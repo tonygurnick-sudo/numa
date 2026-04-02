@@ -23,6 +23,11 @@ interface ExportMessage {
 interface ExportConversationButtonProps {
   messages: ExportMessage[];
   conversationId: string | null;
+  agentName?: string;
+  agentId?: string;
+  userId?: string;
+  userEmail?: string;
+  environment?: string;
 }
 
 type ExportSegment =
@@ -253,12 +258,51 @@ function renderSegmentHtml(seg: ExportSegment): string {
   }
 }
 
-function generateHtml(
-  exportedMessages: ExportedMessage[],
-  dateStr: string,
-  conversationId: string,
-  t: TFunction
-): string {
+interface ExportContext {
+  conversationId: string;
+  dateStr: string;
+  agentName?: string;
+  agentId?: string;
+  userId?: string;
+  userEmail?: string;
+  environment?: string;
+}
+
+function renderContextMetaHtml(ctx: ExportContext, t: TFunction): string {
+  const lines: string[] = [];
+  lines.push(`<div class="meta">${escapeHtml(t('workspace.export.exportedOn', { date: ctx.dateStr }))}</div>`);
+  lines.push(`<div class="meta">${escapeHtml(t('workspace.export.conversationId', { id: ctx.conversationId }))}</div>`);
+  if (ctx.agentName) {
+    lines.push(`<div class="meta">${escapeHtml(t('workspace.export.agentName', { name: ctx.agentName }))}</div>`);
+  }
+  if (ctx.agentId) {
+    lines.push(`<div class="meta">${escapeHtml(t('workspace.export.agentId', { id: ctx.agentId }))}</div>`);
+  }
+  if (ctx.userId) {
+    lines.push(`<div class="meta">${escapeHtml(t('workspace.export.userId', { id: ctx.userId }))}</div>`);
+  }
+  if (ctx.userEmail) {
+    lines.push(`<div class="meta">${escapeHtml(t('workspace.export.userEmail', { email: ctx.userEmail }))}</div>`);
+  }
+  if (ctx.environment) {
+    lines.push(`<div class="meta">${escapeHtml(t('workspace.export.environment', { env: ctx.environment }))}</div>`);
+  }
+  return lines.join('\n');
+}
+
+function renderContextMetaText(ctx: ExportContext, t: TFunction): string[] {
+  const lines: string[] = [];
+  lines.push(t('workspace.export.exportedOn', { date: ctx.dateStr }));
+  lines.push(t('workspace.export.conversationId', { id: ctx.conversationId }));
+  if (ctx.agentName) lines.push(t('workspace.export.agentName', { name: ctx.agentName }));
+  if (ctx.agentId) lines.push(t('workspace.export.agentId', { id: ctx.agentId }));
+  if (ctx.userId) lines.push(t('workspace.export.userId', { id: ctx.userId }));
+  if (ctx.userEmail) lines.push(t('workspace.export.userEmail', { email: ctx.userEmail }));
+  if (ctx.environment) lines.push(t('workspace.export.environment', { env: ctx.environment }));
+  return lines;
+}
+
+function generateHtml(exportedMessages: ExportedMessage[], ctx: ExportContext, t: TFunction): string {
   const messagesHtml = exportedMessages
     .map((msg) => {
       const roleLabel = msg.role === 'user' ? t('workspace.export.roles.user') : t('workspace.export.roles.assistant');
@@ -358,8 +402,7 @@ function generateHtml(
 </head>
 <body>
 <h1>${escapeHtml(t('workspace.export.title'))}</h1>
-<div class="meta">${escapeHtml(t('workspace.export.exportedOn', { date: dateStr }))}</div>
-<div class="meta">${escapeHtml(t('workspace.export.conversationId', { id: conversationId }))}</div>
+${renderContextMetaHtml(ctx, t)}
 ${messagesHtml}
 </body>
 </html>`;
@@ -391,16 +434,10 @@ function renderSegmentText(seg: ExportSegment): string {
   }
 }
 
-function generatePlainText(
-  exportedMessages: ExportedMessage[],
-  dateStr: string,
-  conversationId: string,
-  t: TFunction
-): string {
+function generatePlainText(exportedMessages: ExportedMessage[], ctx: ExportContext, t: TFunction): string {
   const title = t('workspace.export.title');
-  const exportedOn = t('workspace.export.exportedOn', { date: dateStr });
-  const convId = t('workspace.export.conversationId', { id: conversationId });
-  const lines = [title, exportedOn, convId, '', '---', ''];
+  const metaLines = renderContextMetaText(ctx, t);
+  const lines = [title, ...metaLines, '', '---', ''];
 
   for (const msg of exportedMessages) {
     const label = msg.role === 'user' ? t('workspace.export.roles.user') : t('workspace.export.roles.assistant');
@@ -434,7 +471,15 @@ function downloadFile(content: string, filename: string, mimeType: string) {
 
 /* ---------- Component ---------- */
 
-export function ExportConversationButton({ messages, conversationId }: ExportConversationButtonProps) {
+export function ExportConversationButton({
+  messages,
+  conversationId,
+  agentName,
+  agentId,
+  userId,
+  userEmail,
+  environment,
+}: ExportConversationButtonProps) {
   const { t } = useTranslation('chat');
 
   const handleExport = (format: 'html' | 'txt') => {
@@ -444,12 +489,21 @@ export function ExportConversationButton({ messages, conversationId }: ExportCon
     const dateStr = new Date().toLocaleString();
     const shortId = conversationId ? conversationId.substring(0, 8) : 'chat';
     const dateSlug = new Date().toISOString().slice(0, 10);
+    const ctx: ExportContext = {
+      conversationId: conversationId!,
+      dateStr,
+      agentName,
+      agentId,
+      userId,
+      userEmail,
+      environment,
+    };
 
     if (format === 'html') {
-      const html = generateHtml(exportedMessages, dateStr, conversationId, t);
+      const html = generateHtml(exportedMessages, ctx, t);
       downloadFile(html, `conversation-${shortId}-${dateSlug}.html`, 'text/html');
     } else {
-      const text = generatePlainText(exportedMessages, dateStr, conversationId, t);
+      const text = generatePlainText(exportedMessages, ctx, t);
       downloadFile(text, `conversation-${shortId}-${dateSlug}.txt`, 'text/plain');
     }
   };

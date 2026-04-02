@@ -2429,7 +2429,17 @@ const NumaWorkspaceChatAgents = () => {
         </button>
       )}
 
-      {conversationId && <ExportConversationButton messages={messages} conversationId={conversationId} />}
+      {conversationId && (
+        <ExportConversationButton
+          messages={messages}
+          conversationId={conversationId}
+          agentName={currentAgent?.title}
+          agentId={currentAgent?.agentId}
+          userId={sub}
+          userEmail={userEmail}
+          environment={window.location.hostname}
+        />
+      )}
 
       {!isMobile && (
         <button
