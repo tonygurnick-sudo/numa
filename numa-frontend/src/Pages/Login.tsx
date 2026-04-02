@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert, Spinner, InputGroup } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { useAuth, MfaSetupRequired, MfaCodeRequired } from '../Providers/AuthProvider';
+import { useAuth, type MfaSetupRequired, type MfaCodeRequired } from '../Providers/AuthProvider';
 import { useBranding, DEFAULT_BRANDING_THEME } from '../Providers/BrandingContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
+import { RecoveryCodesModal } from '../Components/RecoveryCodesModal';
 
 const NumaLogin = () => {
   const usernameRef = useRef();
@@ -35,6 +36,21 @@ const NumaLogin = () => {
   const [rememberDevice, setRememberDevice] = useState(false);
   const [mfaRememberHours, setMfaRememberHours] = useState(0);
 
+  // Recovery code state
+  const [recoveryCodesEnabled, setRecoveryCodesEnabled] = useState(false);
+  const [showRecoveryCodeInput, setShowRecoveryCodeInput] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [showRecoveryCodes, setShowRecoveryCodes] = useState(false);
+  const [generatedRecoveryCodes, setGeneratedRecoveryCodes] = useState<string[]>([]);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+
+  // Email OTP state (admin MFA reset verification)
+  const [emailOtpStep, setEmailOtpStep] = useState(false);
+  const [emailOtpCode, setEmailOtpCode] = useState('');
+  const [emailOtpMaskedEmail, setEmailOtpMaskedEmail] = useState('');
+  const [emailOtpSending, setEmailOtpSending] = useState(false);
+  const [emailOtpResendCooldown, setEmailOtpResendCooldown] = useState(0);
+
   const clearInputs = () => {
     if (usernameRef.current) usernameRef.current.value = '';
     if (passwordRef.current) passwordRef.current.value = '';
@@ -42,7 +58,10 @@ const NumaLogin = () => {
     if (confirmPasswordRef.current) confirmPasswordRef.current.value = '';
   };
 
-  const { login, setNewPassword, completeMfaSetup, submitMfaCode } = useAuth();
+  const { login, setNewPassword, completeMfaSetup, submitMfaCode, completeReEnrollMfa, finalizeLogin } = useAuth();
+
+  // MFA reset grace period state
+  const [mfaResetPending, setMfaResetPending] = useState(false);
 
   // Fetch MFA remember duration when MFA form appears, and reset the checkbox
   useEffect(() => {
@@ -51,7 +70,10 @@ const NumaLogin = () => {
     let cancelled = false;
     AdminMfaSettingsService.get()
       .then((settings) => {
-        if (!cancelled) setMfaRememberHours(settings.rememberDurationHours);
+        if (!cancelled) {
+          setMfaRememberHours(settings.rememberDurationHours);
+          setRecoveryCodesEnabled(settings.recoveryCodesEnabled === true);
+        }
       })
       .catch(() => {
         // If fetch fails, default to 0 (no remember option)
@@ -60,6 +82,97 @@ const NumaLogin = () => {
       cancelled = true;
     };
   }, [mfaSetupRequired, mfaCodeRequired]);
+
+  // Resend cooldown timer for email OTP
+  useEffect(() => {
+    if (emailOtpResendCooldown <= 0) return;
+    const timer = setTimeout(() => setEmailOtpResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [emailOtpResendCooldown]);
+
+  /** Send (or resend) the email OTP using pending tokens from sessionStorage. */
+  const triggerEmailOtp = async () => {
+    setEmailOtpSending(true);
+    setError(null);
+
+    const accessToken = sessionStorage.getItem('pendingMfaAccessToken');
+    if (!accessToken) {
+      setError(t('mfa.emailOtp.sendFailed'));
+      setEmailOtpSending(false);
+      return;
+    }
+
+    const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+    const authedPost = async (url: string, data?: unknown) => {
+      const resp = await fetch(`${API_ENDPOINT}${url.replace('/api', '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: data ? JSON.stringify(data) : undefined,
+      });
+      if (!resp.ok) {
+        const json = await resp.json().catch(() => ({}));
+        throw new Error((json as { error?: string }).error || `${resp.status}`);
+      }
+      return resp.json();
+    };
+
+    const res = await AdminMfaSettingsService.sendResetOtp(authedPost);
+    setEmailOtpSending(false);
+
+    if (res.sent && res.maskedEmail) {
+      setEmailOtpMaskedEmail(res.maskedEmail);
+      setEmailOtpResendCooldown(60);
+    } else {
+      setError(res.error || t('mfa.emailOtp.sendFailed'));
+    }
+  };
+
+  /** Verify the email OTP code — on success, clear the OTP step and show QR enrollment. */
+  const handleEmailOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const code = emailOtpCode.trim();
+    if (!code || code.length !== 6 || !/^\d+$/.test(code)) {
+      setError(t('mfa.emailOtp.invalidCode'));
+      setLoading(false);
+      return;
+    }
+
+    const accessToken = sessionStorage.getItem('pendingMfaAccessToken');
+    if (!accessToken) {
+      setError(t('mfa.emailOtp.sendFailed'));
+      setLoading(false);
+      return;
+    }
+
+    const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+    const authedPost = async (url: string, data?: unknown) => {
+      const resp = await fetch(`${API_ENDPOINT}${url.replace('/api', '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: data ? JSON.stringify(data) : undefined,
+      });
+      if (!resp.ok) {
+        const json = await resp.json().catch(() => ({}));
+        throw new Error((json as { error?: string }).error || `${resp.status}`);
+      }
+      return resp.json();
+    };
+
+    const res = await AdminMfaSettingsService.verifyResetOtp(code, authedPost);
+    setLoading(false);
+
+    if (res.success) {
+      // OTP verified — proceed to MFA enrollment (QR code)
+      setEmailOtpStep(false);
+      setEmailOtpCode('');
+      setSuccess(null);
+    } else {
+      setError(res.error || t('mfa.emailOtp.invalidCode'));
+    }
+  };
 
   const handleSubmit = async (e, providedUsername, providedPassword) => {
     if (e) e.preventDefault();
@@ -94,6 +207,12 @@ const NumaLogin = () => {
       } else if ('requiresMfaSetup' in result && result.requiresMfaSetup) {
         // MFA setup required - show setup UI
         setMfaSetupRequired(result);
+        if (result.isReEnrollment) {
+          setMfaResetPending(true);
+          // Admin reset: show email OTP step before MFA enrollment
+          setEmailOtpStep(true);
+          triggerEmailOtp();
+        }
         setUsername(enteredUsername);
         setPassword(enteredPassword);
         clearInputs();
@@ -104,6 +223,9 @@ const NumaLogin = () => {
         setPassword(enteredPassword);
         clearInputs();
       } else {
+        // login() returned { success: true } — MFA was either completed via
+        // Cognito challenge or verified as not required. User state is now set
+        // and route protection will allow navigation.
         setSuccess(t('login.messages.loginSuccess'));
         clearInputs();
         navigate(result.features?.includes('chat') ? '/chat' : '/dash');
@@ -184,11 +306,83 @@ const NumaLogin = () => {
     }
 
     try {
-      const result = await completeMfaSetup(code, rememberDevice);
-      if ('success' in result && result.success) {
-        setSuccess(t('login.messages.loginSuccess'));
-        setMfaSetupRequired(null);
-        navigate(result.features?.includes('chat') ? '/chat' : '/dash');
+      let dest: string;
+
+      if (mfaSetupRequired?.pendingLogin) {
+        // AccessToken-based flow: tokens already stored, just verify TOTP.
+        // Does NOT set user state — finalizeLogin() does that later.
+        await completeReEnrollMfa(code);
+      } else {
+        // Session-based flow: completes Cognito MFA_SETUP challenge, stashes
+        // auth result WITHOUT setting user state (no redirect triggered).
+        const result = await completeMfaSetup(code, rememberDevice);
+        if (!('success' in result && result.success)) {
+          // Setup did not succeed — show a generic error so the user knows to retry,
+          // rather than silently dropping back to the form with no feedback.
+          setError(t('mfa.errors.setupFailed'));
+          setLoading(false);
+          return;
+        }
+      }
+
+      // MFA is verified, access token is available via getAccessToken().
+      // User state is NOT yet set — no route guard redirect, no re-render.
+      // Generate recovery codes and show them right here on the login page.
+
+      // Determine destination from token claims FIRST — needed by all branches below.
+      // Uses sessionStorage only (pendingMfaIdToken set by storeTokensWithoutLogin
+      // moments ago) — never localStorage, which may contain a stale token from a
+      // different user's session.
+      const idToken = sessionStorage.getItem('pendingMfaIdToken');
+      try {
+        if (!idToken) throw new Error('no pending ID token');
+        const claims = JSON.parse(atob(idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const features = ((claims['custom:features'] as string) || '').split(',').filter(Boolean);
+        dest = features.includes('chat') ? '/chat' : '/dash';
+      } catch {
+        dest = '/dash';
+      }
+
+      // NOTE: We use raw fetch() here instead of useNumaRequest() because the user
+      // isn't fully logged in yet (user state isn't set). We ONLY use sessionStorage
+      // (pendingMfaAccessToken set by storeTokensWithoutLogin moments ago) — never
+      // localStorage, which may contain a stale token from a different user's session.
+      const accessToken = sessionStorage.getItem('pendingMfaAccessToken');
+      if (!accessToken) {
+        // Token should always be present — storeTokensWithoutLogin sets it right
+        // before we reach here. If missing, something is wrong; skip recovery code
+        // generation and finalize login directly rather than risk acting on a stale token.
+        console.warn('pendingMfaAccessToken missing from sessionStorage — skipping recovery code generation');
+        await finalizeLogin();
+        navigate(dest);
+        return;
+      }
+
+      const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+      const authedPost = async (url: string, data?: unknown) => {
+        const resp = await fetch(`${API_ENDPOINT}${url.replace('/api', '')}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: data ? JSON.stringify(data) : undefined,
+        });
+        if (!resp.ok) throw new Error(`${resp.status}`);
+        return resp.json();
+      };
+
+      try {
+        const codes = await AdminMfaSettingsService.generateRecoveryCodes(authedPost);
+        setGeneratedRecoveryCodes(codes);
+        setPendingNavigation(dest);
+        setShowRecoveryCodes(true);
+        // Modal is now visible. User state is NOT set — no redirect.
+        // Navigation happens in handleRecoveryCodesModalClose → finalizeLogin.
+      } catch {
+        // Feature disabled or error — finalize login and navigate directly
+        await finalizeLogin();
+        navigate(dest);
       }
     } catch (error) {
       console.error('Error completing MFA setup:', error);
@@ -196,6 +390,22 @@ const NumaLogin = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle closing the recovery codes modal — finalize login (sets user state,
+  // which triggers the route guard redirect) and navigate.
+  const handleRecoveryCodesModalClose = async () => {
+    setShowRecoveryCodes(false);
+    setGeneratedRecoveryCodes([]);
+    setPassword('');
+    const dest = pendingNavigation;
+    setPendingNavigation(null);
+    try {
+      await finalizeLogin();
+    } catch (err) {
+      console.error('Failed to finalize login after recovery codes:', err);
+    }
+    if (dest) navigate(dest);
   };
 
   // Handle MFA code submission (subsequent logins)
@@ -222,6 +432,65 @@ const NumaLogin = () => {
     } catch (error) {
       console.error('Error submitting MFA code:', error);
       setError(error.message || t('mfa.errors.verificationFailed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle recovery code submission.
+  // SECURITY NOTE: This flow requires the user's password (stored in React state since
+  // initial login) to re-authenticate after the recovery code disables MFA. The password
+  // is held in component state for the duration of the MFA challenge — this is an
+  // acceptable tradeoff because: (1) it's already in memory from the initial form submit,
+  // (2) React state isn't accessible cross-origin, and (3) it's cleared immediately after
+  // the re-login call (setPassword('') on success).
+  const handleRecoveryCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const code = recoveryCode.trim();
+    if (!code || code.length !== 8) {
+      setError(t('recoveryCodes.invalidRecoveryCode'));
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Step 1: Verify recovery code (public endpoint).
+      // On success the backend disables MFA and writes a grace period record.
+      // Old recovery codes are deleted — user gets fresh ones after re-enrollment.
+      const result = await AdminMfaSettingsService.verifyRecoveryCode(code, username);
+      if (!result.success) {
+        setError(result.error || t('recoveryCodes.verifyFailed'));
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: Re-login. MFA is disabled so Cognito issues tokens, but
+      // token-adjuster detects the grace period and injects mfa_reset_pending.
+      // login() sees this claim and returns { requiresMfaSetup: true } —
+      // the same re-enrollment flow as an admin MFA reset.
+      setShowRecoveryCodeInput(false);
+      setRecoveryCode('');
+      setMfaCodeRequired(null);
+      const loginResult = await login(username, password);
+      setPassword('');
+
+      if ('requiresMfaSetup' in loginResult && loginResult.requiresMfaSetup) {
+        // MFA enrollment screen will be shown (QR code).
+        // After enrollment, recovery codes are generated, then finalizeLogin.
+        setMfaSetupRequired(loginResult);
+        setMfaResetPending(true);
+      } else if ('success' in loginResult && loginResult.success) {
+        // Edge case: grace period not detected (shouldn't happen).
+        // Navigate normally — MFA enforcement on token refresh will catch it.
+        navigate(loginResult.features?.includes('chat') ? '/chat' : '/dash');
+      }
+    } catch (error) {
+      console.error('Error during recovery code login:', error);
+      setPassword('');
+      setError(error instanceof Error ? error.message : t('login.errors.loginFailed'));
     } finally {
       setLoading(false);
     }
@@ -346,12 +615,83 @@ const NumaLogin = () => {
         </Form>
       )}
 
-      {/* MFA Setup Form - First-time enrollment */}
-      {mfaSetupRequired && (
+      {/* Email OTP Step — verify identity via email before MFA enrollment (admin reset only) */}
+      {mfaSetupRequired && emailOtpStep && (
+        <Form onSubmit={handleEmailOtpSubmit}>
+          <Alert variant="warning" className="mb-3">
+            <Alert.Heading className="h6">{t('mfa.emailOtp.title')}</Alert.Heading>
+            {emailOtpSending ? (
+              <p className="mb-0 small">
+                <Spinner as="span" animation="border" size="sm" className="me-2" />
+                {t('mfa.emailOtp.sendingCode')}
+              </p>
+            ) : emailOtpMaskedEmail ? (
+              <p className="mb-0 small">{t('mfa.emailOtp.instructions', { email: emailOtpMaskedEmail })}</p>
+            ) : null}
+          </Alert>
+
+          {emailOtpMaskedEmail && (
+            <>
+              <Form.Group className="mb-3">
+                <Form.Label htmlFor="emailOtpCode">{t('mfa.emailOtp.codeLabel')}</Form.Label>
+                <Form.Control
+                  id="emailOtpCode"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={emailOtpCode}
+                  onChange={(e) => setEmailOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder={t('mfa.emailOtp.codePlaceholder')}
+                  autoComplete="one-time-code"
+                  autoFocus
+                  data-testid="email-otp-input"
+                />
+              </Form.Group>
+
+              <Button
+                variant="primary"
+                type="submit"
+                className="mb-2 w-100"
+                disabled={loading || emailOtpCode.length !== 6}
+                data-testid="email-otp-verify-button"
+              >
+                {loading ? (
+                  <>
+                    <Spinner as="span" animation="border" size="sm" className="me-2" />
+                    {t('mfa.emailOtp.verifying')}
+                  </>
+                ) : (
+                  t('mfa.emailOtp.verifyButton')
+                )}
+              </Button>
+
+              <Button
+                variant="link"
+                className="w-100 text-muted"
+                disabled={emailOtpResendCooldown > 0 || emailOtpSending}
+                onClick={() => triggerEmailOtp()}
+                data-testid="email-otp-resend-button"
+              >
+                {emailOtpResendCooldown > 0
+                  ? t('mfa.emailOtp.resendCooldown', { seconds: emailOtpResendCooldown })
+                  : t('mfa.emailOtp.resendButton')}
+              </Button>
+            </>
+          )}
+        </Form>
+      )}
+
+      {/* MFA Setup Form - First-time enrollment or re-enrollment after admin reset */}
+      {mfaSetupRequired && !emailOtpStep && (
         <Form onSubmit={handleMfaSetupSubmit}>
-          <Alert variant="info" className="mb-3">
-            <Alert.Heading className="h6">{t('mfa.setupTitle')}</Alert.Heading>
-            <p className="mb-0 small">{t('mfa.setupInstructions')}</p>
+          <Alert variant={mfaResetPending ? 'warning' : 'info'} className="mb-3">
+            <Alert.Heading className="h6">
+              {mfaResetPending ? t('mfa.resetPendingTitle') : t('mfa.setupTitle')}
+            </Alert.Heading>
+            <p className="mb-0 small">
+              {mfaResetPending ? t('mfa.resetPendingInstructions') : t('mfa.setupInstructions')}
+            </p>
           </Alert>
 
           {/* QR Code - primary method */}
@@ -445,7 +785,7 @@ const NumaLogin = () => {
       )}
 
       {/* MFA Code Form - Subsequent logins */}
-      {mfaCodeRequired && (
+      {mfaCodeRequired && !showRecoveryCodeInput && (
         <Form onSubmit={handleMfaCodeSubmit}>
           <Alert variant="info" className="mb-3">
             <Alert.Heading className="h6">{t('mfa.codeTitle')}</Alert.Heading>
@@ -506,9 +846,91 @@ const NumaLogin = () => {
             )}
           </Button>
 
-          <p className="text-center text-muted small">{t('mfa.lostAuthenticatorContactAdmin')}</p>
+          {recoveryCodesEnabled ? (
+            <p className="text-center">
+              <Button
+                variant="link"
+                className="text-muted small p-0"
+                onClick={() => {
+                  setShowRecoveryCodeInput(true);
+                  setError(null);
+                  // NOTE: We intentionally keep `password` in state here because the
+                  // recovery code flow needs it for re-login after MFA is disabled
+                  // (handleRecoveryCodeSubmit calls login(username, password)).
+                  // Password is cleared immediately after the re-login call succeeds.
+                }}
+              >
+                {t('recoveryCodes.useRecoveryCode')}
+              </Button>
+            </p>
+          ) : (
+            <p className="text-center text-muted small">{t('mfa.lostAuthenticatorContactAdmin')}</p>
+          )}
         </Form>
       )}
+
+      {/* Recovery Code Input Form */}
+      {mfaCodeRequired && showRecoveryCodeInput && (
+        <Form onSubmit={handleRecoveryCodeSubmit}>
+          <Alert variant="info" className="mb-3">
+            <Alert.Heading className="h6">{t('mfa.codeTitle')}</Alert.Heading>
+            <p className="mb-0 small">{t('recoveryCodes.instructions')}</p>
+          </Alert>
+
+          <Form.Group className="mb-3">
+            <Form.Label>{t('recoveryCodes.recoveryCodeLabel')}</Form.Label>
+            <Form.Control
+              type="text"
+              maxLength={8}
+              value={recoveryCode}
+              onChange={(e) => setRecoveryCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+              placeholder={t('recoveryCodes.recoveryCodePlaceholder')}
+              autoFocus
+              className="font-monospace"
+              style={{ letterSpacing: '0.1em' }}
+              data-testid="recovery-code-input"
+            />
+          </Form.Group>
+
+          <Button
+            variant="primary"
+            type="submit"
+            className="mb-3 w-100"
+            disabled={loading || recoveryCode.length !== 8}
+            data-testid="recovery-code-submit"
+          >
+            {loading ? (
+              <>
+                <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                {t('recoveryCodes.verifyingRecovery')}
+              </>
+            ) : (
+              t('recoveryCodes.verifyRecoveryButton')
+            )}
+          </Button>
+
+          <p className="text-center">
+            <Button
+              variant="link"
+              className="text-muted small p-0"
+              onClick={() => {
+                setShowRecoveryCodeInput(false);
+                setRecoveryCode('');
+                setError(null);
+              }}
+            >
+              {t('recoveryCodes.backToMfaCode')}
+            </Button>
+          </p>
+        </Form>
+      )}
+
+      {/* Recovery Codes Modal — shown after first-time MFA enrollment, before navigation */}
+      <RecoveryCodesModal
+        show={showRecoveryCodes}
+        codes={generatedRecoveryCodes}
+        onClose={handleRecoveryCodesModalClose}
+      />
     </>
   );
 

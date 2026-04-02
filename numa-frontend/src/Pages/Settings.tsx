@@ -940,7 +940,7 @@ export default function SettingsPage() {
           ]
         : []),
       ...(mfaEnabled
-        ? [{ key: 'trusted-devices', label: t('userProfile.trustedDevices.title'), iconClassName: 'bi bi-phone' }]
+        ? [{ key: 'trusted-devices', label: t('userProfile.trustedDevices.title'), iconClassName: 'bi bi-shield-lock' }]
         : []),
     ],
     // REBASE RESOLUTION: Kept HEAD — includes mfaEnabled in deps. Incoming (8e1a6ca9, 2f54184e) omitted it,
@@ -1073,7 +1073,7 @@ export default function SettingsPage() {
                   </span>
                 }
               >
-                <UserManagement embedded />
+                <UserManagement embedded mfaEnabled={mfaEnabled} />
                 <SecuritySettingsPanel mfaEnabled={mfaEnabled} numaGet={numaGet} numaPut={numaPut} />
               </Tab>
               {allowBrandingTab && (

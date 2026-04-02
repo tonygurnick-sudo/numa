@@ -25,7 +25,9 @@ export class AdjustToken extends Construct {
       policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
     });
 
-    // Grant read access to the MFA settings table for session duration enforcement
+    // Grant DynamoDB read for session/MFA settings, plus Cognito permissions
+    // for MFA enforcement (DescribeUserPool to check pool config, AdminGetUser
+    // to check individual user MFA status).
     if (props.mfaSettingsTableName) {
       const sessionPolicy = new DataAwsIamPolicyDocument(this, 'session-policy-doc', {
         statement: [
@@ -33,6 +35,15 @@ export class AdjustToken extends Construct {
             effect: 'Allow',
             actions: ['dynamodb:GetItem'],
             resources: [`arn:aws:dynamodb:*:*:table/${props.mfaSettingsTableName}`],
+          },
+          {
+            effect: 'Allow',
+            actions: ['cognito-idp:AdminGetUser', 'cognito-idp:DescribeUserPool'],
+            // We cannot use the exact pool ID here because the pool depends on
+            // this Lambda (circular — the pool references our ARN in lambdaConfig).
+            // Each client account has only one user pool, so scoping to all pools
+            // in the account is effectively the same as scoping to the exact pool.
+            resources: ['arn:aws:cognito-idp:*:*:userpool/*'],
           },
         ],
       });
