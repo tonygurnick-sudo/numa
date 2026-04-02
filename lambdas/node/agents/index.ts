@@ -425,7 +425,7 @@ const buildWorkspaceItem = (
   return {
     tenant_id: CLIENT_NAME!,
     agent_id: agentId,
-    visibility: payload.visibility === 'public' ? 'public' : 'public',
+    visibility: 'public' as const,
     agent_type: payload.agentType ?? 'task',
     title: payload.title?.trim() ?? 'Untitled Agent',
     description: payload.description?.trim() || undefined,
@@ -877,10 +877,38 @@ const handleUpdateAgent = async (
     if (workspaceAgent.created_by_user_id !== auth.sub && !isAdmin(auth)) {
       return errorResponse(403, 'You do not have permission to update this agent');
     }
+    // Moving workspace agent to personal: create user item, delete workspace item
+    if (payload.visibility === 'personal') {
+      const userItem = buildUserItem(payload, auth, now, agentId);
+      // Preserve original creation metadata from the workspace agent
+      userItem.created_at = workspaceAgent.created_at ?? now;
+      userItem.created_by_user_id = workspaceAgent.created_by_user_id ?? auth.sub;
+      userItem.created_by_name = workspaceAgent.created_by_name ?? userItem.created_by_name;
+      userItem.visibility = 'personal';
+      userItem.source_agent_id = undefined;
+
+      await dynamo.send(
+        new PutCommand({
+          TableName: USER_TABLE,
+          Item: userItem,
+        })
+      );
+      await dynamo.send(
+        new DeleteCommand({
+          TableName: WORKSPACE_TABLE,
+          Key: {
+            tenant_id: CLIENT_NAME!,
+            agent_id: agentId,
+          },
+        })
+      );
+      return jsonResponse(200, { agent: mapUserAgent(userItem) });
+    }
+
     const userWelcomeMessage = resolveWelcomeMessageFromPayload(payload, workspaceAgent);
     const merged: WorkspaceAgentItem = {
       ...workspaceAgent,
-      visibility: payload.visibility === 'public' ? 'public' : workspaceAgent.visibility,
+      visibility: 'public',
       agent_type: payload.agentType ?? workspaceAgent.agent_type,
       title: payload.title?.trim() ?? workspaceAgent.title,
       description: payload.description?.trim() ?? workspaceAgent.description,
