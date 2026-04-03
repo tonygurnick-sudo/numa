@@ -1756,6 +1756,39 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
       route: { verb: 'POST', path: 'audit-user-management' },
     });
+
+    // Admin Disaster Recovery Stats API (GET)
+    if (props.recoveryBucketName && props.recoveryBucketArn) {
+      this.addLambdaFunction(this, 'admin-dr-stats', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/admin-dr-stats',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        environment: {
+          RECOVERY_BUCKET: props.recoveryBucketName,
+          CLIENT_NAME: props.clientName,
+          REGION: props.region,
+        },
+        additionalPolicyStatements: [
+          {
+            effect: 'Allow',
+            actions: ['s3:ListBucket', 's3:GetBucketLocation'],
+            resources: [props.recoveryBucketArn],
+          },
+          {
+            effect: 'Allow',
+            actions: ['s3:GetObject'],
+            resources: [`${props.recoveryBucketArn}/*`],
+          },
+          {
+            effect: 'Allow',
+            actions: ['dynamodb:ListTables', 'dynamodb:DescribeContinuousBackups', 'dynamodb:ListExports'],
+            resources: ['*'],
+          },
+        ],
+        route: { verb: 'GET', path: 'settings/disaster-recovery/stats' },
+      });
+    }
   }
 
   /**
@@ -1937,4 +1970,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   cognitoUserPoolId?: string;
   /** Cognito User Pool ARN for IAM policy */
   cognitoUserPoolArn?: string;
+  /** Recovery bucket name for DR stats endpoint. */
+  recoveryBucketName?: string;
+  /** Recovery bucket ARN for DR stats endpoint IAM policy. */
+  recoveryBucketArn?: string;
 }

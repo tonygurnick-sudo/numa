@@ -16,6 +16,7 @@ import {
   type GlobalDataConnectorSettingsMap,
 } from '../Services/AdminDataConnectorsService';
 import { DataConnectorsTab } from '../Components/DataConnectors/DataConnectorsTab';
+import { DisasterRecoveryTab } from '../Components/DisasterRecovery/DisasterRecoveryTab';
 import { CapabilitiesService, type CapabilitySettingsMap } from '../Services/CapabilitiesService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import { AdminSchedulingSettingsService } from '../Services/AdminSchedulingSettingsService';
@@ -131,6 +132,7 @@ export default function SettingsPage() {
   // Hidden by default — only shown when explicitly set to true in numa-client-config
   const usageReportingEnabled = window.sessionStorage.getItem('DEPLOY_USAGE_REPORTING') === 'true';
   const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
+  const disasterRecoveryEnabled = getFlag('DISASTER_RECOVERY');
   const availableIntegrations = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
 
   useEffect(() => {
@@ -914,6 +916,9 @@ export default function SettingsPage() {
       ...(usageReportingEnabled
         ? [{ key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' }]
         : []),
+      ...(disasterRecoveryEnabled
+        ? [{ key: 'disaster-recovery', label: t('tabs.disasterRecovery'), iconClassName: 'bi bi-shield-check' }]
+        : []),
     ],
     [
       allowBrandingTab,
@@ -922,6 +927,7 @@ export default function SettingsPage() {
       schedulingEnabled,
       dataConnectorsEnabled,
       usageReportingEnabled,
+      disasterRecoveryEnabled,
       t,
     ]
   );
@@ -948,10 +954,23 @@ export default function SettingsPage() {
     [workspaceChatEnabled, mfaEnabled, t]
   );
 
+  const activeTabLabel = (() => {
+    if (currentScope === 'admin') return adminTabs.find((tab) => tab.key === activeKey)?.label;
+    if (currentScope === 'user') return userTabs.find((tab) => tab.key === userSettingsTabKey)?.label;
+    if (currentScope === 'services')
+      return [
+        { key: 'activity', label: t('auditTabs.activity') },
+        { key: 'index', label: t('auditTabs.index') },
+        { key: 'files', label: t('auditTabs.files') },
+        { key: 'users', label: t('auditTabs.users') },
+      ].find((tab) => tab.key === auditTabKey)?.label;
+    return undefined;
+  })();
+
   return (
     <div className="dashboard settings-page">
       <PageHeader
-        title={t('header.title')}
+        title={activeTabLabel ? `${t('header.title')} / ${activeTabLabel}` : t('header.title')}
         subtitle={
           currentScope === 'admin'
             ? t('header.adminSubtitle')
@@ -1836,6 +1855,19 @@ export default function SettingsPage() {
                   }
                 >
                   <LoginHeatmap />
+                </Tab>
+              )}
+              {isAdmin && disasterRecoveryEnabled && (
+                <Tab
+                  eventKey="disaster-recovery"
+                  title={
+                    <span>
+                      <i className="bi bi-shield-check me-2"></i>
+                      {t('tabs.disasterRecovery')}
+                    </span>
+                  }
+                >
+                  <DisasterRecoveryTab />
                 </Tab>
               )}
             </StyledTabs>
