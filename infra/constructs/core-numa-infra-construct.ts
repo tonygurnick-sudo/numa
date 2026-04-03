@@ -109,6 +109,8 @@ export class CoreNumaInfra extends Construct {
   readonly auditSyncTable!: DynamodbTable;
   readonly auditRecoveryTable!: DynamodbTable;
   readonly auditUserManagementTable!: DynamodbTable;
+  readonly configBucket!: ConfigBucket;
+  readonly sitemapsBucket?: PrivateBucket;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -392,6 +394,7 @@ export class CoreNumaInfra extends Construct {
           type: 'S',
         },
       ],
+      pointInTimeRecovery: { enabled: true },
     });
 
     this.brandingTable = new DynamodbTable(this, 'numa-branding-config-table', {
@@ -409,6 +412,7 @@ export class CoreNumaInfra extends Construct {
           type: 'S',
         },
       ],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-branding-config`,
         Environment: props.environmentName,
@@ -562,6 +566,7 @@ export class CoreNumaInfra extends Construct {
           projectionType: 'ALL',
         },
       ],
+      pointInTimeRecovery: { enabled: true },
     });
 
     this.userAgentsTable = new DynamodbTable(this, 'numa-user-agents-table', {
@@ -580,6 +585,7 @@ export class CoreNumaInfra extends Construct {
           projectionType: 'ALL',
         },
       ],
+      pointInTimeRecovery: { enabled: true },
     });
 
     // Agents settings table (company-wide policy)
@@ -588,6 +594,7 @@ export class CoreNumaInfra extends Construct {
       billingMode: 'PAY_PER_REQUEST',
       hashKey: 'setting',
       attribute: [{ name: 'setting', type: 'S' }],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-agents-settings`,
         Environment: props.environmentName,
@@ -612,6 +619,7 @@ export class CoreNumaInfra extends Construct {
           projectionType: 'ALL',
         },
       ],
+      pointInTimeRecovery: { enabled: true },
     });
 
     // Agent teams table (team metadata)
@@ -632,6 +640,7 @@ export class CoreNumaInfra extends Construct {
           projectionType: 'ALL',
         },
       ],
+      pointInTimeRecovery: { enabled: true },
     });
 
     // Agent team members table (team membership + roles)
@@ -651,6 +660,7 @@ export class CoreNumaInfra extends Construct {
           projectionType: 'ALL',
         },
       ],
+      pointInTimeRecovery: { enabled: true },
     });
 
     // Agent sharing table (per-agent access control)
@@ -670,6 +680,7 @@ export class CoreNumaInfra extends Construct {
           projectionType: 'ALL',
         },
       ],
+      pointInTimeRecovery: { enabled: true },
     });
 
     // Scheduling settings table (client-admin minimum interval override)
@@ -678,6 +689,7 @@ export class CoreNumaInfra extends Construct {
       billingMode: 'PAY_PER_REQUEST',
       hashKey: 'setting',
       attribute: [{ name: 'setting', type: 'S' }],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-scheduling-settings`,
         Environment: props.environmentName,
@@ -695,6 +707,7 @@ export class CoreNumaInfra extends Construct {
         attributeName: 'ttl',
         enabled: true,
       },
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-mfa-settings`,
         Environment: props.environmentName,
@@ -773,6 +786,7 @@ export class CoreNumaInfra extends Construct {
       billingMode: 'PAY_PER_REQUEST',
       hashKey: 'user_id',
       attribute: [{ name: 'user_id', type: 'S' }],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-chat-settings`,
         Environment: props.environmentName,
@@ -789,6 +803,7 @@ export class CoreNumaInfra extends Construct {
         { name: 'user_id', type: 'S' },
         { name: 'connector_id', type: 'S' },
       ],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-data-connectors`,
         Environment: props.environmentName,
@@ -801,6 +816,7 @@ export class CoreNumaInfra extends Construct {
       billingMode: 'PAY_PER_REQUEST',
       hashKey: 'connector',
       attribute: [{ name: 'connector', type: 'S' }],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-global-data-connector-settings`,
         Environment: props.environmentName,
@@ -813,6 +829,7 @@ export class CoreNumaInfra extends Construct {
       billingMode: 'PAY_PER_REQUEST',
       hashKey: 'flag',
       attribute: [{ name: 'flag', type: 'S' }],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-capabilities`,
         Environment: props.environmentName,
@@ -829,6 +846,7 @@ export class CoreNumaInfra extends Construct {
         { name: 'user_id', type: 'S' },
         { name: 'sync_config_id', type: 'S' },
       ],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-data-connector-sync-configs`,
         Environment: props.environmentName,
@@ -846,6 +864,7 @@ export class CoreNumaInfra extends Construct {
         { name: 'pk', type: 'S' },
         { name: 'sk', type: 'S' },
       ],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-connector-events`,
         Environment: props.environmentName,
@@ -863,6 +882,7 @@ export class CoreNumaInfra extends Construct {
         { name: 'connector_id', type: 'S' },
         { name: 'event_type', type: 'S' },
       ],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-connector-event-configs`,
         Environment: props.environmentName,
@@ -893,6 +913,7 @@ export class CoreNumaInfra extends Construct {
         { name: 'timestamp_audit_id', type: 'S' },
       ],
       ttl: { attributeName: 'ttl', enabled: true },
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-vault-audit-log`,
         Environment: props.environmentName,
@@ -922,6 +943,7 @@ export class CoreNumaInfra extends Construct {
         attributeName: 'expiry',
         enabled: false,
       },
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-shared`,
         Environment: props.environmentName,
@@ -943,6 +965,7 @@ export class CoreNumaInfra extends Construct {
         attributeName: 'expiry',
         enabled: true,
       },
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${numaClient}-shared-chat-history`,
         Environment: props.environmentName,
@@ -961,6 +984,7 @@ export class CoreNumaInfra extends Construct {
           { name: 'scope_key', type: 'S' },
           { name: 'sk', type: 'S' },
         ],
+        pointInTimeRecovery: { enabled: true },
         tags: {
           Name: `${numaClient}-files`,
           Environment: props.environmentName,
@@ -1025,19 +1049,19 @@ export class CoreNumaInfra extends Construct {
 
     // Create config bucket and otel config
     const otelConfigKey = 'otel-config.yaml';
-    const configBucket = new ConfigBucket(this, 'config-bucket', {
+    this.configBucket = new ConfigBucket(this, 'config-bucket', {
       clientName: props.clientName,
       clientAccountId: props.clientAccountId,
     });
 
     const source = path.resolve(import.meta.dirname, '..', 'assets', 'otel-config.yaml');
     new S3Object(this, 'honeycomb-config-file', {
-      bucket: configBucket.bucket.bucket,
+      bucket: this.configBucket.bucket.bucket,
       key: otelConfigKey,
       source,
     });
 
-    this.otelConfigPath = `${configBucket.bucket.bucketRegionalDomainName}/${otelConfigKey}`;
+    this.otelConfigPath = `${this.configBucket.bucket.bucketRegionalDomainName}/${otelConfigKey}`;
 
     const webCrawlerLogGroup = new CloudwatchLogGroup(this, 'web-crawler-log-group', {
       name: `/numa/${props.clientName}-web-crawler`,
@@ -1386,6 +1410,7 @@ export class CoreNumaInfra extends Construct {
       const siteMapBucket = new PrivateBucket(this, 'site-map-bucket', {
         bucket: numaClient + '-sitemaps',
       });
+      this.sitemapsBucket = siteMapBucket;
 
       for (const crawlerDataSource of props.webCrawlerConfigs) {
         const siteMapFiles = crawlerDataSource.siteMapFiles || [];
@@ -1486,6 +1511,7 @@ export class CoreNumaInfra extends Construct {
         hashKey: 'approval_id',
         attribute: [{ name: 'approval_id', type: 'S' }],
         ttl: { attributeName: 'ttl', enabled: true },
+        pointInTimeRecovery: { enabled: true },
         tags: {
           Name: `${props.clientName}-integrations-approval`,
           Environment: props.environmentName,
@@ -1507,6 +1533,7 @@ export class CoreNumaInfra extends Construct {
           { name: 'pk', type: 'S' },
           { name: 'sk', type: 'S' },
         ],
+        pointInTimeRecovery: { enabled: true },
         tags: {
           Name: `${props.clientName}-mcp-tool-policies`,
           Environment: props.environmentName,
@@ -1520,6 +1547,7 @@ export class CoreNumaInfra extends Construct {
         billingMode: 'PAY_PER_REQUEST',
         hashKey: 'integration',
         attribute: [{ name: 'integration', type: 'S' }],
+        pointInTimeRecovery: { enabled: true },
         tags: {
           Name: `${props.clientName}-global-integration-settings`,
           Environment: props.environmentName,

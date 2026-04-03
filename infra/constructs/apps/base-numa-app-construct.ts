@@ -526,6 +526,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
           projectionType: 'ALL',
         },
       ],
+      pointInTimeRecovery: { enabled: true },
     }));
 
     // Set the base path for jobs

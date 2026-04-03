@@ -313,8 +313,8 @@ export class PortalDeploymentsConstruct extends Construct {
     // 6) Base task definition (RegisterTaskDefinition in the state machine will pin the image tag)
     const defaultImage =
       props.defaultImageUri || '826326270637.dkr.ecr.ap-southeast-2.amazonaws.com/numa-deploy:latest';
-    const cpu = props.cpu || '1024';
-    const memory = props.memory || '2048';
+    const cpu = props.cpu || '2048';
+    const memory = props.memory || '4096';
 
     this.taskDefinition = new EcsTaskDefinition(this, 'task-def', {
       family: 'numa-portal-deploy',

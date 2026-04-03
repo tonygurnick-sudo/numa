@@ -1861,6 +1861,17 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return mfaCodeResult;
       }
 
+      if (!response.AuthenticationResult) {
+        // Device SRP returned an unexpected state (e.g. stale device credentials).
+        // Stale trust was already cleared by performSrpAuthentication — retry once.
+        const retry = await performSrpAuthentication(username, password);
+        if (!retry.response.AuthenticationResult) {
+          throw new Error('Authentication failed — no tokens received. Please try again.');
+        }
+        const { features } = await handleLoginSuccess(retry.response.AuthenticationResult);
+        return { success: true, features };
+      }
+
       // Cognito returned tokens directly — no MFA challenge was issued.
       // With OPTIONAL MFA, this happens when the user has no TOTP configured.
       // We MUST check if MFA enrollment is required BEFORE setting user state,

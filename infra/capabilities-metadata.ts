@@ -247,4 +247,14 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     enabled: false,
     dependencies: [],
   },
+  {
+    flag: 'DISASTER_RECOVERY',
+    title: 'Disaster Recovery',
+    description: 'S3 replication, DynamoDB exports, Cognito and Secrets backups with 14-day retention.',
+    icon: 'bi-shield-check',
+    system_only: true,
+    dev_only: false,
+    enabled: false,
+    dependencies: [],
+  },
 ];

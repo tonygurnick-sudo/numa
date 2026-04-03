@@ -107,6 +107,7 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
         { name: 'PK', type: 'S' },
         { name: 'SK', type: 'S' },
       ],
+      pointInTimeRecovery: { enabled: true },
       tags: {
         Name: `${clientName}-ops-config`,
         Environment: props.environmentName,
