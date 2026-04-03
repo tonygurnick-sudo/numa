@@ -1950,6 +1950,63 @@ fieldset:disabled .btn {
   padding: 0 1.5rem;
 }
 
+.sub-header-tabs-bar__nav-wrapper {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+  min-height: 0;
+}
+
+.sub-header-tabs-bar__nav-nowrap.nav-tabs {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* No .sub-header-tabs-bar__hidden-tab — items stay in flow so offsetLeft
+   measurements remain accurate. overflow:hidden on the nav clips them
+   and the dropdown provides access. */
+
+.sub-header-tabs-bar__overflow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sub-header-tabs-bar__overflow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  color: #71717a;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition:
+    background 0.15s,
+    color 0.15s;
+
+  &:hover,
+  &:focus {
+    background: #f4f4f5;
+    color: #3f3f46;
+  }
+
+  &--active {
+    color: var(--brand-primary, var(--color-primary));
+  }
+
+  // Hide the default Bootstrap dropdown caret
+  &::after {
+    display: none;
+  }
+}
+
 .styled-tabs-nav.nav-tabs,
 .integrations-tabs-nav.nav-tabs {
   margin: 0;

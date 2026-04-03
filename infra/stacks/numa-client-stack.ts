@@ -55,6 +55,7 @@ import { OpsConstruct } from '../constructs/ops-construct';
 import { TranscriptionServiceConstruct } from '../constructs/transcription-service-construct';
 import { RacetechDataFeedConstruct } from '../constructs/racetech-data-feed-construct';
 import { VaultSecretsConstruct } from '../constructs/vault-secrets-construct';
+import { DisasterRecoveryConstruct } from '../constructs/disaster-recovery-construct';
 import { V2AppsConstruct } from '../constructs/v2-apps-construct';
 import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
 import { WorkspaceChatAgentProxy } from '../constructs/workspace-chat-agent-proxy-construct';
@@ -229,6 +230,46 @@ export class NumaClientStack extends TerraformStack {
       qBusinessProvider: qBusinessProvider,
       knowledgeBase: knowledgeBase,
     });
+
+    // ── Disaster Recovery ────────────────────────────────────────────────────
+    let disasterRecovery: DisasterRecoveryConstruct | undefined;
+    if (clientConfig.disasterRecovery) {
+      const sourceBuckets = [
+        { label: 'data', name: core.dataBucket.bucket.bucket, arn: core.dataBucket.bucket.arn },
+        ...(core.companyBucket
+          ? [{ label: 'company', name: core.companyBucket.bucket.bucket, arn: core.companyBucket.bucket.arn }]
+          : []),
+        { label: 'outputs', name: core.outputsBucket.bucket.bucket, arn: core.outputsBucket.bucket.arn },
+        { label: 'branding', name: core.brandingAssetsBucketName, arn: core.brandingAssetsBucketArn },
+        { label: 'config', name: core.configBucket.bucket.bucket, arn: core.configBucket.bucket.arn },
+        ...(core.sitemapsBucket
+          ? [{ label: 'sitemaps', name: core.sitemapsBucket.bucket.bucket, arn: core.sitemapsBucket.bucket.arn }]
+          : []),
+        // Note: S3 Vectors buckets are excluded from DR — they use s3vectors:* APIs,
+        // not standard S3, so versioning/replication don't apply. Embeddings are
+        // regenerable from source documents in the data bucket.
+      ];
+
+      // Skip versioning on data bucket if racetech already manages it
+      if (clientConfig.racetechDataFeed) {
+        const dataBucket = sourceBuckets.find((b) => b.label === 'data');
+        if (dataBucket) (dataBucket as { skipVersioning?: boolean }).skipVersioning = true;
+      }
+
+      // Compute the admin-dr-stats Lambda role ARN deterministically (created later in coreApis)
+      const drStatsRoleName = awsNameWithHashedPrefix(props.clientName, '_admin-dr-stats', 64);
+      const drStatsRoleArn = `arn:aws:iam::${clientConfig.clientAccountId}:role/${drStatsRoleName}`;
+
+      disasterRecovery = new DisasterRecoveryConstruct(this, 'disaster-recovery', {
+        clientName: props.clientName,
+        environmentName: props.environmentName,
+        clientAccountId: clientConfig.clientAccountId,
+        region: clientConfig.region,
+        sourceBuckets,
+        userPoolId: core.userPoolId,
+        additionalAllowedPrincipalArns: [drStatsRoleArn],
+      });
+    }
 
     // Frontend + CloudFront
     // Shared CloudFront secret SSM parameter (used by both FE and Chat Agent)
@@ -591,6 +632,8 @@ export class NumaClientStack extends TerraformStack {
       emailSenderLambdaArn,
       cognitoUserPoolId: core.userPoolId,
       cognitoUserPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
+      recoveryBucketName: disasterRecovery?.recoveryBucketName,
+      recoveryBucketArn: disasterRecovery?.recoveryBucketArn,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
@@ -832,6 +875,7 @@ export class NumaClientStack extends TerraformStack {
         // Per-provider flags removed — providers are now configured dynamically via COMPANY vault secrets.
         // OAUTH_GOOGLE_DRIVE, OAUTH_ONEDRIVE, OAUTH_DROPBOX are no longer needed in config.json.
         RACETECH_DATA_FEED: clientConfig.racetechDataFeed ?? false,
+        DISASTER_RECOVERY: clientConfig.disasterRecovery ?? false,
         V2_APPS: clientConfig.v2Apps ?? false,
         NUMA_APPS: clientConfig.allApps ?? false,
         JOB_HISTORY: (clientConfig.allApps ?? false) ? (clientConfig.jobHistory ?? true) : false,
@@ -1250,6 +1294,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         racetechDataFeed: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable disaster recovery (S3 replication + DynamoDB/Cognito/Secrets exports).
+         * Creates a {namespace}-recovery bucket with versioned replicas and scheduled exports every 6 hours.
+         *
+         * @default false
+         */
+        disasterRecovery: z.boolean().optional().default(false),
 
         /**
          * Feature flags from other branches (not yet implemented in this branch)

@@ -30,7 +30,8 @@
     "usageAnalytics": "Usage Analytics",
     "developer": "Developer",
     "audit": "Audit",
-    "usage": "Usage"
+    "usage": "Usage",
+    "disasterRecovery": "Disaster Recovery"
   },
   "navigation": {
     "unsavedBranding": "You have unsaved branding changes. Leaving this page will discard them. Continue?",
@@ -1115,5 +1116,38 @@
   "numaLibraries": "Numa Libraries",
   "rebuildTranscripts": "Rebuild from S3",
   "rebuilding": "Rebuilding...",
-  "rebuildResult": "Created: {{created}}, Skipped: {{skipped}}, Failed: {{failed}}"
+  "rebuildResult": "Created: {{created}}, Skipped: {{skipped}}, Failed: {{failed}}",
+  "disasterRecovery": {
+    "title": "Disaster Recovery",
+    "description": "Automated backups of S3 buckets, DynamoDB tables, Cognito users, and Secrets Manager secrets.",
+    "loading": "Loading DR status...",
+    "error": "Failed to load disaster recovery status.",
+    "notEnabled": "Disaster recovery is not enabled for this environment.",
+    "overview": "Overview",
+    "recoveryBucket": "Recovery Bucket",
+    "totalSize": "Total Size",
+    "totalObjects": "Total Objects",
+    "s3Replication": "S3 Replication",
+    "lastReplication": "Last Replication",
+    "dynamoDbBackups": "DynamoDB Backups",
+    "totalTables": "Total Tables",
+    "pitrEnabled": "PITR Enabled",
+    "pitrCoverage": "PITR Coverage",
+    "recentExports": "Recent Exports",
+    "exportStatus": "Export Status",
+    "exportTime": "Export Time",
+    "cognitoBackup": "Cognito Backup",
+    "secretsBackup": "Secrets Backup",
+    "lastBackup": "Last Backup",
+    "schedule": "Schedule",
+    "frequency": "Export Frequency",
+    "retentionPeriod": "Retention Period",
+    "everyNHours": "Every {{hours}} hours",
+    "nDays": "{{days}} days",
+    "neverRun": "Never",
+    "prefix": "Category",
+    "objectCount": "Objects",
+    "size": "Size",
+    "noExports": "No recent exports found."
+  }
 }
