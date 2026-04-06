@@ -209,6 +209,8 @@
 .kanban-quick-add-top {
   padding: 0 0 8px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
 /* When at top, type dropdown opens downward */
@@ -292,6 +294,7 @@
 .kanban-quick-add-type {
   position: relative;
   flex-shrink: 0;
+  z-index: 10;
 }
 
 .kanban-quick-add-type-btn {
@@ -328,7 +331,7 @@
   border: 1px solid var(--ops-border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 100;
+  z-index: 9999;
   padding: 4px 0;
 }
 
@@ -1431,7 +1434,7 @@
   border: 1px solid var(--ops-border);
   border-radius: var(--ops-radius);
   margin-bottom: 12px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Group header */
@@ -1666,7 +1669,7 @@
   border: 1px solid var(--ops-border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 100;
+  z-index: 9999;
   padding: 4px 0;
 }
 

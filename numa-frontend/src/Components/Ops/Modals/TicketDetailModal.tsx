@@ -716,6 +716,12 @@ export function TicketDetailModal({
                   </option>
                 ))}
             </Form.Select>
+            {projects.filter((p) => p.isActive).length === 0 && (
+              <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: 2 }}>
+                <i className="bi bi-gear me-1" />
+                {t('tickets.projectHint')}
+              </div>
+            )}
           </div>
         </div>
 

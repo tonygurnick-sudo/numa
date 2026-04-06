@@ -670,145 +670,157 @@ export function GlobalSettingsModal({
 
   // ── Tab 1: Projects ────────────────────────────────────────────────────────
   const renderProjectsTab = () => (
-    <div>
-      <Table size="sm" hover className="mb-0 ops-settings-table">
-        <thead>
-          <tr>
-            <th>{t('common.name')}</th>
-            <th>{t('common.description')}</th>
-            <th>{t('common.color')}</th>
-            <th>{t('common.status')}</th>
-            <th>{t('globalSettings.owner')}</th>
-            <th>{t('globalSettings.active')}</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {projects.map((project, idx) => (
-            <tr key={project.id}>
-              <td>
+    <div className="d-flex flex-column gap-3">
+      {projects.map((project, idx) => (
+        <div
+          key={project.id}
+          className="border rounded-3 p-3"
+          style={{
+            backgroundColor: '#f9fafb',
+            borderLeft: `4px solid ${project.color || '#6c757d'}`,
+          }}
+        >
+          {/* Row 1: Name + Description */}
+          <div className="row g-3 mb-3">
+            <div className="col-12 col-md-5">
+              <Form.Label className="fw-medium small mb-1">{t('common.name')}</Form.Label>
+              <Form.Control
+                type="text"
+                size="sm"
+                value={project.name}
+                onChange={(e) => {
+                  const updated = [...projects];
+                  updated[idx] = { ...updated[idx], name: e.target.value };
+                  setProjects(updated);
+                }}
+              />
+            </div>
+            <div className="col-12 col-md-7">
+              <Form.Label className="fw-medium small mb-1">{t('common.description')}</Form.Label>
+              <Form.Control
+                type="text"
+                size="sm"
+                value={project.description ?? ''}
+                placeholder={t('globalSettings.projectDescriptionPlaceholder', 'Brief project description...')}
+                onChange={(e) => {
+                  const updated = [...projects];
+                  updated[idx] = { ...updated[idx], description: e.target.value };
+                  setProjects(updated);
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Row 2: Color + Status + Owner + Active + Delete */}
+          <div className="row g-3 align-items-end">
+            <div className="col-auto">
+              <Form.Label className="fw-medium small mb-1">{t('common.color')}</Form.Label>
+              <div className="d-flex align-items-center gap-2">
+                <Form.Control
+                  type="color"
+                  value={project.color}
+                  onChange={(e) => {
+                    const updated = [...projects];
+                    updated[idx] = { ...updated[idx], color: e.target.value };
+                    setProjects(updated);
+                  }}
+                  className="p-1"
+                  style={{ width: '32px', height: '32px', cursor: 'pointer', borderRadius: '4px' }}
+                />
                 <Form.Control
                   type="text"
                   size="sm"
-                  value={project.name}
+                  value={project.color}
                   onChange={(e) => {
                     const updated = [...projects];
-                    updated[idx] = { ...updated[idx], name: e.target.value };
+                    updated[idx] = { ...updated[idx], color: e.target.value };
                     setProjects(updated);
                   }}
+                  placeholder="#000000"
+                  style={{ width: '90px' }}
                 />
-              </td>
-              <td>
-                <Form.Control
-                  type="text"
-                  size="sm"
-                  value={project.description ?? ''}
-                  onChange={(e) => {
-                    const updated = [...projects];
-                    updated[idx] = { ...updated[idx], description: e.target.value };
-                    setProjects(updated);
-                  }}
-                />
-              </td>
-              <td>
-                <div className="d-flex align-items-center gap-2">
-                  <Form.Control
-                    type="color"
-                    value={project.color}
-                    onChange={(e) => {
-                      const updated = [...projects];
-                      updated[idx] = { ...updated[idx], color: e.target.value };
-                      setProjects(updated);
-                    }}
-                    title={t('common.chooseColor', 'Choose your color')}
-                    className="p-1"
-                    style={{ width: '32px', height: '32px', cursor: 'pointer', borderRadius: '4px' }}
-                  />
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    value={project.color}
-                    onChange={(e) => {
-                      const updated = [...projects];
-                      updated[idx] = { ...updated[idx], color: e.target.value };
-                      setProjects(updated);
-                    }}
-                    placeholder="#000000"
-                    style={{ maxWidth: '85px' }}
-                  />
-                </div>
-              </td>
-              <td>
-                <Form.Select
-                  size="sm"
-                  value={project.status ?? 'active'}
-                  onChange={(e) => {
-                    const updated = [...projects];
-                    updated[idx] = { ...updated[idx], status: e.target.value as ProjectStatus };
-                    setProjects(updated);
-                  }}
-                >
-                  {PROJECT_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {t(`globalSettings.projectStatus.${s}`)}
+              </div>
+            </div>
+            <div className="col">
+              <Form.Label className="fw-medium small mb-1">{t('common.status')}</Form.Label>
+              <Form.Select
+                size="sm"
+                value={project.status ?? 'active'}
+                onChange={(e) => {
+                  const updated = [...projects];
+                  updated[idx] = { ...updated[idx], status: e.target.value as ProjectStatus };
+                  setProjects(updated);
+                }}
+              >
+                {PROJECT_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {t(`globalSettings.projectStatus.${s}`)}
+                  </option>
+                ))}
+              </Form.Select>
+            </div>
+            <div className="col">
+              <Form.Label className="fw-medium small mb-1">{t('globalSettings.owner')}</Form.Label>
+              <Form.Select
+                size="sm"
+                value={project.ownerId ?? ''}
+                onChange={(e) => {
+                  const selectedId = e.target.value || null;
+                  const selectedStaff = staff.find((s) => s.id === selectedId);
+                  const updated = [...projects];
+                  updated[idx] = {
+                    ...updated[idx],
+                    ownerId: selectedId,
+                    ownerName: selectedStaff?.name ?? selectedStaff?.email ?? null,
+                  };
+                  setProjects(updated);
+                }}
+              >
+                <option value="">{t('globalSettings.unassigned')}</option>
+                {staff
+                  .filter((s) => s.isActive)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name ?? s.email}
                     </option>
                   ))}
-                </Form.Select>
-              </td>
-              <td>
-                <Form.Select
-                  size="sm"
-                  value={project.ownerId ?? ''}
-                  onChange={(e) => {
-                    const selectedId = e.target.value || null;
-                    const selectedStaff = staff.find((s) => s.id === selectedId);
-                    const updated = [...projects];
-                    updated[idx] = {
-                      ...updated[idx],
-                      ownerId: selectedId,
-                      ownerName: selectedStaff?.name ?? selectedStaff?.email ?? null,
-                    };
-                    setProjects(updated);
-                  }}
-                >
-                  <option value="">{t('globalSettings.unassigned')}</option>
-                  {staff
-                    .filter((s) => s.isActive)
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name ?? s.email}
-                      </option>
-                    ))}
-                </Form.Select>
-              </td>
-              <td>
-                <Form.Check
-                  type="switch"
-                  checked={project.isActive}
-                  onChange={(e) => {
-                    const updated = [...projects];
-                    updated[idx] = { ...updated[idx], isActive: e.target.checked };
-                    setProjects(updated);
-                  }}
-                />
-              </td>
-              <td>
-                <Button
-                  variant="outline-danger"
-                  size="sm"
-                  onClick={() => setProjects((prev) => prev.filter((_, i) => i !== idx))}
-                >
-                  <i className="bi bi-trash" />
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
+              </Form.Select>
+            </div>
+            <div className="col-auto d-flex align-items-center gap-3 pb-1">
+              <Form.Check
+                type="switch"
+                id={`project-active-${project.id}`}
+                label={<span className="small fw-medium">{t('globalSettings.active')}</span>}
+                checked={project.isActive}
+                onChange={(e) => {
+                  const updated = [...projects];
+                  updated[idx] = { ...updated[idx], isActive: e.target.checked };
+                  setProjects(updated);
+                }}
+              />
+              <Button
+                variant="outline-danger"
+                size="sm"
+                onClick={() => setProjects((prev) => prev.filter((_, i) => i !== idx))}
+              >
+                <i className="bi bi-trash" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {projects.length === 0 && (
+        <div className="text-muted text-center py-4">
+          <i className="bi bi-folder2-open d-block mb-2" style={{ fontSize: '1.5rem' }} />
+          {t('globalSettings.noProjects', 'No projects yet. Create one to start organising your work.')}
+        </div>
+      )}
+
       <Button
         variant="outline-primary"
         size="sm"
-        className="mt-2"
+        className="align-self-start"
         onClick={() =>
           setProjects((prev) => [
             ...prev,
@@ -878,6 +890,14 @@ export function GlobalSettingsModal({
           'globalSettings.ticketTypesInfo',
           'A ticket type is a piece of work. Create ticket types for bugs, features, tasks, or anything else your boards need to track.'
         )}
+        <br />
+        <span className="text-muted mt-1 d-inline-block">
+          <i className="bi bi-arrow-right-short me-1" />
+          {t(
+            'globalSettings.ticketTypesEnableNote',
+            'New ticket types must be enabled per board in Board Settings > Tickets & Fields.'
+          )}
+        </span>
       </div>
       <Table size="sm" hover className="mb-0 ops-settings-table">
         <thead>

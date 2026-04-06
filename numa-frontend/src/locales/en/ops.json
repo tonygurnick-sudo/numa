@@ -102,6 +102,7 @@
     "assignee": "Assignee",
     "dueDate": "Due Date",
     "project": "Project",
+    "projectHint": "Manage projects in Global Settings",
     "customer": "Customer",
     "supplier": "Supplier",
     "workUnit": "Sprint",
@@ -848,6 +849,7 @@
       "complete": "Complete"
     },
     "ticketTypesInfo": "A ticket type is a piece of work. Create ticket types for bugs, features, tasks, or anything else your boards need to track.",
+    "ticketTypesEnableNote": "New ticket types must be enabled per board in Board Settings > Tickets & Fields.",
     "staffManagedNote": "Staff members are managed via User Management.",
     "role": "Role",
     "prefix": "Prefix",
