@@ -176,7 +176,9 @@ const TicketDetail = ({ ticket }: { ticket: OpsTicket }) => {
         {ticket.ticketType && <TypeBadge type={ticket.ticketType} />}
       </div>
       <div className="ops-renderer-detail-title">{ticket.title}</div>
-      {ticket.description && <div className="ops-renderer-detail-desc">{ticket.description}</div>}
+      {ticket.description && (
+        <div className="ops-renderer-detail-desc" dangerouslySetInnerHTML={{ __html: ticket.description }} />
+      )}
       <div className="ops-renderer-detail-fields">
         {ticket.assignee?.name && (
           <div className="ops-renderer-field">
