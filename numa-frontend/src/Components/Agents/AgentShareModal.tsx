@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
+import { Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { Share2, Trash2, UserPlus, Users } from 'lucide-react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { getAgentSharing, shareAgent, updateAgentSharing, revokeAgentSharing } from '../../Services/AgentsService';
@@ -226,7 +226,9 @@ export const AgentShareModal = ({ show, onHide, agent, teams = [] }: Props) => {
             {PERMISSIONS.map((p) => (
               <tr key={p.capability}>
                 <td>{p.capability}</td>
-                <td className="text-center text-success">&#10003;</td>
+                <td className="text-center text-success">
+                  <i className="bi bi-check" />
+                </td>
                 <td className={`text-center ${p.coOwner ? 'text-success' : 'text-muted'}`}>
                   {p.coOwner ? '\u2713' : '\u2014'}
                 </td>

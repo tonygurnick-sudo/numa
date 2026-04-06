@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { getFlag } from '../../utils/featureFlags';
 import { Button, Form, Spinner, Modal, Dropdown, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Search, Robot, BarChart } from 'react-bootstrap-icons';
-import { Mic, Paperclip, Send } from 'lucide-react';
+import { Paperclip, Send } from 'lucide-react';
 import VoiceRecordButton, { isVoiceRecordingSupported } from './VoiceRecordButton';
 import type { VoiceRecordingState } from './VoiceRecordButton';
 import { useTranslation } from 'react-i18next';

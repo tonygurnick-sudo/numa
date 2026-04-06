@@ -27,7 +27,6 @@ interface FieldRowProps {
   override: FieldOverride;
   ticketTypeId: string;
   index: number;
-  total: number;
   isAdded: boolean;
   onVisibleToggle: (fieldId: string) => void;
   onOverrideChange: (fieldId: string, changes: Partial<FieldOverride>) => void;
@@ -40,7 +39,6 @@ function FieldRow({
   override,
   ticketTypeId,
   index,
-  total,
   isAdded,
   onVisibleToggle,
   onOverrideChange,
@@ -477,7 +475,6 @@ export function TicketsFieldsTab({
                       override={override}
                       ticketTypeId={tt.id}
                       index={idx}
-                      total={orderedFields.length}
                       isAdded={isAdded}
                       onVisibleToggle={onFieldVisibleToggle}
                       onOverrideChange={onFieldOverrideChange}

@@ -1,15 +1,10 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { Button, Modal, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Mic, MicOff, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export type VoiceRecordingState = 'idle' | 'recording' | 'uploading' | 'error';
-
-/** Duration of the last recording in seconds (for display in user message) */
-let lastRecordingDuration = 0;
-export function getLastRecordingDuration(): number {
-  return lastRecordingDuration;
-}
 
 interface VoiceRecordButtonProps {
   /** Called with the recorded audio blob and suggested filename when recording stops */
@@ -257,8 +252,6 @@ export default function VoiceRecordButton({
         if (blob.size > 0) {
           const ext = getExtension(mimeType || recorder.mimeType);
           const filename = `voice-recording-${Date.now()}${ext}`;
-          // Save duration for display in user message
-          lastRecordingDuration = elapsedRef.current;
           setState('uploading');
           onRecordingComplete(blob, filename);
         } else {
