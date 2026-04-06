@@ -112,6 +112,13 @@ const resolveAuthContext = (event: APIGatewayProxyEventV2): AuthContext | null =
 
 const isAdmin = (auth: AuthContext): boolean => auth.groups.includes('admin');
 
+/** Check if user is a team owner (creator or listed in accessControl.owners). */
+const isTeamOwner = (teamMeta: Record<string, unknown>, auth: AuthContext): boolean => {
+  if (teamMeta.createdBy === auth.sub) return true;
+  const ac = teamMeta.accessControl as { owners?: string[] } | undefined;
+  return Array.isArray(ac?.owners) && ac.owners.includes(auth.sub);
+};
+
 const buildPathSegments = (event: APIGatewayProxyEventV2): string[] => {
   const rawPath = event.requestContext.http?.path ?? event.rawPath ?? '';
   const trimmed = rawPath.replace(/^\/+/, '');
@@ -257,7 +264,7 @@ const handleTeams = async (
       : items.filter((team) => {
           const ac = team.accessControl as { mode?: string; users?: string[] } | undefined;
           if (!ac || ac.mode === 'all') return true;
-          if (team.createdBy === auth.sub) return true; // owner always sees their team
+          if (isTeamOwner(team, auth)) return true; // owners always see their team
           return Array.isArray(ac.users) && ac.users.includes(auth.sub);
         });
 
@@ -274,7 +281,7 @@ const handleTeams = async (
     // Verify user has access to this team
     if (meta && !isAdmin(auth)) {
       const ac = meta.accessControl as { mode?: string; users?: string[] } | undefined;
-      if (ac && ac.mode === 'specific' && meta.createdBy !== auth.sub) {
+      if (ac && ac.mode === 'specific' && !isTeamOwner(meta, auth)) {
         if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
           return errorResponse(403, 'You do not have access to this team');
         }
@@ -453,8 +460,7 @@ const handleTeams = async (
     const meta = metaResults[0];
     if (!meta) return errorResponse(404, 'Team not found');
 
-    const isOwner = meta.createdBy === auth.sub;
-    if (!isAdmin(auth) && !isOwner) return errorResponse(403, 'Admin or team owner access required');
+    if (!isAdmin(auth) && !isTeamOwner(meta, auth)) return errorResponse(403, 'Admin or team owner access required');
 
     const updated: Record<string, unknown> = {
       ...meta,
@@ -479,8 +485,7 @@ const handleTeams = async (
     const meta = metaResults[0];
     if (!meta) return errorResponse(404, 'Team not found');
 
-    const isOwner = meta.createdBy === auth.sub;
-    if (!isAdmin(auth) && !isOwner) return errorResponse(403, 'Admin or team owner access required');
+    if (!isAdmin(auth) && !isTeamOwner(meta, auth)) return errorResponse(403, 'Admin or team owner access required');
 
     const tickets = await queryByPK(`TEAM#${teamId}`, 'TICKET#');
     const activeTickets = tickets.filter((t) => t.statusType !== 'deleted');
@@ -501,7 +506,7 @@ const handleTeams = async (
     const teamId = segments[0];
     const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
     if (!teamMeta) return errorResponse(404, 'Team not found');
-    if (!isAdmin(auth) && teamMeta.createdBy !== auth.sub)
+    if (!isAdmin(auth) && !isTeamOwner(teamMeta, auth))
       return errorResponse(403, 'Admin or team owner access required');
     const zones = body.zones;
     if (!Array.isArray(zones)) return errorResponse(400, 'Missing required field: zones (array)');
@@ -535,7 +540,7 @@ const handleTeams = async (
     const teamId = segments[0];
     const teamMetaForZoneDel = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
     if (!teamMetaForZoneDel) return errorResponse(404, 'Team not found');
-    if (!isAdmin(auth) && teamMetaForZoneDel.createdBy !== auth.sub)
+    if (!isAdmin(auth) && !isTeamOwner(teamMetaForZoneDel, auth))
       return errorResponse(403, 'Admin or team owner access required');
     const zoneId = segments[2];
 
@@ -573,7 +578,7 @@ const handleTeams = async (
     const teamId = segments[0];
     const teamMetaForStages = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
     if (!teamMetaForStages) return errorResponse(404, 'Team not found');
-    if (!isAdmin(auth) && teamMetaForStages.createdBy !== auth.sub)
+    if (!isAdmin(auth) && !isTeamOwner(teamMetaForStages, auth))
       return errorResponse(403, 'Admin or team owner access required');
     const stages = body.stages;
     if (!Array.isArray(stages)) return errorResponse(400, 'Missing required field: stages (array)');
@@ -634,8 +639,11 @@ const handleTeams = async (
 
   // POST /ops/teams/{teamId}/work-units — create work unit
   if (method === 'POST' && segments.length === 2 && segments[1] === 'work-units') {
-    if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
     const teamId = segments[0];
+    const wuTeamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (!wuTeamMeta) return errorResponse(404, 'Team not found');
+    if (!isAdmin(auth) && !isTeamOwner(wuTeamMeta, auth))
+      return errorResponse(403, 'Admin or team owner access required');
     const { name, startDate, endDate, status, capacity } = body;
     if (!name) return errorResponse(400, 'Missing required field: name');
 
@@ -841,8 +849,11 @@ const handleTeams = async (
 
   // DELETE /ops/teams/{teamId}/work-units/{id} — delete a planning work unit
   if (method === 'DELETE' && segments.length === 3 && segments[1] === 'work-units') {
-    if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
     const teamId = segments[0];
+    const wuDelTeamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (!wuDelTeamMeta) return errorResponse(404, 'Team not found');
+    if (!isAdmin(auth) && !isTeamOwner(wuDelTeamMeta, auth))
+      return errorResponse(403, 'Admin or team owner access required');
     const id = segments[2];
     const existing = await getItem(`TEAM#${teamId}`, `WORKUNIT#${id}`);
     if (!existing) return errorResponse(404, 'Work unit not found');
@@ -931,6 +942,7 @@ const buildTicketIndexItems = (
   assigneeId: string | undefined,
   customerId: string | undefined,
   workUnitId: string | undefined,
+  projectId: string | undefined,
   updatedAt: string
 ): Record<string, unknown>[] => {
   const items: Record<string, unknown>[] = [];
@@ -974,6 +986,20 @@ const buildTicketIndexItems = (
       ticketId,
       teamId,
       workUnitId,
+    });
+  }
+
+  if (projectId) {
+    items.push({
+      PK: `TEAM#${teamId}`,
+      SK: `TICKET#${ticketId}#IDX_PROJECT`,
+      GSI2PK: `PROJECT#${projectId}`,
+      GSI2SK: `TICKET#${updatedAt}#${ticketId}`,
+      entityType: 'TICKET_INDEX',
+      indexType: 'IDX_PROJECT',
+      ticketId,
+      teamId,
+      projectId,
     });
   }
 
@@ -1346,7 +1372,7 @@ const handleTickets = async (
       const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
       if (teamMeta) {
         const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
-        if (ac && ac.mode === 'specific' && teamMeta.createdBy !== auth.sub) {
+        if (ac && ac.mode === 'specific' && !isTeamOwner(teamMeta, auth)) {
           if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
             return errorResponse(403, 'You do not have access to this team');
           }
@@ -1374,6 +1400,13 @@ const handleTickets = async (
     }
     if (qp.workUnitId) {
       const { items, lastKey } = await queryGSI2(`WORKUNIT#${qp.workUnitId}`, 'TICKET#', limit, cursor);
+      return jsonResponse(200, {
+        tickets: items,
+        cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
+      });
+    }
+    if (qp.projectId) {
+      const { items, lastKey } = await queryGSI2(`PROJECT#${qp.projectId}`, 'TICKET#', limit, cursor);
       return jsonResponse(200, {
         tickets: items,
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
@@ -1454,6 +1487,7 @@ const handleTickets = async (
       supplierId,
       supplierName,
       workUnitId,
+      projectId,
       tags,
       fields,
       dueDate,
@@ -1470,7 +1504,7 @@ const handleTickets = async (
       const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
       if (teamMeta) {
         const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
-        if (ac && ac.mode === 'specific' && teamMeta.createdBy !== auth.sub) {
+        if (ac && ac.mode === 'specific' && !isTeamOwner(teamMeta, auth)) {
           if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
             return errorResponse(403, 'You do not have access to this team');
           }
@@ -1524,6 +1558,7 @@ const handleTickets = async (
       supplierId: supplierId ? String(supplierId) : undefined,
       supplierName: supplierName ? String(supplierName) : undefined,
       workUnitId: workUnitId ? String(workUnitId) : undefined,
+      projectId: projectId ? String(projectId) : undefined,
       tags: Array.isArray(tags) ? tags : [],
       fields: fields ?? {},
       order,
@@ -1546,6 +1581,7 @@ const handleTickets = async (
       assigneeId ? String(assigneeId) : undefined,
       customerId ? String(customerId) : undefined,
       workUnitId ? String(workUnitId) : undefined,
+      projectId ? String(projectId) : undefined,
       ts
     );
 
@@ -1592,7 +1628,7 @@ const handleTickets = async (
       const targetMeta = (await queryByPK(`TEAM#${targetTeamId}`, 'META'))[0];
       if (targetMeta) {
         const ac = targetMeta.accessControl as { mode?: string; users?: string[] } | undefined;
-        if (ac && ac.mode === 'specific' && targetMeta.createdBy !== auth.sub) {
+        if (ac && ac.mode === 'specific' && !isTeamOwner(targetMeta, auth)) {
           if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
             return errorResponse(403, 'You do not have access to the target team');
           }
@@ -1730,6 +1766,7 @@ const handleTickets = async (
         `TICKET#${ticketId}#IDX_ASSIGNEE`,
         `TICKET#${ticketId}#IDX_CUSTOMER`,
         `TICKET#${ticketId}#IDX_WORKUNIT`,
+        `TICKET#${ticketId}#IDX_PROJECT`,
       ];
 
       const newIndexItems = buildTicketIndexItems(
@@ -1738,6 +1775,7 @@ const handleTickets = async (
         updated.assigneeId ? String(updated.assigneeId) : undefined,
         updated.customerId ? String(updated.customerId) : undefined,
         updated.workUnitId ? String(updated.workUnitId) : undefined,
+        updated.projectId ? String(updated.projectId) : undefined,
         ts
       );
 
@@ -1849,6 +1887,27 @@ const handleTickets = async (
             ticketId,
             teamId: targetTeamId,
             workUnitId: String(body.workUnitId),
+          })
+        );
+      }
+    }
+
+    const projectChanged =
+      body.projectId !== undefined && String(body.projectId ?? '') !== String(existing.projectId ?? '');
+    if (projectChanged) {
+      indexOps.push(deleteItem(`TEAM#${targetTeamId}`, `TICKET#${ticketId}#IDX_PROJECT`));
+      if (body.projectId) {
+        indexOps.push(
+          putItem({
+            PK: `TEAM#${targetTeamId}`,
+            SK: `TICKET#${ticketId}#IDX_PROJECT`,
+            GSI2PK: `PROJECT#${String(body.projectId)}`,
+            GSI2SK: `TICKET#${ts}#${ticketId}`,
+            entityType: 'TICKET_INDEX',
+            indexType: 'IDX_PROJECT',
+            ticketId,
+            teamId: targetTeamId,
+            projectId: String(body.projectId),
           })
         );
       }
