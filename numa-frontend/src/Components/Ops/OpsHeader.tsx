@@ -71,6 +71,13 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
   const [detailTicketId, setDetailTicketId] = useState<string | null>(null);
 
   const canManage = Boolean(user?.features?.includes('manageUsers'));
+  const currentUserSub = user?.decoded_tokens?.idToken?.sub;
+  const selectedTeam = teams.find((tm) => tm.id === selectedTeamId);
+  const isTeamOwner = Boolean(
+    currentUserSub &&
+    selectedTeam &&
+    (selectedTeam.createdBy === currentUserSub || selectedTeam.accessControl?.owners?.includes(currentUserSub))
+  );
 
   return (
     <>
@@ -179,7 +186,7 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
                   onCreateBoard={() => setShowCreateTeam(true)}
                 />
                 {/* Board settings — next to board name in single-board mode */}
-                {boardViewMode === 'singleTeam' && selectedTeamId && canManage && (
+                {boardViewMode === 'singleTeam' && selectedTeamId && (canManage || isTeamOwner) && (
                   <button
                     type="button"
                     className="btn btn-link text-muted p-0"
@@ -258,6 +265,7 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
             ) : (
               <AllBoardsStrip
                 canManage={canManage}
+                currentUserSub={currentUserSub}
                 onOpenTeamSettings={(teamId) => {
                   selectTeam(teamId);
                   setShowBoardSettings(true);

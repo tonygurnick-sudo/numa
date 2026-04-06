@@ -15,10 +15,11 @@ import { getCached, setCache } from '../../utils/opsCache';
  */
 interface AllBoardsStripProps {
   canManage?: boolean;
+  currentUserSub?: string;
   onOpenTeamSettings?: (teamId: string) => void;
 }
 
-const AllBoardsStrip = ({ canManage, onOpenTeamSettings }: AllBoardsStripProps) => {
+const AllBoardsStrip = ({ canManage, currentUserSub, onOpenTeamSettings }: AllBoardsStripProps) => {
   const { t } = useTranslation('ops');
   const { numaGet } = useNumaRequest();
   const { teams, selectedTeamId, selectTeam, teamData, activeZoneId, setActiveZone } = useOps();
@@ -146,7 +147,14 @@ const AllBoardsStrip = ({ canManage, onOpenTeamSettings }: AllBoardsStripProps) 
             activeSprintName={activeSprintName}
             onSelectTeam={() => handleSelectTeam(team.id)}
             onSelectZone={(zoneId) => handleSelectZone(team.id, zoneId)}
-            onOpenSettings={canManage && onOpenTeamSettings ? () => onOpenTeamSettings(team.id) : undefined}
+            onOpenSettings={
+              (canManage ||
+                (currentUserSub &&
+                  (team.createdBy === currentUserSub || team.accessControl?.owners?.includes(currentUserSub)))) &&
+              onOpenTeamSettings
+                ? () => onOpenTeamSettings(team.id)
+                : undefined
+            }
           />
         );
       })}
