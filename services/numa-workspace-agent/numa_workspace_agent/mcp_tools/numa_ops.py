@@ -26,6 +26,12 @@ from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
 
 logger = structlog.get_logger()
 
+# Frontend URL for constructing ticket links.
+# Explicit env var takes priority (for custom domains), otherwise derive from CLIENT_NAME.
+_FRONTEND_URL = os.environ.get("NUMA_FRONTEND_URL") or (
+    f"https://{os.environ.get('CLIENT_NAME', 'app')}.numa.arcanum.ai"
+)
+
 # Operations that are read-only and can be auto-approved
 SAFE_OPERATIONS = frozenset(
     {
@@ -117,6 +123,21 @@ def _pop_approval_id(action_key: str) -> str:
 # Maximum inline result size (compact JSON chars). Results exceeding this are
 # saved to a file so the LLM context stays lightweight.
 MAX_INLINE = 2000
+
+
+def _enrich_ticket_urls(result: Any) -> Any:
+    """Add ticketUrl to ticket objects that have a displayId."""
+    if isinstance(result, dict):
+        if "displayId" in result:
+            result["ticketUrl"] = f"{_FRONTEND_URL}/ops?ticket={result['displayId']}"
+        for v in result.values():
+            if isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict) and "displayId" in item:
+                        item["ticketUrl"] = (
+                            f"{_FRONTEND_URL}/ops?ticket={item['displayId']}"
+                        )
+    return result
 
 
 def _count_items(result: Any) -> int | None:
@@ -344,6 +365,16 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                     )
                 except Exception as e:
                     return _err(f"Failed to upload file using presigned URL: {e}")
+
+        # Enrich ticket objects with clickable URLs
+        if operation in (
+            "create_ticket",
+            "update_ticket",
+            "get_ticket",
+            "list_tickets",
+            "search_tickets",
+        ):
+            _enrich_ticket_urls(result)
 
         # Compact JSON — no indent (saves tokens)
         result_text = json.dumps(result, default=str, separators=(",", ":"))

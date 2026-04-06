@@ -488,6 +488,8 @@ export class NumaClientStack extends TerraformStack {
         extractContentLambdaArn: extractContentLambdaArn,
         // Numa Ops feature flag
         numaOpsEnabled: clientConfig.numaOps,
+        // Frontend URL for constructing links (e.g. ticket URLs in chat)
+        frontendUrl: `https://${domainName}`,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK

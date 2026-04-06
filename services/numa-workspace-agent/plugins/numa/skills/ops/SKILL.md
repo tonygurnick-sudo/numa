@@ -549,7 +549,7 @@ mcp__numa__numa_ops_tool(
 
 1. **Always call `get_config` first** — you need ticket types, statuses, and staff IDs before creating tickets
 2. **Call `get_team` to get stage IDs** — `stage_id` is required for ticket creation; stages are returned in the board's zones
-3. **Use display IDs when referencing tickets to users** — e.g., "ENG-42" is friendlier than "ticket-abc123"
+3. **Link tickets using ticketUrl** — ticket responses include a `ticketUrl` field (e.g., `https://acme.numa.arcanum.ai/ops?ticket=ENG-42`). Always include this link when referencing tickets so users can click through directly
 4. **Include full content in approval descriptions** — for write operations, describe exactly what will be created/changed
 5. **Respect team scoping** — users can only see boards they have access to
 6. **Use search before creating** — check if a similar ticket already exists
