@@ -12,7 +12,8 @@ import {
   BOARD_COLORS,
   calculateAutoColorPositions,
 } from '../Shared/colorUtils';
-import { STATUS_TYPE_TO_ZONES } from '../../../constants/opsConstants';
+import { STATUS_TYPE_TO_ZONES, getTicketTypeIconClass } from '../../../constants/opsConstants';
+import TicketTypeIconPicker from '../Shared/TicketTypeIconPicker';
 import { ConfirmModal } from './ConfirmModal';
 import { CustomerDetailModal } from './CustomerDetailModal';
 import { SupplierDetailModal } from './SupplierDetailModal';
@@ -493,9 +494,21 @@ export function GlobalSettingsModal({
 
       // Await all mutations
       const results = await Promise.allSettled(promises);
-      const errors = results.filter((r) => r.status === 'rejected');
-      if (errors.length > 0) {
-        console.error('[GlobalSettingsModal] Some saves failed:', errors);
+      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (rejected.length > 0) {
+        console.error('[GlobalSettingsModal] Some saves failed:', rejected);
+        const messages = rejected.map((r) => {
+          const reason = r.reason;
+          return reason?.response?.data?.message || reason?.message || String(reason);
+        });
+        setError(
+          t('errors.saveFailed', {
+            message: `${rejected.length} operation(s) failed: ${messages.join('; ')}`,
+          })
+        );
+        // Sync state with what actually persisted, but keep modal open for retry
+        await refreshConfig();
+        return;
       }
 
       // Force UI to pick up new ticket types and fields from the backend
@@ -886,7 +899,7 @@ export function GlobalSettingsModal({
                     className="d-flex align-items-center justify-content-center bg-light rounded"
                     style={{ width: 32, height: 32 }}
                   >
-                    {tt.icon}
+                    {tt.icon && <i className={getTicketTypeIconClass(tt.icon)} />}
                   </div>
                 </td>
                 <td>
@@ -947,7 +960,7 @@ export function GlobalSettingsModal({
               id: generateId(),
               name: '',
               prefix: '',
-              icon: '',
+              icon: 'ticket',
               color: BOARD_COLORS[ticketTypes.length % BOARD_COLORS.length],
               defaultFields: [],
               order: ticketTypes.length,
@@ -2618,18 +2631,15 @@ export function GlobalSettingsModal({
                 />
               </Form.Group>
             </div>
-            <div className="col-6 col-md-3">
-              <Form.Group>
-                <Form.Label className="fw-medium small">{t('globalSettings.icon')}</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Emoji"
-                  value={ticketTypeForm.icon}
-                  onChange={(e) => setTicketTypeForm({ ...ticketTypeForm, icon: e.target.value })}
-                />
-              </Form.Group>
-            </div>
           </div>
+
+          <Form.Group>
+            <Form.Label className="fw-medium small">{t('globalSettings.icon')}</Form.Label>
+            <TicketTypeIconPicker
+              value={ticketTypeForm.icon}
+              onChange={(icon) => setTicketTypeForm({ ...ticketTypeForm, icon })}
+            />
+          </Form.Group>
 
           <Form.Group>
             <Form.Label className="fw-medium small">{t('common.color')}</Form.Label>
@@ -2705,8 +2715,8 @@ export function GlobalSettingsModal({
           <Button
             variant="primary"
             onClick={() => {
-              if (!ticketTypeForm.name.trim() || !ticketTypeForm.prefix.trim()) {
-                alert('Name and Prefix are required.');
+              if (!ticketTypeForm.name.trim() || !ticketTypeForm.prefix.trim() || !ticketTypeForm.icon.trim()) {
+                alert('Name, Prefix, and Icon are required.');
                 return;
               }
               if (editingTicketType) {

@@ -491,7 +491,7 @@ export const TEAM_PRESETS_INFO: TeamPresetInfo[] = [
 
 // ─── Ticket Type Icon Mapping ────────────────────────────────────────────────
 
-const TICKET_TYPE_ICON_MAP: Record<string, string> = {
+export const TICKET_TYPE_ICON_MAP: Record<string, string> = {
   // Core types
   sparkles: 'bi-stars',
   stop: 'bi-bug',
