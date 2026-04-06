@@ -53,6 +53,8 @@ export type FieldDefinition = {
   fieldType: FieldType;
   options?: string[];
   defaultValue?: unknown;
+  required?: boolean;
+  helpText?: string;
   isSystem: boolean;
   order: number;
 };
@@ -178,7 +180,9 @@ export type WorkUnitSeriesConfig = {
 export type Team = {
   id: string;
   name: string;
+  description?: string;
   color: string;
+  ticketTypeId?: string;
   allowedTicketTypes: string[];
   fieldOverrides: Record<string, FieldOverride>;
   addedFields?: Record<string, string[]>;
@@ -295,13 +299,15 @@ export type CommentAttachment = {
 
 export type Comment = {
   id: string;
+  commentId?: string;
   ticketId: string;
-  teamId: string;
+  teamId?: string;
   content: string;
   authorId: string;
+  authorEmail?: string;
   authorName: string;
   attachments: CommentAttachment[];
-  isSystem: boolean;
+  isSystem?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -330,6 +336,7 @@ export type WorkUnit = {
   status: WorkUnitStatus;
   startDate?: string | null;
   endDate?: string | null;
+  capacity?: number | null;
   order: number;
   createdAt: string;
   updatedAt: string;

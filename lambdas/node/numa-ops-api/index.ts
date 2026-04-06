@@ -309,9 +309,13 @@ const handleTeams = async (
       description,
       color,
       allowedTicketTypes,
+      fieldOverrides,
+      addedFields,
       accessControl,
       workUnitSeries,
       preset: rawPreset,
+      announcement,
+      order: rawOrder,
       customStages,
       zones: rawZones,
     } = body;
@@ -379,9 +383,14 @@ const handleTeams = async (
       color: color ? String(color) : undefined,
       ticketTypeId: ticketTypeId ? String(ticketTypeId) : undefined,
       allowedTicketTypes: Array.isArray(allowedTicketTypes) ? allowedTicketTypes : undefined,
+      fieldOverrides: fieldOverrides && typeof fieldOverrides === 'object' ? fieldOverrides : undefined,
+      addedFields: addedFields && typeof addedFields === 'object' ? addedFields : undefined,
       accessControl: accessControl ?? { mode: 'all' },
       workUnitSeries: hasWorkUnits ? workUnitSeries : undefined,
       defaultZoneId,
+      announcement: announcement ? String(announcement) : undefined,
+      preset: rawPreset ? String(rawPreset) : undefined,
+      order: typeof rawOrder === 'number' ? rawOrder : undefined,
       createdBy: auth.sub,
       createdAt: ts,
       updatedAt: ts,
@@ -644,7 +653,7 @@ const handleTeams = async (
     if (!wuTeamMeta) return errorResponse(404, 'Team not found');
     if (!isAdmin(auth) && !isTeamOwner(wuTeamMeta, auth))
       return errorResponse(403, 'Admin or team owner access required');
-    const { name, startDate, endDate, status, capacity } = body;
+    const { name, goal, startDate, endDate, status, capacity } = body;
     if (!name) return errorResponse(400, 'Missing required field: name');
 
     const id = randomUUID();
@@ -662,6 +671,7 @@ const handleTeams = async (
       id,
       teamId,
       name: String(name),
+      goal: goal ? String(goal) : undefined,
       startDate: startDate ? String(startDate) : undefined,
       endDate: endDate ? String(endDate) : undefined,
       status: unitStatus,
@@ -1492,6 +1502,9 @@ const handleTickets = async (
       fields,
       dueDate,
       effortPoints,
+      sourceType,
+      sourceId,
+      sourceAppType,
     } = body;
 
     if (!rawTeamId || !rawStageId || !title)
@@ -1568,6 +1581,9 @@ const handleTickets = async (
       linkCount: 0,
       dueDate: dueDate ? String(dueDate) : undefined,
       effortPoints: typeof effortPoints === 'number' ? effortPoints : undefined,
+      sourceType: sourceType ? String(sourceType) : undefined,
+      sourceId: sourceId ? String(sourceId) : undefined,
+      sourceAppType: sourceAppType ? String(sourceAppType) : undefined,
       createdBy: auth.sub,
       createdByName: auth.name ?? undefined,
       createdAt: ts,
