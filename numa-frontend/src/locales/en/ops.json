@@ -487,7 +487,11 @@
     "step3": "Your Workflow",
     "step4": "Access Control",
     "settings": "Board Settings",
-    "owner": "Board Owner",
+    "owner": "Owner",
+    "boardOwners": "Board Owners",
+    "boardOwnersHelp": "Owners can manage board settings, workflow, and access control. The board creator is always an owner.",
+    "boardCreator": "Board Creator",
+    "addOwnerPlaceholder": "Add a co-owner...",
     "deleteTeam": "Delete Board",
     "deleteTeamConfirm": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
     "deleteTeamHasTickets": "Cannot delete a board that still has tickets. Move or delete all tickets first."

@@ -147,14 +147,18 @@ OPS_API_OPERATIONS = {
     "get_team",
     "create_team",
     "update_team",
+    "update_zones",
+    "update_stages",
     "list_tickets",
     "get_ticket",
     "search_tickets",
     "create_ticket",
     "update_ticket",
     "delete_ticket",
+    "bulk_update_tickets",
     "add_comment",
     "list_comments",
+    "get_audit",
     "upload_attachment",
     "get_metrics",
 }
@@ -165,6 +169,7 @@ OPS_CONFIG_OPERATIONS = {
     "list_projects",
     "create_project",
     "update_project",
+    "delete_project",
 }
 
 # Operations that route to numa-ops-crm-api
@@ -226,6 +231,16 @@ def _resolve_lambda_and_request(
             "PUT",
             f"ops/config/projects/{project_id}",
             body,
+            None,
+        )
+
+    if operation == "delete_project":
+        project_id = params.get("project_id", "")
+        return (
+            OPS_CONFIG_API_LAMBDA,
+            "DELETE",
+            f"ops/config/projects/{project_id}",
+            None,
             None,
         )
 
@@ -451,6 +466,28 @@ def _resolve_lambda_and_request(
                 body[camel] = params[snake]
         return (OPS_API_LAMBDA, "PUT", f"ops/teams/{team_id}", body, None)
 
+    if operation == "update_zones":
+        team_id = params.get("team_id", "")
+        zones = params.get("zones", [])
+        return (
+            OPS_API_LAMBDA,
+            "PUT",
+            f"ops/teams/{team_id}/zones",
+            {"zones": zones},
+            None,
+        )
+
+    if operation == "update_stages":
+        team_id = params.get("team_id", "")
+        stages = params.get("stages", [])
+        return (
+            OPS_API_LAMBDA,
+            "PUT",
+            f"ops/teams/{team_id}/stages",
+            {"stages": stages},
+            None,
+        )
+
     if operation == "list_tickets":
         qp = {}
         param_map = {
@@ -566,6 +603,13 @@ def _resolve_lambda_and_request(
             qp["teamId"] = params["team_id"]
         return (OPS_API_LAMBDA, "DELETE", f"ops/tickets/{ticket_id}", None, qp or None)
 
+    if operation == "bulk_update_tickets":
+        body = {
+            "ticketIds": params.get("ticket_ids", []),
+            "changes": params.get("changes", {}),
+        }
+        return (OPS_API_LAMBDA, "POST", "ops/tickets/bulk", body, None)
+
     if operation == "add_comment":
         ticket_id = params.get("ticket_id", "")
         body = {
@@ -580,6 +624,10 @@ def _resolve_lambda_and_request(
     if operation == "list_comments":
         ticket_id = params.get("ticket_id", "")
         return (OPS_API_LAMBDA, "GET", f"ops/tickets/{ticket_id}/comments", None, None)
+
+    if operation == "get_audit":
+        ticket_id = params.get("ticket_id", "")
+        return (OPS_API_LAMBDA, "GET", f"ops/tickets/{ticket_id}/audit", None, None)
 
     if operation == "upload_attachment":
         body = {

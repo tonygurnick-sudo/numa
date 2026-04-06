@@ -197,6 +197,7 @@ export const linkConfigSchema = z.object({
 export const accessControlSchema = z.object({
   mode: accessControlModeSchema,
   users: z.array(z.string()).optional().default([]),
+  owners: z.array(z.string()).optional().default([]),
 });
 
 export const workUnitSeriesSchema = z.object({

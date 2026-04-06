@@ -56,6 +56,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
   // ── Access tab state ────────────────────────────────────────────────────
   const [accessMode, setAccessMode] = useState<AccessControlMode>('all');
   const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
+  const [ownerIds, setOwnerIds] = useState<string[]>([]);
 
   // ── Tab navigation & dirty tracking ─────────────────────────────────
   const [activeTab, setActiveTab] = useState('general');
@@ -68,8 +69,9 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const currentUserSub = user?.decoded_tokens?.idToken?.sub;
   const isOwner = Boolean(
-    team?.createdBy && user?.decoded_tokens?.idToken?.sub && team.createdBy === user.decoded_tokens.idToken.sub
+    currentUserSub && (team?.createdBy === currentUserSub || team?.accessControl?.owners?.includes(currentUserSub))
   );
 
   // ── Sync state from team data when modal opens ──────────────────────────
@@ -86,6 +88,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
       setAddedFields({ ...(team.addedFields ?? {}) });
       setAccessMode(team.accessControl?.mode ?? 'all');
       setAccessUserIds([...(team.accessControl?.users ?? [])]);
+      setOwnerIds([...(team.accessControl?.owners ?? [])]);
       setZones(existingZones.map((z) => ({ ...z })));
       setStages(existingStages.map((s) => ({ ...s })));
       setError(null);
@@ -176,6 +179,13 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     },
     [markDirty]
   );
+  const setOwnerIdsDirty = useCallback(
+    (v: string[]) => {
+      setOwnerIds(v);
+      markDirty();
+    },
+    [markDirty]
+  );
 
   // ── Tab navigation with dirty guard ────────────────────────────────
   const handleTabSelect = useCallback(
@@ -203,6 +213,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     setAddedFields({ ...(team.addedFields ?? {}) });
     setAccessMode(team.accessControl?.mode ?? 'all');
     setAccessUserIds([...(team.accessControl?.users ?? [])]);
+    setOwnerIds([...(team.accessControl?.owners ?? [])]);
     setZones(existingZones.map((z) => ({ ...z })));
     setStages(existingStages.map((s) => ({ ...s })));
   }, [team, config, existingZones, existingStages]);
@@ -317,7 +328,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
         fieldOverrides,
         addedFields,
         workUnitSeries,
-        accessControl: { mode: accessMode, users: accessMode === 'specific' ? accessUserIds : [] },
+        accessControl: { mode: accessMode, users: accessMode === 'specific' ? accessUserIds : [], owners: ownerIds },
         defaultZoneId: defaultZoneId || undefined,
         defaultStageId: defaultStageId || undefined,
       });
@@ -352,6 +363,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     workUnitSeries,
     accessMode,
     accessUserIds,
+    ownerIds,
     defaultZoneId,
     defaultStageId,
     zones,
@@ -506,27 +518,84 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
               </Tab.Pane>
 
               <Tab.Pane eventKey="access" style={{ minHeight: 320 }}>
-                <h6 className="mb-3">{t('settings.accessControl')}</h6>
-                <p className="text-muted small mb-3">{t('teams.accessControlHelp')}</p>
+                {/* ── Board Owners ──────────────────────────────────────── */}
+                <h6 className="mb-2">{t('teams.boardOwners')}</h6>
+                <p className="text-muted small mb-3">{t('teams.boardOwnersHelp')}</p>
 
-                {/* Board owner — always shown regardless of access mode */}
+                {/* Board creator — always shown, cannot be removed */}
                 {team.createdBy &&
                   config.staff &&
                   (() => {
-                    const owner = config.staff.find((s) => s.id === team.createdBy);
-                    return owner ? (
+                    const creator = config.staff.find((s) => s.id === team.createdBy);
+                    return creator ? (
                       <div
-                        className="d-flex align-items-center gap-2 mb-3 px-2 py-2"
+                        className="d-flex align-items-center gap-2 mb-2 px-2 py-2"
                         style={{ backgroundColor: '#f9fafb', borderRadius: 6 }}
                       >
-                        <StaffAvatar staff={owner} size={24} />
-                        <span className="small fw-medium">{owner.name || owner.email}</span>
+                        <StaffAvatar staff={creator} size={24} />
+                        <span className="small fw-medium">{creator.name || creator.email}</span>
                         <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>
-                          {t('teams.owner')}
+                          {t('teams.boardCreator')}
                         </Badge>
                       </div>
                     ) : null;
                   })()}
+
+                {/* Co-owners with remove capability */}
+                {config.staff &&
+                  ownerIds
+                    .filter((id) => id !== team.createdBy)
+                    .map((ownerId) => {
+                      const staff = config.staff.find((s) => s.id === ownerId);
+                      if (!staff) return null;
+                      return (
+                        <div
+                          key={ownerId}
+                          className="d-flex align-items-center gap-2 mb-2 px-2 py-2"
+                          style={{ backgroundColor: '#f9fafb', borderRadius: 6 }}
+                        >
+                          <StaffAvatar staff={staff} size={24} />
+                          <span className="small fw-medium">{staff.name || staff.email}</span>
+                          <Badge bg="primary" className="ms-1" style={{ fontSize: '0.65rem' }}>
+                            {t('teams.owner')}
+                          </Badge>
+                          {isOwner && (
+                            <button
+                              type="button"
+                              className="btn-close ms-auto"
+                              style={{ fontSize: '0.5rem' }}
+                              onClick={() => setOwnerIdsDirty(ownerIds.filter((id) => id !== ownerId))}
+                              aria-label={t('common.remove')}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+
+                {/* Add co-owner picker — only visible to owners */}
+                {isOwner && config.staff && (
+                  <div className="mb-4">
+                    <UserPicker
+                      staff={config.staff}
+                      selectedIds={[]}
+                      onChange={(ids) => {
+                        if (ids.length > 0) {
+                          const newOwners = [...new Set([...ownerIds, ...ids])];
+                          setOwnerIdsDirty(newOwners);
+                        }
+                      }}
+                      excludeIds={[...(team.createdBy ? [team.createdBy] : []), ...ownerIds]}
+                      mode="multi"
+                      placeholder={t('teams.addOwnerPlaceholder')}
+                    />
+                  </div>
+                )}
+
+                <hr className="my-3" />
+
+                {/* ── Access Control ────────────────────────────────────── */}
+                <h6 className="mb-2">{t('settings.accessControl')}</h6>
+                <p className="text-muted small mb-3">{t('teams.accessControlHelp')}</p>
 
                 <Form.Check
                   type="radio"
@@ -551,9 +620,11 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                     <Form.Label className="small text-muted">{t('teams.selectMembers')}</Form.Label>
                     <UserPicker
                       staff={config.staff}
-                      selectedIds={accessUserIds.filter((id) => id !== team.createdBy)}
-                      onChange={(ids) => setAccessUserIdsDirty(ids.filter((id) => id !== team.createdBy))}
-                      excludeIds={team.createdBy ? [team.createdBy] : []}
+                      selectedIds={accessUserIds.filter((id) => id !== team.createdBy && !ownerIds.includes(id))}
+                      onChange={(ids) =>
+                        setAccessUserIdsDirty(ids.filter((id) => id !== team.createdBy && !ownerIds.includes(id)))
+                      }
+                      excludeIds={[...(team.createdBy ? [team.createdBy] : []), ...ownerIds]}
                       mode="multi"
                     />
                   </div>

@@ -36,6 +36,7 @@ SAFE_OPERATIONS = frozenset(
         "get_ticket",
         "search_tickets",
         "list_comments",
+        "get_audit",
         "list_customers",
         "get_customer",
         "list_suppliers",
@@ -50,9 +51,12 @@ VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
     {
         "create_team",
         "update_team",
+        "update_zones",
+        "update_stages",
         "create_ticket",
         "update_ticket",
         "delete_ticket",
+        "bulk_update_tickets",
         "add_comment",
         "create_customer",
         "update_customer",
@@ -62,6 +66,7 @@ VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
         "delete_supplier",
         "create_project",
         "update_project",
+        "delete_project",
         "upload_attachment",
     }
 )
@@ -193,12 +198,15 @@ def _sync_ops_file_to_s3(file_path: Path, content: str) -> None:
                 "description": (
                     "The operation to perform. "
                     "Read operations: get_config, list_teams, get_team, list_tickets, "
-                    "get_ticket, search_tickets, list_comments, list_customers, "
+                    "get_ticket, search_tickets, list_comments, get_audit, list_customers, "
                     "get_customer, list_suppliers, get_supplier, list_projects, get_metrics. "
-                    "Write operations: create_team, update_team, create_ticket, "
-                    "update_ticket, delete_ticket, add_comment, create_customer, "
-                    "update_customer, delete_customer, create_supplier, update_supplier, "
-                    "delete_supplier, create_project, update_project, upload_attachment."
+                    "Write operations: create_team, update_team, update_zones, update_stages, "
+                    "create_ticket, update_ticket, delete_ticket, bulk_update_tickets, "
+                    "add_comment, create_customer, update_customer, delete_customer, "
+                    "create_supplier, update_supplier, delete_supplier, create_project, "
+                    "update_project, delete_project, upload_attachment. "
+                    "IMPORTANT: Ticket descriptions and comments use HTML format for rich text "
+                    "(e.g. <p>, <strong>, <ul><li>), NOT markdown."
                 ),
                 "enum": sorted(VALID_OPERATIONS),
             },

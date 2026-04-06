@@ -154,6 +154,7 @@ export type AccessControlMode = 'all' | 'specific' | 'inherit';
 export type AccessControl = {
   mode: AccessControlMode;
   users: string[];
+  owners: string[];
 };
 
 export type FieldOverride = {
