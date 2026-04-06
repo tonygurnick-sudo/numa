@@ -161,6 +161,12 @@ OPS_API_OPERATIONS = {
     "get_audit",
     "upload_attachment",
     "get_metrics",
+    "list_work_units",
+    "create_work_unit",
+    "update_work_unit",
+    "delete_work_unit",
+    "create_link",
+    "delete_link",
 }
 
 # Operations that route to numa-ops-config-api
@@ -208,6 +214,9 @@ def _resolve_lambda_and_request(
             "name": "name",
             "description": "description",
             "color": "color",
+            "status": "status",
+            "owner_id": "ownerId",
+            "owner_name": "ownerName",
         }
         for snake, camel in mapping.items():
             if params.get(snake) is not None:
@@ -222,6 +231,9 @@ def _resolve_lambda_and_request(
             "description": "description",
             "color": "color",
             "is_active": "isActive",
+            "status": "status",
+            "owner_id": "ownerId",
+            "owner_name": "ownerName",
         }
         for snake, camel in mapping.items():
             if params.get(snake) is not None:
@@ -438,9 +450,12 @@ def _resolve_lambda_and_request(
             "color": "color",
             "ticket_type_id": "ticketTypeId",
             "allowed_ticket_types": "allowedTicketTypes",
+            "field_overrides": "fieldOverrides",
+            "added_fields": "addedFields",
             "access_control": "accessControl",
             "work_unit_series": "workUnitSeries",
             "preset": "preset",
+            "announcement": "announcement",
             "custom_stages": "customStages",
             "zones": "zones",
         }
@@ -458,8 +473,11 @@ def _resolve_lambda_and_request(
             "color": "color",
             "ticket_type_id": "ticketTypeId",
             "allowed_ticket_types": "allowedTicketTypes",
+            "field_overrides": "fieldOverrides",
+            "added_fields": "addedFields",
             "access_control": "accessControl",
             "work_unit_series": "workUnitSeries",
+            "announcement": "announcement",
         }
         for snake, camel in mapping.items():
             if params.get(snake) is not None:
@@ -497,6 +515,7 @@ def _resolve_lambda_and_request(
             "assignee_id": "assigneeId",
             "customer_id": "customerId",
             "work_unit_id": "workUnitId",
+            "project_id": "projectId",
             "priority": "priority",
             "include_archived": "includeArchived",
             "limit": "limit",
@@ -554,9 +573,13 @@ def _resolve_lambda_and_request(
             "supplier_id": "supplierId",
             "supplier_name": "supplierName",
             "work_unit_id": "workUnitId",
+            "project_id": "projectId",
             "tags": "tags",
             "fields": "fields",
             "effort_points": "effortPoints",
+            "source_type": "sourceType",
+            "source_id": "sourceId",
+            "source_app_type": "sourceAppType",
         }
         for snake, camel in mapping.items():
             if params.get(snake) is not None:
@@ -584,6 +607,7 @@ def _resolve_lambda_and_request(
             "supplier_id": "supplierId",
             "supplier_name": "supplierName",
             "work_unit_id": "workUnitId",
+            "project_id": "projectId",
             "tags": "tags",
             "fields": "fields",
             "effort_points": "effortPoints",
@@ -636,6 +660,84 @@ def _resolve_lambda_and_request(
             "contextId": params.get("ticket_id"),
         }
         return (OPS_API_LAMBDA, "POST", "ops/uploads/presigned-url", body, None)
+
+    if operation == "list_work_units":
+        team_id = params.get("team_id", "")
+        return (OPS_API_LAMBDA, "GET", f"ops/teams/{team_id}/work-units", None, None)
+
+    if operation == "create_work_unit":
+        team_id = params.get("team_id", "")
+        body = {}
+        mapping = {
+            "name": "name",
+            "goal": "goal",
+            "start_date": "startDate",
+            "end_date": "endDate",
+            "status": "status",
+            "capacity": "capacity",
+        }
+        for snake, camel in mapping.items():
+            if params.get(snake) is not None:
+                body[camel] = params[snake]
+        return (OPS_API_LAMBDA, "POST", f"ops/teams/{team_id}/work-units", body, None)
+
+    if operation == "update_work_unit":
+        team_id = params.get("team_id", "")
+        work_unit_id = params.get("work_unit_id", "")
+        body = {}
+        mapping = {
+            "name": "name",
+            "goal": "goal",
+            "start_date": "startDate",
+            "end_date": "endDate",
+            "status": "status",
+            "capacity": "capacity",
+        }
+        for snake, camel in mapping.items():
+            if params.get(snake) is not None:
+                body[camel] = params[snake]
+        return (
+            OPS_API_LAMBDA,
+            "PUT",
+            f"ops/teams/{team_id}/work-units/{work_unit_id}",
+            body,
+            None,
+        )
+
+    if operation == "delete_work_unit":
+        team_id = params.get("team_id", "")
+        work_unit_id = params.get("work_unit_id", "")
+        return (
+            OPS_API_LAMBDA,
+            "DELETE",
+            f"ops/teams/{team_id}/work-units/{work_unit_id}",
+            None,
+            None,
+        )
+
+    if operation == "create_link":
+        ticket_id = params.get("ticket_id", "")
+        body = {
+            "linkedTicketId": params.get("linked_ticket_id", ""),
+            "linkedTicketDisplayId": params.get("linked_ticket_display_id", ""),
+            "linkedTicketTitle": params.get("linked_ticket_title"),
+            "linkType": params.get("link_type", ""),
+            "teamId": params.get("team_id"),
+            "linkedTeamId": params.get("linked_team_id"),
+        }
+        return (OPS_API_LAMBDA, "POST", f"ops/tickets/{ticket_id}/links", body, None)
+
+    if operation == "delete_link":
+        ticket_id = params.get("ticket_id", "")
+        link_type = params.get("link_type", "")
+        linked_ticket_id = params.get("linked_ticket_id", "")
+        return (
+            OPS_API_LAMBDA,
+            "DELETE",
+            f"ops/tickets/{ticket_id}/links/{link_type}/{linked_ticket_id}",
+            None,
+            None,
+        )
 
     if operation == "get_metrics":
         qp = {}

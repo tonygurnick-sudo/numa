@@ -57,21 +57,27 @@ mcp__numa__numa_ops_tool(
 
 #### create_project
 
-| Parameter     | Type   | Required | Description         |
-| ------------- | ------ | -------- | ------------------- |
-| `name`        | string | Yes      | Project name        |
-| `description` | string | No       | Project description |
-| `color`       | string | No       | Hex color code      |
+| Parameter     | Type   | Required | Description                                |
+| ------------- | ------ | -------- | ------------------------------------------ |
+| `name`        | string | Yes      | Project name                               |
+| `description` | string | No       | Project description                        |
+| `color`       | string | No       | Hex color code                             |
+| `status`      | string | No       | Status: active, planned, on_hold, complete |
+| `owner_id`    | string | No       | Owner user sub (from get_config staff)     |
+| `owner_name`  | string | No       | Owner display name                         |
 
 #### update_project
 
-| Parameter     | Type    | Required | Description                              |
-| ------------- | ------- | -------- | ---------------------------------------- |
-| `project_id`  | string  | Yes      | Project ID                               |
-| `name`        | string  | No       | New project name                         |
-| `description` | string  | No       | New description                          |
-| `color`       | string  | No       | New color                                |
-| `is_active`   | boolean | No       | Set false to deactivate, true to restore |
+| Parameter     | Type    | Required | Description                                |
+| ------------- | ------- | -------- | ------------------------------------------ |
+| `project_id`  | string  | Yes      | Project ID                                 |
+| `name`        | string  | No       | New project name                           |
+| `description` | string  | No       | New description                            |
+| `color`       | string  | No       | New color                                  |
+| `is_active`   | boolean | No       | Set false to deactivate, true to restore   |
+| `status`      | string  | No       | Status: active, planned, on_hold, complete |
+| `owner_id`    | string  | No       | Owner user sub                             |
+| `owner_name`  | string  | No       | Owner display name                         |
 
 #### delete_project
 
@@ -116,7 +122,10 @@ Returns the board with its zones and stages. Use this to get valid `stage_id` va
 | `preset`               | string | No       | Board preset (e.g., "standard")                                                                      |
 | `ticket_type_id`       | string | No       | Default ticket type ID                                                                               |
 | `allowed_ticket_types` | array  | No       | List of allowed ticket type IDs                                                                      |
+| `field_overrides`      | object | No       | Custom field overrides per board `{fieldId: {required: true, hidden: false}}`                        |
+| `added_fields`         | object | No       | Additional fields per ticket type `{ticketTypeId: [fieldId, ...]}`                                   |
 | `access_control`       | object | No       | `{"mode": "all"\|"specific", "users": ["sub1", "sub2"], "owners": ["sub3"]}` -- owners are co-owners |
+| `announcement`         | string | No       | Board announcement text (shown at top of board)                                                      |
 | `zones`                | array  | No       | Custom zone definitions                                                                              |
 
 #### update_team
@@ -130,8 +139,11 @@ Only board owners (creator or co-owners) and admins can update team settings.
 | `description`          | string | No       | New description                                                                    |
 | `color`                | string | No       | New color                                                                          |
 | `allowed_ticket_types` | array  | No       | List of allowed ticket type IDs                                                    |
+| `field_overrides`      | object | No       | Custom field overrides `{fieldId: {required, hidden}}`                             |
+| `added_fields`         | object | No       | Additional fields per ticket type `{ticketTypeId: [fieldId, ...]}`                 |
 | `access_control`       | object | No       | `{"mode": "all"\|"specific", "users": [...], "owners": [...]}` -- manage ownership |
 | `work_unit_series`     | object | No       | Work unit (sprint) configuration                                                   |
+| `announcement`         | string | No       | Board announcement text                                                            |
 
 #### update_zones
 
@@ -183,6 +195,7 @@ Valid `statusType` values per zone type:
 | `assignee_id`      | string | No       | Filter by assignee (user sub)                                    |
 | `customer_id`      | string | No       | Filter by linked customer                                        |
 | `work_unit_id`     | string | No       | Filter by sprint/work unit                                       |
+| `project_id`       | string | No       | Filter by project                                                |
 | `priority`         | string | No       | Filter by priority (lowest, low, medium, high, highest)          |
 | `include_archived` | string | No       | Set to "true" to include archived tickets                        |
 | `limit`            | string | No       | Pagination limit                                                 |
@@ -207,27 +220,31 @@ Valid `statusType` values per zone type:
 
 **IMPORTANT:** Call `get_config` first to get valid ticket types and staff. Call `get_team` to get valid stage IDs for the board.
 
-| Parameter        | Type   | Required | Description                                                                     |
-| ---------------- | ------ | -------- | ------------------------------------------------------------------------------- |
-| `team_id`        | string | Yes      | Board to create the ticket in                                                   |
-| `stage_id`       | string | Yes      | Stage ID (from get_team response zones/stages)                                  |
-| `title`          | string | Yes      | Ticket title                                                                    |
-| `ticket_type_id` | string | No       | Ticket type ID (from get_config ticketTypes)                                    |
-| `description`    | string | No       | Ticket description (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
-| `priority`       | string | No       | Priority: lowest, low, medium, high, highest                                    |
-| `assignee_id`    | string | No       | Assignee user sub (from get_config staff)                                       |
-| `assignee_name`  | string | No       | Assignee display name                                                           |
-| `reporter_id`    | string | No       | Reporter user sub (defaults to current user)                                    |
-| `reporter_name`  | string | No       | Reporter display name                                                           |
-| `due_date`       | string | No       | Due date in ISO 8601 format                                                     |
-| `customer_id`    | string | No       | Link to a customer                                                              |
-| `customer_name`  | string | No       | Customer display name                                                           |
-| `supplier_id`    | string | No       | Link to a supplier                                                              |
-| `supplier_name`  | string | No       | Supplier display name                                                           |
-| `work_unit_id`   | string | No       | Link to a sprint/work unit                                                      |
-| `tags`           | array  | No       | List of tag strings                                                             |
-| `fields`         | object | No       | Custom field values (field_id → value)                                          |
-| `effort_points`  | number | No       | Effort/story points                                                             |
+| Parameter         | Type   | Required | Description                                                                     |
+| ----------------- | ------ | -------- | ------------------------------------------------------------------------------- |
+| `team_id`         | string | Yes      | Board to create the ticket in                                                   |
+| `stage_id`        | string | Yes      | Stage ID (from get_team response zones/stages)                                  |
+| `title`           | string | Yes      | Ticket title                                                                    |
+| `ticket_type_id`  | string | No       | Ticket type ID (from get_config ticketTypes)                                    |
+| `description`     | string | No       | Ticket description (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
+| `priority`        | string | No       | Priority: lowest, low, medium, high, highest                                    |
+| `assignee_id`     | string | No       | Assignee user sub (from get_config staff)                                       |
+| `assignee_name`   | string | No       | Assignee display name                                                           |
+| `reporter_id`     | string | No       | Reporter user sub (defaults to current user)                                    |
+| `reporter_name`   | string | No       | Reporter display name                                                           |
+| `due_date`        | string | No       | Due date in ISO 8601 format                                                     |
+| `customer_id`     | string | No       | Link to a customer                                                              |
+| `customer_name`   | string | No       | Customer display name                                                           |
+| `supplier_id`     | string | No       | Link to a supplier                                                              |
+| `supplier_name`   | string | No       | Supplier display name                                                           |
+| `work_unit_id`    | string | No       | Link to a sprint/work unit                                                      |
+| `project_id`      | string | No       | Link to a project                                                               |
+| `tags`            | array  | No       | List of tag strings                                                             |
+| `fields`          | object | No       | Custom field values (field_id → value)                                          |
+| `effort_points`   | number | No       | Effort/story points                                                             |
+| `source_type`     | string | No       | Origin of ticket: app, chat, agent, manual                                      |
+| `source_id`       | string | No       | Source record ID (e.g., conversation ID, app run ID)                            |
+| `source_app_type` | string | No       | Source application type identifier                                              |
 
 #### update_ticket
 
@@ -247,6 +264,7 @@ Valid `statusType` values per zone type:
 | `customer_id`     | string  | No       | Link to customer                                   |
 | `supplier_id`     | string  | No       | Link to supplier                                   |
 | `work_unit_id`    | string  | No       | Link to sprint/work unit                           |
+| `project_id`      | string  | No       | Link to project                                    |
 | `tags`            | array   | No       | Updated tags                                       |
 | `fields`          | object  | No       | Updated custom field values                        |
 | `effort_points`   | number  | No       | Updated effort points                              |
@@ -291,6 +309,84 @@ Get the audit trail (change history) for a ticket. Returns entries in reverse ch
 | Parameter   | Type   | Required | Description             |
 | ----------- | ------ | -------- | ----------------------- |
 | `ticket_id` | string | Yes      | Ticket to get audit for |
+
+---
+
+### Work Units (Sprints)
+
+| Operation          | Description                        | Approval |
+| ------------------ | ---------------------------------- | -------- |
+| `list_work_units`  | List sprints for a board           | No       |
+| `create_work_unit` | Create a new sprint                | Yes      |
+| `update_work_unit` | Update an existing sprint          | Yes      |
+| `delete_work_unit` | Delete a sprint (admin/owner only) | Yes      |
+
+#### list_work_units
+
+| Parameter | Type   | Required | Description |
+| --------- | ------ | -------- | ----------- |
+| `team_id` | string | Yes      | Board ID    |
+
+#### create_work_unit
+
+| Parameter    | Type   | Required | Description                         |
+| ------------ | ------ | -------- | ----------------------------------- |
+| `team_id`    | string | Yes      | Board ID                            |
+| `name`       | string | Yes      | Sprint name                         |
+| `goal`       | string | No       | Sprint goal/objective               |
+| `start_date` | string | No       | Start date (ISO 8601)               |
+| `end_date`   | string | No       | End date (ISO 8601)                 |
+| `status`     | string | No       | Status: planning, active, completed |
+| `capacity`   | number | No       | Sprint capacity (story points)      |
+
+#### update_work_unit
+
+| Parameter      | Type   | Required | Description    |
+| -------------- | ------ | -------- | -------------- |
+| `team_id`      | string | Yes      | Board ID       |
+| `work_unit_id` | string | Yes      | Work unit ID   |
+| `name`         | string | No       | New name       |
+| `goal`         | string | No       | New goal       |
+| `start_date`   | string | No       | New start date |
+| `end_date`     | string | No       | New end date   |
+| `status`       | string | No       | New status     |
+| `capacity`     | number | No       | New capacity   |
+
+#### delete_work_unit
+
+| Parameter      | Type   | Required | Description  |
+| -------------- | ------ | -------- | ------------ |
+| `team_id`      | string | Yes      | Board ID     |
+| `work_unit_id` | string | Yes      | Work unit ID |
+
+---
+
+### Ticket Links
+
+| Operation     | Description                           | Approval |
+| ------------- | ------------------------------------- | -------- |
+| `create_link` | Create a dependency/relationship link | Yes      |
+| `delete_link` | Remove a link between two tickets     | Yes      |
+
+#### create_link
+
+| Parameter                  | Type   | Required | Description                                      |
+| -------------------------- | ------ | -------- | ------------------------------------------------ |
+| `ticket_id`                | string | Yes      | Source ticket ID                                 |
+| `linked_ticket_id`         | string | Yes      | Target ticket ID                                 |
+| `linked_ticket_display_id` | string | Yes      | Target ticket display ID (e.g., "ENG-42")        |
+| `linked_ticket_title`      | string | No       | Target ticket title                              |
+| `link_type`                | string | Yes      | Link type: depends_on, blocks, related_to        |
+| `team_id`                  | string | No       | Source ticket's board ID                         |
+| `linked_team_id`           | string | No       | Target ticket's board ID (for cross-board links) |
+
+#### delete_link
+
+| Parameter          | Type   | Required | Description      |
+| ------------------ | ------ | -------- | ---------------- |
+| `ticket_id`        | string | Yes      | Source ticket ID |
+| `link_type`        | string | Yes      | Link type        |
+| `linked_ticket_id` | string | Yes      | Target ticket ID |
 
 ---
 
