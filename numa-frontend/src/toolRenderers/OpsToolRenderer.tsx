@@ -430,7 +430,7 @@ const CommentList = ({ comments }: { comments: OpsComment[] }) => {
             <span className="ops-renderer-comment-author">{c.authorName || c.authorEmail || 'Unknown'}</span>
             {c.createdAt && <span className="ops-renderer-comment-date">{new Date(c.createdAt).toLocaleString()}</span>}
           </div>
-          <div className="ops-renderer-comment-body">{c.content}</div>
+          <div className="ops-renderer-comment-body" dangerouslySetInnerHTML={{ __html: c.content }} />
         </div>
       ))}
     </div>

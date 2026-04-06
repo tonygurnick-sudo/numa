@@ -43,6 +43,7 @@ SAFE_OPERATIONS = frozenset(
         "search_tickets",
         "list_comments",
         "get_audit",
+        "list_work_units",
         "list_customers",
         "get_customer",
         "list_suppliers",
@@ -70,6 +71,11 @@ VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
         "create_supplier",
         "update_supplier",
         "delete_supplier",
+        "create_work_unit",
+        "update_work_unit",
+        "delete_work_unit",
+        "create_link",
+        "delete_link",
         "create_project",
         "update_project",
         "delete_project",
@@ -219,11 +225,13 @@ def _sync_ops_file_to_s3(file_path: Path, content: str) -> None:
                 "description": (
                     "The operation to perform. "
                     "Read operations: get_config, list_teams, get_team, list_tickets, "
-                    "get_ticket, search_tickets, list_comments, get_audit, list_customers, "
-                    "get_customer, list_suppliers, get_supplier, list_projects, get_metrics. "
+                    "get_ticket, search_tickets, list_comments, get_audit, list_work_units, "
+                    "list_customers, get_customer, list_suppliers, get_supplier, list_projects, get_metrics. "
                     "Write operations: create_team, update_team, update_zones, update_stages, "
                     "create_ticket, update_ticket, delete_ticket, bulk_update_tickets, "
-                    "add_comment, create_customer, update_customer, delete_customer, "
+                    "add_comment, create_work_unit, update_work_unit, delete_work_unit, "
+                    "create_link, delete_link, "
+                    "create_customer, update_customer, delete_customer, "
                     "create_supplier, update_supplier, delete_supplier, create_project, "
                     "update_project, delete_project, upload_attachment. "
                     "IMPORTANT: Ticket descriptions and comments use HTML format for rich text "
@@ -331,7 +339,10 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                     file_size = local_path.stat().st_size
 
                     with open(local_path, "rb") as f:
-                        req = urllib.request.Request(upload_url, data=f, method="PUT")
+                        file_data = f.read()
+                        req = urllib.request.Request(
+                            upload_url, data=file_data, method="PUT"
+                        )
                         req.add_header("Content-Type", content_type)
                         req.add_header("Content-Length", str(file_size))
                         urllib.request.urlopen(req, timeout=60.0)

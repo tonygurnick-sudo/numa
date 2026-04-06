@@ -628,9 +628,13 @@ def _resolve_lambda_and_request(
         return (OPS_API_LAMBDA, "DELETE", f"ops/tickets/{ticket_id}", None, qp or None)
 
     if operation == "bulk_update_tickets":
+        changes = dict(params.get("changes", {}))
+        # Backend requires teamId in changes for ticket lookup
+        if params.get("team_id") and "teamId" not in changes:
+            changes["teamId"] = params["team_id"]
         body = {
             "ticketIds": params.get("ticket_ids", []),
-            "changes": params.get("changes", {}),
+            "changes": changes,
         }
         return (OPS_API_LAMBDA, "POST", "ops/tickets/bulk", body, None)
 
