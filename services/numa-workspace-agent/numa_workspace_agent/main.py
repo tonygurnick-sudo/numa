@@ -994,6 +994,7 @@ async def invocations(request: Request):
 
     # Export user context to environment for tools (they read from env vars)
     os.environ["NUMA_USER_SUB"] = user_sub or "unknown"
+    os.environ["NUMA_USER_EMAIL"] = user_email or ""
     os.environ["NUMA_CONVERSATION_ID"] = conversation_id
 
     logger.info(

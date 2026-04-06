@@ -42,6 +42,7 @@ def _build_apigw_event(
     query_params: dict | None = None,
     user_sub: str = "",
     user_email: str = "",
+    user_name: str = "",
     user_groups: list | None = None,
 ) -> dict:
     """Build a minimal API Gateway V2 event for direct Lambda invocation.
@@ -65,6 +66,7 @@ def _build_apigw_event(
         "userContext": {
             "sub": user_sub,
             "email": user_email,
+            "name": user_name,
             "groups": user_groups or [],
         },
     }
@@ -81,6 +83,7 @@ def _invoke_ops_lambda(
     query_params: dict | None = None,
     user_sub: str = "",
     user_email: str = "",
+    user_name: str = "",
     user_groups: list | None = None,
 ) -> Dict[str, Any]:
     """Invoke an ops Lambda and return the parsed response body."""
@@ -94,6 +97,7 @@ def _invoke_ops_lambda(
         query_params,
         user_sub=user_sub,
         user_email=user_email,
+        user_name=user_name,
         user_groups=user_groups,
     )
 
@@ -776,6 +780,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
     op_params = event.get("params", {})
     user_sub = event.get("user_sub", "")
     user_email = event.get("user_email", "")
+    user_name = event.get("user_name", "")
     user_groups = event.get("user_groups", [])
     # Default to False (fail-closed) — matches integrations handler.
     # If auto_approved is missing or unexpected, require approval.
@@ -852,6 +857,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
             query_params=query_params,
             user_sub=user_sub,
             user_email=user_email,
+            user_name=user_name,
             user_groups=user_groups,
         )
 

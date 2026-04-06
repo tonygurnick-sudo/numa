@@ -129,6 +129,8 @@ def invoke_workspace_tool(
         "tool": tool_name,
         "allowed_tools": json.loads(os.environ.get("NUMA_ENABLED_TOOLS", "[]")),
         "user_sub": os.environ.get("NUMA_USER_SUB", ""),
+        "user_email": os.environ.get("NUMA_USER_EMAIL", ""),
+        "user_name": os.environ.get("NUMA_USER_NAME", ""),
         "conversation_id": os.environ.get("NUMA_CONVERSATION_ID", ""),
         "external_user_id": os.environ.get("NUMA_EXTERNAL_USER_ID", ""),
         "params": params,
