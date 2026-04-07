@@ -18,6 +18,8 @@ import type {
   Supplier,
   AuditEntry,
   AuditAction,
+  WorkZone,
+  WorkStage,
 } from '../../../types/ops';
 import { CommentSection } from '../Shared/CommentSection';
 import { LinkedTicketsSection } from '../Shared/LinkedTicketsSection';
@@ -173,6 +175,9 @@ export function TicketDetailModal({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
+  // ── Ticket's own team data (zones/stages) for cross-team accuracy ──────
+  const [ticketTeamData, setTicketTeamData] = useState<{ zones: WorkZone[]; stages: WorkStage[] } | null>(null);
+
   // ── Inline editing state ────────────────────────────────────────────────
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -197,6 +202,12 @@ export function TicketDetailModal({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const descriptionEditorRef = useRef<RichTextEditorHandle>(null);
 
+  // ── Close handler — always flush description before closing ─────────────
+  const handleClose = useCallback(() => {
+    descriptionEditorRef.current?.flush();
+    onHide();
+  }, [onHide]);
+
   // ── Derived data ────────────────────────────────────────────────────────
   const ticketType: TicketType | undefined = ticket
     ? config?.ticketTypes.find((tt) => tt.id === ticket.ticketTypeId)
@@ -215,6 +226,16 @@ export function TicketDetailModal({
       const response = await OpsService.getTicket(numaGet, ticketId, effectiveTeamId ?? undefined);
       setTicket(response.ticket);
       setLinks(response.links ?? []);
+
+      // Load the ticket's actual team data so the stage dropdown is always accurate
+      const ticketTeam = response.ticket.teamId;
+      if (ticketTeam) {
+        OpsService.getTeam(numaGet, ticketTeam)
+          .then((teamResp) => setTicketTeamData({ zones: teamResp.zones, stages: teamResp.stages }))
+          .catch(() => {
+            /* fall back to context teamData */
+          });
+      }
     } catch (err) {
       console.error('[TicketDetailModal] Failed to load ticket', err);
       setError(String(err));
@@ -225,6 +246,7 @@ export function TicketDetailModal({
 
   useEffect(() => {
     if (show && ticketId) {
+      setTicketTeamData(null);
       void loadTicket();
       // Load CRM lists for selector dropdowns
       void OpsService.listCustomers(numaGet)
@@ -554,8 +576,8 @@ export function TicketDetailModal({
     const staff = config.staff;
     const projects = config.projects;
     const hasWorkUnits = team?.workUnitSeries?.enabled === true;
-    const allZones = teamData?.zones ?? [];
-    const allStages = teamData?.stages ?? [];
+    const allZones = ticketTeamData?.zones ?? teamData?.zones ?? [];
+    const allStages = ticketTeamData?.stages ?? teamData?.stages ?? [];
     const selectStyle: React.CSSProperties = { fontSize: '0.85rem' };
 
     return (
@@ -867,7 +889,7 @@ export function TicketDetailModal({
     if (!ticket) return null;
 
     const typeColor = ticketType?.color ?? '#6c757d';
-    const currentStage = (teamData?.stages ?? []).find((s) => s.id === ticket.stageId);
+    const currentStage = (ticketTeamData?.stages ?? teamData?.stages ?? []).find((s) => s.id === ticket.stageId);
 
     return (
       <Modal.Header closeButton className="align-items-start pb-2">
@@ -1064,7 +1086,7 @@ export function TicketDetailModal({
     <>
       <Modal
         show={show}
-        onHide={onHide}
+        onHide={handleClose}
         size="xl"
         fullscreen="lg-down"
         dialogClassName="ticket-detail-modal"
@@ -1116,18 +1138,10 @@ export function TicketDetailModal({
                 </Button>
               </div>
               <div className="d-flex align-items-center gap-2">
-                <Button variant="outline-secondary" size="sm" onClick={onHide} style={{ fontSize: '0.8rem' }}>
+                <Button variant="outline-secondary" size="sm" onClick={handleClose} style={{ fontSize: '0.8rem' }}>
                   {t('common.close')}
                 </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  style={{ fontSize: '0.8rem', minWidth: 70 }}
-                  onClick={() => {
-                    descriptionEditorRef.current?.flush();
-                    onHide();
-                  }}
-                >
+                <Button variant="primary" size="sm" style={{ fontSize: '0.8rem', minWidth: 70 }} onClick={handleClose}>
                   {t('common.save')}
                 </Button>
               </div>

@@ -20,5 +20,5 @@ export function StageBadge({ stageId, stages }: StageBadgeProps): React.JSX.Elem
 
   const color = getStatusTypeColor(stage.statusType ?? 'backlog');
 
-  return <span style={{ color, fontWeight: 500 }}>{stage.name.toLowerCase()}</span>;
+  return <span style={{ color, fontWeight: 500 }}>{stage.name}</span>;
 }
