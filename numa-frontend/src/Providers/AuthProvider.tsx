@@ -429,6 +429,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
   }, [clearScheduledRefresh]);
 
   const refreshTokens = useCallback(async () => {
+    // During MFA enrollment, tokens are stored in refs by storeTokensWithoutLogin
+    // but the refresh token may be revoked (admin called GlobalSignOut). Skip
+    // background refresh entirely — the enrollment flow has its own valid tokens.
+    if (mfaEnrollmentInProgressRef.current) {
+      return false;
+    }
+
     // Prevent concurrent refresh operations
     if (refreshInProgressRef.current) {
       return refreshPromiseRef.current;
@@ -522,14 +529,12 @@ export const AuthProvider = ({ children, initialTokens }) => {
             const newDecodedIdToken = jwtDecode(IdToken);
 
             // Check server-side MFA claims from the token-adjuster Lambda.
-            // If an admin reset MFA while the user was logged in, the refreshed
-            // token will have the claim — force re-login for MFA enrollment.
+            // Only mfa_setup_required forces re-login (no MFA, no grace period).
+            // mfa_reset_pending is allowed — the user is in a grace period after
+            // an admin reset and can continue using the app until they re-enroll.
             const refreshedIdPayload = newDecodedIdToken as Record<string, unknown>;
-            if (
-              refreshedIdPayload['custom:mfa_setup_required'] === 'true' ||
-              refreshedIdPayload['custom:mfa_reset_pending'] === 'true'
-            ) {
-              console.warn('⚠️ Refreshed token has MFA enforcement claim — forcing re-login');
+            if (refreshedIdPayload['custom:mfa_setup_required'] === 'true') {
+              console.warn('⚠️ Refreshed token has MFA setup required claim — forcing re-login');
               logout();
               return false;
             }
@@ -1499,14 +1504,12 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
         // Check server-side MFA claims injected by the token-adjuster Lambda.
         // These are in the Cognito-signed ID token and cannot be tampered with.
-        // If MFA enrollment/reset is required, do NOT restore the session —
-        // force the user back to login where MFA enforcement will run.
+        // Only mfa_setup_required forces re-login — it means the user has no MFA
+        // and no grace period. mfa_reset_pending is allowed: it means an admin
+        // reset MFA and the user is in a grace period (handled at login time).
         const idTokenPayload = decodedIdToken as Record<string, unknown>;
-        if (
-          idTokenPayload['custom:mfa_setup_required'] === 'true' ||
-          idTokenPayload['custom:mfa_reset_pending'] === 'true'
-        ) {
-          console.warn('⚠️ ID token has MFA enforcement claim — clearing session, user must re-login');
+        if (idTokenPayload['custom:mfa_setup_required'] === 'true') {
+          console.warn('⚠️ ID token has MFA setup required claim — clearing session, user must re-login');
           localStorage.removeItem('accessToken');
           localStorage.removeItem('idToken');
           localStorage.removeItem('refreshToken');
@@ -1737,6 +1740,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     NewDeviceMetadata?: { DeviceKey?: string; DeviceGroupKey?: string };
   } | null>(null);
   const pendingRememberDeviceRef = useRef(false);
+  const mfaEnrollmentInProgressRef = useRef(false);
 
   const storeTokensWithoutLogin = (authResult: {
     AccessToken: string;
@@ -1772,6 +1776,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     username: string,
     isAdminReset = false
   ): Promise<MfaSetupRequired> => {
+    mfaEnrollmentInProgressRef.current = true;
     storeTokensWithoutLogin(authResult);
 
     // Initiate MFA enrollment using the stored access token
@@ -1824,6 +1829,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
     await confirmAndRememberDevice(pending, cognitoClient, pending.AccessToken, rememberDevice);
     pendingAuthTokensRef.current = null;
+    mfaEnrollmentInProgressRef.current = false;
     return result;
   }, []);
 
@@ -2498,15 +2504,19 @@ export const AuthProvider = ({ children, initialTokens }) => {
         })
       );
 
-      // Clear the grace period record in DynamoDB (best-effort)
+      // Clear the grace period record in DynamoDB so the next token refresh
+      // gets a clean token without the mfa_reset_pending claim.
       try {
         const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
-        await fetch(`${API_ENDPOINT}/settings/mfa/complete-reset`, {
+        const resetRes = await fetch(`${API_ENDPOINT}/settings/mfa/complete-reset`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         });
+        if (!resetRes.ok) {
+          console.warn(`complete-reset returned ${resetRes.status} — grace period may persist until expiry`);
+        }
       } catch (err) {
-        console.warn('Failed to clear MFA reset record (non-blocking):', err);
+        console.warn('Failed to clear MFA reset record — grace period may persist until expiry:', err);
       }
     },
     [getAccessToken]
