@@ -26,6 +26,14 @@ interface VoiceRecordButtonProps {
 /** Maximum recording duration in seconds (30 minutes) */
 const MAX_RECORDING_SECONDS = 1800;
 
+/** Stores the elapsed seconds of the most recent completed recording */
+let lastRecordingDuration = 0;
+
+/** Returns the duration (in seconds) of the last completed voice recording */
+export function getLastRecordingDuration(): number {
+  return lastRecordingDuration;
+}
+
 /** Number of bars in the audio visualizer */
 const VISUALIZER_BARS = 32;
 
@@ -236,6 +244,7 @@ export default function VoiceRecordButton({
       recorder.onstop = () => {
         clearTimer();
         stopMediaTracks();
+        lastRecordingDuration = elapsedRef.current;
 
         if (cancelledRef.current) {
           cancelledRef.current = false;
