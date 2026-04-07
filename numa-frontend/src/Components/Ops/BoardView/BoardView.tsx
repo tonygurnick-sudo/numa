@@ -514,7 +514,7 @@ const BoardView = () => {
             break;
           }
           case 'archive':
-            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version);
+            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.teamId);
             await refreshTickets();
             break;
           case 'delete':

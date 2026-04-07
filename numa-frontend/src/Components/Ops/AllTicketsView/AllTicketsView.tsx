@@ -948,11 +948,11 @@ export function AllTicketsView(): React.JSX.Element {
             await navigator.clipboard.writeText(`${window.location.origin}/ops?ticket=${ticket.displayId}`);
             break;
           case 'archive':
-            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version);
+            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.teamId);
             await refreshTickets();
             break;
           case 'unarchive':
-            await OpsService.unarchiveTicket(numaPut, ticket.id, ticket.version);
+            await OpsService.unarchiveTicket(numaPut, ticket.id, ticket.version, ticket.teamId);
             await refreshTickets();
             break;
           case 'delete':
