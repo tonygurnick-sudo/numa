@@ -1378,7 +1378,6 @@ export function AllTicketsView(): React.JSX.Element {
         onColumnsChange={(updated) => {
           const newVisible = updated.filter((c) => c.visible).map((c) => c.id);
           setVisibleColumnKeys(newVisible.length > 0 ? newVisible : DEFAULT_VISIBLE_KEYS);
-          setShowColumnPicker(false);
         }}
       />
       <SaveViewModal

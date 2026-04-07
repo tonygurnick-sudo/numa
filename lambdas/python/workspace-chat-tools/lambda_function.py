@@ -695,10 +695,11 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     # Pass allowed_kbs to handler for defensive validation
     params["__allowed_kbs"] = allowed_kbs
     params["__allowed_kbs_with_names"] = allowed_kbs_with_names
-    # Inject auth context for ops handlers (user_sub/email/groups from top-level event)
+    # Inject auth context for ops handlers (user_sub/email/name/groups from top-level event)
     if tool_name and tool_name.startswith("ops_"):
         params["user_sub"] = user_sub
         params["user_email"] = event.get("user_email", "")
+        params["user_name"] = event.get("user_name", "")
         params["user_groups"] = event.get("user_groups", [])
     logger.info("Executing tool", tool=tool_name)
 

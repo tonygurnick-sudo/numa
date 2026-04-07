@@ -63,7 +63,6 @@ import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/Workspac
 import { WorkspaceChatAgentsPanel } from '../Components/WorkspaceChat/WorkspaceChatAgentsPanel';
 import { useWorkspaceChatSettingsPanel } from '../hooks/useWorkspaceChatSettingsPanel';
 import { PendingFilesBar } from '../Components/Chat/PendingFilesBar';
-import { getLastRecordingDuration } from '../Components/Chat/VoiceRecordButton';
 import { deleteWorkspaceChatUploads, uploadWorkspaceChatFileDirect } from '../Services/workspaceChatAgentService';
 import {
   loadStagedItems,
@@ -1875,11 +1874,7 @@ const NumaWorkspaceChatAgents = () => {
       // The actual file references are stored in trace as attachment events
       let displayContent = userMsg;
       if (voiceRecordings && !userMsg.trim()) {
-        const duration = getLastRecordingDuration();
-        const mins = Math.floor(duration / 60);
-        const secs = duration % 60;
-        const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
-        displayContent = t('input.voice.userMessageLabel', { duration: timeStr });
+        displayContent = t('chat:input.voiceMessage', '🎤 Voice message');
       }
       const userMsgObject = { role: 'user', content: displayContent, isVoiceMessage: !!voiceRecordings };
       setMessages((prev) => [...prev, userMsgObject]);

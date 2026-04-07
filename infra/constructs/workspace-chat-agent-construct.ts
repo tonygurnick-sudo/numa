@@ -81,6 +81,8 @@ export interface WorkspaceChatAgentConstructProps {
   documentConverterLambdaArn?: string;
   /** Whether Numa Ops feature is enabled for this client */
   numaOpsEnabled?: boolean;
+  /** Frontend base URL (e.g. https://nd-labs.numa.arcanum.ai) for constructing links */
+  frontendUrl?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -677,6 +679,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Numa Ops feature flag (enables the ops MCP tool)
         ...(props.numaOpsEnabled && {
           NUMA_OPS_ENABLED: 'true',
+        }),
+        // Frontend base URL for constructing links (e.g. ticket URLs)
+        ...(props.frontendUrl && {
+          NUMA_FRONTEND_URL: props.frontendUrl,
         }),
       },
     });

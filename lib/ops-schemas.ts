@@ -135,6 +135,9 @@ export const projectSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   color: z.string().optional(),
+  status: z.enum(['active', 'planned', 'on_hold', 'complete']).optional().default('active'),
+  ownerId: z.string().optional(),
+  ownerName: z.string().optional(),
   isActive: z.boolean().default(true),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -197,6 +200,7 @@ export const linkConfigSchema = z.object({
 export const accessControlSchema = z.object({
   mode: accessControlModeSchema,
   users: z.array(z.string()).optional().default([]),
+  owners: z.array(z.string()).optional().default([]),
 });
 
 export const workUnitSeriesSchema = z.object({

@@ -9,7 +9,6 @@ import {
   getCachedAgents,
   deleteAgent,
   duplicateAgent,
-  updateAgent,
   getAgentPrefs,
   setAgentPref,
   listTeams,
@@ -42,7 +41,6 @@ import {
   Clock,
   ExternalLink,
   Grid3X3,
-  Heart,
   Link2,
   List,
   PlusCircle,
@@ -793,6 +791,7 @@ export const AgentsManagement = () => {
             <Dropdown.Item key={mode} active={sortMode === mode} onClick={() => setSortMode(mode)}>
               {sortMode === mode && (
                 <span style={{ width: 14, display: 'inline-block', color: 'var(--brand-primary, #6366f1)' }}>
+                  {}
                   &#10003;
                 </span>
               )}

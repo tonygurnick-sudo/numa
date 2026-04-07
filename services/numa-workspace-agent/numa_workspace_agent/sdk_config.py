@@ -451,6 +451,10 @@ def create_agent_options(
     # Pass user context to custom tools
     if user_sub:
         env["NUMA_USER_SUB"] = user_sub
+    if user_email:
+        env["NUMA_USER_EMAIL"] = user_email
+    if user_profile and user_profile.get("name"):
+        env["NUMA_USER_NAME"] = user_profile["name"]
     if conversation_id:
         env["NUMA_CONVERSATION_ID"] = conversation_id
 
@@ -491,6 +495,8 @@ def create_agent_options(
         "WORKSPACE_TOOLS_LAMBDA_NAME",
         "NUMA_ALLOWED_KBS",
         "NUMA_USER_SUB",
+        "NUMA_USER_EMAIL",
+        "NUMA_USER_NAME",
         "NUMA_CONVERSATION_ID",
         "OUTPUTS_BUCKET_NAME",
         # Local account credentials for Lambda/S3 calls from in-process MCP tools

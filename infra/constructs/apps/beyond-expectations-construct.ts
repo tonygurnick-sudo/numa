@@ -189,6 +189,7 @@ export class BeyondExpectations extends BaseNumaApp {
         SES_CONFIGURATION_SET: sesConfig?.configurationSet.name || '',
       },
       lambdaDirectory: 'python/beyond-expectations-report-and-email',
+      memorySize: 1024,
       timeout: 900,
     });
 
@@ -199,6 +200,7 @@ export class BeyondExpectations extends BaseNumaApp {
         SES_CONFIGURATION_SET: sesConfig?.configurationSet.name || '',
       },
       lambdaDirectory: 'python/send-email',
+      memorySize: 1024,
       timeout: 900,
     });
 

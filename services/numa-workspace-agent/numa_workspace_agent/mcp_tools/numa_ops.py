@@ -26,6 +26,12 @@ from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
 
 logger = structlog.get_logger()
 
+# Frontend URL for constructing ticket links.
+# Explicit env var takes priority (for custom domains), otherwise derive from CLIENT_NAME.
+_FRONTEND_URL = os.environ.get("NUMA_FRONTEND_URL") or (
+    f"https://{os.environ.get('CLIENT_NAME', 'app')}.numa.arcanum.ai"
+)
+
 # Operations that are read-only and can be auto-approved
 SAFE_OPERATIONS = frozenset(
     {
@@ -36,6 +42,8 @@ SAFE_OPERATIONS = frozenset(
         "get_ticket",
         "search_tickets",
         "list_comments",
+        "get_audit",
+        "list_work_units",
         "list_customers",
         "get_customer",
         "list_suppliers",
@@ -50,9 +58,12 @@ VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
     {
         "create_team",
         "update_team",
+        "update_zones",
+        "update_stages",
         "create_ticket",
         "update_ticket",
         "delete_ticket",
+        "bulk_update_tickets",
         "add_comment",
         "create_customer",
         "update_customer",
@@ -60,8 +71,14 @@ VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
         "create_supplier",
         "update_supplier",
         "delete_supplier",
+        "create_work_unit",
+        "update_work_unit",
+        "delete_work_unit",
+        "create_link",
+        "delete_link",
         "create_project",
         "update_project",
+        "delete_project",
         "upload_attachment",
     }
 )
@@ -112,6 +129,21 @@ def _pop_approval_id(action_key: str) -> str:
 # Maximum inline result size (compact JSON chars). Results exceeding this are
 # saved to a file so the LLM context stays lightweight.
 MAX_INLINE = 2000
+
+
+def _enrich_ticket_urls(result: Any) -> Any:
+    """Add ticketUrl to ticket objects that have a displayId."""
+    if isinstance(result, dict):
+        if "displayId" in result:
+            result["ticketUrl"] = f"{_FRONTEND_URL}/ops?ticket={result['displayId']}"
+        for v in result.values():
+            if isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict) and "displayId" in item:
+                        item["ticketUrl"] = (
+                            f"{_FRONTEND_URL}/ops?ticket={item['displayId']}"
+                        )
+    return result
 
 
 def _count_items(result: Any) -> int | None:
@@ -193,12 +225,17 @@ def _sync_ops_file_to_s3(file_path: Path, content: str) -> None:
                 "description": (
                     "The operation to perform. "
                     "Read operations: get_config, list_teams, get_team, list_tickets, "
-                    "get_ticket, search_tickets, list_comments, list_customers, "
-                    "get_customer, list_suppliers, get_supplier, list_projects, get_metrics. "
-                    "Write operations: create_team, update_team, create_ticket, "
-                    "update_ticket, delete_ticket, add_comment, create_customer, "
-                    "update_customer, delete_customer, create_supplier, update_supplier, "
-                    "delete_supplier, create_project, update_project, upload_attachment."
+                    "get_ticket, search_tickets, list_comments, get_audit, list_work_units, "
+                    "list_customers, get_customer, list_suppliers, get_supplier, list_projects, get_metrics. "
+                    "Write operations: create_team, update_team, update_zones, update_stages, "
+                    "create_ticket, update_ticket, delete_ticket, bulk_update_tickets, "
+                    "add_comment, create_work_unit, update_work_unit, delete_work_unit, "
+                    "create_link, delete_link, "
+                    "create_customer, update_customer, delete_customer, "
+                    "create_supplier, update_supplier, delete_supplier, create_project, "
+                    "update_project, delete_project, upload_attachment. "
+                    "IMPORTANT: Ticket descriptions and comments use HTML format for rich text "
+                    "(e.g. <p>, <strong>, <ul><li>), NOT markdown."
                 ),
                 "enum": sorted(VALID_OPERATIONS),
             },
@@ -302,7 +339,10 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                     file_size = local_path.stat().st_size
 
                     with open(local_path, "rb") as f:
-                        req = urllib.request.Request(upload_url, data=f, method="PUT")
+                        file_data = f.read()
+                        req = urllib.request.Request(
+                            upload_url, data=file_data, method="PUT"
+                        )
                         req.add_header("Content-Type", content_type)
                         req.add_header("Content-Length", str(file_size))
                         urllib.request.urlopen(req, timeout=60.0)
@@ -336,6 +376,16 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                     )
                 except Exception as e:
                     return _err(f"Failed to upload file using presigned URL: {e}")
+
+        # Enrich ticket objects with clickable URLs
+        if operation in (
+            "create_ticket",
+            "update_ticket",
+            "get_ticket",
+            "list_tickets",
+            "search_tickets",
+        ):
+            _enrich_ticket_urls(result)
 
         # Compact JSON — no indent (saves tokens)
         result_text = json.dumps(result, default=str, separators=(",", ":"))

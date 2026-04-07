@@ -94,7 +94,7 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
   const { t } = useTranslation('ops');
   const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
 
-  const stageColor = getColorForPosition(stage.colorPosition);
+  const stageColor = stage.color || getColorForPosition(stage.colorPosition);
   const textColor = getContrastTextColor(stageColor);
 
   return (
@@ -210,7 +210,7 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
       {/* Data rows */}
       {customers.map((customer) => {
         const stage = crmConfig.lifecycleStages.find((s) => s.id === customer.lifecycleStage);
-        const stageColor = stage ? getColorForPosition(stage.colorPosition) : '#6c757d';
+        const stageColor = stage ? stage.color || getColorForPosition(stage.colorPosition) : '#6c757d';
         const stageTextColor = getContrastTextColor(stageColor);
         const primaryContact = customer.contacts.find((c) => c.isPrimary);
         const lastContact = formatLastContact(customer.lastContactDate, t);

@@ -41,6 +41,7 @@ mcp__numa__numa_ops_tool(
 | `list_projects`  | List all projects                                                | No       |
 | `create_project` | Create a new project                                             | Yes      |
 | `update_project` | Update an existing project                                       | Yes      |
+| `delete_project` | Delete a project (admin-only)                                    | Yes      |
 
 #### get_config
 
@@ -56,32 +57,48 @@ mcp__numa__numa_ops_tool(
 
 #### create_project
 
-| Parameter     | Type   | Required | Description         |
-| ------------- | ------ | -------- | ------------------- |
-| `name`        | string | Yes      | Project name        |
-| `description` | string | No       | Project description |
-| `color`       | string | No       | Hex color code      |
+| Parameter     | Type   | Required | Description                                |
+| ------------- | ------ | -------- | ------------------------------------------ |
+| `name`        | string | Yes      | Project name                               |
+| `description` | string | No       | Project description                        |
+| `color`       | string | No       | Hex color code                             |
+| `status`      | string | No       | Status: active, planned, on_hold, complete |
+| `owner_id`    | string | No       | Owner user sub (from get_config staff)     |
+| `owner_name`  | string | No       | Owner display name                         |
 
 #### update_project
 
-| Parameter     | Type    | Required | Description                              |
-| ------------- | ------- | -------- | ---------------------------------------- |
-| `project_id`  | string  | Yes      | Project ID                               |
-| `name`        | string  | No       | New project name                         |
-| `description` | string  | No       | New description                          |
-| `color`       | string  | No       | New color                                |
-| `is_active`   | boolean | No       | Set false to deactivate, true to restore |
+| Parameter     | Type    | Required | Description                                |
+| ------------- | ------- | -------- | ------------------------------------------ |
+| `project_id`  | string  | Yes      | Project ID                                 |
+| `name`        | string  | No       | New project name                           |
+| `description` | string  | No       | New description                            |
+| `color`       | string  | No       | New color                                  |
+| `is_active`   | boolean | No       | Set false to deactivate, true to restore   |
+| `status`      | string  | No       | Status: active, planned, on_hold, complete |
+| `owner_id`    | string  | No       | Owner user sub                             |
+| `owner_name`  | string  | No       | Owner display name                         |
+
+#### delete_project
+
+Admin-only operation. Permanently deletes a project.
+
+| Parameter    | Type   | Required | Description |
+| ------------ | ------ | -------- | ----------- |
+| `project_id` | string | Yes      | Project ID  |
 
 ---
 
 ### Teams (Boards)
 
-| Operation     | Description                         | Approval |
-| ------------- | ----------------------------------- | -------- |
-| `list_teams`  | List all boards the user can access | No       |
-| `get_team`    | Get a single board by ID            | No       |
-| `create_team` | Create a new board                  | Yes      |
-| `update_team` | Update an existing board            | Yes      |
+| Operation       | Description                                   | Approval |
+| --------------- | --------------------------------------------- | -------- |
+| `list_teams`    | List all boards the user can access           | No       |
+| `get_team`      | Get a single board by ID                      | No       |
+| `create_team`   | Create a new board                            | Yes      |
+| `update_team`   | Update an existing board (owner-only)         | Yes      |
+| `update_zones`  | Update zones on a board (owner-only)          | Yes      |
+| `update_stages` | Update stages/columns on a board (owner-only) | Yes      |
 
 #### list_teams
 
@@ -97,40 +114,76 @@ Returns the board with its zones and stages. Use this to get valid `stage_id` va
 
 #### create_team
 
-| Parameter              | Type   | Required | Description                                              |
-| ---------------------- | ------ | -------- | -------------------------------------------------------- |
-| `name`                 | string | Yes      | Board name                                               |
-| `description`          | string | No       | Board description                                        |
-| `color`                | string | No       | Hex color code                                           |
-| `preset`               | string | No       | Board preset (e.g., "standard")                          |
-| `ticket_type_id`       | string | No       | Default ticket type ID                                   |
-| `allowed_ticket_types` | array  | No       | List of allowed ticket type IDs                          |
-| `access_control`       | object | No       | `{"mode": "all"\|"specific", "users": ["sub1", "sub2"]}` |
-| `zones`                | array  | No       | Custom zone definitions                                  |
+| Parameter              | Type   | Required | Description                                                                                          |
+| ---------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------- |
+| `name`                 | string | Yes      | Board name                                                                                           |
+| `description`          | string | No       | Board description                                                                                    |
+| `color`                | string | No       | Hex color code                                                                                       |
+| `preset`               | string | No       | Board preset (e.g., "standard")                                                                      |
+| `ticket_type_id`       | string | No       | Default ticket type ID                                                                               |
+| `allowed_ticket_types` | array  | No       | List of allowed ticket type IDs                                                                      |
+| `field_overrides`      | object | No       | Custom field overrides per board `{fieldId: {required: true, hidden: false}}`                        |
+| `added_fields`         | object | No       | Additional fields per ticket type `{ticketTypeId: [fieldId, ...]}`                                   |
+| `access_control`       | object | No       | `{"mode": "all"\|"specific", "users": ["sub1", "sub2"], "owners": ["sub3"]}` -- owners are co-owners |
+| `announcement`         | string | No       | Board announcement text (shown at top of board)                                                      |
+| `zones`                | array  | No       | Custom zone definitions                                                                              |
 
 #### update_team
 
-| Parameter     | Type   | Required | Description     |
-| ------------- | ------ | -------- | --------------- |
-| `team_id`     | string | Yes      | Board ID        |
-| `name`        | string | No       | New board name  |
-| `description` | string | No       | New description |
-| `color`       | string | No       | New color       |
+Only board owners (creator or co-owners) and admins can update team settings.
+
+| Parameter              | Type   | Required | Description                                                                        |
+| ---------------------- | ------ | -------- | ---------------------------------------------------------------------------------- |
+| `team_id`              | string | Yes      | Board ID                                                                           |
+| `name`                 | string | No       | New board name                                                                     |
+| `description`          | string | No       | New description                                                                    |
+| `color`                | string | No       | New color                                                                          |
+| `allowed_ticket_types` | array  | No       | List of allowed ticket type IDs                                                    |
+| `field_overrides`      | object | No       | Custom field overrides `{fieldId: {required, hidden}}`                             |
+| `added_fields`         | object | No       | Additional fields per ticket type `{ticketTypeId: [fieldId, ...]}`                 |
+| `access_control`       | object | No       | `{"mode": "all"\|"specific", "users": [...], "owners": [...]}` -- manage ownership |
+| `work_unit_series`     | object | No       | Work unit (sprint) configuration                                                   |
+| `announcement`         | string | No       | Board announcement text                                                            |
+
+#### update_zones
+
+Update zones on a board. Only board owners and admins can modify zones.
+
+| Parameter | Type   | Required | Description                                                                             |
+| --------- | ------ | -------- | --------------------------------------------------------------------------------------- |
+| `team_id` | string | Yes      | Board ID                                                                                |
+| `zones`   | array  | Yes      | Array of zone objects: `[{"id": "...", "name": "...", "zoneType": "board"\|"backlog"}]` |
+
+#### update_stages
+
+Update stages (kanban columns) on a board. Only board owners and admins can modify stages.
+
+| Parameter | Type   | Required | Description                                                                                       |
+| --------- | ------ | -------- | ------------------------------------------------------------------------------------------------- |
+| `team_id` | string | Yes      | Board ID                                                                                          |
+| `stages`  | array  | Yes      | Array of stage objects: `[{"id": "...", "zoneId": "...", "name": "...", "statusType": "active"}]` |
+
+Valid `statusType` values per zone type:
+
+- **backlog zones:** backlog, scoped, queued
+- **board zones:** queued, active, completed, ended, deleted
 
 ---
 
 ### Tickets
 
-| Operation        | Description                                      | Approval |
-| ---------------- | ------------------------------------------------ | -------- |
-| `list_tickets`   | List tickets for a board (with optional filters) | No       |
-| `get_ticket`     | Get a single ticket by ID or display ID          | No       |
-| `search_tickets` | Search tickets by text query                     | No       |
-| `create_ticket`  | Create a new ticket                              | Yes      |
-| `update_ticket`  | Update an existing ticket                        | Yes      |
-| `delete_ticket`  | Delete a ticket                                  | Yes      |
-| `add_comment`    | Add a comment to a ticket                        | Yes      |
-| `list_comments`  | List comments on a ticket                        | No       |
+| Operation             | Description                                      | Approval |
+| --------------------- | ------------------------------------------------ | -------- |
+| `list_tickets`        | List tickets for a board (with optional filters) | No       |
+| `get_ticket`          | Get a single ticket by ID or display ID          | No       |
+| `search_tickets`      | Search tickets by text query                     | No       |
+| `create_ticket`       | Create a new ticket                              | Yes      |
+| `update_ticket`       | Update an existing ticket                        | Yes      |
+| `delete_ticket`       | Delete a ticket                                  | Yes      |
+| `bulk_update_tickets` | Bulk update multiple tickets at once             | Yes      |
+| `add_comment`         | Add a comment to a ticket                        | Yes      |
+| `list_comments`       | List comments on a ticket                        | No       |
+| `get_audit`           | Get audit trail (change history) for a ticket    | No       |
 
 #### list_tickets
 
@@ -142,6 +195,7 @@ Returns the board with its zones and stages. Use this to get valid `stage_id` va
 | `assignee_id`      | string | No       | Filter by assignee (user sub)                                    |
 | `customer_id`      | string | No       | Filter by linked customer                                        |
 | `work_unit_id`     | string | No       | Filter by sprint/work unit                                       |
+| `project_id`       | string | No       | Filter by project                                                |
 | `priority`         | string | No       | Filter by priority (lowest, low, medium, high, highest)          |
 | `include_archived` | string | No       | Set to "true" to include archived tickets                        |
 | `limit`            | string | No       | Pagination limit                                                 |
@@ -166,27 +220,31 @@ Returns the board with its zones and stages. Use this to get valid `stage_id` va
 
 **IMPORTANT:** Call `get_config` first to get valid ticket types and staff. Call `get_team` to get valid stage IDs for the board.
 
-| Parameter        | Type   | Required | Description                                    |
-| ---------------- | ------ | -------- | ---------------------------------------------- |
-| `team_id`        | string | Yes      | Board to create the ticket in                  |
-| `stage_id`       | string | Yes      | Stage ID (from get_team response zones/stages) |
-| `title`          | string | Yes      | Ticket title                                   |
-| `ticket_type_id` | string | No       | Ticket type ID (from get_config ticketTypes)   |
-| `description`    | string | No       | Ticket description (supports markdown)         |
-| `priority`       | string | No       | Priority: lowest, low, medium, high, highest   |
-| `assignee_id`    | string | No       | Assignee user sub (from get_config staff)      |
-| `assignee_name`  | string | No       | Assignee display name                          |
-| `reporter_id`    | string | No       | Reporter user sub (defaults to current user)   |
-| `reporter_name`  | string | No       | Reporter display name                          |
-| `due_date`       | string | No       | Due date in ISO 8601 format                    |
-| `customer_id`    | string | No       | Link to a customer                             |
-| `customer_name`  | string | No       | Customer display name                          |
-| `supplier_id`    | string | No       | Link to a supplier                             |
-| `supplier_name`  | string | No       | Supplier display name                          |
-| `work_unit_id`   | string | No       | Link to a sprint/work unit                     |
-| `tags`           | array  | No       | List of tag strings                            |
-| `fields`         | object | No       | Custom field values (field_id → value)         |
-| `effort_points`  | number | No       | Effort/story points                            |
+| Parameter         | Type   | Required | Description                                                                     |
+| ----------------- | ------ | -------- | ------------------------------------------------------------------------------- |
+| `team_id`         | string | Yes      | Board to create the ticket in                                                   |
+| `stage_id`        | string | Yes      | Stage ID (from get_team response zones/stages)                                  |
+| `title`           | string | Yes      | Ticket title                                                                    |
+| `ticket_type_id`  | string | No       | Ticket type ID (from get_config ticketTypes)                                    |
+| `description`     | string | No       | Ticket description (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
+| `priority`        | string | No       | Priority: lowest, low, medium, high, highest                                    |
+| `assignee_id`     | string | No       | Assignee user sub (from get_config staff)                                       |
+| `assignee_name`   | string | No       | Assignee display name                                                           |
+| `reporter_id`     | string | No       | Reporter user sub (defaults to current user)                                    |
+| `reporter_name`   | string | No       | Reporter display name                                                           |
+| `due_date`        | string | No       | Due date in ISO 8601 format                                                     |
+| `customer_id`     | string | No       | Link to a customer                                                              |
+| `customer_name`   | string | No       | Customer display name                                                           |
+| `supplier_id`     | string | No       | Link to a supplier                                                              |
+| `supplier_name`   | string | No       | Supplier display name                                                           |
+| `work_unit_id`    | string | No       | Link to a sprint/work unit                                                      |
+| `project_id`      | string | No       | Link to a project                                                               |
+| `tags`            | array  | No       | List of tag strings                                                             |
+| `fields`          | object | No       | Custom field values (field_id → value)                                          |
+| `effort_points`   | number | No       | Effort/story points                                                             |
+| `source_type`     | string | No       | Origin of ticket: app, chat, agent, manual                                      |
+| `source_id`       | string | No       | Source record ID (e.g., conversation ID, app run ID)                            |
+| `source_app_type` | string | No       | Source application type identifier                                              |
 
 #### update_ticket
 
@@ -206,6 +264,7 @@ Returns the board with its zones and stages. Use this to get valid `stage_id` va
 | `customer_id`     | string  | No       | Link to customer                                   |
 | `supplier_id`     | string  | No       | Link to supplier                                   |
 | `work_unit_id`    | string  | No       | Link to sprint/work unit                           |
+| `project_id`      | string  | No       | Link to project                                    |
 | `tags`            | array   | No       | Updated tags                                       |
 | `fields`          | object  | No       | Updated custom field values                        |
 | `effort_points`   | number  | No       | Updated effort points                              |
@@ -220,19 +279,114 @@ Returns the board with its zones and stages. Use this to get valid `stage_id` va
 | `ticket_id` | string | Yes      | Ticket ID to delete         |
 | `team_id`   | string | Yes      | Board the ticket belongs to |
 
+#### bulk_update_tickets
+
+Update multiple tickets at once (e.g., move all to a new stage, reassign).
+
+| Parameter    | Type   | Required | Description                                                                                                           |
+| ------------ | ------ | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ticket_ids` | array  | Yes      | Array of ticket IDs to update                                                                                         |
+| `changes`    | object | Yes      | Fields to apply to all tickets. Must include `team_id`. Supports: `stage_id`, `assignee_id`, `priority`, `tags`, etc. |
+
 #### add_comment
 
-| Parameter   | Type   | Required | Description                                |
-| ----------- | ------ | -------- | ------------------------------------------ |
-| `ticket_id` | string | Yes      | Ticket to comment on                       |
-| `content`   | string | Yes      | Comment text (supports markdown)           |
-| `team_id`   | string | No       | Board ID (helps with comment count update) |
+| Parameter   | Type   | Required | Description                                                               |
+| ----------- | ------ | -------- | ------------------------------------------------------------------------- |
+| `ticket_id` | string | Yes      | Ticket to comment on                                                      |
+| `content`   | string | Yes      | Comment text (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
+| `team_id`   | string | No       | Board ID (helps with comment count update)                                |
 
 #### list_comments
 
 | Parameter   | Type   | Required | Description                 |
 | ----------- | ------ | -------- | --------------------------- |
 | `ticket_id` | string | Yes      | Ticket to list comments for |
+
+#### get_audit
+
+Get the audit trail (change history) for a ticket. Returns entries in reverse chronological order.
+
+| Parameter   | Type   | Required | Description             |
+| ----------- | ------ | -------- | ----------------------- |
+| `ticket_id` | string | Yes      | Ticket to get audit for |
+
+---
+
+### Work Units (Sprints)
+
+| Operation          | Description                        | Approval |
+| ------------------ | ---------------------------------- | -------- |
+| `list_work_units`  | List sprints for a board           | No       |
+| `create_work_unit` | Create a new sprint                | Yes      |
+| `update_work_unit` | Update an existing sprint          | Yes      |
+| `delete_work_unit` | Delete a sprint (admin/owner only) | Yes      |
+
+#### list_work_units
+
+| Parameter | Type   | Required | Description |
+| --------- | ------ | -------- | ----------- |
+| `team_id` | string | Yes      | Board ID    |
+
+#### create_work_unit
+
+| Parameter    | Type   | Required | Description                         |
+| ------------ | ------ | -------- | ----------------------------------- |
+| `team_id`    | string | Yes      | Board ID                            |
+| `name`       | string | Yes      | Sprint name                         |
+| `goal`       | string | No       | Sprint goal/objective               |
+| `start_date` | string | No       | Start date (ISO 8601)               |
+| `end_date`   | string | No       | End date (ISO 8601)                 |
+| `status`     | string | No       | Status: planning, active, completed |
+| `capacity`   | number | No       | Sprint capacity (story points)      |
+
+#### update_work_unit
+
+| Parameter      | Type   | Required | Description    |
+| -------------- | ------ | -------- | -------------- |
+| `team_id`      | string | Yes      | Board ID       |
+| `work_unit_id` | string | Yes      | Work unit ID   |
+| `name`         | string | No       | New name       |
+| `goal`         | string | No       | New goal       |
+| `start_date`   | string | No       | New start date |
+| `end_date`     | string | No       | New end date   |
+| `status`       | string | No       | New status     |
+| `capacity`     | number | No       | New capacity   |
+
+#### delete_work_unit
+
+| Parameter      | Type   | Required | Description  |
+| -------------- | ------ | -------- | ------------ |
+| `team_id`      | string | Yes      | Board ID     |
+| `work_unit_id` | string | Yes      | Work unit ID |
+
+---
+
+### Ticket Links
+
+| Operation     | Description                           | Approval |
+| ------------- | ------------------------------------- | -------- |
+| `create_link` | Create a dependency/relationship link | Yes      |
+| `delete_link` | Remove a link between two tickets     | Yes      |
+
+#### create_link
+
+| Parameter                  | Type   | Required | Description                                      |
+| -------------------------- | ------ | -------- | ------------------------------------------------ |
+| `ticket_id`                | string | Yes      | Source ticket ID                                 |
+| `linked_ticket_id`         | string | Yes      | Target ticket ID                                 |
+| `linked_ticket_display_id` | string | Yes      | Target ticket display ID (e.g., "ENG-42")        |
+| `linked_ticket_title`      | string | No       | Target ticket title                              |
+| `link_type`                | string | Yes      | Link type: depends_on, blocks, related_to        |
+| `team_id`                  | string | No       | Source ticket's board ID                         |
+| `linked_team_id`           | string | No       | Target ticket's board ID (for cross-board links) |
+
+#### delete_link
+
+| Parameter          | Type   | Required | Description      |
+| ------------------ | ------ | -------- | ---------------- |
+| `ticket_id`        | string | Yes      | Source ticket ID |
+| `link_type`        | string | Yes      | Link type        |
+| `linked_ticket_id` | string | Yes      | Target ticket ID |
 
 ---
 
@@ -366,7 +520,7 @@ mcp__numa__numa_ops_tool(operation="get_team", params='{"team_id":"team-abc"}', 
 # 4. Create the ticket with a valid stage_id
 mcp__numa__numa_ops_tool(
     operation="create_ticket",
-    params='{"team_id":"team-abc","stage_id":"stage-xyz","title":"Fix login bug","ticket_type_id":"tt-bug123","priority":"high","description":"Users report 500 errors on login page"}',
+    params='{"team_id":"team-abc","stage_id":"stage-xyz","title":"Fix login bug","ticket_type_id":"tt-bug123","priority":"high","description":"<p>Users report <strong>500 errors</strong> on the login page.</p><ul><li>Affects all browsers</li><li>Started after last deploy</li></ul>"}',
     description="Create ticket: Fix login bug (high priority) in Engineering board"
 )
 ```
@@ -395,7 +549,9 @@ mcp__numa__numa_ops_tool(
 
 1. **Always call `get_config` first** — you need ticket types, statuses, and staff IDs before creating tickets
 2. **Call `get_team` to get stage IDs** — `stage_id` is required for ticket creation; stages are returned in the board's zones
-3. **Use display IDs when referencing tickets to users** — e.g., "ENG-42" is friendlier than "ticket-abc123"
+3. **Link tickets using ticketUrl** — ticket responses include a `ticketUrl` field (e.g., `https://acme.numa.arcanum.ai/ops?ticket=ENG-42`). Always include this link when referencing tickets so users can click through directly
 4. **Include full content in approval descriptions** — for write operations, describe exactly what will be created/changed
 5. **Respect team scoping** — users can only see boards they have access to
 6. **Use search before creating** — check if a similar ticket already exists
+7. **Use HTML for rich text** — ticket descriptions and comments render HTML, not markdown. Use `<p>`, `<strong>`, `<em>`, `<ul><li>`, `<ol><li>`, `<a href="...">`, `<h3>`, etc. Plain text is also fine but will not be formatted. Do NOT use markdown syntax (e.g., `**bold**`, `- list`) as it will render as literal text
+8. **Board owner operations** — `update_team`, `update_zones`, `update_stages` require board owner or admin access. Use `get_team` to check the current user's permissions

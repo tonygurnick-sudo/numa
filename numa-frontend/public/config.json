@@ -1,9 +1,9 @@
 {
-  "USER_POOL_ID": "us-east-1_3tm2uaPJx",
-  "CLIENT_ID": "22n77de22vjrct7tma3hdij5u6",
+  "USER_POOL_ID": "us-east-1_euGw0Ubxr",
+  "CLIENT_ID": "3d68fjadvc3s39e6aocrvpi9ee",
   "GROUPS": {
     "standard": {
-      "roleArn": "arn:aws:iam::905418183804:role/numa-nd-labs-standard-role",
+      "roleArn": "arn:aws:iam::905418183804:role/numa-arcanum-demo-greg-standard-role",
       "features": [
         "chat",
         "useCompanyData",
@@ -15,7 +15,7 @@
       ]
     },
     "admin": {
-      "roleArn": "arn:aws:iam::905418183804:role/numa-nd-labs-admin-role",
+      "roleArn": "arn:aws:iam::905418183804:role/numa-arcanum-demo-greg-admin-role",
       "features": [
         "chat",
         "useApps",
@@ -32,24 +32,24 @@
     }
   },
   "REGION": "us-east-1",
-  "ROLE_ARN": "arn:aws:iam::905418183804:role/numa-nd-labs-identity-pool-role",
+  "ROLE_ARN": "arn:aws:iam::905418183804:role/numa-arcanum-demo-greg-identity-pool-role",
   "API_ENDPOINT": "/api",
-  "BRANDING_PROVIDER_ENABLED": true,
-  "BRANDING_ASSETS_BUCKET": "numa-nd-labs-branding",
+  "BRANDING_PROVIDER_ENABLED": false,
+  "BRANDING_ASSETS_BUCKET": "numa-arcanum-demo-greg-branding",
   "BRANDING_ASSETS_PREFIX": "",
-  "CLIENT_NAME": "nd-labs",
-  "OUTPUTS_BUCKET_NAME": "numa-nd-labs-outputs",
+  "CLIENT_NAME": "arcanum-demo-greg",
+  "OUTPUTS_BUCKET_NAME": "numa-arcanum-demo-greg-outputs",
   "HONEYCOMB_KEY": "hcaik_01jz21qrb2pqx6j6bcz2gg9akdbq221nnm6y6a2pegb70vj8jtr6tsp629",
-  "DATA_BUCKET": "numa-nd-labs-data",
+  "DATA_BUCKET": "numa-arcanum-demo-greg-data",
   "PROVISION_Q_RESOURCES": false,
   "PREFERRED_KNOWLEDGE_BASE": "bedrock",
-  "BEDROCK_KNOWLEDGE_BASE_ID": "IPYIGNYCGX",
-  "PIPEDREAM_RELAY_LAMBDA_ARN": "arn:aws:lambda:us-east-1:905418183804:function:nd-labs_pipedream-relay",
+  "BEDROCK_KNOWLEDGE_BASE_ID": "5UXPFQNAEO",
+  "PIPEDREAM_RELAY_LAMBDA_ARN": "arn:aws:lambda:us-east-1:905418183804:function:arcanum-demo-greg_pipedream-relay",
   "PIPEDREAM_INTEGRATIONS": true,
   "DATA_CONNECTORS_ENABLED": false,
-  "AGENTS": true,
+  "AGENTS": false,
   "NUMA_WORKSPACE_CHAT": true,
-  "SCHEDULING": true,
+  "SCHEDULING": false,
   "SCHEDULING_MIN_INTERVAL_MINUTES": null,
   "GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES": 30,
   "NUMA_FILES": false,
@@ -60,14 +60,14 @@
   "SECRETS_VAULT_ENABLED": false,
   "NUMA_DROP_ZONES": false,
   "NUMA_SHARING": false,
-  "WORKSPACE_CHAT_MODEL_SELECTION": true,
+  "WORKSPACE_CHAT_MODEL_SELECTION": false,
   "OAUTH_AVAILABLE": true,
   "OAUTH_INTEGRATIONS_ENABLED": false,
   "RACETECH_DATA_FEED": false,
-  "V2_APPS": true,
-  "NUMA_APPS": false,
-  "JOB_HISTORY": false,
+  "V2_APPS": false,
+  "NUMA_APPS": true,
+  "JOB_HISTORY": true,
   "TRANSCRIPTION_SERVICE": false,
-  "WORKSPACE_CHAT_AGENT_FUNCTION_URL": "https://ozagqbxjgy5jnzpillhnn2hewe0phrka.lambda-url.us-east-1.on.aws/",
-  "NUMA_VERSION": "5a154dbd4-1775015609216"
+  "WORKSPACE_CHAT_AGENT_FUNCTION_URL": "https://vf57audxij7l35u3ugkjv77t440rhame.lambda-url.us-east-1.on.aws/",
+  "NUMA_VERSION": "cb581c7f-1775002337973"
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Button, Spinner } from 'react-bootstrap';
+import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 
 interface PdfPreviewProps {
@@ -25,6 +25,7 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
   const [pdfModule, setPdfModule] = useState<ReactPdfModule | null>(null);
   const thumbnailStripRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [mainPageWidth, setMainPageWidth] = useState(800);
 
   // Convert to a Blob URL so react-pdf receives a string instead of an ArrayBuffer.
@@ -93,28 +94,40 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
     (page: number) => {
       if (page >= 1 && page <= numPages) {
         setCurrentPage(page);
+        const targetElement = pageRefs.current[page - 1];
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }
     },
     [numPages]
   );
 
-  const goPrev = useCallback(() => goToPage(currentPage - 1), [currentPage, goToPage]);
-  const goNext = useCallback(() => goToPage(currentPage + 1), [currentPage, goToPage]);
-
-  // Keyboard navigation
+  // Track scroll position to update current page
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        goPrev();
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        goNext();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goPrev, goNext]);
+    if (numPages === 0 || !viewportRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const index = Number((entry.target as HTMLElement).dataset.pageIndex);
+            if (!isNaN(index)) {
+              setCurrentPage(index + 1);
+            }
+          }
+        });
+      },
+      // Target a horizontal band in the center of the viewport (10% height)
+      { root: viewportRef.current, rootMargin: '-45% 0px -45% 0px', threshold: 0 }
+    );
+
+    pageRefs.current.forEach((ref) => {
+      if (ref) observer.observe(ref);
+    });
+
+    return () => observer.disconnect();
+  }, [numPages]);
 
   // Scroll active thumbnail into view
   useEffect(() => {
@@ -177,27 +190,35 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
 
           {/* Main page area */}
           <div className="pdf-page-main">
-            <div className="pdf-page-viewport" ref={viewportRef}>
-              <Page
-                key={currentPage}
-                pageNumber={currentPage}
-                width={mainPageWidth}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-              />
-            </div>
+            {/* Absolute Overlay Navigation Header */}
+            {numPages > 1 && (
+              <div className="pdf-page-nav-overlay">
+                <span className="pdf-page-nav-label">
+                  {t('filePreview.pdf.pageOf', { current: currentPage, total: numPages })}
+                </span>
+              </div>
+            )}
 
-            {/* Navigation bar */}
-            <div className="pdf-page-nav">
-              <Button variant="outline-secondary" size="sm" onClick={goPrev} disabled={currentPage === 1}>
-                <i className="bi bi-chevron-left" />
-              </Button>
-              <span className="pdf-page-nav-label">
-                {t('filePreview.pdf.pageOf', { current: currentPage, total: numPages })}
-              </span>
-              <Button variant="outline-secondary" size="sm" onClick={goNext} disabled={currentPage === numPages}>
-                <i className="bi bi-chevron-right" />
-              </Button>
+            <div className="pdf-page-viewport" ref={viewportRef}>
+              <div className="pdf-pages-stack">
+                {Array.from({ length: numPages }, (_, i) => (
+                  <div
+                    key={i}
+                    data-page-index={i}
+                    ref={(el) => {
+                      pageRefs.current[i] = el;
+                    }}
+                    className="pdf-page-container"
+                  >
+                    <Page
+                      pageNumber={i + 1}
+                      width={mainPageWidth}
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

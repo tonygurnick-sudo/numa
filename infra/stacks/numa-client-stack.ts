@@ -256,10 +256,6 @@ export class NumaClientStack extends TerraformStack {
         if (dataBucket) (dataBucket as { skipVersioning?: boolean }).skipVersioning = true;
       }
 
-      // Compute the admin-dr-stats Lambda role ARN deterministically (created later in coreApis)
-      const drStatsRoleName = awsNameWithHashedPrefix(props.clientName, '_admin-dr-stats', 64);
-      const drStatsRoleArn = `arn:aws:iam::${clientConfig.clientAccountId}:role/${drStatsRoleName}`;
-
       disasterRecovery = new DisasterRecoveryConstruct(this, 'disaster-recovery', {
         clientName: props.clientName,
         environmentName: props.environmentName,
@@ -267,7 +263,6 @@ export class NumaClientStack extends TerraformStack {
         region: clientConfig.region,
         sourceBuckets,
         userPoolId: core.userPoolId,
-        additionalAllowedPrincipalArns: [drStatsRoleArn],
       });
     }
 
@@ -488,6 +483,8 @@ export class NumaClientStack extends TerraformStack {
         extractContentLambdaArn: extractContentLambdaArn,
         // Numa Ops feature flag
         numaOpsEnabled: clientConfig.numaOps,
+        // Frontend URL for constructing links (e.g. ticket URLs in chat)
+        frontendUrl: `https://${domainName}`,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK

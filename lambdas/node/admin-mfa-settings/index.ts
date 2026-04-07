@@ -279,9 +279,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           rememberDurationHours,
           sessionIdleTimeoutMinutes: sessionItem?.sessionIdleTimeoutMinutes ?? 0,
           maxSessionDurationHours: sessionItem?.maxSessionDurationHours ?? 0,
-          // Default to true when no record exists — recovery codes should be
-          // available by default when MFA is on, unless an admin explicitly disables them.
-          recoveryCodesEnabled: recoveryRes.Item ? recoveryRes.Item.enabled === true : true,
+          // Default to false when no record exists — admins must explicitly opt in
+          // to recovery codes. Existing deployments with the record set keep their value.
+          recoveryCodesEnabled: recoveryRes.Item ? recoveryRes.Item.enabled === true : false,
         }),
       };
     }

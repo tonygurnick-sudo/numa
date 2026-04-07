@@ -278,8 +278,7 @@ const handleTicketTypes = async (
   // POST /config/ticket-types
   if (method === 'POST' && segments.length === 0) {
     const { name, prefix, icon, color, defaultFields } = body;
-    if (!name || !prefix || !icon || !color)
-      return errorResponse(400, 'Missing required fields: name, prefix, icon, color');
+    if (!name || !prefix || !color) return errorResponse(400, 'Missing required fields: name, prefix, color');
 
     const p = String(prefix).toUpperCase();
     if (!/^[A-Z0-9]{2,6}$/.test(p)) return errorResponse(400, 'Prefix must be 2-6 uppercase alphanumeric characters');
@@ -291,6 +290,7 @@ const handleTicketTypes = async (
       return errorResponse(409, 'Prefix already in use by another ticket type');
     }
 
+    const resolvedIcon = icon ? String(icon) : 'ticket';
     const id = `tt-${randomUUID().slice(0, 8)}`;
     const item = {
       SK: `TICKET_TYPE#${id}`,
@@ -298,7 +298,7 @@ const handleTicketTypes = async (
       id,
       name: String(name),
       prefix: p,
-      icon: String(icon),
+      icon: resolvedIcon,
       color: String(color),
       defaultFields: Array.isArray(defaultFields) ? defaultFields : [],
       order: existing.length + 1,
@@ -710,6 +710,9 @@ const handleProjects = async (
       name: String(name),
       description: body.description ? String(body.description) : undefined,
       color: body.color ? String(body.color) : undefined,
+      status: body.status ? String(body.status) : 'active',
+      ownerId: body.ownerId ? String(body.ownerId) : undefined,
+      ownerName: body.ownerName ? String(body.ownerName) : undefined,
       isActive: true,
       createdAt: now(),
       updatedAt: now(),

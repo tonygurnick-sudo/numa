@@ -40,11 +40,18 @@ import microsoftExcelIcon from '../assets/icons/microsoft_excel.svg';
 import boxIcon from '../assets/icons/box.svg';
 import smartsheetIcon from '../assets/icons/smartsheet.svg';
 import odooIcon from '../assets/icons/odoo.svg';
-import zohoBooksIcon from '../assets/icons/zoho_books.svg';
-import jobberIcon from '../assets/icons/jobber.svg';
+import zohoBooksIcon from '../assets/icons/zoho_books.png';
+import jobberIcon from '../assets/icons/jobber.png';
 import canvaIcon from '../assets/icons/canva.svg';
 import googleTagManagerIcon from '../assets/icons/google_tag_manager.svg';
 import webflowIcon from '../assets/icons/webflow.svg';
+import dropboxIcon from '../assets/icons/dropbox.svg';
+import surveyMonkeyIcon from '../assets/icons/surveymonkey.svg';
+import mondayIcon from '../assets/icons/monday.png';
+import procoreIcon from '../assets/icons/procore.png';
+import quickbooksIcon from '../assets/icons/quickbooks.svg';
+import harvestIcon from '../assets/icons/harvest.png';
+import alchemerIcon from '../assets/icons/alchemer.png';
 import i18n from '../i18n';
 
 export type BootstrapColor =
@@ -471,7 +478,7 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     name: connectionText('dropbox', 'name'),
     description: connectionText('dropbox', 'description'),
     auth_type: 'oauth',
-    img_src: '',
+    img_src: dropboxIcon,
     fallback_icon: 'bi bi-dropbox',
     fallback_color: 'primary',
     example_query: connectionText('dropbox', 'example_query'),
@@ -481,7 +488,7 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     name: connectionText('survey_monkey', 'name'),
     description: connectionText('survey_monkey', 'description'),
     auth_type: 'oauth',
-    img_src: '',
+    img_src: surveyMonkeyIcon,
     fallback_icon: 'bi bi-ui-checks',
     fallback_color: 'success',
     example_query: connectionText('survey_monkey', 'example_query'),
@@ -491,7 +498,7 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     name: connectionText('monday', 'name'),
     description: connectionText('monday', 'description'),
     auth_type: 'oauth',
-    img_src: '',
+    img_src: mondayIcon,
     fallback_icon: 'bi bi-kanban',
     fallback_color: 'primary',
     example_query: connectionText('monday', 'example_query'),
@@ -501,7 +508,7 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     name: connectionText('procore', 'name'),
     description: connectionText('procore', 'description'),
     auth_type: 'oauth',
-    img_src: '',
+    img_src: procoreIcon,
     fallback_icon: 'bi bi-building',
     fallback_color: 'warning',
     example_query: connectionText('procore', 'example_query'),
@@ -511,7 +518,7 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     name: connectionText('quickbooks', 'name'),
     description: connectionText('quickbooks', 'description'),
     auth_type: 'oauth',
-    img_src: '',
+    img_src: quickbooksIcon,
     fallback_icon: 'bi bi-cash',
     fallback_color: 'success',
     example_query: connectionText('quickbooks', 'example_query'),
@@ -521,7 +528,7 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     name: connectionText('harvest', 'name'),
     description: connectionText('harvest', 'description'),
     auth_type: 'oauth',
-    img_src: '',
+    img_src: harvestIcon,
     fallback_icon: 'bi bi-clock',
     fallback_color: 'warning',
     example_query: connectionText('harvest', 'example_query'),
@@ -531,7 +538,7 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     name: connectionText('alchemer', 'name'),
     description: connectionText('alchemer', 'description'),
     auth_type: 'oauth',
-    img_src: '',
+    img_src: alchemerIcon,
     fallback_icon: 'bi bi-bar-chart',
     fallback_color: 'info',
     example_query: connectionText('alchemer', 'example_query'),

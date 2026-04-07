@@ -245,6 +245,7 @@ export const listTickets = async (
     customerId?: string;
     supplierId?: string;
     workUnitId?: string;
+    projectId?: string;
     search?: string;
     sort?: string;
     limit?: number;
@@ -262,6 +263,7 @@ export const listTickets = async (
     customerId: options?.customerId,
     supplierId: options?.supplierId,
     workUnitId: options?.workUnitId,
+    projectId: options?.projectId,
     search: options?.search,
     sort: options?.sort,
     limit: options?.limit,

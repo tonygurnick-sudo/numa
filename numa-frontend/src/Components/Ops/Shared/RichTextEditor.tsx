@@ -258,21 +258,26 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     setIsHtmlMode((prev) => {
       const nextMode = !prev;
       if (nextMode) {
-        // Switching to HTML mode, sync textarea state from contentEditable
-        const clean = readClean();
-        if (clean !== null) {
-          setHtmlValue(clean);
-        }
-      } else {
-        // Switching from HTML mode to visual mode, render to contentEditable
+        // visual -> HTML: read directly from DOM to avoid stale closures
         const el = editorRef.current;
         if (el) {
-          el.innerHTML = htmlValue;
+          let html = el.innerHTML;
+          if (html === '<br>' || html === '<div><br></div>' || html === '<p><br></p>') {
+            html = '';
+          }
+          setHtmlValue(html);
         }
+      } else {
+        // HTML -> visual: use functional updater to get current htmlValue
+        setHtmlValue((currentHtml) => {
+          const el = editorRef.current;
+          if (el) el.innerHTML = currentHtml;
+          return currentHtml;
+        });
       }
       return nextMode;
     });
-  }, [readClean, htmlValue]);
+  }, []);
 
   // Expose flush() to the parent via ref
   useImperativeHandle(ref, () => ({ flush }), [flush]);

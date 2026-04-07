@@ -27,7 +27,6 @@ interface FieldRowProps {
   override: FieldOverride;
   ticketTypeId: string;
   index: number;
-  total: number;
   isAdded: boolean;
   onVisibleToggle: (fieldId: string) => void;
   onOverrideChange: (fieldId: string, changes: Partial<FieldOverride>) => void;
@@ -40,7 +39,6 @@ function FieldRow({
   override,
   ticketTypeId,
   index,
-  total,
   isAdded,
   onVisibleToggle,
   onOverrideChange,
@@ -402,7 +400,7 @@ export function TicketsFieldsTab({
             style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
           >
             <div
-              className="card-body py-3 px-3 d-flex flex-column gap-2"
+              className="card-body py-3 px-4 d-flex flex-column"
               role="button"
               style={{
                 cursor: 'pointer',
@@ -411,26 +409,38 @@ export function TicketsFieldsTab({
               }}
               onClick={() => setExpandedTypeId(isExpanded ? null : tt.id)}
             >
-              <div className="d-flex align-items-center gap-2">
-                <i className={`${isExpanded ? 'bi bi-chevron-down' : 'bi bi-chevron-right'} text-muted`} />
+              <div className="d-flex align-items-center">
+                <i
+                  className={`${isExpanded ? 'bi bi-chevron-down' : 'bi bi-chevron-right'} text-muted`}
+                  style={{ width: 20, flexShrink: 0 }}
+                />
                 {tt.icon && (
-                  <i className={`${getTicketTypeIconClass(tt.icon)} fs-5`} style={{ color: tt.color || '#6366f1' }} />
+                  <i
+                    className={`${getTicketTypeIconClass(tt.icon)} fs-5 me-2`}
+                    style={{ color: tt.color || '#6366f1', width: 24, flexShrink: 0, textAlign: 'center' }}
+                  />
                 )}
-                <span className="fw-bold text-dark">{tt.name}</span>
-                <Badge bg="secondary" text="white" className="fw-normal bg-opacity-75" style={{ fontSize: '0.7rem' }}>
+                <span className="fw-bold text-dark me-3">{tt.name}</span>
+                <Badge
+                  bg="secondary"
+                  text="white"
+                  className="fw-normal bg-opacity-75 me-2"
+                  style={{ fontSize: '0.7rem' }}
+                >
                   {tt.prefix}
                 </Badge>
-                <Badge bg="light" text="muted" className="fw-normal" style={{ fontSize: '0.65rem' }}>
-                  {t('fieldsTab.fieldCount', { count: orderedFields.length })}
-                </Badge>
-                <div className="ms-auto" onClick={(e) => e.stopPropagation()}>
+                <span className="text-muted small">{t('fieldsTab.fieldCount', { count: orderedFields.length })}</span>
+                <div className="ms-auto ps-3 d-flex align-items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   <Form.Check
                     type="switch"
                     id={`tt-enable-${tt.id}`}
-                    label={<span className="fw-medium text-dark small">{t('settings.enabledOnBoard')}</span>}
                     checked={isEnabled}
                     onChange={() => onToggleTicketType(tt.id)}
+                    className="me-1"
                   />
+                  <span className="fw-medium text-dark small" style={{ whiteSpace: 'nowrap' }}>
+                    {t('settings.enabledOnBoard')}
+                  </span>
                 </div>
               </div>
             </div>
@@ -477,7 +487,6 @@ export function TicketsFieldsTab({
                       override={override}
                       ticketTypeId={tt.id}
                       index={idx}
-                      total={orderedFields.length}
                       isAdded={isAdded}
                       onVisibleToggle={onFieldVisibleToggle}
                       onOverrideChange={onFieldOverrideChange}
