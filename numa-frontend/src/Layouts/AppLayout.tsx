@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, ReactNode } from 'react';
 import { Nav } from '../Components/Nav';
 import { WelcomeProfileSetupModal } from '../Components/WelcomeProfileSetupModal';
+import { AskNumaButton } from '../Components/AskNuma/AskNumaButton';
 import '../assets/styles/layouts/AppLayout.scss';
 
 interface AppLayoutProps {
@@ -76,6 +77,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <Nav isCollapsed={false} onToggleCollapse={toggleCollapse} />
         <div className="app-layout-mobile-content">{children}</div>
         <WelcomeProfileSetupModal />
+        <AskNumaButton />
       </div>
     );
   }
@@ -87,6 +89,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       </aside>
       <main className="app-layout-content">{children}</main>
       <WelcomeProfileSetupModal />
+      <AskNumaButton />
     </div>
   );
 };

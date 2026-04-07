@@ -166,6 +166,7 @@ __metadata:
     fs-extra: "npm:^11.3.0"
     globals: "npm:^16.0.0"
     html-to-docx-lite: "npm:^2.0.1"
+    html-to-image: "npm:^1.11.13"
     i18next: "npm:^23.16.8"
     i18next-browser-languagedetector: "npm:^8.2.0"
     i18next-resources-to-backend: "npm:^1.2.1"
@@ -25503,6 +25504,13 @@ __metadata:
     style-to-js: "npm:^1.1.10"
     xmlbuilder2: "npm:2.1.2"
   checksum: 10c0/82b6394d9606b1263eabbe78d68d715ac62a8c29a6b0e29a95e0580525838ea9f8173ff0391307d2de58d8633b60eb8b3ab835151e42ab4906ed165f3bbfba96
+  languageName: node
+  linkType: hard
+
+"html-to-image@npm:^1.11.13":
+  version: 1.11.13
+  resolution: "html-to-image@npm:1.11.13"
+  checksum: 10c0/03bd7192d87b99499e37ff12a8e2b41ddce4cf8e33a93dfadff18df0f213434c7f1ba8328db2158f4805da07b7aec3c90aec3152908281153217e86784218b10
   languageName: node
   linkType: hard
 
