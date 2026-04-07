@@ -8,7 +8,6 @@ import { KmsKey } from '@cdktf/provider-aws/lib/kms-key';
 import { KmsAlias } from '@cdktf/provider-aws/lib/kms-alias';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { S3BucketLifecycleConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-lifecycle-configuration';
-import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
 import { S3BucketReplicationConfigurationA } from '@cdktf/provider-aws/lib/s3-bucket-replication-configuration';
 import { S3BucketServerSideEncryptionConfigurationA } from '@cdktf/provider-aws/lib/s3-bucket-server-side-encryption-configuration';
 import { S3BucketVersioningA } from '@cdktf/provider-aws/lib/s3-bucket-versioning';
@@ -36,12 +35,6 @@ export interface DisasterRecoveryConstructProps {
 
   /** Cognito User Pool ID for user/group export */
   userPoolId: string;
-
-  /** Deployer role ARN that should retain access to recovery bucket */
-  deployerRoleArn?: string;
-
-  /** Additional IAM role ARNs allowed to access the recovery bucket (e.g., admin-dr-stats Lambda) */
-  additionalAllowedPrincipalArns?: string[];
 }
 
 export class DisasterRecoveryConstruct extends Construct {
@@ -313,41 +306,6 @@ export class DisasterRecoveryConstruct extends Construct {
       rule: schedule.name,
       arn: drExportLambda.lambda.arn,
       targetId: `${props.clientName}-dr-export`,
-    });
-
-    // ── 10. Recovery bucket policy ──────────────────────────────────────────
-    const allowedPrincipalArns = [
-      replicationRole.arn,
-      drExportLambda.lambda.role,
-      `arn:aws:iam::${props.clientAccountId}:role/ArcanumAIAccess`,
-      ...(props.additionalAllowedPrincipalArns ?? []),
-    ];
-    if (props.deployerRoleArn) {
-      allowedPrincipalArns.push(props.deployerRoleArn);
-    }
-
-    const recoveryBucketPolicyDoc = new DataAwsIamPolicyDocument(this, 'recovery-bucket-policy-doc', {
-      statement: [
-        {
-          sid: 'DenyNonDRAccess',
-          effect: 'Deny',
-          principals: [{ type: 'AWS', identifiers: ['*'] }],
-          actions: ['s3:*'],
-          resources: [recoveryBucket.bucket.arn, `${recoveryBucket.bucket.arn}/*`],
-          condition: [
-            {
-              test: 'ArnNotLike',
-              variable: 'aws:PrincipalArn',
-              values: allowedPrincipalArns,
-            },
-          ],
-        },
-      ],
-    });
-
-    new S3BucketPolicy(this, 'recovery-bucket-policy', {
-      bucket: recoveryBucket.bucket.bucket,
-      policy: recoveryBucketPolicyDoc.json,
     });
   }
 }

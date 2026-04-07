@@ -81,39 +81,40 @@ async function getBucketStats(): Promise<DrStats['recoveryBucket']> {
   let totalSize = 0;
   let totalObjects = 0;
 
-  // Get stats for known export prefixes
-  for (const prefix of prefixes) {
-    let count = 0;
-    let size = 0;
-    let lastMod: Date | null = null;
-    let continuationToken: string | undefined;
+  // Get stats for known export prefixes (parallel)
+  const prefixResults = await Promise.all(
+    prefixes.map(async (prefix) => {
+      let count = 0;
+      let size = 0;
+      let lastMod: Date | null = null;
+      let continuationToken: string | undefined;
 
-    do {
-      const resp = await s3.send(
-        new ListObjectsV2Command({
-          Bucket: RECOVERY_BUCKET,
-          Prefix: prefix,
-          ContinuationToken: continuationToken,
-        })
-      );
-      for (const obj of resp.Contents || []) {
-        count++;
-        size += obj.Size || 0;
-        if (obj.LastModified && (!lastMod || obj.LastModified > lastMod)) {
-          lastMod = obj.LastModified;
+      do {
+        const resp = await s3.send(
+          new ListObjectsV2Command({
+            Bucket: RECOVERY_BUCKET,
+            Prefix: prefix,
+            ContinuationToken: continuationToken,
+          })
+        );
+        for (const obj of resp.Contents || []) {
+          count++;
+          size += obj.Size || 0;
+          if (obj.LastModified && (!lastMod || obj.LastModified > lastMod)) {
+            lastMod = obj.LastModified;
+          }
         }
-      }
-      continuationToken = resp.NextContinuationToken;
-    } while (continuationToken);
+        continuationToken = resp.NextContinuationToken;
+      } while (continuationToken);
 
-    prefixStats.push({
-      prefix,
-      objectCount: count,
-      totalSizeBytes: size,
-      lastModified: lastMod?.toISOString() ?? null,
-    });
-    totalSize += size;
-    totalObjects += count;
+      return { prefix, objectCount: count, totalSizeBytes: size, lastModified: lastMod?.toISOString() ?? null };
+    })
+  );
+
+  for (const ps of prefixResults) {
+    prefixStats.push(ps);
+    totalSize += ps.totalSizeBytes;
+    totalObjects += ps.objectCount;
   }
 
   // Get stats for replicated S3 objects (everything NOT in the export prefixes)
@@ -175,32 +176,24 @@ async function getDynamoDbStats(): Promise<DrStats['dynamodb']> {
     exclusiveStartTableName = resp.LastEvaluatedTableName;
   } while (exclusiveStartTableName);
 
-  // Check PITR status for each table
-  const tableStatuses: TablePitrStatus[] = [];
-  let pitrEnabled = 0;
-
-  for (const tableName of tables) {
-    try {
-      const resp = await dynamodb.send(new DescribeContinuousBackupsCommand({ TableName: tableName }));
-      const pitr = resp.ContinuousBackupsDescription?.PointInTimeRecoveryDescription;
-      const enabled = pitr?.PointInTimeRecoveryStatus === 'ENABLED';
-      if (enabled) pitrEnabled++;
-
-      tableStatuses.push({
-        tableName,
-        pitrEnabled: enabled,
-        earliestRestoreDate: pitr?.EarliestRestorableDateTime?.toISOString() ?? null,
-        latestRestoreDate: pitr?.LatestRestorableDateTime?.toISOString() ?? null,
-      });
-    } catch {
-      tableStatuses.push({
-        tableName,
-        pitrEnabled: false,
-        earliestRestoreDate: null,
-        latestRestoreDate: null,
-      });
-    }
-  }
+  // Check PITR status for each table (parallel)
+  const tableStatuses = await Promise.all(
+    tables.map(async (tableName): Promise<TablePitrStatus> => {
+      try {
+        const resp = await dynamodb.send(new DescribeContinuousBackupsCommand({ TableName: tableName }));
+        const pitr = resp.ContinuousBackupsDescription?.PointInTimeRecoveryDescription;
+        return {
+          tableName,
+          pitrEnabled: pitr?.PointInTimeRecoveryStatus === 'ENABLED',
+          earliestRestoreDate: pitr?.EarliestRestorableDateTime?.toISOString() ?? null,
+          latestRestoreDate: pitr?.LatestRestorableDateTime?.toISOString() ?? null,
+        };
+      } catch {
+        return { tableName, pitrEnabled: false, earliestRestoreDate: null, latestRestoreDate: null };
+      }
+    })
+  );
+  const pitrEnabled = tableStatuses.filter((t) => t.pitrEnabled).length;
 
   // Get recent exports
   const recentExports: ExportInfo[] = [];
@@ -243,20 +236,21 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   }
 
   try {
-    let bucketStats: DrStats['recoveryBucket'];
-    try {
-      bucketStats = await getBucketStats();
-    } catch (bucketErr: unknown) {
-      const code = (bucketErr as { name?: string })?.name;
-      if (code === 'NoSuchBucket') {
-        // Recovery bucket hasn't been provisioned yet
-        bucketStats = { name: RECOVERY_BUCKET, totalSizeBytes: 0, totalObjects: 0, prefixes: [] };
-      } else {
-        throw bucketErr;
-      }
-    }
+    const emptyBucket: DrStats['recoveryBucket'] = {
+      name: RECOVERY_BUCKET,
+      totalSizeBytes: 0,
+      totalObjects: 0,
+      prefixes: [],
+    };
 
-    const dynamoStats = await getDynamoDbStats();
+    const [bucketStats, dynamoStats] = await Promise.all([
+      getBucketStats().catch((err: unknown) => {
+        const code = (err as { name?: string })?.name;
+        if (code === 'NoSuchBucket' || code === 'AccessDenied') return emptyBucket;
+        throw err;
+      }),
+      getDynamoDbStats(),
+    ]);
 
     const stats: DrStats = {
       recoveryBucket: bucketStats,

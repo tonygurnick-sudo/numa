@@ -1764,6 +1764,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         lambdaDirectory: 'node/admin-dr-stats',
         runtime: 'nodejs22.x',
         handler: 'index.handler',
+        memorySize: 512,
         environment: {
           RECOVERY_BUCKET: props.recoveryBucketName,
           CLIENT_NAME: props.clientName,
