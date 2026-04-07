@@ -2259,7 +2259,14 @@ async def delete_kb_files(request: Request, kb_id: str) -> Response:
         kb_manager = KnowledgeBaseManager()
 
         # Check EDITOR permission
-        if not kb_manager.check_permission(kb_id, user_id, "EDITOR"):
+        # For the company KB, admin users (who have the deleteFromCompanyData
+        # Cognito feature) are allowed to delete without being in the KB-level
+        # editors list, since the company KB is system-owned.
+        user_groups = user.get("cognito:groups", []) or []
+        is_company_admin = kb_id == "company" and "admin" in user_groups
+        if not is_company_admin and not kb_manager.check_permission(
+            kb_id, user_id, "EDITOR"
+        ):
             logger.warning(
                 "Access denied - user lacks EDITOR permission for file deletion",
                 kb_id=kb_id,
