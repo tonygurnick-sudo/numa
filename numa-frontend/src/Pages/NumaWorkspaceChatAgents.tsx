@@ -2611,8 +2611,6 @@ const NumaWorkspaceChatAgents = () => {
                           setWebSearchEnabled={handleUserSetWebSearchEnabled}
                           createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                           setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
-                          dataAnalysisEnabled={false}
-                          setDataAnalysisEnabled={() => {}}
                           autoToolsEnabled={autoToolsEnabled}
                           setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                           availableConnections={availableConnections}
@@ -2785,8 +2783,6 @@ const NumaWorkspaceChatAgents = () => {
                           setWebSearchEnabled={handleUserSetWebSearchEnabled}
                           createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                           setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
-                          dataAnalysisEnabled={false}
-                          setDataAnalysisEnabled={() => {}}
                           autoToolsEnabled={autoToolsEnabled}
                           setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                           availableConnections={availableConnections}

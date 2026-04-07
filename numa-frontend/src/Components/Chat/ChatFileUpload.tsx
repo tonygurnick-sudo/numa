@@ -66,9 +66,6 @@ type ChatFileUploadProps = {
   currentAgent?: AgentSummary | null;
   setPendingAgent?: (a: AgentSummary | null) => void;
   resetInactivityTimer?: () => void;
-  dataAnalysisAvailable?: boolean;
-  dataAnalysisToolEnabled?: boolean;
-  onFilesUploaded?: (files: FileResult[]) => void;
 };
 
 type UploaderRef = {
@@ -91,9 +88,6 @@ export const ChatFileUpload = ({
   currentAgent = null,
   setPendingAgent,
   resetInactivityTimer = () => {},
-  dataAnalysisAvailable = true,
-  dataAnalysisToolEnabled = false,
-  onFilesUploaded,
 }: ChatFileUploadProps) => {
   const { t } = useTranslation('chat');
   const { numaChatDynamoUtils, user, getCredentials } = useAuth();
@@ -278,9 +272,6 @@ export const ChatFileUpload = ({
       }
 
       refreshSidebar();
-      if (typeof onFilesUploaded === 'function') {
-        onFilesUploaded(fileArray);
-      }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
 
@@ -363,7 +354,7 @@ export const ChatFileUpload = ({
                 const name = (f as { fileName?: string }).fileName || (f as { name?: string }).name || '';
                 return type === 'text/csv' || name.toLowerCase().endsWith('.csv');
               });
-              setShowCsvWarning(Boolean(hasCsv && dataAnalysisAvailable && !dataAnalysisToolEnabled));
+              setShowCsvWarning(false);
             }
           }}
           onSelectFiles={(files) => {
@@ -376,7 +367,7 @@ export const ChatFileUpload = ({
               const name = f.name?.toLowerCase() || '';
               return type === 'text/csv' || name.endsWith('.csv');
             });
-            const shouldWarn = Boolean(hasCsv && dataAnalysisAvailable && !dataAnalysisToolEnabled);
+            const shouldWarn = false;
             setShowCsvWarning(shouldWarn);
             if (shouldWarn && !csvNoticeShown) {
               setMessages((prev: ChatMessage[]) => [

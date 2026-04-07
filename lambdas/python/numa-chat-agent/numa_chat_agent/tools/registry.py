@@ -59,13 +59,6 @@ def _get_create_agent_impl():
     return impl
 
 
-def _get_data_analysis_impl():
-    module = import_module("numa_chat_agent.tools")
-    impl = getattr(module, "data_analysis_impl")
-    logger.debug("Resolved data_analysis_impl", resolved_type=type(impl).__name__)
-    return impl
-
-
 @tool
 def query_knowledge_base(
     query: str, user_intent: str, max_results: int = 6, kb_id: Optional[str] = None
@@ -338,31 +331,11 @@ def create_agent_tool(
     return _get_create_agent_impl()(**clean_payload)
 
 
-@tool
-def data_analysis(
-    prompt: Optional[str] = None,
-    file_names: Optional[list[str]] = None,
-    file_keys: Optional[list[str]] = None,
-    file_uris: Optional[list[str]] = None,
-    job_id: Optional[str] = None,
-):
-    """
-    Run the Data Analysis app on uploaded CSV/Excel/JSON files.
-
-    Use this tool when the user asks to analyze uploaded data files. If specific
-    files are mentioned, pass their names or S3 keys. If none are provided,
-    the most recent uploaded data file is used. Include job_id (UUID) to enable
-    progress tracking in the chat UI.
-    """
-    return _get_data_analysis_impl()(prompt, file_names, file_keys, file_uris, job_id)
-
-
 # Tool registry for dynamic construction
 AVAILABLE_TOOLS = {
     "query_knowledge_base": query_knowledge_base,
     "web_search": web_search,
     "create_agent_tool": create_agent_tool,
-    "data_analysis": data_analysis,
 }
 
 

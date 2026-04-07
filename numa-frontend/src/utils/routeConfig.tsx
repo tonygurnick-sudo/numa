@@ -308,7 +308,7 @@ export const ROUTE_CONFIG = [
   {
     path: '/apps/v2/:appId',
     element: () => <V2AppDetail />,
-    featureFlag: 'V2_APPS',
+    // Feature flag checked inside V2AppDetail -- data-analysis bypasses V2_APPS
   },
   {
     path: '/scheduling/:scheduleId',

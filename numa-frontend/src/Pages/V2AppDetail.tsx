@@ -12,7 +12,11 @@ import { AgentsTab } from '../Components/V2Apps/tabs/AgentsTab';
 import { RunsTab } from '../Components/V2Apps/tabs/RunsTab';
 import { WorkspaceTab } from '../Components/V2Apps/tabs/WorkspaceTab';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
+import { getFlag } from '../utils/featureFlags';
 import type { V2AppTab } from '../types/apps';
+
+// Apps that bypass the V2_APPS feature flag (fully migrated from V1)
+const ALWAYS_AVAILABLE_V2_APPS = new Set(['data-analysis']);
 
 type ConnectionOption = {
   id: string;
@@ -147,10 +151,33 @@ export const V2AppDetail: React.FC = () => {
     [startAnalysis]
   );
 
+  // Reset run state when switching back to the Agents tab so the form is
+  // ready for a new run (the previous run continues in the background).
+  const handleTabChange = useCallback(
+    (tabId: string) => {
+      setActiveTab(tabId);
+      if (tabId === 'agents' && (state === 'processing' || state === 'completed' || state === 'error')) {
+        reset();
+      }
+    },
+    [state, reset]
+  );
+
   // Load run history on mount
   useEffect(() => {
     if (appId) loadHistory();
   }, [appId, loadHistory]);
+
+  // Gate non-migrated V2 apps behind the V2_APPS feature flag
+  if (appId && !ALWAYS_AVAILABLE_V2_APPS.has(appId) && !getFlag('V2_APPS')) {
+    return (
+      <div className="v2-app-detail">
+        <div className="v2-app-detail__content">
+          <Alert variant="warning">{t('v2Apps.detail.notFound')}</Alert>
+        </div>
+      </div>
+    );
+  }
 
   if (!app || !appId) {
     return (
@@ -244,7 +271,7 @@ export const V2AppDetail: React.FC = () => {
         <Nav variant="tabs">
           {app.tabs.map((tab: V2AppTab) => (
             <Nav.Item key={tab.id}>
-              <Nav.Link active={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>
+              <Nav.Link active={activeTab === tab.id} onClick={() => handleTabChange(tab.id)}>
                 {tab.icon && <i className={tab.icon} />}
                 {t(tab.labelKey)}
               </Nav.Link>

@@ -63,7 +63,8 @@ const AppItem = ({ app, onCategoryClick }) => {
 
   const handleClick = () => {
     if (isActive) {
-      navigate(`/app/${app.id}`);
+      // Data analysis is now a V2 app -- route directly to the V2 experience
+      navigate(app.id === 'data-analysis' ? '/apps/v2/data-analysis' : `/app/${app.id}`);
     }
   };
 
