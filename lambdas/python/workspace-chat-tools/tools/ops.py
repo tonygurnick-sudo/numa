@@ -197,6 +197,38 @@ OPS_CRM_OPERATIONS = {
 }
 
 
+def _resolve_ticket_by_display_id(
+    display_id: str,
+    user_sub: str = "",
+    user_email: str = "",
+    user_name: str = "",
+    user_groups: list | None = None,
+) -> tuple[str, str]:
+    """Resolve a display ID (e.g. 'BUG-002') to (ticket_id, team_id).
+
+    Calls the get_ticket by-display-id endpoint internally.
+    Raises ValueError if the display ID is not found.
+    """
+    result = _invoke_ops_lambda(
+        lambda_name=OPS_API_LAMBDA,
+        method="GET",
+        path=f"ops/tickets/by-display-id/{display_id}",
+        user_sub=user_sub,
+        user_email=user_email,
+        user_name=user_name,
+        user_groups=user_groups,
+    )
+    ticket = result.get("ticket", result)
+    ticket_id = ticket.get("id", "")
+    team_id = ticket.get("teamId", "")
+    if not ticket_id:
+        raise ValueError(
+            f"Could not resolve display ID '{display_id}' to a ticket. "
+            "Check that the display ID is correct (e.g. 'BUG-002')."
+        )
+    return ticket_id, team_id
+
+
 def _resolve_lambda_and_request(
     operation: str,
     params: dict,
@@ -843,6 +875,36 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
                 "Approval table not configured, executing without approval",
                 error=str(e),
             )
+
+    # ── Resolve display IDs for mutation operations ─────────────────────
+    # If the caller provided a display_id (e.g. 'BUG-002') instead of a
+    # ticket_id UUID, resolve it before routing to the Lambda.
+    _ticket_mutations = {
+        "update_ticket",
+        "delete_ticket",
+        "add_comment",
+        "list_comments",
+        "get_audit",
+    }
+    if operation in _ticket_mutations:
+        has_ticket_id = bool(op_params.get("ticket_id"))
+        has_display_id = bool(op_params.get("display_id"))
+        if not has_ticket_id and not has_display_id:
+            raise ValueError(
+                f"Missing required parameter for {operation}: "
+                "ticket_id (UUID) or display_id (e.g. 'BUG-002')"
+            )
+        if has_display_id and not has_ticket_id:
+            resolved_id, resolved_team_id = _resolve_ticket_by_display_id(
+                op_params["display_id"],
+                user_sub=user_sub,
+                user_email=user_email,
+                user_name=user_name,
+                user_groups=user_groups,
+            )
+            op_params["ticket_id"] = resolved_id
+            if not op_params.get("team_id") and resolved_team_id:
+                op_params["team_id"] = resolved_team_id
 
     try:
         lambda_name, method, path, body, query_params = _resolve_lambda_and_request(

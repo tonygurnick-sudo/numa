@@ -220,6 +220,8 @@ Valid `statusType` values per zone type:
 
 **IMPORTANT:** Call `get_config` first to get valid ticket types and staff. Call `get_team` to get valid stage IDs for the board.
 
+> **WARNING:** `stage_id` MUST be a valid UUID from the `get_team` response (`zones[].stages[].id`). Do NOT use status names like "backlog", "completed", or "active" -- they will be rejected. Invalid stage IDs will return a 400 error.
+
 | Parameter         | Type   | Required | Description                                                                     |
 | ----------------- | ------ | -------- | ------------------------------------------------------------------------------- |
 | `team_id`         | string | Yes      | Board to create the ticket in                                                   |
@@ -248,36 +250,42 @@ Valid `statusType` values per zone type:
 
 #### update_ticket
 
-| Parameter         | Type    | Required | Description                                        |
-| ----------------- | ------- | -------- | -------------------------------------------------- |
-| `ticket_id`       | string  | Yes      | Ticket ID to update                                |
-| `team_id`         | string  | Yes      | Board the ticket belongs to                        |
-| `current_team_id` | string  | No       | Current board (for cross-board moves)              |
-| `title`           | string  | No       | New title                                          |
-| `description`     | string  | No       | New description                                    |
-| `stage_id`        | string  | No       | Move to different stage (auto-updates status type) |
-| `zone_id`         | string  | No       | Move to different zone                             |
-| `priority`        | string  | No       | New priority                                       |
-| `assignee_id`     | string  | No       | New assignee                                       |
-| `assignee_name`   | string  | No       | Assignee display name                              |
-| `due_date`        | string  | No       | New due date                                       |
-| `customer_id`     | string  | No       | Link to customer                                   |
-| `supplier_id`     | string  | No       | Link to supplier                                   |
-| `work_unit_id`    | string  | No       | Link to sprint/work unit                           |
-| `project_id`      | string  | No       | Link to project                                    |
-| `tags`            | array   | No       | Updated tags                                       |
-| `fields`          | object  | No       | Updated custom field values                        |
-| `effort_points`   | number  | No       | Updated effort points                              |
-| `order`           | number  | No       | Position order within stage                        |
-| `version`         | number  | No       | Optimistic locking (prevents concurrent edits)     |
-| `archived`        | boolean | No       | Set true to archive, false to unarchive            |
+You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002"). If `display_id` is provided, the system will automatically resolve it to the internal UUID and team ID.
+
+| Parameter         | Type    | Required | Description                                                    |
+| ----------------- | ------- | -------- | -------------------------------------------------------------- |
+| `ticket_id`       | string  | Yes\*    | Ticket UUID (\* or provide `display_id` instead)               |
+| `display_id`      | string  | No       | Display ID (e.g. "BUG-002") -- resolves automatically          |
+| `team_id`         | string  | Yes\*    | Board the ticket belongs to (\* auto-resolved from display_id) |
+| `current_team_id` | string  | No       | Current board (for cross-board moves)                          |
+| `title`           | string  | No       | New title                                                      |
+| `description`     | string  | No       | New description                                                |
+| `stage_id`        | string  | No       | Move to different stage (auto-updates status type)             |
+| `zone_id`         | string  | No       | Move to different zone                                         |
+| `priority`        | string  | No       | New priority                                                   |
+| `assignee_id`     | string  | No       | New assignee                                                   |
+| `assignee_name`   | string  | No       | Assignee display name                                          |
+| `due_date`        | string  | No       | New due date                                                   |
+| `customer_id`     | string  | No       | Link to customer                                               |
+| `supplier_id`     | string  | No       | Link to supplier                                               |
+| `work_unit_id`    | string  | No       | Link to sprint/work unit                                       |
+| `project_id`      | string  | No       | Link to project                                                |
+| `tags`            | array   | No       | Updated tags                                                   |
+| `fields`          | object  | No       | Updated custom field values                                    |
+| `effort_points`   | number  | No       | Updated effort points                                          |
+| `order`           | number  | No       | Position order within stage                                    |
+| `version`         | number  | No       | Optimistic locking (prevents concurrent edits)                 |
+| `archived`        | boolean | No       | Set true to archive, false to unarchive                        |
 
 #### delete_ticket
 
-| Parameter   | Type   | Required | Description                 |
-| ----------- | ------ | -------- | --------------------------- |
-| `ticket_id` | string | Yes      | Ticket ID to delete         |
-| `team_id`   | string | Yes      | Board the ticket belongs to |
+You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002"). If `display_id` is provided, the system will automatically resolve it to the internal UUID and team ID.
+
+| Parameter    | Type   | Required | Description                                                    |
+| ------------ | ------ | -------- | -------------------------------------------------------------- |
+| `ticket_id`  | string | Yes\*    | Ticket UUID (\* or provide `display_id` instead)               |
+| `display_id` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically          |
+| `team_id`    | string | Yes\*    | Board the ticket belongs to (\* auto-resolved from display_id) |
 
 #### bulk_update_tickets
 
@@ -290,25 +298,32 @@ Update multiple tickets at once (e.g., move all to a new stage, reassign).
 
 #### add_comment
 
-| Parameter   | Type   | Required | Description                                                               |
-| ----------- | ------ | -------- | ------------------------------------------------------------------------- |
-| `ticket_id` | string | Yes      | Ticket to comment on                                                      |
-| `content`   | string | Yes      | Comment text (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
-| `team_id`   | string | No       | Board ID (helps with comment count update)                                |
+You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002").
+
+| Parameter    | Type   | Required | Description                                                               |
+| ------------ | ------ | -------- | ------------------------------------------------------------------------- |
+| `ticket_id`  | string | Yes\*    | Ticket UUID (\* or provide `display_id` instead)                          |
+| `display_id` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically                     |
+| `content`    | string | Yes      | Comment text (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
+| `team_id`    | string | No       | Board ID (helps with comment count update)                                |
 
 #### list_comments
 
-| Parameter   | Type   | Required | Description                 |
-| ----------- | ------ | -------- | --------------------------- |
-| `ticket_id` | string | Yes      | Ticket to list comments for |
+You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002").
+
+| Parameter    | Type   | Required | Description                                           |
+| ------------ | ------ | -------- | ----------------------------------------------------- |
+| `ticket_id`  | string | Yes\*    | Ticket UUID (\* or provide `display_id` instead)      |
+| `display_id` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically |
 
 #### get_audit
 
-Get the audit trail (change history) for a ticket. Returns entries in reverse chronological order.
+Get the audit trail (change history) for a ticket. You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002").
 
-| Parameter   | Type   | Required | Description             |
-| ----------- | ------ | -------- | ----------------------- |
-| `ticket_id` | string | Yes      | Ticket to get audit for |
+| Parameter    | Type   | Required | Description                                           |
+| ------------ | ------ | -------- | ----------------------------------------------------- |
+| `ticket_id`  | string | Yes\*    | Ticket UUID (\* or provide `display_id` instead)      |
+| `display_id` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically |
 
 ---
 
@@ -548,7 +563,7 @@ mcp__numa__numa_ops_tool(
 ## Best Practices
 
 1. **Always call `get_config` first** — you need ticket types, statuses, and staff IDs before creating tickets
-2. **Call `get_team` to get stage IDs** — `stage_id` is required for ticket creation; stages are returned in the board's zones
+2. **Call `get_team` to get stage IDs** — `stage_id` must be a valid UUID from `get_team` stages. The API will reject invalid stage IDs with a 400 error. Do not use status names like "backlog" or "completed" as stage IDs
 3. **Link tickets using ticketUrl** — ticket responses include a `ticketUrl` field (e.g., `https://acme.numa.arcanum.ai/ops?ticket=ENG-42`). Always include this link when referencing tickets so users can click through directly
 4. **Include full content in approval descriptions** — for write operations, describe exactly what will be created/changed
 5. **Respect team scoping** — users can only see boards they have access to

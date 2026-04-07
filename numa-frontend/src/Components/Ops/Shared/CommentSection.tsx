@@ -256,7 +256,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                 <div className="flex-grow-1" style={{ minWidth: 0 }}>
                   <div className="d-flex align-items-center gap-2 mb-1">
                     <span className="fw-semibold" style={{ fontSize: '0.85rem' }}>
-                      {comment.authorName}
+                      {comment.authorName || comment.authorEmail?.split('@')[0] || t('comments.unknownAuthor')}
                     </span>
                     {comment.isSystem && (
                       <span className="badge bg-light text-muted border" style={{ fontSize: '0.65rem' }}>

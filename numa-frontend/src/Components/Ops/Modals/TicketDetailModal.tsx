@@ -28,6 +28,7 @@ import { RichTextEditor } from '../Shared/RichTextEditor';
 import type { RichTextEditorHandle } from '../Shared/RichTextEditor';
 import { DynamicField } from '../Shared/DynamicField';
 import { ConfirmModal } from './ConfirmModal';
+import { useToast } from '../../../Providers/ToastContext';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 import { StaffAvatar } from '../Shared/StaffAvatar';
 
@@ -163,6 +164,7 @@ export function TicketDetailModal({
 }: TicketDetailModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPut, numaDelete } = useNumaRequest();
+  const { showToast } = useToast();
   const [archiving, setArchiving] = useState(false);
   const { config, teamData, workUnits, refreshTickets, refreshCrmData } = useOps();
 
@@ -388,17 +390,18 @@ export function TicketDetailModal({
   // ── Archive handler ──────────────────────────────────────────────────
 
   const handleToggleArchive = async () => {
-    if (!ticket || !ticketId) return;
+    if (!ticket || !ticketId || !team?.id) return;
     setArchiving(true);
     try {
       const updated = ticket.archived
-        ? await OpsService.unarchiveTicket(numaPut, ticketId, ticket.version)
-        : await OpsService.archiveTicket(numaPut, ticketId, ticket.version);
+        ? await OpsService.unarchiveTicket(numaPut, ticketId, ticket.version, team.id)
+        : await OpsService.archiveTicket(numaPut, ticketId, ticket.version, team.id);
       setTicket(updated);
       void refreshTickets();
       refreshCrmData();
     } catch (err) {
       console.error('[TicketDetailModal] Archive toggle failed', err);
+      showToast({ message: t('errors.archiveFailed'), variant: 'error' });
     } finally {
       setArchiving(false);
     }
@@ -407,9 +410,9 @@ export function TicketDetailModal({
   // ── Delete handler ────────────────────────────────────────────────────
 
   const handleDelete = async () => {
-    if (!ticketId) return;
+    if (!ticketId || !team?.id) return;
     try {
-      await OpsService.deleteTicket(numaDelete, ticketId, team?.id);
+      await OpsService.deleteTicket(numaDelete, ticketId, team.id);
       setShowDeleteConfirm(false);
       onDeleted?.();
       onHide();
@@ -417,6 +420,7 @@ export function TicketDetailModal({
       refreshCrmData();
     } catch (err) {
       console.error('[TicketDetailModal] Delete failed', err);
+      showToast({ message: t('errors.deleteFailed'), variant: 'error' });
     }
   };
 

@@ -279,7 +279,8 @@ const handleCustomers = async (
   // POST /ops/customers — create customer
   if (method === 'POST' && segments.length === 0) {
     const { companyName, industry, lifecycleStage, ownerId } = body;
-    if (!companyName) return errorResponse(400, 'Missing required field: companyName');
+    if (!companyName)
+      return errorResponse(400, 'Missing required field: companyName (e.g. {"companyName": "Acme Corp"})');
 
     const id = randomUUID();
     const ts = now();
@@ -442,7 +443,8 @@ const handleSuppliers = async (
   // POST /ops/suppliers — create supplier
   if (method === 'POST' && segments.length === 0) {
     const { companyName, lifecycleStage, ownerId } = body;
-    if (!companyName) return errorResponse(400, 'Missing required field: companyName');
+    if (!companyName)
+      return errorResponse(400, 'Missing required field: companyName (e.g. {"companyName": "Acme Corp"})');
 
     const id = randomUUID();
     const ts = now();

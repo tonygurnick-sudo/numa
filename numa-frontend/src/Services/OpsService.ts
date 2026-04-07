@@ -313,12 +313,22 @@ export const restoreTicket = async (numaPost: NumaPost, ticketId: string): Promi
   return response.ticket;
 };
 
-export const archiveTicket = async (numaPut: NumaPut, ticketId: string, version: number): Promise<Ticket> => {
-  return updateTicket(numaPut, ticketId, { archived: true, version });
+export const archiveTicket = async (
+  numaPut: NumaPut,
+  ticketId: string,
+  version: number,
+  teamId?: string
+): Promise<Ticket> => {
+  return updateTicket(numaPut, ticketId, { archived: true, version, teamId });
 };
 
-export const unarchiveTicket = async (numaPut: NumaPut, ticketId: string, version: number): Promise<Ticket> => {
-  return updateTicket(numaPut, ticketId, { archived: false, version });
+export const unarchiveTicket = async (
+  numaPut: NumaPut,
+  ticketId: string,
+  version: number,
+  teamId?: string
+): Promise<Ticket> => {
+  return updateTicket(numaPut, ticketId, { archived: false, version, teamId });
 };
 
 export const bulkUpdateTickets = async (numaPost: NumaPost, payload: BulkUpdateTicketsPayload): Promise<void> => {

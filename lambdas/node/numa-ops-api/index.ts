@@ -1071,7 +1071,7 @@ const handleTickets = async (
       attachments: Array.isArray(attachments) ? attachments : undefined,
       authorId: auth.sub,
       authorEmail: auth.email,
-      authorName: auth.name,
+      authorName: auth.name || (auth.email ? auth.email.split('@')[0] : 'Unknown'),
       createdAt: ts,
       updatedAt: ts,
     };
@@ -1507,6 +1507,35 @@ const handleTickets = async (
       sourceAppType,
     } = body;
 
+    // Detect unknown parameters
+    const knownCreateFields = new Set([
+      'teamId',
+      'stageId',
+      'zoneId',
+      'ticketTypeId',
+      'title',
+      'description',
+      'priority',
+      'assigneeId',
+      'assigneeName',
+      'reporterId',
+      'reporterName',
+      'customerId',
+      'customerName',
+      'supplierId',
+      'supplierName',
+      'workUnitId',
+      'projectId',
+      'tags',
+      'fields',
+      'dueDate',
+      'effortPoints',
+      'sourceType',
+      'sourceId',
+      'sourceAppType',
+    ]);
+    const unknownKeys = Object.keys(body).filter((k) => !knownCreateFields.has(k));
+
     if (!rawTeamId || !rawStageId || !title)
       return errorResponse(400, 'Missing required fields: teamId, stageId, title');
 
@@ -1531,6 +1560,12 @@ const handleTickets = async (
 
     // Look up the stage to resolve zoneId and statusType
     const stageRecord = await getItem(`TEAM#${teamId}`, `STAGE#${stageId}`);
+    if (!stageRecord) {
+      return errorResponse(
+        400,
+        `Invalid stageId: '${stageId}' is not a valid stage for team '${teamId}'. Call get_team to retrieve valid stage IDs.`
+      );
+    }
     const zoneId = rawZoneId ? String(rawZoneId) : stageRecord?.zoneId ? String(stageRecord.zoneId) : undefined;
     const statusType = stageRecord?.statusType ? String(stageRecord.statusType) : 'backlog';
 
@@ -1613,7 +1648,14 @@ const handleTickets = async (
 
     await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems as never }));
 
-    return jsonResponse(201, { ticket: ticketItem });
+    return jsonResponse(201, {
+      ticket: ticketItem,
+      ...(unknownKeys.length > 0 && {
+        warnings: [
+          `Unrecognized parameters were ignored: ${unknownKeys.join(', ')}. Valid fields: ${[...knownCreateFields].join(', ')}`,
+        ],
+      }),
+    });
   }
 
   // ── PUT /ops/tickets/{ticketId} — update ticket ─────────────────────────────

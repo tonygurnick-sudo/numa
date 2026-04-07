@@ -82,6 +82,7 @@ export const TEAM_PRESETS: TeamPreset[] = [
         stages: [
           { name: 'To Do', statusType: 'queued' },
           { name: 'In Progress', statusType: 'active' },
+          { name: 'Blocked', statusType: 'active' },
           { name: 'Done', statusType: 'completed' },
         ],
       },
