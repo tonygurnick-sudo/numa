@@ -1081,6 +1081,30 @@ export class NumaClientStack extends TerraformStack {
         description: 'IAM quota sharing manager result',
       });
     }
+
+    // ── Sync ext-api-doc files to S3 (at END to avoid resource address shifts) ──
+    const extApiDocPath = path.join(import.meta.dirname, '..', '..', 'ext-api-doc');
+    try {
+      if (fs.existsSync(extApiDocPath)) {
+        const mdFiles = fs
+          .readdirSync(extApiDocPath, { recursive: true, withFileTypes: true })
+          .filter((f) => f.isFile() && !f.name.startsWith('.'))
+          .map((f) => path.join(f.parentPath, f.name));
+
+        for (const source of mdFiles) {
+          const key = path.relative(extApiDocPath, source);
+          new S3Object(this, `ext-api-doc-${key.replace(/[^a-zA-Z0-9]/g, '-')}`, {
+            bucket: core.extApiDocBucket.bucket.bucket,
+            key,
+            source,
+            sourceHash: Fn.filemd5(source),
+            contentType: 'text/markdown',
+          });
+        }
+      }
+    } catch {
+      // ext-api-doc directory may not exist in CI — that's fine
+    }
   }
 }
 

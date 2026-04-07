@@ -110,6 +110,7 @@ export class CoreNumaInfra extends Construct {
   readonly auditRecoveryTable!: DynamodbTable;
   readonly auditUserManagementTable!: DynamodbTable;
   readonly configBucket!: ConfigBucket;
+  readonly extApiDocBucket!: PrivateBucket;
   readonly sitemapsBucket?: PrivateBucket;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
@@ -1925,6 +1926,11 @@ export class CoreNumaInfra extends Construct {
     new TerraformOutput(this, 'bedrock-model-access-results', {
       value: Fn.format('\n%s', [Fn.join('\n', modelResults)]),
       description: 'Results from Bedrock model access requests',
+    });
+
+    // ── ext-api-doc bucket (at END to avoid shifting resource addresses) ──
+    this.extApiDocBucket = new PrivateBucket(this, 'ext-api-doc-bucket', {
+      bucket: `${numaClient}-ext-api-doc`,
     });
   }
 }
