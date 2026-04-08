@@ -11,6 +11,7 @@ import { Share } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { WorkspaceChatSegment } from '@/types/workspaceChatTypes';
+import { getRenderPayload, type ToolResultLike } from '../../toolRenderers/helpers';
 
 /* ---------- Types ---------- */
 
@@ -35,7 +36,15 @@ type ExportSegment =
   | { kind: 'tool'; displayText: string; isError?: boolean }
   | { kind: 'todo'; items: Array<{ content: string; status: string }> }
   | { kind: 'subagent'; taskDescription: string; subagentType: string }
-  | { kind: 'file'; label: string };
+  | { kind: 'file'; label: string }
+  | {
+      kind: 'render';
+      renderType: 'html' | 'image';
+      content: string;
+      title?: string;
+      height?: number;
+      mimeType?: string;
+    };
 
 interface ExportedMessage {
   role: string;
@@ -149,7 +158,23 @@ function extractExportMessages(messages: ExportMessage[], t: TFunction): Exporte
             }
             break;
 
-          case 'tool_card':
+          case 'tool_card': {
+            // Check for render sub-tool results -- embed inline content in export
+            const tcInput = seg.input as { name?: string } | undefined;
+            if (seg.toolName === 'mcp__numa__numa_tool' && tcInput?.name === 'render' && seg.result) {
+              const renderPayload = getRenderPayload(seg.result as ToolResultLike);
+              if (renderPayload?.content) {
+                segments.push({
+                  kind: 'render',
+                  renderType: renderPayload.render_type,
+                  content: renderPayload.content,
+                  title: renderPayload.title,
+                  height: renderPayload.height,
+                  mimeType: renderPayload.mime_type,
+                });
+                break;
+              }
+            }
             if (seg.label) {
               segments.push({
                 kind: 'tool',
@@ -161,6 +186,7 @@ function extractExportMessages(messages: ExportMessage[], t: TFunction): Exporte
               });
             }
             break;
+          }
 
           case 'subagent':
             if (seg.taskDescription) {
@@ -255,6 +281,18 @@ function renderSegmentHtml(seg: ExportSegment): string {
 
     case 'file':
       return `<div class="segment-file"><svg class="file-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1h5.5L14 5.5V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm5 1v4h4L9 2z"/></svg><span>${escapeHtml(seg.label)}</span></div>`;
+
+    case 'render': {
+      const titleHtml = seg.title ? `<div class="render-export-title">${escapeHtml(seg.title)}</div>` : '';
+      if (seg.renderType === 'html') {
+        const height = seg.height || 400;
+        return `${titleHtml}<iframe srcdoc="${escapeHtml(seg.content)}" sandbox="allow-scripts" style="width:100%;height:${height}px;border:1px solid var(--border-color);border-radius:8px;background:#fff;"></iframe>`;
+      }
+      const src = seg.content.startsWith('data:')
+        ? seg.content
+        : `data:${seg.mimeType || 'image/png'};base64,${seg.content}`;
+      return `${titleHtml}<img src="${src}" alt="${escapeHtml(seg.title || 'Rendered image')}" style="max-width:100%;border-radius:8px;" />`;
+    }
   }
 }
 
@@ -398,6 +436,9 @@ function generateHtml(exportedMessages: ExportedMessage[], ctx: ExportContext, t
   /* File segments */
   .segment-file { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; margin: 0.375rem 0; background: #f3f4f6; border-radius: 8px; font-size: 0.875rem; color: var(--text-secondary); }
   .file-icon { width: 14px; height: 14px; min-width: 14px; flex-shrink: 0; color: var(--text-muted); }
+
+  /* Render tool exports */
+  .render-export-title { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; margin-top: 0.5rem; }
 </style>
 </head>
 <body>
@@ -431,6 +472,9 @@ function renderSegmentText(seg: ExportSegment): string {
 
     case 'file':
       return `[${seg.label}]`;
+
+    case 'render':
+      return seg.title ? `[Rendered: ${seg.title}]` : '[Rendered content]';
   }
 }
 

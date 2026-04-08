@@ -1,4 +1,5 @@
 // Shared helper functions and types for tool renderers
+import { useState, useEffect, useCallback } from 'react';
 import i18n from '../i18n';
 
 export type ToolResultLike = {
@@ -252,3 +253,98 @@ export function getDataAnalysisSummary(result: ToolResultLike): string {
   return i18n.t('common:toolSummaries.dataAnalysis.ready');
 }
 export type { IntegrationDownloadFile as IntegrationFile };
+
+// -------- Render tool --------
+export interface RenderPayload {
+  render_type: 'html' | 'image';
+  content: string;
+  title?: string;
+  height?: number;
+  mime_type?: string;
+  file_path?: string;
+}
+
+export function getRenderPayload(result: ToolResultLike): RenderPayload | null {
+  // Result may be the content array directly (from tool_card segments)
+  // or an object with a .content property (ToolResultLike wrapper)
+  const contentOrResult = Array.isArray(result) ? result : result?.content;
+  const blocks = Array.isArray(contentOrResult) ? (contentOrResult as Array<{ text?: string }>) : undefined;
+  if (!blocks?.length) return null;
+  const text = blocks.map((b) => b?.text ?? '').join('');
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed?.render_type && (parsed.content || parsed.file_path)) {
+      return parsed as RenderPayload;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// -------- Shared S3 file result hook --------
+/**
+ * Fetch a file from S3 by its /workdir/ path.
+ *
+ * The workspace agent syncs files to S3 immediately for large tool results,
+ * so the frontend can render them during streaming. This hook constructs the
+ * S3 key from the relative path and fetches with retries.
+ */
+export function useS3FileResult(
+  filePath: string | undefined,
+  conversationId: string | undefined,
+  sub: string | undefined,
+  getCredentials: () => Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken: string }>
+): { fileData: unknown; loading: boolean } {
+  const [fileData, setFileData] = useState<unknown>(null);
+  const [loading, setLoading] = useState(false);
+
+  const stableGetCredentials = useCallback(getCredentials, [getCredentials]);
+
+  useEffect(() => {
+    if (!filePath || !conversationId || !sub) return;
+    const relativePath = filePath.replace(/^\/workdir\//, '');
+    const bucket = window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
+    const region = window.sessionStorage.getItem('REGION');
+    if (!bucket || !region) return;
+
+    const s3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${relativePath}`;
+    let cancelled = false;
+    setLoading(true);
+
+    (async () => {
+      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+      const credentials = await stableGetCredentials();
+      const client = new S3Client({ region, credentials });
+
+      const MAX_RETRIES = 3;
+      const RETRY_DELAY_MS = 1000;
+
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        if (cancelled) return;
+        try {
+          const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
+          const text = await resp.Body?.transformToString();
+          if (text && !cancelled) {
+            setFileData(JSON.parse(text));
+            setLoading(false);
+            return;
+          }
+        } catch {
+          if (attempt < MAX_RETRIES - 1) {
+            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+          }
+        }
+      }
+
+      if (!cancelled) setLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, conversationId, sub, stableGetCredentials]);
+
+  return { fileData, loading };
+}

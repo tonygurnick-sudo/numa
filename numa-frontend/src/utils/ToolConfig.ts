@@ -35,6 +35,7 @@ const TOOL_RENDERERS: Record<string, ToolRenderer> = {
   convert_document: FallbackRenderer,
   agents: FallbackRenderer,
   memories: FallbackRenderer,
+  render: FallbackRenderer,
   _default: FallbackRenderer,
 };
 
@@ -52,6 +53,7 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   convert_document: 'common:toolLabels.convertDocument',
   agents: 'common:toolLabels.agents',
   memories: 'common:toolLabels.memories',
+  render: 'common:toolLabels.render',
   _default: 'common:toolLabels.unknown',
 };
 

@@ -21,6 +21,7 @@ import { WorkspaceChatToolApproval } from './WorkspaceChatToolApproval';
 import { ClipboardList } from 'lucide-react';
 import { UnifiedToolCard } from '../UnifiedToolCard';
 import { OpsToolRenderer } from '../../toolRenderers/OpsToolRenderer';
+import { RenderToolRenderer } from '../../toolRenderers/RenderToolRenderer';
 import type { ToolResultLike } from '../../toolRenderers/helpers';
 import WorkspaceChatMarkdown, { type FileReference, type FolderReference } from '../Renderers/WorkspaceChatMarkdown';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -148,6 +149,46 @@ export function WorkspaceChatSegmentRenderer({
                   </div>
                   {segment.result && (
                     <OpsToolRenderer
+                      result={segment.result as ToolResultLike}
+                      conversationId={conversationId}
+                      sub={userSub}
+                    />
+                  )}
+                </div>
+              );
+            }
+            // Numa tool renders inline-style (like Ops): description + optional sub-tool renderer
+            if (segment.toolName === 'mcp__numa__numa_tool') {
+              const numaInput = segment.input as { name?: string; description?: string } | undefined;
+              const displayText = numaInput?.description || segment.label || 'Numa Tool';
+              const subTool = numaInput?.name;
+              const NUMA_ICONS: Record<string, string> = {
+                knowledge_base: 'bi-folder2-open',
+                web_search: 'bi-search',
+                extract_content: 'bi-file-earmark-text',
+                convert_document: 'bi-file-earmark-arrow-down',
+                agents: 'bi-robot',
+                memories: 'bi-lightbulb',
+                render: 'bi-eye',
+                files: 'bi-folder',
+              };
+              return (
+                <div key={`numa-${segment.toolUseId}-${!!segment.result}`}>
+                  <div className="workspace-chat-inline-tool-group">
+                    <div className={`workspace-chat-inline-tool ${segment.isLoading ? '' : 'complete'}`}>
+                      <span className={`inline-tool-icon ${segment.isLoading ? 'running' : 'complete'}`}>
+                        <i className={`bi ${NUMA_ICONS[subTool || ''] || 'bi-tools'}`} />
+                      </span>
+                      <div className="inline-tool-content">
+                        <span className="inline-tool-text">{displayText}</span>
+                        {segment.isLoading && (
+                          <span className="spinner-border spinner-border-sm inline-tool-trailing-spinner" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {segment.result && subTool === 'render' && (
+                    <RenderToolRenderer
                       result={segment.result as ToolResultLike}
                       conversationId={conversationId}
                       sub={userSub}
