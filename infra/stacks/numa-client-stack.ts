@@ -481,6 +481,9 @@ export class NumaClientStack extends TerraformStack {
         // Data bucket for downloading attached files (My Files / Company Files)
         dataBucketName: core.dataBucket.bucket.bucket,
         dataBucketArn: core.dataBucket.bucket.arn,
+        // Ext API doc bucket for syncing API reference documentation to workspace
+        extApiDocBucketName: core.extApiDocBucket.bucket.bucket,
+        extApiDocBucketArn: core.extApiDocBucket.bucket.arn,
         extractContentLambdaArn: extractContentLambdaArn,
         // Numa Ops feature flag
         numaOpsEnabled: clientConfig.numaOps,
