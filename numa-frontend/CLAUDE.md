@@ -236,6 +236,32 @@ Workspace chat uses HTTP streaming to the workspace agent proxy with NDJSON fram
 - Components: `src/Components/WorkspaceChat/`
 - Streaming hook: `src/hooks/useWorkspaceChatStreaming.ts`
 
+### Tool Rendering Pipeline
+
+Tool results flow through segments. Each tool_use creates a segment (`inline_tool` or `tool_card`), and the renderer displays it based on segment kind and tool name.
+
+**IMPORTANT: There are TWO segment renderers -- both must be updated when adding tool rendering:**
+
+| Renderer                         | File                                                            | Used by                                                                                                                                              |
+| -------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ChatMessages** (primary)       | `src/Components/Chat/ChatMessages.tsx`                          | The actual chat message component. Contains its own `tool_card` rendering with special cases for Ops, numa_tool, etc. **This is the one users see.** |
+| **WorkspaceChatSegmentRenderer** | `src/Components/WorkspaceChat/WorkspaceChatSegmentRenderer.tsx` | Exported but not directly imported by any page component. May be used as a secondary/alternative renderer.                                           |
+
+When adding a new tool renderer or special-casing a tool's display, update `ChatMessages.tsx` first -- that's where the rendering actually happens.
+
+**Tool result format gotcha:** Results from `tool_card` segments arrive as the raw content array (`[{type: "text", text: "..."}]`), NOT wrapped in `{content: [...]}`. Payload parsers must handle both formats. Follow the pattern in `opsHelpers.ts` `extractText()`:
+
+```ts
+const contentOrResult = Array.isArray(result) ? result : result?.content;
+```
+
+**Key rendering files:**
+
+- `src/ToolRenderers/` -- Renderer components (OpsToolRenderer, RenderToolRenderer, WebSearchRenderer, etc.)
+- `src/ToolRenderers/helpers.ts` -- Shared types, payload parsers, `useS3FileResult` hook
+- `src/utils/ToolConfig.ts` -- Tool descriptor/renderer mapping, visual config
+- `src/utils/workspaceChatEventHandlers.ts` -- Segment creation, tool categorisation, `INLINE_TOOLS` set
+
 ---
 
 ## Partner Revenue Measurement (PRM)

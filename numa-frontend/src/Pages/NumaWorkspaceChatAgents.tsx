@@ -2841,6 +2841,10 @@ const NumaWorkspaceChatAgents = () => {
                             region={REGION || undefined}
                             onOpenFilePreview={handleOpenFilePreviewForChat}
                             onOpenFolderPreview={handleOpenFolderPreviewForChat}
+                            onSendPrompt={(text) => {
+                              const syntheticEvent = { preventDefault: () => {} };
+                              handleSubmit(syntheticEvent, text);
+                            }}
                           />
                         </>
                       )}

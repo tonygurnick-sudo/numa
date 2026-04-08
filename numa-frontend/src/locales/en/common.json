@@ -511,6 +511,7 @@
     "convertDocument": "Convert Document",
     "agents": "Agents",
     "memories": "Memories",
+    "render": "Render",
     "unknown": "Unknown Tool"
   },
   "toolSteps": {

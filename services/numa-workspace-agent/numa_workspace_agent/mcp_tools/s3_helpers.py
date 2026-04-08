@@ -85,6 +85,36 @@ def ensure_file_in_s3(file_path: str, user_sub: str, conversation_id: str) -> No
         s3_client.put_object(Bucket=outputs_bucket, Key=s3_key, Body=f.read())
 
 
+def sync_file_to_s3(file_path: str, content: str | bytes) -> None:
+    """Upload a file to S3 immediately so the frontend can access it during streaming.
+
+    Uses the same key structure as the workspace sync so the frontend can
+    construct the S3 key from the relative path.
+
+    Args:
+        file_path: Absolute path under /workdir/ (e.g. /workdir/outputs/render/foo.html)
+        content: File content (str or bytes)
+    """
+    bucket = os.environ.get("OUTPUTS_BUCKET_NAME", "")
+    user_sub = os.environ.get("NUMA_USER_SUB", "")
+    conversation_id = os.environ.get("NUMA_CONVERSATION_ID", "")
+
+    if not bucket or not user_sub or not conversation_id:
+        logger.debug("Skipping S3 sync — missing env vars")
+        return
+
+    rel_path = get_relative_path(file_path)
+    s3_key = get_s3_key_for_file(rel_path, user_sub, conversation_id)
+    body = content.encode("utf-8") if isinstance(content, str) else content
+
+    try:
+        s3_client = _get_s3_client()
+        s3_client.put_object(Bucket=bucket, Key=s3_key, Body=body)
+        logger.debug("Synced file to S3", s3_key=s3_key)
+    except Exception:
+        logger.warning("Failed to sync file to S3", s3_key=s3_key, exc_info=True)
+
+
 def download_from_s3(bucket: str, s3_key: str, local_path: str) -> None:
     """Download a file from S3 to a local path.
 

@@ -10,6 +10,7 @@ import { useAuth } from '../../Providers/AuthProvider';
 import { ClipboardList } from 'lucide-react';
 import { UnifiedToolCard } from '../UnifiedToolCard';
 import { OpsToolRenderer } from '../../toolRenderers/OpsToolRenderer';
+import { RenderToolRenderer } from '../../toolRenderers/RenderToolRenderer';
 import type { ToolResultLike } from '../../toolRenderers/helpers';
 import { FileMessage } from '../FileMessage';
 import AgentAvatar from '../Agents/AgentAvatar';
@@ -321,6 +322,7 @@ const ChatMessages = ({
   region,
   onOpenFilePreview,
   onOpenFolderPreview,
+  onSendPrompt,
 }: {
   messages: ChatMessage[];
   messageEndRef: RefObject<HTMLDivElement>;
@@ -347,6 +349,7 @@ const ChatMessages = ({
   region?: string;
   onOpenFilePreview?: (ref: FileReference) => void;
   onOpenFolderPreview?: (ref: FolderReference) => void;
+  onSendPrompt?: (text: string) => void;
 }) => {
   const { t } = useTranslation('chat');
   const { getCredentials } = useAuth();
@@ -671,6 +674,51 @@ const ChatMessages = ({
                               result={sc.result as ToolResultLike}
                               conversationId={conversationId}
                               sub={sub}
+                            />
+                          )}
+                        </div>
+                      );
+                    }
+                    // Numa tool renders inline-style (like Ops): description + optional sub-tool renderer
+                    if (sc.toolName === 'mcp__numa__numa_tool') {
+                      const numaInput = sc.input as { name?: string; description?: string } | undefined;
+                      const displayText = numaInput?.description || sc.steps?.[0] || sc.label || 'Numa Tool';
+                      const subTool = numaInput?.name;
+                      const NUMA_ICONS: Record<string, string> = {
+                        knowledge_base: 'bi-folder2-open',
+                        web_search: 'bi-search',
+                        extract_content: 'bi-file-earmark-text',
+                        convert_document: 'bi-file-earmark-arrow-down',
+                        agents: 'bi-robot',
+                        memories: 'bi-lightbulb',
+                        render: 'bi-eye',
+                        files: 'bi-folder',
+                      };
+                      const hasRenderResult = subTool === 'render' && sc.result;
+                      return (
+                        <div key={`numa-${idx}-${!!sc.result}`}>
+                          {/* Hide indicator once render content is ready */}
+                          {!hasRenderResult && (
+                            <div className="workspace-chat-inline-tool-group">
+                              <div className={`workspace-chat-inline-tool ${sc.isLoading ? '' : 'complete'}`}>
+                                <span className={`inline-tool-icon ${sc.isLoading ? 'running' : 'complete'}`}>
+                                  <i className={`bi ${NUMA_ICONS[subTool || ''] || 'bi-tools'}`} />
+                                </span>
+                                <div className="inline-tool-content">
+                                  <span className="inline-tool-text">{displayText}</span>
+                                  {sc.isLoading && (
+                                    <span className="spinner-border spinner-border-sm inline-tool-trailing-spinner" />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {hasRenderResult && (
+                            <RenderToolRenderer
+                              result={sc.result as ToolResultLike}
+                              conversationId={conversationId}
+                              sub={sub}
+                              onSendPrompt={onSendPrompt}
                             />
                           )}
                         </div>

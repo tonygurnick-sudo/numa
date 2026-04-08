@@ -75,7 +75,6 @@ const INLINE_TOOLS = new Set([
   'Grep',
   'Skill',
   'mcp__scripts__execute_script',
-  'mcp__numa__numa_tool',
   'TaskOutput',
 ]);
 
@@ -202,6 +201,7 @@ export function getToolCategoryAndIcon(
       convert_document: 'bi-file-earmark-arrow-down',
       agents: 'bi-robot',
       memories: 'bi-lightbulb',
+      render: 'bi-eye',
     };
     return { category: 'important', iconName: NUMA_SUB_TOOL_ICONS[subTool] || 'bi-tools' };
   }

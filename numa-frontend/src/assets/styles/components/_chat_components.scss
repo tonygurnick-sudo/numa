@@ -6096,3 +6096,52 @@ $border-radius-pill: 1rem;
     }
   }
 }
+
+// ── Render Tool Renderer ──────────────────────────────────────────────
+
+.render-tool-container {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  max-width: 100%;
+}
+
+.render-tool-iframe {
+  width: 100%;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: #fff;
+  resize: vertical;
+  overflow: auto;
+  min-height: 150px;
+  max-height: 800px;
+}
+
+.render-tool-image {
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.render-tool-title {
+  font-size: 0.78rem;
+  color: var(--bs-secondary-color, #6c757d);
+  margin-bottom: 4px;
+}
+
+.render-tool-svg {
+  max-width: 100%;
+  overflow-x: auto;
+
+  svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+}
+
+.render-tool-loading {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
