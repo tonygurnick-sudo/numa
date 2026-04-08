@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { CognitoIdentityProviderClient, ListUserPoolsCommand } from '@aws-sdk/client-cognito-identity-provider';
 import {
   ListApplicationsCommand,
@@ -9,7 +10,10 @@ import {
 import { ListBucketsCommand, S3Client } from '@aws-sdk/client-s3';
 import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
 import { AwsCredentialIdentityProvider } from '@smithy/types';
-import { withPRM } from '../lib/prm-node/prm';
+import { createRequire } from 'module';
+const req = createRequire(import.meta.url);
+const prmBundle = req('../lib/prm-node/prm.js');
+const withPRM = prmBundle.withPRM || prmBundle.default?.withPRM;
 export { type AwsCredentialIdentityProvider } from '@smithy/types';
 
 export interface AWSClientConfig {
@@ -57,17 +61,16 @@ async function getQApplicationId(awsClientConfig: AWSClientConfig, customerName?
   console.log('Get Q application ID');
   const qBusiness = withPRM(QBusinessClient, awsClientConfig);
   const applications = (await qBusiness.send(new ListApplicationsCommand())).applications;
-  return (
-    await customerNameFilter({
-      collection: applications,
-      customerName,
-      resource: 'application',
-      nameName: 'displayName',
-    })
-  ).applicationId;
+  const result = await customerNameFilter({
+    collection: applications,
+    customerName,
+    resource: 'application',
+    nameName: 'displayName',
+  });
+  return (result as any).applicationId;
 }
 
-async function getQIndexId(awsClientConfig: AWSClientConfig, applicationId: string): Promise<string> {
+async function getQIndexId(awsClientConfig: AWSClientConfig, applicationId: string): Promise<string | undefined> {
   console.log('Get Q index ID');
   const qBusiness = withPRM(QBusinessClient, awsClientConfig);
   const indices = (
@@ -77,7 +80,7 @@ async function getQIndexId(awsClientConfig: AWSClientConfig, applicationId: stri
       })
     )
   ).indices;
-  if (hasExactlyOne(indices, 'index')) {
+  if (indices && hasExactlyOne(indices, 'index')) {
     return indices[0].indexId;
   }
 }
@@ -86,7 +89,7 @@ async function getQDataSourceId(
   awsClientConfig: AWSClientConfig,
   applicationId: string,
   indexId: string
-): Promise<string> {
+): Promise<string | undefined> {
   console.log('Get Q data source ID');
   const qBusiness = withPRM(QBusinessClient, awsClientConfig);
   const dataSources = (
@@ -96,46 +99,44 @@ async function getQDataSourceId(
         indexId,
       })
     )
-  ).dataSources.filter((dataSource) => dataSource.type == 'S3');
-  if (hasExactlyOne(dataSources, 'data source')) {
+  ).dataSources?.filter((dataSource) => dataSource.type == 'S3');
+  if (dataSources && hasExactlyOne(dataSources, 'data source')) {
     return dataSources[0].dataSourceId;
   }
 }
 
 async function getQDataBucket(awsClientConfig: AWSClientConfig, customerName?: string): Promise<string> {
   const s3 = withPRM(S3Client, awsClientConfig);
-  const buckets = (await s3.send(new ListBucketsCommand())).Buckets.filter((bucket) =>
-    bucket.Name.match(/^numa-.*-data$/)
-  );
+  const buckets =
+    (await s3.send(new ListBucketsCommand())).Buckets?.filter((bucket) => bucket.Name?.match(/^numa-.*-data$/)) || [];
   if (customerName) customerName += '-data';
-  return (
-    await customerNameFilter({
-      collection: buckets,
-      customerName,
-      resource: 'bucket',
-      nameName: 'Name',
-    })
-  ).Name;
+  const result = await customerNameFilter({
+    collection: buckets,
+    customerName,
+    resource: 'bucket',
+    nameName: 'Name',
+  });
+  return (result as any).Name;
 }
 
 export async function getQUserPool(awsClientConfig: AWSClientConfig, customerName?: string): Promise<string> {
   console.log('Get Q user pool');
   const client = withPRM(CognitoIdentityProviderClient, awsClientConfig);
-  const userPools = (
-    await client.send(
-      new ListUserPoolsCommand({
-        MaxResults: 60,
-      })
-    )
-  ).UserPools;
-  return (
-    await customerNameFilter({
-      collection: userPools,
-      customerName,
-      resource: 'user pool',
-      nameName: 'Name',
-    })
-  ).Id;
+  const userPools =
+    (
+      await client.send(
+        new ListUserPoolsCommand({
+          MaxResults: 60,
+        })
+      )
+    ).UserPools || [];
+  const result = await customerNameFilter({
+    collection: userPools,
+    customerName,
+    resource: 'user pool',
+    nameName: 'Name',
+  });
+  return (result as any).Id;
 }
 
 async function getRetrieverId(awsClientConfig: AWSClientConfig, appId: string): Promise<string> {
