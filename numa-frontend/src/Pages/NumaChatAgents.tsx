@@ -260,7 +260,7 @@ const NumaChatAgents = () => {
     [markUserSettingsModified]
   );
 
-  const addToolCardSteps = useCallback((toolUseId: string, steps: string[]) => {
+  const _addToolCardSteps = useCallback((toolUseId: string, steps: string[]) => {
     setMessages((prev) => {
       if (prev.length === 0) return prev;
       const updated = [...prev];
