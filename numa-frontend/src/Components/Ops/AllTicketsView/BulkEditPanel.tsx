@@ -97,7 +97,8 @@ export function BulkEditPanel({
     setShowDeleteConfirm(false);
     try {
       setApplying(true);
-      await Promise.all(ticketIds.map((id) => OpsService.deleteTicket(numaDelete, id)));
+      const teamId = teamData?.team?.id;
+      await Promise.all(ticketIds.map((id) => OpsService.deleteTicket(numaDelete, id, teamId)));
       resetFields();
       onApplied();
     } catch (err) {
@@ -105,7 +106,7 @@ export function BulkEditPanel({
     } finally {
       setApplying(false);
     }
-  }, [ticketIds, numaDelete, onApplied]);
+  }, [ticketIds, numaDelete, onApplied, teamData]);
 
   const resetFields = () => {
     setStageId(KEEP_AS_IS);

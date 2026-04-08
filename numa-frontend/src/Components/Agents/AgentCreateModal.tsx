@@ -99,6 +99,10 @@ export const AgentCreateModal = ({
 
   const deriveWelcomeMessage = (agent?: AgentSummary | null): string => agent?.userWelcomeMessage?.trim() ?? '';
 
+  const currentUserSub = user?.decoded_tokens?.idToken?.sub;
+  const isWorkspaceVisibilityLocked =
+    editingAgent?.scope === 'workspace' && editingAgent?.createdBy?.userId !== currentUserSub;
+
   const [formState, setFormState] = useState<AgentPayload>(DEFAULT_PAYLOAD);
   const [referenceFiles, setReferenceFiles] = useState<AgentReferenceFile[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1071,11 +1075,11 @@ export const AgentCreateModal = ({
                           className={`p-3 border rounded-3 ${formState.visibility !== 'public' ? 'border-primary border-2 bg-white' : 'bg-white'}`}
                           role="button"
                           onClick={() =>
-                            !saving && editingAgent?.scope !== 'workspace' && handleChange('visibility', 'personal')
+                            !saving && !isWorkspaceVisibilityLocked && handleChange('visibility', 'personal')
                           }
                           style={{
-                            cursor: saving || editingAgent?.scope === 'workspace' ? 'not-allowed' : 'pointer',
-                            opacity: saving || editingAgent?.scope === 'workspace' ? 0.6 : 1,
+                            cursor: saving || isWorkspaceVisibilityLocked ? 'not-allowed' : 'pointer',
+                            opacity: saving || isWorkspaceVisibilityLocked ? 0.6 : 1,
                           }}
                         >
                           <div className="d-flex align-items-center gap-2">
@@ -1097,16 +1101,16 @@ export const AgentCreateModal = ({
                           role="button"
                           onClick={() =>
                             !saving &&
-                            editingAgent?.scope !== 'workspace' &&
+                            !isWorkspaceVisibilityLocked &&
                             agentsMode === 'full' &&
                             handleChange('visibility', 'public')
                           }
                           style={{
                             cursor:
-                              saving || editingAgent?.scope === 'workspace' || agentsMode !== 'full'
+                              saving || isWorkspaceVisibilityLocked || agentsMode !== 'full'
                                 ? 'not-allowed'
                                 : 'pointer',
-                            opacity: saving || editingAgent?.scope === 'workspace' || agentsMode !== 'full' ? 0.6 : 1,
+                            opacity: saving || isWorkspaceVisibilityLocked || agentsMode !== 'full' ? 0.6 : 1,
                           }}
                         >
                           <div className="d-flex align-items-center gap-2">
@@ -1127,7 +1131,7 @@ export const AgentCreateModal = ({
                           <div className="mt-2 small text-muted">{t('createModal.visibility.disabledNote')}</div>
                         )}
                       </div>
-                      {editingAgent?.scope === 'workspace' && (
+                      {isWorkspaceVisibilityLocked && (
                         <Form.Text className="d-block mt-2 text-info">
                           <i className="bi bi-info-circle me-1"></i>
                           {t('createModal.visibility.publicScopeNote')}

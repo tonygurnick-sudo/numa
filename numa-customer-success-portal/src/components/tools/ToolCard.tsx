@@ -21,6 +21,8 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
         return '/tools/config-search';
       case 'all-users-report':
         return '/tools/all-users-report';
+      case 'cost-analytics':
+        return '/tools/cost-analytics';
       case 'setup-nextgen-client':
         return '/tools/setup-nextgen-client';
       case 'setup-non-nextgen-client':

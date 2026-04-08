@@ -977,6 +977,105 @@ const NumaWorkspaceChatAgents = () => {
     }
   }, [agentsMode]);
 
+  // Auto-submit from Ask Numa popup.
+  // The popup creates a conversation, uploads context files to S3, saves staged
+  // items to localStorage, then navigates here. This effect is SELF-CONTAINED:
+  // it reads staged items from localStorage directly (bypassing React state
+  // closure issues), builds attachments, writes the user message to DynamoDB,
+  // and calls streamChat directly -- avoiding handleSubmit entirely.
+  const askNumaDraftHandledRef = useRef(false);
+  useEffect(() => {
+    if (askNumaDraftHandledRef.current) return;
+    const draft = sessionStorage.getItem('numa_ask_numa_draft');
+    if (!draft) return;
+    askNumaDraftHandledRef.current = true;
+    sessionStorage.removeItem('numa_ask_numa_draft');
+    sessionStorage.removeItem('numa_preselected_agent_token');
+
+    try {
+      const { message, conversationId: draftCid } = JSON.parse(draft) as { message: string; conversationId: string };
+      if (!message || !draftCid) return;
+
+      // 1. Load staged items from localStorage (files already uploaded to S3 by popup)
+      const draftStagedItems = loadStagedItems(draftCid);
+      console.log('[AskNuma] Auto-submit:', {
+        cid: draftCid,
+        files: draftStagedItems.map((i) => (i.kind === 'file' ? i.filename : i.folderName)),
+      });
+
+      // 2. Build attachments from staged items (same logic as handleSubmit)
+      const attachmentFiles = flattenStagedItems(draftStagedItems);
+      const attachmentFolders = extractFolderMetadata(draftStagedItems);
+      const attachments =
+        attachmentFiles.length > 0
+          ? {
+              files: attachmentFiles.map((f) => ({ path: f.path, filename: f.filename, size: f.size })),
+              folders: attachmentFolders.length > 0 ? attachmentFolders : undefined,
+            }
+          : undefined;
+
+      // 3. Clear staged items from localStorage SYNCHRONOUSLY before setting conversationId.
+      // This prevents the loadStagedItems useEffect (triggered by conversationId change)
+      // from re-populating stagedItems state with files we've already consumed.
+      clearStagedItems(draftCid);
+
+      // 4. Set conversation and UI state
+      setConversationId(draftCid);
+      setIsConversationLoading(false);
+      setMessages([{ role: 'user', content: message }]);
+      setButtonStatus('loading');
+
+      // 5. Write user message to DynamoDB, configure tools, and stream (async)
+      (async () => {
+        try {
+          if (numaChatDynamoUtils) {
+            await numaChatDynamoUtils
+              .addMessage({
+                conversationId: draftCid,
+                userId: sub,
+                messageType: 'text',
+                role: 'user',
+                content: message,
+              })
+              .catch((err) => console.error('[AskNuma] Error storing user message:', err));
+          }
+
+          const { enabledTools } = configureAgentCall(
+            autoToolsEnabled,
+            webSearchEnabled,
+            createAgentEnabled,
+            idToken,
+            user,
+            sub
+          );
+          setMessages((prev) => [...prev, { role: 'assistant', segments: [], status: 'processing' }]);
+          resetStreamingState();
+
+          await streamChat({
+            prompt: message,
+            conversationId: draftCid,
+            enabledTools,
+            enabledConnections,
+            availableIntegrations: availableConnections
+              .filter((conn) => conn.isConnected)
+              .map((conn) => ({ id: conn.id, name: conn.name })),
+            connectedDataConnectors: dataConnectorsEnabled ? connectedDataConnectors : [],
+            dataConnectorsEnabled,
+            enabledKBIds,
+            availableKBs,
+            attachments,
+            modelId: selectedModelId,
+          });
+        } catch (err) {
+          console.error('[AskNuma] Auto-submit failed:', err);
+          setButtonStatus('idle');
+        }
+      })();
+    } catch {
+      /* ignore malformed draft */
+    }
+  }, []);
+
   // Load connections via proxy
   const loadConnectionStatus = async () => {
     if (!lambdaClient || !user) return;
@@ -2330,7 +2429,17 @@ const NumaWorkspaceChatAgents = () => {
         </button>
       )}
 
-      {conversationId && <ExportConversationButton messages={messages} conversationId={conversationId} />}
+      {conversationId && (
+        <ExportConversationButton
+          messages={messages}
+          conversationId={conversationId}
+          agentName={currentAgent?.title}
+          agentId={currentAgent?.agentId}
+          userId={sub}
+          userEmail={userEmail}
+          environment={window.location.hostname}
+        />
+      )}
 
       {!isMobile && (
         <button
@@ -2611,8 +2720,6 @@ const NumaWorkspaceChatAgents = () => {
                           setWebSearchEnabled={handleUserSetWebSearchEnabled}
                           createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                           setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
-                          dataAnalysisEnabled={false}
-                          setDataAnalysisEnabled={() => {}}
                           autoToolsEnabled={autoToolsEnabled}
                           setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                           availableConnections={availableConnections}
@@ -2785,8 +2892,6 @@ const NumaWorkspaceChatAgents = () => {
                           setWebSearchEnabled={handleUserSetWebSearchEnabled}
                           createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                           setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
-                          dataAnalysisEnabled={false}
-                          setDataAnalysisEnabled={() => {}}
                           autoToolsEnabled={autoToolsEnabled}
                           setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                           availableConnections={availableConnections}

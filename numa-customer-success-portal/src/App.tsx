@@ -14,6 +14,7 @@ import UsageReportTool from './pages/UsageReportTool';
 import QuotaReportTool from './pages/QuotaReportTool';
 import ConfigSearchTool from './pages/ConfigSearchTool';
 import AllUsersReportTool from './pages/AllUsersReportTool';
+import CostAnalyticsTool from './pages/CostAnalyticsTool';
 import Deployments from './pages/Deployments';
 import GroupDeploymentDetail from './pages/GroupDeploymentDetail';
 import CreateClientConfig from './pages/tools/CreateClientConfig';
@@ -57,6 +58,7 @@ function App() {
                       <Route path="/tools/quota-report" element={<QuotaReportTool />} />
                       <Route path="/tools/config-search" element={<ConfigSearchTool />} />
                       <Route path="/tools/all-users-report" element={<AllUsersReportTool />} />
+                      <Route path="/tools/cost-analytics" element={<CostAnalyticsTool />} />
                       <Route path="/tools/create-client-config" element={<CreateClientConfig />} />
                       <Route path="/tools/setup-nextgen-client" element={<SetupNextgenClient />} />
                       <Route path="/tools/setup-non-nextgen-client" element={<SetupNonNextgenClient />} />

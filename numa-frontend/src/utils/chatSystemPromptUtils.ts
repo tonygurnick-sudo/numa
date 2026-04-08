@@ -71,10 +71,10 @@ export const loadCompanyProfile = async (companyBucket, region, getCredentials) 
 export const getEnabledTools = (
   autoToolsEnabled: boolean,
   webSearchEnabled: boolean,
-  dataAnalysisEnabled = false,
+  _dataAnalysisEnabled = false,
   createAgentEnabled = false,
   enabledKBIds: string[] = [],
-  dataAnalysisAvailable = true,
+  _dataAnalysisAvailable = true,
   memoriesEnabled = true,
   numaOpsEnabled = false
 ) => {
@@ -86,7 +86,6 @@ export const getEnabledTools = (
     // In all tools mode, enable tools; include agent creation only when feature enabled
     if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('knowledge_base');
     enabledTools.push('web_search');
-    if (dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled) enabledTools.push('create_agent_tool');
     enabledTools.push('memories_tool');
     if (numaOpsFeatureEnabled) enabledTools.push('numa_ops_tool');
@@ -94,7 +93,6 @@ export const getEnabledTools = (
     // In manual mode, only enable selected tools based on what's selected
     if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('knowledge_base');
     if (webSearchEnabled) enabledTools.push('web_search');
-    if (dataAnalysisEnabled && dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled && createAgentEnabled) enabledTools.push('create_agent_tool');
     if (memoriesEnabled) enabledTools.push('memories_tool');
     if (numaOpsFeatureEnabled && numaOpsEnabled) enabledTools.push('numa_ops_tool');
@@ -268,12 +266,6 @@ Today's Date: ${TODAY}`;
     if (enabledTools.includes('web_search')) {
       toolLines.push('- Use web_search to find current information from the internet using natural language queries');
     }
-    if (enabledTools.includes('data_analysis')) {
-      toolLines.push(
-        '- Use data_analysis to analyze uploaded CSV, Excel, or JSON data files when the user asks for data analysis or insights from their data. Include a job_id (UUID) in the tool input so progress can be tracked. Use file_uris for S3 links.'
-      );
-    }
-
     const agentsFeatureEnabled = getFlag('AGENTS');
     if ((enabledTools.includes('create_agent_tool') || createAgentEnabled) && agentsFeatureEnabled) {
       toolLines.push(

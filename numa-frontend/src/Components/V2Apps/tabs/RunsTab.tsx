@@ -10,6 +10,7 @@ import { getFileIconClass } from '../../../utils/fileUtils';
 import * as v2AppsService from '../../../Services/v2AppsService';
 import type { RunRecord } from '../../../Services/v2AppsService';
 import type { V2AppAgent } from '../../../types/apps';
+import { getFlag } from '../../../utils/featureFlags';
 
 type NumaGet = (url: string, params?: Record<string, unknown>) => Promise<unknown>;
 
@@ -206,6 +207,8 @@ export const RunsTab: React.FC<RunsTabProps> = ({
   const selectedAgent = selectedRun ? getAgentForRun(selectedRun) : undefined;
   const resultConfig = selectedAgent?.resultConfig ?? { type: 'agent-response' as const };
 
+  const isDeveloperMode = getFlag('DEVELOPER_MODE');
+
   const renderMetaBar = (run: RunRecord) => (
     <div className="v2-runs-tab__detail-meta">
       <Badge bg={STATUS_VARIANTS[run.status] || 'secondary'}>
@@ -219,17 +222,17 @@ export const RunsTab: React.FC<RunsTabProps> = ({
           <i className="bi bi-stopwatch" /> {formatDuration(run.result.usage.duration_ms as number)}
         </span>
       )}
-      {run.result?.usage?.num_turns && (
+      {isDeveloperMode && run.result?.usage?.num_turns && (
         <span className="v2-runs-tab__detail-meta-item">
           <i className="bi bi-arrow-repeat" /> {run.result.usage.num_turns as number} {t('v2Apps.runs.turns')}
         </span>
       )}
-      {run.result?.usage?.total_cost_usd != null && (
+      {isDeveloperMode && run.result?.usage?.total_cost_usd != null && (
         <span className="v2-runs-tab__detail-meta-item">
           <i className="bi bi-currency-dollar" /> {`$${(run.result.usage.total_cost_usd as number).toFixed(4)}`}
         </span>
       )}
-      {run.result?.usage?.input_tokens != null && (
+      {isDeveloperMode && run.result?.usage?.input_tokens != null && (
         <span
           className="v2-runs-tab__detail-meta-item"
           title={

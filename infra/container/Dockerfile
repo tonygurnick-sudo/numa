@@ -69,33 +69,6 @@ RUN mkdir infra/cdktf.out
 RUN chown -R node:node infra/cdktf.out
 USER node
 
-# Bake the Claude CLI artifact into the image for Portal/ECS deploys so CDKTF
-# can publish from infra/assets/artifacts/claude-cli/claude-x86_64.zip.
-# Artifacts-first: if the ZIP is present in the build context, use it; otherwise
-# optionally fall back to CLAUDE_ARTIFACT_URL if provided.
-USER root
-RUN bash -c 'set -euo pipefail \
-  && ART_DIR=/workspace/infra/assets/artifacts/claude-cli \
-  && ART_ZIP="$ART_DIR/claude-x86_64.zip" \
-  && mkdir -p "$ART_DIR" \
-  && if [ -f "$ART_ZIP" ]; then \
-       echo "Using existing Claude artifact from build context: $ART_ZIP"; \
-     elif [ -n "${CLAUDE_ARTIFACT_URL:-}" ]; then \
-       echo "Downloading Claude artifact from presigned URL"; \
-       curl -fSL "${CLAUDE_ARTIFACT_URL}" -o "$ART_ZIP"; \
-     else \
-       echo "Claude artifact missing and CLAUDE_ARTIFACT_URL not provided." >&2; \
-       echo "Ensure claude-cli-artifact-build job runs and is a pipeline dependency," >&2; \
-       echo "or pass --build-arg CLAUDE_ARTIFACT_URL=..." >&2; \
-       exit 1; \
-     fi \
-  && ACT="$ART_ZIP" \
-  && echo "Verifying artifact size..." \
-  && SZ=$(stat -c%s "$ACT" 2>/dev/null || stat -f%z "$ACT") \
-  && echo "Artifact size: $SZ bytes" \
-  && [ "$SZ" -gt 1048576 ] \
-  && ls -lh "$ACT"'
-
 # Copy the workspace-agent container image tar (if present from CI packaging)
 # Uses --exclude to make the COPY optional (won't fail if file doesn't exist)
 # The tar is created by: services/package-service.sh numa-workspace-agent

@@ -36,6 +36,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Bot,
+  Check,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -791,8 +792,7 @@ export const AgentsManagement = () => {
             <Dropdown.Item key={mode} active={sortMode === mode} onClick={() => setSortMode(mode)}>
               {sortMode === mode && (
                 <span style={{ width: 14, display: 'inline-block', color: 'var(--brand-primary, #6366f1)' }}>
-                  {}
-                  &#10003;
+                  <Check size={14} />
                 </span>
               )}
               {sortMode !== mode && <span style={{ width: 14, display: 'inline-block' }} />}

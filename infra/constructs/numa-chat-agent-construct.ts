@@ -120,7 +120,6 @@ export class NumaChatAgent extends Construct {
         ...(props.userAgentsTableName && { USER_AGENTS_TABLE: props.userAgentsTableName }),
         ...(props.agentsSettingsTableName && { AGENTS_SETTINGS_TABLE_NAME: props.agentsSettingsTableName }),
         CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
-        DATA_ANALYSIS_STEP_FUNCTION_PARAM_NAME: `/numa/${props.clientName}/apps/data-analysis/step-function-arn`,
         SCHEDULE_RUNNER_SECRET: props.scheduleRunnerSecret,
         // LWA configuration for response streaming
         AWS_LAMBDA_EXEC_WRAPPER: '/opt/bootstrap',
@@ -199,25 +198,6 @@ export class NumaChatAgent extends Construct {
           resources: [
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-chat-history`,
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-*-chat-history`,
-          ],
-        },
-        {
-          effect: 'Allow',
-          actions: ['dynamodb:GetItem'],
-          resources: [
-            `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.clientName}-data-analysis-recent-jobs`,
-          ],
-        },
-        {
-          effect: 'Allow',
-          actions: ['states:StartExecution'],
-          resources: [`arn:aws:states:${props.region}:${callerIdentity.accountId}:stateMachine:*data-analysis*`],
-        },
-        {
-          effect: 'Allow',
-          actions: ['ssm:GetParameter'],
-          resources: [
-            `arn:aws:ssm:${props.region}:${callerIdentity.accountId}:parameter/numa/${props.clientName}/apps/data-analysis/step-function-arn`,
           ],
         },
         {

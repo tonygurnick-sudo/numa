@@ -51,9 +51,6 @@ type NewChatProps = {
   setWebSearchEnabled: Dispatch<SetStateAction<boolean>>;
   createAgentEnabled: boolean;
   setCreateAgentEnabled: Dispatch<SetStateAction<boolean>>;
-  dataAnalysisEnabled: boolean;
-  setDataAnalysisEnabled: Dispatch<SetStateAction<boolean>>;
-  dataAnalysisAvailable?: boolean;
   autoToolsEnabled: boolean;
   setAutoToolsEnabled: Dispatch<SetStateAction<boolean>>;
   availableConnections: ConnectionOption[];
@@ -83,7 +80,6 @@ type NewChatProps = {
   availableKBs?: KnowledgeBase[];
   isLoadingKBs?: boolean;
   agentsFeatureEnabled?: boolean;
-  dataAnalysisBanner?: React.ReactNode;
   onStop?: () => void;
   isStopping?: boolean;
   // V2 variant props (for workspace chat)
@@ -185,9 +181,6 @@ const NewChat = ({
   setWebSearchEnabled,
   createAgentEnabled,
   setCreateAgentEnabled,
-  dataAnalysisEnabled,
-  setDataAnalysisEnabled,
-  dataAnalysisAvailable = true,
   autoToolsEnabled,
   setAutoToolsEnabled,
   availableConnections,
@@ -215,7 +208,6 @@ const NewChat = ({
   availableKBs = [],
   isLoadingKBs = false,
   agentsFeatureEnabled = false,
-  dataAnalysisBanner,
   onStop,
   isStopping = false,
   // V2 variant props
@@ -448,7 +440,6 @@ const NewChat = ({
 
   const inputComposer = (
     <div className="chat-input-wrapper new-chat-input-wrapper" style={{ animation: 'fadeIn 0.8s ease-in-out' }}>
-      {dataAnalysisBanner}
       {/* Show pending/uploading files indicator for pre-minted conversations (V2) */}
       {variant === 'v2' && (stagedItems.length > 0 || uploadingFiles.length > 0) && onRemoveStagedItem && (
         <PendingFilesBar
@@ -468,9 +459,6 @@ const NewChat = ({
         setWebSearchEnabled={setWebSearchEnabled}
         createAgentEnabled={createAgentEnabled}
         setCreateAgentEnabled={setCreateAgentEnabled}
-        dataAnalysisEnabled={dataAnalysisEnabled}
-        setDataAnalysisEnabled={setDataAnalysisEnabled}
-        dataAnalysisAvailable={dataAnalysisAvailable}
         autoToolsEnabled={autoToolsEnabled}
         setAutoToolsEnabled={setAutoToolsEnabled}
         availableConnections={availableConnections}
@@ -563,9 +551,6 @@ const NewChat = ({
               setWebSearchEnabled={setWebSearchEnabled}
               createAgentEnabled={createAgentEnabled}
               setCreateAgentEnabled={setCreateAgentEnabled}
-              dataAnalysisEnabled={dataAnalysisEnabled}
-              setDataAnalysisEnabled={setDataAnalysisEnabled}
-              dataAnalysisAvailable={dataAnalysisAvailable}
               agentsFeatureEnabled={agentsFeatureEnabled}
               enabledKBIds={enabledKBIds || []}
               setEnabledKBIds={setEnabledKBIds || (() => {})}

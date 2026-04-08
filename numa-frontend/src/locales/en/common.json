@@ -249,7 +249,9 @@
   },
   "fileUploader": {
     "dragAndDrop": "Drag and drop your files here, or",
+    "dragAndDropFilesOrFolders": "Drag and drop files or folders here, or",
     "selectFiles": "Select Files",
+    "selectFolder": "Select Folder",
     "filesSelected_one": "{{count}} File Selected",
     "filesSelected_other": "{{count}} Files Selected",
     "folderCount_one": "({{count}} file)",

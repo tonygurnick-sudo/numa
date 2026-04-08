@@ -58,7 +58,7 @@
     "allApps": false,
     "allProdApps": false,
     "apps": {
-      "data-analysis": {}
+      "data-analysis":{}
     },
     "preferredKnowledgeBase": "bedrock",
     "allowBedrockQuotaSharing": true,
@@ -70,7 +70,8 @@
     "numaOps": true,
     "workspaceChatModelSelection": true,
     "scheduling": true,
-    "v2Apps": true
+    "v2Apps": true,
+    "developerMode":true
   },
   "nolia-id-gov-moh": {
     "additionalCognitoClientIds": "415r270afvm16t6fd4veli03tt",

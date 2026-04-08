@@ -9,9 +9,13 @@ import * as path from 'node:path';
 import { AppAgnosticApiGatewayLambdaCollection } from '../constructs/app-agnostic-api-gateway-lambda-collection';
 import { BudgetAlertForwarderConstruct, budgetConfigSchema } from '../constructs/budget-alert-forwarder-construct';
 import {
+  AppCategory,
+  AppStatus,
+  AppType,
   BaseNumaApp,
   BaseNumaAppProps,
   BaseNumaAppType,
+  NumaAppManifest,
   UserConfigurableBaseNumaAppProps,
   userConfigurableBaseNumaAppPropsSchema,
 } from '../constructs/apps/base-numa-app-construct';
@@ -21,10 +25,8 @@ import { CompanyProfile } from '../constructs/apps/company-profile-construct';
 import { ContractAnalysis } from '../constructs/apps/contract-analysis-construct';
 import { CostingCalculator } from '../constructs/apps/costing-calculator-construct';
 import { CouncilResourceConsents } from '../constructs/apps/council-resource-consents-construct';
-import { DataAnalysis } from '../constructs/apps/data-analysis-construct';
 import { DocumentSummariser } from '../constructs/apps/document-summariser-construct';
 import { FinancialAnalysis } from '../constructs/apps/financial-analysis-construct';
-import { Nolia } from '../constructs/apps/nolia-construct';
 import { GdsrAssessment } from '../constructs/apps/gdsr-assessment-construct';
 import { InfringementReview } from '../constructs/apps/infringement-review-construct';
 import { TorAssessment } from '../constructs/apps/tor-assessment-construct';
@@ -479,7 +481,6 @@ export class NumaClientStack extends TerraformStack {
         // Data bucket for downloading attached files (My Files / Company Files)
         dataBucketName: core.dataBucket.bucket.bucket,
         dataBucketArn: core.dataBucket.bucket.arn,
-        // Extract content Lambda for Nolia PDF vision extraction
         extractContentLambdaArn: extractContentLambdaArn,
         // Numa Ops feature flag
         numaOpsEnabled: clientConfig.numaOps,
@@ -763,7 +764,21 @@ export class NumaClientStack extends TerraformStack {
       clientConfig.allProdApps ?? false,
       clientConfig.devInstance ?? false
     );
-    const apps = appConfigsToDeploy.map(([configuredAppId, appConfig]) => {
+    // Collect V2-migrated apps that should appear in the manifest.
+    // These come from explicit client config OR allApps/allProdApps flags.
+    const v2MigratedAppIds = new Set<string>();
+    for (const [id] of appConfigsToDeploy) {
+      if (id in V2_MIGRATED_APPS) v2MigratedAppIds.add(id);
+    }
+    if (clientConfig.allApps || clientConfig.allProdApps) {
+      for (const [id, meta] of Object.entries(V2_MIGRATED_APPS)) {
+        if (clientConfig.allApps || meta.isProdApp) v2MigratedAppIds.add(id);
+      }
+    }
+    // Filter V2-migrated apps out of V1 deployment (they don't need infra)
+    const v1AppConfigs = appConfigsToDeploy.filter(([id]) => !(id in V2_MIGRATED_APPS));
+
+    const apps = v1AppConfigs.map(([configuredAppId, appConfig]) => {
       const app = lookupAppFromId(configuredAppId);
       return new app(this, `${safeConstructId}-${configuredAppId}`, {
         ...appConfig,
@@ -896,10 +911,26 @@ export class NumaClientStack extends TerraformStack {
       cacheControl: 'no-cache, no-store, must-revalidate',
     });
 
+    // Build manifest entries for V2-migrated apps (no infra, manifest only)
+    const v2ManifestEntries: NumaAppManifest[] = [...v2MigratedAppIds].map((id) => {
+      const meta = V2_MIGRATED_APPS[id];
+      return {
+        id,
+        appName: meta.appName,
+        appDescription: meta.description,
+        type: AppType.NUMA,
+        status: AppStatus.ACTIVE,
+        category: meta.category,
+        createdDate: new Date().toISOString().split('T')[0],
+        tasks: [],
+        typicalDurationMinutes: 5,
+      };
+    });
+
     const manifest = new S3Object(this, 'manifest-item', {
       bucket: fe.frontendBucket.bucket,
       key: 'manifest.json',
-      content: JSON.stringify({ apps: apps.map((app) => app.manifest) }),
+      content: JSON.stringify({ apps: [...apps.map((app) => app.manifest), ...v2ManifestEntries] }),
       contentType: 'application/json',
       cacheControl: 'no-cache, no-store, must-revalidate',
     });
@@ -1049,6 +1080,30 @@ export class NumaClientStack extends TerraformStack {
         value: iamManagerInvocation.result,
         description: 'IAM quota sharing manager result',
       });
+    }
+
+    // ── Sync ext-api-doc files to S3 (at END to avoid resource address shifts) ──
+    const extApiDocPath = path.join(import.meta.dirname, '..', '..', 'ext-api-doc');
+    try {
+      if (fs.existsSync(extApiDocPath)) {
+        const mdFiles = fs
+          .readdirSync(extApiDocPath, { recursive: true, withFileTypes: true })
+          .filter((f) => f.isFile() && !f.name.startsWith('.'))
+          .map((f) => path.join(f.parentPath, f.name));
+
+        for (const source of mdFiles) {
+          const key = path.relative(extApiDocPath, source);
+          new S3Object(this, `ext-api-doc-${key.replace(/[^a-zA-Z0-9]/g, '-')}`, {
+            bucket: core.extApiDocBucket.bucket.bucket,
+            key,
+            source,
+            sourceHash: Fn.filemd5(source),
+            contentType: 'text/markdown',
+          });
+        }
+      }
+    } catch {
+      // ext-api-doc directory may not exist in CI — that's fine
     }
   }
 }
@@ -1364,7 +1419,6 @@ export const appLibrary: Record<string, AppDefinition> = {
   'contract-analysis': { app: ContractAnalysis, isProdApp: true },
   'council-recourse-consents': { app: CouncilResourceConsents, isProdApp: false },
   'costing-calculator': { app: CostingCalculator, isProdApp: false },
-  'data-analysis': { app: DataAnalysis, isProdApp: true },
   'document-summariser': { app: DocumentSummariser, isProdApp: true },
   'financial-analysis': { app: FinancialAnalysis, isProdApp: true },
   'gdsr-assessment': { app: GdsrAssessment, isProdApp: false },
@@ -1372,12 +1426,32 @@ export const appLibrary: Record<string, AppDefinition> = {
   'tor-assessment': { app: TorAssessment, isProdApp: false },
   'meeting-analyser': { app: MeetingAnalyser, isProdApp: true },
   'structured-data-query': { app: StructuredDataQueryApp, isProdApp: false },
-  nolia: { app: Nolia, isProdApp: false },
   'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },
   'policy-drafter': { app: PolicyDrafter, isProdApp: true },
   'policy-reviewer': { app: PolicyReviewer, isProdApp: true },
   'rfp-response-comparison': { app: RfpResponseComparison, isProdApp: false },
   'procurement-rfp-assessment': { app: ProcurementRfpAssessment, isProdApp: false },
+};
+
+// Apps fully migrated to V2 (AgentCore workspace agent). These no longer need V1 infra
+// but should still appear in the manifest so the frontend shows them and routes to V2.
+// isProdApp mirrors the old appLibrary flag so allProdApps clients still see these.
+const V2_MIGRATED_APPS: Record<
+  string,
+  { appName: string; category: AppCategory; description: string; isProdApp: boolean }
+> = {
+  'data-analysis': {
+    appName: 'Data Analysis',
+    category: AppCategory.PRODUCTIVITY,
+    description: 'Analyze CSV, Excel, and JSON data files with AI-powered insights and visualizations.',
+    isProdApp: true,
+  },
+  nolia: {
+    appName: 'Nolia',
+    category: AppCategory.COMPLIANCE,
+    description: 'AI-powered procurement compliance review for government agencies.',
+    isProdApp: false,
+  },
 };
 
 // Include the E2E test app in a separate object

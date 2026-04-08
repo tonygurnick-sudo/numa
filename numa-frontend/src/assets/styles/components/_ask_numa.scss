@@ -1,0 +1,311 @@
+// Ask Numa - Floating chat button and popup
+// Figma spec: gradient FAB bottom-right, popup panel above
+
+// ============================================================
+// FAB Button
+// ============================================================
+
+.ask-numa-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1050;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #0c86b6, #ca78b4, #9d64b5);
+  color: #fff;
+  border: 1.89px solid #fff;
+  border-radius: 21.4px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease;
+  box-shadow:
+    0 0.63px 1.89px rgba(0, 0, 0, 0.04),
+    0 3.14px 3.14px rgba(0, 0, 0, 0.04),
+    0 7.55px 4.4px rgba(0, 0, 0, 0.02),
+    0 13.84px 5.66px rgba(0, 0, 0, 0.01),
+    0 21.38px 6.29px rgba(0, 0, 0, 0),
+    0 7.83px 11px rgba(98, 99, 252, 0.22);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 0.63px 1.89px rgba(0, 0, 0, 0.04),
+      0 3.14px 3.14px rgba(0, 0, 0, 0.04),
+      0 7.55px 4.4px rgba(0, 0, 0, 0.02),
+      0 13.84px 5.66px rgba(0, 0, 0, 0.01),
+      0 21.38px 6.29px rgba(0, 0, 0, 0),
+      0 10px 16px rgba(98, 99, 252, 0.3);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  .ask-numa-fab-icon {
+    display: flex;
+    align-items: center;
+    font-size: 18px;
+  }
+}
+
+// ============================================================
+// Click-away overlay
+// ============================================================
+
+.ask-numa-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1049;
+}
+
+// ============================================================
+// Popup Panel
+// ============================================================
+
+.ask-numa-popup {
+  position: fixed;
+  bottom: 88px;
+  right: 24px;
+  width: 420px;
+  z-index: 1050;
+  background: var(--bs-body-bg, #fff);
+  border-radius: 16px;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  // Slide-up animation
+  animation: askNumaSlideUp 0.2s ease-out;
+}
+
+@keyframes askNumaSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Header
+.ask-numa-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+
+  .ask-numa-popup-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ask-numa-popup-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    color: var(--bs-body-color);
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: var(--bs-tertiary-bg, #f0f0f0);
+    }
+  }
+}
+
+// Body (input area)
+.ask-numa-popup-body {
+  padding: 12px 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ask-numa-textarea {
+  width: 100%;
+  min-height: 80px;
+  max-height: 180px;
+  padding: 10px 12px;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 10px;
+  background: var(--bs-body-bg, #fff);
+  color: var(--bs-body-color);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+
+  &:focus {
+    border-color: var(--bs-primary, #0d6efd);
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.1);
+  }
+
+  &::placeholder {
+    color: var(--bs-secondary-color, #6c757d);
+  }
+}
+
+// Footer (actions bar)
+.ask-numa-popup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--bs-border-color, #dee2e6);
+  gap: 8px;
+}
+
+.ask-numa-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ask-numa-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// Upload button (paperclip)
+.ask-numa-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--bs-secondary-color, #6c757d);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+
+  &:hover {
+    background: var(--bs-tertiary-bg, #f0f0f0);
+    color: var(--bs-body-color);
+  }
+}
+
+// Page context toggle
+.ask-numa-context-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--bs-secondary-color, #6c757d);
+  user-select: none;
+
+  .form-check-input {
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .ask-numa-context-label {
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .ask-numa-context-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    font-size: 10px;
+    border-radius: 50%;
+    background: var(--bs-secondary-color, #6c757d);
+    color: #fff;
+    cursor: help;
+    flex-shrink: 0;
+    line-height: 1;
+    font-weight: 700;
+  }
+}
+
+// Send button
+.ask-numa-send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: linear-gradient(135deg, #0c86b6, #9d64b5);
+  color: #fff;
+  border-radius: 10px;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    opacity 0.15s ease,
+    transform 0.1s ease;
+
+  &:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+// Pending files bar override for popup context
+.ask-numa-popup-body .pending-files-bar {
+  margin: 0;
+}
+
+// ============================================================
+// Mobile Responsive
+// ============================================================
+
+@media (max-width: 768px) {
+  .ask-numa-fab {
+    bottom: 16px;
+    right: 16px;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .ask-numa-popup {
+    bottom: 72px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+  }
+}

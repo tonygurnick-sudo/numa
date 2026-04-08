@@ -1071,7 +1071,7 @@ const handleTickets = async (
       attachments: Array.isArray(attachments) ? attachments : undefined,
       authorId: auth.sub,
       authorEmail: auth.email,
-      authorName: auth.name,
+      authorName: auth.name || (auth.email ? auth.email.split('@')[0] : 'Unknown'),
       createdAt: ts,
       updatedAt: ts,
     };
@@ -1394,31 +1394,35 @@ const handleTickets = async (
     const cursor = qp.cursor ? JSON.parse(decodeURIComponent(qp.cursor)) : undefined;
 
     // Cross-team lookups via GSI2
+    // Helper to exclude soft-deleted tickets from GSI2 cross-team queries
+    const excludeDeleted = (tickets: Record<string, unknown>[]): Record<string, unknown>[] =>
+      tickets.filter((t) => t.statusType !== 'deleted');
+
     if (qp.assigneeId) {
       const { items, lastKey } = await queryGSI2(`ASSIGNEE#${qp.assigneeId}`, 'TICKET#', limit, cursor);
       return jsonResponse(200, {
-        tickets: items,
+        tickets: excludeDeleted(items),
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
       });
     }
     if (qp.customerId) {
       const { items, lastKey } = await queryGSI2(`CUSTOMER#${qp.customerId}`, 'TICKET#', limit, cursor);
       return jsonResponse(200, {
-        tickets: items,
+        tickets: excludeDeleted(items),
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
       });
     }
     if (qp.workUnitId) {
       const { items, lastKey } = await queryGSI2(`WORKUNIT#${qp.workUnitId}`, 'TICKET#', limit, cursor);
       return jsonResponse(200, {
-        tickets: items,
+        tickets: excludeDeleted(items),
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
       });
     }
     if (qp.projectId) {
       const { items, lastKey } = await queryGSI2(`PROJECT#${qp.projectId}`, 'TICKET#', limit, cursor);
       return jsonResponse(200, {
-        tickets: items,
+        tickets: excludeDeleted(items),
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
       });
     }
@@ -1430,6 +1434,8 @@ const handleTickets = async (
 
     // Client-side filter for additional params
     let filtered = items.filter((i) => String(i.entityType ?? '') === 'TICKET');
+    // Exclude soft-deleted tickets
+    filtered = filtered.filter((t) => t.statusType !== 'deleted');
     // Exclude archived tickets by default
     if (qp.includeArchived !== 'true') {
       filtered = filtered.filter((t) => !t.archived);
@@ -1507,6 +1513,35 @@ const handleTickets = async (
       sourceAppType,
     } = body;
 
+    // Detect unknown parameters
+    const knownCreateFields = new Set([
+      'teamId',
+      'stageId',
+      'zoneId',
+      'ticketTypeId',
+      'title',
+      'description',
+      'priority',
+      'assigneeId',
+      'assigneeName',
+      'reporterId',
+      'reporterName',
+      'customerId',
+      'customerName',
+      'supplierId',
+      'supplierName',
+      'workUnitId',
+      'projectId',
+      'tags',
+      'fields',
+      'dueDate',
+      'effortPoints',
+      'sourceType',
+      'sourceId',
+      'sourceAppType',
+    ]);
+    const unknownKeys = Object.keys(body).filter((k) => !knownCreateFields.has(k));
+
     if (!rawTeamId || !rawStageId || !title)
       return errorResponse(400, 'Missing required fields: teamId, stageId, title');
 
@@ -1531,6 +1566,12 @@ const handleTickets = async (
 
     // Look up the stage to resolve zoneId and statusType
     const stageRecord = await getItem(`TEAM#${teamId}`, `STAGE#${stageId}`);
+    if (!stageRecord) {
+      return errorResponse(
+        400,
+        `Invalid stageId: '${stageId}' is not a valid stage for team '${teamId}'. Call get_team to retrieve valid stage IDs.`
+      );
+    }
     const zoneId = rawZoneId ? String(rawZoneId) : stageRecord?.zoneId ? String(stageRecord.zoneId) : undefined;
     const statusType = stageRecord?.statusType ? String(stageRecord.statusType) : 'backlog';
 
@@ -1613,7 +1654,14 @@ const handleTickets = async (
 
     await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems as never }));
 
-    return jsonResponse(201, { ticket: ticketItem });
+    return jsonResponse(201, {
+      ticket: ticketItem,
+      ...(unknownKeys.length > 0 && {
+        warnings: [
+          `Unrecognized parameters were ignored: ${unknownKeys.join(', ')}. Valid fields: ${[...knownCreateFields].join(', ')}`,
+        ],
+      }),
+    });
   }
 
   // ── PUT /ops/tickets/{ticketId} — update ticket ─────────────────────────────

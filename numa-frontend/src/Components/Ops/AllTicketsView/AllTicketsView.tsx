@@ -212,7 +212,7 @@ function compareValues(a: unknown, b: unknown, direction: SortDirection): number
 export function AllTicketsView(): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { user } = useAuth();
-  const { numaGet, numaPut } = useNumaRequest();
+  const { numaGet, numaPut, numaDelete } = useNumaRequest();
   const {
     config,
     tickets,
@@ -948,19 +948,15 @@ export function AllTicketsView(): React.JSX.Element {
             await navigator.clipboard.writeText(`${window.location.origin}/ops?ticket=${ticket.displayId}`);
             break;
           case 'archive':
-            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version);
+            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.teamId);
             await refreshTickets();
             break;
           case 'unarchive':
-            await OpsService.unarchiveTicket(numaPut, ticket.id, ticket.version);
+            await OpsService.unarchiveTicket(numaPut, ticket.id, ticket.version, ticket.teamId);
             await refreshTickets();
             break;
           case 'delete':
-            await OpsService.updateTicket(numaPut, ticket.id, {
-              teamId: ticket.teamId,
-              statusType: 'deleted',
-              version: ticket.version,
-            });
+            await OpsService.deleteTicket(numaDelete, ticket.id, ticket.teamId);
             await refreshTickets();
             break;
         }
@@ -968,7 +964,7 @@ export function AllTicketsView(): React.JSX.Element {
         console.error('[AllTicketsView] Context menu action failed:', err);
       }
     },
-    [ctxMenu.ticket, numaPut, refreshTickets, user]
+    [ctxMenu.ticket, numaPut, numaDelete, refreshTickets, user]
   );
 
   // ── Active filter keys for display ──────────────────────────────────────

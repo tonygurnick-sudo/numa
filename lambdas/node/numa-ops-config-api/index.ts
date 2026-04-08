@@ -808,6 +808,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // GET /ops/config — bulk load all config
     if (method === 'GET' && rest.length === 0) {
       const config = await loadAllConfig();
+
+      // Auto-trigger staff sync on first access if staff has never been synced
+      if (config.staff.length === 0 && !config.lastStaffSyncedAt) {
+        try {
+          await handleStaffSync(event, auth);
+          const refreshed = await loadAllConfig();
+          return jsonResponse(200, refreshed);
+        } catch (e) {
+          // Don't break get_config if auto-sync fails — return what we have
+          console.warn('Auto staff sync failed, returning config without staff:', (e as Error).message);
+        }
+      }
+
       return jsonResponse(200, config);
     }
 

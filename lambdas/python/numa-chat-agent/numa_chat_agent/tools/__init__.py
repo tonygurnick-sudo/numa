@@ -8,13 +8,11 @@ existing tests (e.g. ``query_knowledge_base_impl``).
 import structlog  # noqa: F401 re-exported for backward compatibility
 
 from .agent_creation import create_agent_tool as create_agent_tool_impl
-from .data_analysis import run_data_analysis as data_analysis_impl
 from .knowledge_base import query_knowledge_base_impl
 from .registry import (
     AVAILABLE_TOOLS,
 )
 from .registry import create_agent_tool as _create_agent_tool_tool
-from .registry import data_analysis as _data_analysis_tool
 from .registry import (
     get_available_tool_names,
     get_tools_for_agent,
@@ -31,7 +29,6 @@ from .web_search import web_search_impl
 query_knowledge_base = _query_knowledge_base_tool
 web_search = _web_search_tool
 create_agent_tool = _create_agent_tool_tool
-data_analysis = _data_analysis_tool
 
 __all__ = [
     "AVAILABLE_TOOLS",
@@ -44,7 +41,5 @@ __all__ = [
     "web_search_impl",
     "create_agent_tool",
     "create_agent_tool_impl",
-    "data_analysis",
-    "data_analysis_impl",
     "structlog",
 ]

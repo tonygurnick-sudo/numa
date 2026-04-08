@@ -546,7 +546,9 @@
     "loadFailed": "Failed to load: {{message}}",
     "saveFailed": "Failed to save: {{message}}",
     "conflict": "Conflict detected \u2014 please refresh",
-    "notFound": "Not found"
+    "notFound": "Not found",
+    "deleteFailed": "Failed to delete ticket",
+    "archiveFailed": "Failed to archive ticket"
   },
   "empty": {
     "noTickets": "No tickets yet. Create your first ticket to get started.",
@@ -783,6 +785,7 @@
     "deleteConfirm": "Are you sure you want to delete this comment?",
     "placeholder": "Write a comment...",
     "system": "System",
+    "unknownAuthor": "Unknown",
     "timeAgo": {
       "justNow": "just now",
       "minutesAgo": "{{count}}m ago",

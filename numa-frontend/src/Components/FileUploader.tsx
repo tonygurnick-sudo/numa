@@ -29,7 +29,28 @@ interface FileUploaderProps {
   clearFiles?: boolean;
   kb_id?: string;
   selectedFolder?: string;
+  enableFolderUpload?: boolean;
 }
+
+/** System/OS files that should be excluded from folder uploads. */
+const SYSTEM_FILE_NAMES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
+const SYSTEM_PATH_SEGMENTS = ['__MACOSX'];
+
+const isSystemFile = (path: string, name: string): boolean => {
+  if (SYSTEM_FILE_NAMES.has(name)) return true;
+  return SYSTEM_PATH_SEGMENTS.some((seg) => path.includes(`${seg}/`) || path === seg);
+};
+
+/**
+ * Detect false folder entries that macOS sometimes includes in file lists.
+ * These have no MIME type, tiny size, and no file extension.
+ */
+const isFalseFolder = (file: File): boolean => {
+  if (file.type !== '') return false;
+  if (file.size > 512) return false;
+  const hasExtension = file.name.includes('.') && !file.name.startsWith('.');
+  return !hasExtension;
+};
 
 const FileUploader: React.FC<FileUploaderProps> = ({
   onUploadSuccess,
@@ -38,10 +59,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   clearFiles,
   kb_id,
   selectedFolder,
+  enableFolderUpload = false,
 }) => {
   const { t } = useTranslation('common');
   const formatKB = (bytes: number, digits = 2) => t('fileSize.kb', { size: (bytes / 1024).toFixed(digits) });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const [files, setFiles] = useState<ExtendedFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
@@ -84,9 +107,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       setCurrentFileName('');
       setDetailedError(null);
 
-      // Clear file input value
+      // Clear file input values
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
+      }
+      if (folderInputRef.current) {
+        folderInputRef.current.value = '';
       }
     }
   }, [clearFiles]);
@@ -135,6 +161,47 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     if (onFileSelect) {
       onFileSelect(fileList);
     }
+  };
+
+  const handleFolderSelect = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const rawFiles = Array.from(event.target.files || []) as ExtendedFile[];
+
+    // Set customRelativePath from webkitRelativePath and filter out system/false-folder files
+    const validFiles = rawFiles.filter((file) => {
+      const relativePath = file.webkitRelativePath || file.name;
+      if (isFalseFolder(file) || isSystemFile(relativePath, file.name)) return false;
+      file.customRelativePath = relativePath;
+      return true;
+    });
+
+    if (!validFiles.length) return;
+
+    // Let parent handle validation warnings (e.g. large file notices)
+    if (onFileSelect) {
+      onFileSelect(validFiles);
+    }
+
+    // Filter out invalid file types but don't reject the whole batch
+    const filesToAdd = validateFile ? validFiles.filter((file) => validateFile(file)) : validFiles;
+    if (!filesToAdd.length) return;
+
+    const combinedFiles = [...files, ...filesToAdd];
+    const folders = new Set([...fileStructure.folders]);
+
+    filesToAdd.forEach((file) => {
+      const path = file.customRelativePath || file.name;
+      const parts = path.split('/');
+      for (let i = 0; i < parts.length - 1; i++) {
+        folders.add(parts.slice(0, i + 1).join('/'));
+      }
+    });
+
+    setFiles(combinedFiles);
+    setFileStructure({ files: combinedFiles, folders });
+    setTotalFiles(combinedFiles.length);
+    setError(null);
+    setSuccess(false);
+    setUploadProgress(0);
   };
 
   const buildKbPrefix = (kbId: string | null | undefined): { prefix: string; sanitizedKbId: string } => {
@@ -284,9 +351,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       });
       setTotalFiles(0);
 
-      // Reset file input to allow re-adding the same files
+      // Reset file inputs to allow re-adding the same files
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
+      }
+      if (folderInputRef.current) {
+        folderInputRef.current.value = '';
       }
 
       onUploadSuccess();
@@ -393,16 +463,24 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const readDirectory = async (dirEntry: FileSystemDirectoryEntry, files: ExtendedFile[]): Promise<void> => {
     const reader = dirEntry.createReader();
 
-    const entries = await new Promise<FileSystemEntry[]>((resolve) => {
-      reader.readEntries((entries) => resolve(entries));
-    });
+    // readEntries may return results in batches - must loop until empty
+    let entries: FileSystemEntry[] = [];
+    let batch: FileSystemEntry[];
+    do {
+      batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+        reader.readEntries(resolve, reject);
+      });
+      entries = entries.concat(batch);
+    } while (batch.length > 0);
 
     for (const entry of entries) {
       if (entry.isFile) {
-        const file = await new Promise<File>((resolve) => {
-          (entry as FileSystemFileEntry).file((file) => resolve(file));
+        const file = await new Promise<File>((resolve, reject) => {
+          (entry as FileSystemFileEntry).file(resolve, reject);
         });
-        (file as ExtendedFile).customRelativePath = entry.fullPath.substring(1); // Remove leading slash
+        const relativePath = entry.fullPath.substring(1); // Remove leading slash
+        if (isFalseFolder(file) || isSystemFile(relativePath, file.name)) continue;
+        (file as ExtendedFile).customRelativePath = relativePath;
         files.push(file as ExtendedFile);
       } else if (entry.isDirectory) {
         await readDirectory(entry as FileSystemDirectoryEntry, files);
@@ -452,9 +530,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setError(null);
     setSuccess(false);
 
-    // Reset file input to allow re-adding the same files
+    // Reset file inputs to allow re-adding the same files
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+    if (folderInputRef.current) {
+      folderInputRef.current.value = '';
     }
   };
 
@@ -605,18 +686,44 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
       <div className="text-center">
         <input style={{ display: 'none' }} ref={fileInputRef} type="file" onChange={handleFileSelect} multiple />
+        {enableFolderUpload && (
+          <input
+            style={{ display: 'none' }}
+            ref={folderInputRef}
+            type="file"
+            onChange={handleFolderSelect}
+            // @ts-expect-error webkitdirectory is a non-standard attribute
+            webkitdirectory=""
+            multiple
+          />
+        )}
 
         <div className="mb-3">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
-          <p className="mt-2">{t('fileUploader.dragAndDrop')}</p>
-          <Button
-            variant="primary"
-            type="button"
-            style={{ cursor: 'pointer' }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {t('fileUploader.selectFiles')}
-          </Button>
+          <p className="mt-2">
+            {enableFolderUpload ? t('fileUploader.dragAndDropFilesOrFolders') : t('fileUploader.dragAndDrop')}
+          </p>
+          <div className="d-flex gap-2 justify-content-center">
+            <Button
+              variant="primary"
+              type="button"
+              style={{ cursor: 'pointer' }}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {t('fileUploader.selectFiles')}
+            </Button>
+            {enableFolderUpload && (
+              <Button
+                variant="primary"
+                type="button"
+                style={{ cursor: 'pointer' }}
+                onClick={() => folderInputRef.current?.click()}
+              >
+                <i className="bi bi-folder-plus me-1" />
+                {t('fileUploader.selectFolder')}
+              </Button>
+            )}
+          </div>
         </div>
 
         {fileStructure.files.length > 0 && (

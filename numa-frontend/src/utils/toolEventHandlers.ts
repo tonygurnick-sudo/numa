@@ -347,8 +347,7 @@ export function handleToolResults(
   flushPendingText,
   conversationId: string | null,
   saveToolResult?: (payload: ToolPersistencePayload) => void,
-  processedEventIds?: Set<string>,
-  stopDataAnalysisPolling?: (toolUseId: string) => void
+  processedEventIds?: Set<string>
 ) {
   // minimal logging: omit result batch counts
   flushPendingText(conversationId); // Don't preserve content for mid-stream flushes
@@ -389,9 +388,6 @@ export function handleToolResults(
       messageHelpers.clearToolCardInitialStep(toolResult.toolUseId, tName);
       messageHelpers.updateToolLoadingState(toolResult.toolUseId, false);
       messageHelpers.setToolCardResult(toolResult.toolUseId, tName, toolResult);
-      if (stopDataAnalysisPolling) {
-        stopDataAnalysisPolling(toolResult.toolUseId);
-      }
     } else {
       // Attach to (or create) a unified tool card even without explicit id
       messageHelpers.clearToolCardInitialStep(null, tName);
@@ -417,8 +413,6 @@ export interface ProcessToolEventCallbacks {
   saveToolCall?: (payload: ToolPersistencePayload) => void;
   saveToolResult?: (payload: ToolPersistencePayload) => void;
   conversationId: string | null;
-  startDataAnalysisPolling?: (toolUseId: string, jobId: string) => void;
-  stopDataAnalysisPolling?: (toolUseId: string) => void;
 }
 
 export function processToolEvent(
@@ -428,16 +422,7 @@ export function processToolEvent(
 ) {
   const { processedEventIds, toolUseMap, hasStreamingStarted, setHasStreamingStarted } = context;
 
-  const {
-    setMessages,
-    setButtonStatus,
-    flushPendingText,
-    saveToolCall,
-    saveToolResult,
-    conversationId,
-    startDataAnalysisPolling,
-    stopDataAnalysisPolling,
-  } = callbacks;
+  const { setMessages, setButtonStatus, flushPendingText, saveToolCall, saveToolResult, conversationId } = callbacks;
 
   // minimal logging: omit raw event frame logs
 
@@ -544,13 +529,6 @@ export function processToolEvent(
           } catch {
             // best-effort only
           }
-
-          if (tName === 'data_analysis' && startDataAnalysisPolling) {
-            const jobId = (payload as Record<string, unknown>)?.job_id;
-            if (typeof jobId === 'string' && jobId.trim()) {
-              startDataAnalysisPolling(tId, jobId.trim());
-            }
-          }
         }
         // Only add one input per frame
         return;
@@ -568,8 +546,7 @@ export function processToolEvent(
       flushPendingText,
       conversationId,
       saveToolResult,
-      processedEventIds,
-      stopDataAnalysisPolling
+      processedEventIds
     );
     return;
   }

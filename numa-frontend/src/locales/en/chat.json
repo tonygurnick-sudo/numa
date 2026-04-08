@@ -304,6 +304,11 @@
       "title": "Conversation Export",
       "exportedOn": "Exported: {{date}}",
       "conversationId": "Conversation ID: {{id}}",
+      "agentName": "Agent: {{name}}",
+      "agentId": "Agent ID: {{id}}",
+      "userId": "User ID: {{id}}",
+      "userEmail": "User: {{email}}",
+      "environment": "Environment: {{env}}",
       "html": "HTML",
       "htmlDesc": "Styled, readable format",
       "text": "Plain Text",
@@ -494,5 +499,16 @@
   },
   "agents": {
     "chooseExperience": "Choose Chat Experience"
+  },
+  "askNuma": {
+    "buttonLabel": "Ask Numa",
+    "popupTitle": "Ask Numa",
+    "placeholder": "Ask me anything...",
+    "send": "Send",
+    "includePageContext": "Include page context",
+    "pageContextTooltip": "When enabled, Numa receives your current page location, a screenshot of what you see, and the page content. This helps Numa understand the context of your question.",
+    "close": "Close",
+    "sending": "Starting chat...",
+    "capturingContext": "Capturing page context..."
   }
 }

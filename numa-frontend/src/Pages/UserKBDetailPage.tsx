@@ -377,6 +377,7 @@ export function UserKBDetailPage(): React.JSX.Element {
                   clearFiles={clearFileUploader}
                   kb_id={kbId!}
                   selectedFolder={selectedFolder}
+                  enableFolderUpload
                 />
               </div>
             </div>

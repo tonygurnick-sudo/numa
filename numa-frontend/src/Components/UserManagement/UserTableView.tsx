@@ -107,21 +107,14 @@ export function UserTableView({
           </tr>
         </thead>
         <tbody>
-          {showAdminSection && (
+          {showAdminSection && adminUsers.length > 0 && (
             <>
               {renderSectionHeader(t('sections.admins'), adminUsers.length, sectionsExpanded.admin, 'admin', 'primary')}
-              {sectionsExpanded.admin && adminUsers.length > 0 && adminUsers.map(renderUserRow)}
-              {sectionsExpanded.admin && adminUsers.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="text-center text-muted py-3">
-                    {t('table.empty.admins')}
-                  </td>
-                </tr>
-              )}
+              {sectionsExpanded.admin && adminUsers.map(renderUserRow)}
             </>
           )}
 
-          {showStandardSection && (
+          {showStandardSection && standardUsers.length > 0 && (
             <>
               {renderSectionHeader(
                 t('sections.standardUsers'),
@@ -130,14 +123,7 @@ export function UserTableView({
                 'standard',
                 'secondary'
               )}
-              {sectionsExpanded.standard && standardUsers.length > 0 && standardUsers.map(renderUserRow)}
-              {sectionsExpanded.standard && standardUsers.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="text-center text-muted py-3">
-                    {t('table.empty.standard')}
-                  </td>
-                </tr>
-              )}
+              {sectionsExpanded.standard && standardUsers.map(renderUserRow)}
             </>
           )}
 

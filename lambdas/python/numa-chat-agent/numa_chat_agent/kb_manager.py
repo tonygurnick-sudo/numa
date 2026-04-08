@@ -88,19 +88,21 @@ class KnowledgeBaseManager:
 
         # Normalise viewer/editor lists
         normalized_viewers = self._normalize_id_list(viewers, allow_wildcard=True)
-        normalized_editors = self._normalize_id_list(editors)
+        normalized_editors = self._normalize_id_list(editors, allow_wildcard=True)
 
         if created_by:
             if "*" not in normalized_viewers and created_by not in normalized_viewers:
                 normalized_viewers.append(created_by)
-            if created_by not in normalized_editors:
+            if "*" not in normalized_editors and created_by not in normalized_editors:
                 normalized_editors.append(created_by)
 
         # Final de-duplication (handles creator additions)
         normalized_viewers = self._normalize_id_list(
             normalized_viewers, allow_wildcard=True
         )
-        normalized_editors = self._normalize_id_list(normalized_editors)
+        normalized_editors = self._normalize_id_list(
+            normalized_editors, allow_wildcard=True
+        )
 
         viewers_attribute: AttributeValueTypeDef = (
             {"SS": normalized_viewers} if normalized_viewers else {"L": []}
@@ -353,7 +355,7 @@ class KnowledgeBaseManager:
 
         # Check editors (editors can also view)
         editors = kb.get("editors", [])
-        if user_id in editors:
+        if "*" in editors or user_id in editors:
             return True
 
         return False
@@ -439,10 +441,18 @@ class KnowledgeBaseManager:
                 new_viewers_list = normalized_viewers
 
             if editors is not None:
-                normalized_editors = self._normalize_id_list(editors)
+                normalized_editors = self._normalize_id_list(
+                    editors, allow_wildcard=True
+                )
                 if creator_id:
-                    normalized_editors.append(creator_id)
-                    normalized_editors = self._normalize_id_list(normalized_editors)
+                    if (
+                        "*" not in normalized_editors
+                        and creator_id not in normalized_editors
+                    ):
+                        normalized_editors.append(creator_id)
+                    normalized_editors = self._normalize_id_list(
+                        normalized_editors, allow_wildcard=True
+                    )
 
                 update_parts.append("editors = :editors")
                 expr_attr_values[":editors"] = (
@@ -587,7 +597,8 @@ class KnowledgeBaseManager:
 
         # Add editors (overrides viewer)
         for user_id in editors:
-            members[user_id] = "EDITOR"
+            if user_id != "*":
+                members[user_id] = "EDITOR"
 
         # Write membership records
         for user_id, role in members.items():

@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { getFlag } from '../../utils/featureFlags';
 import { Button, Form, Spinner, Modal, Dropdown, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { Search, Robot, BarChart } from 'react-bootstrap-icons';
+import { Search, Robot } from 'react-bootstrap-icons';
 import { Paperclip, Send } from 'lucide-react';
 import VoiceRecordButton, { isVoiceRecordingSupported } from './VoiceRecordButton';
 import type { VoiceRecordingState } from './VoiceRecordButton';
@@ -34,9 +34,6 @@ const ChatInput = ({
   setWebSearchEnabled,
   createAgentEnabled,
   setCreateAgentEnabled,
-  dataAnalysisEnabled,
-  setDataAnalysisEnabled,
-  dataAnalysisAvailable = true,
   autoToolsEnabled,
   setAutoToolsEnabled,
   availableConnections = [],
@@ -95,8 +92,6 @@ const ChatInput = ({
   const maxVisibleConnectionIcons = isMobile ? 2 : 4;
   const visibleConnectionIds = enabledConnections.slice(0, maxVisibleConnectionIcons);
   const hiddenConnectionCount = Math.max(0, enabledConnections.length - visibleConnectionIds.length);
-  const dataAnalysisActive = dataAnalysisAvailable && dataAnalysisEnabled;
-
   // Enable mobile back button to close dropdowns
   useDrawerBackClose({
     isOpen: showKBDropdown,
@@ -711,10 +706,7 @@ const ChatInput = ({
                       <Dropdown.Toggle
                         variant="link"
                         className={`tools-settings-toggle ${
-                          autoToolsEnabled ||
-                          webSearchEnabled ||
-                          dataAnalysisActive ||
-                          (agentsFeatureEnabled && createAgentEnabled)
+                          autoToolsEnabled || webSearchEnabled || (agentsFeatureEnabled && createAgentEnabled)
                             ? 'active'
                             : ''
                         }`}
@@ -803,25 +795,6 @@ const ChatInput = ({
                             disabled={autoToolsEnabled}
                           />
                         </div>
-                        {dataAnalysisAvailable && (
-                          <div className="mb-3">
-                            <Form.Check
-                              type="switch"
-                              id="data-analysis-switch"
-                              label={
-                                <span className="tool-label">
-                                  <BarChart size={16} className="me-2" />
-                                  <span className="tool-name">{t('input.tools.dataAnalysis.title')}</span>
-                                  <span className="tool-separator"> - </span>
-                                  <span className="tool-description">{t('input.tools.dataAnalysis.description')}</span>
-                                </span>
-                              }
-                              checked={autoToolsEnabled || dataAnalysisEnabled}
-                              onChange={(e) => !autoToolsEnabled && setDataAnalysisEnabled(e.target.checked)}
-                              disabled={autoToolsEnabled}
-                            />
-                          </div>
-                        )}
                         {agentsFeatureEnabled && (
                           <div className="mb-3">
                             <Form.Check
@@ -845,7 +818,6 @@ const ChatInput = ({
                         {!autoToolsEnabled &&
                           enabledKBIds.length === 0 &&
                           !webSearchEnabled &&
-                          !dataAnalysisActive &&
                           !(agentsFeatureEnabled && createAgentEnabled) && (
                             <div className="mt-2 p-2 bg-light rounded">
                               <small className="text-muted">{t('input.tools.selectSpecific')}</small>
@@ -855,13 +827,9 @@ const ChatInput = ({
                     </Dropdown>
                   </OverlayTrigger>
                   {/* Tool indicators positioned next to button */}
-                  {(autoToolsEnabled ||
-                    webSearchEnabled ||
-                    dataAnalysisEnabled ||
-                    (agentsFeatureEnabled && createAgentEnabled)) && (
+                  {(autoToolsEnabled || webSearchEnabled || (agentsFeatureEnabled && createAgentEnabled)) && (
                     <span className="active-tools-indicators" style={{ display: 'flex', gap: '0.25rem' }}>
                       {(autoToolsEnabled || webSearchEnabled) && <Search size={12} />}
-                      {(autoToolsEnabled || dataAnalysisActive) && <BarChart size={12} />}
                       {(autoToolsEnabled || (agentsFeatureEnabled && createAgentEnabled)) && <Robot size={12} />}
                     </span>
                   )}

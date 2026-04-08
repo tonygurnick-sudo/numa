@@ -146,7 +146,7 @@ def _enrich_ticket_urls(result: Any) -> Any:
     return result
 
 
-def _count_items(result: Any) -> int | None:
+def _count_items(result: Any, operation: str = "") -> int | None:
     """Count items in an ops API response (find first list value)."""
     if isinstance(result, list):
         return len(result)
@@ -154,6 +154,24 @@ def _count_items(result: Any) -> int | None:
         for v in result.values():
             if isinstance(v, list):
                 return len(v)
+    return None
+
+
+def _build_summary(result: Any, operation: str) -> str | None:
+    """Build a richer summary for specific operations."""
+    if operation == "get_team" and isinstance(result, dict):
+        zones = result.get("zones", [])
+        stages = result.get("stages", [])
+        team = result.get("team", {})
+        name = team.get("name", "")
+        parts = []
+        if name:
+            parts.append(f"Team: {name}")
+        parts.append(f"{len(zones)} zones, {len(stages)} stages")
+        stage_names = [s.get("name", "") for s in stages if isinstance(s, dict)]
+        if stage_names:
+            parts.append(f"Stages: {', '.join(stage_names)}")
+        return ". ".join(parts)
     return None
 
 
@@ -393,12 +411,15 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
         # Large results → save to file, return lightweight summary
         if len(result_text) > MAX_INLINE:
             file_path = _save_ops_result(result, operation)
-            count = _count_items(result)
+            summary = _build_summary(result, operation)
+            count = _count_items(result, operation)
             parts = [
                 f"Ops operation completed: {operation}",
                 f"Description: {description}",
             ]
-            if count is not None:
+            if summary:
+                parts.append(summary)
+            elif count is not None:
                 parts.append(f"Items found: {count}")
             parts.append(f"\nFull results saved to: {file_path}")
             parts.append(

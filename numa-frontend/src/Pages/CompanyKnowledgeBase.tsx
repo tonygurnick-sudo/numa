@@ -347,6 +347,7 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
                   clearFiles={clearFileUploader}
                   kb_id="company"
                   selectedFolder={selectedFolder}
+                  enableFolderUpload
                 />
               </div>
             </div>

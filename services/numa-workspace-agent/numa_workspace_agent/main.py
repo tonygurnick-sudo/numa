@@ -2175,6 +2175,7 @@ async def _handle_fire_and_forget(
         available_kbs = agent_type_config.default_kbs
 
     enabled_integrations = body.get("enabledConnections", [])
+    available_integrations = body.get("availableIntegrations", [])
     connected_data_connectors = body.get("connectedDataConnectors", [])
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []

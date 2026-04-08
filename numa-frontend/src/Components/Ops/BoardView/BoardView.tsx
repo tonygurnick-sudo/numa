@@ -59,7 +59,7 @@ function calculateNewOrder(tickets: Ticket[], insertIndex: number): number {
 
 const BoardView = () => {
   const { t } = useTranslation('ops');
-  const { numaPost, numaPut } = useNumaRequest();
+  const { numaPost, numaPut, numaDelete } = useNumaRequest();
   const { user } = useAuth();
   const {
     teamData,
@@ -514,15 +514,11 @@ const BoardView = () => {
             break;
           }
           case 'archive':
-            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version);
+            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.teamId);
             await refreshTickets();
             break;
           case 'delete':
-            await OpsService.updateTicket(numaPut, ticket.id, {
-              teamId: ticket.teamId,
-              statusType: 'deleted',
-              version: ticket.version,
-            });
+            await OpsService.deleteTicket(numaDelete, ticket.id, ticket.teamId);
             await refreshTickets();
             break;
         }
@@ -530,7 +526,7 @@ const BoardView = () => {
         console.error('[BoardView] Context menu action failed:', err);
       }
     },
-    [ctxMenu.ticket, numaPut, refreshTickets, user, filteredTickets]
+    [ctxMenu.ticket, numaPut, numaDelete, refreshTickets, user, filteredTickets]
   );
 
   const handleQuickAdd = useCallback(

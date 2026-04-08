@@ -144,7 +144,6 @@ pre-commit:
         - lambdas/python/beyond-expectations-format-error-logs
         - lambdas/python/beyond-expectations-report-and-email
         - lambdas/python/candidate-screening
-        - lambdas/python/claude-code-agent
         - lambdas/python/cognito-email-handler
         - lambdas/python/company-profile
         - lambdas/python/contract-analysis
@@ -473,45 +472,6 @@ node-package:
   rules:
     - !reference [.rules, if-deployable]
 
-# Build Claude CLI artifact ZIP (main + CI config changes only)
-claude-cli-artifact-build:
-  stage: package
-  image: amazonlinux:2023
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_BRANCH == "dev"
-  variables:
-    CLAUDE_CLI_VERSION: '2.0.37'
-  before_script:
-    - dnf -y install tar gzip zip which jq
-  script:
-    - set -euo pipefail
-    - test -n "$CLAUDE_CLI_VERSION" || (echo "CLAUDE_CLI_VERSION is required" >&2; exit 1)
-    # Download claude binary directly from the official GCS bucket and package as an artifact
-    - GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
-    - ARCH=$(uname -m); ARCH_LABEL=$([ "$ARCH" = x86_64 ] && echo x64 || echo arm64)
-    - if ldd /bin/ls 2>&1 | grep -q musl; then PLATFORM="linux-${ARCH_LABEL}-musl"; else PLATFORM="linux-${ARCH_LABEL}"; fi
-    - |
-      if [ "$CLAUDE_CLI_VERSION" = "stable" ] || [ "$CLAUDE_CLI_VERSION" = "latest" ]; then
-        VERSION=$(curl -fsSL "$GCS_BUCKET/stable")
-      else
-        VERSION="$CLAUDE_CLI_VERSION"
-      fi
-      echo "Using Claude CLI version: $VERSION for $PLATFORM"
-    - MANIFEST=$(curl -fsSL "$GCS_BUCKET/$VERSION/manifest.json")
-    - CHECKSUM=$(echo "$MANIFEST" | jq -r --arg p "$PLATFORM" '.platforms[$p].checksum')
-    - test -n "$CHECKSUM" || (echo "Failed to resolve checksum for $PLATFORM" >&2; exit 1)
-    - mkdir -p infra/assets/artifacts/claude-cli/bin
-    - curl -fsSL -o infra/assets/artifacts/claude-cli/bin/claude "$GCS_BUCKET/$VERSION/$PLATFORM/claude"
-    - echo "$CHECKSUM  infra/assets/artifacts/claude-cli/bin/claude" | sha256sum -c -
-    - chmod +x infra/assets/artifacts/claude-cli/bin/claude
-    - (cd infra/assets/artifacts/claude-cli && zip -r claude-x86_64.zip bin)
-    - ls -lh infra/assets/artifacts/claude-cli/claude-x86_64.zip
-  artifacts:
-    paths:
-      - infra/assets/artifacts/claude-cli/claude-x86_64.zip
-    expire_in: 7 days
-
 # Build workspace-agent Docker image as tar for Fargate deployment
 # Uses BuildKit local cache to avoid rebuilding system packages, Node.js, Pandoc,
 # and Python deps on every run. First build is full (~27min), subsequent builds
@@ -581,28 +541,6 @@ transcription-service-package:
     expire_in: 7 days
 
 # Publish the artifact ZIP to deployer S3 (main only)
-claude-cli-artifact-publish:
-  stage: package
-  image: registry.gitlab.com/arcanumai/ci/all-inclusive
-  needs: ['claude-cli-artifact-build']
-  rules:
-    - !reference [.rules, if-main]
-  variables:
-    CLAUDE_CLI_VERSION: '2.0.37'
-    CLAUDE_ARTIFACT_S3_PREFIX: 'claude-artifacts'
-    AWS_REGION: us-east-1
-  before_script:
-    - export AWS_ROLE=${AWS_DEPLOYER_ROLE_ARN:-$AWS_CLIENT_ROLE_ARN}
-    - !reference [.common-steps, aws-assume-role]
-  script:
-    - set -euo pipefail
-    - export CLAUDE_ARTIFACT_S3_BUCKET=${CLAUDE_ARTIFACT_S3_BUCKET:-numa-claude-cli-artifacts}
-    - test -f infra/assets/artifacts/claude-cli/claude-x86_64.zip || (echo "Missing artifact zip to publish" && exit 1)
-    - export ARTIFACT_KEY="${CLAUDE_ARTIFACT_S3_PREFIX}/${CLAUDE_CLI_VERSION}/claude-x86_64.zip"
-    - echo "Publishing to s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}"
-    - aws s3 cp --only-show-errors infra/assets/artifacts/claude-cli/claude-x86_64.zip "s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}"
-    - aws s3 ls "s3://${CLAUDE_ARTIFACT_S3_BUCKET}/${ARTIFACT_KEY}"
-
 build-deployment-container:
   stage: image-build
   timeout: 30 minutes # Docker build + ECR push — P90 is ~12min
@@ -614,7 +552,7 @@ build-deployment-container:
   # Note: Removed explicit `needs` to work around GitLab's 50-job limit.
   # This job runs after the package stage completes and automatically
   # receives all artifacts from python-lambdas-package, node-package,
-  # claude-cli-artifact-build, and workspace-agent-package.
+  # and workspace-agent-package.
   variables:
     BUILD_DIR: .
     ECR_REPO: ${ECR_BASE}/numa-deploy
@@ -625,7 +563,6 @@ build-deployment-container:
     # install only the infra deps
     - yarn workspaces focus @arcanumai/q-apps-deployer-infra
     - (cd infra && yarn exec cdktf get)
-    # Build will pick up the artifact from infra/assets/artifacts/claude-cli/claude-x86_64.zip
     - |
       set -euo pipefail
       docker build \
