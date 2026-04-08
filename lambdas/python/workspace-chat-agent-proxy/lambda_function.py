@@ -87,6 +87,10 @@ agentcore_config = Config(
     retries={"max_attempts": 0},  # Don't retry streaming calls
 )
 
+# Retry config for AgentCore 502 errors (container cold-start not ready)
+AGENTCORE_502_MAX_RETRIES = 3
+AGENTCORE_502_BASE_DELAY = 2.0  # seconds; delays will be 2, 4, 8
+
 agentcore_client = boto3.client(
     "bedrock-agentcore",
     region_name=AGENTCORE_REGION,
@@ -763,22 +767,46 @@ async def _invoke_agentcore(
     payload_bytes = json.dumps(payload).encode("utf-8")
 
     try:
-        # Call AgentCore invoke_agent_runtime
+        # Call AgentCore invoke_agent_runtime with retry for 502 cold-start errors.
+        # AgentCore returns 502 when the MicroVM container isn't ready yet (~5% of cold starts).
+        # The container just needs a few more seconds to boot, so we retry with backoff.
         # See: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-invoke-agent.html
-        response = agentcore_client.invoke_agent_runtime(
-            agentRuntimeArn=AGENT_RUNTIME_ARN,
-            payload=payload_bytes,
-            contentType="application/json",
-            accept="application/json",
-            runtimeSessionId=session_id,
-        )
+        last_exception = None
+        for attempt in range(AGENTCORE_502_MAX_RETRIES + 1):
+            try:
+                response = agentcore_client.invoke_agent_runtime(
+                    agentRuntimeArn=AGENT_RUNTIME_ARN,
+                    payload=payload_bytes,
+                    contentType="application/json",
+                    accept="application/json",
+                    runtimeSessionId=session_id,
+                )
 
-        if stream:
-            return _stream_response(response)
-        elif raw:
-            return await _collect_filtered_raw_response(response)
-        else:
-            return await _collect_response(response)
+                if stream:
+                    return _stream_response(response)
+                elif raw:
+                    return await _collect_filtered_raw_response(response)
+                else:
+                    return await _collect_response(response)
+
+            except agentcore_client.exceptions.RuntimeClientError as e:
+                if "502" in str(e) and attempt < AGENTCORE_502_MAX_RETRIES:
+                    delay = AGENTCORE_502_BASE_DELAY * (2**attempt)
+                    logger.warning(
+                        "AgentCore 502 on cold start, retrying in %.1fs "
+                        "(attempt %d/%d, session=%s)",
+                        delay,
+                        attempt + 1,
+                        AGENTCORE_502_MAX_RETRIES,
+                        session_id,
+                    )
+                    await asyncio.sleep(delay)
+                    last_exception = e
+                    continue
+                raise
+
+        # Safety net: all retries exhausted without return or raise
+        raise last_exception  # type: ignore[misc]
 
     except agentcore_client.exceptions.ResourceNotFoundException:
         logger.exception("Agent runtime not found: %s", AGENT_RUNTIME_ARN)
