@@ -15,6 +15,7 @@ import {
   Grid3X3,
   History,
   MessageSquare,
+  MessagesSquare,
   Microscope,
   Plug,
   PlusCircle,
@@ -227,6 +228,19 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
           badge: r.nav.badge,
         });
       });
+      // Inject "Recent Chats" nav item after Chat (opens chat with history panel)
+      if (getFlag('NUMA_WORKSPACE_CHAT')) {
+        const chatIndex = items.findIndex((item) => item.to === '/chat');
+        if (chatIndex !== -1) {
+          items.splice(chatIndex + 1, 0, {
+            to: '/chat-history',
+            label: 'Recent Chats',
+            labelKey: 'nav.items.recentChats',
+            icon: 'bi bi-chat-left-text',
+          });
+        }
+      }
+
       setNavItems(items);
     });
     return () => {
@@ -603,6 +617,8 @@ function getPlannedNavIcon(item, interfaceMode) {
       return FolderClosed;
     case 'nav.items.integrations':
       return Plug;
+    case 'nav.items.recentChats':
+      return MessagesSquare;
     case 'nav.items.jobHistory':
       return History;
     case 'nav.items.scheduling':
