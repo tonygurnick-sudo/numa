@@ -79,6 +79,7 @@ pre-commit:
     - BUILD_DIR:
         - lambdas/node/admin-capabilities
         - lambdas/node/admin-data-connector-settings
+        - lambdas/node/admin-dr-stats
         - lambdas/node/admin-agents-settings
         - lambdas/node/admin-mfa-settings
         - lambdas/node/admin-integration-settings
@@ -163,6 +164,7 @@ pre-commit:
         - lambdas/python/mark-url-status
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-chat-agent
+        - lambdas/python/numa-dr-export
         - lambdas/python/numa-recent-jobs
         - lambdas/python/oauth-files-api
         - lambdas/python/oauth-workspace-tools
