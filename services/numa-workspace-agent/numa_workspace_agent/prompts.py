@@ -910,6 +910,9 @@ def _build_connectors_context(
     Mirrors _build_integrations_context but for OAuth/token data connectors
     (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d, etc.).
 
+    Also checks for API reference documentation on disk at
+    ``/workdir/api-docs/{name}/`` and includes instructions when available.
+
     Args:
         connected_data_connectors: List of dicts with 'id' and 'name' keys
             for each connected data connector.
@@ -918,14 +921,20 @@ def _build_connectors_context(
         Connectors context string for the system prompt.
     """
     connector_lines = []
+    connectors_with_docs: list[str] = []
+
     for conn in connected_data_connectors:
         cid = conn.get("id", "")
         name = conn.get("name", cid)
         connector_lines.append(f"- {name} (`{cid}`): **Connected**")
+        # Check if API reference docs were synced for this connector
+        docs_dir = Path(f"/workdir/api-docs/{name}")
+        if docs_dir.is_dir() and any(docs_dir.iterdir()):
+            connectors_with_docs.append(name)
 
     connectors_list = "\n".join(connector_lines)
 
-    return f"""## Connected Data Connectors
+    context = f"""## Connected Data Connectors
 The user has data connectors configured via the Data Connectors page. These are separate from Pipedream integrations.
 
 **Connector Status:**
@@ -941,6 +950,23 @@ Access these via the `connectors` tool (NOT the integrations tool). Operations:
 The `request` operation makes authenticated HTTP calls to ANY API the connector's OAuth token covers. For example, a Google Drive connector token also works with Google Docs API, Sheets API, etc.
 
 **Do NOT waste tool calls on disconnected connectors.** Only the connectors listed above are connected."""
+
+    if connectors_with_docs:
+        docs_list = ", ".join(connectors_with_docs)
+        context += f"""
+
+**API Reference Documentation:**
+API reference documentation is available at `/workdir/api-docs/{{name}}/` for the following connectors: {docs_list}.
+
+You **MUST** read `01-llm-api-rules.md` before making any authenticated API request via the `request` operation for these connectors. It contains auth requirements, rate limits, required headers, and common pitfalls that will cause failures if ignored.
+
+Companion files provide detailed reference:
+- `01a-domain-model-reference.md` — Entity definitions, field types, relationships.
+- `01b-query-patterns.md` — Read operations: list, search, filter, pagination.
+- `01c-mutation-patterns.md` — Write operations: create, update, delete, batch.
+- `01d-event-and-error-handling.md` — Error codes, retry logic, webhooks."""
+
+    return context
 
 
 def _build_email_signature_context(email_signature: Optional[dict]) -> str:

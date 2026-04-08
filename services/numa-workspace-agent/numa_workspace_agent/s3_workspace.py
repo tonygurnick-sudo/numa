@@ -33,6 +33,7 @@ logger = structlog.get_logger()
 
 # S3 configuration
 OUTPUTS_BUCKET = os.environ.get("OUTPUTS_BUCKET_NAME", "")
+EXT_API_DOC_BUCKET = os.environ.get("EXT_API_DOC_BUCKET_NAME", "")
 S3_PREFIX = "numa-chat/workspace"
 
 
@@ -1207,6 +1208,99 @@ def sync_agent_reference_files(
     )
 
     return downloaded_paths
+
+
+# ---------------------------------------------------------------------------
+# Ext API doc: sync docs for connected data connectors
+# ---------------------------------------------------------------------------
+
+# Tracks which connector slugs have already been synced in this container.
+# Since docs only change on deploy, we never need to re-download within the
+# same container lifetime.
+_ext_api_doc_synced_slugs: set[str] = set()
+
+
+def sync_ext_api_docs_for_connectors(connector_names: list[str]) -> list[str]:
+    """Download API reference docs for connected data connectors.
+
+    For each connector name, lists S3 objects under ``{name}/`` in the
+    ext-api-doc bucket and downloads all ``01-*.md`` files to
+    ``/workdir/api-docs/{name}/``.  Connectors with no matching folder
+    in the bucket are silently skipped.
+
+    Uses a per-container set to skip connectors that have already been
+    synced (docs only change on deploy, not between requests).
+
+    Args:
+        connector_names: List of connector name slugs from
+            ``connectedDataConnectors`` (e.g. ``["fergus", "netsuite"]``).
+
+    Returns:
+        Sorted list of connector names that had docs downloaded
+        (e.g. ``["fergus", "netsuite"]``).
+    """
+    bucket = EXT_API_DOC_BUCKET
+    if not bucket or not connector_names:
+        return sorted(_ext_api_doc_synced_slugs)
+
+    s3 = _get_s3_client()
+    newly_synced: list[str] = []
+
+    for name in connector_names:
+        # Already synced in this container — skip S3 entirely
+        if name in _ext_api_doc_synced_slugs:
+            continue
+
+        prefix = f"{name}/"
+        try:
+            paginator = s3.get_paginator("list_objects_v2")
+            downloaded = 0
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    parts = key.split("/")
+                    if len(parts) != 2:
+                        continue
+                    filename = parts[1]
+                    # Only 01-series files (LLM-optimized docs)
+                    if not filename.startswith("01") or not filename.endswith(".md"):
+                        continue
+                    local_dir = LOCAL_ROOT / "api-docs" / name
+                    local_dir.mkdir(parents=True, exist_ok=True)
+                    local_path = local_dir / filename
+                    if not local_path.exists():
+                        s3.download_file(bucket, key, str(local_path))
+                    downloaded += 1
+
+            if downloaded > 0:
+                _ext_api_doc_synced_slugs.add(name)
+                newly_synced.append(name)
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code", "")
+            if error_code in ("NoSuchBucket", "AccessDenied"):
+                logger.debug(
+                    "Ext API doc bucket not available",
+                    bucket=bucket,
+                    error_code=error_code,
+                )
+                return sorted(_ext_api_doc_synced_slugs)
+            # NoSuchKey or empty prefix — just skip this connector
+            logger.debug(
+                "No API docs found for connector",
+                connector=name,
+                error=str(exc),
+            )
+
+    if newly_synced:
+        logger.info(
+            "Synced ext-api-doc files for connectors",
+            _name="EXT_API_DOC_SYNCED",
+            phase="init",
+            newly_synced=newly_synced,
+            total_synced=sorted(_ext_api_doc_synced_slugs),
+        )
+
+    return sorted(_ext_api_doc_synced_slugs)
 
 
 # ---------------------------------------------------------------------------

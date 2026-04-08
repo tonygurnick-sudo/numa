@@ -71,6 +71,10 @@ export interface WorkspaceChatAgentConstructProps {
   dataBucketName?: string;
   /** Data bucket ARN (for IAM read permissions) */
   dataBucketArn?: string;
+  /** Ext API doc bucket name (for syncing API reference documentation to workspace) */
+  extApiDocBucketName?: string;
+  /** Ext API doc bucket ARN (for IAM read permissions) */
+  extApiDocBucketArn?: string;
   /** V2 app runs DynamoDB table name (for updating run status on completion) */
   v2AppRunsTableName?: string;
   /** V2 app runs DynamoDB table ARN (for IAM permissions) */
@@ -413,6 +417,17 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                 },
               ]
             : []),
+          // Ext API doc bucket read access (for syncing API reference docs to workspace)
+          ...(props.extApiDocBucketArn
+            ? [
+                {
+                  sid: 'S3ExtApiDocRead',
+                  effect: 'Allow' as const,
+                  actions: ['s3:GetObject', 's3:ListBucket'],
+                  resources: [props.extApiDocBucketArn, `${props.extApiDocBucketArn}/*`],
+                },
+              ]
+            : []),
           // DynamoDB UpdateItem for integration tool approval decisions
           ...(props.integrationsApprovalTableArn
             ? [
@@ -667,6 +682,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Data bucket for downloading attached files (My Files / Company Files)
         ...(props.dataBucketName && {
           DATA_BUCKET_NAME: props.dataBucketName,
+        }),
+        // Ext API doc bucket for syncing API reference documentation to workspace
+        ...(props.extApiDocBucketName && {
+          EXT_API_DOC_BUCKET_NAME: props.extApiDocBucketName,
         }),
         // Extract content Lambda for Nolia PDF vision extraction
         ...(props.extractContentLambdaArn && {
