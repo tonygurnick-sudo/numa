@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Form, Spinner, Table } from 'react-bootstrap';
-import { ChevronDown, ChevronRight, Copy, Shield, Trash2, UserCog } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, Shield, Trash2 } from 'lucide-react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { adminListAgents, deleteAgent, duplicateAgent } from '../../Services/AgentsService';
 import type { AdminAgentEntry } from '../../types/agents';
