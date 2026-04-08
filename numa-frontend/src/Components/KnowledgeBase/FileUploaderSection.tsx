@@ -95,6 +95,7 @@ export function FileUploaderSection({
           clearFiles={clearFiles}
           kb_id={kb_id}
           selectedFolder={selectedFolder}
+          enableFolderUpload
         />
       </Card.Body>
     </Card>
