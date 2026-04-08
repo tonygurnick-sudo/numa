@@ -276,7 +276,7 @@ def handler(
         return event
 
     # Get client metadata or use defaults
-    client_metadata = event["request"]["clientMetadata"] or {}
+    client_metadata = event["request"].get("clientMetadata") or {}
     mode = client_metadata.get("mode", "reset")
     domain = client_metadata.get(
         "domain", os.environ.get("DEFAULT_DOMAIN", "app.numa.ai")
