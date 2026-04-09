@@ -1,5 +1,10 @@
 {
   "jumpToLatest": "Jump to latest",
+  "cost": {
+    "perMessage": "${{cost}} · {{turns}} turns · {{inputTokens}} in / {{outputTokens}} out · {{durationSec}}s",
+    "runningTotal": "Total: ${{cost}} (dev)",
+    "devOnlyBadge": "dev only"
+  },
   "input": {
     "placeholder": "How can I help you today?",
     "placeholderV2": "Ask me anything...",
@@ -457,6 +462,11 @@
     "previewNotAvailable": "Preview not available for this file type"
   },
   "workspaceSettings": {
+    "developer": "Developer",
+    "showChatCost": "Show cost info (dev only)",
+    "showChatCostDescription": "Display per-message cost and a running total in this chat. Visible only with the developerMode client flag.",
+    "showCostOn": "On",
+    "showCostOff": "Off",
     "chatUploads": "Chat Uploads",
     "outputFiles": "Output Files",
     "refresh": "Refresh",

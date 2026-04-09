@@ -13,6 +13,7 @@ import { ChatInput } from '../Components/Chat/ChatInput';
 import { ExportConversationButton } from '../Components/Chat/ExportConversationButton';
 import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/Chat/ChatMessages';
+import { useShowChatCost } from '../hooks/useShowChatCost';
 import { NewChat } from '../Components/Chat/NewChat';
 import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
 import { ResultActions } from '../Components/ResultActions';
@@ -108,6 +109,19 @@ const NumaWorkspaceChatAgents = () => {
   const { t } = useTranslation('chat');
   // Basic UI state
   const [messages, setMessages] = useState([]);
+
+  // Dev-only running cost total for the current chat. Gated by the
+  // DEVELOPER_MODE client flag AND the user toggle. Never displayed otherwise.
+  const [showChatCost] = useShowChatCost();
+  const showCostTotal = getFlag('DEVELOPER_MODE') && showChatCost;
+  const chatCostTotal = useMemo(
+    () =>
+      (messages as Array<{ costUsd?: number }>).reduce(
+        (sum, m) => sum + (typeof m.costUsd === 'number' ? m.costUsd : 0),
+        0
+      ),
+    [messages]
+  );
   const [inputMessage, setInputMessage] = useState(() => sessionStorage.getItem('numa-chat-draft') || '');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -2505,7 +2519,9 @@ const NumaWorkspaceChatAgents = () => {
               <PageHeader
                 title={activeAgent?.title || t('page.title')}
                 subtitle={
-                  activeAgent?.description || t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })
+                  showCostTotal
+                    ? `${activeAgent?.description || t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })} · ${t('cost.runningTotal', { cost: chatCostTotal.toFixed(4) })}`
+                    : activeAgent?.description || t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })
                 }
                 icon={
                   activeAgent
