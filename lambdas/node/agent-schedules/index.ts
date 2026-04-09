@@ -288,9 +288,12 @@ const createSchedule = async (
 ): Promise<{ scheduleId: string } & ScheduleRecord> => {
   // Validate payload with Zod
   const validatedPayload = validateCreatePayload(payload);
+  const isEventTrigger = validatedPayload.triggerType === 'event';
 
-  // Enforce minimum scheduling interval
-  await validateCronInterval(validatedPayload.cronExpression);
+  // Enforce minimum scheduling interval (cron only)
+  if (!isEventTrigger && validatedPayload.cronExpression) {
+    await validateCronInterval(validatedPayload.cronExpression);
+  }
 
   const scheduleId = uuidv4();
   const now = Date.now();
@@ -300,8 +303,10 @@ const createSchedule = async (
     tenant_id: CLIENT_NAME,
     conversation_id: validatedPayload.conversationId,
     prompt_text: validatedPayload.promptText,
-    cron_expression: validatedPayload.cronExpression,
-    timezone: validatedPayload.timezone,
+    trigger_type: validatedPayload.triggerType ?? 'cron',
+    trigger: validatedPayload.trigger,
+    cron_expression: isEventTrigger ? undefined : validatedPayload.cronExpression,
+    timezone: isEventTrigger ? undefined : validatedPayload.timezone,
     status: 'active',
     event_type: validatedPayload.eventType ?? 'agent',
     agent_id: validatedPayload.agentId,
@@ -332,6 +337,11 @@ const createSchedule = async (
     })
   );
 
+  // Event-triggered schedules skip EventBridge Scheduler — they fire from connector-event-dispatcher
+  if (isEventTrigger) {
+    return { scheduleId, ...validatedRecord };
+  }
+
   try {
     await scheduler.send(
       new CreateScheduleCommand({
@@ -340,8 +350,8 @@ const createSchedule = async (
         Description:
           validatedPayload.label ||
           `Scheduled agent run for ${validatedPayload.agentTitle || validatedPayload.agentId}`,
-        ScheduleExpression: validatedPayload.cronExpression,
-        ScheduleExpressionTimezone: validatedPayload.timezone,
+        ScheduleExpression: validatedPayload.cronExpression!,
+        ScheduleExpressionTimezone: validatedPayload.timezone!,
         FlexibleTimeWindow: { Mode: 'OFF' },
         Target: {
           Arn: RUNNER_ARN,
@@ -398,10 +408,13 @@ const updateSchedule = async (
     throw new Error('Schedule not found');
   }
 
+  const isEventTrigger = (validatedPayload.triggerType ?? record.trigger_type ?? 'cron') === 'event';
+
   // Enforce minimum scheduling interval when cron expression changes or schedule is reactivated
-  const cronToValidate =
-    validatedPayload.cronExpression ??
-    (validatedPayload.status === 'active' && record.status === 'paused' ? record.cron_expression : undefined);
+  const cronToValidate = isEventTrigger
+    ? undefined
+    : (validatedPayload.cronExpression ??
+      (validatedPayload.status === 'active' && record.status === 'paused' ? record.cron_expression : undefined));
   if (cronToValidate) {
     await validateCronInterval(cronToValidate);
   }
@@ -479,6 +492,25 @@ const updateSchedule = async (
     expressionValues[':notification_emails'] = validatedPayload.notificationEmails;
     setParts.push('#notification_emails = :notification_emails');
   }
+  // Persist trigger field updates for event triggers
+  if (validatedPayload.trigger !== undefined) {
+    expressionNames['#trigger'] = 'trigger';
+    expressionValues[':trigger'] = validatedPayload.trigger;
+    setParts.push('#trigger = :trigger');
+  }
+  // Persist trigger_type changes and clean up stale fields
+  if (validatedPayload.triggerType !== undefined) {
+    expressionNames['#trigger_type'] = 'trigger_type';
+    expressionValues[':trigger_type'] = validatedPayload.triggerType;
+    setParts.push('#trigger_type = :trigger_type');
+    // Clean up fields that don't apply to the new trigger type
+    if (validatedPayload.triggerType === 'event') {
+      removeParts.push('cron_expression', 'timezone');
+    } else if (validatedPayload.triggerType === 'cron') {
+      expressionNames['#trigger_field'] = 'trigger';
+      removeParts.push('#trigger_field');
+    }
+  }
 
   const updatedRecord = await dynamo.send(
     new UpdateCommand({
@@ -503,6 +535,11 @@ const updateSchedule = async (
   const hasScheduleChanges = Boolean(
     validatedPayload.cronExpression || validatedPayload.timezone || validatedPayload.label
   );
+
+  if (isEventTrigger) {
+    // Event-triggered schedules have no EventBridge entry — nothing to sync
+    return updatedRecord.Attributes;
+  }
 
   if (updatedStatus === 'paused' || updatedStatus === 'deleted') {
     try {
@@ -578,16 +615,18 @@ const deleteSchedule = async (auth: AuthContext, scheduleId: string): Promise<vo
     throw new Error('Schedule not found');
   }
 
-  await scheduler
-    .send(
-      new DeleteScheduleCommand({
-        Name: record.schedule_name,
-        GroupName: SCHEDULE_GROUP,
-      })
-    )
-    .catch((err) => {
-      console.warn('Failed to delete scheduler entry', err);
-    });
+  if ((record.trigger_type ?? 'cron') !== 'event') {
+    await scheduler
+      .send(
+        new DeleteScheduleCommand({
+          Name: record.schedule_name,
+          GroupName: SCHEDULE_GROUP,
+        })
+      )
+      .catch((err) => {
+        console.warn('Failed to delete scheduler entry', err);
+      });
+  }
 
   await dynamo.send(
     new UpdateCommand({

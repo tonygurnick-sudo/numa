@@ -114,6 +114,7 @@
     "steps": {
       "trigger": "Trigger",
       "schedule": "Schedule",
+      "event": "Event",
       "agent": "Agent",
       "prompt": "Details",
       "review": "Review"
@@ -126,6 +127,15 @@
       "cancel": "Cancel"
     }
   },
+  "list": {
+    "triggerEmail": "On new email",
+    "filterCount_one": "{{count}} filter",
+    "filterCount_other": "{{count}} filters",
+    "filterAnd": "AND",
+    "filterOr": "OR",
+    "showMore": "Show all ({{count}})",
+    "showLess": "Show less"
+  },
   "trigger": {
     "title": "When should this run?",
     "subtitle": "Choose what triggers your automation.",
@@ -135,8 +145,45 @@
     },
     "event": {
       "title": "When something happens",
-      "description": "Run your agent when an event occurs, like a new email, a file upload, or a CRM update.",
-      "comingSoon": "Coming soon"
+      "description": "Run your agent when an event occurs, like a new email arrives.",
+      "comingSoon": "Coming soon",
+      "connectorsDisabled": "Event triggers require Data Connectors to be enabled for your account.",
+      "gmailNotConnected": "Connect your Gmail account in Data Connectors to use email triggers.",
+      "checkingGmail": "Checking Gmail connection...",
+      "builder": {
+        "title": "Set up the trigger",
+        "subtitle": "Choose what events should fire this automation, and optionally filter them.",
+        "source": "Source",
+        "sourceGmail": "Gmail",
+        "sourceLocked": "More sources coming soon",
+        "matchLogic": "Match",
+        "matchAll": "All filters",
+        "matchAny": "Any filter",
+        "filters": "Filters",
+        "filterRequired": "Add at least one filter so this automation only runs on relevant emails.",
+        "caseInsensitive": "case-insensitive",
+        "addFilter": "Add filter",
+        "valuePlaceholder": "value",
+        "includeContext": "Include email content in the agent prompt",
+        "includeContextHelp": "When enabled, the full email (subject, sender, body, attachments) is automatically passed to the agent so it can read and act on it. Turn off if you only want to pass specific fields via variables.",
+        "yes": "Yes",
+        "no": "No",
+        "variablesTitle": "Available in your prompt:",
+        "variablesHint": "use variables like",
+        "fields": {
+          "sender": "Sender",
+          "subject": "Subject",
+          "to": "To",
+          "body": "Body",
+          "has_attachment": "Has attachment"
+        },
+        "ops": {
+          "contains": "contains",
+          "equals": "equals",
+          "not_contains": "does not contain",
+          "matches": "matches regex"
+        }
+      }
     }
   },
   "schedule": {
@@ -184,6 +231,7 @@
     "subtitle": "Check everything looks right before saving.",
     "triggerType": "Trigger type",
     "scheduleLabel": "Schedule",
+    "eventLabel": "Event trigger",
     "agentLabel": "Agent",
     "promptLabel": "Instructions",
     "nameLabel": "Name",
@@ -219,6 +267,11 @@
       "noInstructions": "No additional instructions",
       "frequency": "Frequency",
       "scheduleDetails": "Schedule Details",
+      "triggerDetails": "Trigger Details",
+      "source": "Source",
+      "filters": "Filters",
+      "filterLogic": "Filter logic",
+      "emailContext": "Email context",
       "emailNotifications": "Email notifications",
       "emailEnabled": "Enabled",
       "emailDisabled": "Disabled"

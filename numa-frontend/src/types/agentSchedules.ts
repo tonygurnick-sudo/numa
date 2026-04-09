@@ -9,12 +9,25 @@ export type ScheduledRunConfig = {
   createAgentEnabled?: boolean;
 };
 
+export type EmailFilterField = 'sender' | 'subject' | 'to' | 'body' | 'has_attachment';
+export type EmailFilterOp = 'contains' | 'equals' | 'not_contains' | 'matches';
+export type EmailFilter = { field: EmailFilterField; op: EmailFilterOp; value: string };
+export type EventTrigger = {
+  source: 'gmail';
+  event: 'message.received';
+  filters: EmailFilter[];
+  filter_logic?: 'all' | 'any';
+  include_email_context?: boolean;
+};
+
 export type AgentSchedule = {
   scheduleId: string;
   conversationId: string;
   promptText: string;
-  cronExpression: string;
-  timezone: string;
+  triggerType?: 'cron' | 'event';
+  trigger?: EventTrigger;
+  cronExpression?: string;
+  timezone?: string;
   status: 'active' | 'paused' | 'deleted';
   eventType?: 'agent' | 'application' | 'data_sync';
   label?: string;
@@ -55,8 +68,10 @@ export type CreateAgentSchedulePayload = {
   agentTitle?: string;
   conversationId: string;
   promptText: string;
-  cronExpression: string;
-  timezone: string;
+  triggerType?: 'cron' | 'event';
+  trigger?: EventTrigger;
+  cronExpression?: string;
+  timezone?: string;
   label?: string;
   runConfig?: ScheduledRunConfig;
   agentSnapshot?: AgentScheduleSnapshot;
@@ -68,6 +83,8 @@ export type CreateAgentSchedulePayload = {
 
 export type UpdateAgentSchedulePayload = {
   promptText?: string;
+  triggerType?: 'cron' | 'event';
+  trigger?: EventTrigger;
   cronExpression?: string;
   timezone?: string;
   label?: string;

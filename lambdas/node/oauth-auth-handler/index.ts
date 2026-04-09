@@ -21,6 +21,8 @@ import {
   CreateSecretCommand,
   DeleteSecretCommand,
 } from '@aws-sdk/client-secrets-manager';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { randomBytes, createHash } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
 
@@ -85,6 +87,10 @@ interface PKCESession {
 // ---------------------------------------------------------------------------
 
 const secretsManager = withPRM(SecretsManagerClient, {});
+const ddbDoc = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}), {
+  marshallOptions: { removeUndefinedValues: true },
+});
+
 // ---------------------------------------------------------------------------
 // Environment
 // ---------------------------------------------------------------------------
@@ -92,6 +98,8 @@ const secretsManager = withPRM(SecretsManagerClient, {});
 const CLIENT_NAME = process.env.CLIENT_NAME || 'demo';
 const VAULT_SECRETS_PREFIX = process.env.VAULT_SECRETS_PREFIX || `${CLIENT_NAME}/vault`;
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'https://localhost:3000';
+const DATA_CONNECTORS_TABLE_NAME = process.env.DATA_CONNECTORS_TABLE_NAME || '';
+const DATA_CONNECTORS_SETTINGS_TABLE_NAME = process.env.DATA_CONNECTORS_SETTINGS_TABLE_NAME || '';
 
 // ---------------------------------------------------------------------------
 // OAuth platform mapping — connectors sharing a single OAuth client
@@ -620,6 +628,98 @@ const deletePKCESession = async (sessionId: string): Promise<void> => {
 };
 
 // ---------------------------------------------------------------------------
+// Gmail Watch Registration (post-connect)
+// ---------------------------------------------------------------------------
+
+/**
+ * Register Gmail push notifications after a user connects Gmail OAuth.
+ * Calls users.watch() and stores the connected email + watch expiry on the
+ * data-connectors DynamoDB record. Failures are logged but never block the
+ * OAuth flow.
+ */
+const registerGmailWatch = async (accessToken: string, userSub: string): Promise<void> => {
+  if (!DATA_CONNECTORS_TABLE_NAME || !DATA_CONNECTORS_SETTINGS_TABLE_NAME) {
+    console.warn(
+      'Gmail watch skipped: DATA_CONNECTORS_TABLE_NAME or DATA_CONNECTORS_SETTINGS_TABLE_NAME not configured'
+    );
+    return;
+  }
+
+  try {
+    // 0. Look up the Pub/Sub topic from the global connector settings table
+    const settingsResult = await ddbDoc.send(
+      new GetCommand({
+        TableName: DATA_CONNECTORS_SETTINGS_TABLE_NAME,
+        Key: { connector: 'google-cloud' },
+      })
+    );
+    const pubsubTopic = settingsResult.Item?.pubsubTopic as string | undefined;
+    if (!pubsubTopic) {
+      console.warn('Gmail watch skipped: no pubsubTopic found in connector settings (run GCP setup wizard first)');
+      return;
+    }
+
+    // 1. Fetch user email from Gmail profile
+    const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    let userEmail = '';
+    if (profileRes.ok) {
+      const profile = (await profileRes.json()) as { emailAddress?: string };
+      userEmail = profile.emailAddress || '';
+    } else {
+      console.warn('Failed to fetch Gmail profile:', profileRes.status);
+    }
+
+    // 2. Call users.watch() to register push notifications
+    const watchRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        topicName: pubsubTopic,
+        labelIds: ['INBOX'],
+      }),
+    });
+
+    if (!watchRes.ok) {
+      const errorText = await watchRes.text();
+      console.error(`Gmail watch registration failed (${watchRes.status}):`, errorText);
+      return;
+    }
+
+    const watchData = (await watchRes.json()) as { historyId?: string; expiration?: string };
+    console.log('Gmail watch registered', { historyId: watchData.historyId, expiration: watchData.expiration });
+
+    // 3. Store connected_email + watch_expiry on the data-connectors record
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    const safeSub = userSub.replace(/[^a-zA-Z0-9_-]/g, '');
+
+    await ddbDoc.send(
+      new UpdateCommand({
+        TableName: DATA_CONNECTORS_TABLE_NAME,
+        Key: { user_id: safeSub, connector_id: 'gmail' },
+        UpdateExpression:
+          'SET #s = :status, connected_email = :email, watch_expiry = :expiry, watch_registered_at = :now',
+        ExpressionAttributeNames: { '#s': 'status' },
+        ExpressionAttributeValues: {
+          ':status': 'connected',
+          ':email': userEmail,
+          ':expiry': Date.now() + sevenDaysMs,
+          ':now': new Date().toISOString(),
+        },
+      })
+    );
+
+    console.log(`Gmail watch registered for user ${safeSub} (${userEmail})`);
+  } catch (error) {
+    console.error('Gmail watch registration error (non-fatal):', error);
+  }
+};
+
+// ---------------------------------------------------------------------------
 // OAuth Provider API Calls
 // ---------------------------------------------------------------------------
 
@@ -858,7 +958,9 @@ const handleAuthorize = async (provider: OAuthProvider, auth: AuthContext, query
       }
     }
   }
-  authUrl.searchParams.set('scope', scopeOverride || effectiveScopes);
+  const finalScopes = scopeOverride || effectiveScopes;
+  console.log('OAuth authorize', { provider, scopeOverride, effectiveScopes, finalScopes, connector });
+  authUrl.searchParams.set('scope', finalScopes);
   authUrl.searchParams.set('state', `${state}:${sessionId}`);
   authUrl.searchParams.set('code_challenge', codeChallenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
@@ -923,6 +1025,13 @@ const handleCallback = async (provider: OAuthProvider, code: string, state: stri
     return errorResponse(500, 'Failed to exchange authorization code for tokens');
   }
 
+  console.log('OAuth callback tokens', {
+    provider,
+    scope: tokens.scope,
+    hasAccessToken: !!tokens.access_token,
+    hasRefreshToken: !!tokens.refresh_token,
+  });
+
   // Delete the PKCE session now that we have exchanged the code — single use only
   await deletePKCESession(sessionId);
 
@@ -947,11 +1056,36 @@ const handleCallback = async (provider: OAuthProvider, code: string, state: stri
     return errorResponse(500, 'Failed to store OAuth tokens');
   }
 
+  // Register Gmail push notifications after successful OAuth connect
+  if (tokenProvider === 'gmail') {
+    await registerGmailWatch(tokens.access_token, session.user_sub);
+  }
+
+  // Fetch user email if we have the right scope
+  let userEmail: string | undefined;
+  if (tokens.scope?.includes('userinfo.email') || tokens.scope?.includes('cloud-platform')) {
+    try {
+      const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+      if (profileRes.ok) {
+        const profile = (await profileRes.json()) as { email?: string };
+        userEmail = profile.email;
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
   return jsonResponse(200, {
     success: true,
     message: `Successfully connected ${provider}`,
     provider,
     connected_at: vaultSecret.connected_at,
+    // Return access token and granted scopes so callers (e.g. GCP setup wizard) can use them
+    access_token: tokens.access_token,
+    scope: tokens.scope,
+    email: userEmail,
   });
 };
 

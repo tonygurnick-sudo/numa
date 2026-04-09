@@ -7,6 +7,8 @@ import { useBranding } from '../../Providers/BrandingContext';
 import { WorkflowConnector } from './WorkflowConnector';
 import { WorkflowStepTrigger } from './WorkflowStepTrigger';
 import { WorkflowStepSchedule } from './WorkflowStepSchedule';
+import { EmailFilterBuilder } from './EmailFilterBuilder';
+import type { EventTrigger } from '../../types/agentSchedules';
 import { WorkflowStepAgent } from './WorkflowStepAgent';
 import { WorkflowStepPrompt } from './WorkflowStepPrompt';
 import { WorkflowStepReview } from './WorkflowStepReview';
@@ -27,8 +29,10 @@ type AutomationWorkflowBuilderProps = {
     agentId: string;
     agentTitle: string;
     promptText: string;
-    cronExpression: string;
-    timezone: string;
+    triggerType: 'cron' | 'event';
+    trigger?: EventTrigger;
+    cronExpression?: string;
+    timezone?: string;
     label: string;
     maxRuns: number;
     emailNotifications: boolean;
@@ -174,6 +178,12 @@ export const AutomationWorkflowBuilder = ({
 
   // Trigger
   const [triggerType, setTriggerType] = useState<TriggerType>('schedule');
+  const [eventTrigger, setEventTrigger] = useState<EventTrigger>({
+    source: 'gmail',
+    event: 'message.received',
+    filters: [],
+    filter_logic: 'all',
+  });
 
   // Schedule
   const [frequency, setFrequency] = useState<FrequencyType>('daily');
@@ -223,6 +233,10 @@ export const AutomationWorkflowBuilder = ({
   // Initialize from editing automation
   useEffect(() => {
     if (editingAutomation) {
+      if (editingAutomation.triggerType === 'event') {
+        setTriggerType('event');
+        if (editingAutomation.trigger) setEventTrigger(editingAutomation.trigger);
+      }
       setName(editingAutomation.label || '');
       setPrompt(editingAutomation.promptText || '');
       setMaxRuns(editingAutomation.maxRuns || 0);
@@ -239,7 +253,7 @@ export const AutomationWorkflowBuilder = ({
       setTimezone(editingAutomation.timezone || getDefaultTimezone());
       setSelectedAgentId(editingAutomation.agentId);
 
-      // Parse cron
+      // Parse cron (no-op for event triggers)
       const parsed = parseCronExpression(editingAutomation.cronExpression || 'cron(0 13 * * ? *)');
       setFrequency(parsed.frequency);
       setWeekDays(parsed.weekDays.length ? parsed.weekDays : ['monday']);
@@ -332,20 +346,24 @@ export const AutomationWorkflowBuilder = ({
   const stepLabels = useMemo(
     () => [
       t('builder.steps.trigger'),
-      t('builder.steps.schedule'),
+      triggerType === 'event' ? t('builder.steps.event') : t('builder.steps.schedule'),
       t('builder.steps.agent'),
       t('builder.steps.prompt'),
       t('builder.steps.review'),
     ],
-    [t]
+    [t, triggerType]
   );
 
   const canProceed = useCallback(
     (step: number): boolean => {
       switch (step) {
         case 0:
-          return triggerType === 'schedule';
+          return triggerType === 'schedule' || triggerType === 'event';
         case 1:
+          if (triggerType === 'event') {
+            // Require at least one filter, and every filter must have a non-empty value.
+            return eventTrigger.filters.length > 0 && eventTrigger.filters.every((f) => f.value.trim().length > 0);
+          }
           return !!cronExpression;
         case 2:
           return !!selectedAgentId;
@@ -355,7 +373,7 @@ export const AutomationWorkflowBuilder = ({
           return true;
       }
     },
-    [triggerType, cronExpression, selectedAgentId, name]
+    [triggerType, cronExpression, selectedAgentId, name, eventTrigger]
   );
 
   const handleNext = useCallback(() => {
@@ -387,8 +405,10 @@ export const AutomationWorkflowBuilder = ({
         agentId: selectedAgentId,
         agentTitle: selectedAgent?.title || '',
         promptText: prompt,
-        cronExpression,
-        timezone,
+        triggerType: triggerType === 'event' ? 'event' : 'cron',
+        trigger: triggerType === 'event' ? eventTrigger : undefined,
+        cronExpression: triggerType === 'event' ? undefined : cronExpression,
+        timezone: triggerType === 'event' ? undefined : timezone,
         label: name.trim(),
         maxRuns,
         emailNotifications,
@@ -414,6 +434,8 @@ export const AutomationWorkflowBuilder = ({
     selectedAgent,
     name,
     prompt,
+    triggerType,
+    eventTrigger,
     cronExpression,
     timezone,
     maxRuns,
@@ -429,6 +451,9 @@ export const AutomationWorkflowBuilder = ({
       case 0:
         return <WorkflowStepTrigger selectedTrigger={triggerType} onSelect={setTriggerType} />;
       case 1:
+        if (triggerType === 'event') {
+          return <EmailFilterBuilder trigger={eventTrigger} onChange={setEventTrigger} />;
+        }
         return (
           <WorkflowStepSchedule
             frequency={frequency}
@@ -500,6 +525,7 @@ export const AutomationWorkflowBuilder = ({
           <WorkflowStepReview
             triggerType={triggerType}
             cronExpression={cronExpression}
+            eventTrigger={triggerType === 'event' ? eventTrigger : undefined}
             agent={selectedAgent}
             name={name}
             prompt={prompt}

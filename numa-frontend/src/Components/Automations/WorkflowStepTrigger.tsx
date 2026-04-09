@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Clock, Zap } from 'lucide-react';
-import { Badge } from 'react-bootstrap';
+import { Alert } from 'react-bootstrap';
+import { getFlag } from '../../utils/featureFlags';
 
 type TriggerType = 'schedule' | 'event';
 
@@ -11,6 +12,7 @@ type WorkflowStepTriggerProps = {
 
 export const WorkflowStepTrigger = ({ selectedTrigger, onSelect }: WorkflowStepTriggerProps) => {
   const { t } = useTranslation('automations');
+  const connectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
 
   return (
     <div className="workflow-step">
@@ -35,20 +37,30 @@ export const WorkflowStepTrigger = ({ selectedTrigger, onSelect }: WorkflowStepT
           </div>
         </div>
 
-        {/* When something happens — coming soon */}
-        <div className="workflow-trigger-card workflow-trigger-card--disabled" aria-disabled="true">
-          <Badge bg="secondary" className="workflow-trigger-card__badge">
-            {t('trigger.event.comingSoon')}
-          </Badge>
-          <div className="workflow-trigger-card__icon workflow-trigger-card__icon--disabled">
+        {/* When something happens — event-based */}
+        <div
+          className={`workflow-trigger-card ${selectedTrigger === 'event' ? 'workflow-trigger-card--selected' : ''} ${!connectorsEnabled ? 'workflow-trigger-card--disabled' : ''}`}
+          onClick={() => connectorsEnabled && onSelect('event')}
+          role="button"
+          tabIndex={connectorsEnabled ? 0 : -1}
+          onKeyDown={(e) => e.key === 'Enter' && connectorsEnabled && onSelect('event')}
+          aria-disabled={!connectorsEnabled}
+        >
+          <div className="workflow-trigger-card__icon">
             <Zap size={32} />
           </div>
           <div className="workflow-trigger-card__content">
-            <h6 className="mb-1 text-muted">{t('trigger.event.title')}</h6>
+            <h6 className="mb-1">{t('trigger.event.title')}</h6>
             <p className="text-muted small mb-0">{t('trigger.event.description')}</p>
           </div>
         </div>
       </div>
+
+      {!connectorsEnabled && (
+        <Alert variant="light" className="mt-3 small border">
+          {t('trigger.event.connectorsDisabled')}
+        </Alert>
+      )}
     </div>
   );
 };

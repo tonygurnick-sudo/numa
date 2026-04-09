@@ -12,6 +12,8 @@ import {
   Clock,
   Bot,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Pause,
   CheckCircle2,
   XCircle,
@@ -58,6 +60,7 @@ export const AutomationsPage = () => {
   const [deleteTarget, setDeleteTarget] = useState<AgentSchedule | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [agentsLoading, setAgentsLoading] = useState(true);
+  const [expandedFilters, setExpandedFilters] = useState<Set<string>>(new Set());
 
   const agentMap = useMemo(() => {
     const map = new Map<string, AgentSummary>();
@@ -172,8 +175,10 @@ export const AutomationsPage = () => {
       agentId: string;
       agentTitle: string;
       promptText: string;
-      cronExpression: string;
-      timezone: string;
+      triggerType: 'cron' | 'event';
+      trigger?: import('../types/agentSchedules').EventTrigger;
+      cronExpression?: string;
+      timezone?: string;
       label: string;
       maxRuns: number;
       emailNotifications: boolean;
@@ -192,6 +197,8 @@ export const AutomationsPage = () => {
         agentTitle: payload.agentTitle,
         conversationId,
         promptText: payload.promptText,
+        triggerType: payload.triggerType,
+        trigger: payload.trigger,
         cronExpression: payload.cronExpression,
         timezone: payload.timezone,
         label: payload.label,
@@ -451,10 +458,71 @@ export const AutomationsPage = () => {
                         <AgentAvatar agent={agent ?? undefined} size={16} />
                         {agent?.title || automation.agentTitle || '\u2014'}
                       </span>
-                      <span className="automation-list-row__chip automation-list-row__chip--schedule">
-                        <Clock size={12} />
-                        {describeCronExpression(automation.cronExpression) || '\u2014'}
-                      </span>
+                      {automation.triggerType === 'event' ? (
+                        <>
+                          <span className="automation-list-row__chip automation-list-row__chip--schedule">
+                            <Zap size={12} />
+                            {t('list.triggerEmail')}
+                          </span>
+                          {automation.trigger?.filters &&
+                            automation.trigger.filters.length > 0 &&
+                            (() => {
+                              const filters = automation.trigger!.filters;
+                              const isExpanded = expandedFilters.has(automation.scheduleId);
+                              const MAX_VISIBLE = 3;
+                              const visible = isExpanded ? filters : filters.slice(0, MAX_VISIBLE);
+                              const hasMore = filters.length > MAX_VISIBLE;
+                              const logic =
+                                automation.trigger!.filter_logic === 'any' ? t('list.filterOr') : t('list.filterAnd');
+
+                              return (
+                                <>
+                                  {visible.map((f, i) => (
+                                    <span
+                                      key={i}
+                                      className="automation-list-row__chip automation-list-row__chip--filter"
+                                    >
+                                      {i > 0 && <span className="text-muted small me-1">{logic}</span>}
+                                      {t(`trigger.event.builder.fields.${f.field}`)}{' '}
+                                      {t(`trigger.event.builder.ops.${f.op}`)}{' '}
+                                      {f.field !== 'has_attachment' && <>&ldquo;{f.value}&rdquo;</>}
+                                    </span>
+                                  ))}
+                                  {hasMore && (
+                                    <span
+                                      className="automation-list-row__chip automation-list-row__chip--toggle"
+                                      role="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedFilters((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(automation.scheduleId)) next.delete(automation.scheduleId);
+                                          else next.add(automation.scheduleId);
+                                          return next;
+                                        });
+                                      }}
+                                    >
+                                      {isExpanded ? (
+                                        <>
+                                          <ChevronUp size={12} /> {t('list.showLess')}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ChevronDown size={12} /> {t('list.showMore', { count: filters.length })}
+                                        </>
+                                      )}
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
+                        </>
+                      ) : (
+                        <span className="automation-list-row__chip automation-list-row__chip--schedule">
+                          <Clock size={12} />
+                          {describeCronExpression(automation.cronExpression || '') || '\u2014'}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="automation-list-row__right">

@@ -1187,8 +1187,8 @@ export const getNextRunTimes = (cronExpression: string, timezone: string = 'UTC'
  * 2. It's a one-off cron expression whose date has passed
  */
 export const isScheduleCompleted = (schedule: {
-  cronExpression: string;
-  timezone: string;
+  cronExpression?: string;
+  timezone?: string;
   status: string;
   maxRuns?: number;
   totalRuns?: number;
@@ -1199,6 +1199,9 @@ export const isScheduleCompleted = (schedule: {
   if (schedule.maxRuns && schedule.totalRuns && schedule.totalRuns >= schedule.maxRuns) {
     return true;
   }
+
+  // Event-triggered schedules have no cron — never "complete" by date
+  if (!schedule.cronExpression || !schedule.timezone) return false;
 
   // Check if it's a one-off schedule with a past date
   const nextRuns = getNextRunTimes(schedule.cronExpression, schedule.timezone, 1);

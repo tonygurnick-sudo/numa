@@ -258,6 +258,26 @@ type RunnerEvent = {
   type?: string;
   scheduleId?: string;
   runId?: string;
+  event?: {
+    source?: string;
+    email?: {
+      id?: string;
+      from?: string;
+      to?: string;
+      subject?: string;
+      body?: string;
+      has_attachment?: boolean;
+      received_at?: string;
+    };
+  };
+};
+
+const interpolateEmailVars = (template: string, email: NonNullable<RunnerEvent['event']>['email']): string => {
+  if (!email) return template;
+  return template.replace(/\{\{\s*email\.(\w+)\s*\}\}/g, (_, key: string) => {
+    const value = (email as Record<string, unknown>)[key];
+    return value == null ? '' : String(value);
+  });
 };
 
 type RunScheduleResponse = {
@@ -547,9 +567,32 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
       return;
     }
 
+    let interpolatedPrompt = schedule.prompt_text;
+    if (event.type === 'EVENT' && event.event?.email) {
+      interpolatedPrompt = interpolateEmailVars(schedule.prompt_text, event.event.email);
+
+      // Auto-inject the email content as context unless explicitly disabled on the trigger
+      const trigger = (schedule as ScheduleRecord & { trigger?: { include_email_context?: boolean } }).trigger;
+      const includeContext = trigger?.include_email_context !== false;
+      if (includeContext) {
+        const e = event.event.email;
+        const contextBlock =
+          `<email_context>\n` +
+          `Message ID: ${e.id ?? ''}\n` +
+          `From: ${e.from ?? ''}\n` +
+          `To: ${e.to ?? ''}\n` +
+          `Subject: ${e.subject ?? ''}\n` +
+          `Received: ${e.received_at ?? ''}\n` +
+          `Has attachments: ${e.has_attachment ? 'yes' : 'no'}\n\n` +
+          `${e.body ?? ''}\n` +
+          `</email_context>\n\n`;
+        interpolatedPrompt = contextBlock + interpolatedPrompt;
+      }
+    }
+
     await executeRun({
       schedule,
-      prompt: schedule.prompt_text,
+      prompt: interpolatedPrompt,
       runConfig: schedule.run_config,
       agentSnapshot: schedule.agent_snapshot,
       auth: { sub: schedule.user_id, email: undefined, name: undefined, groups: [] },

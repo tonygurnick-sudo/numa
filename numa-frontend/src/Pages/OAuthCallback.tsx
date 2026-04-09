@@ -108,6 +108,30 @@ const OAuthCallback: React.FC = () => {
         const data = await response.json();
 
         if (data.success) {
+          // Detect popup mode: window.opener may be null when COOP severs the relationship
+          // (Google sets COOP), but window.name persists and is set to 'google-signin' by the
+          // GCP setup wizard's window.open call.
+          const isPopup = window.opener !== null || window.name === 'google-signin';
+          if (isPopup) {
+            const popupMessage = { type: 'oauth-callback' as const, success: true as const, ...data };
+            if (window.opener) {
+              try {
+                window.opener.postMessage(popupMessage, window.location.origin);
+              } catch {
+                /* fall through to BroadcastChannel */
+              }
+            }
+            try {
+              const bc = new BroadcastChannel('numa-oauth');
+              bc.postMessage(popupMessage);
+              bc.close();
+            } catch {
+              /* BroadcastChannel unsupported */
+            }
+            window.close();
+            return;
+          }
+
           setState({
             status: 'success',
             message: t('oauthCallback.connectionSuccessful', { provider }),
@@ -123,6 +147,33 @@ const OAuthCallback: React.FC = () => {
         }
       } catch (error) {
         console.error('OAuth callback processing failed:', error);
+
+        // Same popup detection as the success path
+        const isPopup = window.opener !== null || window.name === 'google-signin';
+        if (isPopup) {
+          const errorMessage = {
+            type: 'oauth-callback' as const,
+            success: false as const,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
+          if (window.opener) {
+            try {
+              window.opener.postMessage(errorMessage, window.location.origin);
+            } catch {
+              /* fall through */
+            }
+          }
+          try {
+            const bc = new BroadcastChannel('numa-oauth');
+            bc.postMessage(errorMessage);
+            bc.close();
+          } catch {
+            /* unsupported */
+          }
+          window.close();
+          return;
+        }
+
         setState({
           status: 'error',
           message: error instanceof Error ? error.message : t('oauthCallback.unknownError'),

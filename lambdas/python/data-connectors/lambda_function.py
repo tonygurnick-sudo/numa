@@ -7,7 +7,18 @@ import binascii
 import json
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Dict, Optional
+
+
+def _json_default(value: Any) -> Any:
+    """JSON encoder fallback — DynamoDB returns numeric attrs as Decimal."""
+    if isinstance(value, Decimal):
+        return int(value) if value % 1 == 0 else float(value)
+    raise TypeError(
+        f"Object of type {value.__class__.__name__} is not JSON serializable"
+    )
+
 
 import httpx
 import structlog
@@ -55,7 +66,7 @@ def _response(
     return {
         "statusCode": status,
         "headers": headers,
-        "body": json.dumps(body),
+        "body": json.dumps(body, default=_json_default),
     }
 
 

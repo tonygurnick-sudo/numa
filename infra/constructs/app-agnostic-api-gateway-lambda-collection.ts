@@ -2,6 +2,10 @@ import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
+import { CloudwatchEventRule } from '@cdktf/provider-aws/lib/cloudwatch-event-rule';
+import { CloudwatchEventTarget } from '@cdktf/provider-aws/lib/cloudwatch-event-target';
+import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
+import { SchedulerSchedule } from '@cdktf/provider-aws/lib/scheduler-schedule';
 import { SchedulerScheduleGroup } from '@cdktf/provider-aws/lib/scheduler-schedule-group';
 import { ServerlessapplicationrepositoryCloudformationStack } from '@cdktf/provider-aws/lib/serverlessapplicationrepository-cloudformation-stack';
 import { Construct } from 'constructs';
@@ -956,7 +960,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     const gmailWatchManagerEnv = {
       CLIENT_NAME: props.clientName,
       DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
-      PUBSUB_TOPIC: `projects/numa-${props.clientName}/topics/numa-connector-events`,
+      DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
     } as Record<string, string>;
 
     const gmailWatchManagerPolicy = [
@@ -967,12 +971,17 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       },
       {
         effect: 'Allow',
+        actions: ['dynamodb:GetItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSettingsTableName}`],
+      },
+      {
+        effect: 'Allow',
         actions: ['secretsmanager:GetSecretValue'],
         resources: ['*'],
       },
     ];
 
-    this.addLambdaFunction(this, 'gmail-watch-manager', {
+    const gmailWatchManagerLambda = this.addLambdaFunction(this, 'gmail-watch-manager', {
       addAuthorizer: false,
       lambdaDirectory: 'node/gmail-watch-manager',
       runtime: 'nodejs22.x',
@@ -981,18 +990,59 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       additionalPolicyStatements: gmailWatchManagerPolicy,
     });
 
+    // Gmail Watch Manager — EventBridge Scheduler (renew every 6 days)
+    const watchScheduleAssumePolicy = new DataAwsIamPolicyDocument(this, 'watch-schedule-assume-policy', {
+      statement: [
+        {
+          principals: [{ identifiers: ['scheduler.amazonaws.com'], type: 'Service' }],
+          actions: ['sts:AssumeRole'],
+        },
+      ],
+    });
+
+    const watchScheduleRole = new IamRole(this, 'watch-schedule-role', {
+      name: `${props.clientName}-gmail-watch-schedule`,
+      assumeRolePolicy: watchScheduleAssumePolicy.json,
+    });
+
+    new IamRolePolicy(this, 'watch-schedule-role-policy', {
+      role: watchScheduleRole.name,
+      policy: JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Action: 'lambda:InvokeFunction',
+            Resource: gmailWatchManagerLambda.arn,
+          },
+        ],
+      }),
+    });
+
+    new SchedulerSchedule(this, 'gmail-watch-schedule', {
+      name: `${props.clientName}-gmail-watch-renewal`,
+      groupName: 'default',
+      scheduleExpression: 'rate(6 days)',
+      flexibleTimeWindow: { mode: 'OFF' },
+      target: {
+        arn: gmailWatchManagerLambda.arn,
+        roleArn: watchScheduleRole.arn,
+      },
+    });
+
     // Google Cloud Setup (admin-only, automates GCP project provisioning)
     const googleCloudSetupEnv = {
       CLIENT_NAME: props.clientName,
-      DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
+      VAULT_SECRETS_PREFIX: `${props.clientName}/vault`,
+      DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
       WEBHOOK_URL: `https://${props.domainName}/api/webhooks/connector-events/${props.cloudfrontSharedSecret}`,
     } as Record<string, string>;
 
     const googleCloudSetupPolicy = [
       {
         effect: 'Allow',
-        actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
-        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSettingsTableName}`],
       },
       {
         effect: 'Allow',
@@ -1005,6 +1055,16 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         resources: ['*'],
       },
     ];
+
+    this.addLambdaFunction(this, 'google-cloud-setup-list-projects', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'POST', path: 'admin/google-cloud/list-projects' },
+    });
 
     this.addLambdaFunction(this, 'google-cloud-setup-validate', {
       addAuthorizer: true,
@@ -1044,6 +1104,16 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: googleCloudSetupEnv,
       additionalPolicyStatements: googleCloudSetupPolicy,
       route: { verb: 'POST', path: 'admin/google-cloud/setup-pubsub' },
+    });
+
+    this.addLambdaFunction(this, 'google-cloud-setup-client-id', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'GET', path: 'admin/google-cloud/client-id' },
     });
 
     this.addLambdaFunction(this, 'google-cloud-setup-status', {
@@ -1282,6 +1352,69 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
             ]
           : []),
       ],
+    });
+
+    // Connector Event Dispatcher — routes connector events to user automation triggers
+    const connectorEventDispatcherLambda = this.addLambdaFunction(this, 'connector-event-dispatcher', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/connector-event-dispatcher',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      timeout: 60,
+      environment: {
+        CLIENT_NAME: props.clientName,
+        DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
+        AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
+        AGENT_SCHEDULE_RUNNER_FUNCTION_NAME: this.agentScheduleRunnerLambda.functionName,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Scan', 'dynamodb:UpdateItem'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query'],
+          resources: [
+            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
+            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/*`,
+          ],
+        },
+        {
+          effect: 'Allow',
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [`arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['lambda:InvokeFunction'],
+          resources: [this.agentScheduleRunnerLambda.arn],
+        },
+      ],
+    });
+
+    const connectorEventDispatcherRule = new CloudwatchEventRule(this, 'connector-event-dispatcher-rule', {
+      name: `${props.clientName}-connector-event-dispatch`,
+      eventBusName: props.connectorEventBusName,
+      eventPattern: JSON.stringify({
+        source: [{ prefix: 'numa.connector.' }],
+        'detail-type': ['connector.event'],
+      }),
+    });
+
+    new CloudwatchEventTarget(this, 'connector-event-dispatcher-target', {
+      rule: connectorEventDispatcherRule.name,
+      eventBusName: props.connectorEventBusName,
+      arn: connectorEventDispatcherLambda.arn,
+    });
+
+    new LambdaPermission(this, 'connector-event-dispatcher-eb-permission', {
+      statementId: 'AllowEventBridgeInvoke',
+      action: 'lambda:InvokeFunction',
+      functionName: connectorEventDispatcherLambda.functionName,
+      principal: 'events.amazonaws.com',
+      sourceArn: connectorEventDispatcherRule.arn,
     });
 
     const schedulerAssumePolicy = new DataAwsIamPolicyDocument(this, 'agent-schedule-runner-assume-policy', {

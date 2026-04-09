@@ -1,17 +1,13 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import {
-  SecretsManagerClient,
-  PutSecretValueCommand,
-  CreateSecretCommand,
-  DescribeSecretCommand,
-} from '@aws-sdk/client-secrets-manager';
+import { SecretsManagerClient, GetSecretValueCommand, PutSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { withPRM } from '../../../lib/prm-node/prm';
 
 const CLIENT_NAME = process.env.CLIENT_NAME as string;
 const WEBHOOK_URL = process.env.WEBHOOK_URL as string;
-const DATA_CONNECTORS_TABLE_NAME = process.env.DATA_CONNECTORS_TABLE_NAME as string;
+const DATA_CONNECTORS_SETTINGS_TABLE_NAME = process.env.DATA_CONNECTORS_SETTINGS_TABLE_NAME as string;
+const VAULT_SECRETS_PREFIX = process.env.VAULT_SECRETS_PREFIX || `${CLIENT_NAME}/vault`;
 
 const ddbDoc = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}));
 const secretsManager = withPRM(SecretsManagerClient, {});
@@ -67,6 +63,63 @@ function parseBody(event: APIGatewayProxyEventV2): Record<string, unknown> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Consolidated vault helpers
+// ---------------------------------------------------------------------------
+
+interface VaultEntry {
+  id?: string;
+  name?: string;
+  fields: Record<string, string>;
+  metadata?: Record<string, string>;
+}
+
+interface VaultData {
+  secrets?: Record<string, VaultEntry>;
+  _compressed?: boolean;
+  _data?: string;
+}
+
+async function getConsolidatedVault(): Promise<VaultData | null> {
+  const vaultSecretName = `${VAULT_SECRETS_PREFIX}/company`;
+  try {
+    const result = await secretsManager.send(new GetSecretValueCommand({ SecretId: vaultSecretName }));
+    if (!result.SecretString) return null;
+
+    let vaultData = JSON.parse(result.SecretString) as VaultData;
+
+    if (vaultData._compressed && vaultData._data) {
+      const { gunzipSync } = await import('zlib');
+      const decompressed = gunzipSync(Buffer.from(vaultData._data, 'base64')).toString('utf-8');
+      vaultData = JSON.parse(decompressed) as VaultData;
+    }
+
+    return vaultData;
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'ResourceNotFoundException') {
+      return null;
+    }
+    console.error('Failed to read consolidated vault:', err);
+    return null;
+  }
+}
+
+async function putConsolidatedVault(vaultData: VaultData): Promise<boolean> {
+  const vaultSecretName = `${VAULT_SECRETS_PREFIX}/company`;
+  try {
+    await secretsManager.send(
+      new PutSecretValueCommand({
+        SecretId: vaultSecretName,
+        SecretString: JSON.stringify(vaultData),
+      })
+    );
+    return true;
+  } catch (err) {
+    console.error('Failed to write consolidated vault:', err);
+    return false;
+  }
+}
+
 async function googleFetch(url: string, googleToken: string, options: RequestInit = {}): Promise<Response> {
   return fetch(url, {
     ...options,
@@ -76,6 +129,98 @@ async function googleFetch(url: string, googleToken: string, options: RequestIni
       ...((options.headers as Record<string, string>) || {}),
     },
   });
+}
+
+/**
+ * Parse a Google API error response body into a structured object.
+ * Returns a user-friendly errorCode so the frontend can show targeted guidance.
+ */
+function parseGoogleError(status: number, body: string): { message: string; errorCode: string; details?: string } {
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: { message?: string; status?: string; errors?: Array<{ reason?: string }> };
+    };
+    const msg = parsed.error?.message || body;
+    const reason = parsed.error?.errors?.[0]?.reason || '';
+
+    if (msg.includes('has not been used in project') || msg.includes('is disabled')) {
+      // Extract the API name from the message if possible
+      const apiMatch = msg.match(/(\S+\.googleapis\.com)/);
+      return {
+        errorCode: 'API_NOT_ENABLED',
+        message: apiMatch
+          ? `The ${apiMatch[1]} API is not enabled in your Google Cloud project.`
+          : 'A required API is not enabled in your Google Cloud project.',
+        details: msg,
+      };
+    }
+
+    if (
+      status === 403 &&
+      (reason === 'forbidden' || reason === 'insufficientPermissions' || msg.includes('does not have'))
+    ) {
+      return {
+        errorCode: 'PERMISSION_DENIED',
+        message: 'Your Google account does not have permission to perform this action.',
+        details: msg,
+      };
+    }
+
+    if (status === 401 || msg.includes('Invalid Credentials') || msg.includes('token')) {
+      return {
+        errorCode: 'AUTH_EXPIRED',
+        message: 'Your Google sign-in has expired.',
+        details: msg,
+      };
+    }
+
+    return { errorCode: 'UNKNOWN', message: msg, details: body };
+  } catch {
+    return { errorCode: 'UNKNOWN', message: body, details: body };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Route: POST /api/admin/google-cloud/list-projects
+// ---------------------------------------------------------------------------
+
+async function listProjects(event: APIGatewayProxyEventV2) {
+  const body = parseBody(event);
+  const googleToken = body.googleToken as string;
+
+  if (!googleToken) {
+    return fail(400, 'googleToken is required');
+  }
+
+  try {
+    const res = await googleFetch(
+      'https://cloudresourcemanager.googleapis.com/v1/projects?filter=lifecycleState%3AACTIVE&pageSize=100',
+      googleToken
+    );
+
+    if (!res.ok) {
+      const errorBody = await res.text();
+      console.error('list-projects error', res.status, errorBody);
+      const parsed = parseGoogleError(res.status, errorBody);
+      return {
+        statusCode: res.status,
+        headers: HEADERS,
+        body: JSON.stringify({ error: parsed.message, errorCode: parsed.errorCode, details: parsed.details }),
+      };
+    }
+
+    const data = (await res.json()) as { projects?: Array<Record<string, unknown>> };
+    const projects = (data.projects || []).map((p) => ({
+      projectId: p.projectId,
+      name: p.name,
+      projectNumber: p.projectNumber,
+    }));
+
+    return ok({ projects });
+  } catch (err) {
+    console.error('list-projects exception', err);
+    return fail(500, 'Failed to list GCP projects');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +284,13 @@ async function enableApis(event: APIGatewayProxyEventV2) {
       } else {
         const errorBody = await res.text();
         console.error(`enable-api ${api} error`, res.status, errorBody);
-        results.push({ api, status: 'error', error: errorBody });
+        const parsed = parseGoogleError(res.status, errorBody);
+        results.push({
+          api,
+          status: 'error',
+          error: parsed.message,
+          errorCode: parsed.errorCode,
+        } as (typeof results)[number]);
       }
     } catch (err) {
       console.error(`enable-api ${api} exception`, err);
@@ -209,46 +360,43 @@ async function createOAuthClient(event: APIGatewayProxyEventV2) {
   const clientId = (oauthClient.client_id as string) || (oauthClient.name as string);
   const clientSecret = (oauthClient.client_secret as string) || '';
 
-  // Step 3: Store credentials in Secrets Manager
-  const secretName = `${CLIENT_NAME}/oauth-client/google`;
-  const secretValue = JSON.stringify({
-    client_id: clientId,
-    client_secret: clientSecret,
-    project_id: projectId,
-    created_at: new Date().toISOString(),
-  });
+  // Step 3: Store credentials in the consolidated company vault
+  const vault = (await getConsolidatedVault()) || { secrets: {} };
+  if (!vault.secrets) vault.secrets = {};
 
-  try {
-    // Try to update existing secret first
-    await secretsManager.send(new DescribeSecretCommand({ SecretId: secretName }));
-    await secretsManager.send(
-      new PutSecretValueCommand({
-        SecretId: secretName,
-        SecretString: secretValue,
-      })
-    );
-  } catch {
-    // Secret doesn't exist yet, create it
-    try {
-      await secretsManager.send(
-        new CreateSecretCommand({
-          Name: secretName,
-          SecretString: secretValue,
-          Description: `Google OAuth client credentials for ${CLIENT_NAME}`,
-        })
-      );
-    } catch (createErr) {
-      console.error('secrets-manager create error', createErr);
-      return fail(500, 'Failed to store OAuth credentials in Secrets Manager');
-    }
+  const now = new Date().toISOString();
+  vault.secrets['oauth-client-google'] = {
+    id: vault.secrets['oauth-client-google']?.id || crypto.randomUUID(),
+    name: 'Google',
+    fields: {
+      client_id: clientId,
+      client_secret: clientSecret,
+      project_id: projectId,
+      auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
+      token_url: 'https://oauth2.googleapis.com/token',
+      scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.readonly',
+      extra_auth_params: '{"access_type":"offline","prompt":"consent"}',
+    },
+    metadata: {
+      category: 'OAuth Credentials',
+      type: 'oauth_client',
+      description: 'Google OAuth client for Gmail and Drive connectors',
+      created_at: vault.secrets['oauth-client-google']?.metadata?.created_at || now,
+      updated_at: now,
+    },
+  };
+
+  const stored = await putConsolidatedVault(vault);
+  if (!stored) {
+    return fail(500, 'Failed to store OAuth credentials in vault');
   }
 
-  // Step 4: Update connector status in DynamoDB
-  if (DATA_CONNECTORS_TABLE_NAME) {
+  // Step 4: Update connector status in DynamoDB (global settings table)
+  if (DATA_CONNECTORS_SETTINGS_TABLE_NAME) {
     try {
       await ddbDoc.send(
         new UpdateCommand({
-          TableName: DATA_CONNECTORS_TABLE_NAME,
+          TableName: DATA_CONNECTORS_SETTINGS_TABLE_NAME,
           Key: { connector: 'google-cloud' },
           UpdateExpression: 'SET oauthConfigured = :v, updatedAt = :t',
           ExpressionAttributeValues: {
@@ -294,7 +442,12 @@ async function setupPubSub(event: APIGatewayProxyEventV2) {
   if (!topicRes.ok && topicRes.status !== 409) {
     const errorBody = await topicRes.text();
     console.error('create-topic error', topicRes.status, errorBody);
-    return fail(topicRes.status, `Failed to create Pub/Sub topic: ${errorBody}`);
+    const parsed = parseGoogleError(topicRes.status, errorBody);
+    return {
+      statusCode: topicRes.status,
+      headers: HEADERS,
+      body: JSON.stringify({ error: parsed.message, errorCode: parsed.errorCode, details: parsed.details }),
+    };
   }
 
   // Step 2: Create push subscription pointing to the webhook URL
@@ -319,7 +472,12 @@ async function setupPubSub(event: APIGatewayProxyEventV2) {
   if (!subRes.ok && subRes.status !== 409) {
     const errorBody = await subRes.text();
     console.error('create-subscription error', subRes.status, errorBody);
-    return fail(subRes.status, `Failed to create Pub/Sub subscription: ${errorBody}`);
+    const parsed = parseGoogleError(subRes.status, errorBody);
+    return {
+      statusCode: subRes.status,
+      headers: HEADERS,
+      body: JSON.stringify({ error: parsed.message, errorCode: parsed.errorCode, details: parsed.details }),
+    };
   }
 
   // Step 3: Grant Gmail permission to publish to the topic
@@ -346,12 +504,12 @@ async function setupPubSub(event: APIGatewayProxyEventV2) {
     // Non-fatal - topic and subscription are created, IAM can be retried
   }
 
-  // Step 4: Update connector status in DynamoDB
-  if (DATA_CONNECTORS_TABLE_NAME) {
+  // Step 4: Update connector status in DynamoDB (global settings table)
+  if (DATA_CONNECTORS_SETTINGS_TABLE_NAME) {
     try {
       await ddbDoc.send(
         new UpdateCommand({
-          TableName: DATA_CONNECTORS_TABLE_NAME,
+          TableName: DATA_CONNECTORS_SETTINGS_TABLE_NAME,
           Key: { connector: 'google-cloud' },
           UpdateExpression: 'SET pubsubConfigured = :v, pubsubTopic = :t, pubsubSubscription = :s, updatedAt = :ts',
           ExpressionAttributeValues: {
@@ -412,12 +570,11 @@ async function getStatus(event: APIGatewayProxyEventV2) {
     }
   }
 
-  // Check OAuth client configuration (check Secrets Manager)
+  // Check OAuth client configuration (check consolidated vault)
   let oauthConfigured = false;
   try {
-    const secretName = `${CLIENT_NAME}/oauth-client/google`;
-    await secretsManager.send(new DescribeSecretCommand({ SecretId: secretName }));
-    oauthConfigured = true;
+    const vault = await getConsolidatedVault();
+    oauthConfigured = !!vault?.secrets?.['oauth-client-google']?.fields?.client_id;
   } catch {
     oauthConfigured = false;
   }
@@ -437,6 +594,22 @@ async function getStatus(event: APIGatewayProxyEventV2) {
     oauthConfigured,
     pubsubConfigured,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Route: GET /api/admin/google-cloud/client-id
+// ---------------------------------------------------------------------------
+
+async function getClientId() {
+  try {
+    const vault = await getConsolidatedVault();
+    const entry = vault?.secrets?.['oauth-client-google'];
+    const clientId = entry?.fields?.client_id || null;
+    return ok({ clientId });
+  } catch (err) {
+    console.error('get-client-id error', err);
+    return fail(500, 'Failed to read OAuth client configuration');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -461,6 +634,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return fail(403, 'Forbidden: admin access required');
     }
 
+    // POST /api/admin/google-cloud/list-projects
+    if (method === 'POST' && /\/google-cloud\/list-projects\/?$/.test(path)) {
+      return listProjects(event);
+    }
+
     // POST /api/admin/google-cloud/validate-project
     if (method === 'POST' && /\/google-cloud\/validate-project\/?$/.test(path)) {
       return validateProject(event);
@@ -479,6 +657,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // POST /api/admin/google-cloud/setup-pubsub
     if (method === 'POST' && /\/google-cloud\/setup-pubsub\/?$/.test(path)) {
       return setupPubSub(event);
+    }
+
+    // GET /api/admin/google-cloud/client-id
+    if (method === 'GET' && /\/google-cloud\/client-id\/?$/.test(path)) {
+      return getClientId();
     }
 
     // GET /api/admin/google-cloud/status
