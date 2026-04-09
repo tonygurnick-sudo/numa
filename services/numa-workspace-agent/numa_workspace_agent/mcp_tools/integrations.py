@@ -142,10 +142,12 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
         # Handle approval decisions
         status = extract_status(result)
         if status == "denied":
+            deny_reason = result.get("deny_reason", "")
+            msg = f"Action denied by user: {action_key}"
+            if deny_reason:
+                msg += f'. The user said: "{deny_reason}"'
             return {
-                "content": [
-                    {"type": "text", "text": f"Action denied by user: {action_key}"}
-                ],
+                "content": [{"type": "text", "text": msg}],
             }
         if status == "timeout":
             return {
