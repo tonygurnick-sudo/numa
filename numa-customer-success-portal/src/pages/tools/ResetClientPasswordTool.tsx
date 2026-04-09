@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Form, Button, Alert } from 'react-bootstrap';
+import { Card, Form, Button, Alert, Row, Col } from 'react-bootstrap';
 import { z } from 'zod';
 import {
   CognitoIdentityProviderClient,
@@ -105,75 +105,79 @@ export default function ResetClientPasswordTool() {
   };
 
   return (
-    <Card className="border-0 shadow-sm">
-      <Card.Body className="p-4">
-        <div className="d-flex align-items-center mb-4">
-          <Key size={24} className="text-primary me-2" />
-          <h2 className="h4 mb-0">Reset Client Password</h2>
-        </div>
+    <Row className="justify-content-center">
+      <Col xs={12} md={10} lg={8} xl={6}>
+        <Card className="border-0 shadow-sm">
+          <Card.Body className="p-4">
+            <div className="d-flex align-items-center mb-4">
+              <Key size={24} className="text-primary me-2" />
+              <h2 className="h4 mb-0">Reset Client Password</h2>
+            </div>
 
-        <p className="text-muted mb-4">
-          Administratively forcibly set a user's password within a client environment without requiring email
-          verification.
-        </p>
+            <p className="text-muted mb-4">
+              Administratively forcibly set a user's password within a client environment without requiring email
+              verification.
+            </p>
 
-        {error && <Alert variant="danger">{error}</Alert>}
-        {success && <Alert variant="success">{success}</Alert>}
+            {error && <Alert variant="danger">{error}</Alert>}
+            {success && <Alert variant="success">{success}</Alert>}
 
-        <Form onSubmit={onSubmit}>
-          <Form.Group className="mb-3">
-            <Form.Label>Client Name</Form.Label>
-            <Form.Control
-              type="text"
-              placeholder="e.g. arcanum-demo"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              isInvalid={!!validationErrors.clientName}
-            />
-            <Form.Control.Feedback type="invalid">{validationErrors.clientName}</Form.Control.Feedback>
-          </Form.Group>
+            <Form onSubmit={onSubmit}>
+              <Form.Group className="mb-3">
+                <Form.Label>Client Name</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="e.g. arcanum-demo"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  isInvalid={!!validationErrors.clientName}
+                />
+                <Form.Control.Feedback type="invalid">{validationErrors.clientName}</Form.Control.Feedback>
+              </Form.Group>
 
-          <Form.Group className="mb-3">
-            <Form.Label>Username / Email</Form.Label>
-            <Form.Control
-              type="text"
-              placeholder="e.g. user@client.com"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              isInvalid={!!validationErrors.username}
-            />
-            <Form.Control.Feedback type="invalid">{validationErrors.username}</Form.Control.Feedback>
-          </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Username / Email</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="e.g. user@client.com"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  isInvalid={!!validationErrors.username}
+                />
+                <Form.Control.Feedback type="invalid">{validationErrors.username}</Form.Control.Feedback>
+              </Form.Group>
 
-          <Form.Group className="mb-3">
-            <Form.Label>New Password</Form.Label>
-            <Form.Control
-              type="password"
-              placeholder="Ensure standard Cognito complexity"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              isInvalid={!!validationErrors.password}
-            />
-            <Form.Control.Feedback type="invalid">{validationErrors.password}</Form.Control.Feedback>
-          </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>New Password</Form.Label>
+                <Form.Control
+                  type="password"
+                  placeholder="Ensure standard Cognito complexity"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  isInvalid={!!validationErrors.password}
+                />
+                <Form.Control.Feedback type="invalid">{validationErrors.password}</Form.Control.Feedback>
+              </Form.Group>
 
-          <Form.Group className="mb-4">
-            <Form.Check
-              type="checkbox"
-              id="isTemporaryCheckbox"
-              label="Set as Temporary Password (Forces user to change password on next login)"
-              checked={isTemporary}
-              onChange={(e) => setIsTemporary(e.target.checked)}
-            />
-          </Form.Group>
+              <Form.Group className="mb-4">
+                <Form.Check
+                  type="checkbox"
+                  id="isTemporaryCheckbox"
+                  label="Set as Temporary Password (Forces user to change password on next login)"
+                  checked={isTemporary}
+                  onChange={(e) => setIsTemporary(e.target.checked)}
+                />
+              </Form.Group>
 
-          <div className="d-flex justify-content-end">
-            <Button type="submit" variant="primary" disabled={isSubmitting || !clientName}>
-              {isSubmitting ? 'Resetting...' : 'Reset Password'}
-            </Button>
-          </div>
-        </Form>
-      </Card.Body>
-    </Card>
+              <div className="d-flex justify-content-end">
+                <Button type="submit" variant="primary" disabled={isSubmitting || !clientName}>
+                  {isSubmitting ? 'Resetting...' : 'Reset Password'}
+                </Button>
+              </div>
+            </Form>
+          </Card.Body>
+        </Card>
+      </Col>
+    </Row>
   );
 }
