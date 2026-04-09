@@ -167,23 +167,87 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
     return _ok(json.dumps(result, indent=2))
 
 
-async def _handle_web_search(params: dict[str, Any]) -> dict[str, Any]:
-    """Search the web — ports web_search.py main."""
-    query = params.get("query")
-    user_intent = params.get("user_intent")
-    if not query or not user_intent:
-        return _err("Both 'query' and 'user_intent' are required for web_search.")
+FETCH_URL_FILE_THRESHOLD = 5000  # chars -- save to file if content exceeds this
+FETCH_URL_PREVIEW_LENGTH = 500  # chars -- inline preview when saving to file
+FETCH_URL_OUTPUT_DIR = Path("/workdir/outputs/web_fetch")
 
-    max_results = max(1, min(int(params.get("max_results", 3)), 10))
 
-    result = invoke_workspace_tool(
-        "web_search",
-        {
-            "query": query,
-            "user_intent": user_intent,
-            "max_results": max_results,
-        },
+def _save_fetch_url_to_file(result: dict[str, Any]) -> dict[str, Any]:
+    """Save large fetch_url content to a file, return path + preview."""
+    content = result.get("content", "")
+    url = result.get("url", "unknown")
+    title = result.get("title", "")
+
+    if len(content) <= FETCH_URL_FILE_THRESHOLD:
+        return result
+
+    # Sanitize URL into a safe filename
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    safe_name = re.sub(r"[^\w\-.]", "_", f"{parsed.netloc}{parsed.path}".strip("/"))
+    if not safe_name:
+        safe_name = "page"
+    safe_name = safe_name[:100]  # cap length
+
+    FETCH_URL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = FETCH_URL_OUTPUT_DIR / f"{safe_name}.md"
+
+    file_path.write_text(content, encoding="utf-8")
+    logger.info(
+        "Saved fetch_url content to file", path=str(file_path), size=len(content)
     )
+
+    preview = content[:FETCH_URL_PREVIEW_LENGTH].rstrip()
+    return {
+        "url": url,
+        "title": title,
+        "status": "success",
+        "content_type": result.get("content_type", "text/markdown"),
+        "file_path": str(file_path),
+        "content_length": len(content),
+        "preview": f"{preview}...",
+        "hint": f"Full content saved to {file_path}. Read the file for complete page content.",
+    }
+
+
+async def _handle_web_search(params: dict[str, Any]) -> dict[str, Any]:
+    """Search the web or fetch a specific URL.
+
+    Supports two operations:
+    - search (default): Returns URLs with titles and snippets
+    - fetch_url: Fetches a URL with JS rendering, returns markdown content
+    """
+    operation = params.get("operation", "search")
+
+    if operation == "fetch_url":
+        url = params.get("url")
+        if not url:
+            return _err("'url' is required for fetch_url operation.")
+        tool_params: dict[str, Any] = {
+            "operation": "fetch_url",
+            "url": url,
+            "force_playwright": params.get("force_playwright", True),
+        }
+    else:
+        query = params.get("query")
+        if not query:
+            return _err("'query' is required for web_search.")
+        tool_params = {
+            "query": query,
+            "max_results": max(1, min(int(params.get("max_results", 5)), 10)),
+        }
+        # Pass through optional legacy params
+        if params.get("user_intent"):
+            tool_params["user_intent"] = params["user_intent"]
+        if params.get("summarise"):
+            tool_params["summarise"] = params["summarise"]
+
+    result = invoke_workspace_tool("web_search", tool_params)
+
+    # For fetch_url, save large content to file to avoid bloating context
+    if operation == "fetch_url" and result.get("status") == "success":
+        result = _save_fetch_url_to_file(result)
 
     return _ok(json.dumps(result, indent=2))
 

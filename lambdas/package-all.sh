@@ -24,7 +24,10 @@ done
 # Handle Python Lambda packages (existing logic)
 # can't double quote so disable the shellcheck
 # shellcheck disable=SC2086
-PYTHON_DIRS=$(find ${SCRIPT_DIRECTORY}/python -maxdepth 2 -type f -name pyproject.toml -print0 | xargs -0 realpath | xargs dirname)
+# Container-packaged Lambdas (have their own Dockerfile, not ZIP-packaged)
+CONTAINER_LAMBDA_EXCLUDES="browser-lambda"
+
+PYTHON_DIRS=$(find ${SCRIPT_DIRECTORY}/python -maxdepth 2 -type f -name pyproject.toml -print0 | xargs -0 realpath | xargs dirname | grep -v -E "(${CONTAINER_LAMBDA_EXCLUDES})")
 
 # This fails immediately when there is an error and running jobs aren't cleaned
 # up, so all build directories might still be there. `now` could be changed to

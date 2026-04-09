@@ -67,6 +67,10 @@ export interface WorkspaceChatToolsConstructProps {
   emailSenderLambdaArn?: string;
   /** Optional ffmpeg Lambda layer ARN for audio/video transcription (parallel pipeline) */
   ffmpegLayerArn?: string;
+  /** Crawl-page Lambda ARN for web search fetch_url operation */
+  browserLambdaArn?: string;
+  /** Crawl-page Lambda name for web search fetch_url operation */
+  browserLambdaName?: string;
 }
 
 /**
@@ -228,6 +232,16 @@ export class WorkspaceChatToolsConstruct extends Construct {
       });
     }
 
+    // Lambda invoke permission for browser-lambda (web search fetch_url operation)
+    if (props.browserLambdaArn) {
+      policyStatements.push({
+        sid: 'InvokeBrowserLambda',
+        effect: 'Allow',
+        actions: ['lambda:InvokeFunction'],
+        resources: [props.browserLambdaArn],
+      });
+    }
+
     // DynamoDB permission for integrations approval table (human-in-the-loop)
     if (props.integrationsApprovalTableArn) {
       policyStatements.push({
@@ -355,6 +369,8 @@ export class WorkspaceChatToolsConstruct extends Construct {
         DOCUMENT_CONVERTER_LAMBDA_NAME: props.documentConverterLambdaArn
           ? (props.documentConverterLambdaArn.split(':').pop() ?? '')
           : '',
+        // Crawl-page Lambda for web search fetch_url operation (JS rendering)
+        BROWSER_LAMBDA_NAME: props.browserLambdaName ?? '',
         // Agent management tables
         WORKSPACE_AGENTS_TABLE: `numa-${props.clientName}-agents`,
         USER_AGENTS_TABLE: `numa-${props.clientName}-user-agents`,

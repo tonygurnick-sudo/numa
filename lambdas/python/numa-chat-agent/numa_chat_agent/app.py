@@ -1594,6 +1594,8 @@ def _get_web_crawler_stats(kb_id: str) -> List[Dict[str, Any]]:
                         "domain": domain,
                         "sourceUrl": url,
                         "isSeedUrl": True,
+                        "crawlDepth": int(seed.get("crawlDepth", 1)),
+                        "limitToPath": bool(seed.get("limitToPath", True)),
                     }
                 )
 
@@ -2059,8 +2061,12 @@ def _list_kb_files(
                     continue
 
                 # Skip files not supported by Bedrock (S3 is backup, browser only sees indexable files)
+                # Web crawler files use URL-encoded keys with no extension -- always markdown content
                 is_folder = key_val.endswith("/")
-                if not is_folder:
+                is_web_crawler = (
+                    "web-crawler/" in key_val or "scraped-content/" in key_val
+                )
+                if not is_folder and not is_web_crawler:
                     ext = os.path.splitext(key_val)[1].lower()
                     if ext not in BEDROCK_SUPPORTED_EXTENSIONS:
                         continue

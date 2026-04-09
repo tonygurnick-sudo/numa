@@ -259,6 +259,8 @@ See `documentation/email-sending/` for the full guide: architecture, security mo
 
 **Lambdas (Node):** Package one: `cd lambdas && bash package-node-lambda.sh node/<name>`. Or `yarn bundle` in the lambda directory.
 
+**Lambdas (Container):** For Lambdas that need system-level deps (e.g. Playwright/Chromium). Each has its own `Dockerfile` in the lambda directory. Build context is the repo root so shared libs (`lib/prm`) are accessible. Package: `cd lambdas && bash package-container-lambda.sh python/<name>`. Output: `infra/assets/artifacts/<name>/image.tar`. Deployed as ARM64 container images via ECR (skopeo push). Uses `NumaLambda` with `packageType: 'Image'` and `imageUri`. First example: `browser-lambda` (Playwright + Chromium for JS-rendered page fetching).
+
 **Services:** See Services section above for Docker packaging.
 
 **Infra (CDKTF):** Build frontend + package lambdas first, then `yarn cdktf deploy --auto-approve <stack>`.

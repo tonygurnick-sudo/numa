@@ -183,9 +183,13 @@
     "table": {
       "seedUrl": "Seed URL",
       "pages": "Pages Crawled",
+      "depth": "Depth",
       "lastCrawled": "Last Crawled",
-      "status": "Status"
+      "status": "Status",
+      "actions": "Actions"
     },
+    "recrawl": "Re-crawl",
+    "recrawlTooltip": "Re-run this crawl with the same settings",
     "unknown": "Unknown"
   },
   "settings": {

@@ -1075,6 +1075,7 @@ export class CoreNumaInfra extends Construct {
       logGroup: webCrawlerLogGroup,
       region: props.region,
       provisionQResources: props.provisionQResources,
+      deployerRoleArn: props.deployerRoleArn!,
     });
 
     // We'll create the Cognito IDP construct after determining Q Business configuration
@@ -2071,4 +2072,6 @@ export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
    */
   qBusinessProvider?: AwsProvider;
   knowledgeBase?: KnowledgeBase;
+  /** Deployer role ARN for chain assume during ECR image push (container Lambdas) */
+  deployerRoleArn?: string;
 };

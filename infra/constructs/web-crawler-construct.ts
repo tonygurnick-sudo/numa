@@ -2,6 +2,8 @@ import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { Construct } from 'constructs';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
+import { EcrRepository } from '@cdktf/provider-aws/lib/ecr-repository';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
@@ -9,7 +11,9 @@ import { SfnStateMachine } from '@cdktf/provider-aws/lib/sfn-state-machine';
 import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { NumaLambda } from './numa-lambda';
-import { TerraformOutput } from 'cdktf';
+import { Fn, TerraformOutput } from 'cdktf';
+import { Resource as NullResource } from '@cdktf/provider-null/lib/resource';
+import path from 'node:path';
 
 export interface WebCrawlerConstructProps {
   clientName: string;
@@ -19,13 +23,15 @@ export interface WebCrawlerConstructProps {
   region: string;
   /** Whether Q Business resources are provisioned (affects metadata sidecar creation) */
   provisionQResources?: boolean;
+  /** Deployer role ARN for chain assume during ECR push */
+  deployerRoleArn: string;
 }
 
 export class WebCrawlerConstruct extends Construct {
   public readonly crawlUrlsTable: DynamodbTable;
   public readonly stateMachine: SfnStateMachine;
   public readonly enqueueUrlLambda: LambdaFunction;
-  public readonly crawlPageLambda: LambdaFunction;
+  public readonly browserLambda: LambdaFunction;
   public readonly markUrlStatusLambda: LambdaFunction;
   public readonly restartCrawlerLambda: LambdaFunction;
 
@@ -115,11 +121,87 @@ export class WebCrawlerConstruct extends Construct {
     });
     this.enqueueUrlLambda = enqueueUrlLambda.lambda;
 
-    const crawlPageLambda = new NumaLambda(this, 'crawl-page', {
+    // --- browser-lambda: container image Lambda with Playwright + Chromium ---
+
+    const browserLambdaEcr = new EcrRepository(this, 'browser-lambda-ecr', {
+      name: `numa-${props.clientName}-browser-lambda`,
+      imageScanningConfiguration: { scanOnPush: true },
+      forceDelete: true,
+    });
+
+    const callerIdentity = new DataAwsCallerIdentity(this, 'caller-identity', {});
+
+    const imageTarPath = path.resolve(import.meta.dirname, '..', 'assets', 'artifacts', 'browser-lambda', 'image.tar');
+
+    const imageTarHash = Fn.filesha256(imageTarPath);
+    const imageTag = Fn.substr(imageTarHash, 0, 12);
+
+    const pushImage = new NullResource(this, 'push-browser-lambda-image', {
+      triggers: {
+        image_tag: imageTag,
+      },
+      provisioners: [
+        {
+          type: 'local-exec',
+          command: `
+set -e
+
+# Chain assume: deployer role -> client role
+echo "Assuming deployer role..."
+DEPLOYER_CREDS=$(aws sts assume-role \\
+  --role-arn ${props.deployerRoleArn} \\
+  --role-session-name skopeo-deployer \\
+  --query 'Credentials' \\
+  --output json)
+
+export AWS_ACCESS_KEY_ID=$(echo $DEPLOYER_CREDS | jq -r .AccessKeyId)
+export AWS_SECRET_ACCESS_KEY=$(echo $DEPLOYER_CREDS | jq -r .SecretAccessKey)
+export AWS_SESSION_TOKEN=$(echo $DEPLOYER_CREDS | jq -r .SessionToken)
+
+echo "Assuming client role..."
+CLIENT_CREDS=$(aws sts assume-role \\
+  --role-arn arn:aws:iam::${callerIdentity.accountId}:role/ArcanumAIAccess \\
+  --role-session-name skopeo-push \\
+  --query 'Credentials' \\
+  --output json)
+
+export AWS_ACCESS_KEY_ID=$(echo $CLIENT_CREDS | jq -r .AccessKeyId)
+export AWS_SECRET_ACCESS_KEY=$(echo $CLIENT_CREDS | jq -r .SecretAccessKey)
+export AWS_SESSION_TOKEN=$(echo $CLIENT_CREDS | jq -r .SessionToken)
+
+# Login to client ECR
+aws ecr get-login-password --region ${props.region} | \\
+  skopeo login --authfile /tmp/skopeo-auth.json --username AWS --password-stdin ${callerIdentity.accountId}.dkr.ecr.${props.region}.amazonaws.com
+
+# Delete all existing images to keep ECR lean
+echo "Cleaning up old images from ECR..."
+REPO_NAME="numa-${props.clientName}-browser-lambda"
+IMAGES=$(aws ecr list-images --repository-name "$REPO_NAME" --region ${props.region} --query 'imageIds[*]' --output json 2>/dev/null || echo "[]")
+if [ "$IMAGES" != "[]" ] && [ -n "$IMAGES" ]; then
+  aws ecr batch-delete-image --repository-name "$REPO_NAME" --region ${props.region} --image-ids "$IMAGES" || true
+  echo "Deleted old images"
+else
+  echo "No existing images to delete"
+fi
+
+# Push image from tar to client ECR
+skopeo copy --authfile /tmp/skopeo-auth.json --insecure-policy \\
+  docker-archive:${imageTarPath} \\
+  docker://${browserLambdaEcr.repositoryUrl}:${imageTag}
+
+echo "Successfully pushed browser-lambda image to ${browserLambdaEcr.repositoryUrl}:${imageTag}"
+`,
+        },
+      ],
+    });
+
+    const browserLambda = new NumaLambda(this, 'browser-lambda', {
       clientName: props.clientName,
-      lambdaDirectory: 'python/crawl-page/',
       logGroup: props.logGroup,
-      resourceNameSuffix: '_crawl-page',
+      resourceNameSuffix: '_browser-lambda',
+      packageType: 'Image',
+      architecture: 'arm64',
+      imageUri: `${browserLambdaEcr.repositoryUrl}:${imageTag}`,
       additionalPolicyStatements: [
         {
           effect: 'Allow',
@@ -134,9 +216,11 @@ export class WebCrawlerConstruct extends Construct {
         PREFERRED_KNOWLEDGE_BASE: props.provisionQResources ? 'q' : 'bedrock',
       },
       timeout: 300,
-      memorySize: 512,
+      memorySize: 1024,
+      ephemeralStorageMb: 1024,
     });
-    this.crawlPageLambda = crawlPageLambda.lambda;
+    browserLambda.lambda.addOverride('depends_on', [`null_resource.${pushImage.friendlyUniqueId}`]);
+    this.browserLambda = browserLambda.lambda;
 
     const markUrlStatusLambda = new NumaLambda(this, 'mark-url-status', {
       clientName: props.clientName,
@@ -183,7 +267,7 @@ export class WebCrawlerConstruct extends Construct {
           ],
           resources: [
             this.enqueueUrlLambda.arn,
-            this.crawlPageLambda.arn,
+            this.browserLambda.arn,
             this.markUrlStatusLambda.arn,
             this.restartCrawlerLambda.arn,
             `arn:aws:states:${props.region}:*:stateMachine:${numaClient}-web-crawler`,
@@ -375,7 +459,7 @@ export class WebCrawlerConstruct extends Construct {
         },
         CrawlPage: {
           Type: 'Task',
-          Resource: this.crawlPageLambda.arn,
+          Resource: this.browserLambda.arn,
           ResultPath: '$.process_result',
           Next: 'MarkStatus',
           Retry: [
@@ -464,7 +548,7 @@ export class WebCrawlerConstruct extends Construct {
     // Create Lambda permissions for all functions used by the Step Function
     const lambdaPermissions = [
       { id: 'enqueue-url', lambda: this.enqueueUrlLambda },
-      { id: 'crawl-page', lambda: this.crawlPageLambda },
+      { id: 'browser-lambda', lambda: this.browserLambda },
       { id: 'mark-url-status', lambda: this.markUrlStatusLambda },
       { id: 'restart-crawler', lambda: this.restartCrawlerLambda },
     ];

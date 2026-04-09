@@ -150,7 +150,6 @@ pre-commit:
         - lambdas/python/contract-analysis
         - lambdas/python/costing-calculator
         - lambdas/python/council-resource-consents
-        - lambdas/python/crawl-page
         - lambdas/python/data-connectors
         - lambdas/python/document-summariser
         - lambdas/python/e2e-test
@@ -512,6 +511,36 @@ workspace-agent-package:
       - infra/assets/artifacts/numa-workspace-agent/image.tar
     expire_in: 7 days
 
+# Build browser-lambda container Lambda with Playwright + Chromium for JS rendering
+browser-lambda-package:
+  stage: package
+  timeout: 20 minutes
+  image: docker:24
+  services:
+    - docker:24-dind
+  tags:
+    - aws
+  rules:
+    - !reference [.rules, if-deployable]
+  variables:
+    DOCKER_TLS_CERTDIR: '/certs'
+    DOCKER_BUILD_OPTS: '--cache-from type=local,src=$CI_PROJECT_DIR/.docker-cache-browser-lambda --cache-to type=local,dest=$CI_PROJECT_DIR/.docker-cache-browser-lambda,mode=max'
+  cache:
+    - key: browser-lambda-docker-${CI_DEFAULT_BRANCH}
+      paths:
+        - .docker-cache-browser-lambda/
+  before_script:
+    - apk add --no-cache bash git
+    - docker run --privileged --rm tonistiigi/binfmt --install arm64
+  script:
+    - cd lambdas
+    - chmod +x package-container-lambda.sh
+    - ./package-container-lambda.sh python/browser-lambda
+  artifacts:
+    paths:
+      - infra/assets/artifacts/browser-lambda/image.tar
+    expire_in: 7 days
+
 # Build transcription-service Docker image as tar for Fargate deployment
 transcription-service-package:
   stage: package
@@ -554,7 +583,7 @@ build-deployment-container:
   # Note: Removed explicit `needs` to work around GitLab's 50-job limit.
   # This job runs after the package stage completes and automatically
   # receives all artifacts from python-lambdas-package, node-package,
-  # and workspace-agent-package.
+  # workspace-agent-package, and browser-lambda-package.
   variables:
     BUILD_DIR: .
     ECR_REPO: ${ECR_BASE}/numa-deploy

@@ -105,57 +105,103 @@ export class NumaLambda extends Construct {
       this.policyAttachments.push(policyAttachmentAdditional);
     }
 
-    const filename = path.resolve(
-      import.meta.dirname,
-      '..',
-      '..',
-      'lambdas',
-      props.lambdaDirectory,
-      'lambda_function.zip'
-    );
+    const isContainerImage = props.packageType === 'Image';
 
-    const honeycombConfig = otelLayersAndEnvironment(props.runtime, props.otelConfig);
-
-    const sourceCodeHash = Fn.filebase64sha256(filename);
-    const otelResourceAttributes: Record<string, string> = {
-      'numa.clientName': props.clientName,
-      'numa.sourceCodeHash': sourceCodeHash,
-    };
-    if (props.appId) otelResourceAttributes['numa.appId'] = props.appId;
-    const otelEnvironmentVariables = {
+    // OTEL resource attributes (used in both modes for env vars)
+    const otelEnvironmentVariables: Record<string, string> = {
       OTEL_SERVICE_NAME: name,
-      OTEL_RESOURCE_ATTRIBUTES: Object.entries(otelResourceAttributes)
-        .map((pair) => pair.join('='))
-        .join(','),
     };
 
-    this.lambda = new LambdaFunction(scope, name + '_lambda', {
-      environment: {
-        variables: {
-          ...otelEnvironmentVariables,
-          ...honeycombConfig.environmentVariables,
-          ...props.environment,
+    if (isContainerImage) {
+      // Container image mode -- no ZIP file, no layers, no handler/runtime
+      if (!props.imageUri) {
+        throw new Error(`NumaLambda "${name}": imageUri is required when packageType is 'Image'`);
+      }
+
+      otelEnvironmentVariables['OTEL_RESOURCE_ATTRIBUTES'] = [
+        `numa.clientName=${props.clientName}`,
+        ...(props.appId ? [`numa.appId=${props.appId}`] : []),
+      ].join(',');
+
+      this.lambda = new LambdaFunction(scope, name + '_lambda', {
+        imageUri: props.imageUri,
+        packageType: 'Image',
+        architectures: [props.architecture ?? 'arm64'],
+        environment: {
+          variables: {
+            ...otelEnvironmentVariables,
+            ...props.environment,
+          },
         },
-      },
-      filename,
-      functionName: resourceName,
-      handler: props.handler ?? 'lambda_function.handler',
-      layers: [...honeycombConfig.layers, ...(props.additionalLayers ?? [])],
-      loggingConfig: {
-        logFormat: 'JSON',
-        logGroup: props.logGroup.name,
-        systemLogLevel: props.systemLogLevel ?? 'INFO',
-      },
-      memorySize: props.memorySize,
-      role: role.arn,
-      runtime: props.runtime,
-      sourceCodeHash,
-      timeout: props.timeout || 900,
-      ...(props.ephemeralStorageMb ? { ephemeralStorage: { size: props.ephemeralStorageMb } } : {}),
-      tracingConfig: {
-        mode: props.otelConfig?.honeycombIngestKey ? 'PassThrough' : 'Active', // Disable X-Ray sampling when using Honeycomb.
-      },
-    });
+        functionName: resourceName,
+        loggingConfig: {
+          logFormat: 'JSON',
+          logGroup: props.logGroup.name,
+          systemLogLevel: props.systemLogLevel ?? 'INFO',
+        },
+        memorySize: props.memorySize,
+        role: role.arn,
+        timeout: props.timeout || 900,
+        ...(props.ephemeralStorageMb ? { ephemeralStorage: { size: props.ephemeralStorageMb } } : {}),
+        tracingConfig: {
+          mode: props.otelConfig?.honeycombIngestKey ? 'PassThrough' : 'Active',
+        },
+      });
+    } else {
+      // ZIP mode (default) -- existing behavior, unchanged
+      if (!props.lambdaDirectory) {
+        throw new Error(`NumaLambda "${name}": lambdaDirectory is required when packageType is 'Zip' (or unset)`);
+      }
+
+      const filename = path.resolve(
+        import.meta.dirname,
+        '..',
+        '..',
+        'lambdas',
+        props.lambdaDirectory,
+        'lambda_function.zip'
+      );
+
+      const honeycombConfig = otelLayersAndEnvironment(props.runtime!, props.otelConfig);
+
+      const sourceCodeHash = Fn.filebase64sha256(filename);
+      const otelResourceAttributes: Record<string, string> = {
+        'numa.clientName': props.clientName,
+        'numa.sourceCodeHash': sourceCodeHash,
+      };
+      if (props.appId) otelResourceAttributes['numa.appId'] = props.appId;
+      otelEnvironmentVariables['OTEL_RESOURCE_ATTRIBUTES'] = Object.entries(otelResourceAttributes)
+        .map((pair) => pair.join('='))
+        .join(',');
+
+      this.lambda = new LambdaFunction(scope, name + '_lambda', {
+        environment: {
+          variables: {
+            ...otelEnvironmentVariables,
+            ...honeycombConfig.environmentVariables,
+            ...props.environment,
+          },
+        },
+        filename,
+        functionName: resourceName,
+        handler: props.handler ?? 'lambda_function.handler',
+        layers: [...honeycombConfig.layers, ...(props.additionalLayers ?? [])],
+        loggingConfig: {
+          logFormat: 'JSON',
+          logGroup: props.logGroup.name,
+          systemLogLevel: props.systemLogLevel ?? 'INFO',
+        },
+        memorySize: props.memorySize,
+        role: role.arn,
+        runtime: props.runtime,
+        sourceCodeHash,
+        timeout: props.timeout || 900,
+        ...(props.ephemeralStorageMb ? { ephemeralStorage: { size: props.ephemeralStorageMb } } : {}),
+        tracingConfig: {
+          mode: props.otelConfig?.honeycombIngestKey ? 'PassThrough' : 'Active',
+        },
+      });
+    }
   }
 }
 
@@ -206,7 +252,8 @@ export interface NumaLambdaProps {
   clientName: string;
   environment?: Record<string, string>;
   handler?: string;
-  lambdaDirectory: string;
+  /** Subdirectory under lambdas/ where the ZIP lives. Required for ZIP mode, optional for Image mode. */
+  lambdaDirectory?: string;
   logGroup: CloudwatchLogGroup;
   memorySize?: number;
   otelConfig?: OTelConfig;
@@ -217,4 +264,10 @@ export interface NumaLambdaProps {
   ephemeralStorageMb?: number;
   /** Override the system (platform) log level. Defaults to INFO. Set to WARN to suppress platform.start/report noise. */
   systemLogLevel?: 'INFO' | 'WARN' | 'ERROR';
+  /** ECR image URI for container-based Lambdas (e.g., 123456.dkr.ecr.us-east-1.amazonaws.com/name:tag) */
+  imageUri?: string;
+  /** Set to 'Image' for container-based Lambda deployment. Defaults to 'Zip'. */
+  packageType?: 'Zip' | 'Image';
+  /** Lambda CPU architecture. Defaults to 'x86_64' for Zip, 'arm64' for Image. */
+  architecture?: 'x86_64' | 'arm64';
 }

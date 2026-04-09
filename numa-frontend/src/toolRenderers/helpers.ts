@@ -158,6 +158,12 @@ export interface WebSearchPayload {
   results?: Array<{ url: string; title?: string; snippet?: string }>;
   error?: string;
   results_count?: number;
+  // fetch_url operation fields
+  content?: string;
+  content_type?: string;
+  title?: string;
+  url?: string;
+  status?: string;
 }
 
 export function getWebSearchPayload(result: ToolResultLike): WebSearchPayload | null {
@@ -179,9 +185,16 @@ export function getWebSearchPayload(result: ToolResultLike): WebSearchPayload | 
 export function getWebSearchSummary(result: ToolResultLike): string {
   const payload = getWebSearchPayload(result);
   if (!payload) return i18n.t('common:toolSummaries.webSearch.default');
-  const { summarised_content = '', results = [], results_count = 0, error = '' } = payload;
+  const { summarised_content = '', results = [], results_count = 0, error = '', content, title, url } = payload;
   const hasError = !!(error && String(error).trim());
   const hasSummary = !!(summarised_content && String(summarised_content).trim());
+  // fetch_url operation -- page fetched with content returned
+  if (content && url) {
+    return i18n.t('common:toolSummaries.webSearch.pageFetched', {
+      title: title || url,
+      defaultValue: 'Fetched: {{title}}',
+    });
+  }
   if (hasError) return i18n.t('common:toolSummaries.webSearch.failed');
   if (hasSummary) return i18n.t('common:toolSummaries.webSearch.sourcesFound', { count: results_count });
   return i18n.t('common:toolSummaries.webSearch.referencesFound', {
