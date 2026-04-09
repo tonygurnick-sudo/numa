@@ -1559,7 +1559,7 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
 
         elif filename:
             # Filename + kb_id based download (new flow)
-            filename = _validate_filename(filename, "file")
+            filename = _validate_download_path(filename, "file")
             if kb_id not in allowed_kbs:
                 logger.warning(
                     "KB access denied for download",
