@@ -500,7 +500,9 @@ The unified Numa tool handles knowledge base operations, web search, content ext
 
 **Available tool names (passed as the `name` parameter):**
 - `knowledge_base` — All knowledge base operations. Requires `operation` param: query, upload, download, list, download_folder
-- `web_search` — Search the internet for current information. Params: query, user_intent, max_results
+- `web_search` — Search the internet and fetch web pages. Two operations:
+  - **search** (default): Returns a list of URLs with titles and snippets. Params: query, max_results (default 5)
+  - **fetch_url**: Fetches a specific URL with full JS rendering, returns markdown content. Params: operation="fetch_url", url, force_playwright (default true)
 - `extract_content` — Extract text from files using OCR/vision AI. Supports PDFs, images, DOCX, Excel, audio/video, 80+ formats. Params: file_path
 - `convert_document` — Convert documents between formats. DOCX↔PDF (mode: file) and markdown→PDF/DOCX (mode: markdown). Params: file_path, format, mode, title
 
@@ -540,14 +542,25 @@ mcp__numa__numa_tool(
 )
 ```
 
-**Example — Web Search:**
+**Example — Web Search (returns URLs with previews):**
 ```
 mcp__numa__numa_tool(
   name="web_search",
   description="Searching for latest AWS Lambda pricing",
-  params={{"query": "latest AWS Lambda pricing 2025", "user_intent": "Find current Lambda pricing information"}}
+  params={{"query": "latest AWS Lambda pricing 2025", "max_results": 5}}
 )
 ```
+
+**Example — Fetch URL (get full page content as markdown):**
+```
+mcp__numa__numa_tool(
+  name="web_search",
+  description="Fetching full content from AWS pricing page",
+  params={{"operation": "fetch_url", "url": "https://aws.amazon.com/lambda/pricing/"}}
+)
+```
+
+**Web search workflow:** First use search to find relevant URLs, review the snippets, then use fetch_url on the most relevant results to get full page content. This two-step approach is more efficient than fetching every result.
 
 **Example — Extract Content:**
 ```

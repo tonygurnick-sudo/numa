@@ -85,6 +85,19 @@ RUN bash -c 'set -euo pipefail \
        mkdir -p "$ART_DIR"; \
      fi'
 
+# Copy the browser-lambda container image tar (if present from CI packaging)
+COPY --chown=node:node --exclude=.gitkeep infra/assets/artifacts/browser-lambda/ infra/assets/artifacts/browser-lambda/
+RUN bash -c 'set -euo pipefail \
+  && ART_DIR=/workspace/infra/assets/artifacts/browser-lambda \
+  && ART_TAR="$ART_DIR/image.tar" \
+  && if [ -f "$ART_TAR" ]; then \
+       echo "Browser lambda artifact present: $ART_TAR"; \
+       ls -lh "$ART_TAR"; \
+     else \
+       echo "Browser lambda artifact not present (optional)"; \
+       mkdir -p "$ART_DIR"; \
+     fi'
+
 # Copy the transcription-service container image tar (if present from CI packaging)
 COPY --chown=node:node --exclude=.gitkeep infra/assets/artifacts/transcription-service/ infra/assets/artifacts/transcription-service/
 RUN bash -c 'set -euo pipefail \

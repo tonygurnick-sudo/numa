@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
-import { Card, Table, Alert, Badge } from 'react-bootstrap';
+import React, { useMemo, useState } from 'react';
+import { Card, Table, Alert, Badge, Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { WebCrawler } from '../WebCrawler';
 import { useKBState } from '../../Providers/KBStateProvider';
+import { useWebCrawler } from '../../utils/webCrawler';
 
 interface DataSource {
   dataSourceId: string;
@@ -17,6 +18,8 @@ interface DataSource {
   pageCount?: number;
   lastCrawled?: string;
   sourceUrl?: string;
+  crawlDepth?: number;
+  limitToPath?: boolean;
 }
 
 interface KBWebCrawlerTabProps {
@@ -33,8 +36,30 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
   const { t, i18n } = useTranslation('knowledgeBase');
   // Use KB state from context
   const { kbState, isLoading, error, invalidateCache } = useKBState();
+  const { startWebCrawler } = useWebCrawler();
+  const [recrawlingId, setRecrawlingId] = useState<string | null>(null);
 
   const canEdit = role === 'EDITOR' || role === 'OWNER';
+
+  async function handleRecrawl(source: DataSource): Promise<void> {
+    const url = source.sourceUrl || source.name;
+    const depth = source.crawlDepth || 2;
+    const limitToPath = source.limitToPath ?? true;
+
+    setRecrawlingId(source.dataSourceId);
+    try {
+      await startWebCrawler([url], {
+        urlDepthMap: { [url]: depth },
+        kb_id: kbId,
+        limitToPath,
+      });
+      setTimeout(() => invalidateCache(), 2000);
+    } catch (err) {
+      console.error('Re-crawl failed', err);
+    } finally {
+      setRecrawlingId(null);
+    }
+  }
 
   /**
    * Filter data sources to show only web crawlers
@@ -113,8 +138,10 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
                 <tr>
                   <th>{t('webCrawler.table.seedUrl')}</th>
                   <th>{t('webCrawler.table.pages')}</th>
+                  <th>{t('webCrawler.table.depth')}</th>
                   <th>{t('webCrawler.table.lastCrawled')}</th>
                   <th>{t('webCrawler.table.status')}</th>
+                  {canEdit && <th>{t('webCrawler.table.actions')}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -124,6 +151,7 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
                   // Truncate long URLs for display (show first 60 chars + ... if longer)
                   const truncatedUrl =
                     displayUrl && displayUrl.length > 60 ? `${displayUrl.substring(0, 60)}...` : displayUrl;
+                  const isRecrawling = recrawlingId === source.dataSourceId;
 
                   return (
                     <tr key={source.dataSourceId || index}>
@@ -134,6 +162,7 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
                         </a>
                       </td>
                       <td>{source.pageCount || 0}</td>
+                      <td>{source.crawlDepth || '\u2014'}</td>
                       <td>
                         {source.lastCrawled
                           ? new Date(source.lastCrawled).toLocaleString(i18n.language)
@@ -144,6 +173,27 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
                           {source.status || t('webCrawler.unknown')}
                         </Badge>
                       </td>
+                      {canEdit && (
+                        <td>
+                          <OverlayTrigger placement="top" overlay={<Tooltip>{t('webCrawler.recrawlTooltip')}</Tooltip>}>
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={() => handleRecrawl(source)}
+                              disabled={isRecrawling}
+                            >
+                              {isRecrawling ? (
+                                <span className="spinner-border spinner-border-sm" />
+                              ) : (
+                                <>
+                                  <i className="bi bi-arrow-clockwise me-1"></i>
+                                  {t('webCrawler.recrawl')}
+                                </>
+                              )}
+                            </Button>
+                          </OverlayTrigger>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

@@ -8,10 +8,50 @@ import { useTranslation } from 'react-i18next';
 const WebSearchBody = ({ payload }: { payload: WebSearchPayload }) => {
   const { t } = useTranslation('common');
   if (!payload) return null;
-  const { query = '', summarised_content = '', references = [], results = [], error = '' } = payload;
-  const hasError = error && error.trim();
+  const {
+    query = '',
+    summarised_content = '',
+    references = [],
+    results = [],
+    error = '',
+    content,
+    url: fetchedUrl,
+    title: fetchedTitle,
+    status,
+  } = payload;
+  const hasError = (error && error.trim()) || status === 'error';
   const hasSummary = summarised_content && summarised_content.trim();
+  const isFetchUrl = !!(content && fetchedUrl);
   const referencesToShow = hasSummary ? references : results;
+
+  // fetch_url operation -- render the fetched page content as markdown
+  if (isFetchUrl) {
+    return (
+      <>
+        <div className="ws-fetch-url mb-2">
+          <strong>{t('toolRenderers.webSearch.fetchedPage', { defaultValue: 'Fetched Page:' })}</strong>{' '}
+          <a href={fetchedUrl} target="_blank" rel="noopener noreferrer">
+            {fetchedTitle || fetchedUrl}
+          </a>
+        </div>
+        {hasError && (
+          <div
+            className="ws-error mb-3 p-2"
+            style={{ backgroundColor: '#fff3cd', border: '1px solid #ffeaa7', borderRadius: '4px' }}
+          >
+            <strong style={{ color: '#856404' }}>{t('toolRenderers.webSearch.error')}</strong>{' '}
+            <span style={{ color: '#856404' }}>{error}</span>
+          </div>
+        )}
+        {!hasError && content && (
+          <div className="ws-page-content" style={{ maxHeight: '400px', overflow: 'auto', marginTop: '0.5rem' }}>
+            <MarkdownContent content={content} />
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       {query && (

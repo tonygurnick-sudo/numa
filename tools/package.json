@@ -45,6 +45,7 @@
     "check-email-cases": "node --import tsx check-email-cases.ts",
     "check-email-verified": "node --import tsx check-email-verified.ts",
     "check-user-password-state": "node --import tsx check-user-password-state.ts",
+    "reset-user-password": "node --import tsx reset-user-password.ts",
     "retrieve-config": "node --import tsx retrieve-config.ts",
     "write-config": "node --import tsx write-config.ts",
     "delete-config": "node --import tsx delete-config.ts",

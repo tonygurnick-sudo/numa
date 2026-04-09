@@ -517,7 +517,8 @@
   "toolSteps": {
     "webSearch": {
       "query": "Search the web for \"{{query}}\"...",
-      "running": "Searching the web..."
+      "running": "Searching the web...",
+      "fetching": "Fetching {{url}}..."
     },
     "knowledgeBase": {
       "query": "Running query \"{{query}}\"...",
@@ -560,7 +561,8 @@
       "default": "Web Search results",
       "failed": "⚠️ Search failed",
       "sourcesFound": "{{count}} sources found",
-      "referencesFound": "{{count}} web search references"
+      "referencesFound": "{{count}} web search references",
+      "pageFetched": "Fetched: {{title}}"
     },
     "knowledgeBase": {
       "default": "Knowledge Base results",
@@ -613,7 +615,8 @@
       "query": "Query:",
       "error": "⚠️ Error:",
       "sources": "Sources:",
-      "summary": "Summary of Relevant Content:"
+      "summary": "Summary of Relevant Content:",
+      "fetchedPage": "Fetched Page:"
     },
     "knowledgeBase": {
       "querying": "Querying:",

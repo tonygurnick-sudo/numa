@@ -469,7 +469,7 @@ class NumaChatDynamoUtils {
       return limitedConversations;
     } catch (err) {
       console.error('Error fetching user conversation meta:', err);
-      return [];
+      throw err;
     }
   }
 

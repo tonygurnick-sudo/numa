@@ -155,10 +155,17 @@ export function getToolActionSteps(toolName: string | null | undefined, inputPay
   // Web search customisation
   if (name === 'web_search') {
     try {
-      const q =
-        inputPayload && typeof inputPayload === 'object' && 'query' in (inputPayload as Record<string, unknown>)
-          ? (inputPayload as Record<string, unknown>)['query']
-          : undefined;
+      const input = inputPayload && typeof inputPayload === 'object' ? (inputPayload as Record<string, unknown>) : {};
+      const operation = input['operation'] as string | undefined;
+      if (operation === 'fetch_url' && typeof input['url'] === 'string') {
+        return [
+          i18n.t('common:toolSteps.webSearch.fetching', {
+            url: (input['url'] as string).trim(),
+            defaultValue: 'Fetching {{url}}...',
+          }),
+        ];
+      }
+      const q = input['query'];
       if (typeof q === 'string' && q.trim()) {
         return [i18n.t('common:toolSteps.webSearch.query', { query: q.trim() })];
       }

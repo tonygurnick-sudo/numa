@@ -161,6 +161,10 @@ clientConfigProd.json
 
 infra/assets/artifacts/numa-workspace-agent/image.tar
 infra/assets/artifacts/transcription-service/image.tar
+infra/assets/artifacts/browser-lambda/image.tar
+
+# Large binary docs (use summary .md files instead)
+documentation/nolia/knowledge-base/Nolia User documentation.pdf
 # Pipeline retry Wed 18 Feb 2026 02:00:45 NZDT
 
 # Personal scripts

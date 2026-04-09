@@ -231,6 +231,7 @@ export class NumaClientStack extends TerraformStack {
       environmentName: props.environmentName,
       qBusinessProvider: qBusinessProvider,
       knowledgeBase: knowledgeBase,
+      deployerRoleArn: deployerRole,
     });
 
     // ── Disaster Recovery ────────────────────────────────────────────────────
@@ -443,6 +444,9 @@ export class NumaClientStack extends TerraformStack {
         opsCrmApiLambdaArn,
         // ffmpeg layer for parallel audio/video transcription
         ffmpegLayerArn,
+        // Crawl-page Lambda for web search fetch_url (JS rendering via Playwright)
+        browserLambdaArn: core.webCrawler.browserLambda.arn,
+        browserLambdaName: core.webCrawler.browserLambda.functionName,
       });
 
       // Create the AgentCore runtime

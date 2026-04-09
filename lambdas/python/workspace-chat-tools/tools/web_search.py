@@ -13,6 +13,7 @@ Features:
 Adapted from numa-chat-agent/tools/web_search.py.
 """
 
+import json
 import os
 import random
 import re
@@ -32,6 +33,7 @@ logger = structlog.get_logger()
 # Environment variables
 REGION = os.getenv("AWS_REGION", "us-east-1")
 FAST_MODEL_ID = os.getenv("FAST_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
+BROWSER_LAMBDA_NAME = os.getenv("BROWSER_LAMBDA_NAME", "")
 
 # Static user agent pool with current browser versions
 USER_AGENTS = [
@@ -490,36 +492,191 @@ Provide a comprehensive summary:"""
         return ""
 
 
+def _invoke_browser_lambda(url: str, force_playwright: bool = True) -> Dict[str, Any]:
+    """Invoke the browser-lambda Lambda to fetch a URL with JS rendering support.
+
+    Uses the browser-lambda container Lambda which has Playwright + Chromium for
+    rendering JS-heavy pages. Returns markdown content directly.
+    """
+    if not BROWSER_LAMBDA_NAME:
+        raise ValueError(
+            "BROWSER_LAMBDA_NAME not configured -- browser-lambda Lambda not available"
+        )
+
+    lambda_client = prm_client("lambda", region=REGION)
+    payload = {
+        "url": url,
+        "returnContent": True,
+        "forcePlaywright": force_playwright,
+        "crawlDepth": 1,
+        "userId": "web-search",
+        "crawlSessionId": "web-search",
+        "kbId": "company",
+    }
+
+    logger.info(
+        "Invoking browser-lambda Lambda", url=url, force_playwright=force_playwright
+    )
+
+    response = lambda_client.invoke(
+        FunctionName=BROWSER_LAMBDA_NAME,
+        InvocationType="RequestResponse",
+        Payload=json.dumps(payload),
+    )
+
+    result = json.loads(response["Payload"].read())
+
+    if result.get("status") == "error":
+        logger.error("browser-lambda Lambda error", url=url, error=result.get("reason"))
+        raise RuntimeError(
+            f"browser-lambda failed: {result.get('reason', 'unknown error')}"
+        )
+
+    return result
+
+
+def _handle_fetch_url(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Fetch a single URL with full JS rendering via browser-lambda Lambda.
+
+    Returns markdown content from the page, suitable for the workspace agent
+    to use directly or save to a file.
+    """
+    url = params.get("url")
+    if not url:
+        raise ValueError("Missing required parameter: url")
+
+    force_playwright = params.get("force_playwright", True)
+
+    try:
+        result = _invoke_browser_lambda(url, force_playwright=force_playwright)
+        return {
+            "url": result.get("url", url),
+            "title": result.get("title", ""),
+            "content": result.get("content", ""),
+            "content_type": result.get("contentType", "text/markdown"),
+            "status": "success",
+        }
+    except Exception as e:
+        logger.error("fetch_url failed", url=url, error=str(e))
+        return {
+            "url": url,
+            "title": "",
+            "content": "",
+            "status": "error",
+            "error": str(e),
+        }
+
+
+def _handle_search(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Search the web and return structured results with previews.
+
+    Returns a list of URLs with titles and snippets for the agent to review
+    before deciding which pages to fetch in full.
+    """
+    query = params.get("query")
+    if not query:
+        raise ValueError("Missing required parameter: query")
+
+    max_results = min(max(1, params.get("max_results", 5)), 10)
+
+    logger.info("Web search starting", query=query[:100], max_results=max_results)
+
+    # Search for URLs
+    raw_urls = _google_search(query, max_results, max_retries=3)
+    urls = _dedupe(raw_urls)
+
+    if not urls:
+        logger.warning("No URLs found", query=query)
+        return {
+            "results": [],
+            "query": query,
+            "results_count": 0,
+            "error": "No search results found",
+        }
+
+    # Scrape preview content from each URL
+    results = []
+    for url in urls:
+        if not _is_processable_url(url):
+            continue
+        result = _scrape_page(url)
+        if result.get("success"):
+            results.append(
+                {
+                    "url": result["url"],
+                    "title": result.get("title", ""),
+                    "snippet": result.get("snippet", "")[:500],
+                }
+            )
+        time.sleep(0.4 + random.random() * 0.4)
+
+    logger.info(
+        "Web search complete", urls_found=len(urls), results_with_previews=len(results)
+    )
+
+    return {
+        "results": results,
+        "query": query,
+        "results_count": len(results),
+        "hint": 'These are preview snippets only. Use the fetch_url operation to get full page content for any of these URLs: params={"operation": "fetch_url", "url": "<url>"}',
+    }
+
+
 def handle_web_search(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Handle web_search tool invocation.
 
-    Parameters:
-        query (str, required): Natural language search query
-        user_intent (str, required): What the user is trying to accomplish
-        max_results (int, default=3, max=10): Number of results to scrape
+    Supports two operations:
+    - "search" (default): Search the web and return structured results with previews
+    - "fetch_url": Fetch a specific URL with full JS rendering, returns markdown content
 
-    Returns:
-        Dict with summarised_content, references, query, results_count
+    Parameters for search operation:
+        query (str, required): Natural language search query
+        max_results (int, default=5, max=10): Number of results to return
+
+    Parameters for fetch_url operation:
+        url (str, required): URL to fetch
+        force_playwright (bool, default=True): Force JS rendering via Playwright
+
+    Legacy parameters (backward compatible):
+        user_intent (str): If provided with query, falls back to legacy summarization mode
+        summarise (bool): Explicitly request summarization mode
     """
-    query = params.get("query")
+    operation = params.get("operation", "search")
+
+    # Route to fetch_url operation
+    if operation == "fetch_url":
+        return _handle_fetch_url(params)
+
+    # Legacy backward compatibility: if user_intent is provided or summarise is True,
+    # use the old summarization pipeline
     user_intent = params.get("user_intent")
+    summarise = params.get("summarise", False)
+
+    if user_intent or summarise:
+        return _handle_legacy_search(params)
+
+    # Default: structured search with previews
+    return _handle_search(params)
+
+
+def _handle_legacy_search(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Legacy search + summarize pipeline for backward compatibility."""
+    query = params.get("query")
+    user_intent = params.get("user_intent", query)
 
     if not query:
         raise ValueError("Missing required parameter: query")
-    if not user_intent:
-        raise ValueError("Missing required parameter: user_intent")
 
     max_results = min(max(1, params.get("max_results", 3)), 10)
 
     logger.info(
-        "Web search starting",
+        "Web search starting (legacy mode)",
         query=query[:100],
         max_results=max_results,
-        user_intent=user_intent[:100],
+        user_intent=str(user_intent)[:100],
     )
 
-    # Step 1: Search for URLs
     raw_urls = _google_search(query, max_results, max_retries=3)
     urls = _dedupe(raw_urls)
 
@@ -533,7 +690,6 @@ def handle_web_search(params: Dict[str, Any]) -> Dict[str, Any]:
             "error": "No search results found",
         }
 
-    # Step 2: Scrape content from each URL
     results = []
     for url in urls:
         if not _is_processable_url(url):
@@ -541,7 +697,6 @@ def handle_web_search(params: Dict[str, Any]) -> Dict[str, Any]:
         result = _scrape_page(url)
         if result.get("success"):
             results.append(result)
-        # Small delay between requests
         time.sleep(0.4 + random.random() * 0.4)
 
     logger.info(
@@ -557,7 +712,6 @@ def handle_web_search(params: Dict[str, Any]) -> Dict[str, Any]:
             "error": "Content scraping failed",
         }
 
-    # Step 3: Combine and summarize content
     content_pieces = []
     references = []
     for result in results:
@@ -568,10 +722,11 @@ def handle_web_search(params: Dict[str, Any]) -> Dict[str, Any]:
         references.append(url)
 
     all_content = "\n\n".join(content_pieces)
-    summarised_content = _summarize_content(all_content, user_intent, len(references))
+    summarised_content = _summarize_content(
+        all_content, str(user_intent), len(references)
+    )
 
     if not summarised_content:
-        # Fallback: return raw snippets
         logger.warning("Summarization failed, returning raw content")
         raw_snippets = []
         for result in results:

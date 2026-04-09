@@ -1589,7 +1589,14 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                                     className="btn btn-sm btn-link p-0 kb-file-action-btn"
                                     onClick={() => {
                                       const filename = row.name;
-                                      const extension = filename.includes('.') ? filename.split('.').pop() || '' : '';
+                                      const isWebCrawlerFile =
+                                        row.originalKey?.includes('web-crawler/') ||
+                                        row.originalKey?.includes('scraped-content/');
+                                      const extension = isWebCrawlerFile
+                                        ? 'md'
+                                        : filename.includes('.')
+                                          ? filename.split('.').pop() || ''
+                                          : '';
                                       onOpenFilePreview({
                                         filename,
                                         fullPath: row.originalKey!,

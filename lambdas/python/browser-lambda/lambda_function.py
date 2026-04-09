@@ -11,11 +11,13 @@ import asyncio
 import json
 import os
 import pathlib
+import ssl
 import urllib.parse
 from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, TypedDict
 from urllib.parse import urldefrag, urljoin, urlparse
 
+import html2text
 import httpx
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -37,6 +39,8 @@ class CrawlPageEvent(TypedDict, total=False):
     kbId: str
     limitToPath: bool
     seedUrlPrefix: str
+    returnContent: bool
+    forcePlaywright: bool
 
 
 # User agents for retry logic
@@ -56,6 +60,70 @@ MAX_SAME_HOST_LINKS = 5000  # Maximum number of same-host links to collect
 CHUNK_SIZE = 8 * 1024 * 1024  # 8MB chunks for faster downloads
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB limit
 
+# SSRF protection: block requests to internal/private networks
+BLOCKED_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "[::1]",
+    "metadata.google.internal",
+}
+BLOCKED_IP_PREFIXES = (
+    "10.",
+    "172.16.",
+    "172.17.",
+    "172.18.",
+    "172.19.",
+    "172.20.",
+    "172.21.",
+    "172.22.",
+    "172.23.",
+    "172.24.",
+    "172.25.",
+    "172.26.",
+    "172.27.",
+    "172.28.",
+    "172.29.",
+    "172.30.",
+    "172.31.",
+    "192.168.",
+    "169.254.",  # AWS metadata service + link-local
+    "fd",  # IPv6 ULA
+)
+
+
+def _is_blocked_url(url: str) -> bool:
+    """Block URLs targeting internal networks, metadata services, or private IPs."""
+    try:
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+
+        if host in BLOCKED_HOSTS:
+            return True
+
+        if host.startswith(BLOCKED_IP_PREFIXES):
+            return True
+
+        # Resolve hostname to check for DNS rebinding to private IPs
+        import socket
+
+        try:
+            resolved = socket.getaddrinfo(host, None, socket.AF_INET)
+            for _, _, _, _, addr in resolved:
+                ip = addr[0]
+                if ip.startswith(BLOCKED_IP_PREFIXES) or ip in BLOCKED_HOSTS:
+                    logger.warning(
+                        "DNS resolved to blocked IP", host=host, resolved_ip=ip
+                    )
+                    return True
+        except socket.gaierror:
+            pass  # Can't resolve -- let the HTTP client handle the error
+
+        return False
+    except Exception:
+        return True  # Block on parse failure
+
+
 # Supported file types for knowledge base ingestion
 EXTRACTABLE_FILE_TYPES = {
     ".pdf",
@@ -63,6 +131,55 @@ EXTRACTABLE_FILE_TYPES = {
     ".jpg",
     ".jpeg",
 }
+
+# Minimum word count threshold -- pages with fewer words after httpx extraction
+# are candidates for Playwright re-fetch (may be JS-rendered shells)
+MIN_CONTENT_WORDS = int(os.environ.get("MIN_CONTENT_WORDS", "50"))
+
+# Markers that indicate a JS-rendered shell rather than genuinely thin content
+JS_SHELL_MARKERS = [
+    'id="root"',
+    'id="app"',
+    'id="__next"',
+    "__NEXT_DATA__",
+    'id="__nuxt"',
+    "window.__INITIAL_STATE__",
+    "ng-app",
+    "data-reactroot",
+    'id="svelte"',
+    'id="vue-',
+    "data-v-",
+]
+
+# Playwright configuration
+PLAYWRIGHT_TIMEOUT_MS = 30_000
+PLAYWRIGHT_ARGS = [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--single-process",
+]
+
+
+# Use system CA certs instead of pip-installed certifi (which has missing root CAs)
+_ssl_context = ssl.create_default_context()
+
+
+def _configure_html2text() -> html2text.HTML2Text:
+    """Create a configured html2text converter for markdown output."""
+    converter = html2text.HTML2Text()
+    converter.body_width = 0  # Don't wrap lines
+    converter.ignore_links = False
+    converter.ignore_images = True
+    converter.ignore_emphasis = False
+    converter.protect_links = True
+    converter.unicode_snob = True
+    return converter
+
+
+_h2t = _configure_html2text()
 
 
 logger = structlog.get_logger()
@@ -98,15 +215,18 @@ def _parse_html(
     limit_to_path: bool = True,
     seed_url_prefix: Optional[str] = None,
 ) -> tuple[str, str, List[str]]:
-    """Return (title, cleaned_text, links) from raw HTML."""
+    """Return (title, markdown_text, links) from raw HTML."""
     soup = BeautifulSoup(html, "html.parser")
 
     title = soup.title.string.strip() if soup.title and soup.title.string else ""
 
-    # Remove scripts / styles then get plain text
+    # Remove scripts / styles before conversion
     for element in soup(["script", "style"]):
         element.decompose()
-    text = soup.get_text(separator="\n", strip=True)
+
+    # Convert to markdown instead of plain text
+    cleaned_html = str(soup)
+    text = _h2t.handle(cleaned_html).strip()
 
     # Process links with same-host filtering included in the loop
     base_domain = urlparse(url).netloc
@@ -160,17 +280,145 @@ def _parse_html(
     return title, text, same_host_links
 
 
-def sanitise_url_for_s3_key(url: str, prefix: str = "") -> str:
-    """Convert a URL into a safe S3 key, organized by domain."""
+def _should_try_playwright(html: str, extracted_text: str) -> bool:
+    """Detect if a page would benefit from Playwright rendering.
+
+    Covers two cases:
+    1. JS shell: low word count + framework markers (e.g. empty React root div)
+    2. JS-enhanced: SSR page with framework markers that likely loads additional
+       dynamic content via JavaScript (e.g. NRL.com serves nav/headlines via SSR
+       but fixtures, scores, and round data are loaded client-side)
+
+    Framework markers are checked regardless of word count because SSR sites
+    often serve partial content that Playwright significantly enriches.
+    """
+    html_lower = html.lower()
+
+    has_framework_markers = any(
+        marker.lower() in html_lower for marker in JS_SHELL_MARKERS
+    )
+
+    # Framework markers present -- always try Playwright for richer content
+    if has_framework_markers:
+        return True
+
+    # No framework markers but very low content -- check for noscript JS warnings
+    word_count = len(extracted_text.split())
+    if word_count < MIN_CONTENT_WORDS:
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "html.parser")
+        for noscript in soup.find_all("noscript"):
+            noscript_text = noscript.get_text().lower()
+            if "javascript" in noscript_text or "enable js" in noscript_text:
+                return True
+
+    return False
+
+
+async def fetch_page_playwright(
+    url: str,
+    limit_to_path: bool = True,
+    seed_url_prefix: Optional[str] = None,
+) -> Optional[ScrapedContent]:
+    """Fetch a page using Playwright for JS-rendered content."""
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        logger.error("Playwright not installed, cannot render JS content")
+        return None
+
+    browser = None
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=PLAYWRIGHT_ARGS,
+            )
+            page = await browser.new_page(
+                user_agent=FALLBACK_USER_AGENT,
+            )
+
+            response = await page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=PLAYWRIGHT_TIMEOUT_MS,
+            )
+            # Wait briefly for JS to execute after DOM is ready
+            await page.wait_for_timeout(2000)
+
+            if not response or response.status != 200:
+                logger.warning(
+                    "Playwright non-200 status",
+                    url=url,
+                    status=response.status if response else None,
+                )
+                return None
+
+            html = await page.content()
+            # Strip <noscript> tags -- JS has already executed, noscript fallbacks are noise
+            pw_soup = BeautifulSoup(html, "html.parser")
+            for ns in pw_soup.find_all("noscript"):
+                ns.decompose()
+            html = str(pw_soup)
+            title, text, links = _parse_html(html, url, limit_to_path, seed_url_prefix)
+            content = f"# {title}\n\nURL: {url}\n\n{text}"
+
+            logger.info(
+                "Playwright fetch successful",
+                url=url,
+                content_length=len(content),
+                word_count=len(text.split()),
+            )
+
+            return {
+                "title": title,
+                "url": url,
+                "content": content,
+                "content_type": "text/markdown",
+                "metadata": {
+                    "source": url,
+                    "scraped_at": datetime.utcnow().isoformat(),
+                    "content_type": "text/html",
+                    "renderer": "playwright",
+                },
+                "links": links,
+            }
+
+    except Exception as exc:
+        logger.error(
+            "Playwright fetch failed",
+            url=url,
+            error=str(exc),
+            exc_info=True,
+        )
+        return None
+    finally:
+        if browser:
+            await browser.close()
+
+
+def sanitise_url_for_s3_key(
+    url: str, prefix: str = "", seed_url: Optional[str] = None
+) -> str:
+    """Convert a URL into a safe S3 key, organized by seed URL.
+
+    When seed_url is provided, the folder structure uses the seed URL's
+    domain + path (e.g. ``www.nrl.com/draw/``). This groups all pages from
+    a single crawl together. Falls back to the target URL's domain if no
+    seed URL is given.
+    """
     if prefix and not prefix.endswith("/"):
         prefix += "/"
 
-    parsed = urlparse(url)
-    domain = parsed.netloc
+    if seed_url:
+        parsed = urlparse(seed_url)
+        # domain + path, stripped of trailing slash, then re-added
+        folder = f"{parsed.netloc}{parsed.path}".rstrip("/")
+    else:
+        folder = urlparse(url).netloc
 
-    domain_prefix = f"{prefix}{domain}/"
-
-    return f"{domain_prefix}{urllib.parse.quote(url, safe='')}"
+    return f"{prefix}{folder}/{urllib.parse.quote(url, safe='')}"
 
 
 def _sanitize_metadata(meta: Optional[Dict[str, str]]) -> Dict[str, str]:
@@ -206,7 +454,9 @@ async def fetch_page(
 
     for attempt, user_agent in enumerate(user_agents, 1):
         try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+            async with httpx.AsyncClient(
+                timeout=HTTP_TIMEOUT_SECONDS, verify=_ssl_context
+            ) as client:
                 r = await client.get(
                     url, headers={"User-Agent": user_agent}, follow_redirects=True
                 )
@@ -218,10 +468,11 @@ async def fetch_page(
                         logger.warning("Content too large", url=url)
                         return None
 
+                    raw_html = r.text
                     title, text, links = _parse_html(
-                        r.text, url, limit_to_path, seed_url_prefix
+                        raw_html, url, limit_to_path, seed_url_prefix
                     )
-                    content = f"Title: {title}\nURL: {url}\n\n{text}"
+                    content = f"# {title}\n\nURL: {url}\n\n{text}"
 
                     if attempt > 1:
                         logger.info(
@@ -235,13 +486,14 @@ async def fetch_page(
                         "title": title,
                         "url": url,
                         "content": content,
-                        "content_type": "text/html",
+                        "content_type": "text/markdown",
                         "metadata": {
                             "source": url,
                             "scraped_at": datetime.utcnow().isoformat(),
                             "content_type": r.headers.get("content-type", "text/html"),
                         },
                         "links": links,
+                        "_raw_html": raw_html,
                     }
 
                 except Exception as exc:  # noqa: BLE001
@@ -321,11 +573,21 @@ def enqueue_links(
             if seed_url_prefix:
                 item["seedUrlPrefix"] = seed_url_prefix
 
-            table.put_item(Item=item)
+            table.put_item(
+                Item=item,
+                ConditionExpression="attribute_not_exists(userId)",
+            )
             enqueued += 1
             logger.debug("Enqueued link", url=link, depth=new_depth)
-        except ClientError as e:  # noqa: BLE001
-            logger.error("Error enqueueing link", link=link, error=str(e))
+        except ClientError as e:
+            # ConditionalCheckFailedException means URL already exists -- skip silently
+            if (
+                e.response.get("Error", {}).get("Code")
+                == "ConditionalCheckFailedException"
+            ):
+                logger.debug("Link already queued, skipping", url=link)
+            else:
+                logger.error("Error enqueueing link", link=link, error=str(e))
 
     return enqueued
 
@@ -339,7 +601,7 @@ def upload_to_s3(
             Bucket=bucket,
             Key=key,
             Body=content,
-            ContentType="text/html",
+            ContentType="text/markdown",
             ContentEncoding="utf-8",
             Metadata=_sanitize_metadata(metadata),
         )
@@ -419,7 +681,9 @@ async def stream_url_to_s3(
 
     for attempt, user_agent in enumerate(user_agents, 1):
         try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+            async with httpx.AsyncClient(
+                timeout=HTTP_TIMEOUT_SECONDS, verify=_ssl_context
+            ) as client:
                 async with client.stream(
                     "GET", url, headers={"User-Agent": user_agent}
                 ) as response:
@@ -540,10 +804,11 @@ async def process_file_url(
     kb_id: str,
     client_name: str,
     preferred_kb: str = "bedrock",
+    seed_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Download file to S3 via streaming, return metadata."""
 
-    s3_key = sanitise_url_for_s3_key(url, prefix)
+    s3_key = sanitise_url_for_s3_key(url, prefix, seed_url=seed_url)
 
     # Stream download to S3
     upload_result = await stream_url_to_s3(url, bucket, s3_key)
@@ -600,6 +865,8 @@ async def process_url(
     preferred_kb: str = "bedrock",
     limit_to_path: bool = True,
     seed_url_prefix: Optional[str] = None,
+    return_content: bool = False,
+    force_playwright: bool = False,
 ) -> Dict[str, Any]:
     """Fetch, store, and enqueue a single URL."""
     start = datetime.utcnow()
@@ -610,6 +877,16 @@ async def process_url(
         logger.info(
             "URL normalized with https:// prefix", original_url=url, normalized_url=url
         )
+
+    # SSRF protection: block internal/private network URLs
+    if _is_blocked_url(url):
+        logger.warning("Blocked URL targeting internal network", url=url)
+        return {
+            "url": url,
+            "status": "failed",
+            "reason": "URL targets an internal or private network address",
+            "links_enqueued": 0,
+        }
 
     # File type detection - route to appropriate handler
     file_extension = pathlib.Path(url).suffix.lower()
@@ -625,10 +902,34 @@ async def process_url(
             kb_id,
             client_name,
             preferred_kb,
+            seed_url=seed_url_prefix,
         )
 
-    # Existing HTML processing logic with path filtering
-    scraped = await fetch_page(url, limit_to_path, seed_url_prefix)
+    # Fetch page content -- Playwright-first or httpx-first with fallback
+    scraped: Optional[ScrapedContent] = None
+
+    if force_playwright:
+        logger.info("Force Playwright mode", url=url)
+        scraped = await fetch_page_playwright(url, limit_to_path, seed_url_prefix)
+    else:
+        scraped = await fetch_page(url, limit_to_path, seed_url_prefix)
+
+        # Check if the page would benefit from Playwright rendering
+        if scraped:
+            raw_html = scraped.pop("_raw_html", "")
+            content_text = scraped.get("content", "")
+            if _should_try_playwright(raw_html, content_text):
+                logger.info(
+                    "JS-rendered or JS-enhanced page detected, retrying with Playwright",
+                    url=url,
+                    word_count=len(content_text.split()),
+                )
+                playwright_result = await fetch_page_playwright(
+                    url, limit_to_path, seed_url_prefix
+                )
+                if playwright_result:
+                    scraped = playwright_result
+
     if not scraped:
         return {
             "url": url,
@@ -637,9 +938,22 @@ async def process_url(
             "links_enqueued": 0,
         }
 
-    s3_key = sanitise_url_for_s3_key(url, prefix)
     content = scraped.get("content", "")
     title = scraped.get("title", "")
+
+    # Direct content return mode -- skip S3/DynamoDB, return content in response
+    if return_content:
+        duration = (datetime.utcnow() - start).total_seconds()
+        return {
+            "url": url,
+            "status": "success",
+            "content": content,
+            "title": title,
+            "contentType": "text/markdown",
+            "processing_duration": duration,
+        }
+
+    s3_key = sanitise_url_for_s3_key(url, prefix, seed_url=seed_url_prefix)
 
     upload_res = upload_to_s3(
         content=content,
@@ -707,27 +1021,47 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
 
         {
           "url": "https://example.com",
-          "crawl_depth": 3,
-          "user_id": "user123"
+          "crawlDepth": 3,
+          "userId": "user123"
+        }
+
+    Direct content return mode (for web search):
+
+        {
+          "url": "https://example.com",
+          "returnContent": true,
+          "forcePlaywright": true
         }
     """
     logger.info("Received event", input=event)
 
-    try:
-        env = _get_required_env("BUCKET_NAME", "TABLE_NAME", "CLIENT_NAME")
-    except KeyError as exc:
-        return {
-            "status": "error",
-            "message": str(exc),
-            "url": event.get("url", "unknown"),
-        }
-
-    # Get preferred knowledge base (optional, defaults to bedrock)
-    preferred_kb = os.environ.get("PREFERRED_KNOWLEDGE_BASE", "bedrock")
+    return_content = event.get("returnContent", False)
+    force_playwright = event.get("forcePlaywright", False)
 
     url = event.get("url")
     if not url:
         return {"status": "error", "message": "URL is missing from the event"}
+
+    # S3/DynamoDB env vars only required for crawler mode (not returnContent)
+    if return_content:
+        client_name = os.environ.get("CLIENT_NAME", "unknown")
+        bucket = ""
+        table_name = ""
+    else:
+        try:
+            env = _get_required_env("BUCKET_NAME", "TABLE_NAME", "CLIENT_NAME")
+        except KeyError as exc:
+            return {
+                "status": "error",
+                "message": str(exc),
+                "url": url,
+            }
+        client_name = env["CLIENT_NAME"]
+        bucket = env["BUCKET_NAME"]
+        table_name = env["TABLE_NAME"]
+
+    # Get preferred knowledge base (optional, defaults to bedrock)
+    preferred_kb = os.environ.get("PREFERRED_KNOWLEDGE_BASE", "bedrock")
 
     crawl_depth = int(event.get("crawlDepth", 1))
     user_id = event.get("userId", "anonymous")
@@ -746,19 +1080,26 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
         result = asyncio.run(
             process_url(
                 url=url,
-                bucket=env["BUCKET_NAME"],
-                table_name=env["TABLE_NAME"],
+                bucket=bucket,
+                table_name=table_name,
                 user_id=user_id,
                 crawl_depth=crawl_depth,
                 prefix=prefix,
                 crawl_session_id=crawl_session_id,
                 kb_id=kb_id,
-                client_name=env["CLIENT_NAME"],
+                client_name=client_name,
                 preferred_kb=preferred_kb,
                 limit_to_path=limit_to_path,
                 seed_url_prefix=seed_url_prefix,
+                return_content=return_content,
+                force_playwright=force_playwright,
             )
         )
+
+        # Direct content return mode -- return result directly (not wrapped in event)
+        if return_content:
+            return result
+
         return {
             **event,
             "process_result": result,
@@ -768,6 +1109,12 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
         }
     except Exception as exc:  # noqa: BLE001
         logger.error("Error in handler", error=str(exc), exc_info=True)
+        if return_content:
+            return {
+                "url": url,
+                "status": "error",
+                "reason": f"Handler error: {exc}",
+            }
         return {
             **event,
             "process_result": {
