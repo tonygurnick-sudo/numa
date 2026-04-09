@@ -18,6 +18,7 @@ import { Form } from 'react-bootstrap';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { withPRM } from '../../utils/prmUtils';
+import { getFlag } from '../../utils/featureFlags';
 import { buildS3Key, type FileScope } from '../../Services/filesService';
 
 // Shared tab navigation component for both JSON and CSV renderers
@@ -730,15 +731,17 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
           {t('resultRenderer.actions.save')}
         </button>
 
-        <button
-          className="btn btn-outline-info"
-          onClick={handleShare}
-          disabled={loadingActions[`${output.data.key}-download`] || loadingActions[`${output.data.key}-open`]}
-          title={t('resultRenderer.actions.shareFile')}
-        >
-          <i className="bi bi-share me-1"></i>
-          {t('resultRenderer.actions.share')}
-        </button>
+        {getFlag('NUMA_SHARING') && (
+          <button
+            className="btn btn-outline-info"
+            onClick={handleShare}
+            disabled={loadingActions[`${output.data.key}-download`] || loadingActions[`${output.data.key}-open`]}
+            title={t('resultRenderer.actions.shareFile')}
+          >
+            <i className="bi bi-share me-1"></i>
+            {t('resultRenderer.actions.share')}
+          </button>
+        )}
 
         <button
           className="btn btn-outline-secondary"
