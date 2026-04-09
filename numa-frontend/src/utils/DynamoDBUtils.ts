@@ -315,7 +315,8 @@ class NumaChatDynamoUtils {
   async getUserConversationsMetaPaginated(
     userId: string,
     pageSize = 50,
-    cursor: Record<string, AttributeValue> | null = null
+    cursor: Record<string, AttributeValue> | null = null,
+    options?: { startTimestamp?: number; endTimestamp?: number }
   ): Promise<{
     conversations: Array<Record<string, unknown>>;
     lastEvaluatedKey: Record<string, AttributeValue> | null;
@@ -326,15 +327,35 @@ class NumaChatDynamoUtils {
       let lastEvaluatedKey: Record<string, AttributeValue> | undefined | null = cursor;
 
       do {
+        let filterExpression = 'message_type = :mtype AND NOT begins_with(conversation_id, :schedPrefix)';
+        const expressionAttributeValues: Record<string, unknown> = {
+          ':u': userId,
+          ':mtype': 'meta',
+          ':schedPrefix': 'schedule-',
+        };
+        const expressionAttributeNames: Record<string, string> = {};
+
+        if (options?.startTimestamp !== undefined) {
+          filterExpression +=
+            ' AND (latestTimestamp >= :start OR (attribute_not_exists(latestTimestamp) AND #ts >= :start))';
+          expressionAttributeValues[':start'] = options.startTimestamp;
+          expressionAttributeNames['#ts'] = 'timestamp';
+        }
+        if (options?.endTimestamp !== undefined) {
+          filterExpression +=
+            ' AND (latestTimestamp <= :end OR (attribute_not_exists(latestTimestamp) AND #ts <= :end))';
+          expressionAttributeValues[':end'] = options.endTimestamp;
+          expressionAttributeNames['#ts'] = 'timestamp';
+        }
+
         const command = new QueryCommand({
           TableName: this.tableName,
           KeyConditionExpression: 'user_id = :u',
-          FilterExpression: 'message_type = :mtype AND NOT begins_with(conversation_id, :schedPrefix)',
-          ExpressionAttributeValues: marshall({
-            ':u': userId,
-            ':mtype': 'meta',
-            ':schedPrefix': 'schedule-',
-          }),
+          FilterExpression: filterExpression,
+          ExpressionAttributeValues: marshall(expressionAttributeValues),
+          ...(Object.keys(expressionAttributeNames).length > 0
+            ? { ExpressionAttributeNames: expressionAttributeNames }
+            : {}),
           ProjectionExpression:
             'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation, isWorkspaceConversation',
           ScanIndexForward: false,

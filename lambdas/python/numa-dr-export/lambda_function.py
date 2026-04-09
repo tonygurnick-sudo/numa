@@ -98,7 +98,7 @@ def export_dynamodb_tables(log: structlog.BoundLogger, timestamp: str) -> dict:
             )
 
         except ClientError as e:
-            error_code = e.response["Error"]["Code"]
+            error_code = e.response.get("Error", {}).get("Code", "")
             if error_code == "ConflictException":
                 log.info(
                     "Export already in progress",

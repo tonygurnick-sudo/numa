@@ -47,6 +47,7 @@
       "support": "Support",
       "apps": "Apps",
       "favs": "Favs",
+      "recentChats": "Recent Chats",
       "jobHistory": "Job History",
       "chat": "Chat",
       "chatV2": "Numa Chat V2",
@@ -510,6 +511,7 @@
     "convertDocument": "Convert Document",
     "agents": "Agents",
     "memories": "Memories",
+    "render": "Render",
     "unknown": "Unknown Tool"
   },
   "toolSteps": {

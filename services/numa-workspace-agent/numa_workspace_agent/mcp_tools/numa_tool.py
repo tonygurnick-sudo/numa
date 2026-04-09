@@ -39,6 +39,7 @@ from numa_workspace_agent.mcp_tools.s3_helpers import (
     download_from_presigned_url,
     download_from_s3,
     ensure_file_in_s3,
+    sync_file_to_s3,
     upload_to_presigned_url,
 )
 
@@ -1180,6 +1181,99 @@ async def _handle_files(params: dict[str, Any]) -> dict[str, Any]:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Render handler
+# ═════════════════════════════════════════════════════════════════════════════
+
+_RENDER_MAX_INLINE = 2000
+
+_IMAGE_MIME_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+}
+
+
+async def _handle_render(params: dict[str, Any]) -> dict[str, Any]:
+    """Render HTML or image content visually in the chat.
+
+    This is a display pass-through: the agent provides content (inline or
+    from a file), and the result is returned as structured JSON for the
+    frontend to render in a sandboxed iframe or img tag.
+
+    Params:
+        type: "html" or "image"
+        content: Inline HTML string or base64-encoded image data
+        file_path: Path to a file in /workdir/ (alternative to content)
+        title: Optional title shown above the rendered content
+        height: Optional iframe height in pixels (default 400)
+    """
+    render_type = params.get("type")
+    if render_type not in ("html", "image"):
+        return _err("'type' must be 'html' or 'image'.")
+
+    content = params.get("content")
+    file_path = params.get("file_path")
+
+    if not content and not file_path:
+        return _err("Either 'content' or 'file_path' is required.")
+
+    mime_type = None
+
+    if file_path:
+        real = os.path.realpath(file_path)
+        if not real.startswith("/workdir/"):
+            return _err("file_path must be within /workdir/.")
+        if not os.path.exists(real):
+            return _err(f"File not found: {file_path}")
+        try:
+            if render_type == "image":
+                with open(real, "rb") as f:
+                    content = base64.b64encode(f.read()).decode()
+                ext = os.path.splitext(file_path)[1].lower()
+                mime_type = _IMAGE_MIME_TYPES.get(ext, "image/png")
+            else:
+                with open(real, "r", encoding="utf-8") as f:
+                    content = f.read()
+        except Exception as e:
+            return _err(f"Failed to read {file_path}: {e}")
+
+    if len(content) > 2 * 1024 * 1024:
+        return _err("Content exceeds 2MB limit.")
+
+    result = {
+        "render_type": render_type,
+        "content": content,
+        "title": params.get("title"),
+        "height": params.get("height", 400),
+        "mime_type": mime_type,
+    }
+
+    # Large content: save to file and sync to S3 so the frontend can
+    # fetch it during streaming without waiting for end-of-turn sync.
+    if len(content) > _RENDER_MAX_INLINE:
+        from datetime import datetime, timezone
+
+        results_dir = Path("/workdir/outputs/render")
+        results_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        ext = ".html" if render_type == "html" else ".json"
+        saved_path = results_dir / f"render-{timestamp}{ext}"
+        saved_content = json.dumps(result, indent=2)
+        saved_path.write_text(saved_content)
+
+        sync_file_to_s3(str(saved_path), saved_content)
+
+        # Return lightweight reference; frontend fetches full content from S3
+        result["content"] = ""
+        result["file_path"] = str(saved_path)
+
+    return _ok(json.dumps(result))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # Handler dispatch map
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -1191,6 +1285,7 @@ TOOL_HANDLERS = {
     "agents": _handle_agents,
     "memories": _handle_memories,
     "files": _handle_files,
+    "render": _handle_render,
 }
 
 TOOL_NAMES = list(TOOL_HANDLERS.keys())

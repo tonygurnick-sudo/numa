@@ -23,6 +23,7 @@ from typing import Any
 import structlog
 from claude_agent_sdk import tool
 from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
+from numa_workspace_agent.mcp_tools.s3_helpers import sync_file_to_s3
 
 logger = structlog.get_logger()
 
@@ -189,43 +190,9 @@ def _save_ops_result(result: Any, operation: str) -> str:
     file_content = json.dumps(result, indent=2, default=str)
     file_path.write_text(file_content)
 
-    # Upload to S3 immediately so the frontend can render during streaming
-    _sync_ops_file_to_s3(file_path, file_content)
+    sync_file_to_s3(str(file_path), file_content)
 
     return str(file_path)
-
-
-def _sync_ops_file_to_s3(file_path: Path, content: str) -> None:
-    """Upload a single ops result file to S3 (fire-and-forget)."""
-    try:
-        bucket = os.environ.get("OUTPUTS_BUCKET_NAME", "")
-        user_sub = os.environ.get("NUMA_USER_SUB", "")
-        conversation_id = os.environ.get("NUMA_CONVERSATION_ID", "")
-
-        if not bucket or not user_sub or not conversation_id:
-            logger.debug("Skipping ops S3 sync — missing env vars")
-            return
-
-        # /workdir/outputs/ops/file.json -> outputs/ops/file.json
-        rel_path = str(file_path).replace("/workdir/", "")
-        s3_key = (
-            f"numa-chat/workspace/{user_sub}"
-            f"/conversations/{conversation_id}/{rel_path}"
-        )
-
-        import boto3
-
-        s3 = boto3.client("s3")
-        s3.put_object(
-            Bucket=bucket,
-            Key=s3_key,
-            Body=content.encode("utf-8"),
-            ContentType="application/json",
-        )
-        logger.debug("Synced ops result to S3", s3_key=s3_key)
-    except Exception as e:
-        # Non-fatal — workspace sync will catch it later
-        logger.warning("Failed to sync ops result to S3", error=str(e))
 
 
 @tool(

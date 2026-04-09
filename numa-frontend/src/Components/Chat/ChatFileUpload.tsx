@@ -349,7 +349,7 @@ export const ChatFileUpload = ({
             // Preserve existing behavior after upload completes; do not clear the warning here
             if (!files || typeof files === 'string') return;
             if (Array.isArray(files)) {
-              const hasCsv = files.some((f) => {
+              const _hasCsv = files.some((f) => {
                 const type = (f as { fileType?: string }).fileType?.toLowerCase() || '';
                 const name = (f as { fileName?: string }).fileName || (f as { name?: string }).name || '';
                 return type === 'text/csv' || name.toLowerCase().endsWith('.csv');
@@ -362,7 +362,7 @@ export const ChatFileUpload = ({
               setShowCsvWarning(false);
               return;
             }
-            const hasCsv = files.some((f) => {
+            const _hasCsv = files.some((f) => {
               const type = f.type?.toLowerCase() || '';
               const name = f.name?.toLowerCase() || '';
               return type === 'text/csv' || name.endsWith('.csv');

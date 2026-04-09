@@ -46,6 +46,8 @@ const OAuthCallback = lazy(() => import('../Pages/OAuthCallback'));
 const V2AppDetail = lazy(() => import('../Pages/V2AppDetail').then((m) => ({ default: m.V2AppDetail })));
 const ApiContractPage = lazy(() => import('../Pages/ApiContractPage'));
 
+const ChatHistoryPage = lazy(() => import('../Pages/ChatHistoryPage'));
+
 export const ROUTE_CONFIG = [
   // Chat
   {
@@ -60,6 +62,12 @@ export const ROUTE_CONFIG = [
       featureFlag: 'NUMA_WORKSPACE_CHAT',
       order: 1,
     },
+  },
+  {
+    path: '/chat-history',
+    element: () => <ChatHistoryPage />,
+    requiredFeature: 'chat',
+    featureFlag: 'NUMA_WORKSPACE_CHAT',
   },
 
   // Workflows section items

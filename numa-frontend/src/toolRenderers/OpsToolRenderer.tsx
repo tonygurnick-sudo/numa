@@ -6,9 +6,8 @@
  * kanban board (priority dots, status pills, monospace IDs, glassmorphism
  * cards).
  */
-import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ToolResultLike } from './helpers';
+import { useS3FileResult, type ToolResultLike } from './helpers';
 import { useAuth } from '../Providers/AuthProvider';
 import {
   getOpsPayload,
@@ -17,7 +16,6 @@ import {
   isGetOperation,
   isWriteOperation,
   unwrapOpsResult,
-  workdirPathToRelative,
   getPriorityColor,
   getStatusColor,
   getContrastText,
@@ -525,60 +523,10 @@ const ErrorView = ({ payload }: { payload: OpsPayload }) => (
 
 // ── File-based result helpers ──────────────────────────────────────────
 
-/** Fetch full ops result from S3 when the backend saved it to a file.
- *  Retries up to 3 times with 1s backoff — the backend uploads immediately
- *  but there can be a brief delay before the object is readable. */
+/** Fetch full ops result from S3 when the backend saved it to a file. */
 function useOpsFileResult(payload: OpsPayload | null, conversationId?: string, sub?: string) {
-  const [fileData, setFileData] = useState<unknown>(null);
-  const [loading, setLoading] = useState(false);
   const { getCredentials } = useAuth();
-
-  useEffect(() => {
-    if (!payload?.filePath || !conversationId || !sub) return;
-    const relativePath = workdirPathToRelative(payload.filePath);
-    const bucket = window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
-    const region = window.sessionStorage.getItem('REGION');
-    if (!bucket || !region) return;
-
-    const s3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${relativePath}`;
-    let cancelled = false;
-    setLoading(true);
-
-    (async () => {
-      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const credentials = await getCredentials();
-      const client = new S3Client({ region, credentials });
-
-      const MAX_RETRIES = 3;
-      const RETRY_DELAY_MS = 1000;
-
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        if (cancelled) return;
-        try {
-          const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
-          const text = await resp.Body?.transformToString();
-          if (text && !cancelled) {
-            setFileData(JSON.parse(text));
-            setLoading(false);
-            return;
-          }
-        } catch {
-          // Wait before retrying (file may still be uploading to S3)
-          if (attempt < MAX_RETRIES - 1) {
-            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-          }
-        }
-      }
-
-      if (!cancelled) setLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [payload?.filePath, conversationId, sub, getCredentials]);
-
-  return { fileData, loading };
+  return useS3FileResult(payload?.filePath, conversationId, sub, getCredentials);
 }
 
 const LoadingView = () => (

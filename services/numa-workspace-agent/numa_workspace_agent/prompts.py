@@ -361,6 +361,24 @@ Activate skills using the Skill tool. Available skills:
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
 | `connect` | Finding files beyond the workspace — check the data bucket (My Files, Company Files) and data connectors (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). Use when a user asks about files not in /workdir/, needs to send email via a connector, or needs to make authenticated HTTP requests to connected services |
+| `render` | Rendering visual HTML, SVG diagrams, or images inline in the chat. Also covers the design system, colour palette, sendPrompt() bridge, and interactive widget patterns |
+
+**Inline render vs HTML file -- pick the right one:**
+- **Render (inline):** A visual that aids the conversation -- diagrams, charts, comparisons, interactive explainers. Appears in the chat flow. Think of it as another way to explain or present information, like a richer form of text. Use `render` via numa_tool.
+- **HTML file (artifact):** A standalone deliverable the user keeps -- dashboards, reports, tools, apps. Saved to /workdir/ for download. Use `execute_script` to create the file. If you want to preview the file after creating it, render it with `file_path`.
+
+**When to render inline (proactive -- no explicit ask needed):**
+- Explaining concepts with spatial, sequential, or systemic relationships (architecture, workflows, processes)
+- Comparing options, data, or configurations side by side
+- Presenting structured information (timelines, org charts, metrics, summaries)
+- Any time a diagram, chart, or styled layout would genuinely aid understanding more than text alone
+
+**When NOT to render inline:**
+- Simple factual questions, definitions, or summaries that are clear as text
+- Conversational exchanges where no visual adds value
+- The user asked for a file, download, artifact, or standalone app -- create an HTML file instead
+
+Rendered content appears inside the chat column (~600-800px), so design it as a compact visual component, not a full page. Pure SVGs (no scripts) are rendered directly without an iframe for crisper results. A `sendPrompt(text)` function is available inside rendered HTML to send messages back to chat, enabling interactive visuals (clickable nodes, drill-down buttons). Load the render skill for the full design system, colour palette, and sizing guidelines.
 
 **Rules:**
 - **CRITICAL: Always load the relevant skill BEFORE attempting the task.** Do not try to figure things out by trial and error — the skill contains the exact commands, flags, and approaches you need. Loading the skill first saves time and avoids errors.
@@ -892,6 +910,9 @@ def _build_connectors_context(
     Mirrors _build_integrations_context but for OAuth/token data connectors
     (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d, etc.).
 
+    Also checks for API reference documentation on disk at
+    ``/workdir/api-docs/{name}/`` and includes instructions when available.
+
     Args:
         connected_data_connectors: List of dicts with 'id' and 'name' keys
             for each connected data connector.
@@ -900,14 +921,20 @@ def _build_connectors_context(
         Connectors context string for the system prompt.
     """
     connector_lines = []
+    connectors_with_docs: list[str] = []
+
     for conn in connected_data_connectors:
         cid = conn.get("id", "")
         name = conn.get("name", cid)
         connector_lines.append(f"- {name} (`{cid}`): **Connected**")
+        # Check if API reference docs were synced for this connector
+        docs_dir = Path(f"/workdir/api-docs/{name}")
+        if docs_dir.is_dir() and any(docs_dir.iterdir()):
+            connectors_with_docs.append(name)
 
     connectors_list = "\n".join(connector_lines)
 
-    return f"""## Connected Data Connectors
+    context = f"""## Connected Data Connectors
 The user has data connectors configured via the Data Connectors page. These are separate from Pipedream integrations.
 
 **Connector Status:**
@@ -923,6 +950,23 @@ Access these via the `connectors` tool (NOT the integrations tool). Operations:
 The `request` operation makes authenticated HTTP calls to ANY API the connector's OAuth token covers. For example, a Google Drive connector token also works with Google Docs API, Sheets API, etc.
 
 **Do NOT waste tool calls on disconnected connectors.** Only the connectors listed above are connected."""
+
+    if connectors_with_docs:
+        docs_list = ", ".join(connectors_with_docs)
+        context += f"""
+
+**API Reference Documentation:**
+API reference documentation is available at `/workdir/api-docs/{{name}}/` for the following connectors: {docs_list}.
+
+You **MUST** read `01-llm-api-rules.md` before making any authenticated API request via the `request` operation for these connectors. It contains auth requirements, rate limits, required headers, and common pitfalls that will cause failures if ignored.
+
+Companion files provide detailed reference:
+- `01a-domain-model-reference.md` — Entity definitions, field types, relationships.
+- `01b-query-patterns.md` — Read operations: list, search, filter, pagination.
+- `01c-mutation-patterns.md` — Write operations: create, update, delete, batch.
+- `01d-event-and-error-handling.md` — Error codes, retry logic, webhooks."""
+
+    return context
 
 
 def _build_email_signature_context(email_signature: Optional[dict]) -> str:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Table, Button, Form, Badge, Alert, Modal, OverlayTrigger, Tooltip, Spinner } from 'react-bootstrap';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { useTranslation } from 'react-i18next';
@@ -402,7 +402,7 @@ function buildRowsForTree(
       return;
     }
     const fileName = safeDecodeURIComponent(f.Key.split('/').pop() || '');
-    const rowId = parentPath ? `${parentPath}/${fileName}` : fileName;
+    const rowId = (parentPath ? `${parentPath}/${fileName}` : fileName) + `::${f.Key}`;
     const status: Status = resolveStatus(f);
     const kbStatus = f.kbDoc
       ? f.kbDoc.error && Object.keys(f.kbDoc.error).length > 0
@@ -501,8 +501,8 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     const { t } = useTranslation('knowledgeBase');
     // Use KB state from context
     const { kbState, isLoading: kbStateLoading, error: kbStateError, refreshKBState, invalidateCache } = useKBState();
-    const kbDocuments = kbState?.documents || [];
-    const failedDocuments = kbState?.failedDocuments || [];
+    const kbDocuments = useMemo(() => kbState?.documents ?? [], [kbState?.documents]);
+    const failedDocuments = useMemo(() => kbState?.failedDocuments ?? [], [kbState?.failedDocuments]);
 
     // SWR: hydrate file list from localStorage cache so it renders instantly
     const [files, setFiles] = useState<S3Object[]>(() => {
@@ -562,8 +562,8 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       crawling: t('fileExplorer.status.crawling'),
       pending: t('fileExplorer.status.pending'),
     };
-    const formatDate = (date: Date | undefined) => formatDateSafe(date, emptyValue);
-    const formatSize = (size: number | undefined) => formatSizeSafe(size, emptyValue);
+    const formatDate = useCallback((date: Date | undefined) => formatDateSafe(date, emptyValue), [emptyValue]);
+    const formatSize = useCallback((size: number | undefined) => formatSizeSafe(size, emptyValue), [emptyValue]);
 
     /**
      * Determine if status indicators are ready to show.

@@ -61,6 +61,7 @@ from .s3_workspace import (
     read_progress_from_s3,
     read_result_from_s3,
     sync_agent_reference_files,
+    sync_ext_api_docs_for_connectors,
     sync_from_s3,
     sync_to_s3,
     sync_uploads_from_s3,
@@ -1537,18 +1538,30 @@ async def _handle_chat(
         prof = await asyncio.to_thread(fetch_user_profile, user_sub)
         return sig, prof
 
+    async def _load_ext_api_docs():
+        connector_names = [
+            c.get("name", c.get("id", ""))
+            for c in connected_data_connectors
+            if isinstance(c, dict)
+        ]
+        return await asyncio.to_thread(
+            sync_ext_api_docs_for_connectors, connector_names
+        )
+
     (
         company_profile,
         agent_config,
         integration_sync_result,
         kb_listings,
         (email_signature, user_profile),
+        _api_docs_synced,
     ) = await asyncio.gather(
         _load_company_profile(),
         _load_agent_config(),
         _load_integration_schemas(),
         _load_kb_listings(),
         _load_user_data(),
+        _load_ext_api_docs(),
     )
 
     load_elapsed_ms = (time.monotonic() - load_start) * 1000
@@ -1958,6 +1971,14 @@ async def _handle_sync(
             force_refresh=is_cold_start,
         )
 
+    # Sync ext API docs for connected data connectors (instant if already synced)
+    _connector_names_sync = [
+        c.get("name", c.get("id", ""))
+        for c in connected_data_connectors
+        if isinstance(c, dict)
+    ]
+    sync_ext_api_docs_for_connectors(_connector_names_sync)
+
     # Run SDK — custom orchestrator, sequential pipeline, or single agent
     request_metadata = body.get("metadata", {})
 
@@ -2250,6 +2271,14 @@ async def _handle_fire_and_forget(
             user_sub,
             force_refresh=is_cold_start,
         )
+
+    # Sync ext API docs for connected data connectors (instant if already synced)
+    _connector_names_async = [
+        c.get("name", c.get("id", ""))
+        for c in connected_data_connectors
+        if isinstance(c, dict)
+    ]
+    sync_ext_api_docs_for_connectors(_connector_names_async)
 
     # Capture current checksums before background task starts
     pre_checksums = dict(_checksums_cache)

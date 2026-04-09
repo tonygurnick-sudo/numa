@@ -10,6 +10,7 @@ import { downloadPdf, downloadDocx } from '../Services/documentConverterService'
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
 import { withPRM } from '../utils/prmUtils';
+import { getFlag } from '../utils/featureFlags';
 import { buildS3Key, type FileScope } from '../Services/filesService';
 import { fetchFileFromS3 } from '../utils/s3Utils';
 import { CreateShareModal } from './Files/CreateShareModal';
@@ -413,19 +414,21 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
           {t('resultRenderer.actions.save')}
         </Button>
 
-        <Button variant="outline-info" onClick={handleShareFile} disabled={sharingFile}>
-          {sharingFile ? (
-            <>
-              <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-              {t('resultRenderer.actions.preparing')}
-            </>
-          ) : (
-            <>
-              <i className="bi bi-share me-1"></i>
-              {t('resultRenderer.actions.share')}
-            </>
-          )}
-        </Button>
+        {getFlag('NUMA_SHARING') && (
+          <Button variant="outline-info" onClick={handleShareFile} disabled={sharingFile}>
+            {sharingFile ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                {t('resultRenderer.actions.preparing')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-share me-1"></i>
+                {t('resultRenderer.actions.share')}
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Save to Files Modal */}
