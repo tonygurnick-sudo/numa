@@ -33,13 +33,21 @@ from claude_agent_sdk import (
 )
 from numa_workspace_agent.agent_config import AgentConfig
 from numa_workspace_agent.prompts import augment_prompt_with_context
+from numa_workspace_agent.quota_fallback import (
+    is_daily_quota_error,
+    mark_quota_exhausted,
+    resolve_model_with_fallback,
+)
 from numa_workspace_agent.s3_workspace import (
     archive_claude_session,
     restore_claude_session,
     restore_trace_from_s3,
 )
 from numa_workspace_agent.sdk_config import (
+    DEFAULT_MODEL,
+    FALLBACK_MODEL,
     LOCAL_ROOT,
+    _strip_prefix,
     create_agent_options,
     validate_model_id,
 )
@@ -615,8 +623,11 @@ async def stream_claude_sdk(
         v1_migration_context,
     )
 
-    # 4. Create SDK options with validated model
+    # 4. Create SDK options with validated model (with quota fallback pre-check)
     validated_model = validate_model_id(model_id)
+    effective_model = validated_model or DEFAULT_MODEL
+    effective_model, _is_fallback = resolve_model_with_fallback(effective_model)
+    validated_model = effective_model
 
     options = create_agent_options(
         session_id=session_id,
@@ -697,6 +708,7 @@ async def stream_claude_sdk(
     yield format_sse_event(user_event)
 
     message_count = 0
+    _daily_quota_hit = False  # Set when 429 "per day" detected on ResultMessage
     # Track streaming tool_use blocks that may need approval.
     # When the SDK streams sub-agent tool calls, it yields StreamEvents
     try:
@@ -798,6 +810,18 @@ async def stream_claude_sdk(
                         is_error=message.is_error,
                         request_id=request_id,
                     )
+
+                    # Detect daily quota exhaustion (429 "per day")
+                    if message.is_error:
+                        # Check ResultMessage.result and stream_log text entries
+                        _error_texts = [message.result or ""]
+                        _error_texts.extend(
+                            e.text or ""
+                            for e in stream_log.entries
+                            if e.entry_type == "text"
+                        )
+                        if any(is_daily_quota_error(t) for t in _error_texts):
+                            _daily_quota_hit = True
 
                 # Capture session_id from system init message
                 if isinstance(message, SystemMessage) and message.subtype == "init":
@@ -1234,6 +1258,79 @@ async def stream_claude_sdk(
                     f.write(json.dumps(stop_event_payload) + "\n")
                 yield format_sse_event(stop_event_payload)
 
+        # ── Daily quota fallback retry ────────────────────────────────────
+        # If the primary model hit a daily token quota (429 "per day"),
+        # cache the exhaustion and retry immediately with fallback model.
+        if _daily_quota_hit and _strip_prefix(options.model) != _strip_prefix(
+            FALLBACK_MODEL
+        ):
+            mark_quota_exhausted(options.model)
+            logger.warning(
+                "Retrying with fallback model after daily quota exhaustion",
+                _name="QUOTA_FALLBACK_RETRY",
+                phase="fallback",
+                original_model=options.model,
+                fallback_model=FALLBACK_MODEL,
+                conversation_id=conversation_id,
+            )
+
+            # Build fresh options with fallback model (no session resume --
+            # the errored session is not usable)
+            fallback_options = create_agent_options(
+                session_id=None,
+                conversation_id=conversation_id,
+                user_sub=user_sub,
+                user_email=user_email,
+                user_timezone=timezone_str,
+                today_string=today_string,
+                allowed_kb_ids=available_kbs,
+                enabled_tools=enabled_tools,
+                model=FALLBACK_MODEL,
+                agent_config=agent_config,
+                agent_file_paths=agent_file_paths,
+                external_user_id=external_user_id,
+                enabled_integrations=enabled_integrations,
+                available_integrations=available_integrations,
+                connected_data_connectors=connected_data_connectors,
+                request_id=request_id,
+                email_signature=email_signature,
+                agent_type_config=agent_type_config,
+                user_profile=user_profile,
+                company_profile=company_profile,
+                feature_flags=feature_flags,
+            )
+
+            async with ClaudeSDKClient(options=fallback_options) as retry_client:
+                await retry_client.query(augmented_prompt)
+                async for message in retry_client.receive_response():
+                    serialized = serialize_message(message)
+                    if isinstance(message, ResultMessage):
+                        captured_session_id = message.session_id
+                        serialized["session_id"] = captured_session_id
+                        stream_log.finalize(message)
+                        logger.info(
+                            "Fallback SDK result summary",
+                            _name="SDK_RESULT_FALLBACK",
+                            phase="fallback",
+                            conversation_id=conversation_id,
+                            session_id=message.session_id,
+                            duration_ms=message.duration_ms,
+                            num_turns=message.num_turns,
+                            total_cost_usd=message.total_cost_usd,
+                            is_error=message.is_error,
+                            request_id=request_id,
+                        )
+                    if isinstance(message, SystemMessage) and message.subtype == "init":
+                        if "session_id" in message.data:
+                            captured_session_id = message.data["session_id"]
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                stream_log.record_text(block.text)
+                    with trace_path.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(serialized) + "\n")
+                    yield format_sse_event(serialized)
+
     except Exception as e:
         import traceback
 
@@ -1435,8 +1532,12 @@ async def run_claude_sdk(
     # message loop below (same as the streaming path in stream_claude_sdk).
     os.environ["NUMA_APPROVAL_MODE"] = "manual"
 
-    # 4. Create SDK options
+    # 4. Create SDK options (with quota fallback pre-check)
     validated_model = validate_model_id(model_id)
+    effective_model = validated_model or DEFAULT_MODEL
+    effective_model, _is_fallback = resolve_model_with_fallback(effective_model)
+    validated_model = effective_model
+
     options = create_agent_options(
         session_id=session_id,
         conversation_id=conversation_id,
@@ -1492,6 +1593,7 @@ async def run_claude_sdk(
     # Collect assistant text blocks and metadata
     collected_text: list[str] = []
     result_meta: dict[str, Any] = {}
+    _daily_quota_hit = False
 
     try:
         async with ClaudeSDKClient(options=options) as client:
@@ -1776,6 +1878,17 @@ async def run_claude_sdk(
                         is_error=message.is_error,
                     )
 
+                    # Detect daily quota exhaustion (429 "per day")
+                    if message.is_error:
+                        _error_texts = [message.result or ""]
+                        _error_texts.extend(
+                            e.text or ""
+                            for e in stream_log.entries
+                            if e.entry_type == "text"
+                        )
+                        if any(is_daily_quota_error(t) for t in _error_texts):
+                            _daily_quota_hit = True
+
                 if isinstance(message, SystemMessage) and message.subtype == "init":
                     if "session_id" in message.data:
                         captured_session_id = message.data["session_id"]
@@ -1793,6 +1906,96 @@ async def run_claude_sdk(
 
                 with trace_path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(serialized) + "\n")
+
+        # ── Daily quota fallback retry ────────────────────────────────────
+        if _daily_quota_hit and _strip_prefix(options.model) != _strip_prefix(
+            FALLBACK_MODEL
+        ):
+            mark_quota_exhausted(options.model)
+            logger.warning(
+                "Retrying with fallback model after daily quota exhaustion (sync)",
+                _name="QUOTA_FALLBACK_RETRY",
+                phase="fallback",
+                original_model=options.model,
+                fallback_model=FALLBACK_MODEL,
+                conversation_id=conversation_id,
+            )
+
+            # Reset state for retry
+            collected_text.clear()
+            result_meta.clear()
+            captured_session_id = None
+
+            fallback_options = create_agent_options(
+                session_id=None,
+                conversation_id=conversation_id,
+                user_sub=user_sub,
+                user_email=user_email,
+                user_timezone=timezone_str,
+                today_string=today_string,
+                allowed_kb_ids=available_kbs,
+                enabled_tools=enabled_tools,
+                model=FALLBACK_MODEL,
+                agent_config=agent_config,
+                agent_file_paths=agent_file_paths,
+                external_user_id=external_user_id,
+                enabled_integrations=enabled_integrations,
+                available_integrations=available_integrations,
+                connected_data_connectors=connected_data_connectors,
+                request_id=request_id,
+                email_signature=email_signature,
+                agent_type_config=agent_type_config,
+                user_profile=user_profile,
+                company_profile=company_profile,
+                feature_flags=feature_flags,
+                home_dir=system_dir,
+            )
+
+            async with ClaudeSDKClient(options=fallback_options) as retry_client:
+                await retry_client.query(augmented_prompt)
+                async for message in retry_client.receive_response():
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                stream_log.record_text(block.text)
+                                collected_text.append(block.text)
+                            elif isinstance(block, ThinkingBlock):
+                                stream_log.record_thinking(block.thinking)
+                    serialized = serialize_message(message)
+                    if isinstance(message, ResultMessage):
+                        captured_session_id = message.session_id
+                        serialized["session_id"] = captured_session_id
+                        stream_log.finalize(message)
+                        usage = getattr(message, "usage", {}) or {}
+                        result_meta = {
+                            "num_turns": message.num_turns,
+                            "total_cost_usd": message.total_cost_usd,
+                            "duration_ms": message.duration_ms,
+                            "is_error": message.is_error,
+                            "input_tokens": usage.get("input_tokens", 0) or 0,
+                            "output_tokens": usage.get("output_tokens", 0) or 0,
+                            "cache_read_tokens": usage.get("cache_read_input_tokens", 0)
+                            or 0,
+                            "cache_creation_tokens": usage.get(
+                                "cache_creation_input_tokens", 0
+                            )
+                            or 0,
+                        }
+                        logger.info(
+                            "Fallback SDK run result",
+                            _name="SDK_RUN_RESULT_FALLBACK",
+                            phase="fallback",
+                            conversation_id=conversation_id,
+                            duration_ms=message.duration_ms,
+                            num_turns=message.num_turns,
+                            total_cost_usd=message.total_cost_usd,
+                            is_error=message.is_error,
+                        )
+                    if isinstance(message, SystemMessage) and message.subtype == "init":
+                        if "session_id" in message.data:
+                            captured_session_id = message.data["session_id"]
+                    with trace_path.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(serialized) + "\n")
 
     except Exception as e:
         import traceback
