@@ -164,11 +164,16 @@ export interface WebSearchPayload {
   title?: string;
   url?: string;
   status?: string;
+  file_path?: string;
+  preview?: string;
+  hint?: string;
 }
 
 export function getWebSearchPayload(result: ToolResultLike): WebSearchPayload | null {
-  const blocks = Array.isArray(result?.content)
-    ? (result.content as Array<{ json?: unknown; text?: string }>)
+  // Handle both formats: {content: [...]} (MCP) and raw array [...] (history tool_card)
+  const contentOrResult = Array.isArray(result) ? result : result?.content;
+  const blocks = Array.isArray(contentOrResult)
+    ? (contentOrResult as Array<{ json?: unknown; text?: string }>)
     : undefined;
   if (Array.isArray(blocks) && blocks[0]?.json && typeof blocks[0].json === 'object') {
     return blocks[0].json as WebSearchPayload;

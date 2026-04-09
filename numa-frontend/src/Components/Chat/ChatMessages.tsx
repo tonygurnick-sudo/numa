@@ -12,6 +12,7 @@ import { UnifiedToolCard } from '../UnifiedToolCard';
 import { OpsToolRenderer } from '../../toolRenderers/OpsToolRenderer';
 import { RenderToolRenderer } from '../../toolRenderers/RenderToolRenderer';
 import type { ToolResultLike } from '../../toolRenderers/helpers';
+import { WebSearchInlineRenderer } from '../../toolRenderers/WebSearchInlineRenderer';
 import { FileMessage } from '../FileMessage';
 import AgentAvatar from '../Agents/AgentAvatar';
 import type { AgentSummary } from '../../types/agents';
@@ -695,6 +696,7 @@ const ChatMessages = ({
                         files: 'bi-folder',
                       };
                       const hasRenderResult = subTool === 'render' && sc.result;
+                      const hasWebSearchResult = subTool === 'web_search' && sc.result && !sc.isLoading;
                       return (
                         <div key={`numa-${idx}-${!!sc.result}`}>
                           {/* Hide indicator once render content is ready */}
@@ -719,6 +721,14 @@ const ChatMessages = ({
                               conversationId={conversationId}
                               sub={sub}
                               onSendPrompt={onSendPrompt}
+                            />
+                          )}
+                          {hasWebSearchResult && (
+                            <WebSearchInlineRenderer
+                              result={sc.result as ToolResultLike}
+                              onOpenFilePreview={onOpenFilePreview}
+                              conversationId={conversationId}
+                              userSub={sub}
                             />
                           )}
                         </div>

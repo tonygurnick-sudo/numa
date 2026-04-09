@@ -282,6 +282,7 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
                 toolUseId: item.tool_use_id || null,
                 isLoading: false,
                 steps: steps || [],
+                input: inputPayload,
               };
               const idx = segments.push(card) - 1;
               if (item.tool_use_id) toolCardIndexById.set(item.tool_use_id, idx);
