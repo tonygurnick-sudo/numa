@@ -60,6 +60,70 @@ MAX_SAME_HOST_LINKS = 5000  # Maximum number of same-host links to collect
 CHUNK_SIZE = 8 * 1024 * 1024  # 8MB chunks for faster downloads
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB limit
 
+# SSRF protection: block requests to internal/private networks
+BLOCKED_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "[::1]",
+    "metadata.google.internal",
+}
+BLOCKED_IP_PREFIXES = (
+    "10.",
+    "172.16.",
+    "172.17.",
+    "172.18.",
+    "172.19.",
+    "172.20.",
+    "172.21.",
+    "172.22.",
+    "172.23.",
+    "172.24.",
+    "172.25.",
+    "172.26.",
+    "172.27.",
+    "172.28.",
+    "172.29.",
+    "172.30.",
+    "172.31.",
+    "192.168.",
+    "169.254.",  # AWS metadata service + link-local
+    "fd",  # IPv6 ULA
+)
+
+
+def _is_blocked_url(url: str) -> bool:
+    """Block URLs targeting internal networks, metadata services, or private IPs."""
+    try:
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+
+        if host in BLOCKED_HOSTS:
+            return True
+
+        if host.startswith(BLOCKED_IP_PREFIXES):
+            return True
+
+        # Resolve hostname to check for DNS rebinding to private IPs
+        import socket
+
+        try:
+            resolved = socket.getaddrinfo(host, None, socket.AF_INET)
+            for _, _, _, _, addr in resolved:
+                ip = addr[0]
+                if ip.startswith(BLOCKED_IP_PREFIXES) or ip in BLOCKED_HOSTS:
+                    logger.warning(
+                        "DNS resolved to blocked IP", host=host, resolved_ip=ip
+                    )
+                    return True
+        except socket.gaierror:
+            pass  # Can't resolve -- let the HTTP client handle the error
+
+        return False
+    except Exception:
+        return True  # Block on parse failure
+
+
 # Supported file types for knowledge base ingestion
 EXTRACTABLE_FILE_TYPES = {
     ".pdf",
@@ -813,6 +877,16 @@ async def process_url(
         logger.info(
             "URL normalized with https:// prefix", original_url=url, normalized_url=url
         )
+
+    # SSRF protection: block internal/private network URLs
+    if _is_blocked_url(url):
+        logger.warning("Blocked URL targeting internal network", url=url)
+        return {
+            "url": url,
+            "status": "failed",
+            "reason": "URL targets an internal or private network address",
+            "links_enqueued": 0,
+        }
 
     # File type detection - route to appropriate handler
     file_extension = pathlib.Path(url).suffix.lower()
