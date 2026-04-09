@@ -205,16 +205,14 @@ describe('NumaChatDynamoUtils', () => {
       expect(result).toEqual([]);
     });
 
-    it('should handle DynamoDB errors gracefully', async () => {
+    it('should throw on DynamoDB errors so callers can retry', async () => {
       const userId = 'test-user';
 
       marshall.mockImplementation((item) => ({ marshalled: item }));
 
       mockDynamoClient.send.mockRejectedValue(new Error('DynamoDB Error'));
 
-      const result = await dynamoUtils.getUserConversationsMeta(userId);
-
-      expect(result).toEqual([]);
+      await expect(dynamoUtils.getUserConversationsMeta(userId)).rejects.toThrow('DynamoDB Error');
     });
   });
 });

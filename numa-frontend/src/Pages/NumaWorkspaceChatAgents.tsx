@@ -1287,6 +1287,7 @@ const NumaWorkspaceChatAgents = () => {
     onExpired: handleNewChatOnExpired,
     // DO NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
     storageKeySuffix: '-v2', // Isolate inactivity timer from V1 chat
+    hasUserStartedNewChat,
   });
 
   // Typing is user activity — prevent the inactivity handler from wiping the input

@@ -25,6 +25,8 @@ type UseChatInactivityArgs = {
   storageKeySuffix?: string;
   /** If true, filter out workspace conversations from suggestions (for V1 chat) */
   excludeWorkspaceConversations?: boolean;
+  /** External flag indicating the new chat view is being shown (e.g. from useConversationManager) */
+  hasUserStartedNewChat?: boolean;
 };
 
 export function useChatInactivity({
@@ -36,6 +38,7 @@ export function useChatInactivity({
   inputMessage,
   storageKeySuffix = '',
   excludeWorkspaceConversations = false,
+  hasUserStartedNewChat = false,
 }: UseChatInactivityArgs) {
   const [showContinueSuggestions, setShowContinueSuggestions] = useState(false);
   const [recentConversations, setRecentConversations] = useState<ConversationMeta[]>([]);
@@ -94,23 +97,28 @@ export function useChatInactivity({
 
   const fetchRecentConversations = async (signal?: AbortSignal): Promise<ConversationMeta[]> => {
     if (!numaChatDynamoUtils || !sub) return [] as ConversationMeta[];
-    try {
-      const items = await numaChatDynamoUtils.getUserConversationsMeta(sub);
-      return items as ConversationMeta[];
-    } catch (firstError) {
-      console.warn('First attempt to fetch recent conversations failed, retrying in 1.5s...', firstError);
-      // Wait 1.5s to give the AWS SDK time to resolve fresh STS credentials
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      // If the effect was torn down during the delay, bail out
-      if (signal?.aborted) return [] as ConversationMeta[];
+    const MAX_RETRIES = 3;
+    const BASE_DELAY_MS = 1500;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const items = await numaChatDynamoUtils.getUserConversationsMeta(sub);
         return items as ConversationMeta[];
-      } catch (retryError) {
-        console.error('Retry also failed to fetch recent conversations:', retryError);
-        return [] as ConversationMeta[];
+      } catch (error) {
+        if (attempt < MAX_RETRIES) {
+          const delay = BASE_DELAY_MS * Math.pow(2, attempt); // 1.5s, 3s, 6s
+          console.warn(
+            `Fetch recent conversations failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${delay}ms...`,
+            error
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          if (signal?.aborted) return [] as ConversationMeta[];
+        } else {
+          console.error(`All ${MAX_RETRIES + 1} attempts to fetch recent conversations failed:`, error);
+          return [] as ConversationMeta[];
+        }
       }
     }
+    return [] as ConversationMeta[];
   };
 
   const showSuggestionsIfAvailable = async (forceShow = false, signal?: AbortSignal) => {
@@ -214,6 +222,31 @@ export function useChatInactivity({
     };
     // buttonStatus is read via buttonStatusRef to avoid effect teardown on every status change.
   }, [numaChatDynamoUtils, sub]);
+
+  // Catch-up fetch: if the new chat view is showing (e.g. useConversationManager detected
+  // stale inactivity and called handleNewChat) but recent conversations haven't been populated
+  // yet, fetch them now. This handles the race where useConversationManager shows the new chat
+  // view before useChatInactivity's effect can populate recent conversations.
+  const catchUpFetchedRef = useRef(false);
+  useEffect(() => {
+    if (
+      hasUserStartedNewChat &&
+      recentConversations.length === 0 &&
+      !suggestionsLoading &&
+      numaChatDynamoUtils &&
+      sub &&
+      !catchUpFetchedRef.current
+    ) {
+      catchUpFetchedRef.current = true;
+      showSuggestionsIfAvailable(true).catch((error) => {
+        console.warn('Failed to fetch recent conversations on catch-up:', error);
+      });
+    }
+    // Reset the catch-up flag when new chat is deactivated so it can fire again next time
+    if (!hasUserStartedNewChat) {
+      catchUpFetchedRef.current = false;
+    }
+  }, [hasUserStartedNewChat, recentConversations.length, suggestionsLoading, numaChatDynamoUtils, sub]);
 
   const forceShowNewChatView = () => {
     activateNewChatView();
