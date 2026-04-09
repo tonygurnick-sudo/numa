@@ -99,8 +99,9 @@
     },
     "fileUploaded": "File '{{name}}' uploaded successfully.",
     "openDocument": "Open: {{title}}",
-    "copyMessage": "Copy message",
-    "copyMessageAria": "Copy message to clipboard"
+    "copyMessage": "Copy",
+    "copyMessageAria": "Copy message to clipboard",
+    "copied": "Copied"
   },
   "dataAnalysis": {
     "fileFallback": "data file"

@@ -361,6 +361,15 @@ const ChatMessages = ({
   // Track which message index has been copied (for showing checkmark feedback)
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
 
+  // Index of the most recent assistant message — its copy button stays always visible.
+  // Older assistant messages reveal the button on hover.
+  const lastAssistantIndex = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant') return i;
+    }
+    return -1;
+  })();
+
   // Copy message content to clipboard
   const handleCopyMessage = async (message: ChatMessage, messageIndex: number) => {
     try {
@@ -582,16 +591,6 @@ const ChatMessages = ({
                   `${t('messages.roles.system')}:`
                 )}
               </strong>
-              {hasCopyableContent && (
-                <button
-                  className="copy-message-btn"
-                  onClick={() => handleCopyMessage(message, index)}
-                  title={t('messages.copyMessage')}
-                  aria-label={t('messages.copyMessageAria')}
-                >
-                  <i className={`bi ${copiedMessageIndex === index ? 'bi-check' : 'bi-clipboard'}`} />
-                </button>
-              )}
             </div>
             <div className="message-content markdown-content">
               {message.segments && message.segments.length > 0 ? (
@@ -891,6 +890,19 @@ const ChatMessages = ({
                   onClick={onOpenDocument}
                   openLabel={t('messages.openDocument', { title: message.docTitle })}
                 />
+              )}
+
+              {hasCopyableContent && !message.status && (
+                <div className={`message-actions${index === lastAssistantIndex ? ' message-actions-latest' : ''}`}>
+                  <button
+                    className="copy-message-btn"
+                    onClick={() => handleCopyMessage(message, index)}
+                    title={t('messages.copyMessage')}
+                    aria-label={t('messages.copyMessageAria')}
+                  >
+                    <i className={`bi ${copiedMessageIndex === index ? 'bi-check' : 'bi-clipboard'}`} />
+                  </button>
+                </div>
               )}
             </div>
           </div>
