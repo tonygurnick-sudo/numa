@@ -41,6 +41,8 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
         return '/tools/support-docs-manager';
       case 'platform-settings':
         return '/tools/platform-settings';
+      case 'reset-client-password':
+        return '/tools/reset-client-password';
       default:
         return '/';
     }
@@ -71,6 +73,7 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
       case 'bulk-update-client-config':
       case 'support-docs-manager':
       case 'platform-settings':
+      case 'reset-client-password':
         return <Play className="me-2" />;
       default:
         return <Play className="me-2" />;
