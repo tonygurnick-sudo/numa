@@ -454,13 +454,13 @@ Three modes, configurable per category:
 
 ### Approval Categories
 
-| Category         | Tools                         | Write Operations               | Safe Operations           |
-| ---------------- | ----------------------------- | ------------------------------ | ------------------------- |
-| `integrations`   | `run_action`, `proxy_request` | All API calls                  | `configure_props`         |
-| `agents`         | `numa_tool` (agents)          | create, update, duplicate      | list, get                 |
-| `memories`       | `numa_tool` (memories)        | add, update                    | list                      |
-| `knowledgeBases` | `numa_tool` (KB)              | upload                         | query, list, download     |
-| `ops`            | `numa_ops_tool`               | create*\*, update*_, delete\__ | get*\*, list*_, search\__ |
+| Category         | Tools                         | Write Operations                 | Safe Operations             |
+| ---------------- | ----------------------------- | -------------------------------- | --------------------------- |
+| `integrations`   | `run_action`, `proxy_request` | All API calls                    | `configure_props`           |
+| `agents`         | `numa_tool` (agents)          | create, update, duplicate        | list, get                   |
+| `memories`       | `numa_tool` (memories)        | add, update                      | list                        |
+| `knowledgeBases` | `numa_tool` (KB)              | upload                           | query, list, download       |
+| `ops`            | `numa_ops_tool`               | create*\*, update*\_, delete\_\_ | get*\*, list*\_, search\_\_ |
 
 ### Data Flow
 

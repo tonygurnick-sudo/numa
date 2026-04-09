@@ -48,6 +48,12 @@ export const SUPPORTED_INTEGRATIONS = [
   'quickbooks',
   'harvest',
   'alchemer',
+  'microsoft_sql_server',
+  'microsoft_dynamics_365_sales',
+  'dynamics_365_business_central_api',
+  'clickup',
+  'google_ads',
+  'zoho_crm',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];

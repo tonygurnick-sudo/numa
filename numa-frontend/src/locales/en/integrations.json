@@ -253,6 +253,36 @@
       "name": "Alchemer",
       "description": "Survey and feedback management platform.",
       "example_query": "Show me the results of the employee engagement survey."
+    },
+    "microsoft_sql_server": {
+      "name": "Microsoft SQL Server",
+      "description": "Connect to your SQL Server to execute queries and manage your database.",
+      "example_query": "Show me the top 10 users from the users table."
+    },
+    "microsoft_dynamics_365_sales": {
+      "name": "Dynamics 365 Sales",
+      "description": "Manage customer relationships, sales pipelines, and business processes.",
+      "example_query": "List my open sales opportunities."
+    },
+    "dynamics_365_business_central_api": {
+      "name": "Dynamics 365 Business Central",
+      "description": "Comprehensive business management solution for finance, operations, and sales.",
+      "example_query": "Show me the latest purchase orders."
+    },
+    "clickup": {
+      "name": "ClickUp",
+      "description": "Project management platform for tasks, docs, chat, goals, and more.",
+      "example_query": "Create a new task in the engineering space."
+    },
+    "google_ads": {
+      "name": "Google Ads",
+      "description": "Manage and analyze your advertising campaigns, keywords, and metrics.",
+      "example_query": "What is the CPC and spend for my campaigns this week?"
+    },
+    "zoho_crm": {
+      "name": "Zoho CRM",
+      "description": "Manage leads, pipelines, and track sales performance.",
+      "example_query": "List the new leads added this month."
     }
   },
   "tabs": {

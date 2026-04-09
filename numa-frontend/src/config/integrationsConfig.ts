@@ -52,6 +52,12 @@ import procoreIcon from '../assets/icons/procore.png';
 import quickbooksIcon from '../assets/icons/quickbooks.svg';
 import harvestIcon from '../assets/icons/harvest.png';
 import alchemerIcon from '../assets/icons/alchemer.png';
+import clickupIcon from '../assets/icons/clickup.svg';
+import googleAdsIcon from '../assets/icons/google_ads.svg';
+import zohoCrmIcon from '../assets/icons/zoho_crm.svg';
+import microsoftSqlServerIcon from '../assets/icons/microsoft_sql_server.svg';
+import microsoftDynamics365SalesIcon from '../assets/icons/microsoft_dynamics_365_sales.svg';
+import dynamics365BusinessCentralApiIcon from '../assets/icons/dynamics_365_business_central_api.svg';
 import i18n from '../i18n';
 
 export type BootstrapColor =
@@ -542,6 +548,66 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     fallback_icon: 'bi bi-bar-chart',
     fallback_color: 'info',
     example_query: connectionText('alchemer', 'example_query'),
+  },
+  microsoft_sql_server: {
+    id: 'microsoft_sql_server',
+    name: connectionText('microsoft_sql_server', 'name'),
+    description: connectionText('microsoft_sql_server', 'description'),
+    auth_type: 'oauth',
+    img_src: microsoftSqlServerIcon,
+    fallback_icon: 'bi bi-database',
+    fallback_color: 'primary',
+    example_query: connectionText('microsoft_sql_server', 'example_query'),
+  },
+  clickup: {
+    id: 'clickup',
+    name: connectionText('clickup', 'name'),
+    description: connectionText('clickup', 'description'),
+    auth_type: 'oauth',
+    img_src: clickupIcon,
+    fallback_icon: 'bi bi-check2-square',
+    fallback_color: 'primary',
+    example_query: connectionText('clickup', 'example_query'),
+  },
+  google_ads: {
+    id: 'google_ads',
+    name: connectionText('google_ads', 'name'),
+    description: connectionText('google_ads', 'description'),
+    auth_type: 'oauth',
+    img_src: googleAdsIcon,
+    fallback_icon: 'bi bi-badge-ad',
+    fallback_color: 'warning',
+    example_query: connectionText('google_ads', 'example_query'),
+  },
+  zoho_crm: {
+    id: 'zoho_crm',
+    name: connectionText('zoho_crm', 'name'),
+    description: connectionText('zoho_crm', 'description'),
+    auth_type: 'oauth',
+    img_src: zohoCrmIcon,
+    fallback_icon: 'bi bi-building',
+    fallback_color: 'success',
+    example_query: connectionText('zoho_crm', 'example_query'),
+  },
+  microsoft_dynamics_365_sales: {
+    id: 'microsoft_dynamics_365_sales',
+    name: connectionText('microsoft_dynamics_365_sales', 'name'),
+    description: connectionText('microsoft_dynamics_365_sales', 'description'),
+    auth_type: 'oauth',
+    img_src: microsoftDynamics365SalesIcon,
+    fallback_icon: 'bi bi-graph-up-arrow',
+    fallback_color: 'primary',
+    example_query: connectionText('microsoft_dynamics_365_sales', 'example_query'),
+  },
+  dynamics_365_business_central_api: {
+    id: 'dynamics_365_business_central_api',
+    name: connectionText('dynamics_365_business_central_api', 'name'),
+    description: connectionText('dynamics_365_business_central_api', 'description'),
+    auth_type: 'oauth',
+    img_src: dynamics365BusinessCentralApiIcon,
+    fallback_icon: 'bi bi-briefcase',
+    fallback_color: 'primary',
+    example_query: connectionText('dynamics_365_business_central_api', 'example_query'),
   },
 });
 
