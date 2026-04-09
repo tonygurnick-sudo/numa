@@ -20,12 +20,15 @@ async function withDeployerProfile<T>(fn: () => Promise<T>): Promise<T> {
 
 async function main(): Promise<void> {
   const args = argv.slice(2);
-  if (args.length < 3) {
-    console.error('Usage: yarn reset-user-password <clientName> <username> <newPassword>');
+  const isTemporary = args.includes('--temporary');
+  const positionalArgs = args.filter((a) => !a.startsWith('--'));
+
+  if (positionalArgs.length < 3) {
+    console.error('Usage: yarn reset-user-password <clientName> <username> <newPassword> [--temporary]');
     exit(1);
   }
 
-  const [clientName, username, password] = args;
+  const [clientName, username, password] = positionalArgs;
 
   console.log(`Getting config for client: ${clientName}`);
   const clientConfig = await getClientConfig<BasicClientConfig>(clientName);
@@ -56,7 +59,7 @@ async function main(): Promise<void> {
       }
 
       console.log(`User pool found: ${userPoolId}`);
-      console.log(`Setting permanent password for user: ${username}`);
+      console.log(`Setting ${isTemporary ? 'temporary' : 'permanent'} password for user: ${username}`);
 
       const cognito = new CognitoIdentityProviderClient(awsClientConfig);
 
@@ -65,7 +68,7 @@ async function main(): Promise<void> {
           UserPoolId: userPoolId,
           Username: username,
           Password: password,
-          Permanent: true,
+          Permanent: !isTemporary,
         })
       );
 
