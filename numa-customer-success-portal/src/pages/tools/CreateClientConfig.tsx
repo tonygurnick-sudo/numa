@@ -89,6 +89,10 @@ export default function CreateClientConfig() {
   const [allApps, setAllApps] = useState<boolean>(false);
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [pipedream, setPipedream] = useState(false); // default: false, not in defaults helper
+  const [dataConnectorsEnabled, setDataConnectorsEnabled] = useState(defaults.dataConnectorsEnabled);
+  const [scheduling, setScheduling] = useState(defaults.scheduling);
+  const [schedulingMinIntervalMinutes, setSchedulingMinIntervalMinutes] = useState<string>('');
+  const [mfa, setMfa] = useState(defaults.mfa);
   const [devInstance, setDevInstance] = useState(defaults.devInstance);
   const [allowQuotaSharing, setAllowQuotaSharing] = useState(defaults.allowBedrockQuotaSharing);
   const [bedrockAccount, setBedrockAccount] = useState('');
@@ -181,7 +185,18 @@ export default function CreateClientConfig() {
       }
     }
     if (pipedream) minimal['pipedreamIntegrations'] = true;
+    if (dataConnectorsEnabled) minimal['dataConnectorsEnabled'] = true;
     if (agents) minimal['agents'] = true;
+    if (scheduling) minimal['scheduling'] = true;
+    if (schedulingMinIntervalMinutes) {
+      const val = parseInt(schedulingMinIntervalMinutes, 10);
+      if (isNaN(val) || val < 5 || val > 1440) {
+        setError('Scheduling Min Interval must be a whole number between 5 and 1440 minutes');
+        return;
+      }
+      minimal['schedulingMinIntervalMinutes'] = val;
+    }
+    if (mfa) minimal['mfa'] = true;
     if (brandingProviderEnabled !== defaults.brandingProviderEnabled)
       minimal['brandingProviderEnabled'] = brandingProviderEnabled;
     if (!numaWorkspaceChat) minimal['numaWorkspaceChat'] = false;
@@ -400,6 +415,14 @@ export default function CreateClientConfig() {
                         helpText="Enable external API integrations"
                       />
                       <ConfigField
+                        label="Data Connectors"
+                        value={dataConnectorsEnabled}
+                        defaultValue={defaults.dataConnectorsEnabled}
+                        onChange={setDataConnectorsEnabled}
+                        type="switch"
+                        helpText="Show data connectors in the frontend"
+                      />
+                      <ConfigField
                         label="Agents"
                         value={agents}
                         defaultValue={defaults.agents}
@@ -440,6 +463,23 @@ export default function CreateClientConfig() {
                         helpText="Enable Numa Workspace Chat (V2). On by default."
                       />
                       <ConfigField
+                        label="Agent Scheduling"
+                        value={scheduling}
+                        defaultValue={defaults.scheduling}
+                        onChange={setScheduling}
+                        type="switch"
+                        helpText="Enable agent scheduling and notifications features"
+                      />
+                      <ConfigField
+                        label="Scheduling Min Interval (minutes)"
+                        value={schedulingMinIntervalMinutes}
+                        defaultValue=""
+                        onChange={setSchedulingMinIntervalMinutes}
+                        type="text"
+                        placeholder="Leave empty to use global default"
+                        helpText="Override minimum scheduling interval for this client (minutes, min 5). Leave empty to inherit global default."
+                      />
+                      <ConfigField
                         label="Workspace Chat Model Selection"
                         value={workspaceChatModelSelection}
                         defaultValue={defaults.workspaceChatModelSelection}
@@ -462,6 +502,14 @@ export default function CreateClientConfig() {
                         onChange={setV2Apps}
                         type="switch"
                         helpText="Enable V2 Apps. Internal/dev only — not ready for customer use."
+                      />
+                      <ConfigField
+                        label="Multi-Factor Authentication (MFA)"
+                        value={mfa}
+                        defaultValue={defaults.mfa}
+                        onChange={setMfa}
+                        type="switch"
+                        helpText="Require TOTP-based two-factor authentication for all users"
                       />
                       <ConfigField
                         label="Provision Q Resources"
