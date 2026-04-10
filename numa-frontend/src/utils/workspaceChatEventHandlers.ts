@@ -1471,6 +1471,19 @@ function handleResultEvent(
     // Clear streaming status
     delete lastMsg.status;
 
+    // Capture cost/usage from the result event. Always stored;
+    // gating happens at render time via DEVELOPER_MODE + user toggle.
+    if (event.total_cost_usd != null) lastMsg.costUsd = event.total_cost_usd;
+    if (event.num_turns != null) lastMsg.numTurns = event.num_turns;
+    if (event.duration_ms != null) lastMsg.durationMs = event.duration_ms;
+    if (event.usage) {
+      if (event.usage.input_tokens != null) lastMsg.inputTokens = event.usage.input_tokens;
+      if (event.usage.output_tokens != null) lastMsg.outputTokens = event.usage.output_tokens;
+      if (event.usage.cache_read_input_tokens != null) lastMsg.cacheReadTokens = event.usage.cache_read_input_tokens;
+      if (event.usage.cache_creation_input_tokens != null)
+        lastMsg.cacheCreationTokens = event.usage.cache_creation_input_tokens;
+    }
+
     // Finalize text segments
     if (lastMsg.segments) {
       lastMsg.segments = lastMsg.segments.map((seg) => {

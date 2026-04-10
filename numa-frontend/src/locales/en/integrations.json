@@ -253,6 +253,36 @@
       "name": "Alchemer",
       "description": "Survey and feedback management platform.",
       "example_query": "Show me the results of the employee engagement survey."
+    },
+    "microsoft_sql_server": {
+      "name": "Microsoft SQL Server",
+      "description": "Connect to your SQL Server to execute queries and manage your database.",
+      "example_query": "Show me the top 10 users from the users table."
+    },
+    "microsoft_dynamics_365_sales": {
+      "name": "Dynamics 365 Sales",
+      "description": "Manage customer relationships, sales pipelines, and business processes.",
+      "example_query": "List my open sales opportunities."
+    },
+    "dynamics_365_business_central_api": {
+      "name": "Dynamics 365 Business Central",
+      "description": "Comprehensive business management solution for finance, operations, and sales.",
+      "example_query": "Show me the latest purchase orders."
+    },
+    "clickup": {
+      "name": "ClickUp",
+      "description": "Project management platform for tasks, docs, chat, goals, and more.",
+      "example_query": "Create a new task in the engineering space."
+    },
+    "google_ads": {
+      "name": "Google Ads",
+      "description": "Manage and analyze your advertising campaigns, keywords, and metrics.",
+      "example_query": "What is the CPC and spend for my campaigns this week?"
+    },
+    "zoho_crm": {
+      "name": "Zoho CRM",
+      "description": "Manage leads, pipelines, and track sales performance.",
+      "example_query": "List the new leads added this month."
     }
   },
   "tabs": {
@@ -637,65 +667,76 @@
       "title": "Set up Google Services",
       "description": "Configure your Google Cloud project to enable Gmail, Google Drive, and other Google connectors.",
       "setupButton": "Set up Google Services",
+      "configuredButton": "Google Cloud Configured",
+      "steps": {
+        "welcome": "Overview",
+        "signIn": "Sign In",
+        "project": "Project",
+        "configure": "Configure",
+        "done": "Done"
+      },
       "welcome": {
-        "title": "Google Cloud Setup",
-        "description": "This wizard will help you configure a Google Cloud project with the APIs, OAuth credentials, and Pub/Sub infrastructure needed for Google connectors."
+        "description": "This wizard configures your Google Cloud project for real-time Gmail notifications and Google Drive integration with Numa.",
+        "alreadyConfigured": "Google Cloud Services are already configured for this environment.",
+        "reconfigureOption": "If you need to change your Google Cloud project or update your setup, you can re-run this configuration wizard.",
+        "whatWeDo": "We'll set up the following on your GCP project:",
+        "enableApis": "Enable Gmail, Drive, and Pub/Sub APIs",
+        "setupPubsub": "Create a Pub/Sub topic for real-time email notifications",
+        "grantPermissions": "Grant Gmail permission to publish events",
+        "prerequisite": "You'll need a Google account with admin access to a Google Cloud project. If you don't have one yet, you can create one during setup.",
+        "reconfigureButton": "Re-configure"
       },
       "signIn": {
-        "title": "Google Sign-In",
-        "description": "Sign in with your Google admin account to authorize the setup process.",
+        "description": "Sign in with the Google account that has admin access to your Google Cloud project.",
         "button": "Sign in with Google",
-        "signedInAs": "Signed in as {{email}}"
+        "signedIn": "Signed in",
+        "signedInAs": "Signed in as {{email}}",
+        "switchAccount": "Switch account",
+        "loading": "Checking Google configuration...",
+        "noClientId": "A Google connector (e.g. Google Drive) needs to be configured first so we can sign you in. Set one up in Data Connectors, then come back here.",
+        "goToConnectors": "Go to Data Connectors"
       },
       "project": {
-        "title": "Project Selection",
-        "description": "Enter the Google Cloud project ID to configure.",
-        "label": "GCP Project ID",
+        "description": "Select the Google Cloud project to configure, or create a new one.",
+        "label": "Google Cloud Project",
+        "selectPlaceholder": "Select a project...",
         "placeholder": "my-project-id",
-        "hint": "Find this at console.cloud.google.com",
-        "createNew": "Create a new project",
-        "validating": "Validating project access...",
-        "valid": "Project verified"
+        "loading": "Loading your projects...",
+        "noProjects": "No projects found. Create one in the Google Cloud Console, then click Refresh.",
+        "refresh": "Refresh",
+        "createNew": "Create new project",
+        "manualEntry": "Enter a project ID manually"
       },
-      "apis": {
-        "title": "Enable APIs",
-        "description": "Enabling required Google APIs on your project.",
-        "gmailApi": "Gmail API",
-        "driveApi": "Google Drive API",
-        "pubsubApi": "Cloud Pub/Sub API",
-        "enabling": "Enabling...",
-        "enabled": "Enabled",
-        "failed": "Failed"
+      "configure": {
+        "description": "Configuring your Google Cloud project. This may take a moment.",
+        "enableApis": "Enable Gmail, Drive, and Pub/Sub APIs",
+        "setupPubsub": "Create Pub/Sub topic and subscription",
+        "grantPermissions": "Grant Gmail publish permissions",
+        "running": "In progress...",
+        "done": "Done",
+        "allDone": "All configuration steps completed successfully.",
+        "retry": "Retry failed steps",
+        "iamWarning": "Could not set permissions automatically. You may need to grant gmail-api-push@system.gserviceaccount.com the Pub/Sub Publisher role manually."
       },
-      "oauth": {
-        "title": "Create OAuth Client",
-        "description": "Creating an OAuth consent screen and client credentials.",
-        "creating": "Creating OAuth client...",
-        "created": "OAuth client created",
-        "clientId": "Client ID",
-        "savedToVault": "Credentials saved to vault"
-      },
-      "pubsub": {
-        "title": "Pub/Sub Setup",
-        "description": "Creating a Pub/Sub topic and subscription for real-time event delivery.",
-        "topicName": "Topic",
-        "subscriptionName": "Subscription",
-        "creating": "Creating...",
-        "created": "Created"
-      },
-      "summary": {
+      "done": {
         "title": "Setup Complete",
-        "description": "Your Google Cloud project is configured and ready. You can now set up Gmail and Google Drive connectors.",
-        "apisEnabled": "APIs enabled",
-        "oauthConfigured": "OAuth client configured",
-        "pubsubConfigured": "Pub/Sub configured"
+        "description": "Your Google Cloud project is configured. Gmail push notifications and Google Drive integration are ready to use.",
+        "apisEnabled": "Gmail, Drive, and Pub/Sub APIs enabled",
+        "pubsubConfigured": "Pub/Sub topic and subscription created",
+        "notificationsReady": "Real-time Gmail notifications enabled"
       },
       "errors": {
         "signInFailed": "Google sign-in failed. Please try again.",
-        "projectValidationFailed": "Could not validate project: {{message}}",
-        "apiEnableFailed": "Failed to enable {{api}}: {{message}}",
-        "oauthCreateFailed": "Failed to create OAuth client: {{message}}",
-        "pubsubFailed": "Failed to set up Pub/Sub: {{message}}"
+        "projectListFailed": "Could not load projects: {{message}}",
+        "projectListApiNotEnabled": "The Cloud Resource Manager API needs to be enabled before we can list your projects. You can either enable it (link below) and click Refresh, or just type your project ID manually.",
+        "projectListPermissionDenied": "Your Google account doesn't have permission to list projects. This usually means you need Owner or Editor access on the Google Cloud project. You can enter your project ID manually below.",
+        "projectListAuthExpired": "Your Google sign-in has expired. Please go back and sign in again.",
+        "configPartialFailure": "Some steps failed. Check the details below — you may need to fix these manually in Google Cloud Console.",
+        "configApiNotEnabled": "This API couldn't be enabled automatically. Go to APIs & Services in your Google Cloud Console and enable it manually.",
+        "configPermissionDenied": "You don't have permission to do this. Make sure your Google account has Owner or Editor access on the project.",
+        "configAuthExpired": "Your Google sign-in expired during setup. Go back to the Sign In step and sign in again.",
+        "enableApiLink": "Enable APIs in Google Cloud Console",
+        "openConsole": "Open Google Cloud Console"
       }
     },
     "contact": {

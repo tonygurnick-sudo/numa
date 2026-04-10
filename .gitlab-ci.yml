@@ -97,6 +97,7 @@ pre-commit:
         - lambdas/node/callback-renamer
         - lambdas/node/chat-settings
         - lambdas/node/cloudfront-invalidator
+        - lambdas/node/connector-event-dispatcher
         - lambdas/node/connector-event-receiver
         - lambdas/node/data-sync-scheduler
         - lambdas/node/document-converter

@@ -33,6 +33,10 @@ export interface OAuthIntegrationConstructProps extends ApiGatewayLambdaCollecti
   dataConnectorsTableName?: string;
   /** Data connectors DynamoDB table ARN (for IAM permissions) */
   dataConnectorsTableArn?: string;
+  /** Global data connector settings table name (for Pub/Sub topic lookup) */
+  dataConnectorsSettingsTableName?: string;
+  /** Global data connector settings table ARN (for IAM permissions) */
+  dataConnectorsSettingsTableArn?: string;
   /** Data bucket name (for S3 data bucket connector) */
   dataBucketName?: string;
   /** Data bucket ARN (for IAM permissions) */
@@ -97,6 +101,31 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
     // OAuth Authorization Handler (Node.js)
     // Handles OAuth authorize/callback/refresh/revoke flows.
     // No authorizer: OAuth callbacks receive redirects from external providers.
+    // Also registers Gmail push notifications on first connect.
+    const oauthAuthPolicy = [
+      ...oauthPolicy,
+      // Data connectors table (Gmail watch registration writes connected_email + watch_expiry)
+      ...(props.dataConnectorsTableArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['dynamodb:UpdateItem'],
+              resources: [props.dataConnectorsTableArn],
+            },
+          ]
+        : []),
+      // Global connector settings table (read Pub/Sub topic for Gmail watch)
+      ...(props.dataConnectorsSettingsTableArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['dynamodb:GetItem'],
+              resources: [props.dataConnectorsSettingsTableArn],
+            },
+          ]
+        : []),
+    ];
+
     this.addLambdaFunction(this, 'oauth-auth', {
       addAuthorizer: false,
       lambdaDirectory: 'node/oauth-auth-handler',
@@ -104,8 +133,12 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
       handler: 'index.handler',
       memorySize: 256,
       timeout: 29,
-      environment: sharedEnv,
-      additionalPolicyStatements: oauthPolicy,
+      environment: {
+        ...sharedEnv,
+        DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName ?? '',
+        DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName ?? '',
+      },
+      additionalPolicyStatements: oauthAuthPolicy,
       route: [{ verb: 'ANY', path: 'oauth/{proxy+}' }],
     });
 

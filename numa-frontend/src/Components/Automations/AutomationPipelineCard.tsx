@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { Card, Dropdown, Form } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MoreVertical, Play, Pencil, Trash2, Eye, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { MoreVertical, Play, Pencil, Trash2, Eye, Clock, CheckCircle2, XCircle, Zap } from 'lucide-react';
 import { AgentAvatar } from '../Agents/AgentAvatar';
 import { describeCronExpression, getNextRunTimes } from '../../utils/cronUtils';
 import { formatRelativeTime } from '../../utils/automationUtils';
@@ -51,15 +51,16 @@ export const AutomationPipelineCard = ({
   const { t } = useTranslation('automations');
   const navigate = useNavigate();
 
+  const isEventTrigger = automation.triggerType === 'event';
   const scheduleDescription = useMemo(
-    () => describeCronExpression(automation.cronExpression),
-    [automation.cronExpression]
+    () => (isEventTrigger ? null : describeCronExpression(automation.cronExpression)),
+    [automation.cronExpression, isEventTrigger]
   );
   const nextRunDate = useMemo(() => {
-    if (derivedStatus !== 'active') return null;
+    if (isEventTrigger || derivedStatus !== 'active' || !automation.cronExpression) return null;
     const times = getNextRunTimes(automation.cronExpression, automation.timezone, 1);
     return times.length > 0 ? times[0] : null;
-  }, [automation.cronExpression, automation.timezone, derivedStatus]);
+  }, [automation.cronExpression, automation.timezone, derivedStatus, isEventTrigger]);
   const lastRunLabel = formatRelativeTime(automation.lastRunEpoch);
   const displayName = automation.label || automation.agentTitle || t('card.untitled');
   const isActive = automation.status === 'active';
@@ -129,14 +130,38 @@ export const AutomationPipelineCard = ({
 
         {/* Vertical flow: Schedule → Agent */}
         <div className="pipeline-vertical flex-grow-1">
-          {/* Schedule row */}
+          {/* Trigger row */}
           <div className="pipeline-v-row">
             <div className="pipeline-v-dot pipeline-v-dot--schedule">
-              <Clock size={10} />
+              {isEventTrigger ? <Zap size={10} /> : <Clock size={10} />}
             </div>
-            <span className="text-muted" style={{ fontSize: '0.8rem' }}>
-              {scheduleDescription || '\u2014'}
-            </span>
+            <div className="d-flex flex-column" style={{ fontSize: '0.8rem', lineHeight: 1.3 }}>
+              {isEventTrigger ? (
+                <>
+                  <span className="text-muted">{t('list.triggerEmail')}</span>
+                  {automation.trigger?.filters && automation.trigger.filters.length > 0 && (
+                    <div className="d-flex flex-column gap-0" style={{ fontSize: '0.7rem' }}>
+                      {automation.trigger.filters.slice(0, 3).map((f, i) => (
+                        <span key={i} className="text-muted">
+                          {i > 0 && (
+                            <span className="fw-medium me-1">
+                              {automation.trigger!.filter_logic === 'any' ? t('list.filterOr') : t('list.filterAnd')}
+                            </span>
+                          )}
+                          {t(`trigger.event.builder.fields.${f.field}`)} {t(`trigger.event.builder.ops.${f.op}`)}{' '}
+                          {f.field !== 'has_attachment' && <>&ldquo;{f.value}&rdquo;</>}
+                        </span>
+                      ))}
+                      {automation.trigger.filters.length > 3 && (
+                        <span className="text-muted fst-italic">+{automation.trigger.filters.length - 3} more</span>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <span className="text-muted">{scheduleDescription || '\u2014'}</span>
+              )}
+            </div>
           </div>
 
           {/* Connecting line */}
@@ -165,19 +190,21 @@ export const AutomationPipelineCard = ({
               {automation.totalRuns || 0} {t('runs.title').toLowerCase().replace('all ', '')}
             </span>
           </div>
-          <div className="d-flex align-items-center gap-1 text-muted">
-            <span>{t('card.nextRun')}:</span>
-            <span>
-              {nextRunDate
-                ? nextRunDate.toLocaleString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })
-                : t('card.noMoreRuns')}
-            </span>
-          </div>
+          {!isEventTrigger && (
+            <div className="d-flex align-items-center gap-1 text-muted">
+              <span>{t('card.nextRun')}:</span>
+              <span>
+                {nextRunDate
+                  ? nextRunDate.toLocaleString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })
+                  : t('card.noMoreRuns')}
+              </span>
+            </div>
+          )}
         </div>
       </Card.Body>
     </Card>

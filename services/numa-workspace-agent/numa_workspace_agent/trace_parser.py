@@ -242,9 +242,34 @@ def _parse_events_to_messages(
     """
     messages: list[dict[str, Any]] = []
     tool_results: dict[str, dict[str, Any]] = {}  # tool_use_id -> result info
+    # msg_id -> cost/usage info from the result event that closed that turn
+    result_usage_by_msg_id: dict[str, dict[str, Any]] = {}
 
     # Collect all events for processing
     all_events = list(event_iterator)
+
+    # Walk events sequentially to associate `result` events with the
+    # most recent assistant msg_id that fired before them. Cost data is
+    # captured here but only rendered in the frontend when the
+    # DEVELOPER_MODE flag is on.
+    last_assistant_msg_id: Optional[str] = None
+    for event in all_events:
+        ev_type = event.get("type")
+        if ev_type == "assistant":
+            mid = event.get("message", {}).get("id", "")
+            if mid:
+                last_assistant_msg_id = mid
+        elif ev_type == "result" and last_assistant_msg_id:
+            usage = event.get("usage") or {}
+            result_usage_by_msg_id[last_assistant_msg_id] = {
+                "costUsd": event.get("total_cost_usd"),
+                "numTurns": event.get("num_turns"),
+                "durationMs": event.get("duration_ms"),
+                "inputTokens": usage.get("input_tokens"),
+                "outputTokens": usage.get("output_tokens"),
+                "cacheReadTokens": usage.get("cache_read_input_tokens"),
+                "cacheCreationTokens": usage.get("cache_creation_input_tokens"),
+            }
 
     # First pass: collect all tool results for matching
     for event in all_events:
@@ -420,13 +445,20 @@ def _parse_events_to_messages(
 
             # Only add if we have segments
             if combined_segments:
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": " ".join(combined_text_parts),
-                        "segments": combined_segments,
-                    }
-                )
+                msg_dict: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": " ".join(combined_text_parts),
+                    "segments": combined_segments,
+                }
+                # Attach cost/usage from the last msg_id in this group that
+                # had a matching result event. Walk in reverse so the latest
+                # result for the turn wins.
+                for mid in reversed(assistant_msg_ids):
+                    usage = result_usage_by_msg_id.get(mid)
+                    if usage:
+                        msg_dict.update(usage)
+                        break
+                messages.append(msg_dict)
 
     return messages
 

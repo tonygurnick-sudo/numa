@@ -168,6 +168,10 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     [companySecrets]
   );
 
+  const googleCloudConfigured = useMemo(() => {
+    return companySecrets.some((s) => s.name === 'oauth-client-google' || s.id === 'oauth-client-google');
+  }, [companySecrets]);
+
   // ---------------------------------------------------------------------------
   // Merged provider list (registry OAuth always present + API data)
   // ---------------------------------------------------------------------------
@@ -363,9 +367,15 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
         </div>
         {isAdmin && (
           <div className="d-flex gap-2 ms-auto">
-            <Button variant="outline-secondary" size="sm" onClick={() => setGoogleSetupWizardOpen(true)}>
-              <i className="bi bi-google me-1" />
-              {t('dataConnectors.googleCloudSetup.setupButton')}
+            <Button
+              variant={googleCloudConfigured ? 'outline-success' : 'outline-secondary'}
+              size="sm"
+              onClick={() => setGoogleSetupWizardOpen(true)}
+            >
+              <i className={`bi ${googleCloudConfigured ? 'bi-check-circle' : 'bi-google'} me-1`} />
+              {googleCloudConfigured
+                ? t('dataConnectors.googleCloudSetup.configuredButton', 'Google Cloud Configured')
+                : t('dataConnectors.googleCloudSetup.setupButton')}
             </Button>
             <Button variant="outline-primary" size="sm" onClick={() => setPlatformPickerOpen(true)}>
               <Plus size={14} className="me-1" />
@@ -462,6 +472,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
           To revert: remove this JSX block. */}
       <GoogleCloudSetupWizard
         show={googleSetupWizardOpen}
+        isConfigured={googleCloudConfigured}
         onHide={() => setGoogleSetupWizardOpen(false)}
         onComplete={() => {
           setGoogleSetupWizardOpen(false);

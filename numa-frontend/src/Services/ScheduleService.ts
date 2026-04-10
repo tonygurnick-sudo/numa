@@ -2,6 +2,7 @@ import type {
   AgentSchedule,
   AgentScheduleSnapshot,
   CreateAgentSchedulePayload,
+  EventTrigger,
   ScheduledRunConfig,
   UpdateAgentSchedulePayload,
 } from '../types/agentSchedules';
@@ -20,8 +21,10 @@ type BackendScheduleResponse = {
   tenant_id: string;
   conversation_id: string;
   prompt_text: string;
-  cron_expression: string;
-  timezone: string;
+  trigger_type?: 'cron' | 'event';
+  trigger?: EventTrigger;
+  cron_expression?: string;
+  timezone?: string;
   status: 'active' | 'paused' | 'deleted';
   event_type?: 'agent' | 'application' | 'data_sync';
   agent_id: string;
@@ -48,6 +51,8 @@ const transformScheduleResponse = (backendSchedule: BackendScheduleResponse): Ag
   scheduleId: backendSchedule.schedule_id,
   conversationId: backendSchedule.conversation_id,
   promptText: backendSchedule.prompt_text,
+  triggerType: backendSchedule.trigger_type,
+  trigger: backendSchedule.trigger,
   cronExpression: backendSchedule.cron_expression,
   timezone: backendSchedule.timezone,
   status: backendSchedule.status,

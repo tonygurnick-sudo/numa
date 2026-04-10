@@ -20,6 +20,8 @@ import { formatAgentDisplayName } from '../../utils/agentUtils';
 import { downloadFileFromS3 } from '../../utils/s3Utils';
 import { useBranding } from '../../Providers/BrandingContext';
 import { useBrandingAsset } from '../../hooks/useBrandingAsset';
+import { useShowChatCost } from '../../hooks/useShowChatCost';
+import { getFlag } from '../../utils/featureFlags';
 import numaIcon from '/numa-logo.svg?url';
 import { ThinkingBlock } from './ThinkingBlock';
 import { AssistantAdviceBlock } from './AssistantAdviceBlock';
@@ -305,6 +307,16 @@ type ChatMessage = {
   docContent?: string;
   toolEvents?: Array<string>;
   references?: Array<string>;
+  // Dev-mode cost/usage info (from workspace agent SDK result events).
+  // Always populated when available; only rendered when DEVELOPER_MODE
+  // client flag is on AND the user has enabled the cost toggle.
+  costUsd?: number;
+  numTurns?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  durationMs?: number;
 };
 
 const ChatMessages = ({
@@ -360,6 +372,20 @@ const ChatMessages = ({
 
   // Track which message index has been copied (for showing checkmark feedback)
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
+
+  // Index of the most recent assistant message — its copy button stays always visible.
+  // Older assistant messages reveal the button on hover.
+  const lastAssistantIndex = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant') return i;
+    }
+    return -1;
+  })();
+
+  // Cost display gate: requires the DEVELOPER_MODE client config flag
+  // AND the user-level toggle. Both must be true to render any cost UI.
+  const [showChatCost] = useShowChatCost();
+  const showCost = getFlag('DEVELOPER_MODE') && showChatCost;
 
   // Copy message content to clipboard
   const handleCopyMessage = async (message: ChatMessage, messageIndex: number) => {
@@ -582,16 +608,6 @@ const ChatMessages = ({
                   `${t('messages.roles.system')}:`
                 )}
               </strong>
-              {hasCopyableContent && (
-                <button
-                  className="copy-message-btn"
-                  onClick={() => handleCopyMessage(message, index)}
-                  title={t('messages.copyMessage')}
-                  aria-label={t('messages.copyMessageAria')}
-                >
-                  <i className={`bi ${copiedMessageIndex === index ? 'bi-check' : 'bi-clipboard'}`} />
-                </button>
-              )}
             </div>
             <div className="message-content markdown-content">
               {message.segments && message.segments.length > 0 ? (
@@ -883,6 +899,23 @@ const ChatMessages = ({
                 <ChatReferencesDropdown references={message.references} getCredentials={getCredentials} />
               )}
 
+              {/* Dev-only cost footer for this assistant turn */}
+              {showCost && message.role === 'assistant' && message.costUsd != null && (
+                <div
+                  className="message-cost-footer text-muted small mt-1"
+                  style={{ fontFamily: 'monospace', opacity: 0.7 }}
+                >
+                  {t('cost.perMessage', {
+                    cost: message.costUsd.toFixed(4),
+                    turns: message.numTurns ?? 0,
+                    inputTokens: (message.inputTokens ?? 0).toLocaleString(),
+                    outputTokens: (message.outputTokens ?? 0).toLocaleString(),
+                    durationSec: ((message.durationMs ?? 0) / 1000).toFixed(1),
+                  })}{' '}
+                  · {t('cost.devOnlyBadge')}
+                </div>
+              )}
+
               {/* If there's a doc, show the bubble */}
               {message.role === 'assistant' && message.docTitle && message.docContent && (
                 <DocOpenBubble
@@ -891,6 +924,19 @@ const ChatMessages = ({
                   onClick={onOpenDocument}
                   openLabel={t('messages.openDocument', { title: message.docTitle })}
                 />
+              )}
+
+              {hasCopyableContent && !message.status && (
+                <div className={`message-actions${index === lastAssistantIndex ? ' message-actions-latest' : ''}`}>
+                  <button
+                    className="copy-message-btn"
+                    onClick={() => handleCopyMessage(message, index)}
+                    title={t('messages.copyMessage')}
+                    aria-label={t('messages.copyMessageAria')}
+                  >
+                    <i className={`bi ${copiedMessageIndex === index ? 'bi-check' : 'bi-clipboard'}`} />
+                  </button>
+                </div>
               )}
             </div>
           </div>

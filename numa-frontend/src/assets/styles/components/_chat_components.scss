@@ -1617,9 +1617,28 @@ $border-radius-pill: 1rem;
     justify-content: space-between;
   }
 
-  // Copy message button - appears on hover for assistant messages
-  .copy-message-btn {
+  // Action bar under assistant messages.
+  // Hidden by default, revealed on message hover; the latest assistant message
+  // is always visible (`.message-actions-latest`).
+  .message-actions {
     display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+
+    &.message-actions-latest {
+      opacity: 1;
+    }
+  }
+
+  &:hover .message-actions {
+    opacity: 1;
+  }
+
+  .copy-message-btn {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     background: none;
@@ -1627,19 +1646,19 @@ $border-radius-pill: 1rem;
     padding: 0.25rem;
     border-radius: 4px;
     cursor: pointer;
-    opacity: 0;
     transition:
-      opacity 0.2s ease,
-      background-color 0.2s ease;
-    color: #6b7280;
+      background-color 0.2s ease,
+      color 0.2s ease;
+    color: #9ca3af;
+    line-height: 1;
 
     i {
-      font-size: 0.875rem;
+      font-size: 1rem;
     }
 
     &:hover {
       background-color: rgba(0, 0, 0, 0.05);
-      color: var(--brand-primary, var(--color-primary));
+      color: #374151;
     }
 
     &:focus {
@@ -1650,15 +1669,6 @@ $border-radius-pill: 1rem;
     .bi-check {
       color: #10b981;
     }
-  }
-
-  // Show copy button on message hover
-  &:hover .copy-message-btn {
-    opacity: 0.6;
-  }
-
-  .copy-message-btn:hover {
-    opacity: 1 !important;
   }
 
   // Remove border/shadow for assistant messages (white on white)

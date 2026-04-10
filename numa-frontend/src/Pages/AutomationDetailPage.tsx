@@ -284,15 +284,16 @@ export const AutomationDetailPage: React.FC = () => {
     [outputsBucket, region, getCredentials]
   );
 
-  const scheduleDescription = automation ? describeCronExpression(automation.cronExpression) : '';
+  const isEventTrigger = automation?.triggerType === 'event';
+  const scheduleDescription = automation && !isEventTrigger ? describeCronExpression(automation.cronExpression) : '';
   const nextRuns = useMemo(() => {
-    if (!automation || automation.status !== 'active') return [];
+    if (!automation || isEventTrigger || automation.status !== 'active' || !automation.cronExpression) return [];
     try {
       return getNextRunTimes(automation.cronExpression, automation.timezone, 3);
     } catch {
       return [];
     }
-  }, [automation]);
+  }, [automation, isEventTrigger]);
 
   const derivedStatus = automation ? getDerivedAutomationStatus(automation) : 'active';
 
@@ -428,19 +429,34 @@ export const AutomationDetailPage: React.FC = () => {
                   {/* Trigger Node */}
                   <div className="workflow-diagram-node">
                     <div className="workflow-diagram-node__icon workflow-diagram-node__icon--trigger">
-                      <Clock size={22} />
+                      {isEventTrigger ? <Zap size={22} /> : <Clock size={22} />}
                     </div>
-                    <div className="workflow-diagram-node__label">{t('pipeline.schedule')}</div>
-                    <div className="workflow-diagram-node__detail">{scheduleDescription || '\u2014'}</div>
-                    <div className="workflow-diagram-node__sub">{automation.timezone}</div>
-                    {nextRuns.length > 0 && (
-                      <div className="workflow-diagram-node__sub" style={{ color: brandPrimaryColor }}>
-                        {t('detail.overview.nextRun')}:{' '}
-                        {nextRuns[0].toLocaleString(
-                          undefined,
-                          automation.timezone ? { timeZone: automation.timezone } : undefined
+                    <div className="workflow-diagram-node__label">
+                      {isEventTrigger ? t('pipeline.trigger') : t('pipeline.schedule')}
+                    </div>
+                    {isEventTrigger ? (
+                      <>
+                        <div className="workflow-diagram-node__detail">{t('list.triggerEmail')}</div>
+                        {automation.trigger?.filters && automation.trigger.filters.length > 0 && (
+                          <div className="workflow-diagram-node__sub">
+                            {t('list.filterCount', { count: automation.trigger.filters.length })}
+                          </div>
                         )}
-                      </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="workflow-diagram-node__detail">{scheduleDescription || '\u2014'}</div>
+                        <div className="workflow-diagram-node__sub">{automation.timezone}</div>
+                        {nextRuns.length > 0 && (
+                          <div className="workflow-diagram-node__sub" style={{ color: brandPrimaryColor }}>
+                            {t('detail.overview.nextRun')}:{' '}
+                            {nextRuns[0].toLocaleString(
+                              undefined,
+                              automation.timezone ? { timeZone: automation.timezone } : undefined
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -508,25 +524,73 @@ export const AutomationDetailPage: React.FC = () => {
           <Col lg={6}>
             <Card className="h-100 border-0 shadow-sm" style={{ borderRadius: 12 }}>
               <Card.Header className="bg-transparent border-bottom fw-medium">
-                {t('detail.overview.scheduleDetails')}
+                {isEventTrigger ? t('detail.overview.triggerDetails') : t('detail.overview.scheduleDetails')}
               </Card.Header>
               <Card.Body>
                 <dl className="row mb-0">
-                  <dt className="col-sm-4 text-muted small">{t('detail.overview.frequency')}</dt>
-                  <dd className="col-sm-8">{scheduleDescription || '\u2014'}</dd>
+                  {isEventTrigger ? (
+                    <>
+                      <dt className="col-sm-4 text-muted small">{t('detail.overview.source')}</dt>
+                      <dd className="col-sm-8">
+                        <div className="d-flex align-items-center gap-1">
+                          <Mail size={14} />
+                          {t('trigger.event.builder.sourceGmail')}
+                        </div>
+                      </dd>
 
-                  <dt className="col-sm-4 text-muted small">{t('detail.overview.timezone')}</dt>
-                  <dd className="col-sm-8">{automation.timezone || '\u2014'}</dd>
+                      <dt className="col-sm-4 text-muted small">{t('detail.overview.filters')}</dt>
+                      <dd className="col-sm-8">
+                        {automation.trigger?.filters && automation.trigger.filters.length > 0 ? (
+                          <div className="d-flex flex-column gap-1">
+                            {automation.trigger.filters.map((f, i) => (
+                              <div key={i} className="small">
+                                {t(`trigger.event.builder.fields.${f.field}`)} {t(`trigger.event.builder.ops.${f.op}`)}{' '}
+                                &quot;{f.value}&quot;
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          '\u2014'
+                        )}
+                      </dd>
 
-                  <dt className="col-sm-4 text-muted small">{t('detail.overview.nextRun')}</dt>
-                  <dd className="col-sm-8">
-                    {nextRuns.length > 0
-                      ? nextRuns[0].toLocaleString(
-                          undefined,
-                          automation.timezone ? { timeZone: automation.timezone } : undefined
-                        )
-                      : '\u2014'}
-                  </dd>
+                      {automation.trigger?.filters && automation.trigger.filters.length > 1 && (
+                        <>
+                          <dt className="col-sm-4 text-muted small">{t('detail.overview.filterLogic')}</dt>
+                          <dd className="col-sm-8">
+                            {automation.trigger.filter_logic === 'any'
+                              ? t('trigger.event.builder.matchAny')
+                              : t('trigger.event.builder.matchAll')}
+                          </dd>
+                        </>
+                      )}
+
+                      <dt className="col-sm-4 text-muted small">{t('detail.overview.emailContext')}</dt>
+                      <dd className="col-sm-8">
+                        {automation.trigger?.include_email_context !== false
+                          ? t('detail.overview.emailEnabled')
+                          : t('detail.overview.emailDisabled')}
+                      </dd>
+                    </>
+                  ) : (
+                    <>
+                      <dt className="col-sm-4 text-muted small">{t('detail.overview.frequency')}</dt>
+                      <dd className="col-sm-8">{scheduleDescription || '\u2014'}</dd>
+
+                      <dt className="col-sm-4 text-muted small">{t('detail.overview.timezone')}</dt>
+                      <dd className="col-sm-8">{automation.timezone || '\u2014'}</dd>
+
+                      <dt className="col-sm-4 text-muted small">{t('detail.overview.nextRun')}</dt>
+                      <dd className="col-sm-8">
+                        {nextRuns.length > 0
+                          ? nextRuns[0].toLocaleString(
+                              undefined,
+                              automation.timezone ? { timeZone: automation.timezone } : undefined
+                            )
+                          : '\u2014'}
+                      </dd>
+                    </>
+                  )}
 
                   <dt className="col-sm-4 text-muted small">{t('detail.overview.created')}</dt>
                   <dd className="col-sm-8">

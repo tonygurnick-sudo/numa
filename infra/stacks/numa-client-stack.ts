@@ -741,6 +741,9 @@ export class NumaClientStack extends TerraformStack {
       // Data connectors table (for Synergy credential resolution)
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsTableArn: core.dataConnectorsTable.arn,
+      // Global connector settings table (for Pub/Sub topic lookup)
+      dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
+      dataConnectorsSettingsTableArn: core.dataConnectorsSettingsTable.arn,
       // Data bucket (for S3 data bucket connector)
       dataBucketName: core.dataBucket.bucket.bucket,
       dataBucketArn: core.dataBucket.bucket.arn,

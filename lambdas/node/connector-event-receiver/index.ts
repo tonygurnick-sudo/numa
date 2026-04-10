@@ -161,8 +161,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       new PutCommand({
         TableName: CONNECTOR_EVENTS_TABLE,
         Item: {
-          PK: pk,
-          SK: sk,
+          pk,
+          sk,
           connector_id: connectorId,
           event_type: eventType,
           tags,

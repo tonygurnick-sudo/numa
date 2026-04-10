@@ -1,13 +1,15 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from 'react-bootstrap';
-import { Clock, Bot, Settings, Pencil } from 'lucide-react';
+import { Clock, Bot, Settings, Pencil, Zap, Mail } from 'lucide-react';
 import { describeCronExpression } from '../../utils/cronUtils';
 import { AgentAvatar } from '../Agents/AgentAvatar';
 import type { AgentSummary } from '../../types/agents';
+import type { EventTrigger } from '../../types/agentSchedules';
 
 type WorkflowStepReviewProps = {
   triggerType: 'schedule' | 'event';
   cronExpression: string;
+  eventTrigger?: EventTrigger;
   agent: AgentSummary | null;
   name: string;
   prompt: string;
@@ -18,7 +20,9 @@ type WorkflowStepReviewProps = {
 };
 
 export const WorkflowStepReview = ({
+  triggerType,
   cronExpression,
+  eventTrigger,
   agent,
   name,
   prompt,
@@ -29,6 +33,7 @@ export const WorkflowStepReview = ({
 }: WorkflowStepReviewProps) => {
   const { t } = useTranslation('automations');
 
+  const isEvent = triggerType === 'event';
   const scheduleDescription = cronExpression ? describeCronExpression(cronExpression) : '\u2014';
 
   return (
@@ -40,9 +45,7 @@ export const WorkflowStepReview = ({
         {/* Trigger type */}
         <div className="workflow-review-item">
           <div className="d-flex align-items-center gap-3 flex-grow-1">
-            <div className="workflow-review-item__icon">
-              <Clock size={18} />
-            </div>
+            <div className="workflow-review-item__icon">{isEvent ? <Zap size={18} /> : <Clock size={18} />}</div>
             <div>
               <div
                 className="text-muted"
@@ -50,7 +53,7 @@ export const WorkflowStepReview = ({
               >
                 {t('review.triggerType')}
               </div>
-              <div className="fw-medium">{t('trigger.schedule.title')}</div>
+              <div className="fw-medium">{isEvent ? t('trigger.event.title') : t('trigger.schedule.title')}</div>
             </div>
           </div>
           <Button variant="link" size="sm" className="text-muted p-0" onClick={() => onEditStep(0)}>
@@ -58,21 +61,57 @@ export const WorkflowStepReview = ({
           </Button>
         </div>
 
-        {/* Schedule */}
-        <div className="workflow-review-item">
-          <div className="d-flex align-items-center gap-3 flex-grow-1">
-            <div className="workflow-review-item__icon workflow-review-item__icon--schedule">
-              <Clock size={18} />
+        {/* Schedule or Event trigger details */}
+        <div className="workflow-review-item" style={isEvent ? { alignItems: 'flex-start' } : undefined}>
+          <div className="d-flex align-items-start gap-3 flex-grow-1">
+            <div
+              className="workflow-review-item__icon workflow-review-item__icon--schedule"
+              style={isEvent ? { marginTop: 2 } : undefined}
+            >
+              {isEvent ? <Mail size={18} /> : <Clock size={18} />}
             </div>
             <div>
               <div
                 className="text-muted"
                 style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}
               >
-                {t('review.scheduleLabel')}
+                {isEvent ? t('review.eventLabel') : t('review.scheduleLabel')}
               </div>
-              <div className="fw-medium">{scheduleDescription}</div>
-              <div className="text-muted small">{timezone}</div>
+              {isEvent && eventTrigger ? (
+                <div>
+                  <div className="fw-medium mb-1">
+                    {t('trigger.event.builder.sourceGmail')} — {t('list.triggerEmail').toLowerCase()}
+                  </div>
+                  {/* Filters */}
+                  {eventTrigger.filters.length > 0 && (
+                    <div className="d-flex flex-column gap-1 text-muted small">
+                      <div className="fw-medium">
+                        {t('trigger.event.builder.filters')} (
+                        {eventTrigger.filter_logic === 'any'
+                          ? t('trigger.event.builder.matchAny').toLowerCase()
+                          : t('trigger.event.builder.matchAll').toLowerCase()}
+                        ):
+                      </div>
+                      {eventTrigger.filters.map((f, i) => (
+                        <div key={i} className="ps-2">
+                          {t(`trigger.event.builder.fields.${f.field}`)} {t(`trigger.event.builder.ops.${f.op}`)} &quot;
+                          {f.value}&quot;
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Email context */}
+                  <div className="text-muted small mt-1">
+                    {t('trigger.event.builder.includeContext')}:{' '}
+                    {eventTrigger.include_email_context !== false ? t('review.enabled') : t('review.disabled')}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="fw-medium">{scheduleDescription}</div>
+                  <div className="text-muted small">{timezone}</div>
+                </>
+              )}
             </div>
           </div>
           <Button variant="link" size="sm" className="text-muted p-0" onClick={() => onEditStep(1)}>

@@ -61,18 +61,21 @@ REGIONAL_MODEL_MAP: dict[str, dict[str, str]] = {
         "anthropic.claude-sonnet-4-6": "us.anthropic.claude-sonnet-4-6",
         "anthropic.claude-opus-4-6-v1": "us.anthropic.claude-opus-4-6-v1",
         "anthropic.claude-haiku-4-5-20251001-v1:0": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "anthropic.claude-sonnet-4-5-20250929-v1:0": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "us.anthropic.claude-sonnet-4-20250514-v1:0",
     },
     "ap-southeast-2": {
         "anthropic.claude-sonnet-4-6": "au.anthropic.claude-sonnet-4-6",
         "anthropic.claude-opus-4-6-v1": "au.anthropic.claude-opus-4-6-v1",
         "anthropic.claude-haiku-4-5-20251001-v1:0": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "anthropic.claude-sonnet-4-5-20250929-v1:0": "apac.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
     },
     "ap-southeast-3": {
         "anthropic.claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
         "anthropic.claude-opus-4-6-v1": "global.anthropic.claude-opus-4-6-v1",
         "anthropic.claude-haiku-4-5-20251001-v1:0": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "anthropic.claude-sonnet-4-5-20250929-v1:0": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
     },
 }
@@ -96,6 +99,10 @@ def _regionalize(bare_model_id: str) -> str:
 DEFAULT_MODEL = os.environ.get(
     "ANTHROPIC_MODEL", _regionalize("anthropic.claude-sonnet-4-6")
 )
+
+# Fallback model for when a model's daily Bedrock quota is exhausted (429 "per day")
+FALLBACK_MODEL_BARE = "anthropic.claude-sonnet-4-5-20250929-v1:0"
+FALLBACK_MODEL = _regionalize(FALLBACK_MODEL_BARE)
 
 # Allowed models for user selection (computed from regional map)
 ALLOWED_MODELS = set(

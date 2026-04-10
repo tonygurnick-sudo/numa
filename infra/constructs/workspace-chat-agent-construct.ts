@@ -317,7 +317,13 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
           {
             sid: 'DynamoDBAccess',
             effect: 'Allow',
-            actions: ['dynamodb:UpdateItem', 'dynamodb:PutItem', 'dynamodb:Query', 'dynamodb:GetItem'],
+            actions: [
+              'dynamodb:UpdateItem',
+              'dynamodb:PutItem',
+              'dynamodb:Query',
+              'dynamodb:GetItem',
+              'dynamodb:DeleteItem',
+            ],
             resources: [
               `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-chat-history`,
             ],

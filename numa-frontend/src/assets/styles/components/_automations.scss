@@ -138,6 +138,24 @@
       background: rgba(25, 135, 84, 0.08);
       color: #198754;
     }
+
+    &--filter {
+      background: #f8f9fa;
+      color: #495057;
+      font-style: italic;
+    }
+
+    &--toggle {
+      background: transparent;
+      color: var(--brand-primary, #6366f1);
+      cursor: pointer;
+      padding: 2px 8px;
+      font-weight: 500;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
   }
 
   &__right {
@@ -473,7 +491,6 @@
     transform 0.15s ease;
   border-radius: 12px;
   cursor: pointer;
-  overflow: hidden;
 
   &:hover {
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1) !important;

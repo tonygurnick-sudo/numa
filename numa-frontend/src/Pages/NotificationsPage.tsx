@@ -8,6 +8,7 @@ import {
   Clock3,
   Eye,
   Info,
+  Mail,
   PlayCircle,
   RefreshCw,
   StopCircle,
@@ -59,6 +60,8 @@ const getEventTypeColor = (eventType: string): string => {
       return 'danger';
     case 'cancelled':
       return 'warning';
+    case 'new_event':
+      return 'info';
     default:
       return 'secondary';
   }
@@ -76,6 +79,8 @@ const getEventTypeIcon = (eventType: string) => {
       return XCircle;
     case 'cancelled':
       return StopCircle;
+    case 'new_event':
+      return Mail;
     default:
       return Info;
   }
@@ -313,7 +318,7 @@ export const NotificationsPage: React.FC = () => {
                         </small>
                       </div>
                       <div className="notifications-card-actions">
-                        {notification.schedule_id && (
+                        {notification.schedule_id && notification.schedule_type !== 'connector' && (
                           <Button
                             variant="secondary"
                             size="sm"

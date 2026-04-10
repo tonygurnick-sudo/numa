@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Code2,
   Cpu,
   Download,
   Eye,
@@ -33,6 +34,8 @@ import {
 import { getFileIconClass, formatFileSize } from '../../utils/fileUtils';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
+import { getFlag } from '../../utils/featureFlags';
+import { useShowChatCost } from '../../hooks/useShowChatCost';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -163,6 +166,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     tools: true,
     integrations: true,
     model: true,
+    developer: true,
     chatUploads: true,
     outputFiles: true,
   };
@@ -190,6 +194,11 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
 
   // Connected integrations only
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
+
+  // Developer-only chat cost toggle. Section only renders when the
+  // DEVELOPER_MODE client config flag is on.
+  const developerModeEnabled = getFlag('DEVELOPER_MODE');
+  const [showChatCost, setShowChatCost] = useShowChatCost();
 
   // Handlers
   const handleKBToggle = (kbId: string, checked: boolean) => {
@@ -609,6 +618,47 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     );
                   })}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Developer card — only with DEVELOPER_MODE client flag */}
+        {developerModeEnabled && (
+          <div className="workspace-settings-card">
+            <button
+              type="button"
+              className="workspace-settings-card-header workspace-settings-card-header--collapsible"
+              onClick={() => toggleSection('developer')}
+              aria-expanded={!collapsedSections.developer}
+            >
+              <div className="workspace-settings-card-title">
+                <Code2 size={16} />
+                <span>{t('workspaceSettings.developer')}</span>
+              </div>
+              <div className="workspace-settings-card-header-right">
+                {collapsedSections.developer && (
+                  <span className="workspace-settings-collapsed-summary">
+                    {showChatCost ? t('workspaceSettings.showCostOn') : t('workspaceSettings.showCostOff')}
+                  </span>
+                )}
+                {collapsedSections.developer ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              </div>
+            </button>
+            {!collapsedSections.developer && (
+              <div className="workspace-settings-card-body">
+                <Form.Check
+                  type="switch"
+                  id="workspace-settings-show-chat-cost"
+                  checked={showChatCost}
+                  onChange={(e) => setShowChatCost(e.target.checked)}
+                  label={
+                    <span>
+                      <span className="d-block">{t('workspaceSettings.showChatCost')}</span>
+                      <span className="text-muted small">{t('workspaceSettings.showChatCostDescription')}</span>
+                    </span>
+                  }
+                />
               </div>
             )}
           </div>

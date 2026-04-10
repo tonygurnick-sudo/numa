@@ -10,7 +10,7 @@ import { ScheduleService } from '../Services/ScheduleService';
 import { listAgents } from '../Services/AgentsService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useBranding } from '../Providers/BrandingContext';
-import type { AgentSchedule } from '../types/agentSchedules';
+import type { AgentSchedule, EventTrigger } from '../types/agentSchedules';
 import type { AgentSummary } from '../types/agents';
 
 export const AutomationBuilderPage = () => {
@@ -76,8 +76,10 @@ export const AutomationBuilderPage = () => {
       agentId: string;
       agentTitle: string;
       promptText: string;
-      cronExpression: string;
-      timezone: string;
+      triggerType: 'cron' | 'event';
+      trigger?: EventTrigger;
+      cronExpression?: string;
+      timezone?: string;
       label: string;
       maxRuns: number;
       emailNotifications: boolean;
@@ -94,6 +96,8 @@ export const AutomationBuilderPage = () => {
         // Update existing
         await ScheduleService.update(numaPut, automationId, {
           promptText: payload.promptText,
+          triggerType: payload.triggerType,
+          trigger: payload.trigger,
           cronExpression: payload.cronExpression,
           timezone: payload.timezone,
           label: payload.label,
@@ -110,6 +114,8 @@ export const AutomationBuilderPage = () => {
           agentTitle: payload.agentTitle,
           conversationId,
           promptText: payload.promptText,
+          triggerType: payload.triggerType,
+          trigger: payload.trigger,
           cronExpression: payload.cronExpression,
           timezone: payload.timezone,
           label: payload.label,

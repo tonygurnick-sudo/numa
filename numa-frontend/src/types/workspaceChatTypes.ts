@@ -271,6 +271,19 @@ export interface WorkspaceChatMessage {
   docTitle?: string;
   /** Document content if message contains a document */
   docContent?: string;
+  /**
+   * Cost/usage data for this turn (from the SDK result event).
+   * Always populated when available; only rendered when the
+   * DEVELOPER_MODE client flag is on AND the user has enabled the
+   * in-chat cost toggle. Never expose elsewhere.
+   */
+  costUsd?: number;
+  numTurns?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  durationMs?: number;
 }
 
 /** Segment types for rendering message content */

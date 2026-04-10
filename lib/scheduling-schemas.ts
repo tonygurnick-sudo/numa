@@ -101,62 +101,150 @@ export const AgentSnapshotSchema = z.object({
   visibility: z.string().optional(),
 });
 
-// Main schedule record schema
-export const ScheduleRecordSchema = z.object({
-  user_id: z.string().min(1, 'User ID is required'),
-  schedule_id: z.string().uuid('Invalid schedule ID format'),
-  tenant_id: z.string().min(1, 'Tenant ID is required'),
-  conversation_id: z.string().min(1, 'Conversation ID is required'),
-  prompt_text: z.string().max(4000, 'Prompt text too long'),
-  cron_expression: z.string().refine(validateCronExpression, {
-    message:
-      'Invalid cron expression format. Use AWS EventBridge format: cron(minute hour day-of-month month day-of-week year)',
-  }),
-  timezone: z.string().refine((tz) => VALID_TIMEZONES.has(tz), {
-    message: 'Invalid timezone. Must be a valid IANA timezone identifier',
-  }),
-  status: z.enum(['active', 'paused', 'deleted']),
-  event_type: z.enum(['agent', 'application', 'data_sync']).optional().default('agent'),
-  agent_id: z.string().min(1, 'Agent ID is required'),
-  agent_title: z.string().optional(),
-  agent_snapshot: AgentSnapshotSchema.optional(),
-  run_config: ScheduledRunConfigSchema.optional(),
-  label: z.string().max(200, 'Label too long').optional(),
-  max_runs: z.number().int().positive().optional(),
-  total_runs: z.number().int().min(0).optional().default(0),
-  email_notifications: z.boolean().optional().default(false),
-  notification_email: z.string().email().optional(),
-  notification_emails: z.array(z.string().email()).max(10).optional(),
-  last_run_epoch: z.number().optional(),
-  last_status: z.string().optional(),
-  last_error: z.string().optional(),
-  created_at: z.number().positive('Invalid creation timestamp'),
-  updated_at: z.number().positive('Invalid update timestamp'),
-  schedule_name: z.string().min(1, 'Schedule name is required'),
+// Event trigger schemas
+export const EmailFilterFieldSchema = z.enum(['sender', 'subject', 'to', 'body', 'has_attachment']);
+export const EmailFilterOpSchema = z.enum(['contains', 'equals', 'not_contains', 'matches']);
+
+export const EmailFilterSchema = z.object({
+  field: EmailFilterFieldSchema,
+  op: EmailFilterOpSchema,
+  value: z.string().max(500),
 });
 
-// Create payload schema
-export const CreateSchedulePayloadSchema = z.object({
-  agentId: z.string().min(1, 'Agent ID is required'),
-  agentTitle: z.string().optional(),
-  agentSnapshot: AgentSnapshotSchema.optional(),
-  conversationId: z.string().min(1, 'Conversation ID is required'),
-  promptText: z.string().max(4000, 'Prompt text too long'),
-  cronExpression: z.string().refine(validateCronExpression, {
-    message:
-      'Invalid cron expression format. Use AWS EventBridge format: cron(minute hour day-of-month month day-of-week year)',
-  }),
-  timezone: z.string().refine((tz) => VALID_TIMEZONES.has(tz), {
-    message: 'Invalid timezone. Must be a valid IANA timezone identifier',
-  }),
-  label: z.string().max(200, 'Label too long').optional(),
-  runConfig: ScheduledRunConfigSchema.optional(),
-  eventType: z.enum(['agent', 'application', 'data_sync']).optional().default('agent'),
-  maxRuns: z.number().int().positive().optional(),
-  emailNotifications: z.boolean().optional().default(false),
-  notificationEmail: z.string().email().optional(),
-  notificationEmails: z.array(z.string().email()).max(10).optional(),
+export const EventTriggerSchema = z.object({
+  source: z.literal('gmail'),
+  event: z.literal('message.received'),
+  filters: z.array(EmailFilterSchema).max(20).default([]),
+  filter_logic: z.enum(['all', 'any']).optional().default('all'),
+  include_email_context: z.boolean().optional().default(true),
 });
+
+// Main schedule record schema
+export const ScheduleRecordSchema = z
+  .object({
+    user_id: z.string().min(1, 'User ID is required'),
+    schedule_id: z.string().uuid('Invalid schedule ID format'),
+    tenant_id: z.string().min(1, 'Tenant ID is required'),
+    conversation_id: z.string().min(1, 'Conversation ID is required'),
+    prompt_text: z.string().max(4000, 'Prompt text too long'),
+    trigger_type: z.enum(['cron', 'event']).optional().default('cron'),
+    trigger: EventTriggerSchema.optional(),
+    cron_expression: z
+      .string()
+      .refine(validateCronExpression, {
+        message:
+          'Invalid cron expression format. Use AWS EventBridge format: cron(minute hour day-of-month month day-of-week year)',
+      })
+      .optional(),
+    timezone: z
+      .string()
+      .refine((tz) => VALID_TIMEZONES.has(tz), {
+        message: 'Invalid timezone. Must be a valid IANA timezone identifier',
+      })
+      .optional(),
+    status: z.enum(['active', 'paused', 'deleted']),
+    event_type: z.enum(['agent', 'application', 'data_sync']).optional().default('agent'),
+    agent_id: z.string().min(1, 'Agent ID is required'),
+    agent_title: z.string().optional(),
+    agent_snapshot: AgentSnapshotSchema.optional(),
+    run_config: ScheduledRunConfigSchema.optional(),
+    label: z.string().max(200, 'Label too long').optional(),
+    max_runs: z.number().int().positive().optional(),
+    total_runs: z.number().int().min(0).optional().default(0),
+    email_notifications: z.boolean().optional().default(false),
+    notification_email: z.string().email().optional(),
+    notification_emails: z.array(z.string().email()).max(10).optional(),
+    last_run_epoch: z.number().optional(),
+    last_status: z.string().optional(),
+    last_error: z.string().optional(),
+    created_at: z.number().positive('Invalid creation timestamp'),
+    updated_at: z.number().positive('Invalid update timestamp'),
+    schedule_name: z.string().min(1, 'Schedule name is required'),
+  })
+  .superRefine((record, ctx) => {
+    if (record.trigger_type === 'event') {
+      if (!record.trigger) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['trigger'],
+          message: 'trigger is required when trigger_type is "event"',
+        });
+      }
+    } else {
+      if (!record.cron_expression) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['cron_expression'],
+          message: 'cron_expression is required when trigger_type is "cron"',
+        });
+      }
+      if (!record.timezone) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['timezone'],
+          message: 'timezone is required when trigger_type is "cron"',
+        });
+      }
+    }
+  });
+
+// Create payload schema
+export const CreateSchedulePayloadSchema = z
+  .object({
+    agentId: z.string().min(1, 'Agent ID is required'),
+    agentTitle: z.string().optional(),
+    agentSnapshot: AgentSnapshotSchema.optional(),
+    conversationId: z.string().min(1, 'Conversation ID is required'),
+    promptText: z.string().max(4000, 'Prompt text too long'),
+    triggerType: z.enum(['cron', 'event']).optional().default('cron'),
+    trigger: EventTriggerSchema.optional(),
+    cronExpression: z
+      .string()
+      .refine(validateCronExpression, {
+        message:
+          'Invalid cron expression format. Use AWS EventBridge format: cron(minute hour day-of-month month day-of-week year)',
+      })
+      .optional(),
+    timezone: z
+      .string()
+      .refine((tz) => VALID_TIMEZONES.has(tz), {
+        message: 'Invalid timezone. Must be a valid IANA timezone identifier',
+      })
+      .optional(),
+    label: z.string().max(200, 'Label too long').optional(),
+    runConfig: ScheduledRunConfigSchema.optional(),
+    eventType: z.enum(['agent', 'application', 'data_sync']).optional().default('agent'),
+    maxRuns: z.number().int().positive().optional(),
+    emailNotifications: z.boolean().optional().default(false),
+    notificationEmail: z.string().email().optional(),
+    notificationEmails: z.array(z.string().email()).max(10).optional(),
+  })
+  .superRefine((payload, ctx) => {
+    if (payload.triggerType === 'event') {
+      if (!payload.trigger) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['trigger'],
+          message: 'trigger is required when triggerType is "event"',
+        });
+      }
+    } else {
+      if (!payload.cronExpression) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['cronExpression'],
+          message: 'cronExpression is required when triggerType is "cron"',
+        });
+      }
+      if (!payload.timezone) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['timezone'],
+          message: 'timezone is required when triggerType is "cron"',
+        });
+      }
+    }
+  });
 
 // Update payload schema
 export const UpdateSchedulePayloadSchema = z.object({
@@ -182,6 +270,8 @@ export const UpdateSchedulePayloadSchema = z.object({
   emailNotifications: z.boolean().optional().default(false),
   notificationEmail: z.string().email().optional(),
   notificationEmails: z.array(z.string().email()).max(10).optional(),
+  triggerType: z.enum(['cron', 'event']).optional(),
+  trigger: EventTriggerSchema.optional(),
 });
 
 // Application schedule schema
@@ -304,6 +394,8 @@ export type CreateSchedulePayload = z.infer<typeof CreateSchedulePayloadSchema>;
 export type UpdateSchedulePayload = z.infer<typeof UpdateSchedulePayloadSchema>;
 export type ScheduledRunConfig = z.infer<typeof ScheduledRunConfigSchema>;
 export type AgentSnapshot = z.infer<typeof AgentSnapshotSchema>;
+export type EmailFilter = z.infer<typeof EmailFilterSchema>;
+export type EventTrigger = z.infer<typeof EventTriggerSchema>;
 export type ApplicationScheduleRecord = z.infer<typeof ApplicationScheduleRecordSchema>;
 export type DataSyncScheduleRecord = z.infer<typeof DataSyncScheduleRecordSchema>;
 

@@ -777,12 +777,14 @@
       "completed": "Completed",
       "partial": "Partial",
       "failed": "Failed",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "new_event": "New Event"
     },
     "scheduleTypes": {
       "agent": "Agent",
       "application": "Application",
-      "data_sync": "Data Sync"
+      "data_sync": "Data Sync",
+      "connector": "Connector"
     }
   },
   "eventStream": {
