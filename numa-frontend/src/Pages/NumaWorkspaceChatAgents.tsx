@@ -156,8 +156,12 @@ const NumaWorkspaceChatAgents = () => {
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [showMobileActions, setShowMobileActions] = useState(false);
-  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
-  const [isAgentsPanelOpen, setIsAgentsPanelOpen] = useState(false);
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(
+    () => localStorage.getItem('numa-sidebar-active') === 'history'
+  );
+  const [isAgentsPanelOpen, setIsAgentsPanelOpen] = useState(
+    () => localStorage.getItem('numa-sidebar-active') === 'agents'
+  );
   const [showFilePreviewModal, setShowFilePreviewModal] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   // SWR: initialize from localStorage cache so chat settings are available instantly
@@ -316,6 +320,7 @@ const NumaWorkspaceChatAgents = () => {
       closeDocument();
       setShowSplitView(false);
       settingsPanel.openPanel();
+      localStorage.setItem('numa-sidebar-active', 'settings');
     }
   }, [settingsPanel, closeFilePreview, closeDocument, setShowSplitView]);
 
@@ -327,39 +332,35 @@ const NumaWorkspaceChatAgents = () => {
 
     if (isHistoryPanelOpen) {
       setIsHistoryPanelOpen(false);
-      // Re-open settings panel so users always have a panel visible
-      settingsPanel.openPanel();
+      localStorage.removeItem('numa-sidebar-active');
     } else {
       settingsPanel.closePanel();
       setIsAgentsPanelOpen(false);
       setIsHistoryPanelOpen(true);
+      localStorage.setItem('numa-sidebar-active', 'history');
     }
   }, [isMobile, isHistoryPanelOpen, settingsPanel]);
 
   const handleToggleAgents = useCallback(() => {
     if (isAgentsPanelOpen) {
       setIsAgentsPanelOpen(false);
-      // Re-open settings panel so users always have a panel visible
-      settingsPanel.openPanel();
+      localStorage.removeItem('numa-sidebar-active');
     } else {
       settingsPanel.closePanel();
       setIsHistoryPanelOpen(false);
       setIsAgentsPanelOpen(true);
+      localStorage.setItem('numa-sidebar-active', 'agents');
     }
   }, [isAgentsPanelOpen, settingsPanel]);
 
-  // When a document or file preview is closed, re-open the settings panel
-  // so users always have a visible side panel for discoverability
   const handleCloseDocument = useCallback(() => {
     closeDocument();
-    settingsPanel.openPanel();
-  }, [closeDocument, settingsPanel]);
+  }, [closeDocument]);
 
   const handleCloseFilePreview = useCallback(() => {
     closeFilePreview();
     setInlinePreviewContent(null);
-    settingsPanel.openPanel();
-  }, [closeFilePreview, settingsPanel]);
+  }, [closeFilePreview]);
 
   const markUserSettingsModified = useCallback(() => {
     setUserSettingsModified(true);
@@ -1243,8 +1244,6 @@ const NumaWorkspaceChatAgents = () => {
 
     // Clear manual loading state to prevent conflicts
     setIsManuallyLoading(false);
-    setIsHistoryPanelOpen(false);
-    setIsAgentsPanelOpen(false);
 
     // Clear V1 migration flag
     setNeedsV1Migration(false);
@@ -2164,8 +2163,6 @@ const NumaWorkspaceChatAgents = () => {
     const isCancelled = () => loadGenerationRef.current !== generation;
 
     setIsManuallyLoading(true);
-    setIsHistoryPanelOpen(false);
-    setIsAgentsPanelOpen(false);
     setIsConversationLoading(true);
     setUserSettingsModified(false); // Reset so save effect doesn't fire with stale state from previous conversation
     setMessages([]); // Clear current messages immediately
@@ -2788,11 +2785,13 @@ const NumaWorkspaceChatAgents = () => {
                             settingsPanel.closePanel();
                             setIsAgentsPanelOpen(false);
                             setIsHistoryPanelOpen(true);
+                            localStorage.setItem('numa-sidebar-active', 'history');
                           }}
                           onOpenAgents={() => {
                             settingsPanel.closePanel();
                             setIsHistoryPanelOpen(false);
                             setIsAgentsPanelOpen(true);
+                            localStorage.setItem('numa-sidebar-active', 'agents');
                           }}
                           onFilesDropped={(files) => handleDroppedFiles(files.map((f) => ({ file: f })))}
                           uploadingFiles={uploadingFiles}
@@ -2984,7 +2983,6 @@ const NumaWorkspaceChatAgents = () => {
             agents={personalAgents}
             agentsLoading={personalAgentsLoading}
             onSelectAgent={(agent) => {
-              setIsAgentsPanelOpen(false);
               handleAgentSelect(agent);
             }}
           />
