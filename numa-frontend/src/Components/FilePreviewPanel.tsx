@@ -36,6 +36,8 @@ interface FilePreviewPanelProps {
   getCredentials: () => Promise<unknown>;
   /** When true, hides the header (for use in modal containers) */
   embedded?: boolean;
+  /** Pre-loaded content — skips S3 fetch when provided (used for inline documents) */
+  initialContent?: string;
 }
 
 // File size limits for preview (in bytes)
@@ -80,6 +82,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
   region,
   getCredentials,
   embedded = false,
+  initialContent,
 }) => {
   const { t } = useTranslation('chat');
   // Content state
@@ -171,6 +174,12 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
     setConvertingDocx(false);
     setFolderContents([]);
     setFolderError(null);
+
+    // If initial content is provided, use it directly (e.g. inline documents)
+    if (initialContent != null) {
+      setTextContent(initialContent);
+      return;
+    }
 
     if (preview.type === 'folder') {
       // Load folder contents
@@ -265,17 +274,29 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
     fetchBinaryContent,
     checkFileSize,
     fetchImageAsDataUrl,
+    initialContent,
   ]);
 
   // Download handlers
   const handleDownloadFile = useCallback(async () => {
     if (!preview || preview.type !== 'file') return;
     try {
-      await downloadFileFromS3(preview.fullPath, bucket, region, getCredentials, preview.filename);
+      if (initialContent != null) {
+        // Inline document — download from in-memory content
+        const blob = new Blob([initialContent], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = preview.filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        await downloadFileFromS3(preview.fullPath, bucket, region, getCredentials, preview.filename);
+      }
     } catch (err) {
       console.error('Error downloading file:', err);
     }
-  }, [preview, bucket, region, getCredentials]);
+  }, [preview, bucket, region, getCredentials, initialContent]);
 
   const handleDownloadFolder = useCallback(async () => {
     if (!preview || preview.type !== 'folder') return;
@@ -494,7 +515,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
           <div className="file-preview-panel-title">
             <i className={iconClass} style={{ color: iconColor, marginRight: '0.5rem' }}></i>
             <span className="fw-semibold">{title}</span>
-            <span className="text-muted ms-2 small">{preview.relativePath}</span>
+            {preview.relativePath !== title && <span className="text-muted ms-2 small">{preview.relativePath}</span>}
           </div>
           <button type="button" className="file-preview-close-btn" onClick={onClose}>
             <i className="bi bi-x-lg" />

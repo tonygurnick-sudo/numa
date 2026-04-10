@@ -11,12 +11,10 @@ import { ChatHistorySidebar, type ChatHistorySidebarRef } from '../Components/Ch
 import { AgentAvatar } from '../Components/Agents/AgentAvatar';
 import { ChatInput } from '../Components/Chat/ChatInput';
 import { ExportConversationButton } from '../Components/Chat/ExportConversationButton';
-import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/Chat/ChatMessages';
 import { useShowChatCost } from '../hooks/useShowChatCost';
 import { NewChat } from '../Components/Chat/NewChat';
 import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
-import { ResultActions } from '../Components/ResultActions';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { generateSystemPrompt, getEnabledTools } from '../utils/chatSystemPromptUtils';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
@@ -160,7 +158,6 @@ const NumaWorkspaceChatAgents = () => {
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [isAgentsPanelOpen, setIsAgentsPanelOpen] = useState(false);
-  const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showFilePreviewModal, setShowFilePreviewModal] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   // SWR: initialize from localStorage cache so chat settings are available instantly
@@ -276,6 +273,9 @@ const NumaWorkspaceChatAgents = () => {
     closeFilePreview,
   } = filePreviewProcessor;
 
+  // Inline document content for FilePreviewPanel (when opening inline docs as file previews)
+  const [inlinePreviewContent, setInlinePreviewContent] = useState<string | null>(null);
+
   // NUMA-1105: Intercept mobile back-button immediately when opening the preview modal
   useEffect(() => {
     if (!isMobile || !showFilePreviewModal) return;
@@ -357,6 +357,7 @@ const NumaWorkspaceChatAgents = () => {
 
   const handleCloseFilePreview = useCallback(() => {
     closeFilePreview();
+    setInlinePreviewContent(null);
     settingsPanel.openPanel();
   }, [closeFilePreview, settingsPanel]);
 
@@ -367,10 +368,12 @@ const NumaWorkspaceChatAgents = () => {
   // Memoized callbacks for file preview (to avoid re-renders on every keystroke)
   const handleOpenFilePreviewForChat = useCallback(
     (ref: { filename: string; fullPath: string; relativePath: string; extension: string }) => {
-      // Close settings panel for mutual exclusivity
+      // Close other panels for mutual exclusivity
       settingsPanel.closePanel();
       setIsHistoryPanelOpen(false);
       setIsAgentsPanelOpen(false);
+      closeDocument();
+      setInlinePreviewContent(null);
       openFilePreview(ref);
       // Collapse main nav sidebar to give more room for preview
       window.dispatchEvent(new CustomEvent('numa-collapse-sidebar'));
@@ -378,7 +381,7 @@ const NumaWorkspaceChatAgents = () => {
         setShowFilePreviewModal(true);
       }
     },
-    [openFilePreview, isMobile, settingsPanel]
+    [openFilePreview, isMobile, settingsPanel, closeDocument]
   );
 
   const handleOpenFolderPreviewForChat = useCallback(
@@ -670,17 +673,6 @@ const NumaWorkspaceChatAgents = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Allow mobile back button to close the document modal instead of leaving the page
-  useDrawerBackClose({
-    isOpen: showDocumentModal,
-    onClose: () => {
-      setShowDocumentModal(false);
-      closeDocument();
-    },
-    enabled: isMobile,
-    stateKey: 'document-modal',
-  });
 
   // Network status detection for offline banner
   const { isOnline } = useNetworkStatus();
@@ -2839,12 +2831,16 @@ const NumaWorkspaceChatAgents = () => {
                             onOpenDocument={(title, content) => {
                               settingsPanel.closePanel();
                               setInlineDocument({ title, content });
+                              // Store inline content and open via FilePreviewPanel
+                              setInlinePreviewContent(content);
+                              openFilePreview({
+                                filename: title,
+                                fullPath: '',
+                                relativePath: title,
+                                extension: 'md',
+                              });
                               if (isMobile) {
-                                setShowSplitView(false);
-                                setLeftFraction(0.99);
-                                setShowDocumentModal(true);
-                              } else {
-                                openDocument(title, content);
+                                setShowFilePreviewModal(true);
                               }
                             }}
                             isConversationLoading={false}
@@ -2949,12 +2945,11 @@ const NumaWorkspaceChatAgents = () => {
                       bucket={OUTPUTS_BUCKET || ''}
                       region={REGION || ''}
                       getCredentials={getCredentials}
+                      initialContent={inlinePreviewContent ?? undefined}
                     />
-                  ) : showSplitView && inlineDocument ? (
-                    <DocumentPanel documentContent={inlineDocument} onClose={handleCloseDocument} />
                   ) : null
                 }
-                showRight={(showFilePreview && !!filePreview) || (inlineDocument && showSplitView)}
+                showRight={showFilePreview && !!filePreview}
                 leftFraction={showFilePreview && filePreview ? filePreviewLeftFraction : leftFraction}
                 onLeftFractionChange={showFilePreview && filePreview ? setFilePreviewLeftFraction : setLeftFraction}
                 minLeft={200}
@@ -3061,35 +3056,6 @@ const NumaWorkspaceChatAgents = () => {
         </aside>
       )}
 
-      {/* Mobile document viewer */}
-      <Modal
-        show={isMobile && showDocumentModal && !!inlineDocument}
-        onHide={() => {
-          setShowDocumentModal(false);
-          closeDocument();
-        }}
-        fullscreen
-        centered
-        scrollable
-        dialogClassName="document-modal"
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>{inlineDocument?.title || 'Document'}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <div className="message-content markdown-content">
-            <MarkdownContent content={inlineDocument?.content || ''} />
-          </div>
-        </Modal.Body>
-        {inlineDocument?.content ? (
-          <Modal.Footer>
-            <div className="flex-grow-1">
-              <ResultActions content={inlineDocument.content} title={inlineDocument.title || 'Document'} />
-            </div>
-          </Modal.Footer>
-        ) : null}
-      </Modal>
-
       {/* Mobile file preview modal */}
       <Modal
         show={isMobile && showFilePreviewModal && !!filePreview}
@@ -3118,11 +3084,13 @@ const NumaWorkspaceChatAgents = () => {
               onClose={() => {
                 setShowFilePreviewModal(false);
                 closeFilePreview();
+                setInlinePreviewContent(null);
               }}
               bucket={OUTPUTS_BUCKET || ''}
               region={REGION || ''}
               getCredentials={getCredentials}
               embedded={true}
+              initialContent={inlinePreviewContent ?? undefined}
             />
           )}
         </Modal.Body>
