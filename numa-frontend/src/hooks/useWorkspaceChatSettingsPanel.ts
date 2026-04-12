@@ -36,8 +36,16 @@ export interface UseWorkspaceChatSettingsPanelReturn {
  * @param conversationId - Current conversation ID (null for new chat)
  */
 export function useWorkspaceChatSettingsPanel(conversationId: string | null): UseWorkspaceChatSettingsPanelReturn {
-  // Panel always starts open — users can close it, but it re-opens on navigation events
-  const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const PANEL_STATE_KEY = 'numa-settings-panel-open';
+
+  // Panel state persisted to localStorage so it survives conversation changes and page reloads
+  // If history or agents tab is active, settings panel should start closed
+  const [isPanelOpen, setIsPanelOpen] = useState(() => {
+    const activeTab = localStorage.getItem('numa-sidebar-active');
+    if (activeTab === 'history' || activeTab === 'agents') return false;
+    const stored = localStorage.getItem(PANEL_STATE_KEY);
+    return stored !== null ? stored === 'true' : true;
+  });
 
   // File state
   const [uploadsFiles, setUploadsFiles] = useState<WorkspaceChatFileInfo[]>([]);
@@ -48,16 +56,22 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
   // Track last loaded conversation to avoid redundant fetches
   const lastLoadedConversationRef = useRef<string | null>(null);
 
-  // Re-open the panel whenever the conversation changes (new chat, history nav, agent nav)
-  // This ensures users always see the settings panel on navigation events.
-  useEffect(() => {
+  // Panel controls — persist preference to localStorage
+  const openPanel = useCallback(() => {
     setIsPanelOpen(true);
-  }, [conversationId]);
-
-  // Panel controls
-  const openPanel = useCallback(() => setIsPanelOpen(true), []);
-  const closePanel = useCallback(() => setIsPanelOpen(false), []);
-  const togglePanel = useCallback(() => setIsPanelOpen((prev) => !prev), []);
+    localStorage.setItem(PANEL_STATE_KEY, 'true');
+  }, []);
+  const closePanel = useCallback(() => {
+    setIsPanelOpen(false);
+    localStorage.setItem(PANEL_STATE_KEY, 'false');
+  }, []);
+  const togglePanel = useCallback(() => {
+    setIsPanelOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem(PANEL_STATE_KEY, String(next));
+      return next;
+    });
+  }, []);
 
   // Load files for the current conversation
   const loadFiles = useCallback(async () => {

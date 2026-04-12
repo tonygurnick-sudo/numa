@@ -1,6 +1,6 @@
 // ChatMessages.tsx
 import React, { useState, type CSSProperties, type RefObject } from 'react';
-import { Spinner, Button } from 'react-bootstrap';
+import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { MarkdownContent } from '../Renderers/MarkdownContent';
 import { WorkspaceChatMarkdown, type FileReference, type FolderReference } from '../Renderers/WorkspaceChatMarkdown';
@@ -17,7 +17,6 @@ import { FileMessage } from '../FileMessage';
 import AgentAvatar from '../Agents/AgentAvatar';
 import type { AgentSummary } from '../../types/agents';
 import { formatAgentDisplayName } from '../../utils/agentUtils';
-import { downloadFileFromS3 } from '../../utils/s3Utils';
 import { useBranding } from '../../Providers/BrandingContext';
 import { useBrandingAsset } from '../../hooks/useBrandingAsset';
 import { useShowChatCost } from '../../hooks/useShowChatCost';
@@ -70,31 +69,11 @@ function parseFileAttachmentTags(content: string): {
 }
 
 /**
- * A small helper bubble for opening doc if docTitle/docContent exist
+ * Helper to extract file extension from a filename or title.
  */
-function DocOpenBubble({
-  docTitle,
-  docContent,
-  onClick,
-  openLabel,
-}: {
-  docTitle?: string;
-  docContent?: string;
-  onClick: (title: string, content: string) => void;
-  openLabel: string;
-}) {
-  if (!docTitle || !docContent) return null;
-
-  // Renders a button in the bottom-right corner of the message
-  // On click, calls onClick(docTitle, docContent)
-  return (
-    <div className="doc-open-bubble">
-      <Button className="doc-open-bubble-button" onClick={() => onClick(docTitle, docContent)}>
-        <i className="bi bi-file-earmark-text" />
-        <span className="open-label">{openLabel}</span>
-      </Button>
-    </div>
-  );
+function getExtension(name: string): string {
+  const parts = name.split('.');
+  return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
 }
 
 type TextSegment = { kind: 'text'; text: string; finalized?: boolean };
@@ -768,19 +747,20 @@ const ChatMessages = ({
                     const fs = seg as FileUploadSegment;
                     const hasS3Data = fs.s3Key && fs.s3Bucket && fs.region;
 
-                    const handleFileClick = async () => {
-                      if (hasS3Data) {
-                        try {
-                          await downloadFileFromS3(fs.s3Key!, fs.s3Bucket!, fs.region!, getCredentials, fs.filename);
-                        } catch (error) {
-                          console.error('Error downloading file:', error);
-                        }
+                    const handleFileClick = () => {
+                      if (hasS3Data && onOpenFilePreview) {
+                        const ext = getExtension(fs.filename);
+                        onOpenFilePreview({
+                          filename: fs.filename,
+                          fullPath: fs.s3Key!,
+                          relativePath: fs.filename,
+                          extension: ext,
+                        });
                       }
                     };
 
                     return (
                       <div key={idx} className="file-upload-message">
-                        <div className="file-upload-text">{t('messages.fileUploaded', { name: fs.filename })}</div>
                         <FileMessage
                           filename={fs.filename}
                           type={fs.type || 'success'}
@@ -916,14 +896,16 @@ const ChatMessages = ({
                 </div>
               )}
 
-              {/* If there's a doc, show the bubble */}
+              {/* If there's an inline doc, show it as a file pill (same style as file uploads) */}
               {message.role === 'assistant' && message.docTitle && message.docContent && (
-                <DocOpenBubble
-                  docTitle={message.docTitle}
-                  docContent={message.docContent}
-                  onClick={onOpenDocument}
-                  openLabel={t('messages.openDocument', { title: message.docTitle })}
-                />
+                <div className="file-upload-message">
+                  <FileMessage
+                    filename={message.docTitle}
+                    type="success"
+                    onClick={() => onOpenDocument(message.docTitle!, message.docContent!)}
+                    clickable
+                  />
+                </div>
               )}
 
               {hasCopyableContent && !message.status && (
