@@ -31,6 +31,10 @@ import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../../../Providers/ToastContext';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 import { StaffAvatar } from '../Shared/StaffAvatar';
+import { PriorityIndicator } from '../Shared/PriorityIndicator';
+import { SidebarDropdown } from '../Shared/SidebarDropdown';
+import type { DropdownOption } from '../Shared/SidebarDropdown';
+import { getPriorityColor } from '../Shared/colorUtils';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -47,23 +51,6 @@ interface TicketDetailModalProps {
 const PRIORITY_OPTIONS: TicketPriority[] = ['highest', 'high', 'medium', 'low', 'lowest'];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-/**
- * Formats an ISO date string to a locale-friendly display string.
- * Returns a dash if the value is null or undefined.
- */
-function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '\u2014';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '\u2014';
-  return d.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 /**
  * Formats an ISO date string to a compact display string (no time component).
@@ -192,6 +179,7 @@ export function TicketDetailModal({
 
   // ── Delete confirmation ─────────────────────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(true);
 
   // ── History panel ────────────────────────────────────────────────────
   const [showHistory, setShowHistory] = useState(false);
@@ -228,6 +216,7 @@ export function TicketDetailModal({
     try {
       const response = await OpsService.getTicket(numaGet, ticketId, effectiveTeamId ?? undefined);
       setTicket(response.ticket);
+      setTitleDraft(response.ticket.title);
       setLinks(response.links ?? []);
 
       // Load the ticket's actual team data so the stage dropdown is always accurate
@@ -541,35 +530,24 @@ export function TicketDetailModal({
     ];
 
     return (
-      <div
-        className="d-flex align-items-center gap-3 flex-wrap border-top px-3"
-        style={{
-          backgroundColor: '#f9fafb',
-          fontSize: '0.72rem',
-          color: '#6b7280',
-          flexShrink: 0,
-          paddingTop: 7,
-          paddingBottom: 7,
-        }}
-      >
+      <div className="ticket-lifecycle-strip">
         {events.map(({ label, date }) => (
           <div key={label} className="d-flex align-items-center gap-1">
-            <span style={{ fontWeight: 600 }}>{label}:</span>
+            <strong>{label}:</strong>
             <span>{formatDateShort(date)}</span>
           </div>
         ))}
-        {/* Cycle time: startedAt → completedAt */}
         {formatCycleTime(ticket.startedAt, ticket.completedAt) && (
           <div className="d-flex align-items-center gap-1">
-            <span style={{ fontWeight: 600 }}>{t('tickets.cycleTime')}:</span>
+            <strong>{t('tickets.cycleTime')}:</strong>
             <span>{formatCycleTime(ticket.startedAt, ticket.completedAt)}</span>
           </div>
         )}
         {ticket.createdByName && (
           <div className="d-flex align-items-center gap-1 ms-auto">
-            <i className="bi bi-person" />
+            <i className="bi bi-person" style={{ fontSize: '0.7rem' }} />
             <span>{ticket.createdByName}</span>
-            <span style={{ opacity: 0.7 }}>· {relativeTimeShort(ticket.createdAt)}</span>
+            <span style={{ opacity: 0.6 }}>· {relativeTimeShort(ticket.createdAt)}</span>
           </div>
         )}
       </div>
@@ -577,6 +555,15 @@ export function TicketDetailModal({
   };
 
   // ── Render: Sidebar ───────────────────────────────────────────────────
+
+  const STATUS_PILL_COLORS: Record<string, string> = {
+    backlog: '#9ca3af',
+    scoped: '#6366f1',
+    queued: '#4338ca',
+    active: '#2563eb',
+    completed: '#059669',
+    ended: '#6b7280',
+  };
 
   const renderSidebar = () => {
     if (!ticket || !config) return null;
@@ -586,39 +573,13 @@ export function TicketDetailModal({
     const hasWorkUnits = team?.workUnitSeries?.enabled === true;
     const allZones = ticketTeamData?.zones ?? teamData?.zones ?? [];
     const allStages = ticketTeamData?.stages ?? teamData?.stages ?? [];
-    const selectStyle: React.CSSProperties = { fontSize: '0.85rem' };
+    const currentStage = allStages.find((s) => s.id === ticket.stageId);
+    const pillColor = STATUS_PILL_COLORS[currentStage?.statusType ?? 'backlog'] ?? '#9ca3af';
 
     return (
-      <div style={{ fontSize: '0.875rem' }}>
-        {/* Status — full width */}
-        <div className="ticket-sidebar-section-title">{t('tickets.status')}</div>
-        <Form.Select
-          size="sm"
-          value={ticket.stageId}
-          onChange={(e) => {
-            const newStageId = e.target.value;
-            const stage = allStages.find((s) => s.id === newStageId);
-            void handleUpdate({ stageId: newStageId, zoneId: stage?.zoneId });
-          }}
-          style={selectStyle}
-        >
-          {allZones.map((zone) => (
-            <optgroup key={zone.id} label={zone.name}>
-              {allStages
-                .filter((s) => s.zoneId === zone.id)
-                .sort((a, b) => a.order - b.order)
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
-        </Form.Select>
-
-        {/* Title / Summary */}
-        <div style={{ marginTop: 16, marginBottom: 12 }}>
-          <div className="ticket-sidebar-field-label">{t('tickets.title')}</div>
+      <div>
+        {/* ── Title + Status row ──────────────────────────────────────── */}
+        <div className="d-flex align-items-center justify-content-between gap-2" style={{ padding: '12px 14px 8px' }}>
           <Form.Control
             size="sm"
             type="text"
@@ -630,275 +591,433 @@ export function TicketDetailModal({
             onKeyDown={(e) => {
               if (e.key === 'Enter') void saveTitle();
             }}
-            style={{ fontSize: '0.85rem' }}
+            placeholder={t('tickets.title')}
+            className="ticket-sidebar-title-input"
           />
-        </div>
-
-        {/* Priority */}
-        <div style={{ marginTop: 16, marginBottom: 12 }}>
-          <div className="ticket-sidebar-field-label">{t('tickets.priority')}</div>
-          <Form.Select
-            size="sm"
-            value={ticket.priority}
-            onChange={(e) => void handleUpdate({ priority: e.target.value as TicketPriority })}
-            style={selectStyle}
-          >
-            {PRIORITY_OPTIONS.map((p) => (
-              <option key={p} value={p}>
-                {t(`priority.${p}`)}
-              </option>
-            ))}
-          </Form.Select>
-        </div>
-
-        {/* Assignee — full width row with avatar */}
-        <div style={{ marginBottom: 12 }}>
-          <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
-          <div className="d-flex align-items-center gap-2">
-            <StaffAvatar
-              staff={ticket.assigneeId ? staff.find((s) => s.id === ticket.assigneeId) : undefined}
-              name={ticket.assigneeName}
-              size={28}
-            />
-            <Form.Select
-              size="sm"
-              value={ticket.assigneeId ?? ''}
-              onChange={(e) => void handleUpdate({ assigneeId: e.target.value || null })}
-              style={selectStyle}
-            >
-              <option value="">{t('fields.unassigned')}</option>
-              {staff
-                .filter((s) => s.isActive)
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name || s.email}
-                  </option>
-                ))}
-            </Form.Select>
-          </div>
-        </div>
-
-        {/* Reporter — full width row with avatar */}
-        <div style={{ marginBottom: 12 }}>
-          <div className="ticket-sidebar-field-label">{t('tickets.reporter')}</div>
-          <div className="d-flex align-items-center gap-2">
-            <StaffAvatar
-              staff={ticket.reporterId ? (config?.staff ?? []).find((s) => s.id === ticket.reporterId) : undefined}
-              name={ticket.reporterName}
-              size={28}
-            />
-            <Form.Select
-              size="sm"
-              value={ticket.reporterId ?? ''}
-              onChange={(e) => {
-                const selectedStaff = config?.staff.find((s) => s.id === e.target.value);
-                void handleUpdate({
-                  reporterId: e.target.value || null,
-                  reporterName: selectedStaff?.name || selectedStaff?.email || null,
-                });
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <span
+              className="ticket-status-pill"
+              style={{ backgroundColor: pillColor }}
+              onClick={() => {
+                const sel = document.getElementById('ticket-status-select');
+                if (sel) (sel as HTMLSelectElement).showPicker?.();
               }}
-              style={selectStyle}
             >
-              <option value="">{t('fields.unassigned')}</option>
-              {(config?.staff ?? [])
-                .filter((s) => s.isActive)
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name || s.email}
-                  </option>
-                ))}
-            </Form.Select>
-          </div>
-        </div>
-
-        {/* Created by */}
-        <div style={{ marginBottom: 12 }}>
-          <div className="ticket-sidebar-field-label">{t('tickets.createdBy')}</div>
-          <span style={{ fontSize: '0.85rem', display: 'block', paddingTop: 6 }}>{ticket.createdByName}</span>
-        </div>
-
-        {/* Due Date + Project — 2 column */}
-        <div className="ticket-sidebar-grid-row">
-          <div>
-            <div className="ticket-sidebar-field-label">{t('tickets.dueDate')}</div>
-            <Form.Control
-              type="date"
-              size="sm"
-              value={toDateInputValue(ticket.dueDate)}
-              onChange={(e) => void handleUpdate({ dueDate: e.target.value || null })}
-              style={selectStyle}
-            />
-          </div>
-          <div>
-            <div className="ticket-sidebar-field-label">{t('tickets.project')}</div>
+              {currentStage?.name ?? t('tickets.status')}
+              <i className="bi bi-chevron-down" />
+            </span>
             <Form.Select
+              id="ticket-status-select"
               size="sm"
-              value={ticket.projectId ?? ''}
-              onChange={(e) => void handleUpdate({ projectId: e.target.value || null })}
-              style={selectStyle}
-            >
-              <option value="">{t('common.none')}</option>
-              {projects
-                .filter((p) => p.isActive)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-            </Form.Select>
-            {projects.filter((p) => p.isActive).length === 0 && (
-              <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: 2 }}>
-                <i className="bi bi-gear me-1" />
-                {t('tickets.projectHint')}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Customer + Supplier — 2 column */}
-        <div className="ticket-sidebar-grid-row">
-          <div>
-            <div className="ticket-sidebar-field-label">{t('tickets.customer')}</div>
-            <Form.Select
-              size="sm"
-              value={ticket.customerId ?? ''}
-              disabled={loadingCrm}
+              value={ticket.stageId}
               onChange={(e) => {
-                const selected = customers.find((c) => c.id === e.target.value);
-                void handleUpdate({
-                  customerId: e.target.value || null,
-                  customerName: selected?.companyName ?? null,
-                });
+                const newStageId = e.target.value;
+                const stage = allStages.find((s) => s.id === newStageId);
+                void handleUpdate({ stageId: newStageId, zoneId: stage?.zoneId });
               }}
-              style={selectStyle}
-            >
-              {loadingCrm ? (
-                <option value="">{t('common.loading')}</option>
-              ) : (
-                <>
-                  <option value="">{t('common.none')}</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.companyName}
-                    </option>
-                  ))}
-                </>
-              )}
-            </Form.Select>
-          </div>
-          <div>
-            <div className="ticket-sidebar-field-label">{t('tickets.supplier')}</div>
-            <Form.Select
-              size="sm"
-              value={ticket.supplierId ?? ''}
-              disabled={loadingCrm}
-              onChange={(e) => {
-                const selected = suppliers.find((s) => s.id === e.target.value);
-                void handleUpdate({
-                  supplierId: e.target.value || null,
-                  supplierName: selected?.companyName ?? null,
-                });
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                cursor: 'pointer',
               }}
-              style={selectStyle}
             >
-              {loadingCrm ? (
-                <option value="">{t('common.loading')}</option>
-              ) : (
-                <>
-                  <option value="">{t('common.none')}</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.companyName}
-                    </option>
-                  ))}
-                </>
-              )}
-            </Form.Select>
-          </div>
-        </div>
-
-        {/* Sprint — full width (only if work units enabled) */}
-        {hasWorkUnits && (
-          <div className="mb-3">
-            <div className="ticket-sidebar-field-label">{t('tickets.workUnit')}</div>
-            <Form.Select
-              size="sm"
-              value={ticket.workUnitId ?? ''}
-              onChange={(e) => void handleUpdate({ workUnitId: e.target.value || null })}
-              style={selectStyle}
-            >
-              <option value="">{t('common.none')}</option>
-              {workUnits.map((wu) => (
-                <option key={wu.id} value={wu.id}>
-                  {wu.name}
-                </option>
+              {allZones.map((zone) => (
+                <optgroup key={zone.id} label={zone.name}>
+                  {allStages
+                    .filter((s) => s.zoneId === zone.id)
+                    .sort((a, b) => a.order - b.order)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
             </Form.Select>
           </div>
-        )}
-
-        {/* Tags */}
-        <div
-          className="mb-3"
-          style={{ cursor: editingTags ? 'default' : 'pointer' }}
-          onClick={editingTags ? undefined : startEditTags}
-          role={editingTags ? undefined : 'button'}
-          tabIndex={editingTags ? undefined : 0}
-          onKeyDown={
-            editingTags
-              ? undefined
-              : (e) => {
-                  if (e.key === 'Enter' || e.key === ' ') startEditTags();
-                }
-          }
-        >
-          <div className="ticket-sidebar-field-label">{t('tickets.tags')}</div>
-          {editingTags ? (
-            <Form.Control
-              type="text"
-              size="sm"
-              value={tagsDraft}
-              onChange={(e) => setTagsDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void saveTags();
-                if (e.key === 'Escape') cancelTags();
-              }}
-              onBlur={() => void saveTags()}
-              style={{ fontSize: '0.85rem' }}
-              autoFocus
-            />
-          ) : (
-            <div className="d-flex flex-wrap gap-1">
-              {ticket.tags.length > 0 ? (
-                ticket.tags.map((tag) => (
-                  <Badge key={tag} bg="light" text="dark" className="border" style={{ fontSize: '0.75rem' }}>
-                    {tag}
-                  </Badge>
-                ))
-              ) : (
-                <span className="text-muted" style={{ fontSize: '0.85rem' }}>
-                  {t('common.none')}
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* Custom / Dynamic Fields */}
-        {getVisibleFields().length > 0 && (
-          <div className="pt-2 border-top">
-            <div className="ticket-sidebar-section-title">{t('fields.dynamicFields')}</div>
-            {getVisibleFields().map(({ field, override }) => (
-              <DynamicField
-                key={field.id}
-                field={field}
-                value={ticket.fields?.[field.id] ?? field.defaultValue ?? null}
-                onChange={(value) => void handleCustomFieldChange(field.id, value)}
-                compact
-                fieldOverride={override}
-                staff={config.staff}
+        {/* ── Details section ─────────────────────────────────────────── */}
+        <button
+          className="ticket-sidebar-details-toggle"
+          aria-expanded={detailsExpanded}
+          onClick={() => setDetailsExpanded((prev) => !prev)}
+        >
+          <i className="bi bi-chevron-down" />
+          {t('tickets.details', 'Details')}
+        </button>
+
+        {detailsExpanded && (
+          <div className="ticket-sidebar-details-body">
+            {/* Type */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('tickets.type')}</div>
+              <SidebarDropdown
+                value={ticket.ticketTypeId}
+                onChange={(val) => void handleUpdate({ ticketTypeId: val })}
+                options={(config?.ticketTypes ?? []).map((tt) => ({
+                  value: tt.id,
+                  label: tt.name,
+                  icon: tt.icon ? (
+                    <i className={getTicketTypeIconClass(tt.icon)} style={{ color: tt.color, fontSize: '0.82rem' }} />
+                  ) : undefined,
+                }))}
+                renderValue={() => (
+                  <>
+                    {ticketType?.icon && (
+                      <i
+                        className={getTicketTypeIconClass(ticketType.icon)}
+                        style={{ color: ticketType.color, fontSize: '0.82rem' }}
+                      />
+                    )}
+                    <span style={{ color: ticketType?.color }}>{ticketType?.name ?? t('common.none')}</span>
+                  </>
+                )}
               />
-            ))}
+            </div>
+
+            {/* Priority */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('tickets.priority')}</div>
+              <SidebarDropdown
+                value={ticket.priority}
+                onChange={(val) => void handleUpdate({ priority: val as TicketPriority })}
+                options={PRIORITY_OPTIONS.map((p) => ({
+                  value: p,
+                  label: t(`priority.${p}`),
+                  icon: (
+                    <span
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        backgroundColor: getPriorityColor(p),
+                        display: 'inline-block',
+                        flexShrink: 0,
+                      }}
+                    />
+                  ),
+                }))}
+                renderValue={(opt) => (
+                  <>
+                    <PriorityIndicator priority={ticket.priority} />
+                    <span>{opt?.label ?? t('tickets.priority')}</span>
+                  </>
+                )}
+              />
+            </div>
+
+            {/* Assignee */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
+              <SidebarDropdown
+                value={ticket.assigneeId ?? ''}
+                onChange={(val) => void handleUpdate({ assigneeId: val || null })}
+                options={[
+                  { value: '', label: t('fields.unassigned') },
+                  ...staff
+                    .filter((s) => s.isActive)
+                    .map(
+                      (s): DropdownOption => ({
+                        value: s.id,
+                        label: s.name || s.email,
+                        icon: <StaffAvatar staff={s} size={22} />,
+                      })
+                    ),
+                ]}
+                renderValue={() => {
+                  const assignee = ticket.assigneeId ? staff.find((s) => s.id === ticket.assigneeId) : undefined;
+                  return (
+                    <>
+                      <StaffAvatar staff={assignee} name={ticket.assigneeName} size={28} />
+                      <span className={!ticket.assigneeId ? 'sidebar-dropdown-placeholder' : ''}>
+                        {ticket.assigneeName || t('fields.unassigned')}
+                      </span>
+                    </>
+                  );
+                }}
+              />
+            </div>
+
+            {/* Reporter */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('tickets.reporter')}</div>
+              <SidebarDropdown
+                value={ticket.reporterId ?? ''}
+                onChange={(val) => {
+                  const selectedStaff = config?.staff.find((s) => s.id === val);
+                  void handleUpdate({
+                    reporterId: val || null,
+                    reporterName: selectedStaff?.name || selectedStaff?.email || null,
+                  });
+                }}
+                options={[
+                  { value: '', label: t('fields.unassigned') },
+                  ...(config?.staff ?? [])
+                    .filter((s) => s.isActive)
+                    .map(
+                      (s): DropdownOption => ({
+                        value: s.id,
+                        label: s.name || s.email,
+                        icon: <StaffAvatar staff={s} size={22} />,
+                      })
+                    ),
+                ]}
+                renderValue={() => {
+                  const reporter = ticket.reporterId
+                    ? (config?.staff ?? []).find((s) => s.id === ticket.reporterId)
+                    : undefined;
+                  return (
+                    <>
+                      <StaffAvatar staff={reporter} name={ticket.reporterName} size={28} />
+                      <span className={!ticket.reporterId ? 'sidebar-dropdown-placeholder' : ''}>
+                        {ticket.reporterName || t('fields.unassigned')}
+                      </span>
+                    </>
+                  );
+                }}
+              />
+            </div>
+
+            {/* Created by */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('tickets.createdBy')}</div>
+              <span
+                className={!ticket.createdByName ? 'sidebar-dropdown-placeholder' : ''}
+                style={{ fontSize: '0.82rem', display: 'block', padding: '5px 8px' }}
+              >
+                {ticket.createdByName || t('common.none')}
+              </span>
+            </div>
+
+            {/* Sprint (if work units enabled) */}
+            {hasWorkUnits && (
+              <div className="ticket-sidebar-field">
+                <div className="ticket-sidebar-field-label">{t('tickets.workUnit')}</div>
+                <SidebarDropdown
+                  value={ticket.workUnitId ?? ''}
+                  onChange={(val) => void handleUpdate({ workUnitId: val || null })}
+                  options={[
+                    { value: '', label: t('common.none') },
+                    ...workUnits.map(
+                      (wu): DropdownOption => ({
+                        value: wu.id,
+                        label: wu.name,
+                        icon: <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />,
+                      })
+                    ),
+                  ]}
+                  renderValue={(opt) =>
+                    opt?.value ? (
+                      <span className="ticket-badge ticket-badge-sprint" style={{ margin: 0 }}>
+                        <i
+                          className="bi bi-circle-fill me-1"
+                          style={{ fontSize: '0.28rem', verticalAlign: 'middle' }}
+                        />
+                        {opt.label}
+                      </span>
+                    ) : (
+                      <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                    )
+                  }
+                />
+              </div>
+            )}
+
+            {/* Due Date */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('tickets.dueDate')}</div>
+              <Form.Control
+                type="date"
+                size="sm"
+                value={toDateInputValue(ticket.dueDate)}
+                onChange={(e) => void handleUpdate({ dueDate: e.target.value || null })}
+              />
+            </div>
+
+            {/* Project — full width */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('tickets.project')}</div>
+              <SidebarDropdown
+                value={ticket.projectId ?? ''}
+                onChange={(val) => void handleUpdate({ projectId: val || null })}
+                options={[
+                  { value: '', label: t('common.none') },
+                  ...projects
+                    .filter((p) => p.isActive)
+                    .map(
+                      (p): DropdownOption => ({
+                        value: p.id,
+                        label: p.name,
+                        icon: <i className="bi bi-folder" style={{ fontSize: '0.78rem', color: '#6d28d9' }} />,
+                      })
+                    ),
+                ]}
+                renderValue={(opt) =>
+                  opt?.value ? (
+                    <span className="ticket-badge ticket-badge-project" style={{ margin: 0 }}>
+                      <i className="bi bi-folder me-1" />
+                      {opt.label}
+                    </span>
+                  ) : (
+                    <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                  )
+                }
+              />
+            </div>
+
+            {/* Customer — full width */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('tickets.customer')}</div>
+              <SidebarDropdown
+                value={ticket.customerId ?? ''}
+                onChange={(val) => {
+                  const selected = customers.find((c) => c.id === val);
+                  void handleUpdate({
+                    customerId: val || null,
+                    customerName: selected?.companyName ?? null,
+                  });
+                }}
+                disabled={loadingCrm}
+                options={
+                  loadingCrm
+                    ? [{ value: '', label: t('common.loading'), disabled: true }]
+                    : [
+                        { value: '', label: t('common.none') },
+                        ...customers.map(
+                          (c): DropdownOption => ({
+                            value: c.id,
+                            label: c.companyName,
+                            icon: <i className="bi bi-building" style={{ fontSize: '0.78rem', color: '#1d4ed8' }} />,
+                          })
+                        ),
+                      ]
+                }
+                renderValue={(opt) =>
+                  opt?.value ? (
+                    <span className="ticket-badge ticket-badge-customer" style={{ margin: 0 }}>
+                      <i className="bi bi-building me-1" />
+                      {opt.label}
+                    </span>
+                  ) : (
+                    <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                  )
+                }
+              />
+            </div>
+
+            {/* Supplier — full width */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('tickets.supplier')}</div>
+              <SidebarDropdown
+                value={ticket.supplierId ?? ''}
+                onChange={(val) => {
+                  const selected = suppliers.find((s) => s.id === val);
+                  void handleUpdate({
+                    supplierId: val || null,
+                    supplierName: selected?.companyName ?? null,
+                  });
+                }}
+                disabled={loadingCrm}
+                options={
+                  loadingCrm
+                    ? [{ value: '', label: t('common.loading'), disabled: true }]
+                    : [
+                        { value: '', label: t('common.none') },
+                        ...suppliers.map(
+                          (s): DropdownOption => ({
+                            value: s.id,
+                            label: s.companyName,
+                            icon: <i className="bi bi-truck" style={{ fontSize: '0.78rem', color: '#c2410c' }} />,
+                          })
+                        ),
+                      ]
+                }
+                renderValue={(opt) =>
+                  opt?.value ? (
+                    <span className="ticket-badge ticket-badge-supplier" style={{ margin: 0 }}>
+                      <i className="bi bi-truck me-1" />
+                      {opt.label}
+                    </span>
+                  ) : (
+                    <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                  )
+                }
+              />
+            </div>
+
+            {/* Tags */}
+            <div
+              className="ticket-sidebar-field"
+              style={{ cursor: editingTags ? 'default' : 'pointer' }}
+              onClick={editingTags ? undefined : startEditTags}
+              role={editingTags ? undefined : 'button'}
+              tabIndex={editingTags ? undefined : 0}
+              onKeyDown={
+                editingTags
+                  ? undefined
+                  : (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') startEditTags();
+                    }
+              }
+            >
+              <div className="ticket-sidebar-field-label">{t('tickets.tags')}</div>
+              {editingTags ? (
+                <Form.Control
+                  type="text"
+                  size="sm"
+                  value={tagsDraft}
+                  onChange={(e) => setTagsDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void saveTags();
+                    if (e.key === 'Escape') cancelTags();
+                  }}
+                  onBlur={() => void saveTags()}
+                  autoFocus
+                />
+              ) : (
+                <div className="d-flex flex-wrap gap-1" style={{ minHeight: 28, paddingTop: 2, paddingLeft: 8 }}>
+                  {ticket.tags.length > 0 ? (
+                    ticket.tags.map((tag) => (
+                      <span key={tag} className="ticket-tag-badge">
+                        {tag}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="sidebar-dropdown-placeholder" style={{ fontSize: '0.82rem' }}>
+                      {t('common.none')}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Custom / Dynamic Fields */}
+            {getVisibleFields().length > 0 && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #f0f0f0' }}>
+                <div
+                  className="ticket-sidebar-field-label"
+                  style={{ marginBottom: 6, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.05em' }}
+                >
+                  {t('fields.dynamicFields')}
+                </div>
+                {getVisibleFields().map(({ field, override }) => (
+                  <DynamicField
+                    key={field.id}
+                    field={field}
+                    value={ticket.fields?.[field.id] ?? field.defaultValue ?? null}
+                    onChange={(value) => void handleCustomFieldChange(field.id, value)}
+                    compact
+                    fieldOverride={override}
+                    staff={config.staff}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -911,22 +1030,62 @@ export function TicketDetailModal({
     if (!ticket) return null;
 
     const typeColor = ticketType?.color ?? '#6c757d';
-    const currentStage = (ticketTeamData?.stages ?? teamData?.stages ?? []).find((s) => s.id === ticket.stageId);
 
     return (
-      <Modal.Header closeButton className="align-items-start pb-2">
+      <Modal.Header closeButton className="align-items-start">
         <div className="flex-grow-1" style={{ minWidth: 0 }}>
-          {/* Line 1: ID badge + Title */}
-          <div className="d-flex align-items-center gap-2">
+          {/* Line 1: Breadcrumb - type > team */}
+          <div className="d-flex align-items-center gap-1" style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
             <span className="ticket-detail-id">{ticket.displayId}</span>
+            {ticketType && (
+              <>
+                <i className="bi bi-chevron-right" style={{ fontSize: '0.5rem' }} />
+                <span style={{ color: typeColor, fontWeight: 500 }}>
+                  {ticketType.icon && (
+                    <i
+                      className={getTicketTypeIconClass(ticketType.icon)}
+                      style={{ fontSize: '0.65rem', marginRight: 3 }}
+                    />
+                  )}
+                  {ticketType.name}
+                </span>
+              </>
+            )}
+            {teamData?.team?.name && (
+              <>
+                <i className="bi bi-chevron-right" style={{ fontSize: '0.5rem' }} />
+                <span>{teamData.team.name}</span>
+              </>
+            )}
 
             {ticket.archived && (
-              <Badge bg="warning" text="dark" style={{ fontSize: '0.7rem' }}>
+              <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem', marginLeft: 6 }}>
                 <i className="bi bi-archive me-1" />
                 {t('archive.archived')}
               </Badge>
             )}
 
+            <div className="ms-auto d-flex align-items-center gap-1">
+              {saving && <Spinner animation="border" size="sm" />}
+              <button
+                type="button"
+                className="ticket-share-btn"
+                onClick={() => {
+                  const url = `${window.location.origin}${window.location.pathname}?ticket=${ticket.displayId}`;
+                  void navigator.clipboard.writeText(url).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  });
+                }}
+              >
+                <i className={`bi ${copied ? 'bi-check-lg text-success' : 'bi-link-45deg'}`} />
+                {copied ? t('common.copied', 'Copied!') : t('common.share', 'Share')}
+              </button>
+            </div>
+          </div>
+
+          {/* Line 2: Title (click to edit) */}
+          <div style={{ marginTop: 6 }}>
             {editingTitle ? (
               <Form.Control
                 ref={titleInputRef}
@@ -938,14 +1097,14 @@ export function TicketDetailModal({
                   if (e.key === 'Escape') cancelTitle();
                 }}
                 onBlur={() => void saveTitle()}
-                className="fw-bold flex-grow-1"
-                style={{ fontSize: '1.15rem' }}
+                className="fw-semibold"
+                style={{ fontSize: '1.2rem', border: 'none', padding: 0, boxShadow: 'none' }}
                 disabled={saving}
               />
             ) : (
               <h5
-                className="mb-0 fw-bold text-truncate flex-grow-1"
-                style={{ cursor: 'pointer', fontSize: '1.15rem' }}
+                className="mb-0 fw-semibold"
+                style={{ cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1.3, color: '#111827' }}
                 onClick={startEditTitle}
                 role="button"
                 tabIndex={0}
@@ -957,62 +1116,6 @@ export function TicketDetailModal({
                 {ticket.title}
               </h5>
             )}
-
-            {saving && <Spinner animation="border" size="sm" className="flex-shrink-0" />}
-
-            {/* Share button — copies ticket link to clipboard */}
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 flex-shrink-0"
-              style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: 6 }}
-              onClick={() => {
-                const url = `${window.location.origin}${window.location.pathname}?ticket=${ticket.displayId}`;
-                void navigator.clipboard.writeText(url).then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                });
-              }}
-            >
-              <i className={`bi ${copied ? 'bi-check-lg text-success' : 'bi-link-45deg'}`} />
-              {copied ? t('common.copied', 'Copied!') : t('common.share', 'Share')}
-            </button>
-          </div>
-
-          {/* Line 2: Type + Team breadcrumb */}
-          <div className="d-flex align-items-center gap-2 mt-1" style={{ fontSize: '0.8rem' }}>
-            {ticketType && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  color: typeColor,
-                  fontSize: '0.78rem',
-                  fontWeight: 500,
-                }}
-              >
-                {ticketType.icon && (
-                  <i className={getTicketTypeIconClass(ticketType.icon)} style={{ fontSize: '0.7rem' }} />
-                )}
-                {ticketType.name}
-              </span>
-            )}
-            {teamData?.team?.name && (
-              <span className="text-muted" style={{ fontSize: '0.78rem' }}>
-                {teamData.team.name}
-                {currentStage && (
-                  <>
-                    {' '}
-                    <i className="bi bi-chevron-right" style={{ fontSize: '0.55rem' }} /> {currentStage.name}
-                  </>
-                )}
-              </span>
-            )}
-          </div>
-
-          {/* Line 3: Created date */}
-          <div className="ticket-detail-header-meta">
-            {t('tickets.created')} {formatDate(ticket.createdAt)}
           </div>
         </div>
       </Modal.Header>
@@ -1027,18 +1130,13 @@ export function TicketDetailModal({
     return (
       <div className="d-flex" style={{ minHeight: 0, flex: 1, overflow: 'hidden' }}>
         {/* Left column: stacked sections (65%) */}
-        <div
-          style={{
-            flex: '0 0 65%',
-            maxWidth: '65%',
-            overflowY: 'auto',
-            paddingRight: '1.5rem',
-            borderRight: '1px solid #f0f0f0',
-          }}
-        >
-          {/* Description — rich text editor, saves on blur */}
-          <div className="mb-4">
-            <div className="ticket-section-heading">{t('tickets.description')}</div>
+        <div className="ticket-detail-left-col">
+          {/* Description */}
+          <div className="ticket-detail-section">
+            <div className="ticket-section-heading">
+              <i className="bi bi-text-left me-2" />
+              {t('tickets.description')}
+            </div>
             <RichTextEditor
               ref={descriptionEditorRef}
               value={ticket.description ?? ''}
@@ -1054,18 +1152,32 @@ export function TicketDetailModal({
           </div>
 
           {/* Attachments */}
-          <div className="mb-4">
-            <div className="ticket-section-heading">{t('tickets.attachments')}</div>
+          <div className="ticket-detail-section">
+            <div className="ticket-section-heading">
+              <i className="bi bi-paperclip me-2" />
+              {t('tickets.attachments')}
+            </div>
             <AttachmentsSection ticketId={ticket.id} />
           </div>
 
           {/* Activity / Comments */}
-          <div className="mb-4">
+          <div className="ticket-detail-section">
             <div className="ticket-section-heading">
+              <i className="bi bi-chat-dots me-2" />
               {t('tickets.activity')}
               {ticket.commentCount > 0 && (
-                <span className="text-muted ms-1" style={{ fontWeight: 400, fontSize: '0.8rem' }}>
-                  ({ticket.commentCount})
+                <span
+                  className="ms-1"
+                  style={{
+                    fontWeight: 500,
+                    fontSize: '0.72rem',
+                    background: '#e5e7eb',
+                    borderRadius: '10px',
+                    padding: '1px 7px',
+                    color: '#6b7280',
+                  }}
+                >
+                  {ticket.commentCount}
                 </span>
               )}
             </div>
@@ -1073,11 +1185,11 @@ export function TicketDetailModal({
           </div>
         </div>
 
-        {/* Right column: sidebar fields + linked tickets + history (35%) */}
-        <div style={{ flex: '0 0 35%', maxWidth: '35%', overflowY: 'auto', paddingLeft: '1.5rem' }}>
+        {/* Right column: sidebar fields + linked tickets (35%) */}
+        <div className="ticket-detail-right-col">
           <div className="ticket-detail-sidebar">{renderSidebar()}</div>
 
-          {/* Linked Tickets — rendered directly (component has its own heading + Add Link button) */}
+          {/* Linked Tickets */}
           <div className="mt-3">
             <LinkedTicketsSection
               ticketId={ticket.id}
@@ -1086,11 +1198,8 @@ export function TicketDetailModal({
               links={links}
               onRefresh={reloadTicket}
               onTicketClick={(linkedId) => {
-                // Close current modal, re-open with the linked ticket
                 onHide();
-                // Small delay so the modal unmounts before re-opening
                 setTimeout(() => {
-                  // Re-use the same detail flow by updating the parent's selected ticket
                   const event = new CustomEvent('ops:open-ticket', { detail: { ticketId: linkedId } });
                   window.dispatchEvent(event);
                 }, 150);
@@ -1124,49 +1233,34 @@ export function TicketDetailModal({
             </Modal.Body>
             {/* Lifecycle dates — always-visible strip between body and footer */}
             {renderLifecycleDates()}
-            {/* Footer: archive/delete on left, close on right — pinned by Bootstrap */}
-            <Modal.Footer
-              className="d-flex align-items-center justify-content-between py-2"
-              style={{ backgroundColor: '#f9fafb', flexShrink: 0 }}
-            >
-              <div className="d-flex align-items-center gap-2">
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
+            {/* Footer: actions left, close right */}
+            <Modal.Footer className="d-flex align-items-center justify-content-between">
+              <div className="d-flex align-items-center gap-1">
+                <button
+                  type="button"
+                  className="ticket-detail-footer-btn"
                   disabled={archiving}
                   onClick={() => void handleToggleArchive()}
-                  style={{ fontSize: '0.8rem' }}
                 >
-                  <i className={`bi ${ticket.archived ? 'bi-arrow-counterclockwise' : 'bi-archive'} me-1`} />
+                  <i className={`bi ${ticket.archived ? 'bi-arrow-counterclockwise' : 'bi-archive'}`} />
                   {ticket.archived ? t('archive.unarchive') : t('archive.archive')}
-                </Button>
-                <Button
-                  variant="outline-danger"
-                  size="sm"
+                </button>
+                <button
+                  type="button"
+                  className="ticket-detail-footer-btn ticket-detail-footer-btn--danger"
                   onClick={() => setShowDeleteConfirm(true)}
-                  style={{ fontSize: '0.8rem' }}
                 >
-                  <i className="bi bi-trash me-1" />
+                  <i className="bi bi-trash" />
                   {t('common.delete')}
-                </Button>
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  onClick={handleOpenHistory}
-                  style={{ fontSize: '0.8rem' }}
-                >
-                  <i className="bi bi-clock-history me-1" />
+                </button>
+                <button type="button" className="ticket-detail-footer-btn" onClick={handleOpenHistory}>
+                  <i className="bi bi-clock-history" />
                   {t('tickets.history')}
-                </Button>
+                </button>
               </div>
-              <div className="d-flex align-items-center gap-2">
-                <Button variant="outline-secondary" size="sm" onClick={handleClose} style={{ fontSize: '0.8rem' }}>
-                  {t('common.close')}
-                </Button>
-                <Button variant="primary" size="sm" style={{ fontSize: '0.8rem', minWidth: 70 }} onClick={handleClose}>
-                  {t('common.save')}
-                </Button>
-              </div>
+              <button type="button" className="ticket-detail-footer-btn" onClick={handleClose}>
+                {t('common.close')}
+              </button>
             </Modal.Footer>
           </>
         )}

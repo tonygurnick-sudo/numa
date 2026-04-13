@@ -526,31 +526,24 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         {divider}
         {toolbarBtn('Insert table', <i className="bi bi-table" />, handleTableInsert)}
         {onFileAttach && toolbarBtn('Attach file', <i className="bi bi-paperclip" />, handleFileAttach)}
-
-        <div style={{ flexGrow: 1 }} />
+        {divider}
         <button
           type="button"
+          className="ops-editor-toolbar-btn"
           title="Toggle HTML Source"
-          onClick={toggleHtmlMode}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            toggleHtmlMode();
+          }}
           disabled={disabled}
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 28,
-            padding: '0 8px',
-            border: '1px solid #d1d5db',
-            borderRadius: 4,
-            background: isHtmlMode ? '#e0e7ff' : '#fff',
-            color: isHtmlMode ? '#4338ca' : '#374151',
-            fontSize: '0.75rem',
-            fontWeight: 500,
-            cursor: disabled ? 'default' : 'pointer',
+            fontSize: '0.8rem',
             fontFamily: 'inherit',
-            transition: 'background-color 0.2s',
+            color: isHtmlMode ? '#4338ca' : undefined,
+            backgroundColor: isHtmlMode ? '#e0e7ff' : undefined,
           }}
         >
-          <i className="bi bi-code-slash me-1" /> HTML
+          <i className="bi bi-code-slash" />
         </button>
       </div>
 

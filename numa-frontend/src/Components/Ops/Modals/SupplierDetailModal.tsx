@@ -255,10 +255,9 @@ export function SupplierDetailModal({
   ) => {
     const isExpanded = expandedSections.has(sectionKey);
     return (
-      <div className="mb-0">
+      <div>
         <div
-          className="d-flex align-items-center gap-2 py-2 px-3 user-select-none border-bottom"
-          style={{ cursor: 'pointer' }}
+          className="crm-section-header"
           onClick={() => toggleSection(sectionKey)}
           role="button"
           tabIndex={0}
@@ -269,17 +268,15 @@ export function SupplierDetailModal({
             }
           }}
         >
-          <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} style={{ fontSize: '0.75rem' }} />
-          <span className="fw-semibold" style={{ fontSize: '0.9rem' }}>
-            {title}
-          </span>
+          <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
+          <span className="crm-section-header-title">{title}</span>
           {headerExtra && (
             <span className="ms-auto" onClick={(e) => e.stopPropagation()}>
               {headerExtra}
             </span>
           )}
         </div>
-        {isExpanded && <div className="px-3 py-2">{body}</div>}
+        {isExpanded && <div className="crm-section-body">{body}</div>}
       </div>
     );
   };
@@ -296,10 +293,10 @@ export function SupplierDetailModal({
     const isEditing = editingField === field;
 
     return (
-      <div className="mb-2" style={isEditing ? { backgroundColor: '#f0fdfa' } : undefined}>
-        <div className="small text-muted mb-0">{label}</div>
+      <div className={`crm-field-row${isEditing ? ' crm-field-row--editing' : ''}`}>
+        <span className="crm-field-label">{label}</span>
         {isEditing ? (
-          <div className="d-flex gap-1 align-items-center">
+          <div className="d-flex gap-1 align-items-center flex-grow-1">
             <Form.Control
               size="sm"
               type={type}
@@ -310,32 +307,20 @@ export function SupplierDetailModal({
                 if (e.key === 'Enter') saveField(field, fieldDraft || null);
                 if (e.key === 'Escape') cancelEdit();
               }}
+              onBlur={() => saveField(field, fieldDraft || null)}
               disabled={saving}
+              style={{ fontSize: '0.82rem' }}
             />
-            <Button
-              size="sm"
-              variant="link"
-              className="p-0"
-              style={{ color: TEAL_ACCENT }}
-              onClick={() => saveField(field, fieldDraft || null)}
-              disabled={saving}
-            >
-              <i className="bi bi-check-lg" />
-            </Button>
-            <Button size="sm" variant="link" className="p-0 text-secondary" onClick={cancelEdit} disabled={saving}>
-              <i className="bi bi-x-lg" />
-            </Button>
           </div>
         ) : (
-          <div
-            className="small"
+          <span
+            className={`crm-field-value${!displayValue ? ' crm-field-value--empty' : ''}`}
             role="button"
             tabIndex={0}
             onClick={() => startEdit(field, displayValue)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') startEdit(field, displayValue);
             }}
-            style={{ cursor: 'pointer', minHeight: '1.4em' }}
           >
             {type === 'url' && displayValue ? (
               <a
@@ -343,14 +328,14 @@ export function SupplierDetailModal({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                style={{ fontSize: '0.85rem' }}
+                style={{ fontSize: '0.82rem' }}
               >
-                {displayValue} <i className="bi bi-box-arrow-up-right" style={{ fontSize: '0.7rem' }} />
+                {displayValue} <i className="bi bi-box-arrow-up-right" style={{ fontSize: '0.65rem' }} />
               </a>
             ) : (
-              displayValue || <span className="text-muted fst-italic">{t('common.edit')}</span>
+              displayValue || t('common.none')
             )}
-          </div>
+          </span>
         )}
       </div>
     );
@@ -360,9 +345,17 @@ export function SupplierDetailModal({
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered scrollable>
+      <Modal
+        show={show}
+        onHide={onHide}
+        size="xl"
+        fullscreen="lg-down"
+        centered
+        scrollable
+        dialogClassName="crm-detail-modal"
+      >
         {/* ── Header ─────────────────────────────────────────────────────────── */}
-        <Modal.Header closeButton style={{ borderBottom: `3px solid ${TEAL_ACCENT}` }}>
+        <Modal.Header closeButton>
           <Modal.Title className="d-flex align-items-center gap-2 flex-wrap w-100">
             {loading ? (
               <Spinner animation="border" size="sm" style={{ color: TEAL_ACCENT }} />
@@ -790,10 +783,10 @@ export function SupplierDetailModal({
         </Modal.Body>
 
         {/* ── Footer ─────────────────────────────────────────────────────────── */}
-        <Modal.Footer style={{ borderTop: `2px solid ${TEAL_ACCENT}20`, backgroundColor: '#f9fafb' }}>
-          <Button variant="outline-secondary" size="sm" onClick={onHide}>
+        <Modal.Footer>
+          <button type="button" className="ticket-detail-footer-btn" onClick={onHide}>
             {t('common.close')}
-          </Button>
+          </button>
         </Modal.Footer>
       </Modal>
 
