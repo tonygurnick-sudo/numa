@@ -108,6 +108,27 @@ const jsonResponse = (
 const errorResponse = (statusCode: number, message: string): ReturnType<typeof jsonResponse> =>
   jsonResponse(statusCode, { error: message });
 
+/**
+ * Resolve user display name from staff records in OPS_CONFIG_TABLE.
+ * Falls back to JWT name claim, then email prefix, then 'Unknown'.
+ */
+const resolveAuthorName = async (auth: AuthContext): Promise<string> => {
+  try {
+    const result = await dynamo.send(
+      new GetCommand({
+        TableName: OPS_CONFIG_TABLE,
+        Key: { PK: 'CONFIG', SK: `STAFF#${auth.sub}` },
+        ProjectionExpression: '#n',
+        ExpressionAttributeNames: { '#n': 'name' },
+      })
+    );
+    if (result.Item?.name) return String(result.Item.name);
+  } catch {
+    // Fall through to JWT-based fallback
+  }
+  return auth.name || (auth.email ? auth.email.split('@')[0] : 'Unknown');
+};
+
 const parseJwt = (token: string): Record<string, unknown> => {
   try {
     const payload = token.split('.')[1];
@@ -2298,6 +2319,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     const auth = resolveAuthContext(event);
     if (!auth) return errorResponse(401, 'Unauthorized');
+
+    // Enrich auth.name from staff records (JWT access tokens lack the name claim)
+    auth.name = await resolveAuthorName(auth);
 
     const segments = buildPathSegments(event);
     if (segments[0] !== 'ops') {
