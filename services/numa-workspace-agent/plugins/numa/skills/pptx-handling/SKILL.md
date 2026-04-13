@@ -41,7 +41,7 @@ numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/presen
 
 # Step 2: Render PDF pages as images
 execute_script(interpreter="bash", description="Rendering slides as images for QA", code="""
-pdftoppm -jpeg -r 150 /workdir/outputs/converted_presentation.pdf /workdir/outputs/slide
+pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/outputs/slide
 """)
 ```
 
@@ -179,7 +179,7 @@ numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/presen
 
 # Step 2: Render PDF pages as images
 execute_script(interpreter="bash", description="Rendering slides as images for QA", code="""
-pdftoppm -jpeg -r 150 /workdir/outputs/converted_presentation.pdf /workdir/outputs/slide
+pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/outputs/slide
 """)
 ```
 
