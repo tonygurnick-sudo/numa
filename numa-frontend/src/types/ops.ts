@@ -650,6 +650,7 @@ export type UpdateWorkUnitPayload = {
 export type BulkUpdateTicketsPayload = {
   ticketIds: string[];
   changes: {
+    teamId?: string;
     assigneeId?: string | null;
     zoneId?: string;
     stageId?: string;

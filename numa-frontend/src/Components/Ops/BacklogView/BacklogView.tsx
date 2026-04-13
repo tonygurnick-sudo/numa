@@ -1003,7 +1003,7 @@ const BacklogView = () => {
       try {
         await OpsService.bulkUpdateTickets(numaPost, {
           ticketIds: selectedTickets.map((tk) => tk.id),
-          changes: { stageId, zoneId: stage.zoneId },
+          changes: { stageId, zoneId: stage.zoneId, teamId },
         });
         setSelectedIds(new Set());
         await refreshTickets();
@@ -1600,6 +1600,7 @@ const BacklogView = () => {
                           key={s.id}
                           type="button"
                           className="backlog-stage-picker-item"
+                          onMouseDown={(e) => e.stopPropagation()}
                           onClick={() => handleBulkMove(s.id)}
                         >
                           <span className={`backlog-status-dot backlog-status-dot--${s.statusType}`} />
