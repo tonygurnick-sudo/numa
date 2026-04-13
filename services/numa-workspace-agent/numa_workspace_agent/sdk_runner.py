@@ -105,6 +105,12 @@ async def get_run(key: RunKey) -> Optional[RunHandle]:
         return _active_runs.get(key)
 
 
+async def has_active_run(user_sub: str, conversation_id: str) -> bool:
+    """Check if any active run exists for a given user + conversation (any request_id)."""
+    async with _active_runs_lock:
+        return any(k[0] == user_sub and k[1] == conversation_id for k in _active_runs)
+
+
 async def request_stop(key: RunKey, reason: str = "user_requested") -> bool:
     """
     Request a stop for an active run by setting the stop event, interrupting the client,

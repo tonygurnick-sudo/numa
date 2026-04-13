@@ -1048,6 +1048,59 @@ export async function pollWorkspaceAgentRun(
 }
 
 /**
+ * Single status check for a conversation's agent run.
+ * Returns the current status and whether an agent is actively processing.
+ */
+export async function checkConversationStatus(
+  conversationId: string
+): Promise<{ status: string; active?: boolean; run_id?: string }> {
+  const res = await fetch(`${getApiUrl()}/runs/${encodeURIComponent(conversationId)}/status`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`Status check failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/**
+ * Poll a conversation's status until the agent is no longer actively processing.
+ * Resolves when `active` is false or status is not 'running'.
+ * Calls `onPoll` after each check so callers can react to intermediate states.
+ */
+export async function pollConversationUntilComplete(
+  conversationId: string,
+  opts?: {
+    intervalMs?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    onPoll?: (data: { status: string; active?: boolean }) => void;
+  }
+): Promise<{ status: string; active?: boolean }> {
+  const intervalMs = opts?.intervalMs ?? 3000;
+  const timeoutMs = opts?.timeoutMs ?? 600_000; // 10 min default
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    if (opts?.signal?.aborted) {
+      throw new DOMException('Polling aborted', 'AbortError');
+    }
+
+    const data = await checkConversationStatus(conversationId);
+    opts?.onPoll?.(data);
+
+    // Agent is done: not running, or running without an active in-memory run
+    if (data.status !== 'running' || !data.active) {
+      return data;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error(`Polling timed out after ${timeoutMs}ms`);
+}
+
+/**
  * List available agent types from the backend registry.
  *
  * Returns metadata about all registered agent types (type_id,

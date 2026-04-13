@@ -31,6 +31,7 @@ import { FilePreviewPanel } from '../Components/FilePreviewPanel';
 import { autoNameConversation } from '../utils/autoChatTitle';
 import { useChatInactivity } from '../hooks/useChatInactivity';
 import { useWorkspaceChatStreaming } from '../hooks/useWorkspaceChatStreaming';
+import { markProcessingStart, notifyCompletion } from '../hooks/useBrowserNotification';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useDrawerBackClose } from '../hooks/useDrawerBackClose';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
@@ -49,7 +50,11 @@ import {
 } from '../Services/ChatSettingsService';
 import { JumpToLatestButton } from '../Components/WorkspaceChat/JumpToLatestButton';
 // Workspace chat mode imports
-import { getWorkspaceChatRawTrace } from '../Services/workspaceChatAgentService';
+import {
+  getWorkspaceChatRawTrace,
+  checkConversationStatus,
+  pollConversationUntilComplete,
+} from '../Services/workspaceChatAgentService';
 import { parseRawTraceToMessages } from '../utils/workspaceChatEventHandlers';
 // Note: SDK event handling moved to useWorkspaceChatStreaming hook
 import { WorkspaceChatFileUpload } from '../Components/WorkspaceChat/WorkspaceChatFileUpload';
@@ -1311,11 +1316,13 @@ const NumaWorkspaceChatAgents = () => {
 
   // Show new chat view if:
   // 1. We're in a new-chat state with no messages (either suggestions loaded or handleNewChat was called), OR
-  // 2. Conversation was pre-minted via upload but user hasn't sent a message yet
+  // 2. Conversation was pre-minted via upload but user hasn't sent a message yet AND no agent is active
+  //    (agent sessions have a welcome message, so pre-mint shouldn't override the agent view)
   // Note: hasUserStartedNewChat covers the gap where handleNewChat() fired but
   // useChatInactivity hasn't yet activated suggestions (prevents blank screen).
   const shouldShowNewChatView =
-    ((showContinueSuggestions || hasUserStartedNewChat) && messages.length === 0) || isPreMintedConversation;
+    ((showContinueSuggestions || hasUserStartedNewChat) && messages.length === 0) ||
+    (isPreMintedConversation && !pendingAgent && !currentAgent);
   const showLegacyMigrationNotice = !shouldShowNewChatView && needsV1Migration && !dismissedLegacyMigrationNotice;
 
   // Reset notice dismissal on conversation/migration state changes.
@@ -1441,6 +1448,7 @@ const NumaWorkspaceChatAgents = () => {
     getCredentials,
     refreshSessionFiles: settingsPanel.refreshFiles,
     numaPost,
+    onNotifyCompletion: notifyCompletion,
   });
 
   // Handle renaming a conversation from NewChat view
@@ -1898,6 +1906,7 @@ const NumaWorkspaceChatAgents = () => {
       return;
     }
     isProcessingRef.current = true;
+    markProcessingStart();
 
     // Use override message if provided, otherwise use state
     const messageToSend = overrideMessage ?? inputMessage;
@@ -1955,6 +1964,10 @@ const NumaWorkspaceChatAgents = () => {
             }
           : undefined
       );
+
+      // Refresh sidebar immediately so the new conversation appears in history
+      // before the agent responds (don't wait until stream completes)
+      refreshSidebar();
       const userMsg = messageToSend;
 
       // Build attachments from staged items
@@ -2196,6 +2209,60 @@ const NumaWorkspaceChatAgents = () => {
           autoNamingAttemptedRef.current.add(selectedConversationId);
           // This is a V2 conversation, clear any migration flag
           setNeedsV1Migration(false);
+
+          // Check if the agent is still actively running for this conversation.
+          // This handles the case where the user refreshed or navigated away mid-stream.
+          try {
+            const statusData = await checkConversationStatus(selectedConversationId);
+            if (isCancelled()) return;
+
+            if (statusData.status === 'running' && statusData.active) {
+              // Agent is still processing -- block input (loading disables send button)
+              isProcessingRef.current = true;
+              setButtonStatus('loading');
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'system',
+                  content: t('systemMessages.agentFinishing'),
+                  status: 'agentFinishing',
+                },
+              ]);
+
+              // Poll in the background until the agent finishes
+              pollConversationUntilComplete(selectedConversationId, {
+                intervalMs: 3000,
+                timeoutMs: 600_000,
+              })
+                .then(async () => {
+                  if (isCancelled()) return;
+                  // Agent finished -- reload the full trace
+                  try {
+                    const updatedTrace = await getWorkspaceChatRawTrace(selectedConversationId);
+                    if (isCancelled()) return;
+                    const updatedMessages = parseRawTraceToMessages(updatedTrace);
+                    setMessages(updatedMessages);
+                    refreshSidebar();
+                    notifyCompletion();
+                  } catch (reloadErr) {
+                    console.error('[WorkspaceChat] Failed to reload trace after agent completed:', reloadErr);
+                  }
+                })
+                .catch((err) => {
+                  if (err instanceof DOMException && err.name === 'AbortError') return;
+                  console.error('[WorkspaceChat] Status polling error:', err);
+                })
+                .finally(() => {
+                  if (!isCancelled()) {
+                    isProcessingRef.current = false;
+                    setButtonStatus('idle');
+                  }
+                });
+            }
+          } catch (statusErr) {
+            // Non-critical: status check failure shouldn't block conversation loading
+            console.warn('[WorkspaceChat] Status check failed, proceeding normally:', statusErr);
+          }
 
           // Fetch conversation metadata from DynamoDB to restore agent state
           try {
