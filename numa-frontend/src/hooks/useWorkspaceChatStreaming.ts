@@ -145,6 +145,7 @@ export function useWorkspaceChatStreaming({
   const activeStreamingTasksRef = useRef<Set<string>>(new Set());
   const workspaceChatRawTextRef = useRef<string>('');
   const [isStopping, setIsStopping] = useState(false);
+  const isStoppingRef = useRef(false);
 
   // Network resilience state
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -159,6 +160,7 @@ export function useWorkspaceChatStreaming({
       workspaceChatAbortRef.current = null;
     }
     setIsStopping(false);
+    isStoppingRef.current = false;
     setIsReconnecting(false);
     setRetryAttempt(0);
     setCanRetry(false);
@@ -174,11 +176,13 @@ export function useWorkspaceChatStreaming({
     }
 
     setIsStopping(true);
+    isStoppingRef.current = true;
     try {
       await stopWorkspaceChatAgent(conversationId, requestId, getIdToken);
     } catch (err) {
       console.error('[WorkspaceChat] Stop request failed:', err);
       setIsStopping(false);
+      isStoppingRef.current = false;
     }
   }, [getIdToken]);
 
@@ -734,7 +738,18 @@ export function useWorkspaceChatStreaming({
           // connection was likely dropped mid-stream (e.g. timeout).
           // Show a system message so the user knows the response may
           // be incomplete and they can retry.
-          if (!receivedCompletion) {
+          if (!receivedCompletion && isStoppingRef.current) {
+            // User clicked Stop — show a clean "stopped" message, skip reconnection logic
+            console.info('[WorkspaceChat] Stream ended by user stop action');
+            isStoppingRef.current = false;
+            setIsStopping(false);
+            isProcessingRef.current = false;
+            setButtonStatus('idle');
+            setMessages((prev) => [
+              ...prev,
+              { role: 'system' as const, content: t('chat:systemMessages.stoppedByUser') },
+            ]);
+          } else if (!receivedCompletion) {
             console.warn('[WorkspaceChat] Stream closed without completion marker — possible timeout');
             const disconnectedConvId = currentConversationIdRef.current;
 
@@ -818,6 +833,8 @@ export function useWorkspaceChatStreaming({
           }
           workspaceChatAbortRef.current = null;
           activeStreamingTasksRef.current.clear();
+          isStoppingRef.current = false;
+          setIsStopping(false);
           setIsReconnecting(false);
           setRetryAttempt(0);
           setCanRetry(false);
