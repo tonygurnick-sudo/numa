@@ -1254,7 +1254,7 @@ const NumaChatAgents = () => {
           autoNamingAttemptedRef.current.set(cid, count);
 
           if (AUTO_RENAME_ON.has(count)) {
-            const renamed = await autoNameConversation({
+            const newTitle = await autoNameConversation({
               conversationId: cid,
               userId: sub,
               bedrockRuntimeClient,
@@ -1262,9 +1262,8 @@ const NumaChatAgents = () => {
               region: REGION,
               force: count > 1,
             });
-            if (renamed) {
-              // Refresh sidebar to reflect new title
-              refreshSidebar();
+            if (newTitle) {
+              chatHistoryRef.current?.updateConversationName(cid, newTitle);
             }
           }
         }

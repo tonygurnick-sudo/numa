@@ -120,7 +120,7 @@ function buildInvokeModelBody(transcript: string) {
 
 /**
  * Auto-name a conversation if its current name appears to be a default.
- * Returns true if the name was updated.
+ * Returns the new title if updated, or null if unchanged.
  */
 export async function autoNameConversation({
   conversationId,
@@ -129,14 +129,18 @@ export async function autoNameConversation({
   numaChatDynamoUtils,
   region = null,
   force = false,
-}: AutoNameOptions): Promise<boolean> {
+}: AutoNameOptions): Promise<string | null> {
   try {
-    if (!conversationId || !userId || !numaChatDynamoUtils) return false;
+    if (!conversationId || !userId || !numaChatDynamoUtils) {
+      return null;
+    }
 
     // Load all items for the conversation (descending), we will sort ascending to find earliest
     const itemsResp = await numaChatDynamoUtils.queryConversations(conversationId, 1000, userId);
     const items: ChatItem[] = Array.isArray(itemsResp) ? (itemsResp as ChatItem[]) : [];
-    if (items.length === 0) return false;
+    if (items.length === 0) {
+      return null;
+    }
 
     // Sort by timestamp asc to find earliest meta and first user message
     items.sort((a: ChatItem, b: ChatItem) => (a.timestamp || 0) - (b.timestamp || 0));
@@ -147,18 +151,22 @@ export async function autoNameConversation({
 
     // Never override manual names
     if (nameSource === 'manual') {
-      return false;
+      return null;
     }
     // If already named (auto), only re-name when force is set (e.g. re-trigger on 3rd message)
     if (nameSource && !force) {
-      return false;
+      return null;
     }
 
     // If Bedrock not available, skip (prompt-only approach)
-    if (!bedrockRuntimeClient) return false;
+    if (!bedrockRuntimeClient) {
+      return null;
+    }
 
     const transcript = buildCompactTranscript(items);
-    if (!transcript) return false;
+    if (!transcript) {
+      return null;
+    }
 
     // Choose a small/cheap model for title generation (Haiku)
     const REGION = region || window.sessionStorage.getItem('REGION');
@@ -191,19 +199,19 @@ export async function autoNameConversation({
       }
 
       const finalTitle = sanitizeTitle(rawTitle);
-      if (!finalTitle) return false;
+      if (!finalTitle) return null;
 
       if (finalTitle !== currentName) {
         await numaChatDynamoUtils.updateConversationName(conversationId, userId, finalTitle, 'auto');
-        return true;
+        return finalTitle;
       }
-      return false;
+      return null;
     } catch (e) {
       console.error('Auto-naming via Bedrock failed:', e);
-      return false;
+      return null;
     }
   } catch (err) {
     console.error('Auto-name conversation failed:', err);
-    return false;
+    return null;
   }
 }

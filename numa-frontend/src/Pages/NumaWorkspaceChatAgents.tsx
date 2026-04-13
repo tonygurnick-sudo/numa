@@ -1410,7 +1410,7 @@ const NumaWorkspaceChatAgents = () => {
       }
 
       try {
-        const renamed = await autoNameConversation({
+        const newTitle = await autoNameConversation({
           conversationId: cid,
           userId: sub,
           bedrockRuntimeClient,
@@ -1418,9 +1418,10 @@ const NumaWorkspaceChatAgents = () => {
           region: REGION,
           force: count > 1,
         });
-        if (renamed) {
-          // Refresh sidebar to reflect new title
-          refreshSidebar();
+        if (newTitle) {
+          // Surgically update just this conversation's name in the sidebar (no full reload flicker)
+          chatHistoryRef.current?.updateConversationName(cid, newTitle);
+          historyPanelRef.current?.updateConversationName(cid, newTitle);
         }
       } catch (e) {
         console.error('[WorkspaceChat] Auto-naming failed:', e);
