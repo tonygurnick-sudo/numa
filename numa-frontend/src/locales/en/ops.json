@@ -950,5 +950,21 @@
     "ticketCreated": "{{user}} created {{ticket}}",
     "ticketMoved": "{{user}} moved {{ticket}} to {{stage}}",
     "ticketUpdated": "{{user}} updated {{ticket}}"
+  },
+  "moveToBoard": {
+    "title": "Move Ticket to Another Board",
+    "button": "Move to Board",
+    "currentBoard": "Current board",
+    "selectBoard": "Select a board...",
+    "selectStage": "Select a stage...",
+    "targetBoard": "Target board",
+    "targetStage": "Target stage",
+    "confirmMessage": "This ticket will be moved from <strong>{{currentBoard}}</strong> to <strong>{{targetBoard}}</strong> and placed in the <strong>{{stageName}}</strong> stage.",
+    "confirm": "Move Ticket",
+    "cancel": "Cancel",
+    "success": "Ticket moved successfully",
+    "error": "Failed to move ticket. Please try again.",
+    "versionConflict": "This ticket was modified by someone else. Please close and reopen the ticket to try again.",
+    "loadingStages": "Loading stages..."
   }
 }

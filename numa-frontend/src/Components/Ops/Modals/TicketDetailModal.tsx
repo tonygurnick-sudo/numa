@@ -28,6 +28,7 @@ import { RichTextEditor } from '../Shared/RichTextEditor';
 import type { RichTextEditorHandle } from '../Shared/RichTextEditor';
 import { DynamicField } from '../Shared/DynamicField';
 import { ConfirmModal } from './ConfirmModal';
+import { MoveTicketModal } from './MoveTicketModal';
 import { useToast } from '../../../Providers/ToastContext';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 import { StaffAvatar } from '../Shared/StaffAvatar';
@@ -153,7 +154,7 @@ export function TicketDetailModal({
   const { numaGet, numaPut, numaDelete } = useNumaRequest();
   const { showToast } = useToast();
   const [archiving, setArchiving] = useState(false);
-  const { config, teamData, workUnits, refreshTickets, refreshCrmData } = useOps();
+  const { config, teamData, teams, workUnits, refreshTickets, refreshCrmData } = useOps();
 
   // ── Core state ──────────────────────────────────────────────────────────
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -179,6 +180,8 @@ export function TicketDetailModal({
 
   // ── Delete confirmation ─────────────────────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // ── Move to board ──────────────────────────────────────────────────────
+  const [showMoveModal, setShowMoveModal] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(true);
 
   // ── History panel ────────────────────────────────────────────────────
@@ -422,6 +425,15 @@ export function TicketDetailModal({
   const reloadTicket = useCallback(() => {
     void loadTicket();
   }, [loadTicket]);
+
+  // ── Move to board handler ───────────────────────────────────────────
+  const handleTicketMoved = useCallback(() => {
+    setShowMoveModal(false);
+    showToast({ message: t('moveToBoard.success'), variant: 'success' });
+    void refreshTickets();
+    refreshCrmData();
+    onHide();
+  }, [refreshTickets, refreshCrmData, onHide, showToast, t]);
 
   // ── Load audit history ───────────────────────────────────────────────
 
@@ -1257,6 +1269,12 @@ export function TicketDetailModal({
                   <i className="bi bi-clock-history" />
                   {t('tickets.history')}
                 </button>
+                {teams.length > 1 && (
+                  <button type="button" className="ticket-detail-footer-btn" onClick={() => setShowMoveModal(true)}>
+                    <i className="bi bi-arrow-right-square" />
+                    {t('moveToBoard.button')}
+                  </button>
+                )}
               </div>
               <button type="button" className="ticket-detail-footer-btn" onClick={handleClose}>
                 {t('common.close')}
@@ -1277,6 +1295,18 @@ export function TicketDetailModal({
           confirmLabel={t('confirm.delete')}
           variant="danger"
           typeToConfirm={ticket.displayId}
+        />
+      )}
+
+      {/* Move to board modal */}
+      {ticket && (
+        <MoveTicketModal
+          show={showMoveModal}
+          onHide={() => setShowMoveModal(false)}
+          onMoved={handleTicketMoved}
+          ticket={ticket}
+          currentTeamName={teams.find((t) => t.id === ticket.teamId)?.name ?? teamData?.team?.name ?? ''}
+          availableTeams={teams.filter((t) => t.id !== ticket.teamId)}
         />
       )}
 

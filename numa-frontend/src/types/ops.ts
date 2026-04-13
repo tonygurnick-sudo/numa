@@ -512,6 +512,7 @@ export type UpdateTicketPayload = {
   zoneId?: string;
   stageId?: string;
   teamId?: string;
+  currentTeamId?: string;
   ticketTypeId?: string;
   archived?: boolean;
   assigneeId?: string | null;

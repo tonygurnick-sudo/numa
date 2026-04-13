@@ -90,7 +90,7 @@ describe('autoChatTitle - prompt-only title generation', () => {
       region: null,
     });
 
-    expect(renamed).toBe(true);
+    expect(renamed).toBe('Sky and grass colours');
     expect(numaChatDynamoUtils.updateConversationName).toHaveBeenCalledTimes(1);
     expect(numaChatDynamoUtils.updateConversationName).toHaveBeenCalledWith(
       conversationId,
@@ -144,7 +144,7 @@ describe('autoChatTitle - prompt-only title generation', () => {
       region: null,
     });
 
-    expect(renamed).toBe(false);
+    expect(renamed).toBeNull();
     expect(numaChatDynamoUtils.updateConversationName).not.toHaveBeenCalled();
     expect(bedrockRuntimeClient.send).not.toHaveBeenCalled();
   });
@@ -193,7 +193,7 @@ describe('autoChatTitle - prompt-only title generation', () => {
       region: null,
     });
 
-    expect(renamed).toBe(false);
+    expect(renamed).toBeNull();
     expect(numaChatDynamoUtils.updateConversationName).not.toHaveBeenCalled();
     expect(bedrockRuntimeClient.send).not.toHaveBeenCalled();
   });
