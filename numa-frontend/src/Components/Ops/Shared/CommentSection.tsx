@@ -7,6 +7,7 @@ import { useAuth } from '../../../Providers/AuthProvider';
 import * as OpsService from '../../../Services/OpsService';
 import type { Comment } from '../../../types/ops';
 import { RichTextEditor } from './RichTextEditor';
+import { useOps } from '../OpsContext';
 
 /**
  * Checks whether an HTML string has no visible text content.
@@ -102,6 +103,14 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { user } = useAuth() as { user: any };
+  const { config } = useOps();
+
+  const mentionOptions = React.useMemo(() => {
+    return (config?.staff ?? []).map((s) => ({
+      id: String(s.id),
+      display: s.name ? String(s.name) : String(s.email),
+    }));
+  }, [config?.staff]);
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -206,6 +215,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
             onSave={(html) => setNewContent(html)}
             placeholder={t('comments.placeholder')}
             minHeight={80}
+            mentionOptions={mentionOptions}
           />
           <div className="d-flex justify-content-end mt-2">
             <Button
@@ -302,6 +312,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                           onChange={(html) => setEditContent(html)}
                           onSave={(html) => setEditContent(html)}
                           minHeight={80}
+                          mentionOptions={mentionOptions}
                         />
                       </div>
                       <div className="d-flex gap-2">

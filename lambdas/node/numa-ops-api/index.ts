@@ -11,6 +11,7 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { randomUUID } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
 import {
@@ -23,6 +24,7 @@ import type { PresetZone } from '../../../lib/ops-constants';
 import type { ZoneType, StatusType } from '../../../lib/ops-schemas';
 
 const client = withPRM(DynamoDBClient, {});
+
 const dynamo = DynamoDBDocumentClient.from(client, {
   marshallOptions: { removeUndefinedValues: true, convertClassInstanceToMap: true },
 });
@@ -40,6 +42,44 @@ const OUTPUTS_BUCKET_NAME = process.env.OUTPUTS_BUCKET_NAME!;
 const REGION = process.env.REGION || 'ap-southeast-2';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CLIENT_NAME = process.env.CLIENT_NAME!;
+
+/**
+ * Generate an STS presigned GetCallerIdentity URL for cross-account identity proof.
+ */
+async function generateStsProofUrl(expiresIn = 60): Promise<string> {
+  const { SignatureV4 } = await import('@smithy/signature-v4');
+  const { Sha256 } = await import('@aws-crypto/sha256-js');
+  const { defaultProvider } = await import('@aws-sdk/credential-provider-node');
+  const { HttpRequest } = await import('@smithy/protocol-http');
+
+  const signer = new SignatureV4({
+    service: 'sts',
+    region: 'us-east-1',
+    credentials: defaultProvider(),
+    sha256: Sha256,
+  });
+
+  const request = new HttpRequest({
+    method: 'GET',
+    protocol: 'https:',
+    hostname: 'sts.us-east-1.amazonaws.com',
+    path: '/',
+    query: {
+      Action: 'GetCallerIdentity',
+      Version: '2011-06-15',
+    },
+    headers: {
+      host: 'sts.us-east-1.amazonaws.com',
+    },
+  });
+
+  const signed = await signer.presign(request, { expiresIn });
+  const queryString = Object.entries(signed.query ?? {})
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&');
+
+  return `https://${signed.hostname}${signed.path}?${queryString}`;
+}
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -1076,6 +1116,78 @@ const handleTickets = async (
       updatedAt: ts,
     };
     await putItem(commentItem);
+
+    // Parse mentions and send emails
+    const mentions = new Set<string>();
+    const contentStr = String(content);
+    const mentionRegex = /<span[^>]*data-sub="([^"]+)"[^>]*>/g;
+    let match;
+    while ((match = mentionRegex.exec(contentStr)) !== null) {
+      if (match[1] !== auth.sub) {
+        mentions.add(match[1]);
+      }
+    }
+
+    if (mentions.size > 0 && process.env.EMAIL_SENDER_LAMBDA_ARN) {
+      try {
+        const staffResp = await dynamo.send(
+          new QueryCommand({
+            TableName: process.env.OPS_CONFIG_TABLE,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+            ExpressionAttributeValues: { ':pk': 'CONFIG', ':sk': 'STAFF#' },
+          })
+        );
+        const staffList = staffResp.Items ?? [];
+
+        const origin =
+          event.headers.origin ??
+          (event.headers.referer ? event.headers.referer.replace(/\/$/, '') : `https://${event.headers.host}`);
+        const ticketUrl = `${origin}/ops?ticketId=${ticketId}`;
+
+        const authorStaff = staffList.find((s) => s.id === auth.sub || s.SK === `STAFF#${auth.sub}`);
+        const authorName = authorStaff?.name;
+        const authorEmail = authorStaff?.email;
+        const displayAuthor = authorName
+          ? String(authorName)
+          : authorEmail
+            ? String(authorEmail).split('@')[0]
+            : 'Someone';
+
+        for (const sub of mentions) {
+          const mentionedStaff = staffList.find((s) => s.id === sub || s.SK === `STAFF#${sub}`);
+          if (mentionedStaff && mentionedStaff.email) {
+            const emailPayload = {
+              sts_proof_url: await generateStsProofUrl(),
+              client_name: process.env.CLIENT_NAME || 'unknown',
+              to: [mentionedStaff.email],
+              template: 'generic',
+              template_data: {
+                subject: `${displayAuthor} mentioned you in Ops Ticket #${ticketId.split('-')[0] || ticketId.slice(0, 8)}`,
+                title: 'You Were Mentioned',
+                body_html: `<p>You were mentioned in a comment by <strong>${displayAuthor}</strong>:</p>
+                            <blockquote style="border-left: 4px solid #ccc; padding-left: 1rem; color: #555; margin-left: 0; word-break: break-word;">
+                              ${contentStr}
+                            </blockquote>
+                            <p><a href="${ticketUrl}" style="display: inline-block; padding: 10px 20px; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 5px;">View Ticket</a></p>`,
+                body_text: `You were mentioned in a comment by ${displayAuthor}: ${contentStr}\nView Ticket: ${ticketUrl}`,
+                primary_color: '#0d6efd',
+              },
+            };
+
+            const emailLambdaClient = withPRM(LambdaClient, { region: 'us-east-1' });
+            await emailLambdaClient.send(
+              new InvokeCommand({
+                FunctionName: process.env.EMAIL_SENDER_LAMBDA_ARN,
+                InvocationType: 'Event',
+                Payload: Buffer.from(JSON.stringify(emailPayload)),
+              })
+            );
+          }
+        }
+      } catch (err) {
+        console.error('Failed to process mentions', err);
+      }
+    }
 
     // Increment commentCount on the ticket — need to find the ticket first
     const ticketItems = await queryByPK(`TEAM#${String(body.teamId ?? '')}`, `TICKET#${ticketId}`);

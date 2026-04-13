@@ -29,6 +29,8 @@ export interface OpsConstructProps extends ApiGatewayLambdaCollectionProps {
   chatSettingsTableName?: string;
   /** Chat-settings table ARN — used to grant read access for staff profile enrichment. */
   chatSettingsTableArn?: string;
+  /** ARN for the centralized email sender lambda. */
+  emailSenderLambdaArn?: string;
 }
 
 export class OpsConstruct extends ApiGatewayLambdaCollection {
@@ -271,6 +273,7 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
         OUTPUTS_BUCKET_NAME: props.outputsBucketName,
         REGION: props.region,
         OTEL_METRICS_EXPORTER: 'none',
+        EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn ?? '',
       },
       additionalPolicyStatements: [
         {
@@ -288,6 +291,15 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
           actions: ['s3:PutObject'],
           resources: [`${props.outputsBucketArn}/ops/*`],
         },
+        ...(props.emailSenderLambdaArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['lambda:InvokeFunction'],
+                resources: [props.emailSenderLambdaArn],
+              },
+            ]
+          : []),
       ],
       route: [
         { verb: 'ANY', path: 'ops' },

@@ -565,6 +565,7 @@ export type PresignedUrlPayload = {
   context: 'ticket' | 'customer' | 'supplier';
   contextId: string;
   fileName: string;
+  contentType?: string;
 };
 
 export type CreateCustomerPayload = {

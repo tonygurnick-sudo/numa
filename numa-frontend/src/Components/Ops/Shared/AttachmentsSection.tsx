@@ -151,6 +151,7 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
           context: 'ticket',
           contextId: ticketId,
           fileName: file.name,
+          contentType: file.type || 'application/octet-stream',
         });
 
         const uploadResponse = await fetch(uploadUrl, {
