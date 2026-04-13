@@ -777,16 +777,19 @@ const NumaWorkspaceChatAgents = () => {
         console.warn('Failed to read agents cache:', err);
       }
 
-      // Fetch fresh data
+      // Fetch fresh data — load both owned and public (company) agents
       setPersonalAgentsLoading(true);
       try {
-        const ownedAgents = await listAgents(numaGet, { scope: 'owned' });
+        const [ownedAgents, publicAgents] = await Promise.all([
+          listAgents(numaGet, { scope: 'owned' }),
+          listAgents(numaGet, { scope: 'public' }),
+        ]);
 
         // Deduplicate: prefer user-scoped agents over workspace-scoped when both exist with same agentId
         // This happens when a personal agent is made public (creates both user and workspace copies)
         const agentMap = new Map<string, (typeof ownedAgents)[0]>();
 
-        for (const agent of ownedAgents) {
+        for (const agent of [...ownedAgents, ...publicAgents]) {
           const existing = agentMap.get(agent.agentId);
           // Prefer user scope over workspace scope to avoid duplicates
           if (!existing || (agent.scope === 'user' && existing.scope === 'workspace')) {
