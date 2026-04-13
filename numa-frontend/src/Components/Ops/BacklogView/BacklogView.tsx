@@ -87,14 +87,43 @@ interface DraggableRowProps {
   ticket: Ticket;
   typeInfo: { name: string; color: string } | undefined;
   stageInfo: { name: string; statusType: StatusType } | undefined;
+  stages: WorkStage[];
   assigneeStaff?: StaffProfile;
+  projectName?: string | null;
+  selected?: boolean;
   onClick: () => void;
+  onStageChange: (ticketId: string, stageId: string) => void;
+  onSelect?: (ticketId: string) => void;
 }
 
-function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: DraggableRowProps) {
+function DraggableRow({
+  ticket,
+  typeInfo,
+  stageInfo,
+  stages,
+  assigneeStaff,
+  projectName,
+  selected,
+  onClick,
+  onStageChange,
+  onSelect,
+}: DraggableRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: ticket.id,
   });
+  const [showStagePicker, setShowStagePicker] = useState(false);
+  const stagePickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showStagePicker) return;
+    const handler = (e: MouseEvent) => {
+      if (stagePickerRef.current && !stagePickerRef.current.contains(e.target as Node)) {
+        setShowStagePicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showStagePicker]);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -110,7 +139,7 @@ function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: D
     <div
       ref={setNodeRef}
       style={style}
-      className="backlog-ticket-row"
+      className={`backlog-ticket-row${selected ? ' backlog-ticket-row--selected' : ''}`}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -120,6 +149,15 @@ function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: D
       {...attributes}
       {...listeners}
     >
+      {onSelect && (
+        <input
+          type="checkbox"
+          className="backlog-row-checkbox flex-shrink-0"
+          checked={selected ?? false}
+          onChange={() => onSelect(ticket.id)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
       {typeInfo && (
         <span
           style={{
@@ -135,7 +173,51 @@ function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: D
       )}
       <span className="ticket-id flex-shrink-0">{ticket.displayId}</span>
       <span className="text-truncate flex-grow-1">{ticket.title}</span>
-      {stageInfo && <span className={`backlog-status-pill ${statusCls} flex-shrink-0`}>{stageInfo.name}</span>}
+      {projectName && (
+        <span className="backlog-row-meta flex-shrink-0" title={projectName}>
+          {projectName}
+        </span>
+      )}
+      {ticket.customerName && (
+        <span className="backlog-row-meta flex-shrink-0" title={ticket.customerName}>
+          {ticket.customerName}
+        </span>
+      )}
+      {stageInfo && (
+        <div ref={stagePickerRef} style={{ position: 'relative', flexShrink: 0 }}>
+          <span
+            className={`backlog-status-pill backlog-status-pill--clickable ${statusCls}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowStagePicker((prev) => !prev);
+            }}
+            role="button"
+            tabIndex={0}
+          >
+            {stageInfo.name}
+            <i className="bi bi-chevron-down" style={{ fontSize: '0.55rem', marginLeft: 3 }} />
+          </span>
+          {showStagePicker && (
+            <div className="backlog-stage-picker">
+              {stages.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`backlog-stage-picker-item${s.id === ticket.stageId ? ' active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (s.id !== ticket.stageId) onStageChange(ticket.id, s.id);
+                    setShowStagePicker(false);
+                  }}
+                >
+                  <span className={`backlog-status-dot backlog-status-dot--${s.statusType}`} />
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {ticket.effortPoints != null && ticket.effortPoints > 0 && (
         <span className="backlog-effort flex-shrink-0">{ticket.effortPoints}</span>
       )}
@@ -815,7 +897,131 @@ const BacklogView = () => {
     });
   }, []);
 
+  // ── Project name lookup ─────────────────────────────────────────
+  const projectNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (config?.projects) {
+      for (const p of config.projects) map.set(p.id, p.name);
+    }
+    return map;
+  }, [config?.projects]);
+
+  // ── All stages for inline picker ──────────────────────────────
+  const allStages = useMemo(() => (teamData?.stages ?? []).sort((a, b) => a.order - b.order), [teamData?.stages]);
+
+  // ── Selection state ────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectedTickets = useMemo(
+    () => filteredTickets.filter((tk) => selectedIds.has(tk.id)),
+    [filteredTickets, selectedIds]
+  );
+  const handleToggleSelect = useCallback((ticketId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticketId)) next.delete(ticketId);
+      else next.add(ticketId);
+      return next;
+    });
+  }, []);
+  const handleDeselectAll = useCallback(() => setSelectedIds(new Set()), []);
+
   // ── Handlers ───────────────────────────────────────────────────
+  const handleInlineStageChange = useCallback(
+    async (ticketId: string, newStageId: string) => {
+      const ticket = filteredTickets.find((tk) => tk.id === ticketId);
+      if (!ticket) return;
+      const stage = allStages.find((s) => s.id === newStageId);
+      if (!stage) return;
+
+      // Optimistic update
+      setTickets((prev) =>
+        prev.map((tk) => (tk.id === ticketId ? { ...tk, stageId: newStageId, zoneId: stage.zoneId } : tk))
+      );
+
+      try {
+        await OpsService.updateTicket(numaPut, ticketId, {
+          teamId: ticket.teamId,
+          stageId: newStageId,
+          zoneId: stage.zoneId,
+          version: ticket.version,
+        });
+        await refreshTickets();
+      } catch (err) {
+        console.error('[BacklogView] Failed to change stage:', err);
+        await refreshTickets();
+      }
+    },
+    [filteredTickets, allStages, numaPut, refreshTickets, setTickets]
+  );
+
+  // ── Bulk action handlers ────────────────────────────────────────
+  const [bulkActing, setBulkActing] = useState(false);
+  const [showBulkMove, setShowBulkMove] = useState(false);
+  const bulkMoveRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showBulkMove) return;
+    const handler = (e: MouseEvent) => {
+      if (bulkMoveRef.current && !bulkMoveRef.current.contains(e.target as Node)) {
+        setShowBulkMove(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showBulkMove]);
+
+  const handleBulkMove = useCallback(
+    async (stageId: string) => {
+      if (selectedTickets.length === 0 || bulkActing) return;
+      const stage = allStages.find((s) => s.id === stageId);
+      if (!stage) return;
+      setBulkActing(true);
+      setShowBulkMove(false);
+      try {
+        await OpsService.bulkUpdateTickets(numaPost, {
+          ticketIds: selectedTickets.map((tk) => tk.id),
+          changes: { stageId, zoneId: stage.zoneId },
+        });
+        setSelectedIds(new Set());
+        await refreshTickets();
+      } catch (err) {
+        console.error('[BacklogView] Bulk move failed:', err);
+      } finally {
+        setBulkActing(false);
+      }
+    },
+    [selectedTickets, bulkActing, allStages, numaPost, refreshTickets]
+  );
+
+  const handleBulkArchive = useCallback(async () => {
+    if (selectedTickets.length === 0 || bulkActing) return;
+    setBulkActing(true);
+    try {
+      await Promise.all(selectedTickets.map((tk) => OpsService.archiveTicket(numaPut, tk.id, tk.version, tk.teamId)));
+      setSelectedIds(new Set());
+      await refreshTickets();
+    } catch (err) {
+      console.error('[BacklogView] Bulk archive failed:', err);
+    } finally {
+      setBulkActing(false);
+    }
+  }, [selectedTickets, bulkActing, numaPut, refreshTickets]);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedTickets.length === 0 || bulkActing) return;
+    if (!window.confirm(t('tickets.deleteConfirm'))) return;
+    setBulkActing(true);
+    try {
+      await Promise.all(selectedTickets.map((tk) => OpsService.deleteTicket(numaDelete, tk.id, tk.teamId)));
+      setSelectedIds(new Set());
+      await refreshTickets();
+    } catch (err) {
+      console.error('[BacklogView] Bulk delete failed:', err);
+    } finally {
+      setBulkActing(false);
+    }
+  }, [selectedTickets, bulkActing, numaDelete, refreshTickets, t]);
+
   const handleTicketClick = useCallback((ticketId: string) => {
     setDetailTicketId(ticketId);
     setShowDetail(true);
@@ -1298,8 +1504,13 @@ const BacklogView = () => {
                                   ticket={ticket}
                                   typeInfo={typeMap.get(ticket.ticketTypeId)}
                                   stageInfo={stageMap.get(ticket.stageId)}
+                                  stages={allStages}
                                   assigneeStaff={ticket.assigneeId ? staffMap.get(ticket.assigneeId) : undefined}
+                                  projectName={ticket.projectId ? projectNameMap.get(ticket.projectId) : null}
+                                  selected={selectedIds.has(ticket.id)}
                                   onClick={() => handleTicketClick(ticket.id)}
+                                  onStageChange={handleInlineStageChange}
+                                  onSelect={handleToggleSelect}
                                 />
                               ))
                           )}
@@ -1340,6 +1551,59 @@ const BacklogView = () => {
             ) : null}
           </DragOverlay>
         </DndContext>
+
+        {/* Bulk action bar */}
+        {selectedTickets.length > 0 && (
+          <div className="backlog-bulk-bar">
+            <span className="bulk-count">{t('bulk.selected', { count: selectedTickets.length })}</span>
+
+            <div ref={bulkMoveRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="bulk-action"
+                disabled={bulkActing}
+                onClick={() => setShowBulkMove((prev) => !prev)}
+              >
+                <i className="bi bi-arrow-right-circle" />
+                {t('tickets.status')}
+              </button>
+              {showBulkMove && (
+                <div className="backlog-stage-picker" style={{ bottom: '100%', top: 'auto', marginBottom: 4 }}>
+                  {allStages.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className="backlog-stage-picker-item"
+                      onClick={() => handleBulkMove(s.id)}
+                    >
+                      <span className={`backlog-status-dot backlog-status-dot--${s.statusType}`} />
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button type="button" className="bulk-action" disabled={bulkActing} onClick={handleBulkArchive}>
+              <i className="bi bi-archive" />
+              {t('archive.archive')}
+            </button>
+
+            <button
+              type="button"
+              className="bulk-action bulk-action--danger"
+              disabled={bulkActing}
+              onClick={handleBulkDelete}
+            >
+              <i className="bi bi-trash" />
+              {t('bulk.bulkDelete')}
+            </button>
+
+            <button type="button" className="bulk-dismiss" onClick={handleDeselectAll} title={t('bulk.deselectAll')}>
+              <i className="bi bi-x-lg" />
+            </button>
+          </div>
+        )}
 
         {/* Empty state */}
         {backlogTickets.length === 0 && (
