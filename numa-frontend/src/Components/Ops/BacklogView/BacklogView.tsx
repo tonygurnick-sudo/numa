@@ -12,6 +12,8 @@ import {
   useSensors,
   PointerSensor,
 } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
@@ -90,12 +92,13 @@ interface DraggableRowProps {
 }
 
 function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: DraggableRowProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: ticket.id,
   });
 
   const style: React.CSSProperties = {
-    transform: transform ? `translate(${transform.x}px, ${transform.y}px)` : undefined,
+    transform: CSS.Transform.toString(transform),
+    transition: transition ?? undefined,
     opacity: isDragging ? 0.4 : 1,
     zIndex: isDragging ? 10 : undefined,
     position: isDragging ? ('relative' as const) : undefined,
@@ -161,10 +164,11 @@ function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: D
 
 interface DroppableGroupBodyProps {
   groupId: string;
+  ticketIds: string[];
   children: React.ReactNode;
 }
 
-function DroppableGroupBody({ groupId, children }: DroppableGroupBodyProps) {
+function DroppableGroupBody({ groupId, ticketIds, children }: DroppableGroupBodyProps) {
   const { setNodeRef, isOver } = useDroppable({ id: groupId });
 
   return (
@@ -173,7 +177,9 @@ function DroppableGroupBody({ groupId, children }: DroppableGroupBodyProps) {
       className="backlog-group-body"
       style={{ backgroundColor: isOver ? '#f0f4ff' : undefined, minHeight: 32 }}
     >
-      {children}
+      <SortableContext items={ticketIds} strategy={verticalListSortingStrategy}>
+        {children}
+      </SortableContext>
     </div>
   );
 }
@@ -745,10 +751,19 @@ const BacklogView = () => {
     return result;
   }, [filteredTickets, backlogStages, planningUnits, t, firstBacklogZoneId, teamData]);
 
-  // ── Group lookup map (for DnD) ─────────────────────────────────
+  // ── Group lookup maps (for DnD) ────────────────────────────────
   const groupMap = useMemo(() => {
     const map = new Map<string, TicketGroup>();
     for (const g of groups) map.set(g.id, g);
+    return map;
+  }, [groups]);
+
+  // Reverse lookup: ticket ID -> group
+  const ticketGroupMap = useMemo(() => {
+    const map = new Map<string, TicketGroup>();
+    for (const g of groups) {
+      for (const tk of g.tickets) map.set(tk.id, g);
+    }
     return map;
   }, [groups]);
 
@@ -838,6 +853,7 @@ const BacklogView = () => {
       let newZoneId = ticket.zoneId;
       let newStageId = ticket.stageId;
       let newWorkUnitId: string | null | undefined = ticket.workUnitId;
+      let insertIndex: number | null = null;
 
       if (overId.startsWith('bk-stage-')) {
         // Kanban mode: dropped on a stage column
@@ -847,29 +863,72 @@ const BacklogView = () => {
         newStageId = stageId;
         newZoneId = stageInfo.zoneId;
       } else {
-        // List mode or kanban-group mode: dropped on a group
-        const targetGroup = groupMap.get(overId);
-        if (!targetGroup) return;
+        // Check if dropped on another ticket (within-group reorder or cross-group)
+        const overTicket = filteredTickets.find((tk) => tk.id === overId);
+        if (overTicket) {
+          const sourceGroup = ticketGroupMap.get(ticketId);
+          const targetGroup = ticketGroupMap.get(overId);
 
-        newZoneId = targetGroup.zoneId;
-        if (targetGroup.stageId) newStageId = targetGroup.stageId;
-        newWorkUnitId = targetGroup.workUnit?.id ?? null;
+          if (targetGroup) {
+            newZoneId = targetGroup.zoneId;
+            if (targetGroup.stageId) newStageId = targetGroup.stageId;
+            newWorkUnitId = targetGroup.workUnit?.id ?? null;
+
+            // Calculate insertion index based on the over ticket's position
+            const sortedGroupTickets = targetGroup.tickets
+              .filter((tk) => tk.id !== ticketId)
+              .sort((a, b) => a.order - b.order);
+            const overIndex = sortedGroupTickets.findIndex((tk) => tk.id === overId);
+
+            if (sourceGroup?.id === targetGroup.id) {
+              // Same group: determine direction
+              const allSorted = targetGroup.tickets.sort((a, b) => a.order - b.order);
+              const origDragIdx = allSorted.findIndex((tk) => tk.id === ticketId);
+              const origOverIdx = allSorted.findIndex((tk) => tk.id === overId);
+              insertIndex = origDragIdx < origOverIdx ? overIndex + 1 : overIndex;
+            } else {
+              insertIndex = overIndex >= 0 ? overIndex : sortedGroupTickets.length;
+            }
+          }
+        } else {
+          // Dropped on a group droppable
+          const targetGroup = groupMap.get(overId);
+          if (!targetGroup) return;
+
+          newZoneId = targetGroup.zoneId;
+          if (targetGroup.stageId) newStageId = targetGroup.stageId;
+          newWorkUnitId = targetGroup.workUnit?.id ?? null;
+        }
       }
 
-      // No-op if nothing changed
-      if (newStageId === ticket.stageId && newWorkUnitId === ticket.workUnitId) return;
-
-      // Calculate order at end of destination
+      // Build destination ticket list for order calculation
       const destTickets = filteredTickets
         .filter((tk) => {
           if (tk.id === ticketId) return false;
           if (overId.startsWith('bk-stage-')) return tk.stageId === newStageId;
+          // For ticket-on-ticket drops, use the target group's tickets
+          const overTicket = filteredTickets.find((t) => t.id === overId);
+          if (overTicket) {
+            const tg = ticketGroupMap.get(overId);
+            return tg ? tg.tickets.some((gt) => gt.id === tk.id) : false;
+          }
           const g = groupMap.get(overId);
           return g ? g.tickets.some((gt) => gt.id === tk.id) : false;
         })
         .sort((a, b) => a.order - b.order);
 
-      const newOrder = calculateNewOrder(destTickets, destTickets.length);
+      const effectiveIndex = insertIndex ?? destTickets.length;
+
+      // No-op if same group, same position
+      if (newStageId === ticket.stageId && newWorkUnitId === ticket.workUnitId) {
+        const currentSorted = destTickets;
+        const currentIdx = [...currentSorted, ticket]
+          .sort((a, b) => a.order - b.order)
+          .findIndex((tk) => tk.id === ticketId);
+        if (currentIdx === effectiveIndex || currentIdx === effectiveIndex - 1) return;
+      }
+
+      const newOrder = calculateNewOrder(destTickets, effectiveIndex);
 
       // Optimistic update
       setTickets((prev) =>
@@ -895,7 +954,7 @@ const BacklogView = () => {
         await refreshTickets();
       }
     },
-    [filteredTickets, groupMap, stageMap, numaPut, refreshTickets, setTickets]
+    [filteredTickets, groupMap, ticketGroupMap, stageMap, numaPut, refreshTickets, setTickets]
   );
 
   return (
@@ -1162,7 +1221,10 @@ const BacklogView = () => {
 
                     {!isCollapsed && (
                       <>
-                        <DroppableGroupBody groupId={group.id}>
+                        <DroppableGroupBody
+                          groupId={group.id}
+                          ticketIds={group.tickets.sort((a, b) => a.order - b.order).map((tk) => tk.id)}
+                        >
                           {group.tickets.length === 0 ? (
                             <div className="kanban-empty-dropzone my-2 mx-3 text-center" style={{ minHeight: '80px' }}>
                               <i className="bi bi-inbox mb-1" style={{ fontSize: '1.4rem', color: '#9ca3af' }} />
