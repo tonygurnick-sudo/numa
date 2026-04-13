@@ -576,6 +576,8 @@ const BacklogView = () => {
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const [customerFilter, setCustomerFilter] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -665,8 +667,14 @@ const BacklogView = () => {
     if (priorityFilter) {
       result = result.filter((tk) => tk.priority === priorityFilter);
     }
+    if (projectFilter) {
+      result = result.filter((tk) => tk.projectId === projectFilter);
+    }
+    if (customerFilter) {
+      result = result.filter((tk) => tk.customerId === customerFilter);
+    }
     return result;
-  }, [backlogTickets, searchQuery, assigneeFilter, typeFilter, priorityFilter]);
+  }, [backlogTickets, searchQuery, assigneeFilter, typeFilter, priorityFilter, projectFilter, customerFilter]);
 
   // ── Assignees in backlog (for avatar filters) ──────────────────
   const backlogAssignees = useMemo(() => {
@@ -693,6 +701,24 @@ const BacklogView = () => {
     const priorities: TicketPriority[] = ['highest', 'high', 'medium', 'low', 'lowest'];
     return priorities.map((p) => ({ id: p, label: t(`priority.${p}`) }));
   }, [t]);
+
+  // ── Project options for filter ──────────────────────────────────
+  const projectOptions = useMemo(() => {
+    if (!config?.projects) return [];
+    const usedIds = new Set(backlogTickets.map((tk) => tk.projectId).filter(Boolean));
+    return config.projects.filter((p) => usedIds.has(p.id)).map((p) => ({ id: p.id, label: p.name, color: p.color }));
+  }, [config?.projects, backlogTickets]);
+
+  // ── Customer options for filter ────────────────────────────────
+  const customerOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const tk of backlogTickets) {
+      if (tk.customerId && tk.customerName && !seen.has(tk.customerId)) {
+        seen.set(tk.customerId, tk.customerName);
+      }
+    }
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, label: name }));
+  }, [backlogTickets]);
 
   // ── Planning work units ────────────────────────────────────────
   const planningUnits = useMemo(
@@ -1010,6 +1036,26 @@ const BacklogView = () => {
             onChange={setPriorityFilter}
             allLabel={t('backlogView.allPriorities')}
           />
+
+          {projectOptions.length > 0 && (
+            <FilterDropdown
+              label={t('tickets.project')}
+              value={projectFilter}
+              options={projectOptions}
+              onChange={setProjectFilter}
+              allLabel={t('backlogView.allProjects')}
+            />
+          )}
+
+          {customerOptions.length > 0 && (
+            <FilterDropdown
+              label={t('tickets.customer')}
+              value={customerFilter}
+              options={customerOptions}
+              onChange={setCustomerFilter}
+              allLabel={t('backlogView.allCustomers')}
+            />
+          )}
 
           <div className="flex-grow-1" />
 

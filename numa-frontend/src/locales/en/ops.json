@@ -403,7 +403,10 @@
     "priority": "Priority",
     "addTicket": "Add ticket",
     "allTypes": "All Types",
-    "allPriorities": "All Priorities"
+    "allPriorities": "All Priorities",
+    "allProjects": "All Projects",
+    "allCustomers": "All Customers",
+    "bulkArchive": "Archive"
   },
   "boards": {
     "settings": "Board Settings",
