@@ -10,6 +10,7 @@ interface RichTextEditorProps {
   minHeight?: number;
   disabled?: boolean;
   onFileAttach?: (file: File) => void;
+  mentionOptions?: { id: string; display: string }[];
 }
 
 export interface RichTextEditorHandle {
@@ -47,6 +48,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     minHeight = 120,
     disabled = false,
     onFileAttach,
+    mentionOptions,
   },
   ref
 ) {
@@ -55,9 +57,13 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingImage, setIsUploadingImage] = React.useState(false);
-  // Internal state for HTML vs Rich text mode
   const [isHtmlMode, setIsHtmlMode] = React.useState(false);
   const [htmlValue, setHtmlValue] = React.useState(value || '');
+
+  // Mention State
+  const [mentionQuery, setMentionQuery] = React.useState<string | null>(null);
+  const [mentionPos, setMentionPos] = React.useState<{ top: number; left: number } | null>(null);
+  const [mentionIndex, setMentionIndex] = React.useState(0);
 
   // Track the last value we set so we don't clobber the cursor on external re-renders
   const lastSavedRef = useRef<string>(value);
@@ -236,12 +242,82 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     }
   }, [readClean, onSave]);
 
+  const checkMention = useCallback(() => {
+    if (!mentionOptions?.length || isHtmlMode) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const node = range.startContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent?.slice(0, range.startOffset) || '';
+      const match = /(?:^|\s)@(\w*)$/.exec(text);
+      if (match) {
+        setMentionQuery(match[1]);
+        const rect = range.getBoundingClientRect();
+        setMentionPos({ top: rect.bottom, left: rect.left });
+        setMentionIndex(0); // Reset selection
+        return;
+      }
+    }
+    setMentionQuery(null);
+  }, [mentionOptions, isHtmlMode]);
+
+  const insertMention = useCallback(
+    (user: { id: string; display: string }) => {
+      if (!mentionOptions?.length) return;
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+
+      const range = sel.getRangeAt(0);
+      const node = range.startContainer;
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent?.slice(0, range.startOffset) || '';
+        const match = /(?:^|\s)@(\w*)$/.exec(text);
+        if (match) {
+          range.setStart(node, range.startOffset - (match[1].length + 1));
+          range.deleteContents();
+          const html = `<span class="ops-mention" data-sub="${user.id}" style="color: #3b82f6; font-weight: 600;">@${user.display}</span>&nbsp;`;
+          document.execCommand('insertHTML', false, html);
+        }
+      }
+      setMentionQuery(null);
+    },
+    [mentionOptions]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (mentionQuery !== null) {
+        const filtered = (mentionOptions || []).filter((o) =>
+          o.display.toLowerCase().includes(mentionQuery.toLowerCase())
+        );
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setMentionIndex((prev) => (prev + 1) % filtered.length);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setMentionIndex((prev) => (prev - 1 + filtered.length) % filtered.length);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (filtered[mentionIndex]) {
+            insertMention(filtered[mentionIndex]);
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setMentionQuery(null);
+        }
+      }
+    },
+    [mentionQuery, mentionOptions, mentionIndex, insertMention]
+  );
+
   const handleInput = useCallback(() => {
     const clean = readClean();
     if (clean !== null && onChange) {
       onChange(clean);
     }
-  }, [readClean, onChange]);
+    checkMention();
+  }, [readClean, onChange, checkMention]);
 
   const handleHtmlChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -498,6 +574,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
             suppressContentEditableWarning
             data-placeholder={placeholder}
             onInput={handleInput}
+            onKeyDown={handleKeyDown}
             onBlur={flush}
             style={{
               minHeight,
@@ -534,6 +611,56 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           />
         )}
       </div>
+
+      {mentionQuery !== null && mentionPos && (
+        <div
+          style={{
+            position: 'fixed',
+            top: mentionPos.top + 4,
+            left: mentionPos.left,
+            zIndex: 9999,
+            backgroundColor: '#fff',
+            border: '1px solid #d1d5db',
+            borderRadius: '6px',
+            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+            maxHeight: '200px',
+            overflowY: 'auto',
+            minWidth: '200px',
+          }}
+        >
+          {(() => {
+            const filtered = (mentionOptions || []).filter((o) =>
+              o.display.toLowerCase().includes(mentionQuery.toLowerCase())
+            );
+            if (filtered.length === 0) {
+              return (
+                <div style={{ padding: '8px 12px', color: '#6b7280', fontSize: '0.85rem' }}>
+                  {}
+                  {t('editor.noMatches', 'No matches')}
+                </div>
+              );
+            }
+            return filtered.map((option, idx) => (
+              <div
+                key={option.id}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  insertMention(option);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  backgroundColor: idx === mentionIndex ? '#f3f4f6' : '#fff',
+                  color: '#111827',
+                  fontSize: '0.85rem',
+                }}
+              >
+                {option.display}
+              </div>
+            ));
+          })()}
+        </div>
+      )}
 
       {/* Inline style for placeholder */}
       <style>{`

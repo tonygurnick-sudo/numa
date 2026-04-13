@@ -635,6 +635,7 @@ export class NumaClientStack extends TerraformStack {
         userPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
+        emailSenderLambdaArn,
       });
     }
 
