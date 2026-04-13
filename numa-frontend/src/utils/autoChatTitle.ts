@@ -9,6 +9,7 @@ export interface AutoNameOptions {
   bedrockRuntimeClient: BedrockRuntimeClient | null;
   numaChatDynamoUtils: NumaChatDynamoUtils | null;
   region?: string | null;
+  force?: boolean;
 }
 
 // Minimal shape of items stored in Dynamo we care about
@@ -127,6 +128,7 @@ export async function autoNameConversation({
   bedrockRuntimeClient,
   numaChatDynamoUtils,
   region = null,
+  force = false,
 }: AutoNameOptions): Promise<boolean> {
   try {
     if (!conversationId || !userId || !numaChatDynamoUtils) return false;
@@ -143,8 +145,12 @@ export async function autoNameConversation({
     const currentName: string | null = metaItem?.conversationName || null;
     const nameSource: string | null = metaItem?.nameSource ?? null;
 
-    // If a nameSource exists ('manual' or 'auto'), do not rename again
-    if (nameSource) {
+    // Never override manual names
+    if (nameSource === 'manual') {
+      return false;
+    }
+    // If already named (auto), only re-name when force is set (e.g. re-trigger on 3rd message)
+    if (nameSource && !force) {
       return false;
     }
 

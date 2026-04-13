@@ -207,7 +207,7 @@ const NumaWorkspaceChatAgents = () => {
   const preselectHandledRef = useRef(false);
   const preselectActivatedRef = useRef(false);
   const preselectTimerRef = useRef<number | null>(null);
-  const autoNamingAttemptedRef = useRef<Set<string>>(new Set());
+  const autoNamingAttemptedRef = useRef<Map<string, number>>(new Map());
   const lastLoadedConversationRef = useRef<string | null>(null); // Prevents infinite reload loop
   const loadGenerationRef = useRef(0); // Incremented on new chat to cancel in-flight loads
   const conversationChatConfigSaveTimeoutRef = useRef<number | null>(null);
@@ -1400,12 +1400,15 @@ const NumaWorkspaceChatAgents = () => {
         return;
       }
 
-      // Prevent duplicate auto-naming for same conversation
-      if (autoNamingAttemptedRef.current.has(cid)) {
+      // Track completion count per conversation; trigger auto-naming on 1st and 3rd completions
+      const AUTO_RENAME_ON = new Set([1, 3]);
+      const count = (autoNamingAttemptedRef.current.get(cid) ?? 0) + 1;
+      autoNamingAttemptedRef.current.set(cid, count);
+
+      if (!AUTO_RENAME_ON.has(count)) {
         return;
       }
 
-      autoNamingAttemptedRef.current.add(cid);
       try {
         const renamed = await autoNameConversation({
           conversationId: cid,
@@ -1413,6 +1416,7 @@ const NumaWorkspaceChatAgents = () => {
           bedrockRuntimeClient,
           numaChatDynamoUtils,
           region: REGION,
+          force: count > 1,
         });
         if (renamed) {
           // Refresh sidebar to reflect new title
@@ -2211,7 +2215,7 @@ const NumaWorkspaceChatAgents = () => {
           setConversationId(selectedConversationId);
           sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
           sessionStorage.setItem('isWorkspaceConversation-v2', 'true'); // Mark as V2 for auto-load
-          autoNamingAttemptedRef.current.add(selectedConversationId);
+          autoNamingAttemptedRef.current.set(selectedConversationId, Infinity);
           // This is a V2 conversation, clear any migration flag
           setNeedsV1Migration(false);
 
@@ -2371,7 +2375,7 @@ const NumaWorkspaceChatAgents = () => {
     sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
     sessionStorage.setItem('isWorkspaceConversation-v2', 'false'); // V1 until migrated
     setPendingConversationChatConfig((chatConfig as ConversationChatConfig) || null);
-    autoNamingAttemptedRef.current.add(selectedConversationId);
+    autoNamingAttemptedRef.current.set(selectedConversationId, Infinity);
     // Mark this conversation as needing V1 to V2 migration on first message
     setNeedsV1Migration(true);
 

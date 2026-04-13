@@ -127,7 +127,7 @@ const NumaChatAgents = () => {
   const preselectHandledRef = useRef(false);
   const preselectActivatedRef = useRef(false);
   const preselectTimerRef = useRef<number | null>(null);
-  const autoNamingAttemptedRef = useRef<Set<string>>(new Set());
+  const autoNamingAttemptedRef = useRef<Map<string, number>>(new Map());
   const conversationChatConfigSaveTimeoutRef = useRef<number | null>(null);
   const isApplyingConversationChatConfigRef = useRef(false);
   // Custom hooks
@@ -1246,18 +1246,21 @@ const NumaChatAgents = () => {
           .catch((err) => console.error('Error updating meta item:', err));
       }
 
-      // Attempt auto-naming after first assistant response (only once per conversation per session)
+      // Auto-naming: trigger on 1st and 3rd assistant responses
       try {
         if (bedrockRuntimeClient && numaChatDynamoUtils && sub && cid) {
-          // Prevent duplicate auto-naming for same conversation
-          if (!autoNamingAttemptedRef.current.has(cid)) {
-            autoNamingAttemptedRef.current.add(cid);
+          const AUTO_RENAME_ON = new Set([1, 3]);
+          const count = (autoNamingAttemptedRef.current.get(cid) ?? 0) + 1;
+          autoNamingAttemptedRef.current.set(cid, count);
+
+          if (AUTO_RENAME_ON.has(count)) {
             const renamed = await autoNameConversation({
               conversationId: cid,
               userId: sub,
               bedrockRuntimeClient,
               numaChatDynamoUtils,
               region: REGION,
+              force: count > 1,
             });
             if (renamed) {
               // Refresh sidebar to reflect new title
@@ -1598,7 +1601,7 @@ const NumaChatAgents = () => {
 
       // Mark this conversation as already having been through auto-naming consideration
       // This prevents re-triggering auto-naming when resuming an existing conversation
-      autoNamingAttemptedRef.current.add(selectedConversationId);
+      autoNamingAttemptedRef.current.set(selectedConversationId, Infinity);
 
       if (agentMeta?.agentId) {
         try {
