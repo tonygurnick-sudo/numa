@@ -83,11 +83,13 @@ function shortDate(dateStr?: string | null): string {
 
 // ─── Draggable Ticket Row (list mode) ────────────────────────────────────────
 
+type StageGroup = { zoneName: string; stages: WorkStage[] };
+
 interface DraggableRowProps {
   ticket: Ticket;
   typeInfo: { name: string; color: string } | undefined;
   stageInfo: { name: string; statusType: StatusType } | undefined;
-  stages: WorkStage[];
+  stageGroups: StageGroup[];
   assigneeStaff?: StaffProfile;
   projectName?: string | null;
   selected?: boolean;
@@ -100,7 +102,7 @@ function DraggableRow({
   ticket,
   typeInfo,
   stageInfo,
-  stages,
+  stageGroups,
   assigneeStaff,
   projectName,
   selected,
@@ -199,20 +201,25 @@ function DraggableRow({
           </span>
           {showStagePicker && (
             <div className="backlog-stage-picker">
-              {stages.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={`backlog-stage-picker-item${s.id === ticket.stageId ? ' active' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (s.id !== ticket.stageId) onStageChange(ticket.id, s.id);
-                    setShowStagePicker(false);
-                  }}
-                >
-                  <span className={`backlog-status-dot backlog-status-dot--${s.statusType}`} />
-                  {s.name}
-                </button>
+              {stageGroups.map((group) => (
+                <div key={group.zoneName}>
+                  {stageGroups.length > 1 && <div className="backlog-stage-picker-zone">{group.zoneName}</div>}
+                  {group.stages.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className={`backlog-stage-picker-item${s.id === ticket.stageId ? ' active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (s.id !== ticket.stageId) onStageChange(ticket.id, s.id);
+                        setShowStagePicker(false);
+                      }}
+                    >
+                      <span className={`backlog-status-dot backlog-status-dot--${s.statusType}`} />
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           )}
@@ -909,6 +916,22 @@ const BacklogView = () => {
   // ── All stages for inline picker ──────────────────────────────
   const allStages = useMemo(() => (teamData?.stages ?? []).sort((a, b) => a.order - b.order), [teamData?.stages]);
 
+  // Stages grouped by zone (for pickers with zone headers)
+  const stageGroups = useMemo<StageGroup[]>(() => {
+    const zoneNameMap = new Map<string, string>();
+    for (const z of zones) zoneNameMap.set(z.id, z.name);
+    const grouped = new Map<string, WorkStage[]>();
+    for (const s of allStages) {
+      const list = grouped.get(s.zoneId) ?? [];
+      list.push(s);
+      grouped.set(s.zoneId, list);
+    }
+    return Array.from(grouped.entries()).map(([zoneId, stages]) => ({
+      zoneName: zoneNameMap.get(zoneId) ?? '',
+      stages,
+    }));
+  }, [allStages, zones]);
+
   // ── Selection state ────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const selectedTickets = useMemo(
@@ -1504,7 +1527,7 @@ const BacklogView = () => {
                                   ticket={ticket}
                                   typeInfo={typeMap.get(ticket.ticketTypeId)}
                                   stageInfo={stageMap.get(ticket.stageId)}
-                                  stages={allStages}
+                                  stageGroups={stageGroups}
                                   assigneeStaff={ticket.assigneeId ? staffMap.get(ticket.assigneeId) : undefined}
                                   projectName={ticket.projectId ? projectNameMap.get(ticket.projectId) : null}
                                   selected={selectedIds.has(ticket.id)}
@@ -1569,16 +1592,21 @@ const BacklogView = () => {
               </button>
               {showBulkMove && (
                 <div className="backlog-stage-picker" style={{ bottom: '100%', top: 'auto', marginBottom: 4 }}>
-                  {allStages.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      className="backlog-stage-picker-item"
-                      onClick={() => handleBulkMove(s.id)}
-                    >
-                      <span className={`backlog-status-dot backlog-status-dot--${s.statusType}`} />
-                      {s.name}
-                    </button>
+                  {stageGroups.map((group) => (
+                    <div key={group.zoneName}>
+                      {stageGroups.length > 1 && <div className="backlog-stage-picker-zone">{group.zoneName}</div>}
+                      {group.stages.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className="backlog-stage-picker-item"
+                          onClick={() => handleBulkMove(s.id)}
+                        >
+                          <span className={`backlog-status-dot backlog-status-dot--${s.statusType}`} />
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}

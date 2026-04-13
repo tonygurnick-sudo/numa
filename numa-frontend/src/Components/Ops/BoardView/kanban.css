@@ -1892,6 +1892,16 @@
   background: #eff6ff;
 }
 
+.backlog-stage-picker-zone {
+  padding: 6px 10px 2px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9ca3af;
+  user-select: none;
+}
+
 .backlog-status-dot {
   width: 8px;
   height: 8px;
@@ -1918,61 +1928,91 @@
   background: #9ca3af;
 }
 
-/* Bulk action bar */
+/* Bulk action bar — floating dark pill at bottom center */
 .backlog-bulk-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 20;
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1050;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: #fff;
-  border-top: 1px solid var(--ops-border, #e4e4e7);
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
-  border-radius: 0 0 12px 12px;
-  font-size: 0.85rem;
+  gap: 10px;
+  padding: 8px 16px;
+  background: #1f2937;
+  color: #f3f4f6;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  animation: bulkBarSlideUp 0.2s ease-out;
+}
+
+@keyframes bulkBarSlideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .backlog-bulk-bar .bulk-count {
   font-weight: 600;
+  color: #e5e7eb;
 }
 
 .backlog-bulk-bar .bulk-action {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 5px 12px;
-  border: 1px solid var(--ops-border, #e4e4e7);
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid #4b5563;
+  border-radius: 8px;
+  background: transparent;
+  color: #e5e7eb;
   cursor: pointer;
-  font-size: 0.8rem;
-  transition: all 0.1s;
+  font-size: 0.78rem;
+  transition: all 0.12s;
 }
 
 .backlog-bulk-bar .bulk-action:hover {
-  background: #f3f4f6;
+  background: #374151;
+  border-color: #6b7280;
+}
+
+.backlog-bulk-bar .bulk-action--danger {
+  border-color: #7f1d1d;
+  color: #fca5a5;
 }
 
 .backlog-bulk-bar .bulk-action--danger:hover {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #dc2626;
+  background: #7f1d1d;
+  border-color: #991b1b;
+  color: #fef2f2;
 }
 
 .backlog-bulk-bar .bulk-dismiss {
-  margin-left: auto;
+  margin-left: 4px;
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #9ca3af;
+  color: #6b7280;
   font-size: 1rem;
   padding: 4px;
+  line-height: 1;
 }
 
 .backlog-bulk-bar .bulk-dismiss:hover {
-  color: #6b7280;
+  color: #d1d5db;
+}
+
+/* Hide Ask Numa FAB when bulk bar is visible */
+.backlog-bulk-bar ~ .ask-numa-fab,
+body:has(.backlog-bulk-bar) .ask-numa-fab {
+  display: none !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
