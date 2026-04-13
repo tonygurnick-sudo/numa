@@ -226,7 +226,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
     <div
       ref={setCardRef}
       style={style}
-      className="ticket-card"
+      className={`ticket-card${isDragging ? ' ticket-card--dragging' : ''}`}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onMouseEnter={handleMouseEnter}

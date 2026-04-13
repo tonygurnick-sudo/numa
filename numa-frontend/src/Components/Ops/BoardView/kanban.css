@@ -395,20 +395,27 @@
   box-shadow: var(--ops-shadow-sm);
 }
 
-.ticket-card:hover {
+.ticket-card:not(.ticket-card--dragging):hover {
   box-shadow: var(--ops-shadow-lg);
   border-color: #d1d5db;
   transform: translateY(-3px);
 }
 
-.ticket-card:hover .ticket-card-actions {
+.ticket-card:not(.ticket-card--dragging):hover .ticket-card-actions {
   opacity: 1;
 }
 
-.ticket-card:active {
+.ticket-card:not(.ticket-card--dragging):active {
   cursor: grabbing;
   transform: translateY(1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* Reset styles on dragging card so hover/active don't persist */
+.ticket-card--dragging {
+  box-shadow: var(--ops-shadow-sm) !important;
+  border-color: transparent !important;
+  transform: none !important;
 }
 
 /* Hover action buttons (edit/delete) */
