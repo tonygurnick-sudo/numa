@@ -7,6 +7,7 @@ import { ROUTE_CONFIG } from './utils/routeConfig';
 import AppLayout from './Layouts/AppLayout';
 import { useTranslation } from 'react-i18next';
 import { getFlag } from './utils/featureFlags';
+import { useBrowserNotificationRouteTracker } from './hooks/useBrowserNotification';
 
 // Lazy load non-critical pages
 const ResetPassword = lazy(() => import('./Pages/ResetPassword').then((m) => ({ default: m.ResetPassword })));
@@ -44,6 +45,7 @@ const AppRoutes = () => {
   const { user, loading, tokenValidationComplete } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation('common');
+  useBrowserNotificationRouteTracker();
   const isFeatureEnabled = (flag?: string) => {
     if (!flag) return true;
     return getFlag(flag);
