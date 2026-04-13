@@ -2,7 +2,6 @@ import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group
 import { Construct } from 'constructs';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 import { NumaLogGroup } from './numa-log-group';
-import { OTelConfig } from './numa-lambda';
 
 // ─── Vault Secrets Construct ──────────────────────────────────────────────────
 // Wires the vault-secrets Python Lambda into API Gateway behind the authorizer.
@@ -13,7 +12,6 @@ export interface VaultSecretsConstructProps extends ApiGatewayLambdaCollectionPr
   region: string;
   vaultAuditLogTableName: string;
   vaultAuditLogTableArn: string;
-  otelConfig?: OTelConfig;
 }
 
 export class VaultSecretsConstruct extends ApiGatewayLambdaCollection {

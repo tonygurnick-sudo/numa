@@ -2,7 +2,7 @@
   "language": "typescript",
   "app": "node --import tsx/esm main.ts",
   "projectId": "797e8cee-ad9e-4ecf-a502-a412f7ba9b04",
-  "terraformProviders": ["honeycombio/honeycombio"],
+  "terraformProviders": [],
   "terraformModules": [],
   "context": {
     "excludeStackIdFromLogicalIds": "true",

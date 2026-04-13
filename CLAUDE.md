@@ -205,7 +205,7 @@ SaaS integrations use a cross-account proxy model. A dedicated Arcanum-owned acc
 | `numa-client-stack.ts`     | Core per-client stack — Cognito, API Gateway, CloudFront, S3, DynamoDB, Step Functions, Lambdas, workspace agent constructs, knowledge bases |
 | `nextgen-root-stack.ts`    | AWS account bootstrap — creates/organizes client accounts, roles, SSO access                                                                 |
 | `pipedream-proxy-stack.ts` | Integrations proxy account — cross-account Lambda, OAuth secrets, user mapping                                                               |
-| `q-apps-deployer-stack.ts` | Deployer account — `numa-client-config` table, Honeycomb keys, Route53, Customer Success Portal                                              |
+| `q-apps-deployer-stack.ts` | Deployer account — `numa-client-config` table, Route53, Customer Success Portal                                                              |
 
 CloudFront routes `/api/*` to API Gateway and `/api/numa-chat-agent/*` directly to the chat agent Function URL with the shared secret header.
 

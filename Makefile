@@ -21,9 +21,6 @@ export CDKTF_LOG_LEVEL := debug
 # merge both usages
 export NODE_OPTIONS := --max-old-space-size=4096 --trace-deprecation
 export CLIENT_OVERRIDE := arcanum-demo-tony
-export HONEYCOMB_KEY_SECRET := 56sdgz9z60ah0jfrvezhc0q1n61h8vyg
-export HONEYCOMB_KEY_ID := hcamk_01jp5y4xp1z77ed2p3sj7jn2dx
-
 CDKTF := yarn --cwd infra dlx cdktf-cli
 STACK := numa-arcanum-demo-tony
 SYSTEM_USER_FUNCTION_RESOURCE := aws_lambda_function.numa_system-user_function_38BDAEEC

@@ -60,7 +60,6 @@ export class CoreNumaInfra extends Construct {
   readonly defaultWebIdentityRoleArn?: string;
   readonly logGroup: CloudwatchLogGroup;
   readonly outputsBucket: NumaCorsEnabledBucket;
-  readonly otelConfigPath: string;
   readonly dataBucket: NumaCorsEnabledBucket;
   readonly companyBucket?: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
@@ -1048,21 +1047,11 @@ export class CoreNumaInfra extends Construct {
       });
     }
 
-    // Create config bucket and otel config
-    const otelConfigKey = 'otel-config.yaml';
+    // Create config bucket
     this.configBucket = new ConfigBucket(this, 'config-bucket', {
       clientName: props.clientName,
       clientAccountId: props.clientAccountId,
     });
-
-    const source = path.resolve(import.meta.dirname, '..', 'assets', 'otel-config.yaml');
-    new S3Object(this, 'honeycomb-config-file', {
-      bucket: this.configBucket.bucket.bucket,
-      key: otelConfigKey,
-      source,
-    });
-
-    this.otelConfigPath = `${this.configBucket.bucket.bucketRegionalDomainName}/${otelConfigKey}`;
 
     const webCrawlerLogGroup = new CloudwatchLogGroup(this, 'web-crawler-log-group', {
       name: `/numa/${props.clientName}-web-crawler`,

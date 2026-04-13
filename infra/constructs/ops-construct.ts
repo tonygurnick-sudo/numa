@@ -12,7 +12,6 @@ import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 import { NumaLogGroup } from './numa-log-group';
-import { OTelConfig } from './numa-lambda';
 
 // ─── Ops Construct ──────────────────────────────────────────────────────────────
 // Creates all Numa Ops infrastructure: 3 DynamoDB tables, 4 Lambdas (3 API + 1
@@ -24,7 +23,6 @@ export interface OpsConstructProps extends ApiGatewayLambdaCollectionProps {
   region: string;
   outputsBucketArn: string;
   outputsBucketName: string;
-  otelConfig?: OTelConfig;
   userPoolId?: string;
   userPoolArn?: string;
   /** Chat-settings table name — used to enrich staff profiles with user profile data (name, jobTitle, avatar). */

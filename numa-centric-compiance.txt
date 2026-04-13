@@ -158,7 +158,7 @@ LOGGING, MONITORING & DETECTION
 
 ⚠️ PARTIAL:
 - Monitor for anomalous model usage
-  * Basic Honeycomb telemetry, no anomaly detection
+  * AWS X-Ray tracing only, no anomaly detection
 
 ❌ NON-COMPLIANT:
 - Store CloudTrail in immutable log vault
