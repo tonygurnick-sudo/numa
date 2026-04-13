@@ -88,6 +88,7 @@ export class RacetechDataFeedConstruct extends ApiGatewayLambdaCollection {
 
     const uploadRole = new IamRole(this, 'racetech-s3-upload-role', {
       name: `${clientName}-racetech-s3-upload`,
+      maxSessionDuration: 7200,
       assumeRolePolicy: new DataAwsIamPolicyDocument(this, 'upload-role-trust', {
         statement: [
           {
