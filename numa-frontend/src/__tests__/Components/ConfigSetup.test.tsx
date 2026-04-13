@@ -21,7 +21,6 @@ describe('ConfigSetup', () => {
     USER_POOL_ID: 'pool-1',
     CLIENT_ID: 'client-1',
     CLIENT_NAME: 'test-client-1',
-    HONEYCOMB_KEY: 'honey-1',
     ROLE_ARN: 'arn:aws:iam::123456789012:role/test-role-1',
     OUTPUTS_BUCKET_NAME: 'test-outputs-bucket-1',
     DATA_BUCKET: 'test-data-bucket-1',
@@ -41,7 +40,6 @@ describe('ConfigSetup', () => {
     Q_RETRIEVER_ID: 'retriever-2',
     API_ENDPOINT: 'https://api2.example.com',
     CLIENT_NAME: 'test-client-2',
-    HONEYCOMB_KEY: 'honey-2',
     ROLE_ARN: 'arn:aws:iam::123456789012:role/test-role-2',
     OUTPUTS_BUCKET_NAME: 'test-outputs-bucket-2',
     DATA_BUCKET: 'test-data-bucket-2',
@@ -260,7 +258,6 @@ describe('ConfigSetup', () => {
       mockSessionStorage.USER_POOL_ID = 'pool-1';
       mockSessionStorage.CLIENT_ID = 'client-1';
       mockSessionStorage.CLIENT_NAME = 'test-client-1';
-      mockSessionStorage.HONEYCOMB_KEY = 'honey-1';
       mockSessionStorage.OUTPUTS_BUCKET_NAME = 'test-outputs-bucket-1';
       mockSessionStorage.DATA_BUCKET = 'test-data-bucket-1';
       mockSessionStorage.PROVISION_Q_RESOURCES = 'true';

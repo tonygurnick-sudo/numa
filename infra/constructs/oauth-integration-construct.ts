@@ -2,7 +2,7 @@ import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group
 import { Construct } from 'constructs';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 import { NumaLogGroup } from './numa-log-group';
-import { NumaLambda, OTelConfig } from './numa-lambda';
+import { NumaLambda } from './numa-lambda';
 
 // ─── OAuth Integration Construct ────────────────────────────────────────────────
 // Creates OAuth cloud storage integration infrastructure: 2 API Lambdas
@@ -27,8 +27,6 @@ export interface OAuthIntegrationConstructProps extends ApiGatewayLambdaCollecti
   frontendBaseUrl: string;
   /** OAuth provider configurations keyed by provider name */
   oauthProviders: Record<string, OAuthProviderConfig>;
-  /** OpenTelemetry configuration */
-  otelConfig?: OTelConfig;
   /** Data connectors DynamoDB table name (for Synergy credential resolution) */
   dataConnectorsTableName?: string;
   /** Data connectors DynamoDB table ARN (for IAM permissions) */
@@ -202,7 +200,6 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
       timeout: 120,
       logGroup: this.logGroup,
       resourceNameSuffix: '_oauth_workspace_tools',
-      otelConfig: props.otelConfig,
       environment: {
         ...sharedEnv,
         // Data connectors table for Synergy credential resolution

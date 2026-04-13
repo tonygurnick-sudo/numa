@@ -50,7 +50,6 @@ import { z } from 'zod';
 import { KnowledgeBase } from '../constructs/knowledge-base-construct';
 import { S3VectorsKnowledgeBase } from '../constructs/s3-vectors-knowledge-base-construct';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
-import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parameter';
 import { NumaLambda } from '../constructs/numa-lambda';
 import { OAuthIntegrationConstruct } from '../constructs/oauth-integration-construct';
 import { OpsConstruct } from '../constructs/ops-construct';
@@ -150,25 +149,6 @@ export class NumaClientStack extends TerraformStack {
       alias: 'certificate-provider',
       defaultTags: defaultProvider.defaultTags,
     });
-    const parameterLookupProvider = new AwsProvider(this, 'parameter-lookup-provider', {
-      region: 'us-east-1',
-      assumeRole: [
-        {
-          roleArn: deployerRole,
-        },
-      ],
-      alias: 'parameter-lookup-provider',
-      defaultTags: defaultProvider.defaultTags,
-    });
-    const honeycombFrontendKey = new DataAwsSsmParameter(this, 'honeycomb-frontend-key', {
-      provider: parameterLookupProvider,
-      name: '/honeycomb/frontend-key',
-    }).value;
-    const honeycombBackendKey = new DataAwsSsmParameter(this, 'honeycomb-backend-key', {
-      provider: parameterLookupProvider,
-      name: '/honeycomb/backend-key',
-    }).value;
-
     // AgentCore provider - needed when client region doesn't support Bedrock AgentCore
     // (e.g., Jakarta ap-southeast-3 uses Sydney ap-southeast-2 for AgentCore)
     const agentCoreRegion = clientConfig.agentCoreRegion ?? clientConfig.region;
@@ -655,11 +635,6 @@ export class NumaClientStack extends TerraformStack {
         userPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
-        otelConfig: {
-          otelConfigPath: core.otelConfigPath,
-          honeycombIngestKey: honeycombBackendKey,
-          region: clientConfig.region,
-        },
       });
     }
 
@@ -671,11 +646,6 @@ export class NumaClientStack extends TerraformStack {
         clientName: props.clientName,
         dataBucketName: core.dataBucket.bucket.bucket,
         dataBucketArn: core.dataBucket.bucket.arn,
-        otelConfig: {
-          otelConfigPath: core.otelConfigPath,
-          honeycombIngestKey: honeycombBackendKey,
-          region: clientConfig.region,
-        },
       });
     }
 
@@ -688,11 +658,6 @@ export class NumaClientStack extends TerraformStack {
         region: clientConfig.region,
         vaultAuditLogTableName: core.vaultAuditLogTable.name,
         vaultAuditLogTableArn: core.vaultAuditLogTable.arn,
-        otelConfig: {
-          otelConfigPath: core.otelConfigPath,
-          honeycombIngestKey: honeycombBackendKey,
-          region: clientConfig.region,
-        },
       });
     }
 
@@ -715,11 +680,6 @@ export class NumaClientStack extends TerraformStack {
         auditAutomationTableName: core.auditAutomationTable.name,
         auditAutomationTableArn: core.auditAutomationTable.arn,
         deployerRoleArn: deployerRole,
-        otelConfig: {
-          otelConfigPath: core.otelConfigPath,
-          honeycombIngestKey: honeycombBackendKey,
-          region: clientConfig.region,
-        },
       });
     }
 
@@ -733,11 +693,6 @@ export class NumaClientStack extends TerraformStack {
       region: clientConfig.region,
       frontendBaseUrl: `https://${domainName}`,
       oauthProviders: clientConfig.oauthProviders ?? {},
-      otelConfig: {
-        otelConfigPath: core.otelConfigPath,
-        honeycombIngestKey: honeycombBackendKey,
-        region: clientConfig.region,
-      },
       // Data connectors table (for Synergy credential resolution)
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsTableArn: core.dataConnectorsTable.arn,
@@ -800,11 +755,6 @@ export class NumaClientStack extends TerraformStack {
         outputsBucket: core.outputsBucket.bucket,
         region: clientConfig.region,
         sharedExtractContentLambdaArn: coreApis.extractContentLambda.arn,
-        otelConfig: {
-          otelConfigPath: core.otelConfigPath,
-          honeycombIngestKey: honeycombBackendKey,
-          region: clientConfig.region,
-        },
       });
     });
     const folderPath = path.join(import.meta.dirname, '..', 'build', 'numa-frontend');
@@ -866,7 +816,6 @@ export class NumaClientStack extends TerraformStack {
         BRANDING_ASSETS_PREFIX: core.brandingAssetsPrefix,
         CLIENT_NAME: props.clientName,
         OUTPUTS_BUCKET_NAME: core.outputsBucket.bucket.bucket,
-        HONEYCOMB_KEY: honeycombFrontendKey, // We're going to send data directly to honeycomb for now. Move to a collector later.
         DATA_BUCKET: core.dataBucket.bucket.bucket,
         PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? false,
         PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'bedrock',

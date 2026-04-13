@@ -5,7 +5,7 @@ import { DataAwsIamPolicyDocumentStatement } from '@cdktf/provider-aws/lib/data-
 import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { Construct } from 'constructs';
-import { NumaLambda, OTelConfig } from './numa-lambda';
+import { NumaLambda } from './numa-lambda';
 
 export abstract class ApiGatewayLambdaCollection extends Construct {
   private props: ApiGatewayLambdaCollectionProps;
@@ -53,7 +53,6 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       logGroup: this.logGroup,
       memorySize: props.memorySize,
       ephemeralStorageMb: props.ephemeralStorageMb,
-      otelConfig: props.disableOtel ? undefined : this.props.otelConfig,
       resourceNameSuffix: (this.props.resourceNameInfix ?? '') + '_' + name,
       systemLogLevel: props.systemLogLevel,
       timeout: props.timeout || 29, // API Gateway will only wait 30 seconds. Let's try to come in under that
@@ -108,8 +107,6 @@ export interface AddLambdaFunctionProps {
   additionalPolicyStatements?: DataAwsIamPolicyDocumentStatement[];
   /** Optional additional Lambda Layer ARNs to attach */
   additionalLayers?: string[];
-  /** Disable OpenTelemetry layers for this Lambda */
-  disableOtel?: boolean;
   environment?: Record<string, string>;
   handler?: string;
   lambdaDirectory: string;
@@ -128,6 +125,5 @@ export interface ApiGatewayLambdaCollectionProps {
   apiGatewayId: string;
   bedrockAccount?: string;
   clientName: string;
-  otelConfig?: OTelConfig;
   resourceNameInfix?: string;
 }

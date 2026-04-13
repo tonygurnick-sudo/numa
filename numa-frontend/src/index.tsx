@@ -2,7 +2,6 @@ import { StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { I18nextProvider } from 'react-i18next';
 import App from './App.jsx';
-import installOpenTelemetry from './otel-config.jsx';
 import i18n from './i18n';
 
 import { fetchConfigAddtoSession } from './Components/ConfigSetup';
@@ -14,11 +13,6 @@ import { startVersionChecker } from './utils/versionChecker';
 fetchConfigAddtoSession().catch((error) => {
   console.error('Failed to initialize config:', error);
 });
-
-// Only install OpenTelemetry if not running on localhost
-if (!window.location.hostname.includes('localhost')) {
-  installOpenTelemetry(sessionStorage.getItem('HONEYCOMB_KEY'));
-}
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

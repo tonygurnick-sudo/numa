@@ -8,8 +8,6 @@ import { DynamodbResourcePolicy } from '@cdktf/provider-aws/lib/dynamodb-resourc
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { Route53Zone } from '@cdktf/provider-aws/lib/route53-zone';
 import { TerraformOutput } from 'cdktf';
-import { Honeycomb } from '../constructs/honeycomb-construct';
-import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { CustomerSuccessPortalConstruct } from '../constructs/customer-success-portal-construct';
 import { PortalDeploymentsConstruct } from '../constructs/portal-deployments-construct';
 import { PortalNextgenBrokerConstruct } from '../constructs/portal-nextgen-broker-construct';
@@ -140,21 +138,6 @@ export class QAppsDeployerStack extends ArcanumStack {
 
     new TerraformOutput(this, 'email-sender-function-name', {
       value: emailSender.functionName,
-    });
-
-    const honeycomb = new Honeycomb(this, 'honeycomb', {
-      name: 'numa-' + props.environmentName,
-    });
-
-    new SsmParameter(this, 'frontend-key', {
-      name: '/honeycomb/frontend-key',
-      type: 'SecureString',
-      value: honeycomb.frontendKey,
-    });
-    new SsmParameter(this, 'backend-key', {
-      name: '/honeycomb/backend-key',
-      type: 'SecureString',
-      value: honeycomb.backendKey,
     });
 
     new TerraformOutput(this, 'client-config-table-arn', {

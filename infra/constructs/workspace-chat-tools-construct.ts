@@ -1,7 +1,7 @@
 import { Construct } from 'constructs';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
-import { NumaLambda, OTelConfig } from './numa-lambda';
+import { NumaLambda } from './numa-lambda';
 
 /**
  * Configuration for the workspace chat tools Lambda construct.
@@ -21,8 +21,6 @@ export interface WorkspaceChatToolsConstructProps {
   qApplicationId?: string;
   /** Q Business Retriever ID (required for q provider) */
   qRetrieverId?: string;
-  /** Optional OpenTelemetry configuration for observability */
-  otelConfig?: OTelConfig;
   /** Data bucket ARN for KB file downloads/uploads */
   dataBucketArn?: string;
   /** Data bucket name for KB file downloads/uploads */
@@ -343,7 +341,6 @@ export class WorkspaceChatToolsConstruct extends Construct {
       ephemeralStorageMb: 4096,
       logGroup: props.logGroup,
       resourceNameSuffix: '_workspace_chat_tools',
-      otelConfig: props.otelConfig,
       additionalLayers: props.ffmpegLayerArn ? [props.ffmpegLayerArn] : [],
       environment: {
         CLIENT_NAME: props.clientName,
