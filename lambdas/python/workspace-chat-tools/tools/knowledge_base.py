@@ -7,6 +7,7 @@ Provides all KB operations:
 - download: Download files from KB storage
 - list: List files in a KB
 - download_folder: Download folder as zip
+- delete: Delete files from knowledge bases
 
 Security:
 - All operations validate kb_id against allowed_kbs list (fail-closed)
@@ -1071,6 +1072,143 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
             exc_info=True,
         )
         raise ValueError(f"Failed to upload file: {e}")
+
+
+# =============================================================================
+# DELETE OPERATIONS
+# =============================================================================
+
+
+def handle_delete_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Delete a file from knowledge base S3 storage.
+
+    Parameters:
+        filename (str): Relative path of the file within KB (e.g. "reports/doc.pdf")
+        kb_id (str): Knowledge base ID (default: "company")
+        __allowed_kbs (list): Allowed KB IDs for security
+        __user_sub (str): User's Cognito sub for permission check
+
+    Returns:
+        Dict with message, deleted_key, kb_id, and filename
+    """
+    # HITL approval gate
+    request_id = params.get("request_id")
+    if request_id and not params.get("auto_approved", False):
+        user_sub = params.get("__user_sub", "")
+        approval_id = create_approval_request(
+            user_sub=user_sub,
+            action_key="numa_knowledgeBases_delete",
+            description=f"Delete from KB: {params.get('filename', 'unknown')}",
+            props_preview={
+                "filename": params.get("filename", ""),
+                "kb_id": params.get("kb_id", "company"),
+            },
+            approval_id=request_id,
+        )
+        decision, deny_reason = poll_approval(approval_id)
+        if decision == "denied":
+            msg = "The user denied this action."
+            if deny_reason:
+                msg += f' The user said: "{deny_reason}"'
+            return {"status": "denied", "message": msg, "deny_reason": deny_reason}
+        if decision == "timeout":
+            return {"status": "timeout", "message": "Approval timed out"}
+
+    filename = params.get("filename")
+    if not filename or not isinstance(filename, str) or not filename.strip():
+        raise ValueError("Missing required parameter: filename")
+
+    kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
+    allowed_kbs = params.get("__allowed_kbs", [])
+    user_sub = _require_user_sub(params, "delete_kb_file")
+
+    if not DATA_BUCKET_NAME:
+        raise ValueError("DATA_BUCKET_NAME not configured")
+
+    # Security: Validate KB access (fail-closed)
+    if not allowed_kbs:
+        raise ValueError("No knowledge bases are enabled for this conversation")
+
+    if kb_id not in allowed_kbs:
+        logger.warning(
+            "KB access denied for delete",
+            kb_id=kb_id,
+            allowed_kbs=allowed_kbs,
+        )
+        raise ValueError(
+            f"Access denied: KB '{kb_id}' is not enabled. Enabled KBs: {allowed_kbs}"
+        )
+
+    # Server-side permission check (must have EDITOR access to delete)
+    if not verify_kb_write_access(user_sub, kb_id):
+        logger.warning(
+            "KB write access denied for delete",
+            user_sub=user_sub[:8] + "...",
+            kb_id=kb_id,
+        )
+        raise ValueError(
+            f"Access denied: You don't have permission to delete from this knowledge base '{kb_id}'"
+        )
+
+    # Sanitize filename for safe S3 key usage
+    safe_filename = filename.replace("\\", "/").replace("..", "")
+    safe_filename = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", safe_filename)
+    safe_filename = re.sub(r"/+", "/", safe_filename).strip("/")
+    if not safe_filename:
+        raise ValueError("Invalid filename after sanitization")
+
+    # Build S3 key
+    prefix_part = _get_s3_kb_id(kb_id)
+    s3_key = f"documents/{prefix_part}/{safe_filename}"
+
+    s3_client = prm_client("s3", region=REGION)
+    try:
+        # Verify the file exists before deleting
+        try:
+            s3_client.head_object(Bucket=DATA_BUCKET_NAME, Key=s3_key)
+        except s3_client.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] == "404":
+                raise ValueError(f"File not found: '{safe_filename}' in KB '{kb_id}'")
+            raise
+
+        # Delete the file
+        s3_client.delete_object(Bucket=DATA_BUCKET_NAME, Key=s3_key)
+
+        # Delete the metadata sidecar if it exists
+        metadata_key = f"{s3_key}.metadata.json"
+        try:
+            s3_client.delete_object(Bucket=DATA_BUCKET_NAME, Key=metadata_key)
+        except Exception:
+            pass  # Sidecar may not exist; not an error
+
+        logger.info(
+            "File deleted from KB",
+            filename=safe_filename,
+            kb_id=kb_id,
+            s3_key=s3_key,
+            user_sub=user_sub[:8] + "...",
+        )
+
+        return {
+            "message": f"File '{safe_filename}' deleted from KB '{kb_id}'",
+            "deleted_key": s3_key,
+            "kb_id": kb_id,
+            "filename": safe_filename,
+            "note": "The file has been removed. KB index will update within ~30 minutes.",
+        }
+
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to delete file from KB",
+            error=str(e),
+            filename=safe_filename,
+            kb_id=kb_id,
+            exc_info=True,
+        )
+        raise ValueError(f"Failed to delete file: {e}")
 
 
 # =============================================================================

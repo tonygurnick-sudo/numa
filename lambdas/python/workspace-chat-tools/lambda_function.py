@@ -45,6 +45,7 @@ from tools import (
     handle_convert_document,
     handle_convert_preview,
     handle_create_agent,
+    handle_delete_kb_file,
     handle_duplicate_agent,
     handle_extract_content,
     handle_get_agent,
@@ -118,6 +119,7 @@ logger = structlog.get_logger()
 # Tool handlers registry
 TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "add_to_kb": handle_add_to_kb,
+    "delete_kb_file": handle_delete_kb_file,
     "convert_document": handle_convert_document,
     "convert_preview": handle_convert_preview,
     "create_agent": handle_create_agent,
