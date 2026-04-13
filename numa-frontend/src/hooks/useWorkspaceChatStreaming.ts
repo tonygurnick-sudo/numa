@@ -99,6 +99,8 @@ type UseWorkspaceChatStreamingOptions = {
   numaPost?: (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
   /** Optional callback to send a browser notification when chat completes while user is away */
   onNotifyCompletion?: (conversationName?: string) => void;
+  /** Async ID token getter from AuthProvider -- ensures fresh tokens for API calls */
+  getIdToken?: () => Promise<string | null>;
 };
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
@@ -128,6 +130,7 @@ export function useWorkspaceChatStreaming({
   refreshSessionFiles,
   numaPost,
   onNotifyCompletion,
+  getIdToken,
 }: UseWorkspaceChatStreamingOptions) {
   const { t } = useTranslation('chat');
 
@@ -172,12 +175,12 @@ export function useWorkspaceChatStreaming({
 
     setIsStopping(true);
     try {
-      await stopWorkspaceChatAgent(conversationId, requestId);
+      await stopWorkspaceChatAgent(conversationId, requestId, getIdToken);
     } catch (err) {
       console.error('[WorkspaceChat] Stop request failed:', err);
       setIsStopping(false);
     }
-  }, []);
+  }, [getIdToken]);
 
   const streamChat = useCallback(
     async (config: StreamConfig) => {
@@ -746,13 +749,17 @@ export function useWorkspaceChatStreaming({
                 { role: 'system', content: t('chat:systemMessages.agentFinishing'), status: 'agentFinishing' },
               ]);
 
-              checkConversationStatus(disconnectedConvId)
+              checkConversationStatus(disconnectedConvId, getIdToken)
                 .then(async (statusData) => {
                   if (statusData.status === 'running' && statusData.active) {
                     // Agent is still running — poll until it finishes, then reload trace
-                    await pollConversationUntilComplete(disconnectedConvId, { intervalMs: 3000, timeoutMs: 600_000 });
+                    await pollConversationUntilComplete(
+                      disconnectedConvId,
+                      { intervalMs: 3000, timeoutMs: 600_000 },
+                      getIdToken
+                    );
                     // Agent done — reload trace from S3
-                    const updatedTrace = await getWorkspaceChatRawTrace(disconnectedConvId);
+                    const updatedTrace = await getWorkspaceChatRawTrace(disconnectedConvId, getIdToken);
                     const updatedMessages = parseRawTraceToMessages(updatedTrace);
                     setMessages(updatedMessages as Message[]);
                     refreshSidebar();
@@ -760,7 +767,7 @@ export function useWorkspaceChatStreaming({
                   } else {
                     // Agent already finished — reload trace (full response should be in S3)
                     try {
-                      const updatedTrace = await getWorkspaceChatRawTrace(disconnectedConvId);
+                      const updatedTrace = await getWorkspaceChatRawTrace(disconnectedConvId, getIdToken);
                       const updatedMessages = parseRawTraceToMessages(updatedTrace);
                       setMessages(updatedMessages as Message[]);
                       refreshSidebar();
@@ -870,7 +877,7 @@ export function useWorkspaceChatStreaming({
             }
 
             if (hasToolCards) {
-              getWorkspaceChatRawTrace(conversationId)
+              getWorkspaceChatRawTrace(conversationId, getIdToken)
                 .then((traceContent) => {
                   // Extract tool results from user events in the trace
                   const toolResults = new Map<string, { content: unknown; isError: boolean }>();
@@ -1019,7 +1026,8 @@ export function useWorkspaceChatStreaming({
             setRetryAttempt(attempt);
             console.warn(`[WorkspaceChat] Retry attempt ${attempt}/${maxAttempts}`);
           },
-        } satisfies StreamRetryConfig
+        } satisfies StreamRetryConfig,
+        getIdToken
       );
 
       workspaceChatAbortRef.current = abortWorkspaceChat;
@@ -1041,6 +1049,7 @@ export function useWorkspaceChatStreaming({
       getCredentials,
       refreshSessionFiles,
       numaPost,
+      getIdToken,
       t,
     ]
   );

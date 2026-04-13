@@ -299,7 +299,8 @@ const NumaWorkspaceChatAgents = () => {
 
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
-  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getCredentials, lambdaClient } = useAuth();
+  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getIdToken, getCredentials, lambdaClient } =
+    useAuth();
   // Extract user info from token early (used by hooks/deps below)
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const sub = idToken.sub;
@@ -1449,6 +1450,7 @@ const NumaWorkspaceChatAgents = () => {
     refreshSessionFiles: settingsPanel.refreshFiles,
     numaPost,
     onNotifyCompletion: notifyCompletion,
+    getIdToken,
   });
 
   // Handle renaming a conversation from NewChat view
@@ -2197,7 +2199,7 @@ const NumaWorkspaceChatAgents = () => {
       // V2 workspace conversations: load from trace file
       if (isWorkspaceConversation) {
         try {
-          const rawTrace = await getWorkspaceChatRawTrace(selectedConversationId);
+          const rawTrace = await getWorkspaceChatRawTrace(selectedConversationId, getIdToken);
           if (isCancelled()) return;
           // Parse raw trace using same logic as live streaming
           const chatMessages = parseRawTraceToMessages(rawTrace);
@@ -2213,7 +2215,7 @@ const NumaWorkspaceChatAgents = () => {
           // Check if the agent is still actively running for this conversation.
           // This handles the case where the user refreshed or navigated away mid-stream.
           try {
-            const statusData = await checkConversationStatus(selectedConversationId);
+            const statusData = await checkConversationStatus(selectedConversationId, getIdToken);
             if (isCancelled()) return;
 
             if (statusData.status === 'running' && statusData.active) {
@@ -2230,15 +2232,19 @@ const NumaWorkspaceChatAgents = () => {
               ]);
 
               // Poll in the background until the agent finishes
-              pollConversationUntilComplete(selectedConversationId, {
-                intervalMs: 3000,
-                timeoutMs: 600_000,
-              })
+              pollConversationUntilComplete(
+                selectedConversationId,
+                {
+                  intervalMs: 3000,
+                  timeoutMs: 600_000,
+                },
+                getIdToken
+              )
                 .then(async () => {
                   if (isCancelled()) return;
                   // Agent finished -- reload the full trace
                   try {
-                    const updatedTrace = await getWorkspaceChatRawTrace(selectedConversationId);
+                    const updatedTrace = await getWorkspaceChatRawTrace(selectedConversationId, getIdToken);
                     if (isCancelled()) return;
                     const updatedMessages = parseRawTraceToMessages(updatedTrace);
                     setMessages(updatedMessages);

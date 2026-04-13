@@ -25,6 +25,9 @@ import type {
 } from '../types/workspaceChatTypes';
 import { withPRM } from '../utils/prmUtils';
 
+/** Async function that returns a fresh ID token, auto-refreshing if expired */
+export type GetIdToken = () => Promise<string | null>;
+
 /** Callback for receiving SDK events during streaming */
 export type OnWorkspaceChatEvent = (event: SDKEvent) => void;
 
@@ -132,10 +135,14 @@ function getApiUrl(): string {
 /**
  * Get auth headers for API requests.
  * AgentCore session routing is now handled by the proxy based on conversationId.
+ *
+ * When a getIdToken callback is provided (from AuthProvider), it checks token
+ * expiry and auto-refreshes before returning -- preventing 403s after laptop
+ * sleep or backgrounded tabs where the refresh timer was suspended.
  */
-function getAuthHeaders(): Record<string, string> {
+async function getAuthHeaders(getIdToken?: GetIdToken): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
-  const idToken = localStorage.getItem('idToken');
+  const idToken = getIdToken ? await getIdToken() : localStorage.getItem('idToken');
   if (idToken) {
     headers.Authorization = `Bearer ${idToken}`;
   }
@@ -200,13 +207,14 @@ async function streamWorkspaceChatAttempt(
   onEvent: OnWorkspaceChatEvent,
   onComplete: OnWorkspaceChatComplete,
   onError: OnWorkspaceChatError,
-  onSessionEvent?: OnSessionEvent
+  onSessionEvent?: OnSessionEvent,
+  getIdToken?: GetIdToken
 ): Promise<{ abort: () => void }> {
   const abortController = new AbortController();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...getAuthHeaders(),
+    ...(await getAuthHeaders(getIdToken)),
   };
 
   // AgentCore invocations payload with action='chat'
@@ -402,7 +410,8 @@ export async function streamWorkspaceChatAgent(
   onComplete: OnWorkspaceChatComplete,
   onError: OnWorkspaceChatError,
   onSessionEvent?: OnSessionEvent,
-  retryConfig?: StreamRetryConfig
+  retryConfig?: StreamRetryConfig,
+  getIdToken?: GetIdToken
 ): Promise<{ abort: () => void; requestId: string }> {
   const maxAttempts = retryConfig?.maxAttempts ?? DEFAULT_RETRY_CONFIG.maxAttempts;
   const baseDelayMs = retryConfig?.baseDelayMs ?? DEFAULT_RETRY_CONFIG.baseDelayMs;
@@ -438,7 +447,8 @@ export async function streamWorkspaceChatAgent(
           (err) => {
             reject(err);
           },
-          onSessionEvent
+          onSessionEvent,
+          getIdToken
         ).then(({ abort: attemptAbort }) => {
           currentAbort = attemptAbort;
         });
@@ -455,6 +465,13 @@ export async function streamWorkspaceChatAgent(
       }
 
       const statusCode = extractStatusCode(error);
+
+      // Auth errors (401/403): refresh token and allow one retry
+      if ((statusCode === 401 || statusCode === 403) && getIdToken && attempt === 1) {
+        console.warn('[WorkspaceChat] Auth error, refreshing token and retrying once');
+        await getIdToken(); // Force token refresh
+        continue;
+      }
 
       // Don't retry non-retryable errors
       if (!isRetryableError(error, statusCode)) {
@@ -489,12 +506,16 @@ export async function streamWorkspaceChatAgent(
  *
  * Uses AgentCore /invocations with action='stop'.
  */
-export async function stopWorkspaceChatAgent(conversationId: string, requestId: string): Promise<void> {
+export async function stopWorkspaceChatAgent(
+  conversationId: string,
+  requestId: string,
+  getIdToken?: GetIdToken
+): Promise<void> {
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
+      ...(await getAuthHeaders(getIdToken)),
     },
     body: JSON.stringify({
       action: 'stop',
@@ -517,7 +538,8 @@ export async function approveToolAction(
   approvalId: string,
   decision: 'approved' | 'denied',
   conversationId: string,
-  reason?: string
+  reason?: string,
+  getIdToken?: GetIdToken
 ): Promise<void> {
   const body: Record<string, string> = {
     action: 'approve',
@@ -533,7 +555,7 @@ export async function approveToolAction(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
+      ...(await getAuthHeaders(getIdToken)),
     },
     body: JSON.stringify(body),
   });
@@ -551,10 +573,11 @@ export async function approveToolAction(
  * without triggering workspace sync or starting a session.
  */
 export async function getWorkspaceChatConversation(
-  conversationId: string
+  conversationId: string,
+  getIdToken?: GetIdToken
 ): Promise<WorkspaceChatConversationDetailResponse> {
   const res = await fetch(`${getApiUrl()}/history/${encodeURIComponent(conversationId)}`, {
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(getIdToken),
   });
 
   if (!res.ok) {
@@ -572,13 +595,13 @@ export async function getWorkspaceChatConversation(
  *
  * Includes a 30-second timeout to prevent infinite loading if AgentCore is slow or hung.
  */
-export async function getWorkspaceChatRawTrace(conversationId: string): Promise<string> {
+export async function getWorkspaceChatRawTrace(conversationId: string, getIdToken?: GetIdToken): Promise<string> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
   try {
     const res = await fetch(`${getApiUrl()}/trace/${encodeURIComponent(conversationId)}`, {
-      headers: getAuthHeaders(),
+      headers: await getAuthHeaders(getIdToken),
       signal: controller.signal,
     });
 
@@ -624,7 +647,8 @@ function normalizeFilename(name: string): string {
 export async function uploadWorkspaceChatFile(
   file: File,
   conversationId: string,
-  relativePath?: string
+  relativePath?: string,
+  getIdToken?: GetIdToken
 ): Promise<WorkspaceChatUploadResponse> {
   // Convert file to base64
   const arrayBuffer = await file.arrayBuffer();
@@ -632,7 +656,7 @@ export async function uploadWorkspaceChatFile(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...getAuthHeaders(),
+    ...(await getAuthHeaders(getIdToken)),
   };
 
   // Use relativePath if provided (for folder uploads), otherwise just filename
@@ -669,13 +693,14 @@ export async function uploadWorkspaceChatFile(
  */
 export async function deleteWorkspaceChatUploads(
   conversationId: string,
-  paths: string[]
+  paths: string[],
+  getIdToken?: GetIdToken
 ): Promise<{ deleted: string[]; errors: Array<{ path: string; error: string }> }> {
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
+      ...(await getAuthHeaders(getIdToken)),
     },
     body: JSON.stringify({
       action: 'delete_uploads',
@@ -698,9 +723,9 @@ export async function deleteWorkspaceChatUploads(
  * This is a lightweight GET endpoint that reads directly from S3
  * without triggering workspace sync or starting a session.
  */
-export async function listWorkspaceChatFiles(): Promise<WorkspaceChatFilesResponse> {
+export async function listWorkspaceChatFiles(getIdToken?: GetIdToken): Promise<WorkspaceChatFilesResponse> {
   const res = await fetch(`${getApiUrl()}/files`, {
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(getIdToken),
   });
 
   if (!res.ok) {
@@ -716,9 +741,12 @@ export async function listWorkspaceChatFiles(): Promise<WorkspaceChatFilesRespon
  * This endpoint lists files from the conversation's uploads/ and outputs/
  * directories in S3, used for the settings panel file listing.
  */
-export async function listConversationFiles(conversationId: string): Promise<WorkspaceChatFilesResponse> {
+export async function listConversationFiles(
+  conversationId: string,
+  getIdToken?: GetIdToken
+): Promise<WorkspaceChatFilesResponse> {
   const res = await fetch(`${getApiUrl()}/files/${encodeURIComponent(conversationId)}`, {
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(getIdToken),
   });
 
   if (!res.ok) {
@@ -733,12 +761,15 @@ export async function listConversationFiles(conversationId: string): Promise<Wor
  *
  * Uses AgentCore /invocations with action='cleanup_session'.
  */
-export async function cleanupConversationSession(conversationId: string): Promise<WorkspaceChatCleanupResponse> {
+export async function cleanupConversationSession(
+  conversationId: string,
+  getIdToken?: GetIdToken
+): Promise<WorkspaceChatCleanupResponse> {
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
+      ...(await getAuthHeaders(getIdToken)),
     },
     body: JSON.stringify({
       action: 'cleanup_session',
@@ -758,10 +789,10 @@ export async function cleanupConversationSession(conversationId: string): Promis
  *
  * Uses AgentCore /ping endpoint.
  */
-export async function isWorkspaceChatAgentAvailable(): Promise<boolean> {
+export async function isWorkspaceChatAgentAvailable(getIdToken?: GetIdToken): Promise<boolean> {
   try {
     const res = await fetch(`${getApiUrl()}/ping`, {
-      headers: getAuthHeaders(),
+      headers: await getAuthHeaders(getIdToken),
     });
     return res.ok;
   } catch {
@@ -778,13 +809,14 @@ async function notifyUploadComplete(
   conversationId: string,
   filename: string,
   s3Key: string,
-  size: number
+  size: number,
+  getIdToken?: GetIdToken
 ): Promise<WorkspaceChatUploadResponse> {
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
+      ...(await getAuthHeaders(getIdToken)),
     },
     body: JSON.stringify({
       action: 'upload_complete',
@@ -822,7 +854,8 @@ export async function uploadWorkspaceChatFileDirect(
   conversationId: string,
   relativePath: string | undefined,
   onProgress: (progress: number) => void,
-  getCredentials: () => Promise<AwsCredentialIdentity>
+  getCredentials: () => Promise<AwsCredentialIdentity>,
+  getIdToken?: GetIdToken
 ): Promise<WorkspaceChatUploadResponse> {
   // Get config from session storage
   const region = sessionStorage.getItem('REGION');
@@ -869,7 +902,7 @@ export async function uploadWorkspaceChatFileDirect(
   });
 
   // Notify backend that upload is complete (backend syncs from S3 to EFS)
-  return notifyUploadComplete(conversationId, filename, s3Key, file.size);
+  return notifyUploadComplete(conversationId, filename, s3Key, file.size, getIdToken);
 }
 
 /**
@@ -954,7 +987,8 @@ export async function saveInlineDocumentToS3(
  * document-summariser) rather than streamed chat output.
  */
 export async function invokeWorkspaceAgentSync(
-  request: WorkspaceChatRequest
+  request: WorkspaceChatRequest,
+  getIdToken?: GetIdToken
 ): Promise<import('../types/workspaceChatTypes').WorkspaceSyncResponse> {
   const requestId =
     request.requestId ||
@@ -995,7 +1029,7 @@ export async function invokeWorkspaceAgentSync(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
+      ...(await getAuthHeaders(getIdToken)),
     },
     body: JSON.stringify(invocationPayload),
   });
@@ -1022,13 +1056,14 @@ export async function invokeWorkspaceAgentSync(
 export async function pollWorkspaceAgentRun(
   runId: string,
   intervalMs = 2000,
-  timeoutMs = 300_000
+  timeoutMs = 300_000,
+  getIdToken?: GetIdToken
 ): Promise<import('../types/workspaceChatTypes').WorkspaceSyncResponse> {
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeoutMs) {
     const res = await fetch(`${getApiUrl()}/runs/${encodeURIComponent(runId)}/status`, {
-      headers: getAuthHeaders(),
+      headers: await getAuthHeaders(getIdToken),
     });
 
     if (!res.ok) {
@@ -1052,10 +1087,11 @@ export async function pollWorkspaceAgentRun(
  * Returns the current status and whether an agent is actively processing.
  */
 export async function checkConversationStatus(
-  conversationId: string
+  conversationId: string,
+  getIdToken?: GetIdToken
 ): Promise<{ status: string; active?: boolean; run_id?: string }> {
   const res = await fetch(`${getApiUrl()}/runs/${encodeURIComponent(conversationId)}/status`, {
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(getIdToken),
   });
   if (!res.ok) {
     throw new Error(`Status check failed (${res.status})`);
@@ -1075,7 +1111,8 @@ export async function pollConversationUntilComplete(
     timeoutMs?: number;
     signal?: AbortSignal;
     onPoll?: (data: { status: string; active?: boolean }) => void;
-  }
+  },
+  getIdToken?: GetIdToken
 ): Promise<{ status: string; active?: boolean }> {
   const intervalMs = opts?.intervalMs ?? 3000;
   const timeoutMs = opts?.timeoutMs ?? 600_000; // 10 min default
@@ -1086,7 +1123,7 @@ export async function pollConversationUntilComplete(
       throw new DOMException('Polling aborted', 'AbortError');
     }
 
-    const data = await checkConversationStatus(conversationId);
+    const data = await checkConversationStatus(conversationId, getIdToken);
     opts?.onPoll?.(data);
 
     // Agent is done: not running, or running without an active in-memory run
@@ -1106,11 +1143,11 @@ export async function pollConversationUntilComplete(
  * Returns metadata about all registered agent types (type_id,
  * display_name, response_mode).
  */
-export async function listWorkspaceAgentTypes(): Promise<
-  import('../types/workspaceChatTypes').WorkspaceAgentTypeInfo[]
-> {
+export async function listWorkspaceAgentTypes(
+  getIdToken?: GetIdToken
+): Promise<import('../types/workspaceChatTypes').WorkspaceAgentTypeInfo[]> {
   const res = await fetch(`${getApiUrl()}/types`, {
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(getIdToken),
   });
 
   if (!res.ok) {
@@ -1130,13 +1167,14 @@ export async function listWorkspaceAgentTypes(): Promise<
 export async function convertDocxPreview(
   bucket: string,
   key: string,
-  format: string = 'pdf'
+  format: string = 'pdf',
+  getIdToken?: GetIdToken
 ): Promise<{ url: string; filename: string; size: number }> {
   const res = await fetch(`${getApiUrl()}/convert-preview`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
+      ...(await getAuthHeaders(getIdToken)),
     },
     body: JSON.stringify({ bucket, key, format }),
   });
