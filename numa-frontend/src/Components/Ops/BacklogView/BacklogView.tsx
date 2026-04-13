@@ -20,7 +20,7 @@ import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import { CreateTicketModal } from '../Modals/CreateTicketModal';
-import { StartWorkUnitModal, WorkUnitSuccessModal } from '../Modals/WorkUnitModals';
+import { CreateWorkUnitModal, StartWorkUnitModal, WorkUnitSuccessModal } from '../Modals/WorkUnitModals';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { StaffAvatar } from '../Shared/StaffAvatar';
 import type {
@@ -537,7 +537,8 @@ const BacklogView = () => {
     return map;
   }, [config?.staff]);
 
-  // ── Start Sprint modal state ────────────────────────────────────
+  // ── Sprint modal state ──────────────────────────────────────────
+  const [showCreateSprint, setShowCreateSprint] = useState(false);
   const [showStartSprint, setShowStartSprint] = useState(false);
   const [startSprintId, setStartSprintId] = useState<string | null>(null);
   const [showSprintSuccess, setShowSprintSuccess] = useState(false);
@@ -545,6 +546,11 @@ const BacklogView = () => {
 
   const hasActiveWu = useMemo(() => workUnits.some((wu) => wu.status === 'active'), [workUnits]);
   const teamId = teamData?.team?.id ?? '';
+  const workUnitsEnabled = Boolean(teamData?.team?.workUnitSeries);
+  const defaultSprintName = useMemo(() => {
+    const label = teamData?.team?.workUnitSeries?.label ?? 'Sprint';
+    return `${label} ${workUnits.length + 1}`;
+  }, [teamData?.team?.workUnitSeries?.label, workUnits.length]);
 
   // ── Delete Sprint handler ────────────────────────────────────
   const [deletingSprint, setDeletingSprint] = useState(false);
@@ -1027,6 +1033,13 @@ const BacklogView = () => {
             </button>
           ))}
 
+          {workUnitsEnabled && (
+            <button type="button" className="ops-pill" style={{ gap: 4 }} onClick={() => setShowCreateSprint(true)}>
+              <i className="bi bi-plus" />
+              {t('sprints.new')}
+            </button>
+          )}
+
           <div className="backlog-filter-divider" />
 
           <div
@@ -1298,6 +1311,18 @@ const BacklogView = () => {
       </div>
 
       {/* ── Modals ──────────────────────────────────────────────── */}
+      {workUnitsEnabled && (
+        <CreateWorkUnitModal
+          show={showCreateSprint}
+          teamId={teamId}
+          defaultName={defaultSprintName}
+          onHide={() => setShowCreateSprint(false)}
+          onCreated={async () => {
+            setShowCreateSprint(false);
+            await refreshWorkUnits();
+          }}
+        />
+      )}
       <TicketDetailModal
         show={showDetail}
         ticketId={detailTicketId}
