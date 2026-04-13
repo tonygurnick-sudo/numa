@@ -1833,14 +1833,34 @@
   accent-color: var(--brand-primary, #8e50a7);
 }
 
-/* Metadata (project, customer) */
-.backlog-row-meta {
-  font-size: 0.7rem;
-  color: var(--ops-text-muted, #9ca3af);
-  max-width: 100px;
+/* Project / Customer tags in backlog rows */
+.backlog-row-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.backlog-row-tag i {
+  font-size: 0.62rem;
+  flex-shrink: 0;
+}
+
+.backlog-row-tag--project {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.backlog-row-tag--customer {
+  background: #faf5ff;
+  color: #7c3aed;
 }
 
 /* Clickable status pill */

@@ -176,12 +176,14 @@ function DraggableRow({
       <span className="ticket-id flex-shrink-0">{ticket.displayId}</span>
       <span className="text-truncate flex-grow-1">{ticket.title}</span>
       {projectName && (
-        <span className="backlog-row-meta flex-shrink-0" title={projectName}>
+        <span className="backlog-row-tag backlog-row-tag--project flex-shrink-0" title={projectName}>
+          <i className="bi bi-folder" />
           {projectName}
         </span>
       )}
       {ticket.customerName && (
-        <span className="backlog-row-meta flex-shrink-0" title={ticket.customerName}>
+        <span className="backlog-row-tag backlog-row-tag--customer flex-shrink-0" title={ticket.customerName}>
+          <i className="bi bi-people" />
           {ticket.customerName}
         </span>
       )}

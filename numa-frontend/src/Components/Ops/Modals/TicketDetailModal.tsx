@@ -176,6 +176,7 @@ export function TicketDetailModal({
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loadingCrm, setLoadingCrm] = useState(false);
 
   // ── Ticket's own team data (zones/stages) for cross-team accuracy ──────
   const [ticketTeamData, setTicketTeamData] = useState<{ zones: WorkZone[]; stages: WorkStage[] } | null>(null);
@@ -281,6 +282,7 @@ export function TicketDetailModal({
     let cancelled = false;
 
     const loadCrmEntities = async () => {
+      setLoadingCrm(true);
       try {
         const [customersResponse, suppliersResponse] = await Promise.all([
           OpsService.listCustomers(numaGet),
@@ -291,6 +293,8 @@ export function TicketDetailModal({
         setSuppliers(suppliersResponse);
       } catch (err) {
         console.error('[TicketDetailModal] Failed to load CRM entities', err);
+      } finally {
+        if (!cancelled) setLoadingCrm(false);
       }
     };
 
@@ -758,6 +762,7 @@ export function TicketDetailModal({
             <Form.Select
               size="sm"
               value={ticket.customerId ?? ''}
+              disabled={loadingCrm}
               onChange={(e) => {
                 const selected = customers.find((c) => c.id === e.target.value);
                 void handleUpdate({
@@ -767,12 +772,18 @@ export function TicketDetailModal({
               }}
               style={selectStyle}
             >
-              <option value="">{t('common.none')}</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.companyName}
-                </option>
-              ))}
+              {loadingCrm ? (
+                <option value="">{t('common.loading')}</option>
+              ) : (
+                <>
+                  <option value="">{t('common.none')}</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.companyName}
+                    </option>
+                  ))}
+                </>
+              )}
             </Form.Select>
           </div>
           <div>
@@ -780,6 +791,7 @@ export function TicketDetailModal({
             <Form.Select
               size="sm"
               value={ticket.supplierId ?? ''}
+              disabled={loadingCrm}
               onChange={(e) => {
                 const selected = suppliers.find((s) => s.id === e.target.value);
                 void handleUpdate({
@@ -789,12 +801,18 @@ export function TicketDetailModal({
               }}
               style={selectStyle}
             >
-              <option value="">{t('common.none')}</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.companyName}
-                </option>
-              ))}
+              {loadingCrm ? (
+                <option value="">{t('common.loading')}</option>
+              ) : (
+                <>
+                  <option value="">{t('common.none')}</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.companyName}
+                    </option>
+                  ))}
+                </>
+              )}
             </Form.Select>
           </div>
         </div>
