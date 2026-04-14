@@ -31,6 +31,7 @@ import { FilePreviewPanel } from '../Components/FilePreviewPanel';
 import { autoNameConversation } from '../utils/autoChatTitle';
 import { useChatInactivity } from '../hooks/useChatInactivity';
 import { useWorkspaceChatStreaming } from '../hooks/useWorkspaceChatStreaming';
+import { markProcessingStart, notifyCompletion } from '../hooks/useBrowserNotification';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useDrawerBackClose } from '../hooks/useDrawerBackClose';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
@@ -49,7 +50,11 @@ import {
 } from '../Services/ChatSettingsService';
 import { JumpToLatestButton } from '../Components/WorkspaceChat/JumpToLatestButton';
 // Workspace chat mode imports
-import { getWorkspaceChatRawTrace } from '../Services/workspaceChatAgentService';
+import {
+  getWorkspaceChatRawTrace,
+  checkConversationStatus,
+  pollConversationUntilComplete,
+} from '../Services/workspaceChatAgentService';
 import { parseRawTraceToMessages } from '../utils/workspaceChatEventHandlers';
 // Note: SDK event handling moved to useWorkspaceChatStreaming hook
 import { WorkspaceChatFileUpload } from '../Components/WorkspaceChat/WorkspaceChatFileUpload';
@@ -202,7 +207,7 @@ const NumaWorkspaceChatAgents = () => {
   const preselectHandledRef = useRef(false);
   const preselectActivatedRef = useRef(false);
   const preselectTimerRef = useRef<number | null>(null);
-  const autoNamingAttemptedRef = useRef<Set<string>>(new Set());
+  const autoNamingAttemptedRef = useRef<Map<string, number>>(new Map());
   const lastLoadedConversationRef = useRef<string | null>(null); // Prevents infinite reload loop
   const loadGenerationRef = useRef(0); // Incremented on new chat to cancel in-flight loads
   const conversationChatConfigSaveTimeoutRef = useRef<number | null>(null);
@@ -294,7 +299,8 @@ const NumaWorkspaceChatAgents = () => {
 
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
-  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getCredentials, lambdaClient } = useAuth();
+  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getIdToken, getCredentials, lambdaClient } =
+    useAuth();
   // Extract user info from token early (used by hooks/deps below)
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const sub = idToken.sub;
@@ -771,16 +777,19 @@ const NumaWorkspaceChatAgents = () => {
         console.warn('Failed to read agents cache:', err);
       }
 
-      // Fetch fresh data
+      // Fetch fresh data — load both owned and public (company) agents
       setPersonalAgentsLoading(true);
       try {
-        const ownedAgents = await listAgents(numaGet, { scope: 'owned' });
+        const [ownedAgents, publicAgents] = await Promise.all([
+          listAgents(numaGet, { scope: 'owned' }),
+          listAgents(numaGet, { scope: 'public' }),
+        ]);
 
         // Deduplicate: prefer user-scoped agents over workspace-scoped when both exist with same agentId
         // This happens when a personal agent is made public (creates both user and workspace copies)
         const agentMap = new Map<string, (typeof ownedAgents)[0]>();
 
-        for (const agent of ownedAgents) {
+        for (const agent of [...ownedAgents, ...publicAgents]) {
           const existing = agentMap.get(agent.agentId);
           // Prefer user scope over workspace scope to avoid duplicates
           if (!existing || (agent.scope === 'user' && existing.scope === 'workspace')) {
@@ -1311,11 +1320,13 @@ const NumaWorkspaceChatAgents = () => {
 
   // Show new chat view if:
   // 1. We're in a new-chat state with no messages (either suggestions loaded or handleNewChat was called), OR
-  // 2. Conversation was pre-minted via upload but user hasn't sent a message yet
+  // 2. Conversation was pre-minted via upload but user hasn't sent a message yet AND no agent is active
+  //    (agent sessions have a welcome message, so pre-mint shouldn't override the agent view)
   // Note: hasUserStartedNewChat covers the gap where handleNewChat() fired but
   // useChatInactivity hasn't yet activated suggestions (prevents blank screen).
   const shouldShowNewChatView =
-    ((showContinueSuggestions || hasUserStartedNewChat) && messages.length === 0) || isPreMintedConversation;
+    ((showContinueSuggestions || hasUserStartedNewChat) && messages.length === 0) ||
+    (isPreMintedConversation && !pendingAgent && !currentAgent);
   const showLegacyMigrationNotice = !shouldShowNewChatView && needsV1Migration && !dismissedLegacyMigrationNotice;
 
   // Reset notice dismissal on conversation/migration state changes.
@@ -1389,23 +1400,28 @@ const NumaWorkspaceChatAgents = () => {
         return;
       }
 
-      // Prevent duplicate auto-naming for same conversation
-      if (autoNamingAttemptedRef.current.has(cid)) {
+      // Track completion count per conversation; trigger auto-naming on 1st and 3rd completions
+      const AUTO_RENAME_ON = new Set([1, 3]);
+      const count = (autoNamingAttemptedRef.current.get(cid) ?? 0) + 1;
+      autoNamingAttemptedRef.current.set(cid, count);
+
+      if (!AUTO_RENAME_ON.has(count)) {
         return;
       }
 
-      autoNamingAttemptedRef.current.add(cid);
       try {
-        const renamed = await autoNameConversation({
+        const newTitle = await autoNameConversation({
           conversationId: cid,
           userId: sub,
           bedrockRuntimeClient,
           numaChatDynamoUtils,
           region: REGION,
+          force: count > 1,
         });
-        if (renamed) {
-          // Refresh sidebar to reflect new title
-          refreshSidebar();
+        if (newTitle) {
+          // Surgically update just this conversation's name in the sidebar (no full reload flicker)
+          chatHistoryRef.current?.updateConversationName(cid, newTitle);
+          historyPanelRef.current?.updateConversationName(cid, newTitle);
         }
       } catch (e) {
         console.error('[WorkspaceChat] Auto-naming failed:', e);
@@ -1441,6 +1457,8 @@ const NumaWorkspaceChatAgents = () => {
     getCredentials,
     refreshSessionFiles: settingsPanel.refreshFiles,
     numaPost,
+    onNotifyCompletion: notifyCompletion,
+    getIdToken,
   });
 
   // Handle renaming a conversation from NewChat view
@@ -1898,6 +1916,7 @@ const NumaWorkspaceChatAgents = () => {
       return;
     }
     isProcessingRef.current = true;
+    markProcessingStart();
 
     // Use override message if provided, otherwise use state
     const messageToSend = overrideMessage ?? inputMessage;
@@ -1955,6 +1974,10 @@ const NumaWorkspaceChatAgents = () => {
             }
           : undefined
       );
+
+      // Refresh sidebar immediately so the new conversation appears in history
+      // before the agent responds (don't wait until stream completes)
+      refreshSidebar();
       const userMsg = messageToSend;
 
       // Build attachments from staged items
@@ -2184,7 +2207,7 @@ const NumaWorkspaceChatAgents = () => {
       // V2 workspace conversations: load from trace file
       if (isWorkspaceConversation) {
         try {
-          const rawTrace = await getWorkspaceChatRawTrace(selectedConversationId);
+          const rawTrace = await getWorkspaceChatRawTrace(selectedConversationId, getIdToken);
           if (isCancelled()) return;
           // Parse raw trace using same logic as live streaming
           const chatMessages = parseRawTraceToMessages(rawTrace);
@@ -2193,9 +2216,67 @@ const NumaWorkspaceChatAgents = () => {
           setConversationId(selectedConversationId);
           sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
           sessionStorage.setItem('isWorkspaceConversation-v2', 'true'); // Mark as V2 for auto-load
-          autoNamingAttemptedRef.current.add(selectedConversationId);
+          autoNamingAttemptedRef.current.set(selectedConversationId, Infinity);
           // This is a V2 conversation, clear any migration flag
           setNeedsV1Migration(false);
+
+          // Check if the agent is still actively running for this conversation.
+          // This handles the case where the user refreshed or navigated away mid-stream.
+          try {
+            const statusData = await checkConversationStatus(selectedConversationId, getIdToken);
+            if (isCancelled()) return;
+
+            if (statusData.status === 'running' && statusData.active) {
+              // Agent is still processing -- block input (loading disables send button)
+              isProcessingRef.current = true;
+              setButtonStatus('loading');
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'system',
+                  content: t('systemMessages.agentFinishing'),
+                  status: 'agentFinishing',
+                },
+              ]);
+
+              // Poll in the background until the agent finishes
+              pollConversationUntilComplete(
+                selectedConversationId,
+                {
+                  intervalMs: 3000,
+                  timeoutMs: 600_000,
+                },
+                getIdToken
+              )
+                .then(async () => {
+                  if (isCancelled()) return;
+                  // Agent finished -- reload the full trace
+                  try {
+                    const updatedTrace = await getWorkspaceChatRawTrace(selectedConversationId, getIdToken);
+                    if (isCancelled()) return;
+                    const updatedMessages = parseRawTraceToMessages(updatedTrace);
+                    setMessages(updatedMessages);
+                    refreshSidebar();
+                    notifyCompletion();
+                  } catch (reloadErr) {
+                    console.error('[WorkspaceChat] Failed to reload trace after agent completed:', reloadErr);
+                  }
+                })
+                .catch((err) => {
+                  if (err instanceof DOMException && err.name === 'AbortError') return;
+                  console.error('[WorkspaceChat] Status polling error:', err);
+                })
+                .finally(() => {
+                  if (!isCancelled()) {
+                    isProcessingRef.current = false;
+                    setButtonStatus('idle');
+                  }
+                });
+            }
+          } catch (statusErr) {
+            // Non-critical: status check failure shouldn't block conversation loading
+            console.warn('[WorkspaceChat] Status check failed, proceeding normally:', statusErr);
+          }
 
           // Fetch conversation metadata from DynamoDB to restore agent state
           try {
@@ -2295,7 +2376,7 @@ const NumaWorkspaceChatAgents = () => {
     sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
     sessionStorage.setItem('isWorkspaceConversation-v2', 'false'); // V1 until migrated
     setPendingConversationChatConfig((chatConfig as ConversationChatConfig) || null);
-    autoNamingAttemptedRef.current.add(selectedConversationId);
+    autoNamingAttemptedRef.current.set(selectedConversationId, Infinity);
     // Mark this conversation as needing V1 to V2 migration on first message
     setNeedsV1Migration(true);
 

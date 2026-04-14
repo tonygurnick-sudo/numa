@@ -1,5 +1,5 @@
 /* eslint-disable i18next/no-literal-string */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Modal, Button, Form, Nav, Tab, Table, Badge, Accordion, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
@@ -314,8 +314,12 @@ export function GlobalSettingsModal({
   }>({ show: false, title: '', message: '', onConfirm: () => {} });
 
   // ── Sync local state from config when modal opens ─────────────────────────
+  // Only sync on show=false->true transition. config is an object from context
+  // whose reference changes frequently — without the guard, every context update
+  // would reset all local edits while the modal is open.
+  const prevShowRef = useRef(false);
   useEffect(() => {
-    if (show && config) {
+    if (show && !prevShowRef.current && config) {
       setProjects(config.projects ? structuredClone(config.projects) : []);
       setStaff(config.staff ? structuredClone(config.staff) : []);
       setTicketTypes(config.ticketTypes ? structuredClone(config.ticketTypes) : []);
@@ -351,6 +355,7 @@ export function GlobalSettingsModal({
       setFieldSearch('');
       setShowingNewField(false);
     }
+    prevShowRef.current = show;
   }, [show, config]);
 
   // ── Sync staff from Cognito when the modal opens ──────────────────────────

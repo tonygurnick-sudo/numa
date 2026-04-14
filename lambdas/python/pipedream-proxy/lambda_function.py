@@ -271,7 +271,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             operation=event.get("operation"),
             external_user_id=event.get("external_user_id"),
         )
-        return _error_response(500, "Internal server error")
+        return _error_response(500, str(e) or "Internal server error")
 
 
 def _batch_get_schemas(app_slugs: list) -> Dict[str, Any]:

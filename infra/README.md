@@ -141,8 +141,8 @@ aws secretsmanager update-secret \
 
 ```bash
 # Package the relavant lambdas before deployment
-bash package-python-lambda.sh lambdas/python/pipedream-proxy
-bash package-python-lambda.sh lambdas/python/pipedream-account-sync
+bash ./lambdas/package-python-lambda.sh lambdas/python/pipedream-proxy
+bash ./lambdas/package-python-lambda.sh lambdas/python/pipedream-account-sync
 
 # Deploy the proxy infrastructure to the dedicated proxy account
 unset CLIENT_OVERRIDE

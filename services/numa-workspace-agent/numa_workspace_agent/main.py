@@ -71,6 +71,7 @@ from .sdk_config import CLIENT_NAME, LOCAL_ROOT
 from .sdk_runner import (
     check_sdk_available,
     get_run,
+    has_active_run,
     request_stop,
     run_claude_sdk,
     stream_claude_sdk,
@@ -845,11 +846,13 @@ async def _handle_run_status(
     result = read_result_from_s3(user_sub, run_id, s3_prefix=s3_prefix)
 
     if result is None:
-        # No result yet — check for progress events
+        # No result yet — check for progress events and in-memory active runs
         progress = read_progress_from_s3(user_sub, run_id, s3_prefix=s3_prefix)
+        is_active = await has_active_run(user_sub, run_id)
         response: dict[str, Any] = {
             "status": "running",
             "run_id": run_id,
+            "active": is_active,
         }
         if progress and progress.get("events"):
             response["events"] = progress["events"]

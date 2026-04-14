@@ -164,7 +164,7 @@ Batch convert PDF pages to images using poppler (pdftoppm).
 from pdf2image import convert_from_path
 
 # Convert all pages
-images = convert_from_path("/workdir/uploads/document.pdf", dpi=150)
+images = convert_from_path("/workdir/uploads/document.pdf", dpi=120)
 
 for i, img in enumerate(images):
     output_path = f"/workdir/outputs/page_{i + 1}.png"
@@ -183,7 +183,7 @@ images = convert_from_path(
 Or use the CLI directly:
 
 ```bash
-pdftoppm -jpeg -r 150 /workdir/uploads/document.pdf /workdir/outputs/page
+pdftoppm -jpeg -r 120 /workdir/uploads/document.pdf /workdir/outputs/page
 # Creates page-01.jpg, page-02.jpg, etc.
 ```
 
@@ -498,7 +498,7 @@ doc.close()
 Or via CLI:
 
 ```bash
-pdftoppm -jpeg -r 150 /workdir/outputs/report.pdf /workdir/outputs/page
+pdftoppm -jpeg -r 120 /workdir/outputs/report.pdf /workdir/outputs/page
 ```
 
 ### Visual Inspection Checklist

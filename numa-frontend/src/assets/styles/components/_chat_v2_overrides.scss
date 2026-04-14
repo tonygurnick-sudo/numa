@@ -2037,6 +2037,12 @@
 }
 
 // Date group headers in history panel
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-history-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-history-group + .workspace-history-group {
   margin-top: 0.6rem;
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal, Button, Nav, Tab, Form, Badge } from 'react-bootstrap';
 import { StaffAvatar } from '../Shared/StaffAvatar';
 import { useTranslation } from 'react-i18next';
@@ -75,8 +75,12 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
   );
 
   // ── Sync state from team data when modal opens ──────────────────────────
+  // Only sync on the show=false->true transition. Previously this depended on
+  // existingZones/existingStages which are new array refs every render, causing
+  // the effect to re-fire and reset all local edits (breaking stage reorder, etc.)
+  const prevShowRef = useRef(false);
   useEffect(() => {
-    if (show && team) {
+    if (show && !prevShowRef.current && team) {
       setName(team.name);
       setColor(team.color);
       setWorkUnitSeries(team.workUnitSeries ?? null);
@@ -96,7 +100,8 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
       setActiveTab('general');
       setPendingTabKey(null);
     }
-  }, [show, team, existingZones, existingStages]);
+    prevShowRef.current = show;
+  }, [show, team, existingZones, existingStages, config.ticketTypes]);
 
   // ── Sync staff from Cognito when the modal opens ──────────────────────
   useEffect(() => {

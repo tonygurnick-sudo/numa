@@ -775,13 +775,13 @@ function addInlineToolSegment(
 }
 
 /**
- * Set the approval decision on an inline tool segment (e.g., 'execution_timeout').
+ * Set the approval decision on an inline tool segment (e.g., 'execution_timeout', 'execution_failed').
  * Walks backwards through messages to find the matching segment.
  */
 function setApprovalDecision(
   helpers: WorkspaceChatMessageHelpers,
   toolUseId: string,
-  decision: 'approved' | 'denied' | 'timeout' | 'execution_timeout'
+  decision: 'approved' | 'denied' | 'timeout' | 'execution_timeout' | 'execution_failed'
 ): void {
   helpers.setMessages((prev) => {
     const updated = [...prev];
@@ -1338,8 +1338,8 @@ function handleToolResultBlock(
       try {
         const resultStr = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
         const parsed = JSON.parse(resultStr);
-        if (parsed?.status === 'execution_timeout') {
-          setApprovalDecision(helpers, tool_use_id, 'execution_timeout');
+        if (parsed?.status === 'execution_timeout' || parsed?.status === 'execution_failed') {
+          setApprovalDecision(helpers, tool_use_id, parsed.status);
         }
       } catch {
         // Not JSON — ignore

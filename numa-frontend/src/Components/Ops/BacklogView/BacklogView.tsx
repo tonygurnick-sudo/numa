@@ -12,13 +12,15 @@ import {
   useSensors,
   PointerSensor,
 } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import { CreateTicketModal } from '../Modals/CreateTicketModal';
-import { StartWorkUnitModal, WorkUnitSuccessModal } from '../Modals/WorkUnitModals';
+import { CreateWorkUnitModal, StartWorkUnitModal, WorkUnitSuccessModal } from '../Modals/WorkUnitModals';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { StaffAvatar } from '../Shared/StaffAvatar';
 import type {
@@ -81,21 +83,53 @@ function shortDate(dateStr?: string | null): string {
 
 // ─── Draggable Ticket Row (list mode) ────────────────────────────────────────
 
+type StageGroup = { zoneName: string; stages: WorkStage[] };
+
 interface DraggableRowProps {
   ticket: Ticket;
   typeInfo: { name: string; color: string } | undefined;
   stageInfo: { name: string; statusType: StatusType } | undefined;
+  stageGroups: StageGroup[];
   assigneeStaff?: StaffProfile;
+  projectName?: string | null;
+  selected?: boolean;
   onClick: () => void;
+  onStageChange: (ticketId: string, stageId: string) => void;
+  onSelect?: (ticketId: string) => void;
 }
 
-function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: DraggableRowProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+function DraggableRow({
+  ticket,
+  typeInfo,
+  stageInfo,
+  stageGroups,
+  assigneeStaff,
+  projectName,
+  selected,
+  onClick,
+  onStageChange,
+  onSelect,
+}: DraggableRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: ticket.id,
   });
+  const [showStagePicker, setShowStagePicker] = useState(false);
+  const stagePickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showStagePicker) return;
+    const handler = (e: MouseEvent) => {
+      if (stagePickerRef.current && !stagePickerRef.current.contains(e.target as Node)) {
+        setShowStagePicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showStagePicker]);
 
   const style: React.CSSProperties = {
-    transform: transform ? `translate(${transform.x}px, ${transform.y}px)` : undefined,
+    transform: CSS.Transform.toString(transform),
+    transition: transition ?? undefined,
     opacity: isDragging ? 0.4 : 1,
     zIndex: isDragging ? 10 : undefined,
     position: isDragging ? ('relative' as const) : undefined,
@@ -107,7 +141,7 @@ function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: D
     <div
       ref={setNodeRef}
       style={style}
-      className="backlog-ticket-row"
+      className={`backlog-ticket-row${selected ? ' backlog-ticket-row--selected' : ''}`}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -117,6 +151,15 @@ function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: D
       {...attributes}
       {...listeners}
     >
+      {onSelect && (
+        <input
+          type="checkbox"
+          className="backlog-row-checkbox flex-shrink-0"
+          checked={selected ?? false}
+          onChange={() => onSelect(ticket.id)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
       {typeInfo && (
         <span
           style={{
@@ -132,7 +175,58 @@ function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: D
       )}
       <span className="ticket-id flex-shrink-0">{ticket.displayId}</span>
       <span className="text-truncate flex-grow-1">{ticket.title}</span>
-      {stageInfo && <span className={`backlog-status-pill ${statusCls} flex-shrink-0`}>{stageInfo.name}</span>}
+      {projectName && (
+        <span className="backlog-row-tag backlog-row-tag--project flex-shrink-0" title={projectName}>
+          <i className="bi bi-folder" />
+          {projectName}
+        </span>
+      )}
+      {ticket.customerName && (
+        <span className="backlog-row-tag backlog-row-tag--customer flex-shrink-0" title={ticket.customerName}>
+          <i className="bi bi-people" />
+          {ticket.customerName}
+        </span>
+      )}
+      {stageInfo && (
+        <div ref={stagePickerRef} style={{ position: 'relative', flexShrink: 0 }}>
+          <span
+            className={`backlog-status-pill backlog-status-pill--clickable ${statusCls}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowStagePicker((prev) => !prev);
+            }}
+            role="button"
+            tabIndex={0}
+          >
+            {stageInfo.name}
+            <i className="bi bi-chevron-down" style={{ fontSize: '0.55rem', marginLeft: 3 }} />
+          </span>
+          {showStagePicker && (
+            <div className="backlog-stage-picker">
+              {stageGroups.map((group) => (
+                <div key={group.zoneName}>
+                  {stageGroups.length > 1 && <div className="backlog-stage-picker-zone">{group.zoneName}</div>}
+                  {group.stages.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className={`backlog-stage-picker-item${s.id === ticket.stageId ? ' active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (s.id !== ticket.stageId) onStageChange(ticket.id, s.id);
+                        setShowStagePicker(false);
+                      }}
+                    >
+                      <span className={`backlog-status-dot backlog-status-dot--${s.statusType}`} />
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {ticket.effortPoints != null && ticket.effortPoints > 0 && (
         <span className="backlog-effort flex-shrink-0">{ticket.effortPoints}</span>
       )}
@@ -161,10 +255,11 @@ function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: D
 
 interface DroppableGroupBodyProps {
   groupId: string;
+  ticketIds: string[];
   children: React.ReactNode;
 }
 
-function DroppableGroupBody({ groupId, children }: DroppableGroupBodyProps) {
+function DroppableGroupBody({ groupId, ticketIds, children }: DroppableGroupBodyProps) {
   const { setNodeRef, isOver } = useDroppable({ id: groupId });
 
   return (
@@ -173,7 +268,9 @@ function DroppableGroupBody({ groupId, children }: DroppableGroupBodyProps) {
       className="backlog-group-body"
       style={{ backgroundColor: isOver ? '#f0f4ff' : undefined, minHeight: 32 }}
     >
-      {children}
+      <SortableContext items={ticketIds} strategy={verticalListSortingStrategy}>
+        {children}
+      </SortableContext>
     </div>
   );
 }
@@ -531,7 +628,8 @@ const BacklogView = () => {
     return map;
   }, [config?.staff]);
 
-  // ── Start Sprint modal state ────────────────────────────────────
+  // ── Sprint modal state ──────────────────────────────────────────
+  const [showCreateSprint, setShowCreateSprint] = useState(false);
   const [showStartSprint, setShowStartSprint] = useState(false);
   const [startSprintId, setStartSprintId] = useState<string | null>(null);
   const [showSprintSuccess, setShowSprintSuccess] = useState(false);
@@ -539,6 +637,11 @@ const BacklogView = () => {
 
   const hasActiveWu = useMemo(() => workUnits.some((wu) => wu.status === 'active'), [workUnits]);
   const teamId = teamData?.team?.id ?? '';
+  const workUnitsEnabled = Boolean(teamData?.team?.workUnitSeries);
+  const defaultSprintName = useMemo(() => {
+    const label = teamData?.team?.workUnitSeries?.label ?? 'Sprint';
+    return `${label} ${workUnits.length + 1}`;
+  }, [teamData?.team?.workUnitSeries?.label, workUnits.length]);
 
   // ── Delete Sprint handler ────────────────────────────────────
   const [deletingSprint, setDeletingSprint] = useState(false);
@@ -564,6 +667,8 @@ const BacklogView = () => {
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const [customerFilter, setCustomerFilter] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -653,8 +758,14 @@ const BacklogView = () => {
     if (priorityFilter) {
       result = result.filter((tk) => tk.priority === priorityFilter);
     }
+    if (projectFilter) {
+      result = result.filter((tk) => tk.projectId === projectFilter);
+    }
+    if (customerFilter) {
+      result = result.filter((tk) => tk.customerId === customerFilter);
+    }
     return result;
-  }, [backlogTickets, searchQuery, assigneeFilter, typeFilter, priorityFilter]);
+  }, [backlogTickets, searchQuery, assigneeFilter, typeFilter, priorityFilter, projectFilter, customerFilter]);
 
   // ── Assignees in backlog (for avatar filters) ──────────────────
   const backlogAssignees = useMemo(() => {
@@ -681,6 +792,24 @@ const BacklogView = () => {
     const priorities: TicketPriority[] = ['highest', 'high', 'medium', 'low', 'lowest'];
     return priorities.map((p) => ({ id: p, label: t(`priority.${p}`) }));
   }, [t]);
+
+  // ── Project options for filter ──────────────────────────────────
+  const projectOptions = useMemo(() => {
+    if (!config?.projects) return [];
+    const usedIds = new Set(backlogTickets.map((tk) => tk.projectId).filter(Boolean));
+    return config.projects.filter((p) => usedIds.has(p.id)).map((p) => ({ id: p.id, label: p.name, color: p.color }));
+  }, [config?.projects, backlogTickets]);
+
+  // ── Customer options for filter ────────────────────────────────
+  const customerOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const tk of backlogTickets) {
+      if (tk.customerId && tk.customerName && !seen.has(tk.customerId)) {
+        seen.set(tk.customerId, tk.customerName);
+      }
+    }
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, label: name }));
+  }, [backlogTickets]);
 
   // ── Planning work units ────────────────────────────────────────
   const planningUnits = useMemo(
@@ -745,10 +874,19 @@ const BacklogView = () => {
     return result;
   }, [filteredTickets, backlogStages, planningUnits, t, firstBacklogZoneId, teamData]);
 
-  // ── Group lookup map (for DnD) ─────────────────────────────────
+  // ── Group lookup maps (for DnD) ────────────────────────────────
   const groupMap = useMemo(() => {
     const map = new Map<string, TicketGroup>();
     for (const g of groups) map.set(g.id, g);
+    return map;
+  }, [groups]);
+
+  // Reverse lookup: ticket ID -> group
+  const ticketGroupMap = useMemo(() => {
+    const map = new Map<string, TicketGroup>();
+    for (const g of groups) {
+      for (const tk of g.tickets) map.set(tk.id, g);
+    }
     return map;
   }, [groups]);
 
@@ -768,7 +906,147 @@ const BacklogView = () => {
     });
   }, []);
 
+  // ── Project name lookup ─────────────────────────────────────────
+  const projectNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (config?.projects) {
+      for (const p of config.projects) map.set(p.id, p.name);
+    }
+    return map;
+  }, [config?.projects]);
+
+  // ── All stages for inline picker ──────────────────────────────
+  const allStages = useMemo(() => (teamData?.stages ?? []).sort((a, b) => a.order - b.order), [teamData?.stages]);
+
+  // Stages grouped by zone (for pickers with zone headers)
+  const stageGroups = useMemo<StageGroup[]>(() => {
+    const zoneNameMap = new Map<string, string>();
+    for (const z of zones) zoneNameMap.set(z.id, z.name);
+    const grouped = new Map<string, WorkStage[]>();
+    for (const s of allStages) {
+      const list = grouped.get(s.zoneId) ?? [];
+      list.push(s);
+      grouped.set(s.zoneId, list);
+    }
+    return Array.from(grouped.entries()).map(([zoneId, stages]) => ({
+      zoneName: zoneNameMap.get(zoneId) ?? '',
+      stages,
+    }));
+  }, [allStages, zones]);
+
+  // ── Selection state ────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectedTickets = useMemo(
+    () => filteredTickets.filter((tk) => selectedIds.has(tk.id)),
+    [filteredTickets, selectedIds]
+  );
+  const handleToggleSelect = useCallback((ticketId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticketId)) next.delete(ticketId);
+      else next.add(ticketId);
+      return next;
+    });
+  }, []);
+  const handleDeselectAll = useCallback(() => setSelectedIds(new Set()), []);
+
   // ── Handlers ───────────────────────────────────────────────────
+  const handleInlineStageChange = useCallback(
+    async (ticketId: string, newStageId: string) => {
+      const ticket = filteredTickets.find((tk) => tk.id === ticketId);
+      if (!ticket) return;
+      const stage = allStages.find((s) => s.id === newStageId);
+      if (!stage) return;
+
+      // Optimistic update
+      setTickets((prev) =>
+        prev.map((tk) => (tk.id === ticketId ? { ...tk, stageId: newStageId, zoneId: stage.zoneId } : tk))
+      );
+
+      try {
+        await OpsService.updateTicket(numaPut, ticketId, {
+          teamId: ticket.teamId,
+          stageId: newStageId,
+          zoneId: stage.zoneId,
+          version: ticket.version,
+        });
+        await refreshTickets();
+      } catch (err) {
+        console.error('[BacklogView] Failed to change stage:', err);
+        await refreshTickets();
+      }
+    },
+    [filteredTickets, allStages, numaPut, refreshTickets, setTickets]
+  );
+
+  // ── Bulk action handlers ────────────────────────────────────────
+  const [bulkActing, setBulkActing] = useState(false);
+  const [showBulkMove, setShowBulkMove] = useState(false);
+  const bulkMoveRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showBulkMove) return;
+    const handler = (e: MouseEvent) => {
+      if (bulkMoveRef.current && !bulkMoveRef.current.contains(e.target as Node)) {
+        setShowBulkMove(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showBulkMove]);
+
+  const handleBulkMove = useCallback(
+    async (stageId: string) => {
+      if (selectedTickets.length === 0 || bulkActing) return;
+      const stage = allStages.find((s) => s.id === stageId);
+      if (!stage) return;
+      setBulkActing(true);
+      setShowBulkMove(false);
+      try {
+        await OpsService.bulkUpdateTickets(numaPost, {
+          ticketIds: selectedTickets.map((tk) => tk.id),
+          changes: { stageId, zoneId: stage.zoneId, teamId },
+        });
+        setSelectedIds(new Set());
+        await refreshTickets();
+      } catch (err) {
+        console.error('[BacklogView] Bulk move failed:', err);
+      } finally {
+        setBulkActing(false);
+      }
+    },
+    [selectedTickets, bulkActing, allStages, numaPost, refreshTickets]
+  );
+
+  const handleBulkArchive = useCallback(async () => {
+    if (selectedTickets.length === 0 || bulkActing) return;
+    setBulkActing(true);
+    try {
+      await Promise.all(selectedTickets.map((tk) => OpsService.archiveTicket(numaPut, tk.id, tk.version, tk.teamId)));
+      setSelectedIds(new Set());
+      await refreshTickets();
+    } catch (err) {
+      console.error('[BacklogView] Bulk archive failed:', err);
+    } finally {
+      setBulkActing(false);
+    }
+  }, [selectedTickets, bulkActing, numaPut, refreshTickets]);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedTickets.length === 0 || bulkActing) return;
+    if (!window.confirm(t('tickets.deleteConfirm'))) return;
+    setBulkActing(true);
+    try {
+      await Promise.all(selectedTickets.map((tk) => OpsService.deleteTicket(numaDelete, tk.id, tk.teamId)));
+      setSelectedIds(new Set());
+      await refreshTickets();
+    } catch (err) {
+      console.error('[BacklogView] Bulk delete failed:', err);
+    } finally {
+      setBulkActing(false);
+    }
+  }, [selectedTickets, bulkActing, numaDelete, refreshTickets, t]);
+
   const handleTicketClick = useCallback((ticketId: string) => {
     setDetailTicketId(ticketId);
     setShowDetail(true);
@@ -838,6 +1116,7 @@ const BacklogView = () => {
       let newZoneId = ticket.zoneId;
       let newStageId = ticket.stageId;
       let newWorkUnitId: string | null | undefined = ticket.workUnitId;
+      let insertIndex: number | null = null;
 
       if (overId.startsWith('bk-stage-')) {
         // Kanban mode: dropped on a stage column
@@ -847,29 +1126,72 @@ const BacklogView = () => {
         newStageId = stageId;
         newZoneId = stageInfo.zoneId;
       } else {
-        // List mode or kanban-group mode: dropped on a group
-        const targetGroup = groupMap.get(overId);
-        if (!targetGroup) return;
+        // Check if dropped on another ticket (within-group reorder or cross-group)
+        const overTicket = filteredTickets.find((tk) => tk.id === overId);
+        if (overTicket) {
+          const sourceGroup = ticketGroupMap.get(ticketId);
+          const targetGroup = ticketGroupMap.get(overId);
 
-        newZoneId = targetGroup.zoneId;
-        if (targetGroup.stageId) newStageId = targetGroup.stageId;
-        newWorkUnitId = targetGroup.workUnit?.id ?? null;
+          if (targetGroup) {
+            newZoneId = targetGroup.zoneId;
+            if (targetGroup.stageId) newStageId = targetGroup.stageId;
+            newWorkUnitId = targetGroup.workUnit?.id ?? null;
+
+            // Calculate insertion index based on the over ticket's position
+            const sortedGroupTickets = targetGroup.tickets
+              .filter((tk) => tk.id !== ticketId)
+              .sort((a, b) => a.order - b.order);
+            const overIndex = sortedGroupTickets.findIndex((tk) => tk.id === overId);
+
+            if (sourceGroup?.id === targetGroup.id) {
+              // Same group: determine direction
+              const allSorted = targetGroup.tickets.sort((a, b) => a.order - b.order);
+              const origDragIdx = allSorted.findIndex((tk) => tk.id === ticketId);
+              const origOverIdx = allSorted.findIndex((tk) => tk.id === overId);
+              insertIndex = origDragIdx < origOverIdx ? overIndex + 1 : overIndex;
+            } else {
+              insertIndex = overIndex >= 0 ? overIndex : sortedGroupTickets.length;
+            }
+          }
+        } else {
+          // Dropped on a group droppable
+          const targetGroup = groupMap.get(overId);
+          if (!targetGroup) return;
+
+          newZoneId = targetGroup.zoneId;
+          if (targetGroup.stageId) newStageId = targetGroup.stageId;
+          newWorkUnitId = targetGroup.workUnit?.id ?? null;
+        }
       }
 
-      // No-op if nothing changed
-      if (newStageId === ticket.stageId && newWorkUnitId === ticket.workUnitId) return;
-
-      // Calculate order at end of destination
+      // Build destination ticket list for order calculation
       const destTickets = filteredTickets
         .filter((tk) => {
           if (tk.id === ticketId) return false;
           if (overId.startsWith('bk-stage-')) return tk.stageId === newStageId;
+          // For ticket-on-ticket drops, use the target group's tickets
+          const overTicket = filteredTickets.find((t) => t.id === overId);
+          if (overTicket) {
+            const tg = ticketGroupMap.get(overId);
+            return tg ? tg.tickets.some((gt) => gt.id === tk.id) : false;
+          }
           const g = groupMap.get(overId);
           return g ? g.tickets.some((gt) => gt.id === tk.id) : false;
         })
         .sort((a, b) => a.order - b.order);
 
-      const newOrder = calculateNewOrder(destTickets, destTickets.length);
+      const effectiveIndex = insertIndex ?? destTickets.length;
+
+      // No-op if same group, same position
+      if (newStageId === ticket.stageId && newWorkUnitId === ticket.workUnitId) {
+        const currentSorted = destTickets;
+        const currentIdx = [...currentSorted, ticket]
+          .sort((a, b) => a.order - b.order)
+          .findIndex((tk) => tk.id === ticketId);
+        if (currentIdx === effectiveIndex || currentIdx === effectiveIndex - 1) return;
+      }
+
+      const newOrder = calculateNewOrder(destTickets, effectiveIndex);
 
       // Optimistic update
       setTickets((prev) =>
@@ -895,7 +1217,7 @@ const BacklogView = () => {
         await refreshTickets();
       }
     },
-    [filteredTickets, groupMap, stageMap, numaPut, refreshTickets, setTickets]
+    [filteredTickets, groupMap, ticketGroupMap, stageMap, numaPut, refreshTickets, setTickets]
   );
 
   return (
@@ -946,6 +1268,26 @@ const BacklogView = () => {
             allLabel={t('backlogView.allPriorities')}
           />
 
+          {projectOptions.length > 0 && (
+            <FilterDropdown
+              label={t('tickets.project')}
+              value={projectFilter}
+              options={projectOptions}
+              onChange={setProjectFilter}
+              allLabel={t('backlogView.allProjects')}
+            />
+          )}
+
+          {customerOptions.length > 0 && (
+            <FilterDropdown
+              label={t('tickets.customer')}
+              value={customerFilter}
+              options={customerOptions}
+              onChange={setCustomerFilter}
+              allLabel={t('backlogView.allCustomers')}
+            />
+          )}
+
           <div className="flex-grow-1" />
 
           <button
@@ -967,6 +1309,13 @@ const BacklogView = () => {
               <span className="ops-pill-count">{group.tickets.length}</span>
             </button>
           ))}
+
+          {workUnitsEnabled && (
+            <button type="button" className="ops-pill" style={{ gap: 4 }} onClick={() => setShowCreateSprint(true)}>
+              <i className="bi bi-plus" />
+              {t('sprints.new')}
+            </button>
+          )}
 
           <div className="backlog-filter-divider" />
 
@@ -1162,7 +1511,10 @@ const BacklogView = () => {
 
                     {!isCollapsed && (
                       <>
-                        <DroppableGroupBody groupId={group.id}>
+                        <DroppableGroupBody
+                          groupId={group.id}
+                          ticketIds={group.tickets.sort((a, b) => a.order - b.order).map((tk) => tk.id)}
+                        >
                           {group.tickets.length === 0 ? (
                             <div className="kanban-empty-dropzone my-2 mx-3 text-center" style={{ minHeight: '80px' }}>
                               <i className="bi bi-inbox mb-1" style={{ fontSize: '1.4rem', color: '#9ca3af' }} />
@@ -1177,8 +1529,13 @@ const BacklogView = () => {
                                   ticket={ticket}
                                   typeInfo={typeMap.get(ticket.ticketTypeId)}
                                   stageInfo={stageMap.get(ticket.stageId)}
+                                  stageGroups={stageGroups}
                                   assigneeStaff={ticket.assigneeId ? staffMap.get(ticket.assigneeId) : undefined}
+                                  projectName={ticket.projectId ? projectNameMap.get(ticket.projectId) : null}
+                                  selected={selectedIds.has(ticket.id)}
                                   onClick={() => handleTicketClick(ticket.id)}
+                                  onStageChange={handleInlineStageChange}
+                                  onSelect={handleToggleSelect}
                                 />
                               ))
                           )}
@@ -1220,6 +1577,65 @@ const BacklogView = () => {
           </DragOverlay>
         </DndContext>
 
+        {/* Bulk action bar */}
+        {selectedTickets.length > 0 && (
+          <div className="backlog-bulk-bar">
+            <span className="bulk-count">{t('bulk.selected', { count: selectedTickets.length })}</span>
+
+            <div ref={bulkMoveRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="bulk-action"
+                disabled={bulkActing}
+                onClick={() => setShowBulkMove((prev) => !prev)}
+              >
+                <i className="bi bi-arrow-right-circle" />
+                {t('tickets.status')}
+              </button>
+              {showBulkMove && (
+                <div className="backlog-stage-picker" style={{ bottom: '100%', top: 'auto', marginBottom: 4 }}>
+                  {stageGroups.map((group) => (
+                    <div key={group.zoneName}>
+                      {stageGroups.length > 1 && <div className="backlog-stage-picker-zone">{group.zoneName}</div>}
+                      {group.stages.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className="backlog-stage-picker-item"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() => handleBulkMove(s.id)}
+                        >
+                          <span className={`backlog-status-dot backlog-status-dot--${s.statusType}`} />
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button type="button" className="bulk-action" disabled={bulkActing} onClick={handleBulkArchive}>
+              <i className="bi bi-archive" />
+              {t('archive.archive')}
+            </button>
+
+            <button
+              type="button"
+              className="bulk-action bulk-action--danger"
+              disabled={bulkActing}
+              onClick={handleBulkDelete}
+            >
+              <i className="bi bi-trash" />
+              {t('bulk.bulkDelete')}
+            </button>
+
+            <button type="button" className="bulk-dismiss" onClick={handleDeselectAll} title={t('bulk.deselectAll')}>
+              <i className="bi bi-x-lg" />
+            </button>
+          </div>
+        )}
+
         {/* Empty state */}
         {backlogTickets.length === 0 && (
           <div className="d-flex flex-column align-items-center justify-content-center py-5">
@@ -1236,6 +1652,18 @@ const BacklogView = () => {
       </div>
 
       {/* ── Modals ──────────────────────────────────────────────── */}
+      {workUnitsEnabled && (
+        <CreateWorkUnitModal
+          show={showCreateSprint}
+          teamId={teamId}
+          defaultName={defaultSprintName}
+          onHide={() => setShowCreateSprint(false)}
+          onCreated={async () => {
+            setShowCreateSprint(false);
+            await refreshWorkUnits();
+          }}
+        />
+      )}
       <TicketDetailModal
         show={showDetail}
         ticketId={detailTicketId}

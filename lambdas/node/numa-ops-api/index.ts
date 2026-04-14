@@ -108,6 +108,27 @@ const jsonResponse = (
 const errorResponse = (statusCode: number, message: string): ReturnType<typeof jsonResponse> =>
   jsonResponse(statusCode, { error: message });
 
+/**
+ * Resolve user display name from staff records in OPS_CONFIG_TABLE.
+ * Falls back to JWT name claim, then email prefix, then 'Unknown'.
+ */
+const resolveAuthorName = async (auth: AuthContext): Promise<string> => {
+  try {
+    const result = await dynamo.send(
+      new GetCommand({
+        TableName: OPS_CONFIG_TABLE,
+        Key: { PK: 'CONFIG', SK: `STAFF#${auth.sub}` },
+        ProjectionExpression: '#n',
+        ExpressionAttributeNames: { '#n': 'name' },
+      })
+    );
+    if (result.Item?.name) return String(result.Item.name);
+  } catch {
+    // Fall through to JWT-based fallback
+  }
+  return auth.name || (auth.email ? auth.email.split('@')[0] : 'Unknown');
+};
+
 const parseJwt = (token: string): Record<string, unknown> => {
   try {
     const payload = token.split('.')[1];
@@ -157,6 +178,14 @@ const isTeamOwner = (teamMeta: Record<string, unknown>, auth: AuthContext): bool
   if (teamMeta.createdBy === auth.sub) return true;
   const ac = teamMeta.accessControl as { owners?: string[] } | undefined;
   return Array.isArray(ac?.owners) && ac.owners.includes(auth.sub);
+};
+
+/** Check if user has access to a team (owner or listed member). Admins do NOT bypass this. */
+const hasTeamAccess = (teamMeta: Record<string, unknown>, auth: AuthContext): boolean => {
+  const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
+  if (!ac || ac.mode === 'all') return true;
+  if (isTeamOwner(teamMeta, auth)) return true;
+  return Array.isArray(ac.users) && ac.users.includes(auth.sub);
 };
 
 const buildPathSegments = (event: APIGatewayProxyEventV2): string[] => {
@@ -298,15 +327,8 @@ const handleTeams = async (
   if (method === 'GET' && segments.length === 0) {
     const { items } = await queryGSI1('TENANT', 'TEAM#');
 
-    // Admins see all teams; non-admins see only teams they have access to
-    const visibleTeams = isAdmin(auth)
-      ? items
-      : items.filter((team) => {
-          const ac = team.accessControl as { mode?: string; users?: string[] } | undefined;
-          if (!ac || ac.mode === 'all') return true;
-          if (isTeamOwner(team, auth)) return true; // owners always see their team
-          return Array.isArray(ac.users) && ac.users.includes(auth.sub);
-        });
+    // Private boards are private for everyone — admins do NOT bypass access control
+    const visibleTeams = items.filter((team) => hasTeamAccess(team, auth));
 
     return jsonResponse(200, { teams: visibleTeams });
   }
@@ -319,13 +341,8 @@ const handleTeams = async (
     const meta = items.find((i) => String(i.SK) === 'META');
 
     // Verify user has access to this team
-    if (meta && !isAdmin(auth)) {
-      const ac = meta.accessControl as { mode?: string; users?: string[] } | undefined;
-      if (ac && ac.mode === 'specific' && !isTeamOwner(meta, auth)) {
-        if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
-          return errorResponse(403, 'You do not have access to this team');
-        }
-      }
+    if (meta && !hasTeamAccess(meta, auth)) {
+      return errorResponse(403, 'You do not have access to this team');
     }
 
     const zones = items
@@ -1490,16 +1507,9 @@ const handleTickets = async (
     if (!teamId) return errorResponse(400, 'Missing required query parameter: teamId');
 
     // Verify user has access to the team
-    if (!isAdmin(auth)) {
-      const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
-      if (teamMeta) {
-        const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
-        if (ac && ac.mode === 'specific' && !isTeamOwner(teamMeta, auth)) {
-          if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
-            return errorResponse(403, 'You do not have access to this team');
-          }
-        }
-      }
+    const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (teamMeta && !hasTeamAccess(teamMeta, auth)) {
+      return errorResponse(403, 'You do not have access to this team');
     }
 
     const limit = qp.limit ? parseInt(qp.limit, 10) : undefined;
@@ -1660,16 +1670,9 @@ const handleTickets = async (
     const teamId = String(rawTeamId);
 
     // Verify user has access to create tickets in this team
-    if (!isAdmin(auth)) {
-      const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
-      if (teamMeta) {
-        const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
-        if (ac && ac.mode === 'specific' && !isTeamOwner(teamMeta, auth)) {
-          if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
-            return errorResponse(403, 'You do not have access to this team');
-          }
-        }
-      }
+    const createTeamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (createTeamMeta && !hasTeamAccess(createTeamMeta, auth)) {
+      return errorResponse(403, 'You do not have access to this team');
     }
 
     const stageId = String(rawStageId);
@@ -1800,15 +1803,10 @@ const handleTickets = async (
     const targetTeamId = isCrossTeamMove ? teamId! : currentTeamId;
 
     // Verify user has access to the target team for cross-team moves
-    if (isCrossTeamMove && !isAdmin(auth)) {
+    if (isCrossTeamMove) {
       const targetMeta = (await queryByPK(`TEAM#${targetTeamId}`, 'META'))[0];
-      if (targetMeta) {
-        const ac = targetMeta.accessControl as { mode?: string; users?: string[] } | undefined;
-        if (ac && ac.mode === 'specific' && !isTeamOwner(targetMeta, auth)) {
-          if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
-            return errorResponse(403, 'You do not have access to the target team');
-          }
-        }
+      if (targetMeta && !hasTeamAccess(targetMeta, auth)) {
+        return errorResponse(403, 'You do not have access to the target team');
       }
     }
 
@@ -2298,6 +2296,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     const auth = resolveAuthContext(event);
     if (!auth) return errorResponse(401, 'Unauthorized');
+
+    // Enrich auth.name from staff records (JWT access tokens lack the name claim)
+    auth.name = await resolveAuthorName(auth);
 
     const segments = buildPathSegments(event);
     if (segments[0] !== 'ops') {

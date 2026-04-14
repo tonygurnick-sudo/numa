@@ -28,6 +28,7 @@ All KB operations use `name="knowledge_base"` with an `operation` parameter:
 | `download`        | Download a file by S3 URI or filename |
 | `list`            | List files in a KB                    |
 | `download_folder` | Download folder as zip                |
+| `delete`          | Delete files from a knowledge base    |
 
 ---
 
@@ -121,12 +122,12 @@ Add files from the workspace to a knowledge base for future retrieval.
 
 ### Parameters
 
-| Parameter   | Required | Default   | Description                                                                                                         |
-| ----------- | -------- | --------- | ------------------------------------------------------------------------------------------------------------------- |
-| `operation` | Yes      | -         | `"upload"`                                                                                                          |
-| `file`      | Yes      | -         | Path to file in workspace                                                                                           |
-| `kb_id`     | No       | "company" | Target KB ID                                                                                                        |
-| `path`      | No       | root      | Folder prefix within KB (e.g. "reports/2024/"). This is a directory, NOT a filename — omit to upload to the KB root |
+| Parameter   | Required | Default   | Description                                                                                                                                                                                                                                                      |
+| ----------- | -------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operation` | Yes      | -         | `"upload"`                                                                                                                                                                                                                                                       |
+| `file`      | Yes      | -         | Path to file in workspace                                                                                                                                                                                                                                        |
+| `kb_id`     | No       | "company" | Target KB ID                                                                                                                                                                                                                                                     |
+| `path`      | No       | root      | **IMPORTANT: Always include when uploading to a subfolder.** Folder prefix within KB (e.g. `"reports/2024/"`). This is a directory path, NOT a filename. Omit only when uploading to KB root. The parameter name MUST be `path` (not `destination` or `folder`). |
 
 ### Examples
 
@@ -363,6 +364,49 @@ readable_name = unquote(url_encoded_filename)
 - Avoids filename length errors
 - Memory efficient (one file at a time)
 - Works with any KB size up to the 400-file limit
+
+---
+
+## operation: delete
+
+Delete files from a knowledge base. Use this to remove outdated, duplicate, or incorrectly placed files.
+
+### Parameters
+
+| Parameter   | Required | Default   | Description                                                                 |
+| ----------- | -------- | --------- | --------------------------------------------------------------------------- |
+| `operation` | Yes      | -         | `"delete"`                                                                  |
+| `file`      | Yes      | -         | Relative path within KB (e.g. `"old-report.pdf"` or `"reports/draft.docx"`) |
+| `kb_id`     | No       | "company" | KB ID                                                                       |
+
+### Examples
+
+```
+# Delete file from KB root
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Deleting outdated report from KB",
+  params={"operation": "delete", "file": "old-report.pdf", "kb_id": "company"}
+)
+
+# Delete file from subfolder
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Removing duplicate file from KB subfolder",
+  params={"operation": "delete", "file": "3 - Agency Reports/duplicate.docx", "kb_id": "abc-123-uuid"}
+)
+```
+
+### Permissions
+
+- **Company KB**: Only admins can delete
+- **User KBs**: Only editors/owners can delete
+
+### Tips
+
+- Use `list` first to see the exact filenames/paths before deleting
+- Deleting a file also removes its metadata sidecar
+- The KB index will update within ~30 minutes after deletion
 
 ---
 

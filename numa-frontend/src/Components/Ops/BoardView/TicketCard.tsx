@@ -226,7 +226,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
     <div
       ref={setCardRef}
       style={style}
-      className="ticket-card"
+      className={`ticket-card${isDragging ? ' ticket-card--dragging' : ''}`}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onMouseEnter={handleMouseEnter}
@@ -336,13 +336,19 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
         )}
       </div>
 
-      {/* ── Context badges (customer / supplier / sprint) ───────────── */}
-      {(ticket.customerName || ticket.supplierName || workUnit) && (
+      {/* ── Context badges (customer / project / supplier / sprint) ── */}
+      {(ticket.customerName || projectName || ticket.supplierName || workUnit) && (
         <div className="d-flex flex-wrap gap-1 mb-2">
           {ticket.customerName && (
             <span className="ticket-badge ticket-badge-customer">
               <i className="bi bi-building me-1" />
               {ticket.customerName}
+            </span>
+          )}
+          {projectName && (
+            <span className="ticket-badge ticket-badge-project">
+              <i className="bi bi-folder me-1" />
+              {projectName}
             </span>
           )}
           {ticket.supplierName && (
@@ -422,7 +428,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
             }}
           >
             {assigneeStaff || ticket.assigneeName ? (
-              <StaffAvatar staff={assigneeStaff} name={!assigneeStaff ? ticket.assigneeName : undefined} size={22} />
+              <StaffAvatar staff={assigneeStaff} name={!assigneeStaff ? ticket.assigneeName : undefined} size={26} />
             ) : (
               <div className="ticket-avatar ticket-avatar-empty">
                 <i className="bi bi-person" style={{ fontSize: '0.72rem' }} />

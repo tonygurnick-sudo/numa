@@ -196,15 +196,17 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
             )}
             {decision && (
               <span className={`inline-tool-decision-badge ${decision}`}>
-                {decision === 'execution_timeout' && <i className="bi bi-exclamation-triangle me-1" />}
+                {(decision === 'execution_timeout' || decision === 'execution_failed') && (
+                  <i className="bi bi-exclamation-triangle me-1" />
+                )}
                 {approval?.autoApproved
                   ? t('approval.autoApproved')
                   : decision === 'approved'
                     ? t('approval.approved')
                     : decision === 'denied'
                       ? t('approval.denied')
-                      : decision === 'execution_timeout'
-                        ? t('approval.executionTimeout')
+                      : decision === 'execution_timeout' || decision === 'execution_failed'
+                        ? t('approval.executionFailed')
                         : t('approval.timeout')}
               </span>
             )}

@@ -368,7 +368,7 @@ export interface WorkspaceChatToolApprovalSegment {
   description: string;
   propsPreview: string;
   requestId: string;
-  decision?: 'approved' | 'denied' | 'timeout' | 'execution_timeout';
+  decision?: 'approved' | 'denied' | 'timeout' | 'execution_timeout' | 'execution_failed';
   isLoading: boolean;
   autoApproved?: boolean;
 }
@@ -1029,7 +1029,7 @@ export interface WorkspaceChatInlineToolSegment {
     description: string;
     propsPreview: string;
     requestId: string;
-    decision?: 'approved' | 'denied' | 'timeout' | 'execution_timeout';
+    decision?: 'approved' | 'denied' | 'timeout' | 'execution_timeout' | 'execution_failed';
     isSubmitting?: boolean;
     autoApproved?: boolean;
     /** Unix epoch seconds when the backend created the approval — used to sync countdown */

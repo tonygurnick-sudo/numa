@@ -124,6 +124,7 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
             conversationName: defaultName,
             content: 'New conversation started',
             isWorkspaceConversation: isWorkspaceMode,
+            latestTimestamp: Date.now(),
           };
 
           if (agentInfo) {

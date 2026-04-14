@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Modal, Form, Button, Col, Row, Spinner } from 'react-bootstrap';
+import { Modal, Form, Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
@@ -478,7 +478,7 @@ export function CreateTicketModal({
   const typeColor = selectedType?.color ?? '#6c757d';
 
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered>
+    <Modal show={show} onHide={onHide} size="xl" centered dialogClassName="ticket-detail-modal">
       <Form noValidate validated={validated} onSubmit={handleSubmit}>
         {/* ── Header: back + type badge + title input ─────────────────── */}
         <Modal.Header closeButton className="flex-column align-items-start pb-1">
@@ -556,12 +556,15 @@ export function CreateTicketModal({
 
         {/* ── Body: left content + right fields ───────────────────────── */}
         <Modal.Body style={{ padding: '1.25rem 1.5rem', minHeight: 460 }}>
-          <Row>
+          <div className="d-flex" style={{ gap: 0 }}>
             {/* Left: description + attachments + initial comment ─────── */}
-            <Col md={7} style={{ borderRight: '1px solid #f0f0f0', paddingRight: '1.5rem' }}>
+            <div className="ticket-detail-left-col">
               {/* Description */}
-              <Form.Group className="mb-4">
-                <div className="ticket-section-heading">{t('tickets.description')}</div>
+              <Form.Group className="ticket-detail-section">
+                <div className="ticket-section-heading">
+                  <i className="bi bi-text-left me-2" />
+                  {t('tickets.description')}
+                </div>
                 <RichTextEditor
                   value={description}
                   onChange={(html) => setDescription(html)}
@@ -572,8 +575,11 @@ export function CreateTicketModal({
               </Form.Group>
 
               {/* Attachments */}
-              <Form.Group className="mb-4">
-                <div className="ticket-section-heading">{t('tickets.attachments')}</div>
+              <Form.Group className="ticket-detail-section">
+                <div className="ticket-section-heading">
+                  <i className="bi bi-paperclip me-2" />
+                  {t('tickets.attachments')}
+                </div>
                 <div
                   style={{
                     border: '2px dashed #e5e7eb',
@@ -591,8 +597,9 @@ export function CreateTicketModal({
               </Form.Group>
 
               {/* Initial comment */}
-              <Form.Group className="mb-2">
+              <Form.Group className="ticket-detail-section">
                 <div className="ticket-section-heading">
+                  <i className="bi bi-chat-dots me-2" />
                   {t('tickets.initialComment', 'Initial comment')}
                   <span className="ms-2 fw-normal text-muted" style={{ fontSize: '0.78rem' }}>
                     {t('common.optional', '(optional)')}
@@ -606,48 +613,48 @@ export function CreateTicketModal({
                   minHeight={100}
                 />
               </Form.Group>
-            </Col>
+            </div>
 
             {/* Right: sidebar fields matching detail modal layout ─────── */}
-            <Col md={5} style={{ paddingLeft: '1.5rem' }}>
+            <div className="ticket-detail-right-col">
               <div className="ticket-detail-sidebar">
-                {/* Status — full width dropdown, stages grouped by zone */}
-                <div className="ticket-sidebar-section-title">{t('tickets.status')}</div>
-                <Form.Select
-                  size="sm"
-                  value={stageId}
-                  onChange={(e) => {
-                    const newStageId = e.target.value;
-                    const allStages = teamData?.stages ?? [];
-                    const stage = allStages.find((s) => s.id === newStageId);
-                    setStageId(newStageId);
-                    if (stage) setZoneId(stage.zoneId);
-                  }}
-                  style={{ fontSize: '0.85rem' }}
-                >
-                  {zones.map((zone) => (
-                    <optgroup key={zone.id} label={zone.name}>
-                      {(teamData?.stages ?? [])
-                        .filter((s) => s.zoneId === zone.id)
-                        .sort((a, b) => a.order - b.order)
-                        .map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                    </optgroup>
-                  ))}
-                </Form.Select>
+                {/* Status */}
+                <div style={{ padding: '12px 14px 6px' }}>
+                  <div className="ticket-sidebar-field-label">{t('tickets.status')}</div>
+                  <Form.Select
+                    size="sm"
+                    value={stageId}
+                    onChange={(e) => {
+                      const newStageId = e.target.value;
+                      const allStages = teamData?.stages ?? [];
+                      const stage = allStages.find((s) => s.id === newStageId);
+                      setStageId(newStageId);
+                      if (stage) setZoneId(stage.zoneId);
+                    }}
+                  >
+                    {zones.map((zone) => (
+                      <optgroup key={zone.id} label={zone.name}>
+                        {(teamData?.stages ?? [])
+                          .filter((s) => s.zoneId === zone.id)
+                          .sort((a, b) => a.order - b.order)
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                  </Form.Select>
+                </div>
 
-                {/* Priority + Assignee — 2 column */}
-                <div className="ticket-sidebar-grid-row" style={{ marginTop: 16 }}>
-                  <div>
+                <div style={{ padding: '0 14px 10px' }}>
+                  {/* Priority */}
+                  <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.priority')}</div>
                     <Form.Select
                       size="sm"
                       value={(customFields['field-priority'] as string) || 'medium'}
                       onChange={(e) => setFieldValue('field-priority', e.target.value)}
-                      style={{ fontSize: '0.85rem' }}
                     >
                       {PRIORITY_OPTIONS.map((p) => (
                         <option key={p} value={p}>
@@ -656,20 +663,23 @@ export function CreateTicketModal({
                       ))}
                     </Form.Select>
                   </div>
-                  <div>
+
+                  {/* Assignee */}
+                  <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
                     <div className="d-flex align-items-center gap-2">
-                      {customFields['field-assignee'] && (
-                        <StaffAvatar
-                          staff={(config?.staff ?? []).find((s) => s.id === customFields['field-assignee'])}
-                          size={28}
-                        />
-                      )}
+                      <StaffAvatar
+                        staff={
+                          customFields['field-assignee']
+                            ? (config?.staff ?? []).find((s) => s.id === customFields['field-assignee'])
+                            : undefined
+                        }
+                        size={28}
+                      />
                       <Form.Select
                         size="sm"
                         value={(customFields['field-assignee'] as string) || ''}
                         onChange={(e) => setFieldValue('field-assignee', e.target.value || null)}
-                        style={{ fontSize: '0.85rem' }}
                       >
                         <option value="">{t('fields.unassigned')}</option>
                         {(config?.staff ?? [])
@@ -682,50 +692,44 @@ export function CreateTicketModal({
                       </Form.Select>
                     </div>
                   </div>
-                </div>
 
-                {/* Reporter — 2 column (second cell empty, mirrors detail modal's Reporter + Created by row) */}
-                <div className="ticket-sidebar-grid-row">
-                  <div>
+                  {/* Reporter */}
+                  <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.reporter')}</div>
                     <Form.Select
                       size="sm"
                       value={(customFields['field-reporter'] as string) || ''}
                       onChange={(e) => setFieldValue('field-reporter', e.target.value || null)}
-                      style={{ fontSize: '0.85rem' }}
                     >
                       <option value="">{t('fields.unassigned')}</option>
                       {(config?.staff ?? [])
                         .filter((s) => s.isActive)
                         .map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.name}
+                            {s.name || s.email}
                           </option>
                         ))}
                     </Form.Select>
                   </div>
-                  <div />
-                </div>
 
-                {/* Due Date + Project — 2 column */}
-                <div className="ticket-sidebar-grid-row">
-                  <div>
+                  {/* Due Date */}
+                  <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.dueDate')}</div>
                     <Form.Control
                       type="date"
                       size="sm"
                       value={(customFields['field-due-date'] as string) || ''}
                       onChange={(e) => setFieldValue('field-due-date', e.target.value || null)}
-                      style={{ fontSize: '0.85rem' }}
                     />
                   </div>
-                  <div>
+
+                  {/* Project */}
+                  <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.project')}</div>
                     <Form.Select
                       size="sm"
                       value={(customFields['field-project'] as string) || ''}
                       onChange={(e) => setFieldValue('field-project', e.target.value || null)}
-                      style={{ fontSize: '0.85rem' }}
                     >
                       <option value="">{t('common.none')}</option>
                       {(config?.projects ?? [])
@@ -736,23 +740,15 @@ export function CreateTicketModal({
                           </option>
                         ))}
                     </Form.Select>
-                    {(config?.projects ?? []).filter((p) => p.isActive).length === 0 && (
-                      <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: 2 }}>
-                        <i className="bi bi-gear me-1" />
-                        {t('tickets.projectHint')}
-                      </div>
-                    )}
                   </div>
-                </div>
 
-                {/* Customer + Supplier — 2 column */}
-                <div className="ticket-sidebar-grid-row">
-                  <div>
+                  {/* Customer */}
+                  <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.customer')}</div>
                     {prefilledCustomerId ? (
                       <div
                         className="form-control form-control-sm text-truncate"
-                        style={{ fontSize: '0.85rem', backgroundColor: '#f3f4f6', cursor: 'default', color: '#374151' }}
+                        style={{ backgroundColor: '#f3f4f6', cursor: 'default', color: '#374151' }}
                         title={prefilledCustomerName ?? prefilledCustomerId}
                       >
                         {prefilledCustomerName ?? prefilledCustomerId}
@@ -762,7 +758,6 @@ export function CreateTicketModal({
                         size="sm"
                         value={(customFields['field-client'] as string) || ''}
                         onChange={(e) => setFieldValue('field-client', e.target.value || null)}
-                        style={{ fontSize: '0.85rem' }}
                       >
                         <option value="">{t('common.none')}</option>
                         {customers.map((c) => (
@@ -773,12 +768,14 @@ export function CreateTicketModal({
                       </Form.Select>
                     )}
                   </div>
-                  <div>
+
+                  {/* Supplier */}
+                  <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.supplier')}</div>
                     {prefilledSupplierId ? (
                       <div
                         className="form-control form-control-sm text-truncate"
-                        style={{ fontSize: '0.85rem', backgroundColor: '#f3f4f6', cursor: 'default', color: '#374151' }}
+                        style={{ backgroundColor: '#f3f4f6', cursor: 'default', color: '#374151' }}
                         title={prefilledSupplierName ?? prefilledSupplierId}
                       >
                         {prefilledSupplierName ?? prefilledSupplierId}
@@ -788,7 +785,6 @@ export function CreateTicketModal({
                         size="sm"
                         value={(customFields['field-supplier'] as string) || ''}
                         onChange={(e) => setFieldValue('field-supplier', e.target.value || null)}
-                        style={{ fontSize: '0.85rem' }}
                       >
                         <option value="">{t('common.none')}</option>
                         {suppliers.map((s) => (
@@ -799,68 +795,68 @@ export function CreateTicketModal({
                       </Form.Select>
                     )}
                   </div>
-                </div>
 
-                {/* Sprint — full width, only if work units enabled */}
-                {hasWorkUnits && (
-                  <div className="mb-3">
-                    <div className="ticket-sidebar-field-label">{t('tickets.workUnit')}</div>
-                    <Form.Select
+                  {/* Sprint */}
+                  {hasWorkUnits && (
+                    <div className="ticket-sidebar-field">
+                      <div className="ticket-sidebar-field-label">{t('tickets.workUnit')}</div>
+                      <Form.Select
+                        size="sm"
+                        value={(customFields['field-work-unit-id'] as string) || ''}
+                        onChange={(e) => setFieldValue('field-work-unit-id', e.target.value || null)}
+                      >
+                        <option value="">{t('common.none')}</option>
+                        {workUnits.map((wu) => (
+                          <option key={wu.id} value={wu.id}>
+                            {wu.name}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  <div className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{t('tickets.tags')}</div>
+                    <Form.Control
                       size="sm"
-                      value={(customFields['field-work-unit-id'] as string) || ''}
-                      onChange={(e) => setFieldValue('field-work-unit-id', e.target.value || null)}
-                      style={{ fontSize: '0.85rem' }}
-                    >
-                      <option value="">{t('common.none')}</option>
-                      {workUnits.map((wu) => (
-                        <option key={wu.id} value={wu.id}>
-                          {wu.name}
-                        </option>
-                      ))}
-                    </Form.Select>
+                      type="text"
+                      value={tagsInput}
+                      onChange={(e) => setTagsInput(e.target.value)}
+                      placeholder={t('tickets.tagsHelp')}
+                    />
                   </div>
-                )}
 
-                {/* Tags */}
-                <div className="mb-3">
-                  <div className="ticket-sidebar-field-label">{t('tickets.tags')}</div>
-                  <Form.Control
-                    size="sm"
-                    type="text"
-                    value={tagsInput}
-                    onChange={(e) => setTagsInput(e.target.value)}
-                    placeholder={t('tickets.tagsHelp')}
-                    style={{ fontSize: '0.85rem' }}
-                  />
-                </div>
-
-                {/* Custom / Dynamic Fields (only truly custom fields not rendered above) */}
-                {dynamicFields.length > 0 && (
-                  <div className="pt-2 border-top">
-                    <div className="ticket-sidebar-section-title">{t('fields.dynamicFields')}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  {/* Custom / Dynamic Fields */}
+                  {dynamicFields.length > 0 && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #f0f0f0' }}>
+                      <div
+                        className="ticket-sidebar-field-label"
+                        style={{ marginBottom: 6, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.05em' }}
+                      >
+                        {t('fields.dynamicFields')}
+                      </div>
                       {dynamicFields.map((field) => (
-                        <div key={field.id}>
-                          <DynamicField
-                            field={field}
-                            value={customFields[field.id] ?? field.defaultValue ?? null}
-                            onChange={(val) => setFieldValue(field.id, val)}
-                            fieldOverride={fieldOverrides[field.id]}
-                            compact
-                            staff={config?.staff}
-                            customers={customers}
-                            suppliers={suppliers}
-                            workUnits={workUnits}
-                            projects={config?.projects}
-                          />
-                        </div>
+                        <DynamicField
+                          key={field.id}
+                          field={field}
+                          value={customFields[field.id] ?? field.defaultValue ?? null}
+                          onChange={(val) => setFieldValue(field.id, val)}
+                          fieldOverride={fieldOverrides[field.id]}
+                          compact
+                          staff={config?.staff}
+                          customers={customers}
+                          suppliers={suppliers}
+                          workUnits={workUnits}
+                          projects={config?.projects}
+                        />
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </Col>
-          </Row>
+            </div>
+          </div>
 
           {error && (
             <div className="alert alert-danger mt-3 mb-0" style={{ position: 'sticky', top: 0, zIndex: 5 }}>

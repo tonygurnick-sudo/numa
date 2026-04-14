@@ -23,6 +23,7 @@ type AddMessageOptions = {
   agentVisibility?: string;
   isAgentConversation?: boolean;
   isWorkspaceConversation?: boolean;
+  latestTimestamp?: number;
 };
 
 type AddFileMessageOptions = {
@@ -75,6 +76,7 @@ class NumaChatDynamoUtils {
     agentVisibility,
     isAgentConversation,
     isWorkspaceConversation,
+    latestTimestamp,
   }: AddMessageOptions) {
     try {
       const timestamp = Date.now();
@@ -102,6 +104,7 @@ class NumaChatDynamoUtils {
         agentVisibility,
         isAgentConversation,
         isWorkspaceConversation,
+        latestTimestamp,
       };
 
       const command = new PutItemCommand({
@@ -359,6 +362,7 @@ class NumaChatDynamoUtils {
           ProjectionExpression:
             'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation, isWorkspaceConversation',
           ScanIndexForward: false,
+          ConsistentRead: true,
           ExclusiveStartKey: lastEvaluatedKey || undefined,
         });
 

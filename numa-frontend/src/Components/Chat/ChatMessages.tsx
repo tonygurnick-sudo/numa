@@ -543,6 +543,40 @@ const ChatMessages = ({
           }
         }
 
+        // System notification messages (agent finishing, stream timeout) get a clean alert-style rendering
+        const msgAction = (message as ChatMessage & { action?: { type: string; label: string } }).action;
+        if (message.role === 'system' && (message.status === 'agentFinishing' || msgAction)) {
+          return (
+            <div key={index} className="d-flex justify-content-center my-3">
+              <div
+                className="d-flex flex-column align-items-center text-center px-4 py-3 rounded-3"
+                style={{
+                  background: 'var(--color-bg-light, #f8f9fa)',
+                  border: '1px solid var(--color-border, #dee2e6)',
+                  maxWidth: '480px',
+                  width: '100%',
+                }}
+              >
+                {message.status === 'agentFinishing' && (
+                  <Spinner
+                    animation="border"
+                    size="sm"
+                    className="mb-2"
+                    style={{ color: 'var(--brand-primary, #6f42c1)' }}
+                  />
+                )}
+                <span className="text-muted small">{message.content}</span>
+                {msgAction?.type === 'continue' && onSendPrompt && (
+                  <button className="btn btn-sm btn-outline-primary mt-2" onClick={() => onSendPrompt('continue')}>
+                    <i className="bi bi-arrow-clockwise me-1" />
+                    {msgAction.label}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        }
+
         // Check if this is the first assistant message (agent welcome)
         const isInitialAgentMessage = message.role === 'assistant' && index === 0 && currentAgent;
 

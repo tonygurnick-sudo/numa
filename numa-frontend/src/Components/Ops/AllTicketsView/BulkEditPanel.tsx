@@ -65,6 +65,8 @@ export function BulkEditPanel({
       setApplying(true);
 
       const changes: Record<string, string | null | undefined> = {};
+      const teamId = teamData?.team?.id;
+      if (teamId) changes.teamId = teamId;
       if (stageId !== KEEP_AS_IS) {
         changes.stageId = stageId;
         const stage = stages.find((s) => s.id === stageId);

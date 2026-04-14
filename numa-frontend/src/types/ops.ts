@@ -512,6 +512,8 @@ export type UpdateTicketPayload = {
   zoneId?: string;
   stageId?: string;
   teamId?: string;
+  currentTeamId?: string;
+  ticketTypeId?: string;
   archived?: boolean;
   assigneeId?: string | null;
   assigneeName?: string | null;
@@ -650,6 +652,7 @@ export type UpdateWorkUnitPayload = {
 export type BulkUpdateTicketsPayload = {
   ticketIds: string[];
   changes: {
+    teamId?: string;
     assigneeId?: string | null;
     zoneId?: string;
     stageId?: string;

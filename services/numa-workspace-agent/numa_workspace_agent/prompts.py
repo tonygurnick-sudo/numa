@@ -482,7 +482,7 @@ import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=1
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 
 # PDF to images (execute_script, interpreter="bash")
-pdftoppm -jpeg -r 150 /workdir/uploads/file.pdf /workdir/outputs/page
+pdftoppm -jpeg -r 120 /workdir/uploads/file.pdf /workdir/outputs/page
 
 # Extract text from PPTX/DOCX (execute_script, interpreter="python3")
 from markitdown import MarkItDown; print(MarkItDown().convert('/workdir/uploads/presentation.pptx').text_content)
