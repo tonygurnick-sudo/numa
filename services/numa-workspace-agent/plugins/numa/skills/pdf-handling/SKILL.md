@@ -304,6 +304,38 @@ These patterns prevent common layout bugs (content spilling to extra pages, brok
 - Content slightly too tall for one page → cascading overflow pushes everything to extra pages
 - Tables splitting without repeated headers → keep small tables together with `page-break-inside: avoid`
 
+### WeasyPrint Silent-Failure Gotchas
+
+WeasyPrint will happily render a PDF with broken visuals and **no error or warning**. These are the ones that bite most often:
+
+- **No gradients on `::before` / `::after`** — pseudo-element gradients render blank. Use solid colours, or put real `<div>` elements in the markup for decorative shapes.
+- **No `position: absolute` footers** — causes layout overlap with content. Use normal document flow with `margin-top`, or the `@page` margin boxes shown above.
+- **Flexbox height fill is unreliable** — avoid `flex: 1` and `height: 100%` inside flex containers; they produce inconsistent results or collapse silently.
+- **Always include this CSS upfront** to stop content tearing across pages:
+  ```css
+  .card,
+  table,
+  .info-box,
+  li {
+    page-break-inside: avoid;
+  }
+  ```
+
+### Always Verify the Rendered PDF
+
+Because these failures are silent, **never deliver a WeasyPrint PDF without rendering and inspecting each page as an image first**. Use PyMuPDF (`fitz`) to rasterise every page and check visually before returning the file to the user:
+
+```python
+import fitz  # PyMuPDF
+
+doc = fitz.open("/workdir/outputs/report.pdf")
+for i, page in enumerate(doc):
+    page.get_pixmap(dpi=150).save(f"/workdir/outputs/_preview_page_{i+1}.png")
+doc.close()
+```
+
+Then view each `_preview_page_*.png` to confirm layout, colours, and decorative elements actually rendered. If anything looks blank or overlapping, revisit the gotchas above.
+
 ### Professional Layouts: reportlab
 
 For pixel-perfect PDF creation with precise positioning, subscripts, superscripts, and complex layouts.
@@ -725,6 +757,9 @@ numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/docume
 | Font not found (fpdf2)            | Use built-in fonts: Helvetica, Times, Courier                                     |
 | Large file size                   | Compress images before embedding; use JPEG over PNG                               |
 | WeasyPrint missing fonts          | System fonts are available; use common font families                              |
+| WeasyPrint blank decorative shape | Gradients on `::before`/`::after` silently fail — use real `<div>` + solid colour |
+| WeasyPrint footer overlaps body   | Don't use `position: absolute` footers — use `@page` margin boxes or `margin-top` |
+| WeasyPrint flex layout collapses  | Avoid `flex: 1` / `height: 100%` in flex containers — unreliable                  |
 | pdfplumber table extraction fails | Try `page.extract_tables(table_settings={...})` with custom settings              |
 
 ---

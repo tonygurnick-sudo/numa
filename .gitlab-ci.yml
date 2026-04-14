@@ -55,6 +55,18 @@ default:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
 
+# Always-run sentinel on MR pipelines so GitLab never sees zero jobs.
+# Without this, docs-only MRs (e.g. changes under services/**/*.md) fail with
+# "Pipeline creation failed" because every other job is gated on changes: to
+# source paths, and GitLab refuses to create an empty pipeline.
+mr-sanity:
+  stage: .pre
+  image: alpine:latest
+  script:
+    - echo "MR pipeline non-empty guard."
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
 # Blocking manual gate for dev branch — pipeline pauses here until someone clicks play.
 # Only appears on dev push. Main and MR pipelines are unaffected.
 deploy-dev-gate:
