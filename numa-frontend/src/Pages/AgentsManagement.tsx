@@ -488,8 +488,23 @@ export const AgentsManagement = () => {
   };
 
   const handleDelete = async (agent: AgentSummary) => {
-    if (!window.confirm(t('management.confirmDelete', { title: agent.title }))) return;
     try {
+      const schedules = await ScheduleService.getByAgent(numaGet, agent.agentId);
+      const activeSchedules = schedules.filter((s) => s.status === 'active');
+
+      if (activeSchedules.length > 0) {
+        // Collect a list of recognizable schedule names (label, prompt text, or ID as fallback)
+        const scheduleNames = activeSchedules.map((s) => s.label || s.promptText || s.scheduleId).join('\n• ');
+        const confirmMessage = `${t('management.confirmDeleteWithSchedules', {
+          title: agent.title,
+          count: activeSchedules.length,
+        })}\n\n• ${scheduleNames}`;
+
+        if (!window.confirm(confirmMessage)) return;
+      } else {
+        if (!window.confirm(t('management.confirmDelete', { title: agent.title }))) return;
+      }
+
       await deleteAgent(numaDelete, agent.agentId);
       await loadAgents();
     } catch (err) {

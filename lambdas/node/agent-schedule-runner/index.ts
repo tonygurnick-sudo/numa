@@ -288,24 +288,6 @@ type RunScheduleResponse = {
   triggeredBySchedule?: boolean;
 };
 
-type ScheduledJobRecord = {
-  jobId: string;
-  userId: string;
-  appId: string;
-  appName: string;
-  dateTime: string;
-  status: 'STARTED' | 'COMPLETED' | 'FAILED';
-  results: {
-    agentTitle: string;
-    promptText: string;
-    scheduleId: string;
-    result?: string;
-    error?: string;
-  };
-  startedAt: string;
-  completedAt?: string;
-};
-
 /**
  * Structured self-evaluation written by the workspace agent at the end of each
  * scheduled run to /workdir/outputs/status.json. Read from S3 after the run.
@@ -656,7 +638,6 @@ const executeRun = async ({
   // Notify schedule started and create job record
   if (!adHoc) {
     await NotificationService.notifyScheduleStarted(schedule.user_id, schedule.schedule_id, 'agent', scheduleName);
-    await createJobRecord(schedule.user_id, schedule.schedule_id, scheduleName, runPrompt, 'STARTED');
   }
 
   if (!adHoc) {
@@ -762,15 +743,6 @@ const executeRun = async ({
         scheduleName,
         errorMessage
       );
-      await createJobRecord(
-        schedule.user_id,
-        schedule.schedule_id,
-        scheduleName,
-        runPrompt,
-        'FAILED',
-        undefined,
-        errorMessage
-      );
     }
     throw err instanceof Error ? err : new Error('Agent invocation failed');
   }
@@ -849,15 +821,6 @@ const executeRun = async ({
           notificationMessage,
           notifExtra
         );
-        await createJobRecord(
-          schedule.user_id,
-          schedule.schedule_id,
-          scheduleName,
-          runPrompt,
-          'FAILED',
-          undefined,
-          notificationMessage
-        );
       } else if (agentReportedStatus === 'partial') {
         await NotificationService.notifySchedulePartial(
           schedule.user_id,
@@ -867,14 +830,6 @@ const executeRun = async ({
           notificationMessage,
           notifExtra
         );
-        await createJobRecord(
-          schedule.user_id,
-          schedule.schedule_id,
-          scheduleName,
-          runPrompt,
-          'COMPLETED',
-          notificationMessage
-        );
       } else {
         await NotificationService.notifyScheduleCompleted(
           schedule.user_id,
@@ -883,14 +838,6 @@ const executeRun = async ({
           scheduleName,
           notificationMessage,
           notifExtra
-        );
-        await createJobRecord(
-          schedule.user_id,
-          schedule.schedule_id,
-          scheduleName,
-          runPrompt,
-          'COMPLETED',
-          notificationMessage
         );
       }
 
@@ -984,15 +931,6 @@ const executeRun = async ({
         scheduleName,
         errorMessage
       );
-      await createJobRecord(
-        schedule.user_id,
-        schedule.schedule_id,
-        scheduleName,
-        runPrompt,
-        'FAILED',
-        undefined,
-        errorMessage
-      );
     }
     throw err instanceof Error ? err : new Error('Unable to persist response');
   }
@@ -1004,41 +942,6 @@ const executeRun = async ({
     runLogS3Key: runLogKey ?? undefined,
     triggeredBySchedule: Boolean(triggeredBySchedule),
   };
-};
-
-const createJobRecord = async (
-  userId: string,
-  scheduleId: string,
-  agentTitle: string,
-  promptText: string,
-  status: 'STARTED' | 'COMPLETED' | 'FAILED',
-  result?: string,
-  error?: string
-): Promise<ScheduledJobRecord> => {
-  // Create a job record for scheduled agent runs to appear in job history
-  const jobRecord = {
-    jobId: `schedule-${scheduleId}-${Date.now()}`,
-    userId,
-    appId: 'scheduled-agents',
-    appName: 'Scheduled Agents',
-    dateTime: new Date().toISOString(),
-    status,
-    results: {
-      agentTitle,
-      promptText,
-      scheduleId,
-      ...(result && { result }),
-      ...(error && { error }),
-    },
-    startedAt: new Date().toISOString(),
-    ...(status !== 'STARTED' && { completedAt: new Date().toISOString() }),
-  };
-
-  // For now, just log the job record - in a full implementation,
-  // this would write to a jobs table or call the jobs API
-  console.log('Job record created:', JSON.stringify(jobRecord, null, 2));
-
-  return jobRecord;
 };
 
 const markScheduleStatus = async (
