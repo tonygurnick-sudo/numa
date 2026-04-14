@@ -2027,8 +2027,24 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
       continue;
     }
 
-    // Skip result events
+    // Capture cost/usage from result events onto the current assistant message
     if (event.type === 'result') {
+      const resultEvent = event as SDKResultEvent;
+      if (currentAssistantMessage) {
+        if (resultEvent.total_cost_usd != null) currentAssistantMessage.costUsd = resultEvent.total_cost_usd;
+        if (resultEvent.num_turns != null) currentAssistantMessage.numTurns = resultEvent.num_turns;
+        if (resultEvent.duration_ms != null) currentAssistantMessage.durationMs = resultEvent.duration_ms;
+        if (resultEvent.usage) {
+          if (resultEvent.usage.input_tokens != null)
+            currentAssistantMessage.inputTokens = resultEvent.usage.input_tokens;
+          if (resultEvent.usage.output_tokens != null)
+            currentAssistantMessage.outputTokens = resultEvent.usage.output_tokens;
+          if (resultEvent.usage.cache_read_input_tokens != null)
+            currentAssistantMessage.cacheReadTokens = resultEvent.usage.cache_read_input_tokens;
+          if (resultEvent.usage.cache_creation_input_tokens != null)
+            currentAssistantMessage.cacheCreationTokens = resultEvent.usage.cache_creation_input_tokens;
+        }
+      }
       continue;
     }
 
