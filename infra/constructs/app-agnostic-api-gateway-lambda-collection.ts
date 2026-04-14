@@ -1138,6 +1138,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       AGENT_TEAMS_TABLE: props.agentTeamsTableName,
       AGENT_TEAM_MEMBERS_TABLE: props.agentTeamMembersTableName,
       AGENT_SHARING_TABLE: props.agentSharingTableName,
+      AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
     } as Record<string, string>;
 
     const agentsPolicy = [
@@ -1164,6 +1165,8 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           `arn:aws:dynamodb:*:*:table/${props.agentTeamMembersTableName}/index/*`,
           `arn:aws:dynamodb:*:*:table/${props.agentSharingTableName}`,
           `arn:aws:dynamodb:*:*:table/${props.agentSharingTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/*`,
         ],
       },
       // Read agents settings policy table

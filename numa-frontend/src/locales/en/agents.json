@@ -465,6 +465,7 @@
       "delete": "Failed to delete agent"
     },
     "confirmDelete": "Delete agent \"{{title}}\"?",
+    "confirmDeleteWithSchedules": "Delete agent \"{{title}}\"? This will also auto-pause {{count}} active schedule(s).",
     "missingIntegrations": {
       "title": "Missing integrations",
       "loading": "Checking your integrations...",

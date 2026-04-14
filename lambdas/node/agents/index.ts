@@ -7,6 +7,7 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'crypto';
 import { S3Client, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -37,6 +38,7 @@ const PREFS_TABLE = process.env.AGENT_USER_PREFS_TABLE;
 const TEAMS_TABLE = process.env.AGENT_TEAMS_TABLE;
 const TEAM_MEMBERS_TABLE = process.env.AGENT_TEAM_MEMBERS_TABLE;
 const SHARING_TABLE = process.env.AGENT_SHARING_TABLE;
+const AGENT_SCHEDULES_TABLE = process.env.AGENT_SCHEDULES_TABLE_NAME;
 
 type AgentVisibility = 'personal' | 'public';
 type AgentScope = 'workspace' | 'user';
@@ -761,6 +763,103 @@ const handleCreateAgent = async (
   return jsonResponse(201, { agent: mapUserAgent(userItem) });
 };
 
+const syncAgentSchedules = async (
+  agentId: string,
+  updatedAgentResponse: AgentResponse | null,
+  action: 'update' | 'delete'
+): Promise<void> => {
+  if (!AGENT_SCHEDULES_TABLE) return;
+  try {
+    // 1. Sync regular agent schedules
+    const schedulesResult = await dynamo.send(
+      new QueryCommand({
+        TableName: AGENT_SCHEDULES_TABLE,
+        IndexName: 'agent-id-index',
+        KeyConditionExpression: 'agent_id = :agentId',
+        ExpressionAttributeValues: {
+          ':agentId': agentId,
+        },
+      })
+    );
+    if (schedulesResult.Items && schedulesResult.Items.length > 0) {
+      for (const rawItem of schedulesResult.Items) {
+        const item = rawItem as { user_id: string; schedule_id: string; status: string };
+        if (action === 'delete') {
+          if (item.status === 'active') {
+            await dynamo.send(
+              new UpdateCommand({
+                TableName: AGENT_SCHEDULES_TABLE,
+                Key: { user_id: item.user_id, schedule_id: item.schedule_id },
+                UpdateExpression: 'SET #status = :paused, updated_at = :ts',
+                ExpressionAttributeNames: { '#status': 'status' },
+                ExpressionAttributeValues: { ':paused': 'paused', ':ts': Date.now() },
+              })
+            );
+          }
+        } else if (action === 'update' && updatedAgentResponse) {
+          await dynamo.send(
+            new UpdateCommand({
+              TableName: AGENT_SCHEDULES_TABLE,
+              Key: { user_id: item.user_id, schedule_id: item.schedule_id },
+              UpdateExpression: 'SET agent_title = :at, agent_snapshot = :as, updated_at = :ts',
+              ExpressionAttributeValues: {
+                ':at': updatedAgentResponse.title,
+                ':as': updatedAgentResponse,
+                ':ts': Date.now(),
+              },
+            })
+          );
+        }
+      }
+    }
+
+    // 2. Sync application schedules
+    const appSchedulesResult = await dynamo.send(
+      new QueryCommand({
+        TableName: AGENT_SCHEDULES_TABLE,
+        IndexName: 'app-id-index',
+        KeyConditionExpression: 'app_id = :appId',
+        ExpressionAttributeValues: {
+          ':appId': agentId,
+        },
+      })
+    );
+    if (appSchedulesResult.Items && appSchedulesResult.Items.length > 0) {
+      for (const rawItem of appSchedulesResult.Items) {
+        const item = rawItem as { user_id: string; schedule_id: string; status: string };
+        if (action === 'delete') {
+          if (item.status === 'active') {
+            await dynamo.send(
+              new UpdateCommand({
+                TableName: AGENT_SCHEDULES_TABLE,
+                Key: { user_id: item.user_id, schedule_id: item.schedule_id },
+                UpdateExpression: 'SET #status = :paused, updated_at = :ts',
+                ExpressionAttributeNames: { '#status': 'status' },
+                ExpressionAttributeValues: { ':paused': 'paused', ':ts': Date.now() },
+              })
+            );
+          }
+        } else if (action === 'update' && updatedAgentResponse) {
+          await dynamo.send(
+            new UpdateCommand({
+              TableName: AGENT_SCHEDULES_TABLE,
+              Key: { user_id: item.user_id, schedule_id: item.schedule_id },
+              UpdateExpression: 'SET app_title = :at, updated_at = :ts',
+              // Note: Application schedules do not currently hold an `agent_snapshot` field, only `app_title`
+              ExpressionAttributeValues: {
+                ':at': updatedAgentResponse.title,
+                ':ts': Date.now(),
+              },
+            })
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync agent schedules', err);
+  }
+};
+
 const handleUpdateAgent = async (
   agentId: string,
   payload: UpdateAgentPayload | null,
@@ -870,7 +969,9 @@ const handleUpdateAgent = async (
       );
     }
 
-    return jsonResponse(200, { agent: mapUserAgent(merged) });
+    const responseAgent = mapUserAgent(merged);
+    await syncAgentSchedules(agentId, responseAgent, 'update');
+    return jsonResponse(200, { agent: responseAgent });
   }
 
   if (workspaceAgent) {
@@ -902,7 +1003,9 @@ const handleUpdateAgent = async (
           },
         })
       );
-      return jsonResponse(200, { agent: mapUserAgent(userItem) });
+      const responseAgent = mapUserAgent(userItem);
+      await syncAgentSchedules(agentId, responseAgent, 'update');
+      return jsonResponse(200, { agent: responseAgent });
     }
 
     const userWelcomeMessage = resolveWelcomeMessageFromPayload(payload, workspaceAgent);
@@ -974,7 +1077,9 @@ const handleUpdateAgent = async (
         Item: merged,
       })
     );
-    return jsonResponse(200, { agent: mapWorkspaceAgent(merged) });
+    const responseAgent = mapWorkspaceAgent(merged);
+    await syncAgentSchedules(agentId, responseAgent, 'update');
+    return jsonResponse(200, { agent: responseAgent });
   }
 
   return errorResponse(404, 'Agent not found');
@@ -1015,6 +1120,7 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
         },
       })
     );
+    await syncAgentSchedules(agentId, null, 'delete');
     return jsonResponse(200, { ok: true });
   }
 
@@ -1050,6 +1156,7 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
         },
       })
     );
+    await syncAgentSchedules(agentId, null, 'delete');
     return jsonResponse(200, { ok: true });
   }
 
