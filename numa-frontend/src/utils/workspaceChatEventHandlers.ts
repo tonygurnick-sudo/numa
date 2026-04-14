@@ -775,13 +775,13 @@ function addInlineToolSegment(
 }
 
 /**
- * Set the approval decision on an inline tool segment (e.g., 'execution_timeout').
+ * Set the approval decision on an inline tool segment (e.g., 'execution_timeout', 'execution_failed').
  * Walks backwards through messages to find the matching segment.
  */
 function setApprovalDecision(
   helpers: WorkspaceChatMessageHelpers,
   toolUseId: string,
-  decision: 'approved' | 'denied' | 'timeout' | 'execution_timeout'
+  decision: 'approved' | 'denied' | 'timeout' | 'execution_timeout' | 'execution_failed'
 ): void {
   helpers.setMessages((prev) => {
     const updated = [...prev];
@@ -1338,8 +1338,8 @@ function handleToolResultBlock(
       try {
         const resultStr = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
         const parsed = JSON.parse(resultStr);
-        if (parsed?.status === 'execution_timeout') {
-          setApprovalDecision(helpers, tool_use_id, 'execution_timeout');
+        if (parsed?.status === 'execution_timeout' || parsed?.status === 'execution_failed') {
+          setApprovalDecision(helpers, tool_use_id, parsed.status);
         }
       } catch {
         // Not JSON — ignore
@@ -2027,8 +2027,24 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
       continue;
     }
 
-    // Skip result events
+    // Capture cost/usage from result events onto the current assistant message
     if (event.type === 'result') {
+      const resultEvent = event as SDKResultEvent;
+      if (currentAssistantMessage) {
+        if (resultEvent.total_cost_usd != null) currentAssistantMessage.costUsd = resultEvent.total_cost_usd;
+        if (resultEvent.num_turns != null) currentAssistantMessage.numTurns = resultEvent.num_turns;
+        if (resultEvent.duration_ms != null) currentAssistantMessage.durationMs = resultEvent.duration_ms;
+        if (resultEvent.usage) {
+          if (resultEvent.usage.input_tokens != null)
+            currentAssistantMessage.inputTokens = resultEvent.usage.input_tokens;
+          if (resultEvent.usage.output_tokens != null)
+            currentAssistantMessage.outputTokens = resultEvent.usage.output_tokens;
+          if (resultEvent.usage.cache_read_input_tokens != null)
+            currentAssistantMessage.cacheReadTokens = resultEvent.usage.cache_read_input_tokens;
+          if (resultEvent.usage.cache_creation_input_tokens != null)
+            currentAssistantMessage.cacheCreationTokens = resultEvent.usage.cache_creation_input_tokens;
+        }
+      }
       continue;
     }
 

@@ -20,6 +20,7 @@ type ConversationMeta = {
 
 export interface WorkspaceChatHistoryPanelRef {
   refreshConversations: () => void;
+  updateConversationName: (conversationId: string, name: string) => void;
 }
 
 export interface WorkspaceChatHistoryPanelProps {
@@ -107,7 +108,10 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
 
     const fetchConversations = useCallback(async () => {
       if (!numaChatDynamoUtils || !user) return;
-      setIsLoading(true);
+      // Only show spinner on initial load when there's nothing to display
+      if (conversations.length === 0) {
+        setIsLoading(true);
+      }
       setHasMore(true);
       setCursor(null);
       try {
@@ -190,6 +194,11 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
     useImperativeHandle(ref, () => ({
       refreshConversations: () => {
         fetchConversations();
+      },
+      updateConversationName: (conversationId: string, name: string) => {
+        setConversations((prev) =>
+          prev.map((c) => (c.conversation_id === conversationId ? { ...c, conversationName: name } : c))
+        );
       },
     }));
 

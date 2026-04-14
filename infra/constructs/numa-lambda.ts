@@ -13,32 +13,6 @@ import { Construct } from 'constructs';
 import path from 'node:path';
 import { awsNameWithHashedPrefix } from './aws-name-utils';
 
-const OTEL_COLLECTOR_LAYER_VERSION = '0_16_0';
-const OTEL_LANGUAGE_LAYER_VERSION = '0_15_0';
-const OTEL_LAYER_ACCOUNT = '184161586896'; // From: https://github.com/open-telemetry/opentelemetry-lambda/releases
-
-// Regions where AWS publishes OpenTelemetry Lambda layers.
-// ap-southeast-3 (Jakarta) and other newer regions are NOT supported.
-// Source: https://aws-otel.github.io/docs/getting-started/lambda/lambda-python/
-const OTEL_SUPPORTED_REGIONS = new Set([
-  'ap-northeast-1',
-  'ap-northeast-2',
-  'ap-south-1',
-  'ap-southeast-1',
-  'ap-southeast-2',
-  'ca-central-1',
-  'eu-central-1',
-  'eu-north-1',
-  'eu-west-1',
-  'eu-west-2',
-  'eu-west-3',
-  'sa-east-1',
-  'us-east-1',
-  'us-east-2',
-  'us-west-1',
-  'us-west-2',
-]);
-
 export class NumaLambda extends Construct {
   readonly additionalPolicies: IamPolicy[];
   readonly lambda: LambdaFunction;
@@ -144,7 +118,7 @@ export class NumaLambda extends Construct {
         timeout: props.timeout || 900,
         ...(props.ephemeralStorageMb ? { ephemeralStorage: { size: props.ephemeralStorageMb } } : {}),
         tracingConfig: {
-          mode: props.otelConfig?.honeycombIngestKey ? 'PassThrough' : 'Active',
+          mode: 'Active',
         },
       });
     } else {
@@ -162,8 +136,6 @@ export class NumaLambda extends Construct {
         'lambda_function.zip'
       );
 
-      const honeycombConfig = otelLayersAndEnvironment(props.runtime!, props.otelConfig);
-
       const sourceCodeHash = Fn.filebase64sha256(filename);
       const otelResourceAttributes: Record<string, string> = {
         'numa.clientName': props.clientName,
@@ -178,14 +150,13 @@ export class NumaLambda extends Construct {
         environment: {
           variables: {
             ...otelEnvironmentVariables,
-            ...honeycombConfig.environmentVariables,
             ...props.environment,
           },
         },
         filename,
         functionName: resourceName,
         handler: props.handler ?? 'lambda_function.handler',
-        layers: [...honeycombConfig.layers, ...(props.additionalLayers ?? [])],
+        layers: [...(props.additionalLayers ?? [])],
         loggingConfig: {
           logFormat: 'JSON',
           logGroup: props.logGroup.name,
@@ -198,51 +169,11 @@ export class NumaLambda extends Construct {
         timeout: props.timeout || 900,
         ...(props.ephemeralStorageMb ? { ephemeralStorage: { size: props.ephemeralStorageMb } } : {}),
         tracingConfig: {
-          mode: props.otelConfig?.honeycombIngestKey ? 'PassThrough' : 'Active',
+          mode: 'Active',
         },
       });
     }
   }
-}
-
-type OTelLayerLanguage = 'python' | 'nodejs';
-function otelLanguageLayer(language: OTelLayerLanguage, region: string): string {
-  return `arn:aws:lambda:${region}:${OTEL_LAYER_ACCOUNT}:layer:opentelemetry-${language}-${OTEL_LANGUAGE_LAYER_VERSION}:1`;
-}
-
-type LambdaArchitecture = 'amd64' | 'arm64';
-
-function otelLayersAndEnvironment(
-  runtime: string,
-  props?: OTelConfig
-): {
-  environmentVariables: Record<string, string>;
-  layers: string[];
-} {
-  const environmentVariables: Record<string, string> = {};
-  const layers: string[] = [];
-
-  if (props && OTEL_SUPPORTED_REGIONS.has(props.region)) {
-    const architecture = props?.architecture ?? 'amd64';
-    const collectorLayer = `arn:aws:lambda:${props.region}:${OTEL_LAYER_ACCOUNT}:layer:opentelemetry-collector-${architecture}-${OTEL_COLLECTOR_LAYER_VERSION}:1`;
-    layers.push(collectorLayer);
-    if (runtime.match(/^python/)) {
-      layers.push(otelLanguageLayer('python', props.region));
-    } else {
-      layers.push(otelLanguageLayer('nodejs', props.region));
-    }
-    environmentVariables['AWS_LAMBDA_EXEC_WRAPPER'] = '/opt/otel-handler';
-    environmentVariables['HONEYCOMB_INGEST_KEY'] = props.honeycombIngestKey;
-    environmentVariables['OPENTELEMETRY_COLLECTOR_CONFIG_URI'] = `s3://${props.otelConfigPath}`;
-  }
-  return { layers, environmentVariables };
-}
-
-export interface OTelConfig {
-  honeycombIngestKey: string;
-  otelConfigPath: string;
-  region: string;
-  architecture?: LambdaArchitecture;
 }
 
 export interface NumaLambdaProps {
@@ -256,7 +187,6 @@ export interface NumaLambdaProps {
   lambdaDirectory?: string;
   logGroup: CloudwatchLogGroup;
   memorySize?: number;
-  otelConfig?: OTelConfig;
   resourceNameSuffix: string;
   runtime?: string;
   timeout?: number;

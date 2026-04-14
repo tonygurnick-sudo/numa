@@ -6,6 +6,8 @@ import {
   saveInlineDocumentToS3,
   isRetryableError,
   getWorkspaceChatRawTrace,
+  checkConversationStatus,
+  pollConversationUntilComplete,
 } from '../Services/workspaceChatAgentService';
 import type { StreamRetryConfig } from '../Services/workspaceChatAgentService';
 import {
@@ -20,6 +22,7 @@ import {
   getToolSegmentKind,
 } from '../utils/workspaceChatEventHandlers';
 import { parseChunkWithoutDocComments, extractSingleDocBlock } from '../utils/streamingProcessors';
+import { parseRawTraceToMessages } from '../utils/workspaceChatEventHandlers';
 import type { SDKEventContext, SDKEvent, SDKStreamEvent, WorkspaceChatModelId } from '../types/workspaceChatTypes';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 
@@ -94,6 +97,10 @@ type UseWorkspaceChatStreamingOptions = {
   refreshSessionFiles?: () => void;
   /** Authenticated POST helper for API calls (transcription submit, etc.) */
   numaPost?: (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
+  /** Optional callback to send a browser notification when chat completes while user is away */
+  onNotifyCompletion?: (conversationName?: string) => void;
+  /** Async ID token getter from AuthProvider -- ensures fresh tokens for API calls */
+  getIdToken?: () => Promise<string | null>;
 };
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
@@ -122,6 +129,8 @@ export function useWorkspaceChatStreaming({
   getCredentials,
   refreshSessionFiles,
   numaPost,
+  onNotifyCompletion,
+  getIdToken,
 }: UseWorkspaceChatStreamingOptions) {
   const { t } = useTranslation('chat');
 
@@ -136,6 +145,7 @@ export function useWorkspaceChatStreaming({
   const activeStreamingTasksRef = useRef<Set<string>>(new Set());
   const workspaceChatRawTextRef = useRef<string>('');
   const [isStopping, setIsStopping] = useState(false);
+  const isStoppingRef = useRef(false);
 
   // Network resilience state
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -150,6 +160,7 @@ export function useWorkspaceChatStreaming({
       workspaceChatAbortRef.current = null;
     }
     setIsStopping(false);
+    isStoppingRef.current = false;
     setIsReconnecting(false);
     setRetryAttempt(0);
     setCanRetry(false);
@@ -165,13 +176,15 @@ export function useWorkspaceChatStreaming({
     }
 
     setIsStopping(true);
+    isStoppingRef.current = true;
     try {
-      await stopWorkspaceChatAgent(conversationId, requestId);
+      await stopWorkspaceChatAgent(conversationId, requestId, getIdToken);
     } catch (err) {
       console.error('[WorkspaceChat] Stop request failed:', err);
       setIsStopping(false);
+      isStoppingRef.current = false;
     }
-  }, []);
+  }, [getIdToken]);
 
   const streamChat = useCallback(
     async (config: StreamConfig) => {
@@ -725,20 +738,103 @@ export function useWorkspaceChatStreaming({
           // connection was likely dropped mid-stream (e.g. timeout).
           // Show a system message so the user knows the response may
           // be incomplete and they can retry.
-          if (!receivedCompletion) {
-            console.warn('[WorkspaceChat] Stream closed without completion marker — possible timeout');
+          if (!receivedCompletion && isStoppingRef.current) {
+            // User clicked Stop — show a clean "stopped" message, skip reconnection logic
+            console.info('[WorkspaceChat] Stream ended by user stop action');
+            isStoppingRef.current = false;
+            setIsStopping(false);
+            isProcessingRef.current = false;
+            setButtonStatus('idle');
             setMessages((prev) => [
               ...prev,
-              {
-                role: 'system',
-                content: t('chat:systemMessages.streamDisconnected'),
-              },
+              { role: 'system' as const, content: t('chat:systemMessages.stoppedByUser') },
             ]);
+          } else if (!receivedCompletion) {
+            console.warn('[WorkspaceChat] Stream closed without completion marker — possible timeout');
+            const disconnectedConvId = currentConversationIdRef.current;
+
+            // Check if the agent is still running server-side before deciding what to show.
+            // The proxy Lambda may have timed out but the agent keeps running on AgentCore.
+            if (disconnectedConvId) {
+              // Keep the UI in a loading state (disables send button + input controls)
+              isProcessingRef.current = true;
+              setButtonStatus('loading');
+              setMessages((prev) => [
+                ...prev,
+                { role: 'system', content: t('chat:systemMessages.agentFinishing'), status: 'agentFinishing' },
+              ]);
+
+              checkConversationStatus(disconnectedConvId, getIdToken)
+                .then(async (statusData) => {
+                  if (statusData.status === 'running' && statusData.active) {
+                    // Agent is still running — poll until it finishes, then reload trace
+                    await pollConversationUntilComplete(
+                      disconnectedConvId,
+                      { intervalMs: 3000, timeoutMs: 600_000 },
+                      getIdToken
+                    );
+                    // Agent done — reload trace from S3
+                    const updatedTrace = await getWorkspaceChatRawTrace(disconnectedConvId, getIdToken);
+                    const updatedMessages = parseRawTraceToMessages(updatedTrace);
+                    setMessages(updatedMessages as Message[]);
+                    refreshSidebar();
+                    onNotifyCompletion?.();
+                  } else {
+                    // Agent already finished — reload trace (full response should be in S3)
+                    try {
+                      const updatedTrace = await getWorkspaceChatRawTrace(disconnectedConvId, getIdToken);
+                      const updatedMessages = parseRawTraceToMessages(updatedTrace);
+                      setMessages(updatedMessages as Message[]);
+                      refreshSidebar();
+                      onNotifyCompletion?.();
+                    } catch {
+                      // Trace not available — show Continue button as fallback
+                      setMessages((prev) => [
+                        ...prev.filter((m) => m.content !== t('chat:systemMessages.agentFinishing')),
+                        {
+                          role: 'system',
+                          content: t('chat:systemMessages.streamTimedOut'),
+                          action: { type: 'continue', label: t('chat:systemMessages.continueButton') },
+                        },
+                      ]);
+                    }
+                  }
+                })
+                .catch(() => {
+                  // Status check failed — fall back to Continue button
+                  setMessages((prev) => [
+                    ...prev.filter((m) => m.content !== t('chat:systemMessages.agentFinishing')),
+                    {
+                      role: 'system',
+                      content: t('chat:systemMessages.streamTimedOut'),
+                      action: { type: 'continue', label: t('chat:systemMessages.continueButton') },
+                    },
+                  ]);
+                })
+                .finally(() => {
+                  isProcessingRef.current = false;
+                  setButtonStatus('idle');
+                });
+            } else {
+              // No conversation ID — just show Continue button
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'system',
+                  content: t('chat:systemMessages.streamTimedOut'),
+                  action: { type: 'continue', label: t('chat:systemMessages.continueButton') },
+                },
+              ]);
+            }
           }
 
-          isProcessingRef.current = false;
+          if (receivedCompletion) {
+            isProcessingRef.current = false;
+          }
           workspaceChatAbortRef.current = null;
           activeStreamingTasksRef.current.clear();
+          isStoppingRef.current = false;
+          setIsStopping(false);
           setIsReconnecting(false);
           setRetryAttempt(0);
           setCanRetry(false);
@@ -798,7 +894,7 @@ export function useWorkspaceChatStreaming({
             }
 
             if (hasToolCards) {
-              getWorkspaceChatRawTrace(conversationId)
+              getWorkspaceChatRawTrace(conversationId, getIdToken)
                 .then((traceContent) => {
                   // Extract tool results from user events in the trace
                   const toolResults = new Map<string, { content: unknown; isError: boolean }>();
@@ -870,6 +966,7 @@ export function useWorkspaceChatStreaming({
           if (onStreamComplete) {
             onStreamComplete(conversationId);
           }
+          onNotifyCompletion?.();
           setTimeout(() => inputRef.current?.focus(), 0);
         },
         // onError — called after all automatic retries are exhausted
@@ -946,7 +1043,8 @@ export function useWorkspaceChatStreaming({
             setRetryAttempt(attempt);
             console.warn(`[WorkspaceChat] Retry attempt ${attempt}/${maxAttempts}`);
           },
-        } satisfies StreamRetryConfig
+        } satisfies StreamRetryConfig,
+        getIdToken
       );
 
       workspaceChatAbortRef.current = abortWorkspaceChat;
@@ -968,6 +1066,7 @@ export function useWorkspaceChatStreaming({
       getCredentials,
       refreshSessionFiles,
       numaPost,
+      getIdToken,
       t,
     ]
   );

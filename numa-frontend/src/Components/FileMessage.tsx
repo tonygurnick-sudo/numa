@@ -51,7 +51,7 @@ export const FileMessage = ({
       <span className="file-name">{filename}</span>
       {type === 'success' && (
         <div className="success-indicator">
-          <i className="bi bi-download" />
+          <i className="bi bi-box-arrow-up-right" />
         </div>
       )}
       {showSpinner && (

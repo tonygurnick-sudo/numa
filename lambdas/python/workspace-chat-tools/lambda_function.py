@@ -45,6 +45,7 @@ from tools import (
     handle_convert_document,
     handle_convert_preview,
     handle_create_agent,
+    handle_delete_kb_file,
     handle_duplicate_agent,
     handle_extract_content,
     handle_get_agent,
@@ -118,6 +119,7 @@ logger = structlog.get_logger()
 # Tool handlers registry
 TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "add_to_kb": handle_add_to_kb,
+    "delete_kb_file": handle_delete_kb_file,
     "convert_document": handle_convert_document,
     "convert_preview": handle_convert_preview,
     "create_agent": handle_create_agent,
@@ -387,6 +389,43 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         # Pass user_sub to handler for server-side write permission check
         # (admin check for company KB, editor/owner check for user KBs)
         params["__user_sub"] = user_sub
+
+    # Security: Validate delete_kb_file tool access (fail-closed)
+    if tool_name == "delete_kb_file":
+        kb_id = params.get("kb_id", "company")
+
+        if not allowed_kbs:
+            logger.warning(
+                "KB delete denied - no KBs enabled",
+                kb_id=kb_id,
+                allowed_kbs=allowed_kbs,
+            )
+            return {
+                "status": "error",
+                "result": None,
+                "error": "No knowledge bases are enabled for this conversation",
+            }
+
+        if kb_id not in allowed_kbs:
+            logger.warning(
+                "KB delete denied - not in allowed list",
+                kb_id=kb_id,
+                allowed_kbs=allowed_kbs,
+            )
+            return {
+                "status": "error",
+                "result": None,
+                "error": f"Knowledge base '{kb_id}' is not enabled. Enabled KBs: {allowed_kbs}",
+            }
+
+        logger.info(
+            "KB delete access validated (client-side list)",
+            kb_id=kb_id,
+            allowed_kbs=allowed_kbs,
+        )
+
+        params["__user_sub"] = user_sub
+        params["__allowed_kbs"] = allowed_kbs
 
     # Security: Validate list_kb_files tool access (fail-closed)
     if tool_name == "list_kb_files":

@@ -272,7 +272,7 @@ def _execute_with_idempotency(
         execute_fn: Zero-arg callable that performs the actual relay invocation
 
     Returns:
-        The result from execute_fn, or an already_executed/execution_timeout response
+        The result from execute_fn, or an already_executed/execution_failed response
     """
     if not INTEGRATIONS_APPROVAL_TABLE:
         # No table configured — skip idempotency and just execute
@@ -320,11 +320,12 @@ def _execute_with_idempotency(
         )
         return result
     except Exception as exc:
-        # Relay failed or timed out — mark as unknown so a retry can attempt again
+        # Relay failed — mark as unknown so a retry can attempt again
+        error_msg = str(exc)
         logger.warning(
             "Relay execution failed after approval",
             approval_id=approval_id,
-            error=str(exc),
+            error=error_msg,
         )
         dynamodb.update_item(
             TableName=INTEGRATIONS_APPROVAL_TABLE,
@@ -335,11 +336,8 @@ def _execute_with_idempotency(
             },
         )
         return {
-            "status": "execution_timeout",
-            "message": (
-                "Action was approved and may have completed. "
-                "Check the target system before retrying."
-            ),
+            "status": "execution_failed",
+            "message": error_msg,
         }
 
 

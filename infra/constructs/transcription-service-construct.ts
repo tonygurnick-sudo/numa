@@ -19,7 +19,6 @@ import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-i
 import { Resource as NullResource } from '@cdktf/provider-null/lib/resource';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 import { NumaLogGroup } from './numa-log-group';
-import { OTelConfig } from './numa-lambda';
 
 export interface TranscriptionServiceConstructProps extends ApiGatewayLambdaCollectionProps {
   region: string;
@@ -36,7 +35,6 @@ export interface TranscriptionServiceConstructProps extends ApiGatewayLambdaColl
   auditAutomationTableArn: string;
   /** Deployer role ARN for chain assume (required for ECR push from local-exec) */
   deployerRoleArn: string;
-  otelConfig?: OTelConfig;
 }
 
 export class TranscriptionServiceConstruct extends ApiGatewayLambdaCollection {

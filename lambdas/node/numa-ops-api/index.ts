@@ -11,6 +11,7 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { randomUUID } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
 import {
@@ -23,6 +24,7 @@ import type { PresetZone } from '../../../lib/ops-constants';
 import type { ZoneType, StatusType } from '../../../lib/ops-schemas';
 
 const client = withPRM(DynamoDBClient, {});
+
 const dynamo = DynamoDBDocumentClient.from(client, {
   marshallOptions: { removeUndefinedValues: true, convertClassInstanceToMap: true },
 });
@@ -40,6 +42,44 @@ const OUTPUTS_BUCKET_NAME = process.env.OUTPUTS_BUCKET_NAME!;
 const REGION = process.env.REGION || 'ap-southeast-2';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CLIENT_NAME = process.env.CLIENT_NAME!;
+
+/**
+ * Generate an STS presigned GetCallerIdentity URL for cross-account identity proof.
+ */
+async function generateStsProofUrl(expiresIn = 60): Promise<string> {
+  const { SignatureV4 } = await import('@smithy/signature-v4');
+  const { Sha256 } = await import('@aws-crypto/sha256-js');
+  const { defaultProvider } = await import('@aws-sdk/credential-provider-node');
+  const { HttpRequest } = await import('@smithy/protocol-http');
+
+  const signer = new SignatureV4({
+    service: 'sts',
+    region: 'us-east-1',
+    credentials: defaultProvider(),
+    sha256: Sha256,
+  });
+
+  const request = new HttpRequest({
+    method: 'GET',
+    protocol: 'https:',
+    hostname: 'sts.us-east-1.amazonaws.com',
+    path: '/',
+    query: {
+      Action: 'GetCallerIdentity',
+      Version: '2011-06-15',
+    },
+    headers: {
+      host: 'sts.us-east-1.amazonaws.com',
+    },
+  });
+
+  const signed = await signer.presign(request, { expiresIn });
+  const queryString = Object.entries(signed.query ?? {})
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&');
+
+  return `https://${signed.hostname}${signed.path}?${queryString}`;
+}
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +107,27 @@ const jsonResponse = (
 
 const errorResponse = (statusCode: number, message: string): ReturnType<typeof jsonResponse> =>
   jsonResponse(statusCode, { error: message });
+
+/**
+ * Resolve user display name from staff records in OPS_CONFIG_TABLE.
+ * Falls back to JWT name claim, then email prefix, then 'Unknown'.
+ */
+const resolveAuthorName = async (auth: AuthContext): Promise<string> => {
+  try {
+    const result = await dynamo.send(
+      new GetCommand({
+        TableName: OPS_CONFIG_TABLE,
+        Key: { PK: 'CONFIG', SK: `STAFF#${auth.sub}` },
+        ProjectionExpression: '#n',
+        ExpressionAttributeNames: { '#n': 'name' },
+      })
+    );
+    if (result.Item?.name) return String(result.Item.name);
+  } catch {
+    // Fall through to JWT-based fallback
+  }
+  return auth.name || (auth.email ? auth.email.split('@')[0] : 'Unknown');
+};
 
 const parseJwt = (token: string): Record<string, unknown> => {
   try {
@@ -117,6 +178,14 @@ const isTeamOwner = (teamMeta: Record<string, unknown>, auth: AuthContext): bool
   if (teamMeta.createdBy === auth.sub) return true;
   const ac = teamMeta.accessControl as { owners?: string[] } | undefined;
   return Array.isArray(ac?.owners) && ac.owners.includes(auth.sub);
+};
+
+/** Check if user has access to a team (owner or listed member). Admins do NOT bypass this. */
+const hasTeamAccess = (teamMeta: Record<string, unknown>, auth: AuthContext): boolean => {
+  const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
+  if (!ac || ac.mode === 'all') return true;
+  if (isTeamOwner(teamMeta, auth)) return true;
+  return Array.isArray(ac.users) && ac.users.includes(auth.sub);
 };
 
 const buildPathSegments = (event: APIGatewayProxyEventV2): string[] => {
@@ -258,15 +327,8 @@ const handleTeams = async (
   if (method === 'GET' && segments.length === 0) {
     const { items } = await queryGSI1('TENANT', 'TEAM#');
 
-    // Admins see all teams; non-admins see only teams they have access to
-    const visibleTeams = isAdmin(auth)
-      ? items
-      : items.filter((team) => {
-          const ac = team.accessControl as { mode?: string; users?: string[] } | undefined;
-          if (!ac || ac.mode === 'all') return true;
-          if (isTeamOwner(team, auth)) return true; // owners always see their team
-          return Array.isArray(ac.users) && ac.users.includes(auth.sub);
-        });
+    // Private boards are private for everyone — admins do NOT bypass access control
+    const visibleTeams = items.filter((team) => hasTeamAccess(team, auth));
 
     return jsonResponse(200, { teams: visibleTeams });
   }
@@ -279,13 +341,8 @@ const handleTeams = async (
     const meta = items.find((i) => String(i.SK) === 'META');
 
     // Verify user has access to this team
-    if (meta && !isAdmin(auth)) {
-      const ac = meta.accessControl as { mode?: string; users?: string[] } | undefined;
-      if (ac && ac.mode === 'specific' && !isTeamOwner(meta, auth)) {
-        if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
-          return errorResponse(403, 'You do not have access to this team');
-        }
-      }
+    if (meta && !hasTeamAccess(meta, auth)) {
+      return errorResponse(403, 'You do not have access to this team');
     }
 
     const zones = items
@@ -1077,6 +1134,78 @@ const handleTickets = async (
     };
     await putItem(commentItem);
 
+    // Parse mentions and send emails
+    const mentions = new Set<string>();
+    const contentStr = String(content);
+    const mentionRegex = /<span[^>]*data-sub="([^"]+)"[^>]*>/g;
+    let match;
+    while ((match = mentionRegex.exec(contentStr)) !== null) {
+      if (match[1] !== auth.sub) {
+        mentions.add(match[1]);
+      }
+    }
+
+    if (mentions.size > 0 && process.env.EMAIL_SENDER_LAMBDA_ARN) {
+      try {
+        const staffResp = await dynamo.send(
+          new QueryCommand({
+            TableName: process.env.OPS_CONFIG_TABLE,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+            ExpressionAttributeValues: { ':pk': 'CONFIG', ':sk': 'STAFF#' },
+          })
+        );
+        const staffList = staffResp.Items ?? [];
+
+        const origin =
+          event.headers.origin ??
+          (event.headers.referer ? event.headers.referer.replace(/\/$/, '') : `https://${event.headers.host}`);
+        const ticketUrl = `${origin}/ops?ticketId=${ticketId}`;
+
+        const authorStaff = staffList.find((s) => s.id === auth.sub || s.SK === `STAFF#${auth.sub}`);
+        const authorName = authorStaff?.name;
+        const authorEmail = authorStaff?.email;
+        const displayAuthor = authorName
+          ? String(authorName)
+          : authorEmail
+            ? String(authorEmail).split('@')[0]
+            : 'Someone';
+
+        for (const sub of mentions) {
+          const mentionedStaff = staffList.find((s) => s.id === sub || s.SK === `STAFF#${sub}`);
+          if (mentionedStaff && mentionedStaff.email) {
+            const emailPayload = {
+              sts_proof_url: await generateStsProofUrl(),
+              client_name: process.env.CLIENT_NAME || 'unknown',
+              to: [mentionedStaff.email],
+              template: 'generic',
+              template_data: {
+                subject: `${displayAuthor} mentioned you in Ops Ticket #${ticketId.split('-')[0] || ticketId.slice(0, 8)}`,
+                title: 'You Were Mentioned',
+                body_html: `<p>You were mentioned in a comment by <strong>${displayAuthor}</strong>:</p>
+                            <blockquote style="border-left: 4px solid #ccc; padding-left: 1rem; color: #555; margin-left: 0; word-break: break-word;">
+                              ${contentStr}
+                            </blockquote>
+                            <p><a href="${ticketUrl}" style="display: inline-block; padding: 10px 20px; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 5px;">View Ticket</a></p>`,
+                body_text: `You were mentioned in a comment by ${displayAuthor}: ${contentStr}\nView Ticket: ${ticketUrl}`,
+                primary_color: '#0d6efd',
+              },
+            };
+
+            const emailLambdaClient = withPRM(LambdaClient, { region: 'us-east-1' });
+            await emailLambdaClient.send(
+              new InvokeCommand({
+                FunctionName: process.env.EMAIL_SENDER_LAMBDA_ARN,
+                InvocationType: 'Event',
+                Payload: Buffer.from(JSON.stringify(emailPayload)),
+              })
+            );
+          }
+        }
+      } catch (err) {
+        console.error('Failed to process mentions', err);
+      }
+    }
+
     // Increment commentCount on the ticket — need to find the ticket first
     const ticketItems = await queryByPK(`TEAM#${String(body.teamId ?? '')}`, `TICKET#${ticketId}`);
     // Fallback: scan for ticket by looking at GSI3
@@ -1378,16 +1507,9 @@ const handleTickets = async (
     if (!teamId) return errorResponse(400, 'Missing required query parameter: teamId');
 
     // Verify user has access to the team
-    if (!isAdmin(auth)) {
-      const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
-      if (teamMeta) {
-        const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
-        if (ac && ac.mode === 'specific' && !isTeamOwner(teamMeta, auth)) {
-          if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
-            return errorResponse(403, 'You do not have access to this team');
-          }
-        }
-      }
+    const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (teamMeta && !hasTeamAccess(teamMeta, auth)) {
+      return errorResponse(403, 'You do not have access to this team');
     }
 
     const limit = qp.limit ? parseInt(qp.limit, 10) : undefined;
@@ -1548,16 +1670,9 @@ const handleTickets = async (
     const teamId = String(rawTeamId);
 
     // Verify user has access to create tickets in this team
-    if (!isAdmin(auth)) {
-      const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
-      if (teamMeta) {
-        const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
-        if (ac && ac.mode === 'specific' && !isTeamOwner(teamMeta, auth)) {
-          if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
-            return errorResponse(403, 'You do not have access to this team');
-          }
-        }
-      }
+    const createTeamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (createTeamMeta && !hasTeamAccess(createTeamMeta, auth)) {
+      return errorResponse(403, 'You do not have access to this team');
     }
 
     const stageId = String(rawStageId);
@@ -1688,15 +1803,10 @@ const handleTickets = async (
     const targetTeamId = isCrossTeamMove ? teamId! : currentTeamId;
 
     // Verify user has access to the target team for cross-team moves
-    if (isCrossTeamMove && !isAdmin(auth)) {
+    if (isCrossTeamMove) {
       const targetMeta = (await queryByPK(`TEAM#${targetTeamId}`, 'META'))[0];
-      if (targetMeta) {
-        const ac = targetMeta.accessControl as { mode?: string; users?: string[] } | undefined;
-        if (ac && ac.mode === 'specific' && !isTeamOwner(targetMeta, auth)) {
-          if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
-            return errorResponse(403, 'You do not have access to the target team');
-          }
-        }
+      if (targetMeta && !hasTeamAccess(targetMeta, auth)) {
+        return errorResponse(403, 'You do not have access to the target team');
       }
     }
 
@@ -2186,6 +2296,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     const auth = resolveAuthContext(event);
     if (!auth) return errorResponse(401, 'Unauthorized');
+
+    // Enrich auth.name from staff records (JWT access tokens lack the name claim)
+    auth.name = await resolveAuthorName(auth);
 
     const segments = buildPathSegments(event);
     if (segments[0] !== 'ops') {

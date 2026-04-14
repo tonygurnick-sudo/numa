@@ -59,7 +59,7 @@ def _get_api_key() -> str:
 def _resp(status: int, body: dict) -> dict:
     return {
         "statusCode": status,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {"Content-Type": "application/json", "Cache-Control": "no-store"},
         "body": json.dumps(body),
     }
 
@@ -122,14 +122,16 @@ def lambda_handler(event: dict, _ctx: object) -> dict:
             RoleArn=UPLOAD_ROLE_ARN,
             RoleSessionName="racetech-upload",
             Policy=json.dumps(session_policy),
-            DurationSeconds=PRESIGN_EXPIRES + 300,
+            DurationSeconds=min(
+                PRESIGN_EXPIRES + 300, 3600
+            ),  # role-chaining caps at 1h
         )["Credentials"]
     except ClientError:
         logger.exception("STS assume_role failed")
         return _resp(500, {"error": "Internal error"})
 
     # ── 5. Generate presigned PUT URL ─────────────────────────────────────────
-    s3 = boto3.client(
+    s3 = prm_client(
         "s3",
         aws_access_key_id=creds["AccessKeyId"],
         aws_secret_access_key=creds["SecretAccessKey"],

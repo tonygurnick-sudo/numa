@@ -203,6 +203,7 @@ function renderEditControl(
           onChange={(e) => setLocalValue(e.target.value)}
           onBlur={onBlur}
           required={isRequired}
+          placeholder={t('common.none')}
           style={style}
         />
       );
@@ -253,6 +254,7 @@ function renderEditControl(
           onChange={(e) => setLocalValue(e.target.value === '' ? null : Number(e.target.value))}
           onBlur={onBlur}
           required={isRequired}
+          placeholder={t('common.none')}
           style={style}
         />
       );
@@ -265,6 +267,7 @@ function renderEditControl(
           onChange={(e) => setLocalValue(e.target.value === '' ? null : Number(e.target.value))}
           onBlur={onBlur}
           required={isRequired}
+          placeholder={t('common.none')}
           step="0.01"
           min="0"
           style={style}
@@ -293,6 +296,7 @@ function renderEditControl(
           }
           onBlur={onBlur}
           required={isRequired}
+          placeholder={t('common.none')}
           min="0"
           max="100"
           style={style}

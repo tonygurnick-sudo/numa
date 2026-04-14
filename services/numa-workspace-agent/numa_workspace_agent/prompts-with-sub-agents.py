@@ -494,7 +494,7 @@ python3 -c "import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 
 # PDF to images (Poppler)
-pdftoppm -jpeg -r 150 /workdir/uploads/file.pdf /workdir/outputs/page
+pdftoppm -jpeg -r 120 /workdir/uploads/file.pdf /workdir/outputs/page
 
 # Extract text from PPTX/DOCX (markitdown)
 python3 -m markitdown /workdir/uploads/presentation.pptx

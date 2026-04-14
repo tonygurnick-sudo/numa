@@ -17,6 +17,7 @@ type ChatHistorySidebarProps = {
 
 export type ChatHistorySidebarRef = {
   refreshConversations: () => void;
+  updateConversationName: (conversationId: string, name: string) => void;
   toggleSidebar: () => void;
   collapseSidebar: () => void;
 };
@@ -118,7 +119,10 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
      */
     const fetchConversations = async () => {
       if (!numaChatDynamoUtils || !user) return;
-      setIsLoading(true);
+      // Only show spinner on initial load when there's nothing to display
+      if (conversations.length === 0) {
+        setIsLoading(true);
+      }
       try {
         const userId = sub || 'anonymous';
         let metaItems = await numaChatDynamoUtils.getUserConversationsMeta(userId);
@@ -146,6 +150,11 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
     useImperativeHandle(ref, () => ({
       refreshConversations: () => {
         fetchConversations();
+      },
+      updateConversationName: (conversationId: string, name: string) => {
+        setConversations((prev) =>
+          prev.map((c) => (c.conversation_id === conversationId ? { ...c, conversationName: name } : c))
+        );
       },
       toggleSidebar: () => {
         setShow((prevShow) => !prevShow);

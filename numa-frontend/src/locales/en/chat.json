@@ -138,7 +138,11 @@
     "agentError": "Agent error: {{message}}",
     "loadConversationFailed": "Error loading conversation. Please try again or select a different conversation.",
     "loadTraceFailed": "Unable to load conversation history. This may happen after stopping a response. Please send a new message to continue.",
-    "streamDisconnected": "Connection lost during a long operation. Your response may be incomplete — please send a follow-up message to continue."
+    "streamDisconnected": "Connection lost during a long operation. Your response may be incomplete - please send a follow-up message to continue.",
+    "stoppedByUser": "Response stopped. You can send a follow-up message to continue.",
+    "streamTimedOut": "Numa's response was interrupted. You can send a follow-up message to continue where it left off.",
+    "continueButton": "Continue",
+    "agentFinishing": "The connection was interrupted, but Numa is still working on your request. Please wait - the full response will appear once it's ready."
   },
   "connection": {
     "reconnecting": "Reconnecting...",

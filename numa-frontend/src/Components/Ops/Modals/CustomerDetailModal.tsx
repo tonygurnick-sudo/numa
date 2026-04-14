@@ -24,7 +24,7 @@ import type {
 import { ContactSection } from '../Shared/ContactSection';
 import { ActivitySection } from '../Shared/ActivitySection';
 import { DocumentSection } from '../Shared/DocumentSection';
-import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
+import { getColorForPosition } from '../Shared/colorUtils';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { CreateTicketModal } from './CreateTicketModal';
 import { TicketDetailModal } from './TicketDetailModal';
@@ -96,33 +96,6 @@ function getRenewalUrgency(
     return { className: 'text-warning', label: t('crm.renewalInDays', { count: days }) };
   }
   return { className: 'text-muted', label: t('crm.renewalInDays', { count: days }) };
-}
-
-// ─── Named color resolver (seed data uses names like 'amber', 'indigo') ────
-
-const NAMED_COLORS: Record<string, string> = {
-  amber: '#f59e0b',
-  indigo: '#6366f1',
-  blue: '#3b82f6',
-  red: '#ef4444',
-  green: '#22c55e',
-  violet: '#8b5cf6',
-  pink: '#ec4899',
-  cyan: '#06b6d4',
-  orange: '#f97316',
-  teal: '#14b8a6',
-  purple: '#a855f7',
-  lime: '#84cc16',
-  sky: '#0ea5e9',
-  rose: '#f43f5e',
-  emerald: '#10b981',
-  slate: '#64748b',
-  yellow: '#eab308',
-};
-
-function resolveColor(color: string): string {
-  if (color.startsWith('#')) return color;
-  return NAMED_COLORS[color.toLowerCase()] ?? color;
 }
 
 type LinkedWorkSortBy = 'updatedAt' | 'createdAt' | 'priority' | 'statusType';
@@ -527,15 +500,9 @@ export function CustomerDetailModal({
   ) => {
     const isExpanded = expandedSections.has(sectionKey);
     return (
-      <div className="mb-0">
+      <div>
         <div
-          className="d-flex align-items-center gap-2 py-2 px-3 user-select-none"
-          style={{
-            cursor: 'pointer',
-            backgroundColor: '#f8f9fa',
-            borderBottom: '1px solid #e5e7eb',
-            borderTop: '1px solid #e5e7eb',
-          }}
+          className="crm-section-header"
           onClick={() => toggleSection(sectionKey)}
           role="button"
           tabIndex={0}
@@ -546,20 +513,15 @@ export function CustomerDetailModal({
             }
           }}
         >
-          <i
-            className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`}
-            style={{ fontSize: '0.7rem', color: '#6b7280' }}
-          />
-          <span className="fw-semibold" style={{ fontSize: '0.85rem', color: '#374151' }}>
-            {title}
-          </span>
+          <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
+          <span className="crm-section-header-title">{title}</span>
           {headerExtra && (
             <span className="ms-auto" onClick={(e) => e.stopPropagation()}>
               {headerExtra}
             </span>
           )}
         </div>
-        {isExpanded && <div className="px-3 py-2">{body}</div>}
+        {isExpanded && <div className="crm-section-body">{body}</div>}
       </div>
     );
   };
@@ -581,23 +543,8 @@ export function CustomerDetailModal({
     const isEditing = editingField === field;
 
     return (
-      <div
-        className="d-flex align-items-start py-2"
-        style={{
-          fontSize: '0.875rem',
-          backgroundColor: isEditing ? '#eff6ff' : undefined,
-          borderRadius: isEditing ? 4 : undefined,
-          paddingLeft: isEditing ? 8 : undefined,
-          paddingRight: isEditing ? 8 : undefined,
-          borderBottom: '1px solid #f3f4f6',
-        }}
-      >
-        <span
-          className="fw-medium me-2"
-          style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
-        >
-          {label}
-        </span>
+      <div className={`crm-field-row${isEditing ? ' crm-field-row--editing' : ''}`}>
+        <span className="crm-field-label">{label}</span>
         {isEditing ? (
           <div className="d-flex align-items-center gap-1 flex-grow-1">
             <Form.Control
@@ -610,15 +557,14 @@ export function CustomerDetailModal({
                 if (e.key === 'Escape') cancelEdit();
               }}
               onBlur={() => void saveField(field)}
-              style={{ fontSize: '0.85rem' }}
+              style={{ fontSize: '0.82rem' }}
               autoFocus
               disabled={saving}
             />
           </div>
         ) : (
           <span
-            className="flex-grow-1"
-            style={{ cursor: 'pointer', minWidth: 0, color: displayValue ? '#111827' : undefined }}
+            className={`crm-field-value${!displayValue ? ' crm-field-value--empty' : ''}`}
             onClick={() => startEdit(field, type === 'date' ? toDateInputValue(currentValue) : (currentValue ?? ''))}
             role="button"
             tabIndex={0}
@@ -634,14 +580,12 @@ export function CustomerDetailModal({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                style={{ fontSize: '0.85rem' }}
+                style={{ fontSize: '0.82rem' }}
               >
-                {displayValue} <i className="bi bi-box-arrow-up-right" style={{ fontSize: '0.7rem' }} />
+                {displayValue} <i className="bi bi-box-arrow-up-right" style={{ fontSize: '0.65rem' }} />
               </a>
             ) : (
-              displayValue || (
-                <span style={{ color: '#d1d5db', fontStyle: 'italic', fontSize: '0.82rem' }}>{t('common.none')}</span>
-              )
+              displayValue || t('common.none')
             )}
           </span>
         )}
@@ -658,15 +602,12 @@ export function CustomerDetailModal({
     currentValue: string | null | undefined,
     options: { value: string; label: string; color?: string }[]
   ) => (
-    <div className="d-flex align-items-start py-2" style={{ fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6' }}>
-      <span className="fw-medium me-2" style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}>
-        {label}
-      </span>
+    <div className="crm-field-row">
+      <span className="crm-field-label">{label}</span>
       <Form.Select
         size="sm"
         value={currentValue ?? ''}
         onChange={(e) => void handleSelectChange(field, e.target.value)}
-        style={{ fontSize: '0.85rem' }}
         disabled={saving}
       >
         <option value="">{t('common.selectOption')}</option>
@@ -685,23 +626,8 @@ export function CustomerDetailModal({
   const renderCurrencyRow = (label: string, field: string, currentValue: number | null | undefined) => {
     const isEditing = editingField === field;
     return (
-      <div
-        className="d-flex align-items-start py-2"
-        style={{
-          fontSize: '0.875rem',
-          backgroundColor: isEditing ? '#eff6ff' : undefined,
-          borderRadius: isEditing ? 4 : undefined,
-          paddingLeft: isEditing ? 8 : undefined,
-          paddingRight: isEditing ? 8 : undefined,
-          borderBottom: '1px solid #f3f4f6',
-        }}
-      >
-        <span
-          className="fw-medium me-2"
-          style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
-        >
-          {label}
-        </span>
+      <div className={`crm-field-row${isEditing ? ' crm-field-row--editing' : ''}`}>
+        <span className="crm-field-label">{label}</span>
         {isEditing ? (
           <div className="d-flex align-items-center gap-1 flex-grow-1">
             <Form.Control
@@ -714,15 +640,14 @@ export function CustomerDetailModal({
                 if (e.key === 'Escape') cancelEdit();
               }}
               onBlur={() => void saveNumberField(field)}
-              style={{ fontSize: '0.85rem' }}
+              style={{ fontSize: '0.82rem' }}
               autoFocus
               disabled={saving}
             />
           </div>
         ) : (
           <span
-            className="flex-grow-1"
-            style={{ cursor: 'pointer', minWidth: 0 }}
+            className={`crm-field-value${currentValue == null ? ' crm-field-value--empty' : ''}`}
             onClick={() => startEdit(field, currentValue != null ? String(currentValue) : '')}
             role="button"
             tabIndex={0}
@@ -732,11 +657,7 @@ export function CustomerDetailModal({
               }
             }}
           >
-            {currentValue != null ? (
-              <span style={{ color: '#111827' }}>{formatCurrency(currentValue)}</span>
-            ) : (
-              <span style={{ color: '#d1d5db', fontStyle: 'italic', fontSize: '0.82rem' }}>{t('common.none')}</span>
-            )}
+            {currentValue != null ? formatCurrency(currentValue) : t('common.none')}
           </span>
         )}
       </div>
@@ -769,7 +690,6 @@ export function CustomerDetailModal({
 
     const stage: CrmLifecycleStage | undefined = stages.find((s) => s.id === customer.lifecycleStage);
     const stageColor = stage ? getColorForPosition(stage.colorPosition) : '#6c757d';
-    const stageTextColor = getContrastTextColor(stageColor);
 
     return (
       <Modal.Header closeButton className="align-items-start">
@@ -784,20 +704,18 @@ export function CustomerDetailModal({
               {customer.companyName}
             </h5>
             {stage && (
-              <Badge
-                pill
+              <span
+                className="ticket-badge"
                 style={{
-                  backgroundColor: stageColor,
-                  color: stageTextColor,
-                  fontSize: '0.8rem',
+                  maxWidth: 'none',
+                  background: `${stageColor}18`,
+                  color: stageColor,
+                  border: `1px solid ${stageColor}40`,
                   fontWeight: 600,
-                  padding: '6px 12px',
-                  letterSpacing: '0.02em',
-                  boxShadow: `0 2px 4px ${stageColor}40`,
                 }}
               >
                 {stage.name}
-              </Badge>
+              </span>
             )}
             {saving && <Spinner animation="border" size="sm" className="ms-1" />}
           </div>
@@ -806,33 +724,22 @@ export function CustomerDetailModal({
           <div className="d-flex flex-wrap gap-1 mt-2">
             {customerFlags.map((flag) => {
               const isActive = customer.flags.includes(flag.id);
-              const flagHex = resolveColor(flag.color);
               return (
-                <Badge
+                <span
                   key={flag.id}
-                  pill
+                  className={`ticket-badge ${isActive ? 'ticket-badge-customer' : 'ticket-badge-inactive'}`}
                   role="button"
                   tabIndex={0}
-                  style={{
-                    backgroundColor: isActive ? flagHex : '#e2e8f0',
-                    color: isActive ? getContrastTextColor(flagHex) : '#475569',
-                    border: 'none',
-                    fontWeight: isActive ? 700 : 500,
-                    cursor: 'pointer',
-                    fontSize: '0.75rem',
-                    padding: '6px 12px',
-                    opacity: 1,
-                    transition: 'all 0.15s ease-in-out',
-                  }}
                   onClick={() => toggleFlag(flag.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') toggleFlag(flag.id);
                   }}
                   title={flag.name}
+                  style={{ cursor: 'pointer', maxWidth: 'none' }}
                 >
                   {flag.icon && <i className={`bi bi-${flag.icon} me-1`} />}
                   {flag.name}
-                </Badge>
+                </span>
               );
             })}
           </div>
@@ -911,16 +818,8 @@ export function CustomerDetailModal({
               </div>
             </div>
             {renewalUrgency && (
-              <div
-                className="d-flex align-items-start py-2"
-                style={{ fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6' }}
-              >
-                <span
-                  className="fw-medium me-2"
-                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
-                >
-                  {t('crm.renewalStatus')}
-                </span>
+              <div className="crm-field-row">
+                <span className="crm-field-label">{t('crm.renewalStatus')}</span>
                 <span className={renewalUrgency.className}>{renewalUrgency.label}</span>
               </div>
             )}
@@ -1377,7 +1276,7 @@ export function CustomerDetailModal({
         size="xl"
         fullscreen="lg-down"
         scrollable
-        dialogClassName="customer-detail-modal"
+        dialogClassName="crm-detail-modal"
         contentClassName="d-flex flex-column"
       >
         {loading && renderLoading()}
@@ -1386,30 +1285,22 @@ export function CustomerDetailModal({
           <>
             {renderHeader()}
             <Modal.Body style={{ overflowY: 'auto' }}>{renderBody()}</Modal.Body>
-            <Modal.Footer
-              className="d-flex justify-content-between small text-muted"
-              style={{ backgroundColor: '#f9fafb' }}
-            >
-              <span>
+            <Modal.Footer className="d-flex justify-content-between">
+              <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
                 {t('crm.lastContactFooter')}: {lastContactLabel}
               </span>
-              <span>
-                {t('tickets.created')}:{' '}
-                {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : t('common.none')}
-              </span>
+              <div className="d-flex align-items-center gap-2">
+                <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                  {t('tickets.created')}:{' '}
+                  {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : t('common.none')}
+                </span>
+                <button type="button" className="ticket-detail-footer-btn" onClick={onHide}>
+                  {t('common.close')}
+                </button>
+              </div>
             </Modal.Footer>
           </>
         )}
-
-        {/* Inline style for modal height */}
-        <style>{`
-          .customer-detail-modal {
-            max-height: 90vh;
-          }
-          .customer-detail-modal .modal-content {
-            max-height: 90vh;
-          }
-        `}</style>
       </Modal>
 
       {/* Create ticket pre-linked to this customer */}

@@ -569,9 +569,24 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
     allowed_kbs, allowed_kb_ids, user_sub = _get_kb_config()
 
     # kb_path is a folder prefix, not a destination filename.
-    kb_path = params.get("path", "")
-    if kb_path and "." in Path(kb_path).name:
-        kb_path = str(Path(kb_path).parent) if str(Path(kb_path).parent) != "." else ""
+    # Accept common aliases — in long conversations the model sometimes
+    # hallucinates "destination", "folder", etc. instead of "path".
+    kb_path = (
+        params.get("path")
+        or params.get("destination")
+        or params.get("folder")
+        or params.get("folder_path")
+        or params.get("target_path")
+        or ""
+    )
+    # Strip the last segment if it looks like a filename (has a file extension)
+    # but preserve folder names that happen to contain dots (e.g. "v2.7 reports/").
+    if kb_path:
+        last_segment = Path(kb_path).name
+        if last_segment and re.match(r".+\.\w{1,10}$", last_segment):
+            kb_path = (
+                str(Path(kb_path).parent) if str(Path(kb_path).parent) != "." else ""
+            )
 
     lambda_params: dict[str, Any] = {
         "filename": file_path.name,
@@ -851,6 +866,45 @@ async def _handle_kb_download_folder(params: dict[str, Any]) -> dict[str, Any]:
     return _ok(json.dumps(result, indent=2))
 
 
+async def _handle_kb_delete(params: dict[str, Any]) -> dict[str, Any]:
+    """Delete file from KB."""
+    filename = params.get("file") or params.get("filename")
+    if not filename:
+        return _err(
+            "'file' (relative path within KB, e.g. 'reports/doc.pdf') "
+            "is required for delete."
+        )
+
+    allowed_kbs, allowed_kb_ids, user_sub = _get_kb_config()
+
+    lambda_params: dict[str, Any] = {
+        "filename": filename,
+        "kb_id": params.get("kb_id", "company"),
+    }
+
+    # Inject approval fields for KB delete
+    approval_key = "numa_knowledgeBases_delete"
+    request_id = pop_approval_id(approval_key)
+    if request_id:
+        lambda_params["request_id"] = request_id
+        lambda_params["auto_approved"] = is_auto_approved()
+
+    result = invoke_workspace_tool(
+        "delete_kb_file",
+        lambda_params,
+        extra_event_fields={
+            "user_sub": user_sub,
+            "allowed_kbs": allowed_kb_ids,
+        },
+    )
+
+    # Handle approval denial/timeout from Lambda
+    if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
+        return _ok(json.dumps(result, indent=2))
+
+    return _ok(json.dumps(result, indent=2))
+
+
 # ── Helpers: check tool enablement ───────────────────────────────────────────
 
 
@@ -940,14 +994,15 @@ _KB_OPERATIONS = {
     "download": _handle_kb_download,
     "list": _handle_kb_list,
     "download_folder": _handle_kb_download_folder,
+    "delete": _handle_kb_delete,
 }
 
 
 async def _handle_knowledge_base(params: dict[str, Any]) -> dict[str, Any]:
-    """Knowledge base operations — query, upload, download, list, download_folder.
+    """Knowledge base operations — query, upload, download, list, download_folder, delete.
 
     Params:
-        operation: One of query, upload, download, list, download_folder
+        operation: One of query, upload, download, list, download_folder, delete
         (remaining keys are operation-specific, see knowledge-search SKILL.md)
     """
     operation = params.get("operation")
