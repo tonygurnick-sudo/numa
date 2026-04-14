@@ -163,16 +163,19 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                     }
                 ],
             }
-        if status == "execution_timeout":
+        if status in ("execution_timeout", "execution_failed"):
+            # Pass through the real error message from the relay/proxy
+            error_message = result.get("message", "")
             return {
                 "content": [
                     {
                         "type": "text",
                         "text": json.dumps(
                             {
-                                "status": "execution_timeout",
+                                "status": status,
                                 "message": (
-                                    f"Execution failed or timed out for: {action_key}. "
+                                    error_message
+                                    or f"Execution failed or timed out for: {action_key}. "
                                     "The action was approved but may not have completed. "
                                     "Check the target system before retrying."
                                 ),
@@ -414,16 +417,18 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                     }
                 ],
             }
-        if status == "execution_timeout":
+        if status in ("execution_timeout", "execution_failed"):
+            error_message = result.get("message", "")
             return {
                 "content": [
                     {
                         "type": "text",
                         "text": json.dumps(
                             {
-                                "status": "execution_timeout",
+                                "status": status,
                                 "message": (
-                                    f"Execution failed or timed out for proxy request: {method} {upstream_url}. "
+                                    error_message
+                                    or f"Execution failed or timed out for proxy request: {method} {upstream_url}. "
                                     "The request was approved but may not have completed. "
                                     "Check the target system before retrying."
                                 ),

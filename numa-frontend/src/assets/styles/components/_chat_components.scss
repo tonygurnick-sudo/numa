@@ -4815,7 +4815,8 @@ $border-radius-pill: 1rem;
     color: #d97706;
   }
 
-  &.execution_timeout {
+  &.execution_timeout,
+  &.execution_failed {
     background: color-mix(in srgb, #d97706 15%, transparent);
     color: #b45309;
     font-weight: 600;

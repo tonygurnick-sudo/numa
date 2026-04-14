@@ -924,9 +924,9 @@ class PipedreamOperations:
                 json=body,
                 timeout=30,
             )
-            response.raise_for_status()
 
-            # Try to parse as JSON, fall back to text (or base64 for binary)
+            # Parse response body before checking status so we can
+            # surface the upstream API's error message on failure.
             try:
                 result = response.json()
             except Exception:
@@ -949,6 +949,35 @@ class PipedreamOperations:
                 else:
                     result = {"text": response.text}
 
+            if not response.ok:
+                # Extract the most useful error message from the
+                # upstream response for surfacing back to the user.
+                error_detail = None
+                if isinstance(result, dict):
+                    error_detail = (
+                        result.get("message")
+                        or result.get("error")
+                        or result.get("msg")
+                    )
+                if not error_detail:
+                    error_detail = (
+                        result.get("text", str(result))
+                        if isinstance(result, dict)
+                        else str(result)
+                    )
+                logger.error(
+                    "Failed proxy request",
+                    error=error_detail,
+                    status_code=response.status_code,
+                    method=method,
+                    upstream_url=upstream_url[:100],
+                )
+                raise Exception(
+                    f"Execution failed or timed out for proxy request: "
+                    f"{method} {upstream_url} "
+                    f"(HTTP {response.status_code}: {error_detail})"
+                )
+
             logger.info(
                 "Proxy request completed",
                 method=method,
@@ -958,7 +987,18 @@ class PipedreamOperations:
 
             return result
 
+        except requests.exceptions.Timeout:
+            logger.error(
+                "Proxy request timed out",
+                method=method,
+                upstream_url=upstream_url[:100],
+            )
+            raise Exception(
+                f"Proxy request timed out after 30s: {method} {upstream_url}"
+            )
         except Exception as e:
+            if "Execution failed" in str(e) or "timed out" in str(e):
+                raise  # Already formatted, don't wrap again
             logger.error(
                 "Failed proxy request",
                 error=str(e),
