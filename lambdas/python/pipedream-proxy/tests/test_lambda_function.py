@@ -324,7 +324,7 @@ class TestLambdaFunction(unittest.TestCase):
         self.assertEqual(response["statusCode"], 500)
         body = json.loads(response["body"])
         self.assertFalse(body["success"])
-        self.assertEqual(body["error"], "Internal server error")
+        self.assertEqual(body["error"], "Pipedream API error")
 
 
 class TestPipedreamOperations(unittest.TestCase):
