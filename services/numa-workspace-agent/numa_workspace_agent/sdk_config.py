@@ -421,7 +421,9 @@ def create_agent_options(
         "CLAUDE_CODE_USE_BEDROCK": "1",
         "AWS_REGION": REGION,
         "AWS_DEFAULT_REGION": REGION,  # Some AWS SDKs need this
-        # "DISABLE_PROMPT_CACHING": "1",
+        # Prompt caching: enable 1-hour TTL for Bedrock (default is 5min).
+        # Reduces cache write costs across longer conversations.
+        "ENABLE_PROMPT_CACHING_1H_BEDROCK": "1",
         # Disable OpenTelemetry in SDK subprocess (X-Ray OTLP not configured)
         "OTEL_SDK_DISABLED": "true",
         # Thinking tokens (from agent type config)

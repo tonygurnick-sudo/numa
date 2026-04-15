@@ -640,7 +640,7 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         CLOUDWATCH_LOG_GROUP: containerLogGroup.name,
         // Bedrock configuration
         CLAUDE_CODE_USE_BEDROCK: '1',
-        // DISABLE_PROMPT_CACHING: '1', // Prompt caching not fully supported on Bedrock
+        ENABLE_PROMPT_CACHING_1H_BEDROCK: '1', // 1-hour TTL prompt caching on Bedrock
         CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(regionModel.default.max_tokens),
         MAX_THINKING_TOKENS: '10000',
         // Model configuration
