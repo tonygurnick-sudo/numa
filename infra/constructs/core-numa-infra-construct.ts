@@ -724,6 +724,8 @@ export class CoreNumaInfra extends Construct {
         { name: 'user_id', type: 'S' },
         { name: 'schedule_id', type: 'S' },
         { name: 'event_type', type: 'S' },
+        { name: 'agent_id', type: 'S' },
+        { name: 'app_id', type: 'S' },
       ],
       globalSecondaryIndex: [
         {
@@ -735,6 +737,16 @@ export class CoreNumaInfra extends Construct {
           name: 'event-type-index',
           hashKey: 'event_type',
           rangeKey: 'user_id',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'agent-id-index',
+          hashKey: 'agent_id',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'app-id-index',
+          hashKey: 'app_id',
           projectionType: 'ALL',
         },
       ],

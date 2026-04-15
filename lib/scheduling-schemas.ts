@@ -84,7 +84,7 @@ export const AgentSnapshotSchema = z.object({
   agentId: z.string().optional(),
   title: z.string().optional(),
   description: z.string().optional(),
-  icon: z.string().optional(),
+  icon: z.string().nullable().optional(),
   iconImage: z
     .object({
       s3Bucket: z.string(),
@@ -265,6 +265,8 @@ export const UpdateSchedulePayloadSchema = z.object({
     .optional(),
   label: z.string().max(200, 'Label too long').optional(),
   runConfig: ScheduledRunConfigSchema.optional(),
+  agentTitle: z.string().optional(),
+  appTitle: z.string().optional(),
   agentSnapshot: AgentSnapshotSchema.optional(),
   maxRuns: z.number().int().positive().nullable().optional(),
   emailNotifications: z.boolean().optional().default(false),

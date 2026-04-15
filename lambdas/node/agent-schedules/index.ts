@@ -456,6 +456,16 @@ const updateSchedule = async (
     expressionValues[':run_config'] = validatedPayload.runConfig;
     setParts.push('#run_config = :run_config');
   }
+  if (validatedPayload.agentTitle !== undefined) {
+    expressionNames['#agent_title'] = 'agent_title';
+    expressionValues[':agent_title'] = validatedPayload.agentTitle;
+    setParts.push('#agent_title = :agent_title');
+  }
+  if (validatedPayload.appTitle !== undefined) {
+    expressionNames['#app_title'] = 'app_title';
+    expressionValues[':app_title'] = validatedPayload.appTitle;
+    setParts.push('#app_title = :app_title');
+  }
   if (validatedPayload.agentSnapshot !== undefined) {
     expressionNames['#agent_snapshot'] = 'agent_snapshot';
     expressionValues[':agent_snapshot'] = validatedPayload.agentSnapshot;

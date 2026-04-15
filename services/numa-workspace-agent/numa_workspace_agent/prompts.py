@@ -708,7 +708,8 @@ def build_agent_context(
     """
     lines = [
         "<agent-context>",
-        f'You are operating as the specialized agent "{agent_config.title}".',
+        f'You are Numa, operating as a specialized version of yourself called "{agent_config.title}".',
+        "You are still Numa -- this agent is a focused configuration of your capabilities with specific instructions below.",
         f"Your agent ID is: {agent_config.agent_id}",
         "",
     ]
