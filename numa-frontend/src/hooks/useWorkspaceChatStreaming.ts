@@ -144,6 +144,7 @@ export function useWorkspaceChatStreaming({
   >(new Map());
   const activeStreamingTasksRef = useRef<Set<string>>(new Set());
   const workspaceChatRawTextRef = useRef<string>('');
+  const pollingAbortRef = useRef<AbortController | null>(null);
   const [isStopping, setIsStopping] = useState(false);
   const isStoppingRef = useRef(false);
 
@@ -177,6 +178,23 @@ export function useWorkspaceChatStreaming({
 
     setIsStopping(true);
     isStoppingRef.current = true;
+
+    // Cancel any in-flight polling from the interrupted-state handler so it
+    // doesn't overwrite messages after we've moved on.
+    if (pollingAbortRef.current) {
+      pollingAbortRef.current.abort();
+      pollingAbortRef.current = null;
+
+      // Clean up the interrupted banner and unlock the input since polling
+      // is no longer running.
+      setMessages((prev) => [
+        ...prev.filter((m) => m.status !== 'agentFinishing'),
+        { role: 'system' as const, content: t('chat:systemMessages.stoppedByUser') },
+      ]);
+      isProcessingRef.current = false;
+      setButtonStatus('idle');
+    }
+
     try {
       await stopWorkspaceChatAgent(conversationId, requestId, getIdToken);
     } catch (err) {
@@ -184,7 +202,7 @@ export function useWorkspaceChatStreaming({
       setIsStopping(false);
       isStoppingRef.current = false;
     }
-  }, [getIdToken]);
+  }, [getIdToken, setMessages, setButtonStatus, t]);
 
   const streamChat = useCallback(
     async (config: StreamConfig) => {
@@ -207,6 +225,13 @@ export function useWorkspaceChatStreaming({
 
       // Store config for retry capability
       lastStreamConfigRef.current = config;
+
+      // Cancel any in-flight polling from a previous interrupted-state so it
+      // doesn't overwrite messages after the new stream starts.
+      if (pollingAbortRef.current) {
+        pollingAbortRef.current.abort();
+        pollingAbortRef.current = null;
+      }
 
       // Reset workspace chat event context for new turn
       resetSDKEventContext(workspaceChatEventContextRef.current);
@@ -256,6 +281,9 @@ export function useWorkspaceChatStreaming({
         },
         // onEvent - handle SDK events and StreamEvents for real-time streaming
         (event: SDKEvent) => {
+          // Stop clicked — suppress all further rendering while backend winds down
+          if (isStoppingRef.current) return;
+
           // Handle StreamEvent type for real-time streaming
           if (event.type === 'StreamEvent') {
             workspaceChatEventContextRef.current.skipTextFromAssistant = true;
@@ -764,13 +792,16 @@ export function useWorkspaceChatStreaming({
                 { role: 'system', content: t('chat:systemMessages.agentFinishing'), status: 'agentFinishing' },
               ]);
 
+              const pollingAbort = new AbortController();
+              pollingAbortRef.current = pollingAbort;
+
               checkConversationStatus(disconnectedConvId, getIdToken)
                 .then(async (statusData) => {
                   if (statusData.status === 'running' && statusData.active) {
                     // Agent is still running — poll until it finishes, then reload trace
                     await pollConversationUntilComplete(
                       disconnectedConvId,
-                      { intervalMs: 3000, timeoutMs: 600_000 },
+                      { intervalMs: 3000, timeoutMs: 600_000, signal: pollingAbort.signal },
                       getIdToken
                     );
                     // Agent done — reload trace from S3
@@ -800,7 +831,12 @@ export function useWorkspaceChatStreaming({
                     }
                   }
                 })
-                .catch(() => {
+                .catch((err) => {
+                  // If polling was intentionally aborted (user clicked Stop or sent
+                  // a new message), the UI is already handled — just bail out.
+                  if (err?.name === 'AbortError' || pollingAbort.signal.aborted) {
+                    return;
+                  }
                   // Status check failed — fall back to Continue button
                   setMessages((prev) => [
                     ...prev.filter((m) => m.content !== t('chat:systemMessages.agentFinishing')),
@@ -812,8 +848,13 @@ export function useWorkspaceChatStreaming({
                   ]);
                 })
                 .finally(() => {
-                  isProcessingRef.current = false;
-                  setButtonStatus('idle');
+                  pollingAbortRef.current = null;
+                  // Only reset processing state if polling wasn't intentionally
+                  // aborted -- stopStream/streamChat already handled the UI.
+                  if (!pollingAbort.signal.aborted) {
+                    isProcessingRef.current = false;
+                    setButtonStatus('idle');
+                  }
                 });
             } else {
               // No conversation ID — just show Continue button

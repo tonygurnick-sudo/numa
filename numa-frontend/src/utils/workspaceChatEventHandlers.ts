@@ -1925,10 +1925,77 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
   const seenMessageIds = new Set<string>();
   let currentAssistantMessage: WorkspaceChatMessage | null = null;
 
+  // Accumulate text from StreamEvent deltas for stopped/interrupted turns
+  // (where no full 'assistant' message exists in the trace)
+  let streamEventText = '';
+  let streamEventThinking = '';
+  let hasStreamEventsForCurrentTurn = false;
+
+  // Helper: flush accumulated StreamEvent deltas into an assistant message
+  // Called at turn boundaries when we have deltas but no full assistant message
+  const flushStreamEventDeltas = () => {
+    if (!hasStreamEventsForCurrentTurn) return;
+
+    if ((streamEventText || streamEventThinking) && !currentAssistantMessage) {
+      currentAssistantMessage = {
+        role: 'assistant',
+        content: '',
+        segments: [],
+      };
+    }
+
+    if (currentAssistantMessage && streamEventThinking) {
+      currentAssistantMessage.segments = currentAssistantMessage.segments || [];
+      currentAssistantMessage.segments.push({
+        kind: 'thinking',
+        text: streamEventThinking,
+        isStreaming: false,
+      } as WorkspaceChatSegment);
+    }
+
+    if (currentAssistantMessage && streamEventText) {
+      currentAssistantMessage.segments = currentAssistantMessage.segments || [];
+      currentAssistantMessage.segments.push({
+        kind: 'text',
+        text: streamEventText,
+        finalized: true,
+      });
+      currentAssistantMessage.content = streamEventText;
+    }
+
+    streamEventText = '';
+    streamEventThinking = '';
+    hasStreamEventsForCurrentTurn = false;
+  };
+
   // Build messages - skip subagent events (they're collected separately)
   for (const event of events) {
     // Skip subagent events - they have parent_tool_use_id set
     if (isSubagentEvent(event)) {
+      continue;
+    }
+
+    // Accumulate text from StreamEvent deltas (for stopped/interrupted turns)
+    if (event.type === 'StreamEvent') {
+      const streamEvent = (
+        event as { event?: { type?: string; delta?: { type?: string; text?: string; thinking?: string } } }
+      ).event;
+      if (streamEvent?.type === 'content_block_delta' && streamEvent.delta) {
+        if (streamEvent.delta.type === 'text_delta' && streamEvent.delta.text) {
+          streamEventText += streamEvent.delta.text;
+          hasStreamEventsForCurrentTurn = true;
+        } else if (streamEvent.delta.type === 'thinking_delta' && streamEvent.delta.thinking) {
+          streamEventThinking += streamEvent.delta.thinking;
+          hasStreamEventsForCurrentTurn = true;
+        }
+      }
+      continue;
+    }
+
+    // Handle completion events (e.g. user_cancelled from stop button)
+    // Flush any accumulated StreamEvent deltas into an assistant message
+    if (event.type === 'completion') {
+      flushStreamEventDeltas();
       continue;
     }
 
@@ -2059,6 +2126,9 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
 
     // Handle user messages
     if (event.type === 'user') {
+      // Flush any accumulated StreamEvent deltas before starting a new user turn
+      flushStreamEventDeltas();
+
       const userEvent = event as { message?: { content?: unknown[] | string }; content?: unknown[] | string };
       const content = userEvent.message?.content ?? userEvent.content;
 
@@ -2177,6 +2247,11 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
 
     // Handle assistant messages - group all consecutive ones together
     if (event.type === 'assistant') {
+      // Full assistant message supersedes accumulated StreamEvent deltas
+      streamEventText = '';
+      streamEventThinking = '';
+      hasStreamEventsForCurrentTurn = false;
+
       // Handle both streaming format (event.message.id) and trace format (event.id or generate one)
       const eventWithMessage = event as { message?: { id?: string }; id?: string };
       const msgId = eventWithMessage.message?.id ?? eventWithMessage.id ?? `assistant-${Date.now()}`;
@@ -2205,6 +2280,9 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
       processAssistantContent(event, context, currentAssistantMessage, toolResults, subagentEvents);
     }
   }
+
+  // Flush any trailing StreamEvent deltas (e.g. trace ends mid-stream)
+  flushStreamEventDeltas();
 
   // Push final assistant message
   if (currentAssistantMessage) {

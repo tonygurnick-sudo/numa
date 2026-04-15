@@ -12,18 +12,23 @@
   z-index: 1050;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 14px 20px;
+  justify-content: center;
+  gap: 0;
+  padding: 14px;
   background: linear-gradient(135deg, #0c86b6, #ca78b4, #9d64b5);
   color: #fff;
   border: 1.89px solid #fff;
-  border-radius: 21.4px;
+  border-radius: 50%;
   cursor: pointer;
   font-size: 15px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
+  overflow: hidden;
   transition:
+    border-radius 0.25s ease,
+    padding 0.25s ease,
+    gap 0.25s ease,
     transform 0.15s ease,
     box-shadow 0.2s ease;
   box-shadow:
@@ -34,7 +39,11 @@
     0 21.38px 6.29px rgba(0, 0, 0, 0),
     0 7.83px 11px rgba(98, 99, 252, 0.22);
 
-  &:hover {
+  &:hover,
+  &--active {
+    border-radius: 21.4px;
+    padding: 14px 20px;
+    gap: 8px;
     transform: translateY(-2px);
     box-shadow:
       0 0.63px 1.89px rgba(0, 0, 0, 0.04),
@@ -43,6 +52,11 @@
       0 13.84px 5.66px rgba(0, 0, 0, 0.01),
       0 21.38px 6.29px rgba(0, 0, 0, 0),
       0 10px 16px rgba(98, 99, 252, 0.3);
+
+    .ask-numa-fab-label {
+      max-width: 120px;
+      opacity: 1;
+    }
   }
 
   &:active {
@@ -52,7 +66,17 @@
   .ask-numa-fab-icon {
     display: flex;
     align-items: center;
+    flex-shrink: 0;
     font-size: 18px;
+  }
+
+  .ask-numa-fab-label {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition:
+      max-width 0.25s ease,
+      opacity 0.2s ease;
   }
 }
 
@@ -298,7 +322,7 @@
   .ask-numa-fab {
     bottom: 16px;
     right: 16px;
-    padding: 12px 16px;
+    padding: 12px;
     font-size: 14px;
   }
 

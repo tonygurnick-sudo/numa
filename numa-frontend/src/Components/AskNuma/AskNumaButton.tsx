@@ -50,11 +50,15 @@ export function AskNumaButton() {
           <AskNumaPopup onClose={() => setIsOpen(false)} />
         </>
       )}
-      <button className="ask-numa-fab" onClick={() => setIsOpen((prev) => !prev)} aria-label={t('askNuma.buttonLabel')}>
+      <button
+        className={`ask-numa-fab ${isOpen ? 'ask-numa-fab--active' : ''}`}
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-label={t('askNuma.buttonLabel')}
+      >
         <span className="ask-numa-fab-icon">
           <Sparkles size={18} />
         </span>
-        {t('askNuma.buttonLabel')}
+        <span className="ask-numa-fab-label">{t('askNuma.buttonLabel')}</span>
       </button>
     </>
   );
