@@ -56,7 +56,7 @@ export interface ToolResultFile {
 // Quota Report specific interfaces
 export type QuotaType = 'On-demand' | 'Cross-region' | 'Global cross-region';
 export type ModelFamily = 'sonnet' | 'opus' | 'haiku' | 'nova';
-export type QuotaMetric = 'requests-per-minute' | 'tokens-per-minute';
+export type QuotaMetric = 'requests-per-minute' | 'tokens-per-minute' | 'requests-per-day' | 'tokens-per-day';
 
 export interface QuotaDescriptor {
   QuotaCode: string;

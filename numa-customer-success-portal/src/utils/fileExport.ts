@@ -67,7 +67,18 @@ export class FileExportService {
 
     // Build headers with new columns and metric suffix for quota columns
     // Include inference profile (US/Global/APAC) when present to distinguish regional quotas
-    const metricSuffix = (m: QuotaMetric) => (m === 'requests-per-minute' ? 'RPM' : 'TPM');
+    const metricSuffix = (m: QuotaMetric) => {
+      switch (m) {
+        case 'requests-per-minute':
+          return 'RPM';
+        case 'tokens-per-minute':
+          return 'TPM';
+        case 'requests-per-day':
+          return 'RPD';
+        case 'tokens-per-day':
+          return 'TPD';
+      }
+    };
     const buildQuotaHeader = (q: QuotaDescriptor): string => {
       const parts = [q.Model, q.Type];
       if (q.InferenceProfile) {

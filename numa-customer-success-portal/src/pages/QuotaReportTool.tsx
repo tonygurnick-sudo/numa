@@ -22,7 +22,12 @@ import type {
 
 const DEFAULT_TYPES: QuotaType[] = ['On-demand', 'Cross-region', 'Global cross-region'];
 const DEFAULT_FAMILIES: ModelFamily[] = ['sonnet', 'opus', 'haiku', 'nova'];
-const DEFAULT_METRICS: QuotaMetric[] = ['requests-per-minute', 'tokens-per-minute'];
+const DEFAULT_METRICS: QuotaMetric[] = [
+  'requests-per-minute',
+  'tokens-per-minute',
+  'requests-per-day',
+  'tokens-per-day',
+];
 
 const FAMILY_LABELS: Record<ModelFamily, string> = {
   sonnet: 'Sonnet',
@@ -34,6 +39,15 @@ const FAMILY_LABELS: Record<ModelFamily, string> = {
 const METRIC_LABELS: Record<QuotaMetric, string> = {
   'requests-per-minute': 'Requests/min',
   'tokens-per-minute': 'Tokens/min',
+  'requests-per-day': 'Requests/day',
+  'tokens-per-day': 'Tokens/day',
+};
+
+const METRIC_SUFFIXES: Record<QuotaMetric, string> = {
+  'requests-per-minute': 'RPM',
+  'tokens-per-minute': 'TPM',
+  'requests-per-day': 'RPD',
+  'tokens-per-day': 'TPD',
 };
 
 export default function QuotaReportTool() {
@@ -149,8 +163,7 @@ export default function QuotaReportTool() {
   const quotaColumns = useMemo(
     () =>
       resultQuotas.map((q) => {
-        const metricSuffix = q.Metric === 'tokens-per-minute' ? ' (TPM)' : ' (RPM)';
-        return `${q.Model}-${q.Type}${metricSuffix}`;
+        return `${q.Model}-${q.Type} (${METRIC_SUFFIXES[q.Metric]})`;
       }),
     [resultQuotas]
   );
@@ -169,8 +182,8 @@ export default function QuotaReportTool() {
             <h2 className="mb-0">Quota Report</h2>
           </div>
           <p className="text-muted mb-0">
-            Fetch Bedrock quotas (RPM & TPM) across client accounts. Dev accounts are consolidated and always check both
-            regions.
+            Fetch Bedrock quotas (RPM, TPM, RPD, TPD) across client accounts. Dev accounts are consolidated and always
+            check both regions.
           </p>
         </div>
       </div>
@@ -280,7 +293,7 @@ export default function QuotaReportTool() {
                         />
                       ))}
                     </div>
-                    <Form.Text className="text-muted">Requests per minute and/or tokens per minute</Form.Text>
+                    <Form.Text className="text-muted">Requests/tokens per minute and/or per day</Form.Text>
                   </Form.Group>
 
                   <Form.Group className="mb-3">
