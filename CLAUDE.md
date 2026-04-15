@@ -216,6 +216,7 @@ CloudFront routes `/api/*` to API Gateway and `/api/numa-chat-agent/*` directly 
 - **S3 buckets per client:** `outputs` (app artifacts, chat uploads, run status) and `data` (knowledge base documents).
 - **Knowledge bases:** Amazon Q Business (enterprise search) or Bedrock KB (S3-backed vector store, ~30min indexing cadence). Configurable per client.
 - **Chat history:** DynamoDB `numa-<client>-chat-history` — conversation turns, tool use, results frames.
+- **Workspace chat traces:** S3 at `s3://numa-<client>-outputs/numa-chat/workspace/<user_sub>/conversations/<conversation_id>/_system/trace.jsonl` — NDJSON event log of the full conversation (user messages, assistant messages, StreamEvents, tool use, completions). Loaded on page refresh to reconstruct chat state.
 
 ---
 

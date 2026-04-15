@@ -113,30 +113,54 @@ async def has_active_run(user_sub: str, conversation_id: str) -> bool:
 
 async def request_stop(key: RunKey, reason: str = "user_requested") -> bool:
     """
-    Request a stop for an active run by setting the stop event, interrupting the client,
-    and cancelling the running task if needed.
+    Request a graceful stop for an active run.
+
+    Sets the stop event and interrupts the SDK client so the stream loop
+    exits cleanly, writes the completion event to the trace, and lets
+    the finally block sync to S3.  We intentionally do NOT cancel the
+    asyncio task -- task.cancel() raises CancelledError which races with
+    the graceful shutdown path and can kill the task before the trace is
+    written and synced.
     """
     async with _active_runs_lock:
         handle = _active_runs.get(key)
         if not handle:
+            logger.info(
+                "Stop requested but no active run found",
+                _name="STOP_NO_RUN",
+                conversation_id=key[1],
+                request_id=key[2],
+            )
             return False
         handle.stop_reason = reason
         handle.stop_event.set()
         client = handle.client
-        task = handle.task
+
+    logger.info(
+        "Stop event set, interrupting SDK client",
+        _name="STOP_INTERRUPT",
+        conversation_id=key[1],
+        request_id=key[2],
+        reason=reason,
+    )
 
     try:
         await client.interrupt()
+        logger.info(
+            "SDK client interrupted successfully",
+            _name="STOP_INTERRUPTED",
+            conversation_id=key[1],
+            request_id=key[2],
+        )
     except Exception as e:
         logger.warning(
             "Failed to interrupt SDK client",
+            _name="STOP_INTERRUPT_FAILED",
             error=str(e),
             conversation_id=key[1],
             request_id=key[2],
         )
 
-    if task and not task.done():
-        task.cancel()
     return True
 
 
@@ -734,21 +758,39 @@ async def stream_claude_sdk(
 
             # Stream responses - receive_response() completes when query finishes
             # (receive_messages() stays open for multi-turn and doesn't auto-end)
+            _stop_interrupt_sent = False
             async for message in client.receive_response():
-                # External stop request
-                if stop_event.is_set():
+                # External stop request -- interrupt but DON'T break.
+                # We let receive_response() finish naturally so the SDK
+                # commits the partial response to its conversation history
+                # (via the ResultMessage).  We just stop yielding SSE to
+                # the frontend.
+                if not _stop_interrupt_sent and stop_event.is_set():
                     if handle and not stop_reason:
                         stop_reason = handle.stop_reason or "user_requested"
                     elif not stop_reason:
                         stop_reason = "user_requested"
+                    logger.info(
+                        "Stop event detected, interrupting SDK (draining response)",
+                        _name="STOP_STREAM_BREAK",
+                        conversation_id=conversation_id,
+                        request_id=request_id,
+                        stop_reason=stop_reason,
+                        messages_received=message_count,
+                    )
                     try:
                         await client.interrupt()
                     except Exception:
                         pass
-                    break
+                    _stop_interrupt_sent = True
+                    # Continue iterating -- don't break
 
                 # Client disconnect stop path
-                if disconnect_checker and await disconnect_checker():
+                if (
+                    not _stop_interrupt_sent
+                    and disconnect_checker
+                    and await disconnect_checker()
+                ):
                     stop_reason = "client_disconnect"
                     stop_event.set()
                     if handle:
@@ -757,7 +799,28 @@ async def stream_claude_sdk(
                         await client.interrupt()
                     except Exception:
                         pass
-                    break
+                    _stop_interrupt_sent = True
+                    # Continue iterating -- don't break
+
+                # After interrupt, still write to trace and capture session
+                # state, but skip SSE streaming, approval checks, etc.
+                if _stop_interrupt_sent:
+                    serialized = serialize_message(message)
+                    if isinstance(message, ResultMessage):
+                        captured_session_id = message.session_id
+                        serialized["session_id"] = captured_session_id
+                        stream_log.finalize(message)
+                        logger.info(
+                            "SDK result received after stop (drain complete)",
+                            _name="STOP_DRAIN_RESULT",
+                            conversation_id=conversation_id,
+                            session_id=message.session_id,
+                            request_id=request_id,
+                        )
+                    trace_line = json.dumps(serialized) + "\n"
+                    with trace_path.open("a", encoding="utf-8") as f:
+                        f.write(trace_line)
+                    continue
 
                 message_count += 1
                 msg_type = type(message).__name__
@@ -1262,6 +1325,14 @@ async def stream_claude_sdk(
                 }
                 with trace_path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(stop_event_payload) + "\n")
+                logger.info(
+                    "Stop completion event written to trace",
+                    _name="STOP_TRACE_WRITTEN",
+                    conversation_id=conversation_id,
+                    request_id=request_id,
+                    stop_reason=stop_reason,
+                    messages_received=message_count,
+                )
                 yield format_sse_event(stop_event_payload)
 
         # ── Daily quota fallback retry ────────────────────────────────────
