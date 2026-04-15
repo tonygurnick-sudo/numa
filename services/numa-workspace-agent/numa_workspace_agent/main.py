@@ -1580,31 +1580,13 @@ async def _handle_chat(
         has_kb_listings=kb_listings is not None,
     )
 
-    # --- Post-gather: Apply agent config restrictions ---
+    # --- Post-gather: Apply agent config ---
     agent_file_paths: list[str] = []
     if agent_config:
-        tools_config = agent_config.tools_config
-
-        # Filter web_search if disabled by agent
-        if not tools_config.auto_tools_enabled and not tools_config.web_search_enabled:
-            enabled_tools = [t for t in enabled_tools if t != "web_search"]
-
-        # Filter create_agent_tool if disabled by agent
-        if (
-            not tools_config.auto_tools_enabled
-            and not tools_config.create_agent_enabled
-        ):
-            enabled_tools = [t for t in enabled_tools if t != "create_agent_tool"]
-
-        # Apply KB restrictions
-        allowed_kbs = tools_config.allowed_knowledge_bases
-        if allowed_kbs is not None:
-            if len(allowed_kbs) == 0:
-                available_kbs = []
-            elif available_kbs:
-                available_kbs = [
-                    kb for kb in available_kbs if kb.get("id") in allowed_kbs
-                ]
+        # Tool selection (enabledTools, availableKBs, enabledConnections) is resolved
+        # upstream by the caller (frontend UI or schedule runner). The agent's
+        # tools_config sets the initial defaults; the caller can override them.
+        # We do NOT re-filter here -- the request payload is the source of truth.
 
         # Download agent reference files
         if agent_config.reference_files:
@@ -1618,8 +1600,6 @@ async def _handle_chat(
             phase="request",
             agent_id=agent_id,
             agent_title=agent_config.title,
-            web_search_enabled=tools_config.web_search_enabled,
-            allowed_kbs=allowed_kbs,
             reference_files_count=len(agent_file_paths),
         )
 
