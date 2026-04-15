@@ -322,7 +322,12 @@ export class QuotaReportService {
 
       const items = (res.Quotas || [])
         .filter(
-          (q) => q.QuotaName && (/requests per minute/i.test(q.QuotaName) || /tokens per minute/i.test(q.QuotaName))
+          (q) =>
+            q.QuotaName &&
+            (/requests per minute/i.test(q.QuotaName) ||
+              /tokens per minute/i.test(q.QuotaName) ||
+              /requests per day/i.test(q.QuotaName) ||
+              /tokens per day/i.test(q.QuotaName))
         )
         .map((q) => ({ quota: q, classified: this.classifyQuota(q.QuotaName!) }))
         .filter(({ classified }) => classified !== null)
@@ -358,7 +363,18 @@ export class QuotaReportService {
       if (/Haiku/i.test(model)) return 2;
       return 3; // Nova and others
     };
-    const metricRank = (m: QuotaMetric): number => (m === 'requests-per-minute' ? 0 : 1);
+    const metricRank = (m: QuotaMetric): number => {
+      switch (m) {
+        case 'requests-per-minute':
+          return 0;
+        case 'tokens-per-minute':
+          return 1;
+        case 'requests-per-day':
+          return 2;
+        case 'tokens-per-day':
+          return 3;
+      }
+    };
     const typeRank = (t: QuotaType): number => (t === 'On-demand' ? 0 : t === 'Cross-region' ? 1 : 2);
 
     found.sort((a, b) => {
@@ -391,7 +407,13 @@ export class QuotaReportService {
       : /^Global\s+cross-region/i.test(name)
         ? 'Global cross-region'
         : 'Cross-region';
-    const metric: QuotaMetric = /tokens per minute/i.test(name) ? 'tokens-per-minute' : 'requests-per-minute';
+    const metric: QuotaMetric = /tokens per day/i.test(name)
+      ? 'tokens-per-day'
+      : /requests per day/i.test(name)
+        ? 'requests-per-day'
+        : /tokens per minute/i.test(name)
+          ? 'tokens-per-minute'
+          : 'requests-per-minute';
     const inferenceProfile = this.extractInferenceProfile(name);
 
     // Sonnet detection
@@ -441,9 +463,9 @@ export class QuotaReportService {
     const start = name.search(new RegExp(modelKeyword, 'i'));
     if (start >= 0) {
       const tail = name.slice(start);
-      // Extract up to "requests per minute" or "tokens per minute", excluding inference profile info
+      // Extract up to "requests per minute/day" or "tokens per minute/day", excluding inference profile info
       let label = tail
-        .split(/(?:requests|tokens) per minute/i)[0]
+        .split(/(?:requests|tokens) per (?:minute|day)/i)[0]
         .replace(/\s+in\s+(?:US|Global|APAC|EU)\s*$/i, '') // Remove trailing inference profile
         .trim()
         .replace(/[-–—]\s*$/, '')
@@ -457,7 +479,7 @@ export class QuotaReportService {
     }
 
     // Fallback: after 'Claude ' or 'Amazon '
-    const fallbackMatch = name.match(/(?:Claude|Amazon)\s+(.+?)(?:requests|tokens) per minute/i);
+    const fallbackMatch = name.match(/(?:Claude|Amazon)\s+(.+?)(?:requests|tokens) per (?:minute|day)/i);
     if (fallbackMatch) {
       let label = fallbackMatch[1]
         .replace(/\s+in\s+(?:US|Global|APAC|EU)\s*$/i, '')
@@ -528,7 +550,7 @@ export class QuotaReportService {
     const quotas = await this.discoverQuotasInClient({
       families,
       types: ['On-demand', 'Cross-region'],
-      metrics: ['requests-per-minute', 'tokens-per-minute'],
+      metrics: ['requests-per-minute', 'tokens-per-minute', 'requests-per-day', 'tokens-per-day'],
       accountId,
       region,
     });
