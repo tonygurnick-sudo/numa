@@ -84,7 +84,7 @@ export const AgentSnapshotSchema = z.object({
   agentId: z.string().optional(),
   title: z.string().optional(),
   description: z.string().optional(),
-  icon: z.string().optional(),
+  icon: z.string().nullable().optional(),
   iconImage: z
     .object({
       s3Bucket: z.string(),
