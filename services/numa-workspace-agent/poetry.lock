@@ -575,18 +575,18 @@ files = [
 
 [[package]]
 name = "claude-agent-sdk"
-version = "0.1.50"
+version = "0.1.59"
 description = "Python SDK for Claude Code"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "claude_agent_sdk-0.1.50-py3-none-macosx_11_0_arm64.whl", hash = "sha256:858b1822451209b2c3ad8df27458168d29ac19fd628680853f7707ea017fea73"},
-    {file = "claude_agent_sdk-0.1.50-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:44e75b9d076bd6030742729f99eb38777b80f052b22338d0a028d8190fc59e52"},
-    {file = "claude_agent_sdk-0.1.50-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:7363d431dc6efd83fa658a045e14fa4357440352b548002bfb9096d8f04d143c"},
-    {file = "claude_agent_sdk-0.1.50-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:493d8cc43f4166291606749cf47b03e822f03b7f371cc77af697564017ccf579"},
-    {file = "claude_agent_sdk-0.1.50-py3-none-win_amd64.whl", hash = "sha256:2e44caf3e5bce56e26a18158acf3e1c2c2784cf8fa15e425afe92816c987eb1a"},
-    {file = "claude_agent_sdk-0.1.50.tar.gz", hash = "sha256:e15157792857ecb55274a71f08981efcfda2e169bee7894cbdc245d05ac43203"},
+    {file = "claude_agent_sdk-0.1.59-py3-none-macosx_11_0_arm64.whl", hash = "sha256:b8734b5d630b75ad63b29a802fff40ba087adf463c1004dae65f7a5a912ab13a"},
+    {file = "claude_agent_sdk-0.1.59-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:b333c0685db3f6e035acd2c6efa6ae4c4d8b077fef99de829ddb2a37ca1d9183"},
+    {file = "claude_agent_sdk-0.1.59-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:8ebe1f7e6dc18c5fae6483977ff16fcabe91cbb955f9c423c05a11f013db3957"},
+    {file = "claude_agent_sdk-0.1.59-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:cac6c42f3c554981597a3d023bc87fe5b4bc14da987d9ef30cc2596005c3bc12"},
+    {file = "claude_agent_sdk-0.1.59-py3-none-win_amd64.whl", hash = "sha256:92d8da9ea5f0b4a7492d074d612d54b5e6ce6800312992aa48b2bcaa6bf7bf5e"},
+    {file = "claude_agent_sdk-0.1.59.tar.gz", hash = "sha256:061af12a783a3456abfd0def3602a01249b2eee1be783fb3e242392c0ebbd2e2"},
 ]
 
 [package.dependencies]
@@ -5314,4 +5314,4 @@ test = ["pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "6fc27c46e6c15f0414ad643371d244806c45dab036db74646a6d1e522568a68f"
+content-hash = "8d5594ee65b9793f1a8e9933bcd11a056e93daeab83e215472929c510dee7573"
