@@ -2,14 +2,8 @@ import { useState } from 'react';
 import { Card, Button, Alert, Badge, ProgressBar, Spinner } from 'react-bootstrap';
 import { BarChart } from 'react-bootstrap-icons';
 import { QuotaReportService } from '@/services/quotaReportService';
-import type { QuotaDescriptor, QuotaMetric, ToolProgress } from '@/types/tools';
-
-const METRIC_SUFFIXES: Record<QuotaMetric, string> = {
-  'requests-per-minute': 'RPM',
-  'tokens-per-minute': 'TPM',
-  'requests-per-day': 'RPD',
-  'tokens-per-day': 'TPD',
-};
+import { QUOTA_METRIC_SUFFIX } from '@numa/quota-snapshot';
+import type { QuotaDescriptor, ToolProgress } from '@/types/tools';
 
 interface QuotaCheckCardProps {
   accountId: string;
@@ -59,7 +53,7 @@ export function QuotaCheckCard({ accountId, region, disabled }: QuotaCheckCardPr
           {q.Model}
         </td>
         <td>{q.Type}</td>
-        <td>{METRIC_SUFFIXES[q.Metric]}</td>
+        <td>{QUOTA_METRIC_SUFFIX[q.Metric]}</td>
         <td className="text-end">{formatValue(values[q.QuotaCode])}</td>
       </tr>
     ));

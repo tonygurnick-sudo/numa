@@ -12,6 +12,7 @@ import { CustomerSuccessPortalConstruct } from '../constructs/customer-success-p
 import { PortalDeploymentsConstruct } from '../constructs/portal-deployments-construct';
 import { PortalNextgenBrokerConstruct } from '../constructs/portal-nextgen-broker-construct';
 import { EmailSenderConstruct } from '../constructs/email-sender-construct';
+import { QuotaReportDailyConstruct } from '../constructs/quota-report-daily-construct';
 
 export class QAppsDeployerStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: QAppsDeployerStackProps) {
@@ -140,6 +141,20 @@ export class QAppsDeployerStack extends ArcanumStack {
       value: emailSender.functionName,
     });
 
+    // Daily quota report — snapshots Bedrock quotas across all client accounts,
+    // uploads CSV to HQ's company knowledge base for agent-driven alerting
+    if (props.enableQuotaReportDaily) {
+      if (!props.hqAccountId || !props.hqDataBucket) {
+        throw new Error('enableQuotaReportDaily requires hqAccountId and hqDataBucket');
+      }
+      new QuotaReportDailyConstruct(this, 'quota-report-daily', {
+        clientConfigTableArn: clientConfigTable.arn,
+        clientConfigTableName: clientConfigTable.name,
+        hqAccountId: props.hqAccountId,
+        hqDataBucket: props.hqDataBucket,
+      });
+    }
+
     new TerraformOutput(this, 'client-config-table-arn', {
       value: clientConfigTable.arn,
     });
@@ -243,4 +258,14 @@ export interface QAppsDeployerStackProps extends ArcanumStackProps {
    * @default true (when enableCustomerSuccessPortal=true)
    */
   enablePortalDeployments?: boolean;
+  /**
+   * Enable daily quota report snapshot Lambda + EventBridge schedule.
+   * Fetches Bedrock quotas across all client accounts and uploads CSV to HQ KB.
+   * @default false
+   */
+  enableQuotaReportDaily?: boolean;
+  /** HQ client account ID for quota report S3 upload — required when enableQuotaReportDaily is true */
+  hqAccountId?: string;
+  /** HQ data bucket name — required when enableQuotaReportDaily is true */
+  hqDataBucket?: string;
 }

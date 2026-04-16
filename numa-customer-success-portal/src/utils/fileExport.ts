@@ -12,8 +12,8 @@ import type {
   UsageSummary,
   QuotaReportRow,
   QuotaDescriptor,
-  QuotaMetric,
 } from '@/types/tools';
+import { buildQuotaHeader } from '@numa/quota-snapshot';
 
 export class FileExportService {
   /**
@@ -60,34 +60,11 @@ export class FileExportService {
   static generateQuotaReportCSV(
     rows: QuotaReportRow[],
     quotas: QuotaDescriptor[],
-    context: { families: string[]; metrics: QuotaMetric[]; types: string[]; advancedFilter?: string }
+    context: { families: string[]; metrics: string[]; types: string[]; advancedFilter?: string }
   ): ToolResultFile | null {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
     if (rows.length === 0 || quotas.length === 0) return null;
 
-    // Build headers with new columns and metric suffix for quota columns
-    // Include inference profile (US/Global/APAC) when present to distinguish regional quotas
-    const metricSuffix = (m: QuotaMetric) => {
-      switch (m) {
-        case 'requests-per-minute':
-          return 'RPM';
-        case 'tokens-per-minute':
-          return 'TPM';
-        case 'requests-per-day':
-          return 'RPD';
-        case 'tokens-per-day':
-          return 'TPD';
-      }
-    };
-    const buildQuotaHeader = (q: QuotaDescriptor): string => {
-      const parts = [q.Model, q.Type];
-      if (q.InferenceProfile) {
-        parts.push(q.InferenceProfile);
-      }
-      parts.push(metricSuffix(q.Metric));
-      const header = parts.join('-');
-      return q.isPriority ? `* ${header}` : header;
-    };
     const headers = [
       'accountName',
       'stackNames',

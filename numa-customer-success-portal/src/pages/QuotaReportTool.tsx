@@ -9,6 +9,7 @@ import { clientService } from '@/services/clientService';
 import { FileExportService } from '@/utils/fileExport';
 import { QuotaReportService } from '@/services/quotaReportService';
 import type { Client } from '@/types';
+import { QUOTA_METRIC_SUFFIX, ALL_MODEL_FAMILIES, ALL_QUOTA_TYPES, ALL_QUOTA_METRICS } from '@numa/quota-snapshot';
 import type {
   QuotaReportParameters,
   ToolResult,
@@ -20,14 +21,9 @@ import type {
   QuotaType,
 } from '@/types/tools';
 
-const DEFAULT_TYPES: QuotaType[] = ['On-demand', 'Cross-region', 'Global cross-region'];
-const DEFAULT_FAMILIES: ModelFamily[] = ['sonnet', 'opus', 'haiku', 'nova'];
-const DEFAULT_METRICS: QuotaMetric[] = [
-  'requests-per-minute',
-  'tokens-per-minute',
-  'requests-per-day',
-  'tokens-per-day',
-];
+const DEFAULT_TYPES: QuotaType[] = [...ALL_QUOTA_TYPES];
+const DEFAULT_FAMILIES: ModelFamily[] = [...ALL_MODEL_FAMILIES];
+const DEFAULT_METRICS: QuotaMetric[] = [...ALL_QUOTA_METRICS];
 
 const FAMILY_LABELS: Record<ModelFamily, string> = {
   sonnet: 'Sonnet',
@@ -41,13 +37,6 @@ const METRIC_LABELS: Record<QuotaMetric, string> = {
   'tokens-per-minute': 'Tokens/min',
   'requests-per-day': 'Requests/day',
   'tokens-per-day': 'Tokens/day',
-};
-
-const METRIC_SUFFIXES: Record<QuotaMetric, string> = {
-  'requests-per-minute': 'RPM',
-  'tokens-per-minute': 'TPM',
-  'requests-per-day': 'RPD',
-  'tokens-per-day': 'TPD',
 };
 
 export default function QuotaReportTool() {
@@ -163,7 +152,7 @@ export default function QuotaReportTool() {
   const quotaColumns = useMemo(
     () =>
       resultQuotas.map((q) => {
-        return `${q.Model}-${q.Type} (${METRIC_SUFFIXES[q.Metric]})`;
+        return `${q.Model}-${q.Type} (${QUOTA_METRIC_SUFFIX[q.Metric]})`;
       }),
     [resultQuotas]
   );

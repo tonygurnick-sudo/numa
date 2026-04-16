@@ -8,6 +8,7 @@
     "numa-frontend",
     "numa-customer-success-portal",
     "lib/client-config-node",
+    "lib/quota-snapshot",
     "lib/usage-analytics-schemas",
     "lambdas/node/*"
   ],
