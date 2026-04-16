@@ -391,6 +391,28 @@ export class NumaFrontendInfra extends Construct {
       });
     }
 
+    // Public demo proxy Lambda Function URL origin (if enabled)
+    // Fully public, no CloudFront secret — for unlisted demo page
+    if (props.publicDemoProxyUrl) {
+      const publicDemoProxyDomain = Fn.replace(
+        Fn.replace(props.publicDemoProxyUrl, '/^https?:\/{2}/', ''),
+        '/\/$/',
+        ''
+      );
+      origins.push({
+        // No CloudFront secret — this is a public API
+        customOriginConfig: {
+          httpPort: 80,
+          httpsPort: 443,
+          originProtocolPolicy: 'https-only',
+          originSslProtocols: ['TLSv1.2'],
+          originReadTimeout: 60, // Keep-alive pings every 30s for streaming
+        },
+        domainName: publicDemoProxyDomain,
+        originId: 'public-demo-proxy',
+      });
+    }
+
     // Build ordered cache behaviors (more specific routes before generic /api/*)
     const orderedCacheBehavior: CloudfrontDistributionOrderedCacheBehavior[] = [
       {
@@ -533,6 +555,20 @@ export class NumaFrontendInfra extends Construct {
       });
     }
 
+    // Public demo proxy cache behavior (if enabled) - must come before /api/* catch-all
+    if (props.publicDemoProxyUrl) {
+      orderedCacheBehavior.push({
+        targetOriginId: 'public-demo-proxy',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/api/public-demo/*',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: false, // IMPORTANT: Disable compression for streaming
+        cachePolicyId: cachingDisabledPolicyId,
+        originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac', // AllViewerExceptHostHeader
+      });
+    }
+
     // API Gateway catch-all (must be last)
     orderedCacheBehavior.push({
       targetOriginId: 'api-gateway',
@@ -663,4 +699,6 @@ export interface NumaFrontendInfraProps {
   workspaceChatAgentProxyUrl?: string;
   /** Optional shared document Q&A Lambda Function URL for public sharing feature */
   sharedChatFunctionUrl?: string;
+  /** Optional public demo proxy Lambda Function URL (unlisted, no auth) */
+  publicDemoProxyUrl?: string;
 }

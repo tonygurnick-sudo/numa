@@ -2665,6 +2665,12 @@ export const useAuth = () => {
   return context;
 };
 
+/** Safe variant of useAuth that returns null outside AuthProvider (e.g. public demo page). */
+// eslint-disable-next-line react-refresh/only-export-components
+export const useAuthOptional = () => {
+  return useContext(AuthContext);
+};
+
 // Create a wrapper for testing
 export const TestAuthProvider = ({ children, refreshHandler, initialTokens }) => {
   return (

@@ -998,6 +998,17 @@ _KB_OPERATIONS = {
 }
 
 
+def _get_allowed_kb_operations() -> list[str] | None:
+    """Return the allowed KB sub-operations, or None if unrestricted."""
+    raw = os.environ.get("NUMA_ALLOWED_KB_OPERATIONS")
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return []  # Malformed → fail-closed
+
+
 async def _handle_knowledge_base(params: dict[str, Any]) -> dict[str, Any]:
     """Knowledge base operations — query, upload, download, list, download_folder, delete.
 
@@ -1010,6 +1021,14 @@ async def _handle_knowledge_base(params: dict[str, Any]) -> dict[str, Any]:
     if not handler:
         valid = ", ".join(_KB_OPERATIONS)
         return _err(f"Invalid knowledge_base operation: '{operation}'. Valid: {valid}")
+
+    # Check agent-type-level KB operation restriction (e.g. read-only access)
+    allowed_kb_ops = _get_allowed_kb_operations()
+    if allowed_kb_ops is not None and operation not in allowed_kb_ops:
+        return _err(
+            f"The '{operation}' knowledge base operation is not available for this agent type. "
+            f"Available operations: {', '.join(allowed_kb_ops) if allowed_kb_ops else 'none'}."
+        )
 
     # Pass through all params except 'operation' to the sub-handler
     sub_params = {k: v for k, v in params.items() if k != "operation"}

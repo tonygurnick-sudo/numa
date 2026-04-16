@@ -257,4 +257,15 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     enabled: false,
     dependencies: [],
   },
+  {
+    flag: 'PUBLIC_DEMO',
+    title: 'Public Demo',
+    description:
+      'Public-facing demo chat page (unlisted URL, no auth required). Uses Haiku 4.5 with daily cost limits.',
+    icon: 'bi-globe',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['NUMA_WORKSPACE_CHAT'],
+  },
 ];

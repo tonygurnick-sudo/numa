@@ -71,6 +71,11 @@ class AgentTypeConfig:
             request if set.
         restrict_kbs: When True, ignore any KBs sent in the request and only
             use default_kbs. Useful for locked-down agent types.
+        allowed_kb_operations: Which sub-operations within knowledge_base are
+            permitted. ``None`` (default) means all operations are allowed.
+            A list restricts to only those names (e.g.
+            ``["query", "list", "download", "download_folder"]`` for read-only).
+            Valid names: query, upload, download, list, download_folder, delete.
         default_integrations: Pre-configured integration IDs.
         restrict_integrations: When True, ignore integrations from the request.
         system_prompt_builder: Optional callable that builds the system prompt
@@ -143,6 +148,9 @@ class AgentTypeConfig:
     # ── Knowledge Base ────────────────────────────────────────────────────
     default_kbs: Optional[list[dict]] = None
     restrict_kbs: bool = False
+    allowed_kb_operations: Optional[list[str]] = (
+        None  # None = all, list = only these (e.g. ["query", "list", "download", "download_folder"])
+    )
 
     # ── Integrations ──────────────────────────────────────────────────────
     default_integrations: Optional[list[str]] = None

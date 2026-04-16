@@ -38,6 +38,14 @@ interface FilePreviewPanelProps {
   embedded?: boolean;
   /** Pre-loaded content — skips S3 fetch when provided (used for inline documents) */
   initialContent?: string;
+  /** Optional override for DOCX->PDF conversion (e.g. public demo uses its own proxy) */
+  convertDocxFn?: (
+    bucket: string,
+    key: string,
+    format?: string
+  ) => Promise<{ url: string; filename: string; size: number }>;
+  /** Base path for the full-screen preview route (default: '/file-preview') */
+  fullScreenBasePath?: string;
 }
 
 // File size limits for preview (in bytes)
@@ -83,6 +91,8 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
   getCredentials,
   embedded = false,
   initialContent,
+  convertDocxFn,
+  fullScreenBasePath = '/file-preview',
 }) => {
   const { t } = useTranslation('chat');
   // Content state
@@ -229,7 +239,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
             // fall back to client-side docx-preview library if conversion fails
             try {
               setConvertingDocx(true);
-              const result = await convertDocxPreview(bucket, s3Key);
+              const result = await (convertDocxFn || convertDocxPreview)(bucket, s3Key);
               const pdfResponse = await fetch(result.url);
               if (!pdfResponse.ok) throw new Error('Failed to fetch converted PDF');
               const pdfBuffer = await pdfResponse.arrayBuffer();
@@ -554,7 +564,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
                     ext: preview.extension,
                     bucket,
                   });
-                  window.open(`/file-preview?${params.toString()}`, '_blank');
+                  window.open(`${fullScreenBasePath}?${params.toString()}`, '_blank');
                 }
               : undefined
           }
