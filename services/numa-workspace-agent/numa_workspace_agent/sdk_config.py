@@ -388,6 +388,10 @@ def create_agent_options(
     prompt_builder = type_config.system_prompt_builder or build_workspace_system_prompt
     flags = feature_flags or {}
 
+    # NOTE: today_string is intentionally NOT passed to the default prompt builder.
+    # It is prepended to each user message instead (see augment_prompt_with_context)
+    # to keep the system prompt stable for prompt caching. Custom prompt builders
+    # (e.g. Nolia) still receive it via **kwargs if they need it.
     system_prompt = prompt_builder(
         working_dir=str(LOCAL_ROOT),
         user_timezone=user_timezone,
