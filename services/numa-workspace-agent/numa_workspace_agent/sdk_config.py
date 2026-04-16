@@ -455,6 +455,12 @@ def create_agent_options(
         env["NUMA_ALLOWED_OPERATIONS"] = json.dumps(type_config.allowed_numa_operations)
     # else: don't set env var — None means "no restriction"
 
+    # Pass allowed KB sub-operations (e.g. read-only: ["query", "list", "download", "download_folder"])
+    if type_config.allowed_kb_operations is not None:
+        env["NUMA_ALLOWED_KB_OPERATIONS"] = json.dumps(
+            type_config.allowed_kb_operations
+        )
+
     # Pass user context to custom tools
     if user_sub:
         env["NUMA_USER_SUB"] = user_sub
@@ -496,6 +502,7 @@ def create_agent_options(
     for _key in (
         "NUMA_ENABLED_TOOLS",
         "NUMA_ALLOWED_OPERATIONS",
+        "NUMA_ALLOWED_KB_OPERATIONS",
         "NUMA_ENABLED_INTEGRATIONS",
         "NUMA_EXTERNAL_USER_ID",
         # Numa tool needs these for Lambda invocation, KB operations, S3 file sync

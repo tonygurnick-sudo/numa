@@ -488,11 +488,7 @@ const ChatInput = ({
                   rows={1}
                   style={v2TextareaStyle}
                 />
-                <div className="chat-input-inline-tools">
-                  <FeatureWrapper requiredFeature="useCompanyData">
-                    {renderUploadButton('attachment-icon v2-inline')}
-                  </FeatureWrapper>
-                </div>
+                <div className="chat-input-inline-tools">{renderUploadButton('attachment-icon v2-inline')}</div>
               </div>
               <div className="chat-input-inline-actions">{renderSendButton()}</div>
             </div>
@@ -519,10 +515,9 @@ const ChatInput = ({
           <div className="input-controls">
             <div className="left-controls">
               {/* Attachment Button & Knowledge Base Selector */}
+              {renderUploadButton()}
               <FeatureWrapper requiredFeature="useCompanyData">
                 <>
-                  {renderUploadButton()}
-
                   {/* V1 only: KB Dropdown (V2 has KB in settings panel) */}
                   {variant === 'v1' && (
                     <OverlayTrigger

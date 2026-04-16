@@ -21,6 +21,10 @@ const DropZonePage = lazy(() => import('./Pages/DropZonePage').then((m) => ({ de
 const FilePreviewFullScreen = lazy(() =>
   import('./Pages/FilePreviewFullScreen').then((m) => ({ default: m.FilePreviewFullScreen }))
 );
+const PublicDemoChat = lazy(() => import('./Pages/PublicDemoChat').then((m) => ({ default: m.PublicDemoChat })));
+const PublicDemoFilePreview = lazy(() =>
+  import('./Pages/PublicDemoFilePreview').then((m) => ({ default: m.PublicDemoFilePreview }))
+);
 
 // Component to wrap authenticated routes with AppLayout
 const AuthenticatedLayout = ({ children, requiredFeature }: { children: ReactNode; requiredFeature?: string }) => {
@@ -86,6 +90,10 @@ const AppRoutes = () => {
         <Route path="/shared/:uuid" element={<SharedDocumentChat />} />
         {/* Public drop zone upload page - no authentication required */}
         <Route path="/dropzone/:uuid" element={<DropZonePage />} />
+        {/* Public demo chat page - no authentication required, unlisted URL */}
+        {getFlag('PUBLIC_DEMO') && <Route path="/demo" element={<PublicDemoChat />} />}
+        {/* Public demo file preview - no authentication required */}
+        {getFlag('PUBLIC_DEMO') && <Route path="/demo/file-preview" element={<PublicDemoFilePreview />} />}
         {/* Protected share analytics page - only accessible to share creator */}
         <Route
           path="/analyze/shared/:uuid"

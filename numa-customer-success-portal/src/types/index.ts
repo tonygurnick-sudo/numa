@@ -101,6 +101,8 @@ export const clientConfigSchema = z.object({
   workspaceChatModelSelection: z.boolean().optional(), // default: false
   numaOps: z.boolean().optional(), // default: false
   v2Apps: z.boolean().optional(), // default: false
+  publicDemo: z.boolean().optional(), // default: false
+  publicDemoDailyLimitUsd: z.number().optional(), // default: 50
 
   // Data source configurations
   webCrawlerConfigs: z.array(webCrawlerConfigSchema).optional(),
@@ -178,6 +180,8 @@ export const getDefaultClientConfigValues = () => ({
   workspaceChatModelSelection: false,
   numaOps: false,
   v2Apps: false,
+  publicDemo: false,
+  publicDemoDailyLimitUsd: 50,
   mfa: false,
 });
 

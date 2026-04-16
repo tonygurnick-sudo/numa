@@ -603,6 +603,13 @@
   font-size: 0.9rem;
   line-height: 1.35;
   color: #18181b;
+
+  // Prevent iOS Safari auto-zoom on input focus (triggers when font-size < 16px).
+  // Uses hover:none to target touch devices, including when embedded in iframes
+  // where max-width media queries may not match the device screen size.
+  @media (hover: none) {
+    font-size: 16px;
+  }
 }
 
 .workspace-chat-v2 .chat-input-container .chat-input-main-row {
@@ -2338,6 +2345,7 @@
   }
 
   .workspace-chat-v2 .chat-input-container .chat-textarea.chat-textarea-v2 {
+    font-size: 16px !important;
     padding-right: 2.45rem !important;
     padding-left: 14px !important;
     min-height: 40px !important;

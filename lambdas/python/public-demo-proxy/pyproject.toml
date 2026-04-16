@@ -1,0 +1,26 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "public-demo-proxy"
+version = "0.1.0"
+description = "Public unauthenticated proxy for demo chat page — Haiku 4.5 only, daily cost limits"
+authors = ["ArcanumAI"]
+packages = [{ include = "*.py" }]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+boto3 = "^1.40"
+fastapi = "^0.115"
+uvicorn = "^0.30"
+
+[tool.poetry.group.dev.dependencies]
+pyright = "^1.1"
+pytest = "^8.3"
+boto3-stubs = { version = "^1.40.0", extras = ["bedrock-agentcore", "dynamodb", "s3"] }
+
+[tool.pyright]
+typeCheckingMode = "basic"
+reportMissingImports = "none"
+exclude = ["tests"]

@@ -12,6 +12,9 @@ vi.mock('../../Providers/AuthProvider', () => ({
   useAuth: () => ({
     getCredentials: vi.fn(),
   }),
+  useAuthOptional: () => ({
+    getCredentials: vi.fn(),
+  }),
 }));
 
 // Mock the useBranding hook
