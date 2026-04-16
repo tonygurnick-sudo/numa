@@ -1176,11 +1176,12 @@ def build_workspace_system_prompt(
     )
 
     # Append user context section (matches chat system prompt format)
+    # NOTE: today_string (with time) is deliberately NOT included here — it is
+    # prepended to each user message instead (via augment_prompt_with_context)
+    # so the system prompt stays stable for prompt caching.
     user_context_parts = []
     if user_email:
         user_context_parts.append(f"User Email: {user_email}")
-    if today_string:
-        user_context_parts.append(f"Today's Date: {today_string}")
 
     if user_context_parts:
         user_context = "\n".join(user_context_parts)
@@ -1503,6 +1504,7 @@ def augment_prompt_with_context(
     kb_listings: Optional[dict[str, dict]] = None,
     attached_folders: Optional[list[dict]] = None,
     v1_migration_context: Optional[str] = None,
+    today_string: Optional[str] = None,
 ) -> str:
     """
     Augment user prompt with additional context.
@@ -1518,11 +1520,20 @@ def augment_prompt_with_context(
                          for folders that were uploaded.
         v1_migration_context: Optional formatted V1 conversation history context
                               for migrated conversations.
+        today_string: Frontend-provided date/time string. Prepended to user message
+                      instead of system prompt so the system prompt stays stable
+                      for prompt caching.
 
     Returns:
         Augmented prompt string
     """
     parts = []
+
+    # Prepend timestamp to user message for timeline context.
+    # This is deliberately kept out of the system prompt to avoid
+    # busting the prompt cache on every message.
+    if today_string:
+        parts.append(f"[{today_string}]")
 
     # Add V1 migration context first if present (so Claude sees previous conversation)
     if v1_migration_context:
