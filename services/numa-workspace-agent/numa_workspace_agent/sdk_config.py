@@ -388,6 +388,10 @@ def create_agent_options(
     prompt_builder = type_config.system_prompt_builder or build_workspace_system_prompt
     flags = feature_flags or {}
 
+    # NOTE: today_string is intentionally NOT passed to the default prompt builder.
+    # It is prepended to each user message instead (see augment_prompt_with_context)
+    # to keep the system prompt stable for prompt caching. Custom prompt builders
+    # (e.g. Nolia) still receive it via **kwargs if they need it.
     system_prompt = prompt_builder(
         working_dir=str(LOCAL_ROOT),
         user_timezone=user_timezone,
@@ -421,7 +425,9 @@ def create_agent_options(
         "CLAUDE_CODE_USE_BEDROCK": "1",
         "AWS_REGION": REGION,
         "AWS_DEFAULT_REGION": REGION,  # Some AWS SDKs need this
-        # "DISABLE_PROMPT_CACHING": "1",
+        # Prompt caching: enable 1-hour TTL for Bedrock (default is 5min).
+        # Reduces cache write costs across longer conversations.
+        "ENABLE_PROMPT_CACHING_1H_BEDROCK": "1",
         # Disable OpenTelemetry in SDK subprocess (X-Ray OTLP not configured)
         "OTEL_SDK_DISABLED": "true",
         # Thinking tokens (from agent type config)

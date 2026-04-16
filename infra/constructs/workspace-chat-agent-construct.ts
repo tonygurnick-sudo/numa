@@ -610,16 +610,17 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         },
       ],
 
-      // Session lifecycle - 3 hour idle timeout, 4 hour max lifetime
-      // Fire-and-forget pipelines (Nolia, V2 Apps) can run 30-60+ min after the
-      // 202 response. The heartbeat subprocess isn't reliably deferring idle kills
-      // (see NUMA-1209), so we use a generous timeout as a workaround.
+      // Session lifecycle — idle timeout varies by client type.
+      // Nolia clients need long timeouts: fire-and-forget pipelines can run
+      // 30-60+ min after the 202 response, and the heartbeat subprocess isn't
+      // reliably deferring idle kills (see NUMA-1209).
+      // Standard chat clients use shorter timeouts to reduce costs.
       // Defaults: idleRuntimeSessionTimeout=900s (15 min), maxLifetime=28800s (8 hrs)
       // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-settings.html
       lifecycleConfiguration: [
         {
-          idleRuntimeSessionTimeout: 10800, // 3 hours in seconds
-          maxLifetime: 14400, // 4 hours in seconds
+          idleRuntimeSessionTimeout: props.clientName.startsWith('nolia') ? 10800 : 1800, // Nolia: 3hrs, others: 30min
+          maxLifetime: 14400, // 4hrs for all — idle timeout handles cost savings
         },
       ],
 
@@ -640,7 +641,7 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         CLOUDWATCH_LOG_GROUP: containerLogGroup.name,
         // Bedrock configuration
         CLAUDE_CODE_USE_BEDROCK: '1',
-        // DISABLE_PROMPT_CACHING: '1', // Prompt caching not fully supported on Bedrock
+        ENABLE_PROMPT_CACHING_1H_BEDROCK: '1', // 1-hour TTL prompt caching on Bedrock
         CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(regionModel.default.max_tokens),
         MAX_THINKING_TOKENS: '10000',
         // Model configuration

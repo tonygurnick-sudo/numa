@@ -643,7 +643,9 @@ async def stream_claude_sdk(
     if paths["uploads"].exists():
         uploaded_files = [f.name for f in paths["uploads"].iterdir() if f.is_file()]
 
-    # 4. Augment user prompt with upload context, folder info, KB info, and V1 migration context
+    # 4. Augment user prompt with upload context, folder info, KB info, and V1 migration context.
+    # today_string is prepended here (not in system prompt) to keep the system prompt
+    # stable for prompt caching -- each user message gets a timestamp instead.
     augmented_prompt = augment_prompt_with_context(
         prompt,
         uploaded_files,
@@ -651,6 +653,7 @@ async def stream_claude_sdk(
         kb_listings,
         attached_folders,
         v1_migration_context,
+        today_string=today_string,
     )
 
     # 4. Create SDK options with validated model (with quota fallback pre-check)
@@ -1595,7 +1598,7 @@ async def run_claude_sdk(
     if paths["uploads"].exists():
         uploaded_files = [f.name for f in paths["uploads"].iterdir() if f.is_file()]
 
-    # 3. Augment prompt
+    # 3. Augment prompt (today_string prepended here, not in system prompt, for caching)
     augmented_prompt = augment_prompt_with_context(
         prompt,
         uploaded_files,
@@ -1603,6 +1606,7 @@ async def run_claude_sdk(
         kb_listings,
         attached_folders,
         v1_migration_context,
+        today_string=today_string,
     )
 
     # 3b. Default approval mode env var — overridden per tool call in the
