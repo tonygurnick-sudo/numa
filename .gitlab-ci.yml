@@ -118,6 +118,7 @@ pre-commit:
         - lambdas/node/google-cloud-setup
         - lambdas/node/notifications-api
         - lambdas/node/notifications-stream
+        - lambdas/node/numa-quota-report-daily
         - lambdas/node/oauth-auth-handler
         - lambdas/node/numa-ops-api
         - lambdas/node/numa-ops-config-api

@@ -53,30 +53,9 @@ export interface ToolResultFile {
   size: number;
 }
 
-// Quota Report specific interfaces
-export type QuotaType = 'On-demand' | 'Cross-region' | 'Global cross-region';
-export type ModelFamily = 'sonnet' | 'opus' | 'haiku' | 'nova';
-export type QuotaMetric = 'requests-per-minute' | 'tokens-per-minute' | 'requests-per-day' | 'tokens-per-day';
-
-export interface QuotaDescriptor {
-  QuotaCode: string;
-  QuotaName: string;
-  Model: string;
-  Type: QuotaType;
-  Metric: QuotaMetric;
-  InferenceProfile?: string; // e.g., 'US', 'Global', 'APAC' - to distinguish regional quotas
-  isPriority?: boolean; // True for Claude 4.5, 4.6+ models
-}
-
-export interface QuotaReportRow {
-  accountName: string;
-  stackNames?: string[]; // For dev accounts sharing AWS account, list stack names
-  accountId: string;
-  region: string;
-  isDev: boolean;
-  bedrockAccount?: string; // Cross-account quota sharing target
-  values: Record<string /* QuotaCode */, number | null>;
-}
+// Quota Report types — authoritative source is the shared lib
+import type { QuotaType, ModelFamily, QuotaMetric, QuotaDescriptor, QuotaReportRow } from '@numa/quota-snapshot';
+export type { QuotaType, ModelFamily, QuotaMetric, QuotaDescriptor, QuotaReportRow };
 
 export interface QuotaReportParameters {
   clientScope: 'all' | 'selected' | 'arcanum-internal';

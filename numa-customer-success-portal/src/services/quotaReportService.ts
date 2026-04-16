@@ -1,4 +1,5 @@
-import { ServiceQuotas, ListServiceQuotasCommand, GetServiceQuotaCommand } from '@aws-sdk/client-service-quotas';
+import { ServiceQuotas } from '@aws-sdk/client-service-quotas';
+import { discoverBedrockQuotas, fetchQuotaValues } from '@numa/quota-snapshot';
 import { awsCredentialsService } from '@/services/awsCredentialsService';
 import { clientService } from '@/services/clientService';
 import { FileExportService } from '@/utils/fileExport';
@@ -10,12 +11,9 @@ import type {
   QuotaReportRow,
   ToolResultFile,
   ToolProgress,
-  QuotaType,
-  QuotaMetric,
   ModelFamily,
 } from '@/types/tools';
 
-const SERVICE_CODE = 'bedrock';
 const ALL_REGIONS = ['us-east-1', 'ap-southeast-2', 'ap-southeast-3'];
 
 // Arcanum internal AWS accounts for direct quota querying
@@ -33,15 +31,6 @@ const ARCANUM_INTERNAL_ACCOUNTS = [
   { name: 'arcanum-staging', accountId: '978450690680' },
   { name: 'Q Demo Account', accountId: '905418183804' },
 ];
-
-interface ClassifiedQuota {
-  family: ModelFamily;
-  label: string;
-  type: QuotaType;
-  metric: QuotaMetric;
-  raw: string;
-  inferenceProfile?: string; // e.g., 'US', 'Global', 'APAC'
-}
 
 interface AccountGroup {
   accountId: string;
@@ -123,7 +112,8 @@ export class QuotaReportService {
       const empty: QuotaReportResult = {
         metadata: {
           runAt: new Date().toISOString(),
-          totalClients: allClients.length,
+          totalClients:
+            clientScope === 'arcanum-internal' ? ARCANUM_INTERNAL_ACCOUNTS.length : Object.keys(accountGroups).length,
           processedAccounts: 0,
           modelFamilies,
           quotaMetrics,
@@ -151,23 +141,11 @@ export class QuotaReportService {
     for (const group of groupEntries) {
       for (const region of group.regions) {
         queue.push(async () => {
-          const values: Record<string, number | null> = {};
+          let values: Record<string, number | null> = {};
           try {
             const awsConfig = await awsCredentialsService.getClientConfig(group.accountId, region);
             const sq = new ServiceQuotas(awsConfig);
-
-            // Fetch each quota code
-            for (const q of quotas) {
-              try {
-                const res = await sq.send(
-                  new GetServiceQuotaCommand({ ServiceCode: SERVICE_CODE, QuotaCode: q.QuotaCode })
-                );
-                values[q.QuotaCode] = res.Quota?.Value ?? null;
-              } catch {
-                // Missing/denied quota; record null and continue
-                values[q.QuotaCode] = null;
-              }
-            }
+            values = await fetchQuotaValues(sq, quotas);
           } finally {
             // Determine display name for this row
             // For Arcanum internal accounts, use stored accountName; for clients, derive from client list
@@ -296,237 +274,22 @@ export class QuotaReportService {
 
   private static async discoverQuotasInClient(args: {
     families: ModelFamily[];
-    types: QuotaType[];
-    metrics: QuotaMetric[];
+    types: QuotaReportParameters['types'];
+    metrics: QuotaReportParameters['quotaMetrics'];
     accountId: string;
     region: string;
     advancedFilter?: string;
   }): Promise<QuotaDescriptor[]> {
     const { families, types, metrics, accountId, region, advancedFilter } = args;
-    const signature = `${accountId}|${region}|${families.sort().join('+')}|${types.sort().join(',')}|${metrics.sort().join(',')}|${(advancedFilter || '').toLowerCase()}`;
+    const signature = `${accountId}|${region}|${[...families].sort().join('+')}|${[...types].sort().join(',')}|${[...metrics].sort().join(',')}|${(advancedFilter || '').toLowerCase()}`;
     const cached = this.quotaCache.get(signature);
     if (cached) return cached;
 
-    // Use client account (assumed ArcanumAIAccess role) to list quotas
     const clientCfg = await awsCredentialsService.getClientConfig(accountId, region);
     const sq = new ServiceQuotas(clientCfg);
-
-    const found: QuotaDescriptor[] = [];
-    let NextToken: string | undefined = undefined;
-
-    do {
-      const res = await sq.send(
-        new ListServiceQuotasCommand({ ServiceCode: SERVICE_CODE, MaxResults: 100, NextToken })
-      );
-      NextToken = res.NextToken;
-
-      const items = (res.Quotas || [])
-        .filter(
-          (q) =>
-            q.QuotaName &&
-            (/requests per minute/i.test(q.QuotaName) ||
-              /tokens per minute/i.test(q.QuotaName) ||
-              /requests per day/i.test(q.QuotaName) ||
-              /tokens per day/i.test(q.QuotaName))
-        )
-        .map((q) => ({ quota: q, classified: this.classifyQuota(q.QuotaName!) }))
-        .filter(({ classified }) => classified !== null)
-        .filter(({ classified }) => families.includes(classified!.family))
-        .filter(({ classified }) => types.includes(classified!.type))
-        .filter(({ classified }) => metrics.includes(classified!.metric))
-        .filter(
-          ({ classified }) =>
-            !advancedFilter ||
-            classified!.label.toLowerCase().includes(advancedFilter.toLowerCase()) ||
-            classified!.raw.toLowerCase().includes(advancedFilter.toLowerCase())
-        );
-
-      for (const { quota, classified } of items) {
-        if (quota.QuotaCode && classified) {
-          found.push({
-            QuotaCode: quota.QuotaCode,
-            QuotaName: classified.raw,
-            Model: classified.label,
-            Type: classified.type,
-            Metric: classified.metric,
-            InferenceProfile: classified.inferenceProfile,
-            isPriority: this.isPriorityModel(classified.label),
-          });
-        }
-      }
-    } while (NextToken);
-
-    // Stable order: by family (Sonnet first), then Model, then Metric (RPM first), then Type (On-demand first)
-    const familyRank = (model: string): number => {
-      if (/Sonnet/i.test(model)) return 0;
-      if (/Opus/i.test(model)) return 1;
-      if (/Haiku/i.test(model)) return 2;
-      return 3; // Nova and others
-    };
-    const metricRank = (m: QuotaMetric): number => {
-      switch (m) {
-        case 'requests-per-minute':
-          return 0;
-        case 'tokens-per-minute':
-          return 1;
-        case 'requests-per-day':
-          return 2;
-        case 'tokens-per-day':
-          return 3;
-      }
-    };
-    const typeRank = (t: QuotaType): number => (t === 'On-demand' ? 0 : t === 'Cross-region' ? 1 : 2);
-
-    found.sort((a, b) => {
-      // Priority models (4.5/4.6+) first
-      const pa = a.isPriority ? 0 : 1;
-      const pb = b.isPriority ? 0 : 1;
-      if (pa !== pb) return pa - pb;
-
-      const fa = familyRank(a.Model);
-      const fb = familyRank(b.Model);
-      if (fa !== fb) return fa - fb;
-      if (a.Model !== b.Model) return a.Model.localeCompare(b.Model);
-      const ma = metricRank(a.Metric);
-      const mb = metricRank(b.Metric);
-      if (ma !== mb) return ma - mb;
-      return typeRank(a.Type) - typeRank(b.Type);
-    });
-
+    const found = await discoverBedrockQuotas(sq, { families, types, metrics, advancedFilter });
     this.quotaCache.set(signature, found);
     return found;
-  }
-
-  /**
-   * Classify a quota name into family, label, type, metric, and inference profile.
-   */
-  private static classifyQuota(name: string): ClassifiedQuota | null {
-    const raw = name;
-    const type: QuotaType = /^On-demand/i.test(name)
-      ? 'On-demand'
-      : /^Global\s+cross-region/i.test(name)
-        ? 'Global cross-region'
-        : 'Cross-region';
-    const metric: QuotaMetric = /tokens per day/i.test(name)
-      ? 'tokens-per-day'
-      : /requests per day/i.test(name)
-        ? 'requests-per-day'
-        : /tokens per minute/i.test(name)
-          ? 'tokens-per-minute'
-          : 'requests-per-minute';
-    const inferenceProfile = this.extractInferenceProfile(name);
-
-    // Sonnet detection
-    if (/Sonnet/i.test(name)) {
-      const label = this.extractModelLabel(name, 'Sonnet');
-      return { family: 'sonnet', label, type, metric, raw, inferenceProfile };
-    }
-
-    // Opus detection
-    if (/Opus/i.test(name)) {
-      const label = this.extractModelLabel(name, 'Opus');
-      return { family: 'opus', label, type, metric, raw, inferenceProfile };
-    }
-
-    // Haiku detection
-    if (/Haiku/i.test(name)) {
-      const label = this.extractModelLabel(name, 'Haiku');
-      return { family: 'haiku', label, type, metric, raw, inferenceProfile };
-    }
-
-    // Nova detection
-    if (/Nova/i.test(name)) {
-      const label = this.extractModelLabel(name, 'Nova');
-      return { family: 'nova', label, type, metric, raw, inferenceProfile };
-    }
-
-    return null;
-  }
-
-  /**
-   * Extract inference profile region from quota name (e.g., 'US', 'Global', 'APAC').
-   */
-  private static extractInferenceProfile(name: string): string | undefined {
-    // Match patterns like "in US", "in Global", "in APAC", "in EU"
-    const profileMatch = name.match(/\bin\s+(US|Global|APAC|EU)\b/i);
-    if (profileMatch) {
-      return profileMatch[1].toUpperCase();
-    }
-    return undefined;
-  }
-
-  /**
-   * Extract a clean model label from a quota name.
-   * Makes model versions explicit (e.g., bare "Sonnet" → "Sonnet 3.5").
-   */
-  private static extractModelLabel(name: string, modelKeyword: string): string {
-    const start = name.search(new RegExp(modelKeyword, 'i'));
-    if (start >= 0) {
-      const tail = name.slice(start);
-      // Extract up to "requests per minute/day" or "tokens per minute/day", excluding inference profile info
-      let label = tail
-        .split(/(?:requests|tokens) per (?:minute|day)/i)[0]
-        .replace(/\s+in\s+(?:US|Global|APAC|EU)\s*$/i, '') // Remove trailing inference profile
-        .trim()
-        .replace(/[-–—]\s*$/, '')
-        .trim();
-
-      if (label) {
-        // Make bare model names more explicit
-        label = this.normalizeModelLabel(label, modelKeyword);
-        return label;
-      }
-    }
-
-    // Fallback: after 'Claude ' or 'Amazon '
-    const fallbackMatch = name.match(/(?:Claude|Amazon)\s+(.+?)(?:requests|tokens) per (?:minute|day)/i);
-    if (fallbackMatch) {
-      let label = fallbackMatch[1]
-        .replace(/\s+in\s+(?:US|Global|APAC|EU)\s*$/i, '')
-        .trim()
-        .replace(/[-–—]\s*$/, '')
-        .trim();
-      label = this.normalizeModelLabel(label, modelKeyword);
-      return label;
-    }
-
-    return this.normalizeModelLabel(modelKeyword, modelKeyword);
-  }
-
-  /**
-   * Normalize model labels to be more explicit about versions.
-   * - Bare "Sonnet" → "Sonnet 3.5" (the original Claude 3.5 Sonnet)
-   * - Bare "Haiku" → "Haiku 3" (the original Claude 3 Haiku)
-   * - Bare "Opus" → "Opus 3" (Claude 3 Opus)
-   */
-  private static normalizeModelLabel(label: string, modelKeyword: string): string {
-    // If the label is just the bare model name without version, add default version
-    const barePattern = new RegExp(`^${modelKeyword}$`, 'i');
-    if (barePattern.test(label.trim())) {
-      switch (modelKeyword.toLowerCase()) {
-        case 'sonnet':
-          return 'Sonnet 3.5';
-        case 'haiku':
-          return 'Haiku 3';
-        case 'opus':
-          return 'Opus 3';
-        default:
-          return label;
-      }
-    }
-    return label;
-  }
-
-  /**
-   * Check if a model label represents a priority (latest generation) model.
-   * Models with version 4.5 or higher are considered priority.
-   */
-  private static isPriorityModel(label: string): boolean {
-    const versionMatch = label.match(/\b(\d+)\.(\d+)\b/);
-    if (!versionMatch) return false;
-    const major = parseInt(versionMatch[1], 10);
-    const minor = parseInt(versionMatch[2], 10);
-    return major > 4 || (major === 4 && minor >= 5);
   }
 
   /**
@@ -562,24 +325,10 @@ export class QuotaReportService {
 
     onProgress?.({ current: 30, total: 100, message: 'Fetching quota values...' });
 
-    const values: Record<string, number | null> = {};
     const awsConfig = await awsCredentialsService.getClientConfig(accountId, region);
     const sq = new ServiceQuotas(awsConfig);
-
-    for (let i = 0; i < quotas.length; i++) {
-      const q = quotas[i];
-      try {
-        const res = await sq.send(new GetServiceQuotaCommand({ ServiceCode: SERVICE_CODE, QuotaCode: q.QuotaCode }));
-        values[q.QuotaCode] = res.Quota?.Value ?? null;
-      } catch {
-        values[q.QuotaCode] = null;
-      }
-      onProgress?.({
-        current: 30 + Math.floor(((i + 1) / quotas.length) * 70),
-        total: 100,
-        message: `Fetched ${i + 1}/${quotas.length} quotas`,
-      });
-    }
+    const values = await fetchQuotaValues(sq, quotas);
+    onProgress?.({ current: 100, total: 100, message: `Fetched ${quotas.length}/${quotas.length} quotas` });
 
     return { quotas, values };
   }

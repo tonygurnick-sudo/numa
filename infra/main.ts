@@ -55,6 +55,9 @@ if (override === undefined || override === 'none') {
     templateBucketName: 'arcanum-numa-templates' + bucketSuffix,
     appsBucketName: 'numa-qapps' + bucketSuffix,
     enableCustomerSuccessPortal: true, // Enable POC Customer Success Portal
+    enableQuotaReportDaily: true,
+    hqAccountId: '619071323471',
+    hqDataBucket: 'numa-hq-data',
     ...environmentConfig,
   });
 
