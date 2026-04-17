@@ -555,8 +555,8 @@ export function CreateTicketModal({
         </Modal.Header>
 
         {/* ── Body: left content + right fields ───────────────────────── */}
-        <Modal.Body style={{ padding: '1.25rem 1.5rem', minHeight: 460 }}>
-          <div className="d-flex" style={{ gap: 0 }}>
+        <Modal.Body className="d-flex flex-column" style={{ padding: '1.25rem 1.5rem', overflow: 'hidden', flex: 1 }}>
+          <div className="d-flex" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             {/* Left: description + attachments + initial comment ─────── */}
             <div className="ticket-detail-left-col">
               {/* Description */}
