@@ -95,8 +95,6 @@ type UseWorkspaceChatStreamingOptions = {
   getCredentials?: () => Promise<AwsCredentialIdentity>;
   /** Callback to refresh the session files panel after saving inline docs */
   refreshSessionFiles?: () => void;
-  /** Authenticated POST helper for API calls (transcription submit, etc.) */
-  numaPost?: (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
   /** Optional callback to send a browser notification when chat completes while user is away */
   onNotifyCompletion?: (conversationName?: string) => void;
   /** Async ID token getter from AuthProvider -- ensures fresh tokens for API calls */
@@ -128,7 +126,6 @@ export function useWorkspaceChatStreaming({
   onStreamComplete,
   getCredentials,
   refreshSessionFiles,
-  numaPost,
   onNotifyCompletion,
   getIdToken,
 }: UseWorkspaceChatStreamingOptions) {
@@ -907,13 +904,9 @@ export function useWorkspaceChatStreaming({
 
               // Auto-save inline document to S3 outputs (fire-and-forget)
               if (getCredentials && conversationId) {
-                saveInlineDocumentToS3(
-                  docBlock.docTitle,
-                  docBlock.docContent,
-                  conversationId,
-                  getCredentials,
-                  numaPost
-                ).then(() => refreshSessionFiles?.());
+                saveInlineDocumentToS3(docBlock.docTitle, docBlock.docContent, conversationId, getCredentials).then(
+                  () => refreshSessionFiles?.()
+                );
               }
             }
           }
@@ -1106,7 +1099,6 @@ export function useWorkspaceChatStreaming({
       onStreamComplete,
       getCredentials,
       refreshSessionFiles,
-      numaPost,
       getIdToken,
       t,
     ]

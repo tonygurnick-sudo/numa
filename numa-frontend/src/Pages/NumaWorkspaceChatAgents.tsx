@@ -58,7 +58,6 @@ import {
 import { parseRawTraceToMessages } from '../utils/workspaceChatEventHandlers';
 // Note: SDK event handling moved to useWorkspaceChatStreaming hook
 import { WorkspaceChatFileUpload } from '../Components/WorkspaceChat/WorkspaceChatFileUpload';
-import { TranscriptionService } from '../Services/TranscriptionService';
 import {
   WorkspaceChatHistoryPanel,
   type WorkspaceChatHistoryPanelRef,
@@ -1155,9 +1154,6 @@ const NumaWorkspaceChatAgents = () => {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const isProcessingRef = useRef(false);
 
-  // Track transcription jobs for uploaded files (filePath → { jobId, s3Key })
-  const transcriptionJobsRef = useRef<Map<string, { jobId: string; s3Key: string }>>(new Map());
-
   // Scroll mode: read from user settings, with localStorage as fallback
   // (localStorage ensures the setting works even before the backend Lambda is redeployed)
   const scrollMode: ChatScrollMode =
@@ -1456,7 +1452,6 @@ const NumaWorkspaceChatAgents = () => {
     onStreamComplete: handleAutoNaming,
     getCredentials,
     refreshSessionFiles: settingsPanel.refreshFiles,
-    numaPost,
     onNotifyCompletion: notifyCompletion,
     getIdToken,
   });
@@ -1748,19 +1743,6 @@ const NumaWorkspaceChatAgents = () => {
 
         refreshSidebar();
         settingsPanel.refreshFiles();
-
-        // Submit uploaded files to transcription service (fire-and-forget)
-        const outputsBucket = sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || '';
-        if (outputsBucket && convId) {
-          for (const r of successfulResponses) {
-            const s3Key = `numa-chat/workspace/${sub}/conversations/${convId}/uploads/${r.filename}`;
-            TranscriptionService.submit(r.filename, s3Key, numaPost, outputsBucket)
-              .then((result) => {
-                transcriptionJobsRef.current.set(r.path, { jobId: result.jobId, s3Key });
-              })
-              .catch((err) => console.warn('Pre-transcription submit failed:', err));
-          }
-        }
       }
     },
     [
@@ -2079,38 +2061,9 @@ const NumaWorkspaceChatAgents = () => {
       // Reset streaming helpers for this turn
       resetStreamingState();
 
-      // Enrich prompt with pre-transcribed file content (if available)
-      let enrichedPrompt = userMsg;
-      if (attachments?.files && transcriptionJobsRef.current.size > 0) {
-        const enrichments: string[] = [];
-        for (const file of attachments.files) {
-          const job = transcriptionJobsRef.current.get(file.path);
-          if (!job) continue;
-          try {
-            const jobStatus = await TranscriptionService.get(job.jobId, numaGet);
-            if (jobStatus.status === 'COMPLETED' && jobStatus.outputKey) {
-              const output = await TranscriptionService.getOutputContent(jobStatus.outputKey, getCredentials);
-              const text = TranscriptionService.outputToText(output);
-              if (text) {
-                enrichments.push(
-                  `<file-content name="${file.filename}" source="pre-transcribed">\n${text}\n</file-content>`
-                );
-              }
-              // Remove from tracking — content has been delivered
-              transcriptionJobsRef.current.delete(file.path);
-            }
-          } catch {
-            // Transcription not ready or failed — agent will fall back to extract_content
-          }
-        }
-        if (enrichments.length > 0) {
-          enrichedPrompt = `${userMsg}\n\n${enrichments.join('\n\n')}`;
-        }
-      }
-
       // Call workspace streaming hook
       await streamChat({
-        prompt: enrichedPrompt,
+        prompt: userMsg,
         conversationId: cid,
         enabledTools,
         enabledConnections,
@@ -3215,20 +3168,6 @@ const NumaWorkspaceChatAgents = () => {
 
           refreshSidebar();
           setShowUploadModal(false);
-
-          // Submit uploaded files to transcription service (fire-and-forget)
-          // Pre-transcribes so content is ready when the user sends a message
-          const outputsBucket = sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || '';
-          if (outputsBucket && conversationId) {
-            for (const r of responses) {
-              const s3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/uploads/${r.filename}`;
-              TranscriptionService.submit(r.filename, s3Key, numaPost, outputsBucket)
-                .then((result) => {
-                  transcriptionJobsRef.current.set(r.path, { jobId: result.jobId, s3Key });
-                })
-                .catch((err) => console.warn('Pre-transcription submit failed:', err));
-            }
-          }
 
           // Refresh the settings panel file list to show new uploads
           settingsPanel.refreshFiles();
