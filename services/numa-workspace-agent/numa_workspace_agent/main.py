@@ -1241,7 +1241,8 @@ def _download_single_integration(
             )
             return False
 
-        actions = payload.get("result", {}).get("actions", [])
+        result = payload.get("result", {})
+        actions = result.get("actions", [])
         if not actions:
             logger.info("No actions found", app_slug=app_slug)
             return False
@@ -1279,10 +1280,19 @@ def _download_single_integration(
         index_file = app_dir / "_index.json"
         index_file.write_text(json.dumps(index_entries, indent=2))
 
+        # Write denied tools metadata if present (from relay policy filtering)
+        denied_tools = result.get("denied_tools", [])
+        denied_file = app_dir / "_denied_tools.json"
+        if denied_tools:
+            denied_file.write_text(json.dumps(denied_tools, indent=2))
+        elif denied_file.exists():
+            denied_file.unlink()
+
         logger.info(
             "Downloaded integration schemas",
             app_slug=app_slug,
             action_count=len(index_entries),
+            denied_tools_count=len(denied_tools),
         )
         return True
 
@@ -1358,7 +1368,9 @@ def _sync_integration_schemas(
             batch_payload = json.loads(batch_response["Payload"].read())
 
             if batch_payload.get("status") == "success":
-                schemas = batch_payload.get("result", {}).get("schemas", {})
+                batch_result = batch_payload.get("result", {})
+                schemas = batch_result.get("schemas", {})
+                denied_by_app = batch_result.get("denied_tools_by_app", {})
                 for slug, schema_data in schemas.items():
                     actions = schema_data.get("actions", [])
                     index = schema_data.get("index", [])
@@ -1367,6 +1379,14 @@ def _sync_integration_schemas(
                         added.append(slug)
                         batch_remaining.discard(slug)
 
+                        # Write denied tools metadata from batch response
+                        denied_tools = denied_by_app.get(slug, [])
+                        denied_file = tools_dir / slug / "_denied_tools.json"
+                        if denied_tools:
+                            denied_file.write_text(json.dumps(denied_tools, indent=2))
+                        elif denied_file.exists():
+                            denied_file.unlink()
+
                 if schemas:
                     logger.info(
                         "Batch schema load from cache",
@@ -1374,6 +1394,7 @@ def _sync_integration_schemas(
                         phase="integrations",
                         loaded=list(schemas.keys()),
                         remaining=list(batch_remaining),
+                        denied_tools_by_app=denied_by_app,
                     )
         except Exception as e:
             logger.warning(

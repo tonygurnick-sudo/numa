@@ -37,6 +37,47 @@ def _get_global_table():
     return dynamodb.Table(table_name)
 
 
+def _get_merged_deny_tools(external_user_id: str, app_name: str) -> set:
+    """Get merged deny tools from global settings + per-user policy.
+
+    Global denies always apply. Per-user denies stack on top.
+    If a tool is globally denied, a user cannot un-deny it.
+    """
+    # Global denies
+    global_settings = _get_global_settings(app_name)
+    global_deny = set(global_settings.get("denyTools", []) or [])
+
+    # Per-user denies
+    policy_table = os.environ.get(
+        "USER_INTEGRATION_SETTINGS_TABLE_NAME"
+    ) or os.environ.get("MCP_POLICY_TABLE_NAME")
+    if policy_table:
+        try:
+            store = PolicyStore()
+            user_policy = store.get_policy(external_user_id, app_name)
+            user_deny = set(user_policy.get("denyTools", []) or [])
+            return global_deny | user_deny
+        except Exception as e:
+            logger.warning(
+                "Failed to read user policy, using global only",
+                app_name=app_name,
+                error=str(e),
+            )
+
+    return global_deny
+
+
+def _extract_app_slug(action_key: str) -> str:
+    """Extract the integration app slug from an action key.
+
+    Action keys follow the format '{slug}-{action-name}' where slugs use
+    underscores (e.g., 'google_drive-find-file' -> 'google_drive').
+    """
+    if "-" in action_key:
+        return action_key.split("-", 1)[0]
+    return action_key
+
+
 def _get_global_settings(app_name: str) -> dict:
     table = _get_global_table()
     if not table:
@@ -176,6 +217,27 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
                 logger.error("PIPEDREAM_PROXY_LAMBDA_ARN environment variable not set")
                 return _error_response(500, "Relay configuration error")
 
+            # Execution-time policy enforcement for run_action and configure_props
+            if operation in ("run_action", "configure_props"):
+                action_key = parameters.get("action_key", "")
+                app_slug = _extract_app_slug(action_key)
+                if app_slug and action_key:
+                    deny_tools = _get_merged_deny_tools(external_user_id, app_slug)
+                    if action_key in deny_tools:
+                        logger.warning(
+                            "Action denied by policy",
+                            _name="POLICY_DENIED",
+                            operation=operation,
+                            action_key=action_key,
+                            app_slug=app_slug,
+                            external_user_id=external_user_id,
+                        )
+                        return _error_response(
+                            403,
+                            f"Action '{action_key}' is denied by integration policy. "
+                            "This tool has been restricted by an administrator or user preference.",
+                        )
+
             # Generate STS proof URL for caller identity verification
             try:
                 sts_proof_url = generate_sts_proof_url()
@@ -253,6 +315,50 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
                     status_code=status_code,
                     operation=operation,
                 )
+
+            # Post-filter responses for list_actions and batch_get_schemas
+            # to strip denied tools and include deny list metadata.
+            # Metadata goes inside body["data"] so it passes through
+            # _invoke_relay() in workspace-chat-tools (which returns data only).
+            if status_code == 200 and isinstance(body, dict):
+                data = body.get("data", {})
+                if not isinstance(data, dict):
+                    data = {}
+
+                if operation == "list_actions":
+                    app_slug = parameters.get("app_slug", "")
+                    if app_slug:
+                        deny_tools = _get_merged_deny_tools(external_user_id, app_slug)
+                        if deny_tools:
+                            if "actions" in data:
+                                data["actions"] = [
+                                    a
+                                    for a in data["actions"]
+                                    if a.get("key") not in deny_tools
+                                ]
+                            data["denied_tools"] = sorted(deny_tools)
+
+                elif operation == "batch_get_schemas":
+                    schemas = data.get("schemas", {})
+                    all_denied: Dict[str, list] = {}
+                    for slug, schema_data in schemas.items():
+                        deny_tools = _get_merged_deny_tools(external_user_id, slug)
+                        if deny_tools:
+                            if "actions" in schema_data:
+                                schema_data["actions"] = [
+                                    a
+                                    for a in schema_data["actions"]
+                                    if a.get("key") not in deny_tools
+                                ]
+                            if "index" in schema_data:
+                                schema_data["index"] = [
+                                    entry
+                                    for entry in schema_data["index"]
+                                    if entry.get("key") not in deny_tools
+                                ]
+                            all_denied[slug] = sorted(deny_tools)
+                    if all_denied:
+                        data["denied_tools_by_app"] = all_denied
 
             # Return the response with parsed body (maintain original structure for frontend compatibility)
             return {
