@@ -1766,7 +1766,7 @@ const handleTickets = async (
       assigneeId: assigneeId ? String(assigneeId) : undefined,
       assigneeName: assigneeName ? String(assigneeName) : undefined,
       reporterId: reporterId ? String(reporterId) : auth.sub,
-      reporterName: reporterName ? String(reporterName) : undefined,
+      reporterName: reporterName ? String(reporterName) : !reporterId ? auth.name : undefined,
       customerId: customerId ? String(customerId) : undefined,
       customerName: customerName ? String(customerName) : undefined,
       supplierId: supplierId ? String(supplierId) : undefined,
