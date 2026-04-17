@@ -119,6 +119,22 @@ function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
   return { agents: v(obj.agents), memories: v(obj.memories), knowledgeBases: v(obj.knowledgeBases), ops: v(obj.ops) };
 }
 
+// Merge a (possibly partial) incoming NumaToolApprovalMode into the current stored value.
+// Only keys with a valid ApprovalMode override; unknown/invalid keys fall back to current.
+function mergeNumaToolApprovalMode(incoming: unknown, current: NumaToolApprovalMode): NumaToolApprovalMode {
+  if (!incoming || typeof incoming !== 'object') return current;
+  const src = incoming as Record<string, unknown>;
+  const keys: (keyof NumaToolApprovalMode)[] = ['agents', 'memories', 'knowledgeBases', 'ops'];
+  const out: NumaToolApprovalMode = { ...current };
+  for (const k of keys) {
+    const v = src[k];
+    if (typeof v === 'string' && VALID_APPROVAL_MODES.includes(v as ApprovalMode)) {
+      out[k] = v as ApprovalMode;
+    }
+  }
+  return out;
+}
+
 function truncate(value: unknown, maxLen: number): string {
   if (typeof value !== 'string') return '';
   return value.slice(0, maxLen);
@@ -510,7 +526,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           VALID_APPROVAL_MODES.includes(body.approvalMode as ApprovalMode)
             ? (body.approvalMode as ApprovalMode)
             : currentGlobal.approvalMode,
-        numaToolApprovalMode: currentGlobal.numaToolApprovalMode,
+        numaToolApprovalMode:
+          'numaToolApprovalMode' in body
+            ? mergeNumaToolApprovalMode(body.numaToolApprovalMode, currentGlobal.numaToolApprovalMode)
+            : currentGlobal.numaToolApprovalMode,
         emailSignatureEnabled: currentGlobal.emailSignatureEnabled,
         emailSignatureText: currentGlobal.emailSignatureText,
         chatScrollMode: currentGlobal.chatScrollMode,

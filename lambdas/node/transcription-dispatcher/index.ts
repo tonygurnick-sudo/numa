@@ -59,7 +59,7 @@ const FARGATE_ONLY_FORMATS = new Set([
 
 // File size thresholds for Fargate routing (bytes)
 const FARGATE_SIZE_THRESHOLDS: Record<string, number> = {
-  default: 5 * 1024 * 1024, // All files over 5 MB → Fargate
+  default: 50 * 1024 * 1024, // All files over 50 MB → Fargate
 };
 
 /** Write an audit log entry to the automation table (non-fatal). */

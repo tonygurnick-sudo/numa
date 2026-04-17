@@ -15,7 +15,6 @@ import BoardSelector from './BoardSelector';
 import ZoneSprintStrip from './ZoneSprintStrip';
 import AllBoardsStrip from './AllBoardsStrip';
 import { useActivityBadgeCount } from './useActivityBadgeCount';
-import { StaffAvatar } from './Shared/StaffAvatar';
 import type { Ticket } from '../../types/ops';
 import type { OpsTopView } from './useOpsData';
 import './BoardView/kanban.css';
@@ -55,7 +54,6 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
     refreshTeam,
     refreshTeams,
     refreshConfig,
-    config,
     myWorkFilter,
     setMyWorkFilter,
   } = useOps();
@@ -197,64 +195,6 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
                     <i className="bi bi-sliders" />
                   </button>
                 )}
-
-                {/* Board member avatars */}
-                {boardViewMode === 'singleTeam' &&
-                  selectedTeamId &&
-                  config?.staff &&
-                  (() => {
-                    const team = teams.find((tm) => tm.id === selectedTeamId);
-                    if (!team) return null;
-                    const isAll = team.accessControl?.mode !== 'specific';
-                    const memberIdSet = new Set(
-                      isAll
-                        ? config.staff.filter((s) => s.isActive).map((s) => s.id)
-                        : (team.accessControl?.users ?? [])
-                    );
-                    if (team.createdBy) memberIdSet.add(team.createdBy);
-                    const members = [...memberIdSet].map((id) => config.staff.find((s) => s.id === id)).filter(Boolean);
-                    const MAX_SHOW = 4;
-                    const visible = members.slice(0, MAX_SHOW);
-                    const overflow = members.length - MAX_SHOW;
-                    if (members.length === 0) return null;
-                    return (
-                      <button
-                        type="button"
-                        className="d-flex align-items-center border-0 bg-transparent p-0"
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => setShowBoardSettings(true)}
-                        title={isAll ? t('teams.allUsers') : `${members.length} ${t('teams.selectMembers')}`}
-                      >
-                        <div className="d-flex" style={{ marginLeft: 4 }}>
-                          {visible.map((staff, i) => (
-                            <div
-                              key={staff!.id}
-                              style={{ marginLeft: i > 0 ? -6 : 0, zIndex: MAX_SHOW - i, position: 'relative' }}
-                            >
-                              <StaffAvatar staff={staff!} size={26} />
-                            </div>
-                          ))}
-                          {overflow > 0 && (
-                            <div
-                              className="d-flex align-items-center justify-content-center rounded-circle text-muted"
-                              style={{
-                                width: 26,
-                                height: 26,
-                                fontSize: '0.65rem',
-                                fontWeight: 600,
-                                backgroundColor: '#e5e7eb',
-                                marginLeft: -6,
-                                zIndex: 0,
-                                position: 'relative',
-                              }}
-                            >
-                              +{overflow}
-                            </div>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })()}
 
                 <div className="vr align-self-stretch my-2" />
               </div>

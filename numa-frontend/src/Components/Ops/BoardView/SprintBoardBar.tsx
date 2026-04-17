@@ -16,7 +16,7 @@ import type { WorkUnit } from '../../../types/ops';
  *
  * Only renders when work units (sprints) are enabled for the team.
  */
-const SprintBoardBar = () => {
+const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
   const { t } = useTranslation('ops');
   const {
     teamData,
@@ -110,100 +110,113 @@ const SprintBoardBar = () => {
 
   if (!hasWorkUnits) return null;
 
+  const sprintPills = workUnits
+    .filter((wu) => wu.status === 'active')
+    .map((wu) => {
+      const stats = workUnitStats.get(wu.id) ?? { done: 0, total: 0 };
+      const isSelected = selectedWorkUnitId === wu.id;
+      const ticketPct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
+
+      return (
+        <button
+          key={wu.id}
+          type="button"
+          className={`ops-pill ops-pill--sprint ${isSelected ? 'active' : ''}`}
+          onClick={() => selectWorkUnit(isSelected ? null : wu.id)}
+        >
+          <span className="ops-sprint-dot" style={{ backgroundColor: statusDotColor(wu.status) }} />
+          {wu.name}
+          <span className="ops-sprint-fraction">{t('sprints.progress', { done: stats.done, total: stats.total })}</span>
+          <span className="ops-sprint-track">
+            <span
+              className="ops-sprint-track-fill"
+              style={{
+                width: `${ticketPct}%`,
+                backgroundColor: statusDotColor(wu.status),
+              }}
+            />
+          </span>
+        </button>
+      );
+    });
+
+  const actions = (
+    <div className={`d-flex align-items-center gap-2 flex-shrink-0${inline ? '' : ' ms-auto'}`}>
+      <button type="button" className="ops-new-link" onClick={() => setShowCreate(true)}>
+        <i className="bi bi-plus" />
+        {t('sprints.new')}
+      </button>
+
+      {selectedWorkUnit && selectedWorkUnit.status === 'active' && (
+        <button
+          type="button"
+          className="ops-new-link"
+          style={{ color: '#d97706' }}
+          onClick={() => setShowComplete(true)}
+        >
+          {t('sprints.complete')}
+        </button>
+      )}
+    </div>
+  );
+
+  const inlineContent = (
+    <>
+      {sprintPills}
+      {actions}
+    </>
+  );
+
+  const fullContent = (
+    <div className="ops-sprint-board-bar">
+      <div className="d-flex align-items-center gap-2 flex-wrap">
+        {sprintPills}
+
+        {/* Inline detail info -- date range, progress, goal */}
+        {selectedWorkUnit && (
+          <>
+            <div className="vr align-self-stretch my-1 mx-1" style={{ opacity: 0.3 }} />
+            <div
+              className="d-flex align-items-center gap-3"
+              style={{ fontSize: '0.78rem', color: 'var(--ops-text-muted)' }}
+            >
+              {(selectedWorkUnit.startDate || selectedWorkUnit.endDate) && (
+                <span className="d-flex align-items-center gap-1">
+                  <i className="bi bi-calendar3" style={{ fontSize: '0.72rem' }} />
+                  {t('sprints.dateRange', {
+                    start: formatDate(selectedWorkUnit.startDate),
+                    end: formatDate(selectedWorkUnit.endDate),
+                  })}
+                </span>
+              )}
+              {selectedWorkUnit.status === 'active' &&
+                (() => {
+                  const stats = workUnitStats.get(selectedWorkUnit.id) ?? { done: 0, total: 0 };
+                  return (
+                    <span className="d-flex align-items-center gap-1">
+                      <i className="bi bi-check2-square" style={{ fontSize: '0.72rem' }} />
+                      {t('sprints.completionSummary', { done: stats.done, incomplete: stats.total - stats.done })}
+                    </span>
+                  );
+                })()}
+              {selectedWorkUnit.goal && (
+                <span className="d-flex align-items-center gap-1 text-truncate" style={{ maxWidth: 280 }}>
+                  <i className="bi bi-bullseye" style={{ fontSize: '0.72rem' }} />
+                  {selectedWorkUnit.goal}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+
+        {actions}
+      </div>
+    </div>
+  );
+
   return (
     <>
-      <div className="ops-sprint-board-bar">
-        <div className="d-flex align-items-center gap-2 flex-wrap">
-          {/* Active sprint pills — toggle: click to filter, click again to deselect */}
-          {workUnits
-            .filter((wu) => wu.status === 'active')
-            .map((wu) => {
-              const stats = workUnitStats.get(wu.id) ?? { done: 0, total: 0 };
-              const isSelected = selectedWorkUnitId === wu.id;
-              const ticketPct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
-
-              return (
-                <button
-                  key={wu.id}
-                  type="button"
-                  className={`ops-pill ops-pill--sprint ${isSelected ? 'active' : ''}`}
-                  onClick={() => selectWorkUnit(isSelected ? null : wu.id)}
-                >
-                  <span className="ops-sprint-dot" style={{ backgroundColor: statusDotColor(wu.status) }} />
-                  {wu.name}
-                  <span className="ops-sprint-fraction">
-                    {t('sprints.progress', { done: stats.done, total: stats.total })}
-                  </span>
-                  <span className="ops-sprint-track">
-                    <span
-                      className="ops-sprint-track-fill"
-                      style={{
-                        width: `${ticketPct}%`,
-                        backgroundColor: statusDotColor(wu.status),
-                      }}
-                    />
-                  </span>
-                </button>
-              );
-            })}
-
-          {/* Inline detail info — date range, progress, goal */}
-          {selectedWorkUnit && (
-            <>
-              <div className="vr align-self-stretch my-1 mx-1" style={{ opacity: 0.3 }} />
-              <div
-                className="d-flex align-items-center gap-3"
-                style={{ fontSize: '0.78rem', color: 'var(--ops-text-muted)' }}
-              >
-                {(selectedWorkUnit.startDate || selectedWorkUnit.endDate) && (
-                  <span className="d-flex align-items-center gap-1">
-                    <i className="bi bi-calendar3" style={{ fontSize: '0.72rem' }} />
-                    {t('sprints.dateRange', {
-                      start: formatDate(selectedWorkUnit.startDate),
-                      end: formatDate(selectedWorkUnit.endDate),
-                    })}
-                  </span>
-                )}
-                {selectedWorkUnit.status === 'active' &&
-                  (() => {
-                    const stats = workUnitStats.get(selectedWorkUnit.id) ?? { done: 0, total: 0 };
-                    return (
-                      <span className="d-flex align-items-center gap-1">
-                        <i className="bi bi-check2-square" style={{ fontSize: '0.72rem' }} />
-                        {t('sprints.completionSummary', { done: stats.done, incomplete: stats.total - stats.done })}
-                      </span>
-                    );
-                  })()}
-                {selectedWorkUnit.goal && (
-                  <span className="d-flex align-items-center gap-1 text-truncate" style={{ maxWidth: 280 }}>
-                    <i className="bi bi-bullseye" style={{ fontSize: '0.72rem' }} />
-                    {selectedWorkUnit.goal}
-                  </span>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* Right-side actions */}
-          <div className="ms-auto d-flex align-items-center gap-2 flex-shrink-0">
-            <button type="button" className="ops-new-link" onClick={() => setShowCreate(true)}>
-              <i className="bi bi-plus" />
-              {t('sprints.new')}
-            </button>
-
-            {selectedWorkUnit && selectedWorkUnit.status === 'active' && (
-              <button
-                type="button"
-                className="ops-new-link"
-                style={{ color: '#d97706' }}
-                onClick={() => setShowComplete(true)}
-              >
-                {t('sprints.complete')}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+      {inline ? inlineContent : fullContent}
 
       {/* ── Work Unit Modals ──────────────────────────────────────────── */}
       <CreateWorkUnitModal

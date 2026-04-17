@@ -139,6 +139,7 @@ export default function SettingsPage() {
   const schedulingEnabled = getFlag('SCHEDULING');
   const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
   const mfaEnabled = getFlag('MFA_ENABLED');
+  const hasOps = getFlag('NUMA_OPS');
   // Hidden by default — only shown when explicitly set to true in numa-client-config
   const usageReportingEnabled = window.sessionStorage.getItem('DEPLOY_USAGE_REPORTING') === 'true';
   const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
@@ -1379,6 +1380,174 @@ export default function SettingsPage() {
                           )}
                         </div>
 
+                        <div className="mb-3">
+                          <div className="settings-section-title mb-1">{t('chatDefaults.approvalsTitle')}</div>
+                          <div className="text-muted small mb-3">{t('chatDefaults.approvalsHelp')}</div>
+                          <table className="table table-borderless approval-grid mb-0">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '28%' }}>{t('userProfile.approval.grid.toolType')}</th>
+                                <th className="text-center">{t('userProfile.approval.modes.always.label')}</th>
+                                <th className="text-center">{t('userProfile.approval.modes.non_destructive.label')}</th>
+                                <th className="text-center">{t('userProfile.approval.modes.never.label')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td>
+                                  <div className="fw-semibold">{t('userProfile.approval.grid.integrations')}</div>
+                                  <div className="text-muted small">
+                                    {t('userProfile.approval.grid.integrationsHelp')}
+                                  </div>
+                                </td>
+                                {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                                  <td key={mode} className="text-center align-middle">
+                                    <Form.Check
+                                      type="radio"
+                                      id={`chat-defaults-approval-integrations-${mode}`}
+                                      name="chatDefaultsApprovalMode"
+                                      checked={globalChatSettings.approvalMode === mode}
+                                      onChange={() => {
+                                        setGlobalChatSettings((prev) => ({ ...prev, approvalMode: mode }));
+                                        setChatDefaultsDirty(true);
+                                      }}
+                                      className="d-inline-block"
+                                    />
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr>
+                                <td>
+                                  <div className="fw-semibold">{t('userProfile.approval.grid.agents')}</div>
+                                  <div className="text-muted small">{t('userProfile.approval.grid.agentsHelp')}</div>
+                                </td>
+                                {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                                  <td key={mode} className="text-center align-middle">
+                                    <Form.Check
+                                      type="radio"
+                                      id={`chat-defaults-approval-agents-${mode}`}
+                                      name="chatDefaultsNumaToolApprovalMode.agents"
+                                      checked={(globalChatSettings.numaToolApprovalMode?.agents ?? 'never') === mode}
+                                      onChange={() => {
+                                        setGlobalChatSettings((prev) => ({
+                                          ...prev,
+                                          numaToolApprovalMode: {
+                                            ...(prev.numaToolApprovalMode ??
+                                              DEFAULT_GLOBAL_CHAT_SETTINGS.numaToolApprovalMode),
+                                            agents: mode,
+                                          },
+                                        }));
+                                        setChatDefaultsDirty(true);
+                                      }}
+                                      className="d-inline-block"
+                                    />
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr>
+                                <td>
+                                  <div className="fw-semibold">{t('userProfile.approval.grid.memories')}</div>
+                                  <div className="text-muted small">{t('userProfile.approval.grid.memoriesHelp')}</div>
+                                </td>
+                                {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                                  <td key={mode} className="text-center align-middle">
+                                    <Form.Check
+                                      type="radio"
+                                      id={`chat-defaults-approval-memories-${mode}`}
+                                      name="chatDefaultsNumaToolApprovalMode.memories"
+                                      checked={(globalChatSettings.numaToolApprovalMode?.memories ?? 'never') === mode}
+                                      onChange={() => {
+                                        setGlobalChatSettings((prev) => ({
+                                          ...prev,
+                                          numaToolApprovalMode: {
+                                            ...(prev.numaToolApprovalMode ??
+                                              DEFAULT_GLOBAL_CHAT_SETTINGS.numaToolApprovalMode),
+                                            memories: mode,
+                                          },
+                                        }));
+                                        setChatDefaultsDirty(true);
+                                      }}
+                                      className="d-inline-block"
+                                    />
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr>
+                                <td>
+                                  <div className="fw-semibold">{t('userProfile.approval.grid.knowledgeBases')}</div>
+                                  <div className="text-muted small">
+                                    {t('userProfile.approval.grid.knowledgeBasesHelp')}
+                                  </div>
+                                </td>
+                                {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                                  <td key={mode} className="text-center align-middle">
+                                    <Form.Check
+                                      type="radio"
+                                      id={`chat-defaults-approval-kb-${mode}`}
+                                      name="chatDefaultsNumaToolApprovalMode.knowledgeBases"
+                                      checked={
+                                        (globalChatSettings.numaToolApprovalMode?.knowledgeBases ?? 'never') === mode
+                                      }
+                                      onChange={() => {
+                                        setGlobalChatSettings((prev) => ({
+                                          ...prev,
+                                          numaToolApprovalMode: {
+                                            ...(prev.numaToolApprovalMode ??
+                                              DEFAULT_GLOBAL_CHAT_SETTINGS.numaToolApprovalMode),
+                                            knowledgeBases: mode,
+                                          },
+                                        }));
+                                        setChatDefaultsDirty(true);
+                                      }}
+                                      className="d-inline-block"
+                                    />
+                                  </td>
+                                ))}
+                              </tr>
+                              {hasOps && (
+                                <tr>
+                                  <td>
+                                    <div className="fw-semibold">{t('userProfile.approval.grid.ops')}</div>
+                                    <div className="text-muted small">{t('userProfile.approval.grid.opsHelp')}</div>
+                                  </td>
+                                  {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                                    <td key={mode} className="text-center align-middle">
+                                      <Form.Check
+                                        type="radio"
+                                        id={`chat-defaults-approval-ops-${mode}`}
+                                        name="chatDefaultsNumaToolApprovalMode.ops"
+                                        checked={(globalChatSettings.numaToolApprovalMode?.ops ?? 'never') === mode}
+                                        onChange={() => {
+                                          setGlobalChatSettings((prev) => ({
+                                            ...prev,
+                                            numaToolApprovalMode: {
+                                              ...(prev.numaToolApprovalMode ??
+                                                DEFAULT_GLOBAL_CHAT_SETTINGS.numaToolApprovalMode),
+                                              ops: mode,
+                                            },
+                                          }));
+                                          setChatDefaultsDirty(true);
+                                        }}
+                                        className="d-inline-block"
+                                      />
+                                    </td>
+                                  ))}
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                          <div className="text-muted small mt-2">
+                            <strong>{t('userProfile.approval.modes.always.label')}:</strong>{' '}
+                            {t('userProfile.approval.grid.alwaysHelp')}
+                            <br />
+                            <strong>{t('userProfile.approval.modes.non_destructive.label')}:</strong>{' '}
+                            {t('userProfile.approval.grid.safeHelp')}
+                            <br />
+                            <strong>{t('userProfile.approval.modes.never.label')}:</strong>{' '}
+                            {t('userProfile.approval.grid.neverHelp')}
+                          </div>
+                        </div>
+
                         <Form.Group className="mb-3">
                           <Form.Label className="settings-section-title">
                             {t('chatDefaults.defaultIntegrations')}
@@ -1447,6 +1616,8 @@ export default function SettingsPage() {
                                     dataAnalysisEnabled: globalChatSettings.dataAnalysisEnabled,
                                     defaultConnectionIds: globalChatSettings.defaultConnectionIds,
                                     allowUserDefaults: globalChatSettings.allowUserDefaults,
+                                    approvalMode: globalChatSettings.approvalMode,
+                                    numaToolApprovalMode: globalChatSettings.numaToolApprovalMode,
                                   },
                                   numaPut
                                 );

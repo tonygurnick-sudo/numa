@@ -81,6 +81,8 @@
     "memoryManagementHelp": "Allow Numa to save and update memories about you and your integrations.",
     "dataConnectors": "Data Connectors",
     "dataConnectorsHelp": "Access external data sources like Google Drive, OneDrive, and Dropbox from chat.",
+    "approvalsTitle": "Tool approval defaults",
+    "approvalsHelp": "Set the default approval mode for each tool category. Users can still override these for themselves, and \"Reset to company defaults\" in a user's profile will snap back to whatever you set here.",
     "defaultIntegrations": "Default integrations",
     "integrationsDisabled": "Integrations are not enabled in this environment.",
     "noIntegrations": "No integrations are enabled for this environment.",
