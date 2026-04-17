@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Button, Dropdown, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Link2, MoreVertical, Settings, Trash2, Zap } from 'lucide-react';
@@ -14,6 +15,8 @@ type OAuthConnectorCardProps = {
   adminDisabled?: boolean;
   onDisconnect?: () => void;
   isDisconnecting?: boolean;
+  extraStatus?: ReactNode;
+  hasError?: boolean;
 };
 
 export const OAuthConnectorCard = ({
@@ -28,6 +31,8 @@ export const OAuthConnectorCard = ({
   adminDisabled = false,
   onDisconnect,
   isDisconnecting = false,
+  extraStatus,
+  hasError = false,
 }: OAuthConnectorCardProps) => {
   const { t } = useTranslation('integrations');
 
@@ -52,9 +57,15 @@ export const OAuthConnectorCard = ({
 
         <div className="integrations-row-card__controls">
           {credentialConfigured && (
-            <div className="integrations-row-status">
-              <span className="integrations-row-status__dot" aria-hidden="true" />
-              <span>{t('dataConnectors.oauth.configured')}</span>
+            <div className="d-flex align-items-center gap-3">
+              <div className={`integrations-row-status${hasError ? ' integrations-row-status--error' : ''}`}>
+                <span
+                  className={`integrations-row-status__dot${hasError ? ' integrations-row-status__dot--error' : ''}`}
+                  aria-hidden="true"
+                />
+                <span>{hasError ? t('dataConnectors.oauth.authError') : t('dataConnectors.oauth.configured')}</span>
+              </div>
+              {extraStatus}
             </div>
           )}
 

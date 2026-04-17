@@ -24,15 +24,15 @@ Content-Type: application/json
 {
   "ClientId": "numa-integration",
   "Name": "Numa Connector",
-  "ExpireInDays": 180
+  "ExpireInDays": 90
 }
 ```
 
-| Field          | Type   | Description                           |
-| -------------- | ------ | ------------------------------------- |
-| `ClientId`     | string | Identifier for the client application |
-| `Name`         | string | Human-readable token name             |
-| `ExpireInDays` | int    | Token lifetime in days (max 180)      |
+| Field          | Type   | Description                                    |
+| -------------- | ------ | ---------------------------------------------- |
+| `ClientId`     | string | Identifier for the client application          |
+| `Name`         | string | Human-readable token name                      |
+| `ExpireInDays` | int    | Token lifetime in days (Numa uses 90, max 180) |
 
 ### Option B: Via Swagger UI
 
@@ -47,7 +47,7 @@ Content-Type: application/json
 1. Log in to `https://{instance}`
 2. Navigate to User Settings > API Access (exact path may vary by version)
 3. Create new Personal Access Token
-4. Set expiry (max 180 days)
+4. Set expiry (Numa uses 90 days, max 180)
 5. Copy the token immediately — shown only once
 
 ---
@@ -58,7 +58,7 @@ Content-Type: application/json
 | ------------------ | --------------------------------------------- |
 | Header             | `Authorization: Bearer {PAT}`                 |
 | Token format       | Opaque string                                 |
-| Max lifetime       | **180 days** from creation                    |
+| Max lifetime       | **90 days** from creation (Synergy max: 180)  |
 | Scopes/permissions | Inherited from the user's role in 12d Synergy |
 
 ---
@@ -71,27 +71,38 @@ Content-Type: application/json
 | Can extend expiry? | No                                                                         |
 | Rotation strategy  | Create new PAT via `POST /api/v1/auth/generate-pat` before old one expires |
 
-### Automated Rotation (Recommended)
+### Automated Rotation (Implemented)
 
-Since PAT creation is an API call, Numa can automate rotation:
+Numa automates PAT rotation with two mechanisms:
+
+**Lazy rotation (on API use):** Every Synergy API call checks the PAT
+expiry. If within 30 days of expiry, a new PAT is generated automatically
+before the request proceeds. The old token is archived in `pat_history`.
+
+**Manual rotation (API endpoint):** Admins can trigger immediate rotation
+via `POST /api/data-connectors/synergy/rotate-pat`.
+
+**PAT status endpoint:** `GET /api/data-connectors/synergy/pat-status`
+returns expiry info, days remaining, status level, and rotation history.
 
 ```
-1. Track PAT creation date
-2. At 150 days (30 before expiry):
-   POST /api/v1/auth/generate-pat with new Name
-3. Store new PAT in connector config
-4. Old PAT continues working until its expiry
-5. Optionally revoke old PAT via DELETE /api/v1/auth/tokens/{id}
+Flow:
+1. PAT created with 90-day TTL, pat_created_at/pat_expires_at tracked
+2. On each API call, if days_remaining <= 30:
+   POST /api/v1/auth/generate-pat → new 90-day PAT
+3. Old token info archived in pat_history (capped at 50 entries)
+4. New PAT + expiry stored in Secrets Manager + DynamoDB
+5. Old PAT continues working until its original expiry
 ```
 
-### Proactive Warning Timeline
+### Status Levels & Frontend Indicators
 
-| Days before expiry | Action                                 |
-| ------------------ | -------------------------------------- |
-| 30 days            | Display warning in Numa admin settings |
-| 14 days            | Email notification to admin            |
-| 7 days             | Urgent warning banner                  |
-| 0 days             | Token expires, connector stops working |
+| Days remaining | Status     | UI indicator                         |
+| -------------- | ---------- | ------------------------------------ |
+| > 30 days      | `healthy`  | Green shield — token valid           |
+| 8–30 days      | `warning`  | Yellow shield + manual rotate button |
+| 1–7 days       | `critical` | Red shield + manual rotate button    |
+| 0 days         | `expired`  | Red shield — connector stops working |
 
 ---
 
@@ -106,7 +117,7 @@ Authorization: Bearer {PAT}
 POST /api/v1/auth/generate-pat
 Authorization: Bearer {PAT}
 Content-Type: application/json
-{"ClientId": "numa", "Name": "Numa Connector", "ExpireInDays": 180}
+{"ClientId": "numa", "Name": "Numa Connector", "ExpireInDays": 90}
 
 # Revoke PAT
 DELETE /api/v1/auth/tokens/{id}

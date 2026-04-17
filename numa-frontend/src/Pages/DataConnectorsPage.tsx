@@ -13,6 +13,7 @@ import type { DataConnectorStatus } from '../types/dataConnectors';
 import type { SynergyFolderItemsResponse, SynergyJob, SyncConfig } from '../types/synergySync';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
+import { SynergyPatBadge } from '../Components/DataConnectors/SynergyPatBadge';
 import { SYSTEM_KB_IDS } from '../constants/knowledgeBase';
 
 export const DataConnectorsPage = () => {
@@ -41,6 +42,7 @@ export const DataConnectorsPage = () => {
 
   const synergyStatus = statusItems.find((item) => item.connector_id === 'synergy');
   const isSynergyConnected = synergyStatus?.status === 'connected';
+  const hasSynergyAuthError = synergyStatus?.status === 'auth_error';
 
   const loadStatus = useCallback(async () => {
     try {
@@ -347,13 +349,24 @@ export const DataConnectorsPage = () => {
                       </div>
                     </div>
                     <div className="d-flex align-items-center justify-content-between">
-                      <span
-                        className={`badge brand-status-badge ${
-                          isSynergyConnected ? 'brand-status-badge--active' : 'brand-status-badge--inactive'
-                        }`}
-                      >
-                        {isSynergyConnected ? t('status.connected') : t('status.notConnected')}
-                      </span>
+                      <div className="d-flex align-items-center gap-2 flex-wrap">
+                        <span
+                          className={`badge brand-status-badge ${
+                            hasSynergyAuthError
+                              ? 'brand-status-badge--error'
+                              : isSynergyConnected
+                                ? 'brand-status-badge--active'
+                                : 'brand-status-badge--inactive'
+                          }`}
+                        >
+                          {hasSynergyAuthError
+                            ? t('status.authError')
+                            : isSynergyConnected
+                              ? t('status.connected')
+                              : t('status.notConnected')}
+                        </span>
+                        <SynergyPatBadge connectorConfigured={isSynergyConnected || hasSynergyAuthError} />
+                      </div>
                       <Button variant="secondary" onClick={() => setActiveConnector('synergy')}>
                         {t('dataConnectorsPage.synergyCard.open')}
                       </Button>
@@ -389,9 +402,14 @@ export const DataConnectorsPage = () => {
                         {saveError}
                       </Alert>
                     )}
-                    {!isSynergyConnected && (
+                    {!isSynergyConnected && !hasSynergyAuthError && (
                       <Alert variant="warning" className="mb-3">
                         {t('dataConnectorsPage.synergyNotConnected')}
+                      </Alert>
+                    )}
+                    {hasSynergyAuthError && (
+                      <Alert variant="danger" className="mb-3">
+                        {t('dataConnectorsPage.synergyAuthError')}
                       </Alert>
                     )}
                     <div className="mb-4">

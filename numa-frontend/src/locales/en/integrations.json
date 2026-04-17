@@ -314,6 +314,7 @@
   "status": {
     "connected": "Connected",
     "notConnected": "Not Connected",
+    "authError": "Authentication Error",
     "disabledByAdmin": "Disabled by your administrator",
     "reconnectRequired": "Reconnect Required",
     "connectedSince": "Since {{date}}",
@@ -392,7 +393,18 @@
       "setupGuide": "View setup guide"
     },
     "synergy": {
-      "iconAlt": "Synergy 12d Icon"
+      "iconAlt": "Synergy 12d Icon",
+      "pat": {
+        "healthy": "Token valid ({{days}} days remaining)",
+        "warning": "Token expires in {{days}} days",
+        "critical": "Token expires in {{days}} days!",
+        "expired": "Token expired",
+        "unknown": "Token expiry unknown",
+        "rotate": "Rotate",
+        "rotateSuccess": "Token rotated successfully",
+        "rotateFailed": "Token rotation failed",
+        "rotating": "Rotating..."
+      }
     },
     "modal": {
       "connectTitle": "Connect to Synergy 12d",
@@ -447,6 +459,7 @@
     "oauth": {
       "configure": "Configure",
       "configured": "Configured",
+      "authError": "Token expired — reconnect required",
       "configuring": "Configuring...",
       "notConfigured": "Not configured",
       "credentialsMissing": "Admin must configure OAuth client credentials.",
@@ -777,6 +790,7 @@
     },
     "backToConnectors": "Back to connectors",
     "synergyNotConnected": "Synergy 12d is not connected. Connect your Synergy 12d credentials in Integrations first.",
+    "synergyAuthError": "Your Synergy 12d access token has expired or been revoked. Please reconnect with new credentials.",
     "skipUnsupportedFiles": "Skip files that the knowledge base cannot ingest",
     "loadingConnectors": "Loading data connectors...",
     "searchJobs": "Search jobs...",

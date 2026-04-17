@@ -9,6 +9,24 @@ import httpx
 from connectors.synergy import _build_base_url, _normalize_token
 
 
+class SynergyAuthError(ValueError):
+    """Raised when Synergy returns 401/403 — token expired, revoked, or insufficient permissions."""
+
+    def __init__(self, status_code: int, detail: str = ""):
+        self.status_code = status_code
+        super().__init__(
+            f"Synergy authentication failed (HTTP {status_code}). {detail}".strip()
+        )
+
+
+def _check_response(response: httpx.Response) -> None:
+    """Raise SynergyAuthError on 401/403, otherwise raise_for_status."""
+    if response.status_code in (401, 403):
+        detail = response.text[:200] if response.text else ""
+        raise SynergyAuthError(response.status_code, detail)
+    response.raise_for_status()
+
+
 def search_jobs(  # pylint: disable=too-many-arguments
     server: str,
     token: str,
@@ -44,7 +62,7 @@ def search_jobs(  # pylint: disable=too-many-arguments
         "Content-Type": "application/json",
     }
     response = httpx.post(url, json=payload, headers=headers, timeout=60)
-    response.raise_for_status()
+    _check_response(response)
     data = response.json()
     items = data.get("Result") or data.get("Items") or data.get("items") or []
     jobs = [_normalize_job(job) for job in items if isinstance(job, dict)]
@@ -66,7 +84,7 @@ def list_job_folders(server: str, token: str, job_id: str) -> List[Dict[str, Any
         "Content-Type": "application/json",
     }
     response = httpx.get(url, headers=headers, timeout=60)
-    response.raise_for_status()
+    _check_response(response)
     data = response.json()
     items = (
         data.get("SubFolders")
@@ -87,7 +105,7 @@ def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
         "Content-Type": "application/json",
     }
     response = httpx.get(url, headers=headers, timeout=60)
-    response.raise_for_status()
+    _check_response(response)
     data = response.json()
     subfolders = [
         _normalize_folder(folder)

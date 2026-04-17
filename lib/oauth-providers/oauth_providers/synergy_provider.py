@@ -322,7 +322,7 @@ class SynergyProvider(OAuthProvider):
             "POST",
             f"{base_url}/api/v1/auth/generate-pat",
             access_token,
-            json={"ClientId": "numa", "Name": "numa-user", "ExpireInDays": 180},
+            json={"ClientId": "numa", "Name": "numa-user", "ExpireInDays": 90},
         )
         data = response.json()
         return data.get("Token") or data.get("token") or None

@@ -22,6 +22,9 @@ from .oauth_tools import (
     get_available_providers,
     get_oauth_token,
 )
+from .synergy_helpers import (
+    SynergyAuthError,
+)
 from .synergy_helpers import download_file as synergy_download_file
 from .synergy_helpers import (
     get_folder_items,
@@ -285,6 +288,13 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
             "error": f"Invalid folder_id format: {folder_id}. Use 'job:{{id}}' or 'folder:{{id}}'.",
         }
 
+    except SynergyAuthError:
+        return {
+            "status": "error",
+            "result": None,
+            "error": "Your Synergy access token has expired. Please reconnect with new credentials.",
+            "error_code": "auth_error",
+        }
     except httpx.HTTPError as e:
         logger.error("Synergy API error", error=str(e))
         return {"status": "error", "result": None, "error": f"Synergy API error: {e}"}
@@ -340,6 +350,13 @@ def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
             "error": None,
         }
 
+    except SynergyAuthError:
+        return {
+            "status": "error",
+            "result": None,
+            "error": "Your Synergy access token has expired. Please reconnect with new credentials.",
+            "error_code": "auth_error",
+        }
     except httpx.HTTPError as e:
         logger.error("Synergy search error", error=str(e))
         return {"status": "error", "result": None, "error": f"Synergy API error: {e}"}
@@ -394,6 +411,13 @@ def handle_connect_synergy_download(params: Dict[str, Any]) -> Dict[str, Any]:
             "error": None,
         }
 
+    except SynergyAuthError:
+        return {
+            "status": "error",
+            "result": None,
+            "error": "Your Synergy access token has expired. Please reconnect with new credentials.",
+            "error_code": "auth_error",
+        }
     except httpx.HTTPError as e:
         logger.error("Synergy download error", error=str(e))
         return {

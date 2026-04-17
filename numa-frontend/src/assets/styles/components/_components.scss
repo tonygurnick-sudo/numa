@@ -2224,6 +2224,14 @@ fieldset:disabled .btn {
   color: #b45309;
 }
 
+.integrations-row-status--error {
+  color: #dc2626;
+}
+
+.integrations-row-status__dot--error {
+  background: #dc2626;
+}
+
 .integrations-row-status__dot {
   width: 0.5rem;
   height: 0.5rem;
@@ -2450,6 +2458,12 @@ fieldset:disabled .btn {
 .brand-status-badge--inactive {
   background-color: color-mix(in srgb, var(--brand-border, #e5e7eb) 40%, transparent);
   color: var(--brand-textMuted, var(--color-text-muted));
+}
+
+.brand-status-badge--error {
+  background-color: color-mix(in srgb, #dc2626 15%, transparent);
+  color: #dc2626;
+  border-color: color-mix(in srgb, #dc2626 40%, transparent);
 }
 
 .connector-move-enter {
