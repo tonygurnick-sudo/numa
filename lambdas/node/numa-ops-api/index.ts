@@ -215,20 +215,40 @@ const queryGSI1 = async (
   limit?: number,
   startKey?: Record<string, unknown>
 ): Promise<{ items: Record<string, unknown>[]; lastKey?: Record<string, unknown> }> => {
-  const result = await dynamo.send(
-    new QueryCommand({
-      TableName: OPS_TABLE,
-      IndexName: 'GSI1',
-      KeyConditionExpression: skPrefix ? 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)' : 'GSI1PK = :pk',
-      ExpressionAttributeValues: skPrefix ? { ':pk': gsi1pk, ':sk': skPrefix } : { ':pk': gsi1pk },
-      ...(limit ? { Limit: limit } : {}),
-      ...(startKey ? { ExclusiveStartKey: startKey } : {}),
-    })
-  );
-  return {
-    items: (result.Items ?? []) as Record<string, unknown>[],
-    lastKey: result.LastEvaluatedKey as Record<string, unknown> | undefined,
-  };
+  // When a limit is specified, use single-page cursor-based pagination for the frontend.
+  // When no limit, auto-paginate to return all results (avoids 1MB truncation).
+  if (limit) {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: OPS_TABLE,
+        IndexName: 'GSI1',
+        KeyConditionExpression: skPrefix ? 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)' : 'GSI1PK = :pk',
+        ExpressionAttributeValues: skPrefix ? { ':pk': gsi1pk, ':sk': skPrefix } : { ':pk': gsi1pk },
+        Limit: limit,
+        ...(startKey ? { ExclusiveStartKey: startKey } : {}),
+      })
+    );
+    return {
+      items: (result.Items ?? []) as Record<string, unknown>[],
+      lastKey: result.LastEvaluatedKey as Record<string, unknown> | undefined,
+    };
+  }
+  const allItems: Record<string, unknown>[] = [];
+  let exclusiveStartKey = startKey;
+  do {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: OPS_TABLE,
+        IndexName: 'GSI1',
+        KeyConditionExpression: skPrefix ? 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)' : 'GSI1PK = :pk',
+        ExpressionAttributeValues: skPrefix ? { ':pk': gsi1pk, ':sk': skPrefix } : { ':pk': gsi1pk },
+        ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+      })
+    );
+    allItems.push(...((result.Items ?? []) as Record<string, unknown>[]));
+    exclusiveStartKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
+  return { items: allItems };
 };
 
 const queryGSI2 = async (
@@ -237,20 +257,38 @@ const queryGSI2 = async (
   limit?: number,
   startKey?: Record<string, unknown>
 ): Promise<{ items: Record<string, unknown>[]; lastKey?: Record<string, unknown> }> => {
-  const result = await dynamo.send(
-    new QueryCommand({
-      TableName: OPS_TABLE,
-      IndexName: 'GSI2',
-      KeyConditionExpression: skPrefix ? 'GSI2PK = :pk AND begins_with(GSI2SK, :sk)' : 'GSI2PK = :pk',
-      ExpressionAttributeValues: skPrefix ? { ':pk': gsi2pk, ':sk': skPrefix } : { ':pk': gsi2pk },
-      ...(limit ? { Limit: limit } : {}),
-      ...(startKey ? { ExclusiveStartKey: startKey } : {}),
-    })
-  );
-  return {
-    items: (result.Items ?? []) as Record<string, unknown>[],
-    lastKey: result.LastEvaluatedKey as Record<string, unknown> | undefined,
-  };
+  if (limit) {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: OPS_TABLE,
+        IndexName: 'GSI2',
+        KeyConditionExpression: skPrefix ? 'GSI2PK = :pk AND begins_with(GSI2SK, :sk)' : 'GSI2PK = :pk',
+        ExpressionAttributeValues: skPrefix ? { ':pk': gsi2pk, ':sk': skPrefix } : { ':pk': gsi2pk },
+        Limit: limit,
+        ...(startKey ? { ExclusiveStartKey: startKey } : {}),
+      })
+    );
+    return {
+      items: (result.Items ?? []) as Record<string, unknown>[],
+      lastKey: result.LastEvaluatedKey as Record<string, unknown> | undefined,
+    };
+  }
+  const allItems: Record<string, unknown>[] = [];
+  let exclusiveStartKey = startKey;
+  do {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: OPS_TABLE,
+        IndexName: 'GSI2',
+        KeyConditionExpression: skPrefix ? 'GSI2PK = :pk AND begins_with(GSI2SK, :sk)' : 'GSI2PK = :pk',
+        ExpressionAttributeValues: skPrefix ? { ':pk': gsi2pk, ':sk': skPrefix } : { ':pk': gsi2pk },
+        ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+      })
+    );
+    allItems.push(...((result.Items ?? []) as Record<string, unknown>[]));
+    exclusiveStartKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
+  return { items: allItems };
 };
 
 const queryGSI3 = async (gsi3pk: string, gsi3sk?: string): Promise<Record<string, unknown> | undefined> => {
@@ -267,14 +305,21 @@ const queryGSI3 = async (gsi3pk: string, gsi3sk?: string): Promise<Record<string
 };
 
 const queryByPK = async (pk: string, skPrefix?: string): Promise<Record<string, unknown>[]> => {
-  const result = await dynamo.send(
-    new QueryCommand({
-      TableName: OPS_TABLE,
-      KeyConditionExpression: skPrefix ? 'PK = :pk AND begins_with(SK, :sk)' : 'PK = :pk',
-      ExpressionAttributeValues: skPrefix ? { ':pk': pk, ':sk': skPrefix } : { ':pk': pk },
-    })
-  );
-  return (result.Items ?? []) as Record<string, unknown>[];
+  const allItems: Record<string, unknown>[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: OPS_TABLE,
+        KeyConditionExpression: skPrefix ? 'PK = :pk AND begins_with(SK, :sk)' : 'PK = :pk',
+        ExpressionAttributeValues: skPrefix ? { ':pk': pk, ':sk': skPrefix } : { ':pk': pk },
+        ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+      })
+    );
+    allItems.push(...((result.Items ?? []) as Record<string, unknown>[]));
+    exclusiveStartKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
+  return allItems;
 };
 
 const getItem = async (pk: string, sk: string): Promise<Record<string, unknown> | undefined> => {
