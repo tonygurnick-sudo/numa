@@ -904,6 +904,33 @@ Important notes:
             content = prompt_file.read_text().strip()
             context += f"\n\n### {slug} — Integration Guide\n{content}\n"
 
+    # Append denied tools policy section
+    tools_dir = Path("/workdir/tools/integrations")
+    denied_entries = []
+    for slug in enabled_integrations:
+        denied_file = tools_dir / slug / "_denied_tools.json"
+        if denied_file.is_file():
+            try:
+                denied_tools = json.loads(denied_file.read_text())
+                if denied_tools:
+                    tool_list = ", ".join(f"`{t}`" for t in denied_tools)
+                    denied_entries.append(f"- **{slug}**: {tool_list}")
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    if denied_entries:
+        denied_list = "\n".join(denied_entries)
+        context += f"""
+
+### Restricted Integration Tools
+
+The following tools have been restricted by administrator or user policy. They have been removed from the available action schemas and **will be rejected if called**.
+
+{denied_list}
+
+**Do NOT attempt to work around these restrictions** by using `proxy_request` to call the underlying API directly, or by any other means. These tools are intentionally disabled. If the user asks you to perform an action covered by a restricted tool, explain that the tool is restricted by their integration policy and suggest they update their settings if needed.
+"""
+
     # Append email signature when an email integration is connected
     has_email_integration = any(
         slug in _EMAIL_INTEGRATION_SLUGS for slug in enabled_integrations
