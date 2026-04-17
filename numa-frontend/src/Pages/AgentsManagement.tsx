@@ -717,6 +717,7 @@ export const AgentsManagement = () => {
           <Col key={agent.agentId}>
             <AgentCard
               agent={agent}
+              isFavorite={isAgentFavorite(agent)}
               onChat={handleStartChat}
               onEdit={agent.scope === 'user' || agent.createdBy.userId === userId ? handleEdit : undefined}
               onDuplicate={handleDuplicate}

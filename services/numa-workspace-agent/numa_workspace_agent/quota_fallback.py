@@ -42,16 +42,22 @@ def _get_client():
     return get_dynamodb_client()
 
 
+_DAILY_QUOTA_PHRASES = ("per day", "tokens per day", "per-day", "daily")
+
+
 def is_daily_quota_error(text: Optional[str]) -> bool:
     """Check if error text indicates daily token quota exhaustion.
 
-    Only matches "per day" errors -- NOT transient RPM/TPM throttling
-    which the SDK's internal retry logic handles silently.
+    Matches 429 errors whose body mentions daily-quota wording --
+    NOT transient RPM/TPM throttling, which the SDK's internal retry
+    logic handles silently before anything reaches us.
     """
     if not text:
         return False
     lower = text.lower()
-    return "429" in lower and "per day" in lower
+    if "429" not in lower:
+        return False
+    return any(phrase in lower for phrase in _DAILY_QUOTA_PHRASES)
 
 
 def mark_quota_exhausted(model_id: str) -> bool:

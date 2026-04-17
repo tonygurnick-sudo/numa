@@ -49,8 +49,17 @@ class TestIsDailyQuotaError:
         assert not is_daily_quota_error("500 Internal Server Error")
 
     def test_partial_match_per_day_only(self):
-        """Needs both '429' AND 'per day' to match."""
+        """Needs 429 AND a daily-quota phrase to match."""
         assert not is_daily_quota_error("Error per day limit reached")
+
+    def test_matches_hyphenated_per_day(self):
+        assert is_daily_quota_error("429 per-day token limit exceeded")
+
+    def test_matches_daily_wording(self):
+        assert is_daily_quota_error("429 daily token quota exceeded")
+
+    def test_rejects_daily_without_429(self):
+        assert not is_daily_quota_error("Daily token quota exceeded")
 
 
 # ── mark_quota_exhausted ──────────────────────────────────────────────────────

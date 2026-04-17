@@ -280,12 +280,20 @@ function DroppableGroupBody({ groupId, ticketIds, children }: DroppableGroupBody
 interface BacklogGroupFooterProps {
   zoneId: string;
   stageId?: string;
+  workUnitId?: string;
   ticketTypes: TicketType[];
-  onQuickAdd: (title: string, zoneId: string, stageId?: string, ticketTypeId?: string) => void;
+  onQuickAdd: (title: string, zoneId: string, stageId?: string, ticketTypeId?: string, workUnitId?: string) => void;
   onCreateTicket: (zoneId: string) => void;
 }
 
-function BacklogGroupFooter({ zoneId, stageId, ticketTypes, onQuickAdd, onCreateTicket }: BacklogGroupFooterProps) {
+function BacklogGroupFooter({
+  zoneId,
+  stageId,
+  workUnitId,
+  ticketTypes,
+  onQuickAdd,
+  onCreateTicket,
+}: BacklogGroupFooterProps) {
   const { t } = useTranslation('ops');
   const [active, setActive] = useState(false);
   const [value, setValue] = useState('');
@@ -317,7 +325,7 @@ function BacklogGroupFooter({ zoneId, stageId, ticketTypes, onQuickAdd, onCreate
 
   const handleSubmit = () => {
     const trimmed = value.trim();
-    if (trimmed) onQuickAdd(trimmed, zoneId, stageId, selectedType?.id);
+    if (trimmed) onQuickAdd(trimmed, zoneId, stageId, selectedType?.id, workUnitId);
     setValue('');
     setActive(false);
     setShowTypeDropdown(false);
@@ -670,7 +678,22 @@ const BacklogView = () => {
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [customerFilter, setCustomerFilter] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(`numa_ops_collapsed_groups_${teamId}`);
+      return saved ? new Set(JSON.parse(saved) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [groupOrder, setGroupOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`numa_ops_group_order_${teamId}`);
+      return saved ? (JSON.parse(saved) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // ── View mode with localStorage persistence ────────────────────
   const [viewMode, setViewMode] = useState<BacklogViewMode>(() => {
@@ -861,13 +884,15 @@ const BacklogView = () => {
 
     for (const wu of planningUnits) {
       const wuTickets = filteredTickets.filter((tk) => tk.workUnitId === wu.id);
+      const wuZoneId = (teamData?.team?.workUnitSeries?.backlogZoneId as string | undefined) ?? firstBacklogZoneId;
       result.push({
         id: wu.id,
         label: wu.name,
         sublabel: t('sprints.planning'),
         tickets: wuTickets,
         workUnit: wu,
-        zoneId: (teamData?.team?.workUnitSeries?.backlogZoneId as string | undefined) ?? firstBacklogZoneId,
+        zoneId: wuZoneId,
+        stageId: backlogStages.find((s) => s.zoneId === wuZoneId)?.id,
       });
     }
 
@@ -890,21 +915,77 @@ const BacklogView = () => {
     return map;
   }, [groups]);
 
-  // ── Visible groups (group filter) ──────────────────────────────
+  // ── Visible groups (group filter + custom ordering) ─────────────
+  const orderedGroups = useMemo(() => {
+    if (groupOrder.length === 0) return groups;
+    const orderMap = new Map(groupOrder.map((id, idx) => [id, idx]));
+    return [...groups].sort((a, b) => {
+      const aIdx = orderMap.get(a.id) ?? Infinity;
+      const bIdx = orderMap.get(b.id) ?? Infinity;
+      if (aIdx === Infinity && bIdx === Infinity) return 0;
+      return aIdx - bIdx;
+    });
+  }, [groups, groupOrder]);
+
   const visibleGroups = useMemo(() => {
-    if (groupFilter === null) return groups;
-    return groups.filter((g) => g.id === groupFilter);
-  }, [groups, groupFilter]);
+    if (groupFilter === null) return orderedGroups;
+    return orderedGroups.filter((g) => g.id === groupFilter);
+  }, [orderedGroups, groupFilter]);
+
+  const moveGroup = useCallback(
+    (groupId: string, direction: 'up' | 'down') => {
+      const currentOrder = orderedGroups.map((g) => g.id);
+      const idx = currentOrder.indexOf(groupId);
+      if (idx < 0) return;
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= currentOrder.length) return;
+      const newOrder = [...currentOrder];
+      [newOrder[idx], newOrder[targetIdx]] = [newOrder[targetIdx], newOrder[idx]];
+      setGroupOrder(newOrder);
+      if (teamId) {
+        try {
+          localStorage.setItem(`numa_ops_group_order_${teamId}`, JSON.stringify(newOrder));
+        } catch {
+          /* noop */
+        }
+      }
+    },
+    [orderedGroups, teamId]
+  );
 
   // ── Toggle collapse ────────────────────────────────────────────
-  const toggleGroup = useCallback((groupId: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
-  }, []);
+  const toggleGroup = useCallback(
+    (groupId: string) => {
+      setCollapsedGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(groupId)) next.delete(groupId);
+        else next.add(groupId);
+        if (teamId) {
+          try {
+            localStorage.setItem(`numa_ops_collapsed_groups_${teamId}`, JSON.stringify([...next]));
+          } catch {
+            /* noop */
+          }
+        }
+        return next;
+      });
+    },
+    [teamId]
+  );
+
+  // Reload collapsed/order state when team changes
+  useEffect(() => {
+    if (!teamId) return;
+    try {
+      const savedCollapsed = localStorage.getItem(`numa_ops_collapsed_groups_${teamId}`);
+      setCollapsedGroups(savedCollapsed ? new Set(JSON.parse(savedCollapsed) as string[]) : new Set());
+      const savedOrder = localStorage.getItem(`numa_ops_group_order_${teamId}`);
+      setGroupOrder(savedOrder ? (JSON.parse(savedOrder) as string[]) : []);
+    } catch {
+      setCollapsedGroups(new Set());
+      setGroupOrder([]);
+    }
+  }, [teamId]);
 
   // ── Project name lookup ─────────────────────────────────────────
   const projectNameMap = useMemo(() => {
@@ -1058,7 +1139,7 @@ const BacklogView = () => {
   }, []);
 
   const handleBacklogQuickAdd = useCallback(
-    async (title: string, zoneId: string, stageId?: string, ticketTypeId?: string) => {
+    async (title: string, zoneId: string, stageId?: string, ticketTypeId?: string, workUnitId?: string) => {
       if (!teamId || !config?.ticketTypes?.[0]) return;
       const resolvedStageId = stageId ?? teamData?.stages?.find((s) => s.zoneId === zoneId)?.id;
       if (!resolvedStageId) return;
@@ -1071,6 +1152,7 @@ const BacklogView = () => {
           stageId: resolvedStageId,
           zoneId,
           priority: 'medium',
+          workUnitId,
         });
         await refreshTickets();
       } catch (err) {
@@ -1407,6 +1489,28 @@ const BacklogView = () => {
                         }
                       }}
                     >
+                      {visibleGroups.length > 1 && (
+                        <div className="backlog-group-reorder" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="backlog-reorder-btn"
+                            disabled={visibleGroups.indexOf(group) === 0}
+                            onClick={() => moveGroup(group.id, 'up')}
+                            title={t('backlogView.moveUp')}
+                          >
+                            <i className="bi bi-arrow-up-short" />
+                          </button>
+                          <button
+                            type="button"
+                            className="backlog-reorder-btn"
+                            disabled={visibleGroups.indexOf(group) === visibleGroups.length - 1}
+                            onClick={() => moveGroup(group.id, 'down')}
+                            title={t('backlogView.moveDown')}
+                          >
+                            <i className="bi bi-arrow-down-short" />
+                          </button>
+                        </div>
+                      )}
                       <i
                         className={`bi bi-chevron-${isCollapsed ? 'right' : 'down'}`}
                         style={{ fontSize: 12, color: '#6b7280', flexShrink: 0 }}
@@ -1543,6 +1647,7 @@ const BacklogView = () => {
                         <BacklogGroupFooter
                           zoneId={group.zoneId}
                           stageId={group.stageId}
+                          workUnitId={group.workUnit?.id}
                           ticketTypes={config?.ticketTypes ?? []}
                           onQuickAdd={handleBacklogQuickAdd}
                           onCreateTicket={handleAddTicket}

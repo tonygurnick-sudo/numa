@@ -407,7 +407,13 @@
     "allPriorities": "All Priorities",
     "allProjects": "All Projects",
     "allCustomers": "All Customers",
-    "bulkArchive": "Archive"
+    "bulkArchive": "Archive",
+    "moveUp": "Move section up",
+    "moveDown": "Move section down"
+  },
+  "toolbar": {
+    "searchPlaceholder": "Search tickets...",
+    "clearFilters": "Clear filters"
   },
   "boards": {
     "settings": "Board Settings",

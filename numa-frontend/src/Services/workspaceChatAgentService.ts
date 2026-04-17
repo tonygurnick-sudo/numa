@@ -9,7 +9,6 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import axios from 'axios';
 import { sanitizeS3Filename } from '../utils/sanitizeFilename';
-import { TranscriptionService } from './TranscriptionService';
 import type {
   SDKEvent,
   WorkspaceChatRequest,
@@ -930,8 +929,7 @@ export async function saveInlineDocumentToS3(
   title: string,
   content: string,
   conversationId: string,
-  getCredentials: () => Promise<AwsCredentialIdentity>,
-  numaPost?: (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>
+  getCredentials: () => Promise<AwsCredentialIdentity>
 ): Promise<void> {
   const region = sessionStorage.getItem('REGION');
   const bucket = sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
@@ -962,14 +960,6 @@ export async function saveInlineDocumentToS3(
     await axios.put(presignedUrl, blob, {
       headers: { 'Content-Type': 'text/markdown' },
     });
-
-    // Submit to transcription service (fire-and-forget)
-    if (numaPost) {
-      const outputsBucket = sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || '';
-      TranscriptionService.submit(filename, s3Key, numaPost, outputsBucket || undefined).catch((err) =>
-        console.warn('[WorkspaceChat] Chat save pre-transcription failed:', err)
-      );
-    }
   } catch (err) {
     console.error('[WorkspaceChat] Failed to save inline document to S3:', err);
   }

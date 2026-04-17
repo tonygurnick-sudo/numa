@@ -30,6 +30,7 @@ import { downloadAgentExport, serializeAgentSummaryToExport } from '../../utils/
 
 type AgentCardProps = {
   agent: AgentSummary;
+  isFavorite?: boolean;
   onChat?: (agent: AgentSummary) => void;
   onEdit?: (agent: AgentSummary) => void;
   onDuplicate?: (agent: AgentSummary) => void;
@@ -105,6 +106,7 @@ const renderIntegrations = (agent: AgentSummary) => {
 
 export const AgentCard = ({
   agent,
+  isFavorite,
   onChat,
   onEdit,
   onDuplicate,
@@ -117,6 +119,7 @@ export const AgentCard = ({
   disabled = false,
   isInMyAgentsSection = false,
 }: AgentCardProps) => {
+  const favorite = isFavorite ?? agent.isFavorite ?? false;
   const { t } = useTranslation('agents');
   // Determine if this agent should be collapsed by default
   // Collapse if explicitly in "My Agents" section
@@ -175,7 +178,7 @@ export const AgentCard = ({
 
   const handleFavoriteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onToggleFavorite?.(agent, !agent.isFavorite);
+    onToggleFavorite?.(agent, !favorite);
   };
 
   const handleExportClick = (e: React.MouseEvent) => {
@@ -390,12 +393,12 @@ export const AgentCard = ({
                 style={{ flexShrink: 0 }}
                 onClick={handleFavoriteClick}
                 disabled={disabled}
-                aria-label={agent.isFavorite ? t('card.favorite.removeAria') : t('card.favorite.addAria')}
+                aria-label={favorite ? t('card.favorite.removeAria') : t('card.favorite.addAria')}
               >
                 <Star
                   size={18}
-                  style={{ color: agent.isFavorite ? '#f0ad4e' : '#6c757d' }}
-                  fill={agent.isFavorite ? '#f0ad4e' : 'none'}
+                  style={{ color: favorite ? '#f0ad4e' : '#6c757d' }}
+                  fill={favorite ? '#f0ad4e' : 'none'}
                 />
               </Button>
             )}
@@ -475,7 +478,7 @@ export const AgentCard = ({
                 placement="top"
                 overlay={
                   <Tooltip id={`fav-${agent.agentId}`}>
-                    {agent.isFavorite ? t('card.favorite.remove') : t('card.favorite.add')}
+                    {favorite ? t('card.favorite.remove') : t('card.favorite.add')}
                   </Tooltip>
                 }
               >
@@ -484,12 +487,12 @@ export const AgentCard = ({
                   className="p-0"
                   onClick={handleFavoriteClick}
                   disabled={disabled}
-                  aria-label={agent.isFavorite ? t('card.favorite.removeAria') : t('card.favorite.addAria')}
+                  aria-label={favorite ? t('card.favorite.removeAria') : t('card.favorite.addAria')}
                 >
                   <Star
                     size={20}
-                    style={{ color: agent.isFavorite ? '#f0ad4e' : '#6c757d' }}
-                    fill={agent.isFavorite ? '#f0ad4e' : 'none'}
+                    style={{ color: favorite ? '#f0ad4e' : '#6c757d' }}
+                    fill={favorite ? '#f0ad4e' : 'none'}
                   />
                 </Button>
               </OverlayTrigger>
