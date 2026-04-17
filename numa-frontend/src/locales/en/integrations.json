@@ -284,6 +284,11 @@
       "name": "Zoho CRM",
       "description": "Manage leads, pipelines, and track sales performance.",
       "example_query": "List the new leads added this month."
+    },
+    "microsofttodo": {
+      "name": "Microsoft To Do",
+      "description": "Manage tasks, lists, and your daily workflow in Microsoft To Do.",
+      "example_query": "List all my incomplete tasks for today."
     }
   },
   "tabs": {
