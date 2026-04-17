@@ -17,9 +17,10 @@ import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { Ticket, WorkStage } from '../../../types/ops';
+import type { Ticket, WorkStage, StaffProfile } from '../../../types/ops';
 import KanbanZone from './KanbanZone';
 import SprintBoardBar from './SprintBoardBar';
+import BoardToolbar from './BoardToolbar';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import { CreateTicketModal } from '../Modals/CreateTicketModal';
 import ContextMenu from '../ContextMenu';
@@ -120,6 +121,8 @@ const BoardView = () => {
   } = useOps();
 
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
+  const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   // ── Drop indicator state: tracks where the dragged card would be inserted ──
   const [dropIndicator, setDropIndicator] = useState<{
@@ -146,6 +149,32 @@ const BoardView = () => {
   const stages = teamData?.stages ?? [];
   const hasWorkUnitSeries = Boolean(team?.workUnitSeries?.enabled);
 
+  // ── Board members for toolbar avatar filter ──
+  const boardMembers = useMemo(() => {
+    if (!config?.staff || !team) return [];
+    const isAll = team.accessControl?.mode !== 'specific';
+    const memberIdSet = new Set(
+      isAll ? config.staff.filter((s) => s.isActive).map((s) => s.id) : (team.accessControl?.users ?? [])
+    );
+    if (team.createdBy) memberIdSet.add(team.createdBy);
+    return [...memberIdSet].map((id) => config.staff.find((s) => s.id === id)).filter(Boolean) as StaffProfile[];
+  }, [config?.staff, team]);
+
+  const toggleAssignee = useCallback((id: string) => {
+    setAssigneeFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  // Reset filters on zone/team change
+  useEffect(() => {
+    setAssigneeFilter(new Set());
+    setSearchQuery('');
+  }, [activeZoneId, team?.id]);
+
   // ── Active zone: the board-type zone selected via OpsHeader zone tabs ──
 
   const activeZone = useMemo(
@@ -169,8 +198,25 @@ const BoardView = () => {
     if (myWorkFilter && userSub) {
       result = result.filter((tk) => tk.assigneeId && tk.assigneeId === userSub);
     }
+    // Assignee filter (toolbar avatars)
+    if (assigneeFilter.size > 0) {
+      result = result.filter((tk) => tk.assigneeId && assigneeFilter.has(tk.assigneeId));
+    }
+    // Search filter (toolbar search input)
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((tk) => tk.title.toLowerCase().includes(q) || tk.displayId?.toLowerCase().includes(q));
+    }
     return result;
-  }, [tickets, activeZone, selectedWorkUnitId, myWorkFilter, user?.decoded_tokens?.idToken?.sub]);
+  }, [
+    tickets,
+    activeZone,
+    selectedWorkUnitId,
+    myWorkFilter,
+    user?.decoded_tokens?.idToken?.sub,
+    assigneeFilter,
+    searchQuery,
+  ]);
 
   // ── Unsorted tickets: board zone tickets with no sprint assignment ──
   const unsortedCount = useMemo(() => {
@@ -182,6 +228,14 @@ const BoardView = () => {
     () => workUnits.filter((wu) => wu.status === 'planning' || wu.status === 'active'),
     [workUnits]
   );
+
+  // ── Zone progress for toolbar ──────────────────
+  const progressPercent = useMemo(() => {
+    const total = filteredTickets.length;
+    if (total === 0) return 0;
+    const done = filteredTickets.filter((tk) => tk.statusType === 'completed' || tk.statusType === 'ended').length;
+    return Math.round((done / total) * 100);
+  }, [filteredTickets]);
 
   // ── Sprint progress label for the zone progress bar ──────────────────
   const sprintLabel = useMemo(() => {
@@ -761,7 +815,17 @@ const BoardView = () => {
               </button>
             </div>
           )}
-          {hasWorkUnitSeries && <SprintBoardBar />}
+          <BoardToolbar
+            members={boardMembers}
+            assigneeFilter={assigneeFilter}
+            onToggleAssignee={toggleAssignee}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            progressPercent={progressPercent}
+            progressLabel={sprintLabel}
+          >
+            {hasWorkUnitSeries && <SprintBoardBar inline />}
+          </BoardToolbar>
           {/* Board announcement banner */}
           {team.announcement && !announcementDismissed && (
             <div className="ops-announcement">
@@ -791,7 +855,6 @@ const BoardView = () => {
             onQuickAdd={handleQuickAdd}
             dropIndicator={dropIndicator}
             activeTicketId={activeTicket?.id ?? null}
-            sprintLabel={sprintLabel}
           />
         </div>
         {dragOverlay}

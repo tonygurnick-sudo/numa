@@ -411,6 +411,10 @@
     "moveUp": "Move section up",
     "moveDown": "Move section down"
   },
+  "toolbar": {
+    "searchPlaceholder": "Search tickets...",
+    "clearFilters": "Clear filters"
+  },
   "boards": {
     "settings": "Board Settings",
     "create": "New Board",

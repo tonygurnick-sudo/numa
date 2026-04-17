@@ -428,7 +428,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
             }}
           >
             {assigneeStaff || ticket.assigneeName ? (
-              <StaffAvatar staff={assigneeStaff} name={!assigneeStaff ? ticket.assigneeName : undefined} size={26} />
+              <StaffAvatar staff={assigneeStaff} name={!assigneeStaff ? ticket.assigneeName : undefined} size={24} />
             ) : (
               <div className="ticket-avatar ticket-avatar-empty">
                 <i className="bi bi-person" style={{ fontSize: '0.72rem' }} />
