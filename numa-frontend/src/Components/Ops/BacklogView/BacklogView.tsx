@@ -1489,6 +1489,28 @@ const BacklogView = () => {
                         }
                       }}
                     >
+                      {visibleGroups.length > 1 && (
+                        <div className="backlog-group-reorder" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="backlog-reorder-btn"
+                            disabled={visibleGroups.indexOf(group) === 0}
+                            onClick={() => moveGroup(group.id, 'up')}
+                            title={t('backlogView.moveUp')}
+                          >
+                            <i className="bi bi-arrow-up-short" />
+                          </button>
+                          <button
+                            type="button"
+                            className="backlog-reorder-btn"
+                            disabled={visibleGroups.indexOf(group) === visibleGroups.length - 1}
+                            onClick={() => moveGroup(group.id, 'down')}
+                            title={t('backlogView.moveDown')}
+                          >
+                            <i className="bi bi-arrow-down-short" />
+                          </button>
+                        </div>
+                      )}
                       <i
                         className={`bi bi-chevron-${isCollapsed ? 'right' : 'down'}`}
                         style={{ fontSize: 12, color: '#6b7280', flexShrink: 0 }}
@@ -1518,29 +1540,6 @@ const BacklogView = () => {
                         <span className="backlog-status-badge backlog-status-badge--active">{summary.active}</span>
                         <span className="backlog-status-badge backlog-status-badge--done">{summary.done}</span>
                       </div>
-
-                      {visibleGroups.length > 1 && (
-                        <div className="backlog-group-reorder" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="backlog-reorder-btn"
-                            disabled={visibleGroups.indexOf(group) === 0}
-                            onClick={() => moveGroup(group.id, 'up')}
-                            title={t('backlogView.moveUp')}
-                          >
-                            <i className="bi bi-chevron-up" />
-                          </button>
-                          <button
-                            type="button"
-                            className="backlog-reorder-btn"
-                            disabled={visibleGroups.indexOf(group) === visibleGroups.length - 1}
-                            onClick={() => moveGroup(group.id, 'down')}
-                            title={t('backlogView.moveDown')}
-                          >
-                            <i className="bi bi-chevron-down" />
-                          </button>
-                        </div>
-                      )}
 
                       <button
                         type="button"

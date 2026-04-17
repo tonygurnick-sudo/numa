@@ -165,7 +165,7 @@
   flex: 1;
   overflow-y: auto;
   min-height: 40px;
-  padding: 2px 0;
+  padding: 4px 0 2px;
   scrollbar-width: thin;
   scrollbar-color: #d1d5db transparent;
   transition:
@@ -2122,38 +2122,34 @@
 .backlog-group-reorder {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.backlog-group-header:hover .backlog-group-reorder {
-  opacity: 1;
+  gap: 1px;
+  flex-shrink: 0;
+  margin-right: 2px;
 }
 
 .backlog-reorder-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
+  width: 18px;
   height: 14px;
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: var(--ops-text-secondary);
-  font-size: 10px;
+  color: var(--brand-primary, #8e50a7);
+  font-size: 14px;
   cursor: pointer;
   padding: 0;
   line-height: 1;
+  transition: background-color 0.15s;
 }
 
 .backlog-reorder-btn:hover:not(:disabled) {
-  background: #e5e7eb;
-  color: #4b5563;
+  background: rgba(142, 80, 167, 0.12);
 }
 
 .backlog-reorder-btn:disabled {
-  opacity: 0.25;
+  opacity: 0.2;
   cursor: default;
 }
 
@@ -3167,6 +3163,121 @@ body:has(.backlog-bulk-bar) .ask-numa-fab {
   text-align: right;
   margin-bottom: 2px;
   line-height: 1;
+}
+
+/* ── Board Toolbar ──────────────────────────────────────────────── */
+
+.ops-board-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px 0 0;
+  margin-bottom: 8px;
+}
+
+.ops-board-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.ops-toolbar-avatars {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ops-toolbar-avatar-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #fff;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+.ops-toolbar-avatar-btn:hover {
+  transform: translateY(-2px);
+  z-index: 100 !important;
+}
+
+.ops-toolbar-avatar-btn.active {
+  border-color: var(--brand-primary, #8e50a7);
+  box-shadow: 0 0 0 2px rgba(142, 80, 167, 0.25);
+  z-index: 100 !important;
+}
+
+.ops-toolbar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 200px;
+}
+
+.ops-toolbar-search-icon {
+  position: absolute;
+  left: 8px;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.ops-toolbar-search-input {
+  width: 100%;
+  padding: 5px 28px 5px 26px;
+  border: 1px solid var(--ops-border, #e4e4e7);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  outline: none;
+  background: #fff;
+  transition: border-color 0.15s;
+}
+
+.ops-toolbar-search-input:focus {
+  border-color: var(--brand-primary, #8e50a7);
+}
+
+.ops-toolbar-search-input::placeholder {
+  color: #9ca3af;
+}
+
+.ops-toolbar-search-clear {
+  position: absolute;
+  right: 4px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.ops-toolbar-search-clear:hover {
+  color: #4b5563;
+}
+
+.ops-toolbar-sprint-label {
+  font-size: 0.7rem;
+  color: var(--ops-text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* Full-width progress bar sits at bottom of toolbar */
+.ops-board-toolbar > .ops-zone-progress {
+  height: 3px;
 }
 
 /* Zone tab completion percentage */
