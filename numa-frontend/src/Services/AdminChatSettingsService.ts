@@ -1,10 +1,12 @@
 import {
   DEFAULT_CHAT_SETTINGS,
+  DEFAULT_NUMA_TOOL_APPROVAL_MODE,
   VALID_APPROVAL_MODES,
   VALID_SCROLL_MODES,
   type ApprovalMode,
   type ChatScrollMode,
   type ChatSettings,
+  type NumaToolApprovalMode,
 } from './ChatSettingsService';
 import i18n from '../i18n';
 
@@ -95,6 +97,19 @@ function parseBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
+  if (typeof data !== 'object' || data === null) return { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE };
+  const obj = data as Record<string, unknown>;
+  const validateField = (val: unknown, fallback: ApprovalMode): ApprovalMode =>
+    typeof val === 'string' && VALID_APPROVAL_MODES.includes(val as ApprovalMode) ? (val as ApprovalMode) : fallback;
+  return {
+    agents: validateField(obj.agents, DEFAULT_NUMA_TOOL_APPROVAL_MODE.agents),
+    memories: validateField(obj.memories, DEFAULT_NUMA_TOOL_APPROVAL_MODE.memories),
+    knowledgeBases: validateField(obj.knowledgeBases, DEFAULT_NUMA_TOOL_APPROVAL_MODE.knowledgeBases),
+    ops: validateField(obj.ops, DEFAULT_NUMA_TOOL_APPROVAL_MODE.ops),
+  };
+}
+
 function validateGlobal(data: unknown): GlobalChatSettings {
   const normalized = parseJsonIfNeeded(data);
 
@@ -139,6 +154,7 @@ function validateGlobal(data: unknown): GlobalChatSettings {
       typeof obj.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(obj.approvalMode as ApprovalMode)
         ? (obj.approvalMode as ApprovalMode)
         : DEFAULT_GLOBAL_CHAT_SETTINGS.approvalMode,
+    numaToolApprovalMode: validateNumaToolApprovalMode(obj.numaToolApprovalMode),
     emailSignatureEnabled:
       typeof obj.emailSignatureEnabled === 'boolean'
         ? obj.emailSignatureEnabled
