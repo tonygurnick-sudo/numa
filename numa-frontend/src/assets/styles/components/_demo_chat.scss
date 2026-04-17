@@ -9,6 +9,92 @@
   overscroll-behavior: contain;
 }
 
+// ── Demo sidebar (decorative, non-interactive) ──────────────
+// The sidebar is a visual shell only -- items are rendered with
+// .nav-link-disabled so they're inert. The toggle button is the
+// only interactive element.
+.demo-nav {
+  .nav-link.nav-link-disabled {
+    cursor: default;
+
+    &.active {
+      // Keep the active style visible on the disabled "Chat" item so
+      // visitors see where they are in the product.
+      opacity: 1;
+    }
+  }
+
+  // Simple initials circle for the demo user footer
+  .demo-nav-avatar {
+    background: var(--brand-primary, #7c3aed);
+    color: #ffffff;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1;
+
+    span {
+      display: inline-flex;
+    }
+  }
+}
+
+// ── Embed-mode sidebar styling ──────────────────────────────
+// Match the lavender palette used by the embed chat so the sidebar
+// blends with the iframe treatment instead of looking pasted on top.
+.demo-layout--embed {
+  background: #f5f0f8;
+
+  .app-layout-content {
+    background: #f5f0f8;
+  }
+
+  .demo-nav {
+    background-color: #f5f0f8;
+    border-right-color: #e4dded;
+
+    .nav-search-input {
+      background: #ede9f3;
+      border-color: #e4dded;
+
+      &:disabled {
+        background: #ede9f3;
+        border-color: #e4dded;
+      }
+    }
+
+    .nav-link.active {
+      // Richer purple highlight matching the user-bubble colour
+      background-color: #ede9f3;
+      color: #6d28d9;
+
+      .nav-icon {
+        color: #6d28d9;
+      }
+    }
+
+    .nav-divider {
+      border-top-color: #e4dded;
+    }
+
+    .footer {
+      border-top-color: #e4dded;
+    }
+
+    .nav-toggle-btn {
+      border-color: #e4dded;
+
+      &:hover {
+        background-color: #ede9f3;
+        color: #6d28d9;
+      }
+    }
+
+    .demo-nav-avatar {
+      background: #6d28d9;
+    }
+  }
+}
+
 // ── Welcome screen ──────────────────────────────────────────
 .demo-welcome {
   display: flex;
