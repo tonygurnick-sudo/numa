@@ -18,7 +18,7 @@ import type {
   OAuthBreadcrumb,
 } from '../types/oauthProviders';
 import type { SynergyJob, SynergyFolder, SynergyFile } from '../types/synergySync';
-import { OAuthProvidersService } from '../Services/OAuthProvidersService';
+import { OAuthProvidersService, OAuthApiError } from '../Services/OAuthProvidersService';
 import { SynergyDataConnectorService } from '../Services/SynergyDataConnectorService';
 import {
   getRemoteFolder,
@@ -48,11 +48,14 @@ type ShowToast = (opts: { message: string; variant?: 'success' | 'error' | 'info
 
 export type SynergyBreadcrumb = { label: string; type: 'root' | 'job' | 'folder'; id?: string };
 
+type SetProviderStatus = (provider: string, status: OAuthConnectionStatus) => void;
+
 export interface UseRemoteBrowseOpts {
   numaGet: NumaGet;
   showToast: ShowToast;
   enabledOAuthProviders: OAuthProviderInfo[];
   oauthProviderStatuses: Record<string, OAuthConnectionStatus>;
+  setProviderStatus: SetProviderStatus;
   synergyConnected: boolean;
   activeTab: string | null;
 }
@@ -113,6 +116,7 @@ export function useRemoteBrowse({
   showToast,
   enabledOAuthProviders,
   oauthProviderStatuses,
+  setProviderStatus,
   synergyConnected,
   activeTab,
 }: UseRemoteBrowseOpts): UseRemoteBrowseReturn {
@@ -151,6 +155,16 @@ export function useRemoteBrowse({
   // --- Helper: only update state when data actually changed (prevents flickering) --
   const dataChanged = (a: unknown[], b: unknown[]): boolean =>
     a.length !== b.length || JSON.stringify(a) !== JSON.stringify(b);
+
+  /** Check if an error is an auth/token error (401/403 or error_code: auth_error). */
+  const isAuthError = (error: unknown): boolean => {
+    if (error instanceof OAuthApiError) {
+      return error.status === 401 || error.status === 403 || error.errorCode === 'auth_error';
+    }
+    // AxiosError from numaGet
+    const resp = (error as { response?: { status?: number; data?: { error_code?: string } } })?.response;
+    return resp?.status === 401 || resp?.status === 403 || resp?.data?.error_code === 'auth_error';
+  };
 
   // --- Prefetch hooks (one per provider type) -----------------------------
   const oauthPrefetch = useRemotePrefetch({
@@ -278,7 +292,18 @@ export function useRemoteBrowse({
         } catch (error) {
           console.error(`Failed to load ${provider} contents:`, error);
           if (generationRef.current === gen) {
-            showToast({ message: t('remote.errors.loadProviderFiles', { provider }), variant: 'error' });
+            if (isAuthError(error)) {
+              setProviderStatus(provider, {
+                status: 'error',
+                error_message: t('remote.errors.authExpired', { provider: displayName }),
+              });
+              showToast({
+                message: t('remote.errors.authExpired', { provider: displayName }),
+                variant: 'error',
+              });
+            } else {
+              showToast({ message: t('remote.errors.loadProviderFiles', { provider: displayName }), variant: 'error' });
+            }
             setOauthFolders([]);
             setOauthFiles([]);
           }
@@ -467,13 +492,25 @@ export function useRemoteBrowse({
           setRemoteFolder(cacheKey, { jobs });
           setSynergyJobs(jobs);
         }
-      } catch {
-        if (generationRef.current === gen) setSynergyJobs([]);
+      } catch (error) {
+        if (generationRef.current === gen) {
+          setSynergyJobs([]);
+          if (isAuthError(error)) {
+            setProviderStatus('synergy', {
+              status: 'error',
+              error_message: t('remote.errors.authExpired', { provider: t('remote.synergyName') }),
+            });
+            showToast({
+              message: t('remote.errors.authExpired', { provider: t('remote.synergyName') }),
+              variant: 'error',
+            });
+          }
+        }
       } finally {
         if (generationRef.current === gen) setSynergyJobsLoading(false);
       }
     }
-  }, [numaGet]);
+  }, [numaGet, showToast, setProviderStatus, t]);
 
   const handleSynergyJobClick = useCallback(
     async (job: SynergyJob) => {
@@ -517,14 +554,26 @@ export function useRemoteBrowse({
             setSynergyFolders(folders);
             synergyPrefetch.triggerPrefetch(folders, cacheKey);
           }
-        } catch {
-          if (generationRef.current === gen) setSynergyFolders([]);
+        } catch (error) {
+          if (generationRef.current === gen) {
+            setSynergyFolders([]);
+            if (isAuthError(error)) {
+              setProviderStatus('synergy', {
+                status: 'error',
+                error_message: t('remote.errors.authExpired', { provider: t('remote.synergyName') }),
+              });
+              showToast({
+                message: t('remote.errors.authExpired', { provider: t('remote.synergyName') }),
+                variant: 'error',
+              });
+            }
+          }
         } finally {
           if (generationRef.current === gen) setSynergyFoldersLoading(false);
         }
       }
     },
-    [numaGet, synergyPrefetch]
+    [numaGet, synergyPrefetch, showToast, setProviderStatus, t]
   );
 
   const handleSynergyFolderClick = useCallback(
@@ -576,17 +625,27 @@ export function useRemoteBrowse({
             setSynergyFiles(response.files ?? []);
             synergyPrefetch.triggerPrefetch(response.subfolders ?? [], cacheKey);
           }
-        } catch {
+        } catch (error) {
           if (generationRef.current === gen) {
             setSynergyFolders([]);
             setSynergyFiles([]);
+            if (isAuthError(error)) {
+              setProviderStatus('synergy', {
+                status: 'error',
+                error_message: t('remote.errors.authExpired', { provider: t('remote.synergyName') }),
+              });
+              showToast({
+                message: t('remote.errors.authExpired', { provider: t('remote.synergyName') }),
+                variant: 'error',
+              });
+            }
           }
         } finally {
           if (generationRef.current === gen) setSynergyFoldersLoading(false);
         }
       }
     },
-    [numaGet, synergyPrefetch]
+    [numaGet, synergyPrefetch, showToast, setProviderStatus, t]
   );
 
   const handleSynergyBreadcrumbClick = useCallback(

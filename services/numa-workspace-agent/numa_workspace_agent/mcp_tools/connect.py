@@ -251,6 +251,25 @@ async def _handle_status(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _check_auth_error(result: dict[str, Any]) -> dict[str, Any] | None:
+    """If the result contains an auth_error, return an LLM-friendly error response."""
+    if isinstance(result, dict) and result.get("error_code") == "auth_error":
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "The user's Synergy 12d access token has expired or been revoked. "
+                        "They need to reconnect with new credentials in Files > Remote. "
+                        "Do not retry this operation until they confirm reconnection."
+                    ),
+                }
+            ],
+            "isError": True,
+        }
+    return None
+
+
 async def _handle_list_files(params: dict[str, Any]) -> dict[str, Any]:
     """List files and folders from a connector."""
     connector = params.get("connector", "")
@@ -261,6 +280,9 @@ async def _handle_list_files(params: dict[str, Any]) -> dict[str, Any]:
     )
 
     if isinstance(result, dict) and result.get("error"):
+        auth_err = _check_auth_error(result)
+        if auth_err:
+            return auth_err
         return {
             "content": [{"type": "text", "text": f"Error: {result['error']}"}],
             "isError": True,
@@ -317,6 +339,9 @@ async def _handle_search_files(params: dict[str, Any]) -> dict[str, Any]:
     )
 
     if isinstance(result, dict) and result.get("error"):
+        auth_err = _check_auth_error(result)
+        if auth_err:
+            return auth_err
         return {
             "content": [{"type": "text", "text": f"Error: {result['error']}"}],
             "isError": True,
@@ -383,6 +408,9 @@ async def _handle_download_file(params: dict[str, Any]) -> dict[str, Any]:
     )
 
     if isinstance(result, dict) and result.get("error"):
+        auth_err = _check_auth_error(result)
+        if auth_err:
+            return auth_err
         return {
             "content": [{"type": "text", "text": f"Error: {result['error']}"}],
             "isError": True,

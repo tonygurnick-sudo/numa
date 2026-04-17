@@ -6,7 +6,7 @@ import base64
 import binascii
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, Optional
 
@@ -34,11 +34,18 @@ from storage import (
     get_secret_payload,
     list_connectors_for_user,
     list_sync_configs,
+    update_connector_expiry,
+    update_connector_health,
     update_sync_config,
     upsert_connector_record,
     upsert_secret,
 )
-from synergy_api import get_folder_items, list_job_folders, search_jobs
+from synergy_api import (
+    SynergyAuthError,
+    get_folder_items,
+    list_job_folders,
+    search_jobs,
+)
 
 logger = structlog.get_logger()
 
@@ -49,6 +56,10 @@ SETTINGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SETTINGS_TABLE_NAME")
 SYNC_CONFIGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME")
 EVENT_CONFIGS_TABLE_NAME = os.environ.get("CONNECTOR_EVENT_CONFIGS_TABLE_NAME")
 SYSTEM_KB_IDS = {"company", "numa-support"}
+
+# Synergy PAT rotation config
+PAT_TTL_DAYS = 90
+PAT_ROTATION_THRESHOLD_DAYS = 30  # Rotate when within this many days of expiry
 
 
 def _response(
@@ -73,6 +84,20 @@ def _response(
 def _now_iso() -> str:
     """Return current UTC time as an ISO string."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def _update_connector_expiry(
+    table_name: str, user_id: str, pat_expires_at: str
+) -> None:
+    """Update the PAT expiry on the Synergy connector DynamoDB record."""
+    try:
+        update_connector_expiry(table_name, user_id, "synergy", pat_expires_at)
+    except Exception as exc:
+        logger.warning(
+            "Failed to update connector expiry in DynamoDB",
+            error=str(exc),
+            user_id=user_id,
+        )
 
 
 def _get_user_id(event: Dict[str, Any]) -> Optional[str]:
@@ -136,7 +161,11 @@ def _handle_status(user_id: str, table_name: str) -> Dict[str, Any]:
 
 
 def _get_synergy_credentials(table_name: str, user_id: str) -> tuple[str, str] | None:
-    """Return Synergy server and access token for the user."""
+    """Return Synergy server and access token for the user.
+
+    If the PAT is within PAT_ROTATION_THRESHOLD_DAYS of expiry, attempts
+    automatic rotation via the Synergy API before returning credentials.
+    """
     record = get_connector_record(table_name, user_id, "synergy")
     if not record or record.get("status") != "connected":
         return None
@@ -148,7 +177,137 @@ def _get_synergy_credentials(table_name: str, user_id: str) -> tuple[str, str] |
     token = secret.get("access_token")
     if not server or not token:
         return None
+
+    # Check if PAT needs rotation
+    pat_expires_at = secret.get("pat_expires_at")
+    now = datetime.now(timezone.utc)
+
+    # Backfill: existing connections without expiry tracking — set to now
+    # to force immediate rotation attempt on next use
+    if not pat_expires_at:
+        pat_expires_at = now.isoformat()
+        logger.info(
+            "Backfilling missing pat_expires_at to force rotation",
+            _name="PAT_ROTATION",
+            user_id=user_id,
+        )
+
+    try:
+        expiry = datetime.fromisoformat(pat_expires_at)
+        days_remaining = (expiry - now).days
+        if days_remaining <= PAT_ROTATION_THRESHOLD_DAYS:
+            logger.info(
+                "Synergy PAT approaching expiry, attempting rotation",
+                _name="PAT_ROTATION",
+                days_remaining=days_remaining,
+                user_id=user_id,
+            )
+            result = _rotate_synergy_pat(server, token, secret, table_name, user_id)
+            if result:
+                token = result[0]
+    except (ValueError, TypeError) as exc:
+        logger.warning(
+            "Failed to parse PAT expiry", _name="PAT_ROTATION", error=str(exc)
+        )
+
     return server, token
+
+
+def _rotate_synergy_pat(
+    server: str,
+    current_token: str,
+    secret: Dict[str, Any],
+    table_name: str,
+    user_id: str,
+) -> Optional[tuple[str, str]]:
+    """Generate a new Synergy PAT and update storage.
+
+    Returns (new_token, new_expires_at_iso) or None on failure.
+    """
+    from connectors.synergy import _build_base_url, _normalize_token
+
+    try:
+        base_url = _build_base_url(server)
+        auth_header = _normalize_token(current_token)
+        response = httpx.post(
+            f"{base_url}/api/v1/auth/generate-pat",
+            headers={
+                "Authorization": auth_header,
+                "Content-Type": "application/json",
+            },
+            json={
+                "ClientId": "numa",
+                "Name": "numa-auto-rotation",
+                "ExpireInDays": PAT_TTL_DAYS,
+            },
+            timeout=30,
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "PAT rotation API call failed",
+                _name="PAT_ROTATION",
+                status=response.status_code,
+                body=response.text[:200],
+            )
+            return None
+
+        data = response.json()
+        new_token = data.get("Token") or data.get("token")
+        if not new_token:
+            logger.warning("PAT rotation response missing token", _name="PAT_ROTATION")
+            return None
+
+        # Build history entry for old token
+        now = datetime.now(timezone.utc)
+        pat_history = secret.get("pat_history") or []
+        pat_history.append(
+            {
+                "token_prefix": current_token[:12] + "...",
+                "created_at": secret.get("pat_created_at"),
+                "expires_at": secret.get("pat_expires_at"),
+                "replaced_at": now.isoformat(),
+                "reason": "auto_rotation",
+            }
+        )
+        pat_history = pat_history[-50:]  # Cap to prevent unbounded growth
+
+        # Update secret with new token — use secret name (not ARN) because
+        # upsert_secret tries create_secret(Name=...) first, which requires a
+        # valid name, not an ARN.
+        new_expires_at = now + timedelta(days=PAT_TTL_DAYS)
+        expires_at_iso = new_expires_at.isoformat()
+        updated_secret = {
+            **secret,
+            "access_token": new_token,
+            "pat_created_at": now.isoformat(),
+            "pat_expires_at": expires_at_iso,
+            "pat_ttl_days": PAT_TTL_DAYS,
+            "pat_history": pat_history,
+        }
+        prefix = SECRETS_PREFIX or f"{CLIENT_NAME}/data-connectors"
+        secret_name = f"{prefix}/synergy/{user_id}"
+        upsert_secret(secret_name, updated_secret)
+
+        # Update DynamoDB expiry for quick querying
+        _update_connector_expiry(table_name, user_id, expires_at_iso)
+
+        logger.info(
+            "Synergy PAT rotated successfully",
+            _name="PAT_ROTATION",
+            user_id=user_id,
+            new_expires_at=expires_at_iso,
+            history_count=len(pat_history),
+        )
+        return new_token, expires_at_iso
+
+    except Exception as exc:
+        logger.warning(
+            "PAT rotation failed",
+            _name="PAT_ROTATION",
+            error=str(exc),
+            user_id=user_id,
+        )
+        return None
 
 
 def _read_connector_settings(connector_id: str) -> Optional[Dict[str, Any]]:
@@ -184,11 +343,45 @@ def _persist_connector(
         "server": config.get("server"),
         "access_token": config.get("access_token"),
     }
+
     prefix = SECRETS_PREFIX or f"{client_name}/data-connectors"
     secret_name = f"{prefix}/{connector_id}/{user_id}"
+
+    # For Synergy, track PAT expiry and maintain token history
+    if connector_id == "synergy":
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(days=PAT_TTL_DAYS)
+        secret_payload["pat_created_at"] = now.isoformat()
+        secret_payload["pat_expires_at"] = expires_at.isoformat()
+        secret_payload["pat_ttl_days"] = PAT_TTL_DAYS
+
+        # Preserve history from previous secret if it exists
+        try:
+            old_secret = get_secret_payload(secret_name)
+            pat_history = old_secret.get("pat_history") or []
+            old_token = old_secret.get("access_token")
+            if old_token and old_token != config.get("access_token"):
+                pat_history.append(
+                    {
+                        "token_prefix": old_token[:12] + "...",
+                        "created_at": old_secret.get("pat_created_at"),
+                        "expires_at": old_secret.get("pat_expires_at"),
+                        "replaced_at": now.isoformat(),
+                    }
+                )
+            secret_payload["pat_history"] = pat_history[-50:]
+        except Exception:
+            secret_payload["pat_history"] = []
+
     secret_arn = upsert_secret(secret_name, secret_payload)
 
     sanitized = connector.sanitize_config(config)
+
+    # Include pat_expires_at in DynamoDB for quick querying
+    extra_fields = {}
+    if connector_id == "synergy" and secret_payload.get("pat_expires_at"):
+        extra_fields["pat_expires_at"] = secret_payload["pat_expires_at"]
+
     item = upsert_connector_record(
         table_name,
         user_id,
@@ -196,6 +389,7 @@ def _persist_connector(
         sanitized,
         secret_arn,
         test_result_payload,
+        extra_fields=extra_fields,
     )
     return {
         "status": item.get("status"),
@@ -275,6 +469,34 @@ def _handle_connect(
     )
 
 
+def _synergy_auth_error_response(
+    table_name: str, user_id: str, exc: SynergyAuthError
+) -> Dict[str, Any]:
+    """Persist auth_error health and return a structured 401 response."""
+    update_connector_health(table_name, user_id, "synergy", "auth_error", str(exc))
+    return _response(
+        401,
+        {
+            "error": "Synergy access token expired or invalid. Please reconnect.",
+            "error_code": "auth_error",
+        },
+    )
+
+
+def _synergy_auth_retry(
+    table_name: str, user_id: str, server: str, token: str
+) -> Optional[str]:
+    """Attempt PAT rotation after an auth error. Returns new token or None."""
+    secret_arn = (get_connector_record(table_name, user_id, "synergy") or {}).get(
+        "secret_arn"
+    )
+    if not secret_arn:
+        return None
+    secret = get_secret_payload(secret_arn)
+    result = _rotate_synergy_pat(server, token, secret, table_name, user_id)
+    return result[0] if result else None
+
+
 def _handle_synergy_jobs(
     event: Dict[str, Any], user_id: str, table_name: str
 ) -> Dict[str, Any]:
@@ -289,9 +511,20 @@ def _handle_synergy_jobs(
     page_size = int(params.get("page_size") or 50)
     try:
         payload = search_jobs(server, token, name, page, page_size)
+    except SynergyAuthError as exc:
+        new_token = _synergy_auth_retry(table_name, user_id, server, token)
+        if new_token:
+            try:
+                payload = search_jobs(server, new_token, name, page, page_size)
+            except (ValueError, httpx.HTTPError, SynergyAuthError):
+                return _synergy_auth_error_response(table_name, user_id, exc)
+        else:
+            return _synergy_auth_error_response(table_name, user_id, exc)
     except (ValueError, httpx.HTTPError) as exc:
         logger.warning("Synergy job search failed", error=str(exc))
         return _response(400, {"error": str(exc)})
+    # Clear any stale error state on success
+    update_connector_health(table_name, user_id, "synergy", "connected")
     return _response(200, payload, cache_control="private, max-age=300")
 
 
@@ -305,9 +538,19 @@ def _handle_synergy_job_folders(
     server, token = creds
     try:
         items = list_job_folders(server, token, job_id)
+    except SynergyAuthError as exc:
+        new_token = _synergy_auth_retry(table_name, user_id, server, token)
+        if new_token:
+            try:
+                items = list_job_folders(server, new_token, job_id)
+            except (ValueError, httpx.HTTPError, SynergyAuthError):
+                return _synergy_auth_error_response(table_name, user_id, exc)
+        else:
+            return _synergy_auth_error_response(table_name, user_id, exc)
     except (ValueError, httpx.HTTPError) as exc:
         logger.warning("Synergy job folders failed", error=str(exc))
         return _response(400, {"error": str(exc)})
+    update_connector_health(table_name, user_id, "synergy", "connected")
     return _response(200, {"items": items}, cache_control="private, max-age=300")
 
 
@@ -321,9 +564,19 @@ def _handle_synergy_folder_items(
     server, token = creds
     try:
         payload = get_folder_items(server, token, folder_id)
+    except SynergyAuthError as exc:
+        new_token = _synergy_auth_retry(table_name, user_id, server, token)
+        if new_token:
+            try:
+                payload = get_folder_items(server, new_token, folder_id)
+            except (ValueError, httpx.HTTPError, SynergyAuthError):
+                return _synergy_auth_error_response(table_name, user_id, exc)
+        else:
+            return _synergy_auth_error_response(table_name, user_id, exc)
     except (ValueError, httpx.HTTPError) as exc:
         logger.warning("Synergy folder items failed", error=str(exc))
         return _response(400, {"error": str(exc)})
+    update_connector_health(table_name, user_id, "synergy", "connected")
     return _response(200, payload, cache_control="private, max-age=300")
 
 
@@ -514,6 +767,97 @@ def _handle_gmail_send(
 
 
 # ---------------------------------------------------------------------------
+# Synergy PAT management routes
+# ---------------------------------------------------------------------------
+
+
+def _handle_pat_status(user_id: str, table_name: str) -> Dict[str, Any]:
+    """Return PAT expiry status for the user's Synergy connector."""
+    record = get_connector_record(table_name, user_id, "synergy")
+    if not record or record.get("status") not in ("connected", "auth_error"):
+        return _response(404, {"error": "Synergy connector not configured."})
+
+    secret_arn = record.get("secret_arn")
+    if not secret_arn:
+        return _response(404, {"error": "No credentials stored."})
+
+    secret = get_secret_payload(secret_arn)
+    now = datetime.now(timezone.utc)
+
+    pat_created_at = secret.get("pat_created_at")
+    pat_expires_at = secret.get("pat_expires_at")
+    pat_ttl_days = secret.get("pat_ttl_days", PAT_TTL_DAYS)
+    pat_history = secret.get("pat_history") or []
+
+    days_remaining = None
+    status = "unknown"
+    if pat_expires_at:
+        try:
+            expiry = datetime.fromisoformat(pat_expires_at)
+            days_remaining = (expiry - now).days
+            if days_remaining <= 0:
+                status = "expired"
+            elif days_remaining <= 7:
+                status = "critical"
+            elif days_remaining <= PAT_ROTATION_THRESHOLD_DAYS:
+                status = "warning"
+            else:
+                status = "healthy"
+        except (ValueError, TypeError):
+            pass
+
+    return _response(
+        200,
+        {
+            "pat_created_at": pat_created_at,
+            "pat_expires_at": pat_expires_at,
+            "pat_ttl_days": pat_ttl_days,
+            "days_remaining": days_remaining,
+            "status": status,
+            "rotation_threshold_days": PAT_ROTATION_THRESHOLD_DAYS,
+            "history_count": len(pat_history),
+            "history": [
+                {k: v for k, v in entry.items() if k != "token_prefix"}
+                for entry in pat_history[
+                    -10:
+                ]  # Last 10 entries, no token prefixes to frontend
+            ],
+        },
+    )
+
+
+def _handle_pat_rotate(user_id: str, table_name: str) -> Dict[str, Any]:
+    """Manually trigger PAT rotation for the user's Synergy connector."""
+    record = get_connector_record(table_name, user_id, "synergy")
+    if not record or record.get("status") not in ("connected", "auth_error"):
+        return _response(404, {"error": "Synergy connector not configured."})
+
+    secret_arn = record.get("secret_arn")
+    if not secret_arn:
+        return _response(404, {"error": "No credentials stored."})
+
+    secret = get_secret_payload(secret_arn)
+    server = secret.get("server") or (record.get("config") or {}).get("server")
+    token = secret.get("access_token")
+    if not server or not token:
+        return _response(400, {"error": "Missing server or token in credentials."})
+
+    result = _rotate_synergy_pat(server, token, secret, table_name, user_id)
+    if not result:
+        return _response(500, {"error": "PAT rotation failed. Check logs for details."})
+
+    _, new_expires_at = result
+    return _response(
+        200,
+        {
+            "success": True,
+            "message": "PAT rotated successfully.",
+            "pat_expires_at": new_expires_at,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Event config routes
 # ---------------------------------------------------------------------------
 
@@ -614,6 +958,12 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
 
     if method == "POST" and path.endswith("/data-connectors/connect"):
         return _handle_connect(event, user_id, table_name, client_name)
+
+    if method == "GET" and path.endswith("/data-connectors/synergy/pat-status"):
+        return _handle_pat_status(user_id, table_name)
+
+    if method == "POST" and path.endswith("/data-connectors/synergy/rotate-pat"):
+        return _handle_pat_rotate(user_id, table_name)
 
     if method == "GET" and path.endswith("/data-connectors/synergy/jobs"):
         return _handle_synergy_jobs(event, user_id, table_name)

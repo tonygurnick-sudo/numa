@@ -1,4 +1,4 @@
-import type { DataConnectorStatus } from '../types/dataConnectors';
+import type { DataConnectorStatus, PatStatus } from '../types/dataConnectors';
 
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 type NumaPost = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
@@ -14,5 +14,13 @@ export const DataConnectorsService = {
     payload: { connector_id: string; config: Record<string, unknown> }
   ): Promise<unknown> {
     return numaPost('/api/data-connectors/connect', payload);
+  },
+
+  async getSynergyPatStatus(numaGet: NumaGet): Promise<PatStatus> {
+    return (await numaGet('/api/data-connectors/synergy/pat-status')) as PatStatus;
+  },
+
+  async rotateSynergyPat(numaPost: NumaPost): Promise<unknown> {
+    return numaPost('/api/data-connectors/synergy/rotate-pat');
   },
 };

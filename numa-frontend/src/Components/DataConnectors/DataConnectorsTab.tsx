@@ -18,6 +18,7 @@ import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useAuth } from '../../Providers/AuthProvider';
 // SynergyConnectorCard removed — Synergy now uses standard connector flow
 import { OAuthConnectorCard } from './OAuthConnectorCard';
+import { SynergyPatBadge } from './SynergyPatBadge';
 // SynergyWizard removed — Synergy now uses ApiKeyWizard via standard flow
 import { OAuthWizard } from './wizards/OAuthWizard';
 import { PlatformPickerModal } from './wizards/PlatformPickerModal';
@@ -54,7 +55,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   const { user } = useAuth();
   const isAdmin = Boolean(user?.groups?.includes('admin'));
 
-  const [_statusItems, setStatusItems] = useState<DataConnectorStatus[]>([]);
+  const [statusItems, setStatusItems] = useState<DataConnectorStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -142,6 +143,9 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
 
   const getConnectorSecret = (connectorId: string): VaultSecretMetadata | undefined =>
     companySecrets.find((s) => s.name === `connector-${connectorId}`);
+
+  const getConnectorStatus = (connectorId: string): DataConnectorStatus | undefined =>
+    statusItems.find((s) => s.connector_id === connectorId);
 
   // Set of all configured connector IDs (for platform picker badge)
   const configuredIds = useMemo(() => {
@@ -430,6 +434,8 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
               adminDisabled={false}
               onDisconnect={isAdmin ? () => handleConnectorDelete(connector.id, connector.displayName) : undefined}
               isDisconnecting={disconnectingId === connector.id}
+              hasError={getConnectorStatus(connector.id)?.status === 'auth_error'}
+              extraStatus={connector.id === 'synergy' ? <SynergyPatBadge connectorConfigured /> : undefined}
             />
           ))}
       </div>

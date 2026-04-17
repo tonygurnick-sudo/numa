@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -25,6 +26,28 @@ DATA_CONNECTORS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_TABLE_NAME", "")
 DATA_CONNECTORS_SECRETS_PREFIX = os.environ.get(
     "DATA_CONNECTORS_SECRETS_PREFIX", f"{CLIENT_NAME}/data-connectors"
 )
+
+# PAT rotation config — must match data-connectors Lambda values
+PAT_TTL_DAYS = 90
+PAT_ROTATION_THRESHOLD_DAYS = 30
+
+
+class SynergyAuthError(ValueError):
+    """Raised when Synergy returns 401/403 — token expired, revoked, or insufficient permissions."""
+
+    def __init__(self, status_code: int, detail: str = ""):
+        self.status_code = status_code
+        super().__init__(
+            f"Synergy authentication failed (HTTP {status_code}). {detail}".strip()
+        )
+
+
+def _check_response(response: httpx.Response) -> None:
+    """Raise SynergyAuthError on 401/403, otherwise raise_for_status."""
+    if response.status_code in (401, 403):
+        detail = response.text[:200] if response.text else ""
+        raise SynergyAuthError(response.status_code, detail)
+    response.raise_for_status()
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +97,8 @@ def get_synergy_credentials(user_sub: str) -> Optional[tuple[str, str]]:
     """Return Synergy (server, access_token) for the user, or None if not configured.
 
     Reads the data-connectors DynamoDB table and Secrets Manager.
-    Pattern copied from data-connectors/lambda_function.py:_get_synergy_credentials().
+    If the PAT is within PAT_ROTATION_THRESHOLD_DAYS of expiry (or has no
+    expiry tracking), attempts automatic rotation before returning credentials.
     """
     if not DATA_CONNECTORS_TABLE_NAME:
         return None
@@ -91,8 +115,8 @@ def get_synergy_credentials(user_sub: str) -> Optional[tuple[str, str]]:
         if not secret_arn:
             return None
 
-        secrets = prm_client("secretsmanager")
-        secret_response = secrets.get_secret_value(SecretId=secret_arn)
+        secrets_client = prm_client("secretsmanager")
+        secret_response = secrets_client.get_secret_value(SecretId=secret_arn)
         secret_data = json.loads(secret_response.get("SecretString", "{}"))
 
         server = secret_data.get("server") or (record.get("config") or {}).get("server")
@@ -101,10 +125,144 @@ def get_synergy_credentials(user_sub: str) -> Optional[tuple[str, str]]:
         if not server or not token:
             return None
 
+        # Check if PAT needs rotation
+        pat_expires_at = secret_data.get("pat_expires_at")
+        now = datetime.now(timezone.utc)
+
+        # Backfill: if no expiry tracked, set to now to force immediate rotation
+        if not pat_expires_at:
+            pat_expires_at = now.isoformat()
+            logger.info(
+                "Backfilling missing pat_expires_at to force rotation",
+                _name="PAT_ROTATION",
+                user_id=user_sub,
+            )
+
+        try:
+            expiry = datetime.fromisoformat(pat_expires_at)
+            days_remaining = (expiry - now).days
+            if days_remaining <= PAT_ROTATION_THRESHOLD_DAYS:
+                logger.info(
+                    "Synergy PAT approaching expiry, attempting rotation",
+                    _name="PAT_ROTATION",
+                    days_remaining=days_remaining,
+                    user_id=user_sub,
+                )
+                new_token = _rotate_pat(server, token, secret_data, user_sub)
+                if new_token:
+                    token = new_token
+        except (ValueError, TypeError) as exc:
+            logger.warning(
+                "Failed to parse PAT expiry", _name="PAT_ROTATION", error=str(exc)
+            )
+
         return server, token
 
     except Exception as e:
         logger.warning("Failed to get Synergy credentials", error=str(e))
+        return None
+
+
+def _rotate_pat(
+    server: str,
+    current_token: str,
+    secret_data: Dict[str, Any],
+    user_sub: str,
+) -> Optional[str]:
+    """Generate a new Synergy PAT and update Secrets Manager + DynamoDB.
+
+    Returns the new token on success, None on failure.
+    """
+    try:
+        base_url = _build_base_url(server)
+        auth_header = _normalize_token(current_token)
+        response = httpx.post(
+            f"{base_url}/api/v1/auth/generate-pat",
+            headers={
+                "Authorization": auth_header,
+                "Content-Type": "application/json",
+            },
+            json={
+                "ClientId": "numa",
+                "Name": "numa-auto-rotation",
+                "ExpireInDays": PAT_TTL_DAYS,
+            },
+            timeout=30,
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "PAT rotation API call failed",
+                _name="PAT_ROTATION",
+                status=response.status_code,
+            )
+            return None
+
+        data = response.json()
+        new_token = data.get("Token") or data.get("token")
+        if not new_token:
+            return None
+
+        now = datetime.now(timezone.utc)
+        pat_history = secret_data.get("pat_history") or []
+        pat_history.append(
+            {
+                "token_prefix": current_token[:12] + "...",
+                "created_at": secret_data.get("pat_created_at"),
+                "expires_at": secret_data.get("pat_expires_at"),
+                "replaced_at": now.isoformat(),
+                "reason": "auto_rotation",
+            }
+        )
+
+        new_expires_at = now + timedelta(days=PAT_TTL_DAYS)
+        updated_secret = {
+            **secret_data,
+            "access_token": new_token,
+            "pat_created_at": now.isoformat(),
+            "pat_expires_at": new_expires_at.isoformat(),
+            "pat_ttl_days": PAT_TTL_DAYS,
+            "pat_history": pat_history[-50:],
+        }
+
+        # Update Secrets Manager
+        secret_name = f"{DATA_CONNECTORS_SECRETS_PREFIX}/synergy/{user_sub}"
+        secrets_client = prm_client("secretsmanager")
+        try:
+            secrets_client.create_secret(
+                Name=secret_name,
+                SecretString=json.dumps(updated_secret),
+            )
+        except secrets_client.exceptions.ResourceExistsException:
+            secrets_client.put_secret_value(
+                SecretId=secret_name,
+                SecretString=json.dumps(updated_secret),
+            )
+
+        # Update DynamoDB expiry
+        try:
+            dynamodb = prm_resource("dynamodb")
+            table = dynamodb.Table(DATA_CONNECTORS_TABLE_NAME)
+            table.update_item(
+                Key={"user_id": user_sub, "connector_id": "synergy"},
+                UpdateExpression="SET pat_expires_at = :exp, updated_at = :now",
+                ExpressionAttributeValues={
+                    ":exp": new_expires_at.isoformat(),
+                    ":now": now.isoformat(),
+                },
+            )
+        except Exception as exc:
+            logger.warning("Failed to update DynamoDB expiry", error=str(exc))
+
+        logger.info(
+            "Synergy PAT rotated successfully",
+            _name="PAT_ROTATION",
+            user_id=user_sub,
+            new_expires_at=new_expires_at.isoformat(),
+        )
+        return new_token
+
+    except Exception as exc:
+        logger.warning("PAT rotation failed", _name="PAT_ROTATION", error=str(exc))
         return None
 
 
@@ -163,7 +321,7 @@ def search_jobs(
         "Content-Type": "application/json",
     }
     response = httpx.post(url, json=payload, headers=headers, timeout=60)
-    response.raise_for_status()
+    _check_response(response)
     data = response.json()
     items = data.get("Result") or data.get("Items") or data.get("items") or []
     jobs = [_normalize_job(job) for job in items if isinstance(job, dict)]
@@ -185,7 +343,7 @@ def list_job_folders(server: str, token: str, job_id: str) -> List[Dict[str, Any
         "Content-Type": "application/json",
     }
     response = httpx.get(url, headers=headers, timeout=60)
-    response.raise_for_status()
+    _check_response(response)
     data = response.json()
     items = (
         data.get("SubFolders")
@@ -206,7 +364,7 @@ def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
         "Content-Type": "application/json",
     }
     response = httpx.get(url, headers=headers, timeout=60)
-    response.raise_for_status()
+    _check_response(response)
     data = response.json()
     subfolders = [
         _normalize_folder(folder)
@@ -266,7 +424,7 @@ def download_file(server: str, token: str, file_id: str) -> tuple[bytes, str]:
         content=b"",
         timeout=120,
     )
-    response.raise_for_status()
+    _check_response(response)
 
     # Try to extract filename from Content-Disposition header
     filename = f"synergy_file_{file_id[:8]}"
