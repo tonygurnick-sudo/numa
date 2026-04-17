@@ -459,7 +459,7 @@ async def stream_claude_sdk(
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
-    company_profile: Optional[str] = None,
+    company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     voice_recordings: Optional[list[str]] = None,
 ) -> AsyncIterator[bytes]:
@@ -699,7 +699,7 @@ async def stream_claude_sdk(
         has_folders=bool(attached_folders),
         request_id=request_id,
         system_prompt_length=len(options.system_prompt) if options.system_prompt else 0,
-        has_company_profile="**Company Information:**" in (options.system_prompt or ""),
+        has_company_profile="**Company Profile:**" in (options.system_prompt or ""),
     )
 
     # 5a. Write attachment event if files are attached (before user event)
@@ -1523,7 +1523,7 @@ async def run_claude_sdk(
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
-    company_profile: Optional[str] = None,
+    company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     system_dir: Optional[Path] = None,
 ) -> dict[str, Any]:

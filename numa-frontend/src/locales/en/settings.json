@@ -509,29 +509,58 @@
     "subtitle": "Manage your company information and settings",
     "editTitle": "Edit Company Information",
     "editDescription": "Enter your company information below. This will be used in chat interactions.",
-    "adminTitle": "Company-wide profile",
+    "adminTitle": "Company Profile",
     "adminDescription": "This profile is injected into every chat as context so the AI understands your organisation. Changes take effect for new chats immediately.",
     "loading": "Loading...",
+    "sections": {
+      "details": "Company Details",
+      "detailsDescription": "Basic information about your company.",
+      "information": "Company Information",
+      "informationDescription": "General description of your company that the AI can reference in every chat.",
+      "bestPractices": "Company-wide Best Practices",
+      "bestPracticesDescription": "Instructions and guidelines that apply to all Numa chats across your organisation."
+    },
+    "fields": {
+      "companyName": {
+        "label": "Company Name",
+        "placeholder": "e.g. Acme Corp"
+      },
+      "industry": {
+        "label": "Industry",
+        "placeholder": "e.g. SaaS, Construction, Accounting"
+      },
+      "country": {
+        "label": "Country",
+        "placeholder": "e.g. Australia"
+      },
+      "companyInformation": {
+        "label": "Company Information",
+        "placeholder": "Enter a detailed description of your company, including its mission, values, products, and any other information that would be helpful for the AI assistant."
+      },
+      "bestPractices": {
+        "label": "Best Practices",
+        "placeholder": "e.g. Always respond in formal English, use metric units, follow our brand voice guidelines..."
+      }
+    },
     "form": {
       "label": "Company Information",
       "placeholder": "Enter a detailed description of your company, including its mission, values, and any other information that would be helpful for users interacting with your AI assistant.",
-      "characterCount": "Character count: {{count}}/10000",
-      "sharedNote": "This information will be available to all users in chat interactions.",
-      "limitNote": "Note: Only the first ~3000 characters will be used in chat context."
+      "characterCount": "{{count}}/{{max}}",
+      "sharedNote": "This information will be available to all users in chat interactions."
     },
     "lastUpdated": {
       "never": "Never",
       "label": "Last updated: {{date}}"
     },
     "status": {
-      "empty": "No company information exists yet. Enter your company information and click Save.",
+      "empty": "No company information exists yet. Fill in your company details and click Save.",
       "loadError": "Error loading company information: {{message}}",
       "saveSuccess": "Company information saved successfully!",
       "saveError": "Error saving company information: {{message}}"
     },
     "actions": {
       "saving": "Saving...",
-      "save": "Save Information"
+      "save": "Save"
     }
   },
   "userProfile": {

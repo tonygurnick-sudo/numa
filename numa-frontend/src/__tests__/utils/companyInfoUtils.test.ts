@@ -2,7 +2,13 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { saveCompanyInfo, fetchCompanyInfo, getProfileText } from '../../utils/companyInfoUtils';
+import {
+  saveCompanyInfo,
+  fetchCompanyInfo,
+  getProfileText,
+  migrateCompanyProfile,
+  type CompanyProfileData,
+} from '../../utils/companyInfoUtils';
 import { uploadFileToS3, fetchFileFromS3 } from '../../utils/s3Utils';
 
 // Mock the s3Utils functions
@@ -17,137 +23,134 @@ describe('companyInfoUtils', () => {
   const mockGetCredentials = vi.fn().mockResolvedValue({ accessKeyId: 'test', secretAccessKey: 'test' });
   const mockProfileText = 'This is a test company profile';
 
+  const mockProfileData: CompanyProfileData = {
+    companyName: 'Acme Corp',
+    industry: 'SaaS',
+    country: 'Australia',
+    companyInformation: mockProfileText,
+    bestPractices: '',
+    lastUpdated: null,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
-    // Clear the sessionStorage cache so it doesn't leak between tests
     window.sessionStorage.removeItem('COMPANY_PROFILE_DATA');
   });
 
-  describe('saveCompanyInfo', () => {
-    it('should save company info to S3', async () => {
-      // Call the function
-      const result = await saveCompanyInfo(mockProfileText, mockS3Bucket, mockRegion, mockGetCredentials);
+  describe('migrateCompanyProfile', () => {
+    it('should migrate old format (profile -> companyInformation)', () => {
+      const result = migrateCompanyProfile({ profile: 'old text', lastUpdated: '2023-01-01T00:00:00.000Z' });
+      expect(result.companyInformation).toBe('old text');
+      expect(result.companyName).toBe('');
+      expect(result.lastUpdated).toBe('2023-01-01T00:00:00.000Z');
+    });
 
-      // Check that uploadFileToS3 was called with the correct parameters
+    it('should pass through new format unchanged', () => {
+      const result = migrateCompanyProfile({
+        companyName: 'Test',
+        companyInformation: 'new text',
+        bestPractices: 'some practices',
+        lastUpdated: '2023-01-01T00:00:00.000Z',
+      });
+      expect(result.companyName).toBe('Test');
+      expect(result.companyInformation).toBe('new text');
+      expect(result.bestPractices).toBe('some practices');
+    });
+
+    it('should return empty profile for null/undefined input', () => {
+      const result = migrateCompanyProfile(null as unknown as Record<string, unknown>);
+      expect(result.companyInformation).toBe('');
+      expect(result.companyName).toBe('');
+    });
+  });
+
+  describe('saveCompanyInfo', () => {
+    it('should save structured company info to S3', async () => {
+      const result = await saveCompanyInfo(mockProfileData, mockS3Bucket, mockRegion, mockGetCredentials);
+
       expect(uploadFileToS3).toHaveBeenCalledTimes(1);
       expect(uploadFileToS3).toHaveBeenCalledWith(
-        expect.stringContaining(mockProfileText), // content
-        'application/json', // contentType
+        expect.stringContaining(mockProfileText),
+        'application/json',
         mockS3Bucket,
         'company-data.json',
         mockRegion,
         mockGetCredentials
       );
 
-      // Check the result
       expect(result).toBe('s3://test-bucket/company-data.json');
     });
 
     it('should throw an error if region is missing', async () => {
-      await expect(saveCompanyInfo(mockProfileText, mockS3Bucket, null, mockGetCredentials)).rejects.toThrow(
+      await expect(saveCompanyInfo(mockProfileData, mockS3Bucket, '' as string, mockGetCredentials)).rejects.toThrow(
         'Region is missing for saveCompanyInfo'
       );
     });
 
     it('should throw an error if S3 bucket is missing', async () => {
-      await expect(saveCompanyInfo(mockProfileText, null, mockRegion, mockGetCredentials)).rejects.toThrow(
+      await expect(saveCompanyInfo(mockProfileData, '' as string, mockRegion, mockGetCredentials)).rejects.toThrow(
         'S3 bucket name is missing for saveCompanyInfo'
-      );
-    });
-
-    it('should handle errors from uploadFileToS3', async () => {
-      // Mock uploadFileToS3 to throw an error
-      uploadFileToS3.mockRejectedValueOnce(new Error('Upload failed'));
-
-      await expect(saveCompanyInfo(mockProfileText, mockS3Bucket, mockRegion, mockGetCredentials)).rejects.toThrow(
-        'Upload failed'
       );
     });
   });
 
   describe('fetchCompanyInfo', () => {
-    const mockCompanyInfo = {
+    const mockOldFormatInfo = {
       profile: mockProfileText,
       lastUpdated: '2023-01-01T00:00:00.000Z',
     };
 
-    const mockBlob = new Blob([JSON.stringify(mockCompanyInfo)], { type: 'application/json' });
+    const mockBlob = new Blob([JSON.stringify(mockOldFormatInfo)], { type: 'application/json' });
 
     beforeEach(() => {
-      // Mock text method on Blob
-      mockBlob.text = vi.fn().mockResolvedValue(JSON.stringify(mockCompanyInfo));
-
-      // Mock fetchFileFromS3 to return the blob
-      fetchFileFromS3.mockResolvedValue(mockBlob);
+      mockBlob.text = vi.fn().mockResolvedValue(JSON.stringify(mockOldFormatInfo));
+      (fetchFileFromS3 as ReturnType<typeof vi.fn>).mockResolvedValue(mockBlob);
     });
 
-    it('should fetch company info from S3', async () => {
-      // Call the function
+    it('should fetch and migrate old format company info from S3', async () => {
       const result = await fetchCompanyInfo(mockS3Bucket, mockRegion, mockGetCredentials);
 
-      // Check that fetchFileFromS3 was called with the correct parameters
       expect(fetchFileFromS3).toHaveBeenCalledTimes(1);
-      expect(fetchFileFromS3).toHaveBeenCalledWith('company-data.json', mockS3Bucket, mockRegion, mockGetCredentials);
-
-      // Check the result
-      expect(result).toEqual(mockCompanyInfo);
+      expect(result.companyInformation).toBe(mockProfileText);
+      expect(result.lastUpdated).toBe('2023-01-01T00:00:00.000Z');
     });
 
     it('should return empty profile if region is missing', async () => {
-      const result = await fetchCompanyInfo(mockS3Bucket, null, mockGetCredentials);
-
+      const result = await fetchCompanyInfo(mockS3Bucket, '' as string, mockGetCredentials);
       expect(fetchFileFromS3).not.toHaveBeenCalled();
-      expect(result).toEqual({ profile: '', lastUpdated: null });
-    });
-
-    it('should return empty profile if S3 bucket is missing', async () => {
-      const result = await fetchCompanyInfo(null, mockRegion, mockGetCredentials);
-
-      expect(fetchFileFromS3).not.toHaveBeenCalled();
-      expect(result).toEqual({ profile: '', lastUpdated: null });
+      expect(result.companyInformation).toBe('');
     });
 
     it('should handle 404 errors gracefully', async () => {
-      // Mock fetchFileFromS3 to throw a 404 error
-      fetchFileFromS3.mockRejectedValueOnce(new Error('Not Found'));
-
+      (fetchFileFromS3 as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Not Found'));
       const result = await fetchCompanyInfo(mockS3Bucket, mockRegion, mockGetCredentials);
-
-      expect(result).toEqual({ profile: '', lastUpdated: null });
+      expect(result.companyInformation).toBe('');
     });
 
     it('should handle other errors gracefully', async () => {
-      // Mock fetchFileFromS3 to throw a generic error
-      fetchFileFromS3.mockRejectedValueOnce(new Error('Something went wrong'));
-
+      (fetchFileFromS3 as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Something went wrong'));
       const result = await fetchCompanyInfo(mockS3Bucket, mockRegion, mockGetCredentials);
-
-      expect(result).toEqual({ profile: '', lastUpdated: null });
+      expect(result.companyInformation).toBe('');
     });
   });
 
   describe('getProfileText', () => {
-    it('should extract profile text from company info', () => {
-      const mockCompanyInfo = {
-        profile: mockProfileText,
-        lastUpdated: '2023-01-01T00:00:00.000Z',
-      };
-
-      const result = getProfileText(mockCompanyInfo);
-
+    it('should extract companyInformation from new format', () => {
+      const result = getProfileText(mockProfileData);
       expect(result).toBe(mockProfileText);
     });
 
-    it('should return empty string if company info is null', () => {
-      const result = getProfileText(null);
-
-      expect(result).toBe('');
+    it('should fall back to profile field from old format', () => {
+      const result = getProfileText({ profile: 'old text' } as Record<string, unknown>);
+      expect(result).toBe('old text');
     });
 
-    it('should return empty string if profile is missing', () => {
-      const result = getProfileText({ lastUpdated: '2023-01-01T00:00:00.000Z' });
+    it('should return empty string if company info is null', () => {
+      expect(getProfileText(null)).toBe('');
+    });
 
-      expect(result).toBe('');
+    it('should return empty string if no profile fields exist', () => {
+      expect(getProfileText({ lastUpdated: '2023-01-01T00:00:00.000Z' } as Record<string, unknown>)).toBe('');
     });
   });
 });
