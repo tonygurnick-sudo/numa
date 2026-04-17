@@ -288,7 +288,7 @@
         "label": "Job Type",
         "all": "All",
         "apps": "Apps",
-        "agents": "Agents"
+        "agents": "Scheduled Agents"
       },
       "app": {
         "label": "Filter by App",
