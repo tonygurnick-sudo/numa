@@ -354,7 +354,7 @@ def create_agent_options(
     email_signature: Optional[dict] = None,
     agent_type_config: Optional[AgentTypeConfig] = None,
     user_profile: Optional[dict] = None,
-    company_profile: Optional[str] = None,
+    company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     home_dir: Optional[Path] = None,
 ) -> ClaudeAgentOptions:

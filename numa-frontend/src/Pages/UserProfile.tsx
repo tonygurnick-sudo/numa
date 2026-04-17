@@ -35,6 +35,7 @@ import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon 
 import ProfileAvatar from '../Components/ProfileAvatar';
 import { invalidateProfileBlob } from '../utils/profileImageCache';
 import { RichTextEditor } from '../Components/Ops/Shared/RichTextEditor';
+import { CharCount } from '../Components/CharCount';
 
 type Connection = { id: string; isConnected: boolean; mcpServerUrl?: string };
 
@@ -48,16 +49,6 @@ const LIMIT_URL = 200;
 const LIMIT_LONG = 500;
 const LIMIT_CUSTOM_INSTRUCTIONS = 1500;
 const LIMIT_MEMORY = 300;
-
-function CharCount({ value, max }: { value: string; max: number }) {
-  const len = value.length;
-  const isNear = len > max * 0.9;
-  return (
-    <div className={`profile-char-count ${isNear ? 'is-near' : ''}`}>
-      {len}/{max}
-    </div>
-  );
-}
 
 interface UserProfilePageProps {
   embedded?: boolean;
