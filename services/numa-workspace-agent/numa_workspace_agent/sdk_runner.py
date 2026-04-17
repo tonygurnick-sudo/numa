@@ -1447,6 +1447,15 @@ async def stream_claude_sdk(
         if hasattr(e, "cmd"):
             extra_info["cmd"] = str(getattr(e, "cmd", ""))
 
+        # Cache quota exhaustion if the raised error looks like a daily 429.
+        # Without this, the next request won't know to skip the exhausted model
+        # via the pre-check and will burn the SDK's full retry budget again.
+        if any(
+            is_daily_quota_error(s)
+            for s in (error_str, extra_info.get("stderr"), extra_info.get("stdout"))
+        ) and _strip_prefix(options.model) != _strip_prefix(FALLBACK_MODEL):
+            mark_quota_exhausted(options.model)
+
         error_event = {
             "type": "error",
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -2082,23 +2091,36 @@ async def run_claude_sdk(
         import traceback
 
         error_tb = traceback.format_exc()
+        error_str = str(e)
         stream_log.is_error = True
-        stream_log.error_message = str(e)
+        stream_log.error_message = error_str
 
         logger.error(
             "Claude SDK run error",
             _name="SDK_RUN_ERROR",
             phase="sdk",
-            error=str(e),
+            error=error_str,
             error_type=type(e).__name__,
             traceback=error_tb,
             conversation_id=conversation_id,
         )
 
+        # Cache quota exhaustion if the raised error looks like a daily 429,
+        # so subsequent requests skip the exhausted model via the pre-check.
+        if any(
+            is_daily_quota_error(s)
+            for s in (
+                error_str,
+                getattr(e, "stderr", None),
+                getattr(e, "stdout", None),
+            )
+        ) and _strip_prefix(options.model) != _strip_prefix(FALLBACK_MODEL):
+            mark_quota_exhausted(options.model)
+
         error_event = {
             "type": "error",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": str(e),
+            "error": error_str,
             "error_type": type(e).__name__,
         }
         with trace_path.open("a", encoding="utf-8") as f:
@@ -2110,7 +2132,7 @@ async def run_claude_sdk(
             "artifacts": [],
             "usage": result_meta,
             "session_id": captured_session_id or session_id or "",
-            "error": str(e),
+            "error": error_str,
         }
 
     finally:
