@@ -54,6 +54,7 @@ export const SUPPORTED_INTEGRATIONS = [
   'clickup',
   'google_ads',
   'zoho_crm',
+  'microsofttodo',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];
