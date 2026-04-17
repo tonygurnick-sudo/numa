@@ -5,6 +5,7 @@ import AppProviders from './Providers/AppProviders';
 import { ProtectedRoute } from './Components/RequiredFeaturesWrapper';
 import { ROUTE_CONFIG } from './utils/routeConfig';
 import AppLayout from './Layouts/AppLayout';
+import DemoLayout from './Layouts/DemoLayout';
 import { useTranslation } from 'react-i18next';
 import { getFlag } from './utils/featureFlags';
 import { useBrowserNotificationRouteTracker } from './hooks/useBrowserNotification';
@@ -91,7 +92,16 @@ const AppRoutes = () => {
         {/* Public drop zone upload page - no authentication required */}
         <Route path="/dropzone/:uuid" element={<DropZonePage />} />
         {/* Public demo chat page - no authentication required, unlisted URL */}
-        {getFlag('PUBLIC_DEMO') && <Route path="/demo" element={<PublicDemoChat />} />}
+        {getFlag('PUBLIC_DEMO') && (
+          <Route
+            path="/demo"
+            element={
+              <DemoLayout>
+                <PublicDemoChat />
+              </DemoLayout>
+            }
+          />
+        )}
         {/* Public demo file preview - no authentication required */}
         {getFlag('PUBLIC_DEMO') && <Route path="/demo/file-preview" element={<PublicDemoFilePreview />} />}
         {/* Protected share analytics page - only accessible to share creator */}
