@@ -32,6 +32,7 @@ def handler(event: dict, context: object) -> dict:
         "dynamodb": export_dynamodb_tables(log, timestamp),
         "cognito": export_cognito(log, timestamp),
         "secrets": export_secrets(log, timestamp),
+        "qbusiness": export_qbusiness(log, timestamp),
     }
 
     log.info("DR export complete", results=results, _name="DR_EXPORT_COMPLETE")
@@ -209,7 +210,60 @@ def export_cognito(log: structlog.BoundLogger, timestamp: str) -> dict:
         ContentType="application/json",
     )
 
-    return {"users": len(users), "groups": len(groups)}
+    # Export identity providers (SSO config — SAML/OIDC providers)
+    identity_providers: list[dict] = []
+    try:
+        idp_resp = cognito.list_identity_providers(
+            UserPoolId=USER_POOL_ID, MaxResults=25
+        )
+        for provider_summary in idp_resp.get("Providers", []):
+            try:
+                provider_detail = cognito.describe_identity_provider(
+                    UserPoolId=USER_POOL_ID,
+                    ProviderName=provider_summary["ProviderName"],
+                )
+                idp = provider_detail.get("IdentityProvider", {})
+                identity_providers.append(
+                    {
+                        "ProviderName": idp.get("ProviderName"),
+                        "ProviderType": idp.get("ProviderType"),
+                        "ProviderDetails": idp.get("ProviderDetails", {}),
+                        "AttributeMapping": idp.get("AttributeMapping", {}),
+                        "IdpIdentifiers": idp.get("IdpIdentifiers", []),
+                    }
+                )
+            except ClientError as e:
+                log.warning(
+                    "Failed to describe identity provider",
+                    provider=provider_summary.get("ProviderName"),
+                    error=str(e),
+                    _name="DR_COGNITO_IDP_ERROR",
+                )
+        log.info(
+            "Identity providers exported",
+            count=len(identity_providers),
+            _name="DR_COGNITO_IDP",
+        )
+    except ClientError as e:
+        log.warning(
+            "Failed to list identity providers",
+            error=str(e),
+            _name="DR_COGNITO_IDP_LIST_ERROR",
+        )
+
+    if identity_providers:
+        s3.put_object(
+            Bucket=RECOVERY_BUCKET,
+            Key=f"{prefix}/identity-providers.json",
+            Body=json.dumps(identity_providers, indent=2, default=str),
+            ContentType="application/json",
+        )
+
+    return {
+        "users": len(users),
+        "groups": len(groups),
+        "identityProviders": len(identity_providers),
+    }
 
 
 def export_secrets(log: structlog.BoundLogger, timestamp: str) -> dict:
@@ -260,3 +314,90 @@ def export_secrets(log: structlog.BoundLogger, timestamp: str) -> dict:
     )
 
     return {"secrets": len(secrets), "errors": errors}
+
+
+def export_qbusiness(log: structlog.BoundLogger, timestamp: str) -> dict:
+    """Export Q Business application config to S3 (if provisioned)."""
+    q_app_id = os.environ.get("Q_APPLICATION_ID")
+    if not q_app_id:
+        log.info(
+            "Q Business not provisioned, skipping export", _name="DR_QBUSINESS_SKIP"
+        )
+        return {"skipped": True}
+
+    s3 = client("s3")
+    config: dict = {}
+
+    try:
+        qbusiness = client("qbusiness")
+
+        # Export application config
+        try:
+            app_resp = qbusiness.get_application(ApplicationId=q_app_id)
+            config["application"] = {
+                "applicationId": app_resp.get("ApplicationId"),
+                "displayName": app_resp.get("DisplayName"),
+                "description": app_resp.get("Description"),
+                "roleArn": app_resp.get("RoleArn"),
+                "status": app_resp.get("Status"),
+            }
+        except ClientError as e:
+            log.warning(
+                "Failed to get Q Business application",
+                error=str(e),
+                _name="DR_QBUSINESS_APP_ERROR",
+            )
+
+        # Export indices
+        try:
+            indices_resp = qbusiness.list_indices(ApplicationId=q_app_id)
+            config["indices"] = [
+                {
+                    "indexId": idx.get("IndexId"),
+                    "displayName": idx.get("DisplayName"),
+                    "status": idx.get("Status"),
+                }
+                for idx in indices_resp.get("Indices", [])
+            ]
+        except ClientError as e:
+            log.warning(
+                "Failed to list Q Business indices",
+                error=str(e),
+                _name="DR_QBUSINESS_INDEX_ERROR",
+            )
+
+        # Export retrievers
+        try:
+            retrievers_resp = qbusiness.list_retrievers(ApplicationId=q_app_id)
+            config["retrievers"] = [
+                {
+                    "retrieverId": r.get("RetrieverId"),
+                    "displayName": r.get("DisplayName"),
+                    "type": r.get("Type"),
+                    "status": r.get("Status"),
+                }
+                for r in retrievers_resp.get("Retrievers", [])
+            ]
+        except ClientError as e:
+            log.warning(
+                "Failed to list Q Business retrievers",
+                error=str(e),
+                _name="DR_QBUSINESS_RETRIEVER_ERROR",
+            )
+
+        if config:
+            s3.put_object(
+                Bucket=RECOVERY_BUCKET,
+                Key=f"qbusiness/{timestamp}/config.json",
+                Body=json.dumps(config, indent=2, default=str),
+                ContentType="application/json",
+            )
+            log.info("Q Business config exported", _name="DR_QBUSINESS")
+
+    except Exception as e:
+        log.warning(
+            "Q Business export failed", error=str(e), _name="DR_QBUSINESS_ERROR"
+        )
+        return {"error": str(e)}
+
+    return {"exported": True}

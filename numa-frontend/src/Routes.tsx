@@ -9,6 +9,7 @@ import DemoLayout from './Layouts/DemoLayout';
 import { useTranslation } from 'react-i18next';
 import { getFlag } from './utils/featureFlags';
 import { useBrowserNotificationRouteTracker } from './hooks/useBrowserNotification';
+import SSOCallbackHandler from './Components/Auth/SSOCallbackHandler';
 
 // Lazy load non-critical pages
 const ResetPassword = lazy(() => import('./Pages/ResetPassword').then((m) => ({ default: m.ResetPassword })));
@@ -74,7 +75,11 @@ const AppRoutes = () => {
       <Routes>
         <Route
           path="/"
-          element={<Navigate to={user ? (user?.features?.includes('chat') ? '/chat' : '/dash') : '/login'} replace />}
+          element={
+            <SSOCallbackHandler>
+              <Navigate to={user ? (user?.features?.includes('chat') ? '/chat' : '/dash') : '/login'} replace />
+            </SSOCallbackHandler>
+          }
         />
         <Route
           path="/login"

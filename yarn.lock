@@ -21449,8 +21449,10 @@ __metadata:
   resolution: "admin-dr-stats@workspace:lambdas/node/admin-dr-stats"
   dependencies:
     "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
     "@aws-sdk/client-dynamodb": "npm:^3.699.0"
     "@aws-sdk/client-s3": "npm:^3.699.0"
+    "@aws-sdk/client-secrets-manager": "npm:^3.699.0"
     "@types/aws-lambda": "npm:^8.10.146"
     "@types/node": "npm:^22.10.1"
     "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
@@ -21514,6 +21516,26 @@ __metadata:
   resolution: "admin-scheduling-settings@workspace:lambdas/node/admin-scheduling-settings"
   dependencies:
     "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
+"admin-sso-settings@workspace:lambdas/node/admin-sso-settings":
+  version: 0.0.0-use.local
+  resolution: "admin-sso-settings@workspace:lambdas/node/admin-sso-settings"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
     "@aws-sdk/client-dynamodb": "npm:^3.699.0"
     "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
     "@types/aws-lambda": "npm:^8.10.146"
@@ -23031,6 +23053,24 @@ __metadata:
   checksum: 10c0/2455b482302cb784b46dea60a8ee83f0c23e794bdd979556bdb107abe681bba722af62a37f5c955ff4efd68fdb9688c3986e719b4fd536c0e06bb25bc82abea3
   languageName: node
   linkType: hard
+
+"cognito-pre-signup@workspace:lambdas/node/cognito-pre-signup":
+  version: 0.0.0-use.local
+  resolution: "cognito-pre-signup@workspace:lambdas/node/cognito-pre-signup"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
 
 "cognito-srp-helper@npm:^2.2.3":
   version: 2.3.4
@@ -31529,6 +31569,26 @@ __metadata:
   languageName: node
   linkType: hard
 
+"scim-endpoint@workspace:lambdas/node/scim-endpoint":
+  version: 0.0.0-use.local
+  resolution: "scim-endpoint@workspace:lambdas/node/scim-endpoint"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
 "seed-api-key@workspace:lambdas/node/seed-api-key":
   version: 0.0.0-use.local
   resolution: "seed-api-key@workspace:lambdas/node/seed-api-key"
@@ -31931,6 +31991,43 @@ __metadata:
   checksum: 10c0/c3fd24a90dc37a9dc5c4154cb4121e27507c33ebfeee3532aaf03625756b2c006cf79c0a23db0ba16c4a6e88e1349455327867e03453fc9d54b32c546bc18ca6
   languageName: node
   linkType: hard
+
+"sso-group-mapper@workspace:lambdas/node/sso-group-mapper":
+  version: 0.0.0-use.local
+  resolution: "sso-group-mapper@workspace:lambdas/node/sso-group-mapper"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
+"sso-token-exchange@workspace:lambdas/node/sso-token-exchange":
+  version: 0.0.0-use.local
+  resolution: "sso-token-exchange@workspace:lambdas/node/sso-token-exchange"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
 
 "ssri@npm:^12.0.0":
   version: 12.0.0

@@ -35,6 +35,9 @@ export interface DisasterRecoveryConstructProps {
 
   /** Cognito User Pool ID for user/group export */
   userPoolId: string;
+
+  /** Q Business Application ID for config export (optional — only if Q Business is provisioned) */
+  qBusinessApplicationId?: string;
 }
 
 export class DisasterRecoveryConstruct extends Construct {
@@ -96,27 +99,18 @@ export class DisasterRecoveryConstruct extends Construct {
       bucket: recoveryBucket.bucket.bucket,
       rule: [
         {
+          // Expire all objects after 14 days — covers exports AND S3 replicas.
+          // Storage class: STANDARD (Glacier IR 90-day minimum makes it more
+          // expensive than STANDARD for 14-day retention).
+          id: 'expire-all-objects',
+          status: 'Enabled',
+          expiration: [{ days: 14 }],
+        },
+        {
+          // Expire non-current versions after 14 days (versioned bucket).
           id: 'expire-old-s3-versions',
           status: 'Enabled',
           noncurrentVersionExpiration: [{ noncurrentDays: 14 }],
-        },
-        {
-          id: 'expire-dynamodb-exports',
-          status: 'Enabled',
-          filter: [{ prefix: 'dynamodb/' }],
-          expiration: [{ days: 14 }],
-        },
-        {
-          id: 'expire-cognito-snapshots',
-          status: 'Enabled',
-          filter: [{ prefix: 'cognito/' }],
-          expiration: [{ days: 14 }],
-        },
-        {
-          id: 'expire-secrets-snapshots',
-          status: 'Enabled',
-          filter: [{ prefix: 'secrets/' }],
-          expiration: [{ days: 14 }],
         },
       ],
     });
@@ -241,6 +235,7 @@ export class DisasterRecoveryConstruct extends Construct {
         CLIENT_NAME: props.clientName,
         USER_POOL_ID: props.userPoolId,
         KMS_KEY_ID: kmsKey.keyId,
+        ...(props.qBusinessApplicationId ? { Q_APPLICATION_ID: props.qBusinessApplicationId } : {}),
       },
       additionalPolicyStatements: [
         // DynamoDB export permissions
@@ -264,7 +259,13 @@ export class DisasterRecoveryConstruct extends Construct {
         // Cognito read
         {
           effect: 'Allow',
-          actions: ['cognito-idp:ListUsers', 'cognito-idp:ListGroups', 'cognito-idp:AdminListGroupsForUser'],
+          actions: [
+            'cognito-idp:ListUsers',
+            'cognito-idp:ListGroups',
+            'cognito-idp:AdminListGroupsForUser',
+            'cognito-idp:ListIdentityProviders',
+            'cognito-idp:DescribeIdentityProvider',
+          ],
           resources: [`arn:aws:cognito-idp:${props.region}:${props.clientAccountId}:userpool/${props.userPoolId}`],
         },
         // Secrets Manager read
@@ -279,6 +280,16 @@ export class DisasterRecoveryConstruct extends Construct {
           actions: ['kms:Encrypt', 'kms:GenerateDataKey'],
           resources: [kmsKey.arn],
         },
+        // Q Business read (for config export)
+        ...(props.qBusinessApplicationId
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['qbusiness:GetApplication', 'qbusiness:ListIndices', 'qbusiness:ListRetrievers'],
+                resources: ['*'],
+              },
+            ]
+          : []),
       ],
     });
 

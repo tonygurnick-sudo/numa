@@ -702,6 +702,267 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'POST', path: 'settings/mfa/verify-reset-otp' },
     });
 
+    // Admin SSO Settings API (SAML identity provider configuration)
+    const adminSsoEnv = {
+      CLIENT_NAME: props.clientName,
+      SSO_SETTINGS_TABLE_NAME: props.mfaSettingsTableName, // Reuses MFA settings table with 'sso-config' key
+      USER_POOL_ID: props.userPoolId,
+      USER_POOL_CLIENT_ID: props.userPoolClientId,
+      DOMAIN_NAME: props.domainName,
+      REGION: props.region,
+    } as Record<string, string>;
+    const adminSsoPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.mfaSettingsTableName}`],
+      },
+      {
+        effect: 'Allow',
+        actions: [
+          'cognito-idp:CreateIdentityProvider',
+          'cognito-idp:UpdateIdentityProvider',
+          'cognito-idp:DeleteIdentityProvider',
+          'cognito-idp:DescribeIdentityProvider',
+          'cognito-idp:ListIdentityProviders',
+          'cognito-idp:UpdateUserPoolClient',
+          'cognito-idp:DescribeUserPoolClient',
+          'cognito-idp:ListUsers',
+          'cognito-idp:AdminDisableProviderForUser',
+        ],
+        resources: [`arn:aws:cognito-idp:*:*:userpool/${props.userPoolId}`],
+      },
+    ];
+    // GET /settings/sso/login-config — public (login page fetches SSO status pre-auth)
+    this.addLambdaFunction(this, 'admin-sso-login-config', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'GET', path: 'settings/sso/login-config' },
+    });
+    // GET /settings/sso — get current SSO config (admin)
+    this.addLambdaFunction(this, 'admin-sso-settings-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'GET', path: 'settings/sso' },
+    });
+    // GET /settings/sso/metadata — get SP metadata for IdP configuration (admin)
+    this.addLambdaFunction(this, 'admin-sso-metadata-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'GET', path: 'settings/sso/metadata' },
+    });
+    // PUT /settings/sso — save SSO config (admin)
+    this.addLambdaFunction(this, 'admin-sso-settings-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'PUT', path: 'settings/sso' },
+    });
+    // POST /settings/sso/enable — activate SSO (admin)
+    this.addLambdaFunction(this, 'admin-sso-enable', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'POST', path: 'settings/sso/enable' },
+    });
+    // POST /settings/sso/disable — deactivate SSO (admin)
+    this.addLambdaFunction(this, 'admin-sso-disable', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'POST', path: 'settings/sso/disable' },
+    });
+    // DELETE /settings/sso — delete SSO config and IdP entirely (admin)
+    this.addLambdaFunction(this, 'admin-sso-settings-delete', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'DELETE', path: 'settings/sso' },
+    });
+    // GET /settings/sso/group-mapping — get group mapping config (admin)
+    this.addLambdaFunction(this, 'admin-sso-group-mapping-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'GET', path: 'settings/sso/group-mapping' },
+    });
+    // PUT /settings/sso/group-mapping — save group mapping config (admin)
+    this.addLambdaFunction(this, 'admin-sso-group-mapping-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'PUT', path: 'settings/sso/group-mapping' },
+    });
+    // GET /settings/sso/users — list users with SSO link status (admin)
+    this.addLambdaFunction(this, 'admin-sso-users-list', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'GET', path: 'settings/sso/users' },
+    });
+    // POST /settings/sso/users/{sub}/unlink — unlink SSO from a user (admin)
+    this.addLambdaFunction(this, 'admin-sso-user-unlink', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'POST', path: 'settings/sso/users/{sub}/unlink' },
+    });
+    // SCIM token management (admin)
+    this.addLambdaFunction(this, 'admin-sso-scim-generate', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'POST', path: 'settings/sso/scim/generate-token' },
+    });
+    this.addLambdaFunction(this, 'admin-sso-scim-config', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'GET', path: 'settings/sso/scim/config' },
+    });
+    this.addLambdaFunction(this, 'admin-sso-scim-revoke', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-sso-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSsoEnv,
+      additionalPolicyStatements: adminSsoPolicy,
+      route: { verb: 'DELETE', path: 'settings/sso/scim/token' },
+    });
+
+    // SCIM endpoint (token auth — Azure AD calls these, not Cognito authorizer)
+    const scimEnv = {
+      USER_POOL_ID: props.userPoolId,
+      SCIM_TOKEN_TABLE: props.mfaSettingsTableName,
+      CLIENT_NAME: props.clientName,
+    } as Record<string, string>;
+    const scimPolicy = [
+      {
+        effect: 'Allow',
+        actions: [
+          'cognito-idp:AdminCreateUser',
+          'cognito-idp:AdminDeleteUser',
+          'cognito-idp:AdminDisableUser',
+          'cognito-idp:AdminEnableUser',
+          'cognito-idp:AdminGetUser',
+          'cognito-idp:AdminUpdateUserAttributes',
+          'cognito-idp:AdminAddUserToGroup',
+          'cognito-idp:ListUsers',
+        ],
+        resources: [`arn:aws:cognito-idp:*:*:userpool/${props.userPoolId}`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.mfaSettingsTableName}`],
+      },
+    ];
+    // SCIM routes — no Cognito authorizer (uses bearer token auth internally)
+    this.addLambdaFunction(this, 'scim-service-provider-config', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/scim-endpoint',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: scimEnv,
+      additionalPolicyStatements: scimPolicy,
+      route: { verb: 'GET', path: 'scim/ServiceProviderConfig' },
+    });
+    this.addLambdaFunction(this, 'scim-schemas', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/scim-endpoint',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: scimEnv,
+      additionalPolicyStatements: scimPolicy,
+      route: { verb: 'GET', path: 'scim/Schemas' },
+    });
+    this.addLambdaFunction(this, 'scim-users-list', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/scim-endpoint',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: scimEnv,
+      additionalPolicyStatements: scimPolicy,
+      route: { verb: 'GET', path: 'scim/Users' },
+    });
+    this.addLambdaFunction(this, 'scim-users-create', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/scim-endpoint',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: scimEnv,
+      additionalPolicyStatements: scimPolicy,
+      route: { verb: 'POST', path: 'scim/Users' },
+    });
+    // ANY handles GET, PUT, PATCH, DELETE on /scim/Users/{id} — Lambda routes by method internally
+    this.addLambdaFunction(this, 'scim-users-by-id', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/scim-endpoint',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: scimEnv,
+      additionalPolicyStatements: scimPolicy,
+      route: { verb: 'ANY', path: 'scim/Users/{id}' },
+    });
+
+    // SSO Token Exchange (public — proxies Cognito /oauth2/token with client_secret)
+    const ssoTokenExchangeEnv = {
+      CLIENT_SECRET: props.userPoolClientSecret,
+      COGNITO_CLIENT_ID: props.userPoolClientId,
+      COGNITO_REGION: props.region,
+      CLIENT_NAME: props.clientName,
+    };
+    this.addLambdaFunction(this, 'sso-token-exchange', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/sso-token-exchange',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: ssoTokenExchangeEnv,
+      route: { verb: 'POST', path: 'auth/sso/token-exchange' },
+    });
+
     // User Chat Settings API (per-user defaults for tools, KBs, integrations)
     const chatSettingsEnv = {
       CLIENT_NAME: props.clientName,
@@ -1895,35 +2156,116 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
 
     // Admin Disaster Recovery Stats API (GET)
     if (props.recoveryBucketName && props.recoveryBucketArn) {
+      const drEnv = {
+        RECOVERY_BUCKET: props.recoveryBucketName,
+        CLIENT_NAME: props.clientName,
+        REGION: props.region,
+        USER_POOL_ID: props.userPoolId,
+      } as Record<string, string>;
+      const drPolicy = [
+        {
+          effect: 'Allow',
+          actions: ['s3:ListBucket', 's3:GetBucketLocation'],
+          resources: [props.recoveryBucketArn],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject', 's3:HeadObject', 's3:PutObject'],
+          resources: [`${props.recoveryBucketArn}/*`],
+        },
+        {
+          // KMS for reading encrypted backups and writing encrypted secrets/DynamoDB
+          effect: 'Allow',
+          actions: ['kms:Decrypt', 'kms:Encrypt', 'kms:GenerateDataKey', 'kms:DescribeKey', 'kms:CreateGrant'],
+          resources: ['*'],
+        },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:*'],
+          resources: ['*'],
+        },
+        {
+          effect: 'Allow',
+          actions: [
+            'cognito-idp:AdminCreateUser',
+            'cognito-idp:AdminUpdateUserAttributes',
+            'cognito-idp:AdminAddUserToGroup',
+            'cognito-idp:AdminGetUser',
+            'cognito-idp:CreateGroup',
+            'cognito-idp:ListGroups',
+          ],
+          resources: [`arn:aws:cognito-idp:*:*:userpool/${props.userPoolId}`],
+        },
+        {
+          effect: 'Allow',
+          actions: [
+            'secretsmanager:CreateSecret',
+            'secretsmanager:UpdateSecret',
+            'secretsmanager:ListSecrets',
+            'secretsmanager:TagResource',
+          ],
+          resources: ['*'],
+        },
+      ];
+      // GET /settings/disaster-recovery/stats — legacy stats
       this.addLambdaFunction(this, 'admin-dr-stats', {
         addAuthorizer: true,
         lambdaDirectory: 'node/admin-dr-stats',
         runtime: 'nodejs22.x',
         handler: 'index.handler',
         memorySize: 512,
-        environment: {
-          RECOVERY_BUCKET: props.recoveryBucketName,
-          CLIENT_NAME: props.clientName,
-          REGION: props.region,
-        },
-        additionalPolicyStatements: [
-          {
-            effect: 'Allow',
-            actions: ['s3:ListBucket', 's3:GetBucketLocation'],
-            resources: [props.recoveryBucketArn],
-          },
-          {
-            effect: 'Allow',
-            actions: ['s3:GetObject'],
-            resources: [`${props.recoveryBucketArn}/*`],
-          },
-          {
-            effect: 'Allow',
-            actions: ['dynamodb:ListTables', 'dynamodb:DescribeContinuousBackups', 'dynamodb:ListExports'],
-            resources: ['*'],
-          },
-        ],
+        timeout: 60,
+        environment: drEnv,
+        additionalPolicyStatements: drPolicy,
         route: { verb: 'GET', path: 'settings/disaster-recovery/stats' },
+      });
+      // GET /settings/disaster-recovery/backups — daily backup listing
+      this.addLambdaFunction(this, 'admin-dr-backups', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/admin-dr-stats',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        memorySize: 512,
+        timeout: 60,
+        environment: drEnv,
+        additionalPolicyStatements: drPolicy,
+        route: { verb: 'GET', path: 'settings/disaster-recovery/backups' },
+      });
+      // POST /settings/disaster-recovery/restore — restore from backup
+      this.addLambdaFunction(this, 'admin-dr-restore', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/admin-dr-stats',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        memorySize: 1024,
+        timeout: 900,
+        environment: drEnv,
+        additionalPolicyStatements: drPolicy,
+        route: { verb: 'POST', path: 'settings/disaster-recovery/restore' },
+      });
+      // POST /settings/disaster-recovery/access-log — record DR tab unlock
+      this.addLambdaFunction(this, 'admin-dr-access-log', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/admin-dr-stats',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        memorySize: 256,
+        timeout: 10,
+        environment: drEnv,
+        additionalPolicyStatements: drPolicy,
+        route: { verb: 'POST', path: 'settings/disaster-recovery/access-log' },
+      });
+      // GET /settings/disaster-recovery/last-restore — last restore metadata
+      this.addLambdaFunction(this, 'admin-dr-last-restore', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/admin-dr-stats',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        memorySize: 256,
+        timeout: 10,
+        environment: drEnv,
+        additionalPolicyStatements: drPolicy,
+        route: { verb: 'GET', path: 'settings/disaster-recovery/last-restore' },
       });
     }
   }
