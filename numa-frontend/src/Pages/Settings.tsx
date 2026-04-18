@@ -58,6 +58,7 @@ import { loadCapabilities, groupByDependencies } from '../utils/capabilityRegist
 import { ROUTE_CONFIG } from '../utils/routeConfig';
 import type { CapabilityItem } from '../utils/capabilityRegistry';
 import { getFlagRegistry } from '../utils/featureFlags';
+import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
 import { loadAdminCapabilityGating } from '../utils/adminCapabilityGating';
 
 const useNavigationConfirm = (when: boolean, message: string) => {
@@ -99,7 +100,7 @@ const AUDIT_SUB_DEFAULTS: Record<string, string> = {
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
   const { user, getCredentials, lambdaClient } = useAuth();
-  const { numaGet, numaPut, numaPost } = useNumaRequest();
+  const { numaGet, numaPut, numaPost, numaDelete } = useNumaRequest();
   const { scope: urlScope, tab: urlTab } = useParams<{ scope?: string; tab?: string }>();
   const navigate = useNavigate();
   const [activeKey, setActiveKey] = useState<string>(urlTab || 'users');
@@ -140,6 +141,7 @@ export default function SettingsPage() {
   const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
   const mfaEnabled = getFlag('MFA_ENABLED');
   const hasOps = getFlag('NUMA_OPS');
+  const ssoEnabled = getFlag('SSO_ENABLED');
   // Hidden by default — only shown when explicitly set to true in numa-client-config
   const usageReportingEnabled = window.sessionStorage.getItem('DEPLOY_USAGE_REPORTING') === 'true';
   const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
@@ -916,6 +918,7 @@ export default function SettingsPage() {
   const adminTabs = useMemo(
     () => [
       { key: 'users', label: t('tabs.users'), iconClassName: 'bi bi-people' },
+      ...(ssoEnabled ? [{ key: 'sso', label: t('tabs.sso'), iconClassName: 'bi bi-shield-check' }] : []),
       ...(allowBrandingTab ? [{ key: 'branding', label: t('tabs.branding'), iconClassName: 'bi bi-palette' }] : []),
       { key: 'chat-defaults', label: t('tabs.chatDefaults'), iconClassName: 'bi bi-chat-dots' },
       { key: 'numa-libraries', label: 'Numa Libraries', iconClassName: 'bi bi-journal-code' },
@@ -938,6 +941,7 @@ export default function SettingsPage() {
     ],
     [
       allowBrandingTab,
+      ssoEnabled,
       agentsFeatureEnabled,
       mfaEnabled,
       schedulingEnabled,
@@ -1111,6 +1115,19 @@ export default function SettingsPage() {
                 <UserManagement embedded mfaEnabled={mfaEnabled} />
                 <SecuritySettingsPanel mfaEnabled={mfaEnabled} numaGet={numaGet} numaPut={numaPut} />
               </Tab>
+              {ssoEnabled && isAdmin && (
+                <Tab
+                  eventKey="sso"
+                  title={
+                    <span>
+                      <i className="bi bi-shield-check me-2"></i>
+                      {t('tabs.sso')}
+                    </span>
+                  }
+                >
+                  <SSOSettingsPanel numaGet={numaGet} numaPut={numaPut} numaPost={numaPost} numaDelete={numaDelete} />
+                </Tab>
+              )}
               {allowBrandingTab && (
                 <Tab
                   eventKey="branding"

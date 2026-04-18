@@ -394,25 +394,45 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   const logout = useCallback(() => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('idToken');
-    localStorage.removeItem('lastTokenValidation');
-    sessionStorage.removeItem('numaSessionStart');
-    sessionStartRef.current = 0;
+    const idToken = decodedTokensRef.current?.idToken as Record<string, unknown> | null;
+    const isFederatedUser = !!idToken?.identities;
 
-    // Clear chat state so re-login starts a fresh conversation
-    localStorage.removeItem('numa_chat_lastInteraction-v2');
-    sessionStorage.removeItem('currentConversationId-v2');
-    sessionStorage.removeItem('isWorkspaceConversation-v2');
-    sessionStorage.removeItem('numa-chat-draft');
+    // Clear persistent + ref state. Applies to both federated and non-federated
+    // logouts so stale tokens, conversation IDs, and SWR caches don't leak into
+    // the next session (a federated logout triggers a full page reload via
+    // Cognito, so React state cleanup is deferred to the non-federated path).
+    const clearPersistentState = () => {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('idToken');
+      localStorage.removeItem('lastTokenValidation');
+      localStorage.removeItem('numa_chat_lastInteraction-v2');
+      sessionStorage.removeItem('numaSessionStart');
+      sessionStorage.removeItem('currentConversationId-v2');
+      sessionStorage.removeItem('isWorkspaceConversation-v2');
+      sessionStorage.removeItem('numa-chat-draft');
+      sessionStartRef.current = 0;
+      clearAllSwrCaches();
+      tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
+      decodedTokensRef.current = { accessToken: null, idToken: null };
+      clearScheduledRefresh();
+    };
 
-    clearAllSwrCaches();
-    tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
-    decodedTokensRef.current = { accessToken: null, idToken: null };
-    clearScheduledRefresh();
+    if (isFederatedUser) {
+      const clientName = sessionStorage.getItem('CLIENT_NAME') || '';
+      const region = sessionStorage.getItem('REGION') || 'us-east-1';
+      const clientId = sessionStorage.getItem('CLIENT_ID') || '';
+      const logoutUri = `${window.location.origin}/`;
+      const cognitoDomain = `numa-${clientName}`;
+      const cognitoLogoutUrl = `https://${cognitoDomain}.auth.${region}.amazoncognito.com/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutUri)}`;
 
-    // Clear all AWS clients to force re-authentication
+      clearPersistentState();
+      window.location.href = cognitoLogoutUrl;
+      return;
+    }
+
+    clearPersistentState();
+
     setQBusinessClient(null);
     setQAppsClient(null);
     setBedrockRuntimeClient(null);
@@ -2539,6 +2559,23 @@ export const AuthProvider = ({ children, initialTokens }) => {
     [user]
   );
 
+  // SSO login: accepts tokens from the SSO token exchange (snake_case from Cognito
+  // /oauth2/token endpoint) and completes the login flow identically to SRP auth.
+  const loginWithTokens = useCallback(
+    async (tokens: {
+      access_token: string;
+      id_token: string;
+      refresh_token: string;
+    }): Promise<{ features: string[] }> => {
+      return handleLoginSuccessRef.current({
+        AccessToken: tokens.access_token,
+        IdToken: tokens.id_token,
+        RefreshToken: tokens.refresh_token,
+      });
+    },
+    []
+  );
+
   const value = useMemo(() => {
     return {
       isAuthenticated: !!user,
@@ -2547,6 +2584,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       authError,
       tokenValidationComplete,
       login,
+      loginWithTokens,
       logout,
       setNewPassword,
       refreshTokens,
@@ -2583,6 +2621,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     authError,
     tokenValidationComplete,
     login,
+    loginWithTokens,
     logout,
     setNewPassword,
     refreshTokens,

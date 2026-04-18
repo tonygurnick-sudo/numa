@@ -22,6 +22,8 @@ import { Fn, TerraformOutput, ITerraformDependable } from 'cdktf';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import { AdjustToken } from './adjust-token-construct';
+import { CognitoPreSignup } from './cognito-pre-signup-construct';
+import { SSOGroupMapper } from './sso-group-mapper-construct';
 import { CognitoEmailHandler } from './cognito-email-handler-construct';
 import { NoliaCognitoEmailHandler } from './nolia-cognito-email-handler-construct';
 import { BoxDataSource, boxDataSourcePropsSchema } from './data-sources/box-datasource-construct';
@@ -154,6 +156,16 @@ export class CoreNumaInfra extends Construct {
       nameSuffix: numaClient,
       mfaSettingsTableName: `${numaClient}-mfa-settings`,
     });
+
+    const preSignup = new CognitoPreSignup(this, 'cognito-pre-signup', {
+      nameSuffix: numaClient,
+    });
+
+    const groupMapper = new SSOGroupMapper(this, 'sso-group-mapper', {
+      nameSuffix: numaClient,
+      groupMappingTableName: `${numaClient}-mfa-settings`,
+    });
+
     const cognitoDomain = numaClient;
 
     // MFA set to OPTIONAL — Cognito does NOT enforce MFA itself. Instead, the
@@ -181,6 +193,8 @@ export class CoreNumaInfra extends Construct {
       name: numaClient,
       usernameAttributes: ['email'],
       lambdaConfig: {
+        preSignUp: preSignup.function.arn,
+        postAuthentication: groupMapper.function.arn,
         preTokenGenerationConfig: {
           lambdaArn: at.function.arn,
           lambdaVersion: 'V2_0',
@@ -206,6 +220,22 @@ export class CoreNumaInfra extends Construct {
     new LambdaPermission(this, 'cognito-token-adjuster-permission', {
       statementId: 'cognito-token-adjuster',
       functionName: at.function.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: 'cognito-idp.amazonaws.com',
+      sourceArn: userPool.arn,
+    });
+
+    new LambdaPermission(this, 'cognito-pre-signup-permission', {
+      statementId: 'cognito-pre-signup',
+      functionName: preSignup.function.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: 'cognito-idp.amazonaws.com',
+      sourceArn: userPool.arn,
+    });
+
+    new LambdaPermission(this, 'cognito-group-mapper-permission', {
+      statementId: 'cognito-group-mapper',
+      functionName: groupMapper.function.functionName,
       action: 'lambda:InvokeFunction',
       principal: 'cognito-idp.amazonaws.com',
       sourceArn: userPool.arn,
@@ -270,26 +300,31 @@ export class CoreNumaInfra extends Construct {
       callbackUrls: [`https://${props.domainName}/`],
       allowedOauthFlowsUserPoolClient: true,
       allowedOauthFlows: ['code'],
-      allowedOauthScopes: ['openid', 'email', 'profile'],
+      // `aws.cognito.signin.user.admin` is required for SAML/OAuth federated
+      // users — without it, access tokens can't call GetUser/GlobalSignOut,
+      // which validateTokenWithCognito relies on.
+      allowedOauthScopes: ['openid', 'email', 'profile', 'aws.cognito.signin.user.admin'],
       accessTokenValidity: 60,
       refreshTokenValidity: 60,
       idTokenValidity: 60,
       authSessionValidity: 5,
       tokenValidityUnits: [{ accessToken: 'minutes', refreshToken: 'days', idToken: 'minutes' }],
       supportedIdentityProviders: ['COGNITO'],
-      // DANGER: Conditional lifecycle management for Cognito OAuth callback URLs
+      logoutUrls: [`https://${props.domainName}/`, `https://${props.domainName}/login`],
+      // Lifecycle: ignore fields managed dynamically by Lambdas at runtime.
       //
-      // PROBLEM: The previous unconditional `ignoreChanges: ['callback_urls']` was preventing
-      // Terraform from setting initial OAuth callback URLs, causing deployment failures with:
-      // "CallbackUrls can not be empty when code flow or implicit flow is selected"
-      //
-      // SOLUTION: Only ignore callback_urls changes when Q Business is provisioned, because
-      // in that case the SetCallbackUrl construct's Lambda will manage them dynamically.
-      // For non-Q Business clients, Terraform should manage callback URLs normally.
-      //
-      // RISK: This change affects OAuth flow initialization. Test thoroughly before production.
+      // - supported_identity_providers: Managed by admin-sso-settings Lambda when
+      //   admins configure SAML SSO. Without this, deploys revert SSO config.
+      // - logout_urls: Set here as initial value but ignored so SSO Lambda can update.
+      // - callback_urls: Only ignored when Q Business is provisioned, because the
+      //   SetCallbackUrl Lambda manages them dynamically. For non-Q Business clients,
+      //   Terraform manages callback URLs normally.
       lifecycle: {
-        ignoreChanges: props.provisionQResources ? ['callback_urls'] : [],
+        ignoreChanges: [
+          'supported_identity_providers',
+          'logout_urls',
+          ...(props.provisionQResources ? ['callback_urls'] : []),
+        ],
       },
     });
 

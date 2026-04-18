@@ -1,5 +1,5 @@
 {
-  "name": "admin-dr-stats",
+  "name": "scim-endpoint",
   "packageManager": "yarn@4.9.2",
   "type": "module",
   "main": "index.ts",
@@ -19,14 +19,13 @@
   "scripts": {
     "clean": "rimraf dist lambda_function.zip",
     "build": "yarn clean && esbuild --bundle --format=esm --platform=node --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" index.ts",
-    "bundle": "yarn build && touch -d \"$(git log -1 --format=%cd --date=format:%FT%T || date -u +%Y-%m-%dT%H:%M:%S)\" dist/* && zip -X -j lambda_function.zip dist/*",
+    "bundle": "yarn build && GIT_TS=$(git log -1 --format=%cd --date=format:%Y%m%d%H%M.%S .); [ -n \"$GIT_TS\" ] && touch -t $GIT_TS dist/*; zip -X -j lambda_function.zip dist/*",
     "lint": "eslint && tsc --noEmit",
     "test": "echo 'no tests'"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.699.0",
     "@aws-sdk/client-dynamodb": "^3.699.0",
-    "@aws-sdk/client-s3": "^3.699.0",
-    "@aws-sdk/client-secrets-manager": "^3.699.0"
+    "@aws-sdk/lib-dynamodb": "^3.699.0"
   }
 }

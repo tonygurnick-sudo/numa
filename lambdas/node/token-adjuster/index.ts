@@ -164,15 +164,27 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
   // Check for MFA reset grace period
   const graceExpiresAt = await checkMfaResetGracePeriod(userSub);
 
+  // Skip MFA enforcement for federated (SSO) users — the IdP handles MFA.
+  // Cognito sets the 'identities' attribute on users created via federation.
+  const isFederatedUser = !!event.request.userAttributes['identities'];
+
+  // Fix #10: audit trail for MFA skip on federated users
+  if (isFederatedUser) {
+    console.log(
+      JSON.stringify({ _name: 'MFA_SKIP_FEDERATED', sub: userSub, email, triggerSource: event.triggerSource })
+    );
+  }
+
   // MFA enforcement — only on initial authentication, not token refresh.
   // Checks the ACTUAL user pool MFA config via DescribeUserPool (cached per
   // cold start). No env vars, no feature flags — if the pool is OPTIONAL,
   // we enforce. If it's OFF, we don't. Self-contained.
   let mfaSetupRequired = false;
   if (
-    event.triggerSource === 'TokenGeneration_Authentication' ||
-    event.triggerSource === 'TokenGeneration_HostedAuth' ||
-    event.triggerSource === 'TokenGeneration_RefreshTokens'
+    !isFederatedUser &&
+    (event.triggerSource === 'TokenGeneration_Authentication' ||
+      event.triggerSource === 'TokenGeneration_HostedAuth' ||
+      event.triggerSource === 'TokenGeneration_RefreshTokens')
   ) {
     const poolMfaConfig = await getPoolMfaConfig(event.userPoolId);
 

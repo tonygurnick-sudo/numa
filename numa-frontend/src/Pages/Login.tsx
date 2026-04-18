@@ -7,7 +7,9 @@ import { useAuth, type MfaSetupRequired, type MfaCodeRequired } from '../Provide
 import { useBranding, DEFAULT_BRANDING_THEME } from '../Providers/BrandingContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
+import { AdminSSOSettingsService, type SSOLoginConfig } from '../Services/AdminSSOSettingsService';
 import { RecoveryCodesModal } from '../Components/RecoveryCodesModal';
+import { getFlag } from '../utils/featureFlags';
 
 const NumaLogin = () => {
   const usernameRef = useRef();
@@ -44,6 +46,10 @@ const NumaLogin = () => {
   const [generatedRecoveryCodes, setGeneratedRecoveryCodes] = useState<string[]>([]);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
 
+  // SSO state
+  const [ssoConfig, setSsoConfig] = useState<SSOLoginConfig | null>(null);
+  const [ssoLoading, setSsoLoading] = useState(false);
+
   // Email OTP state (admin MFA reset verification)
   const [emailOtpStep, setEmailOtpStep] = useState(false);
   const [emailOtpCode, setEmailOtpCode] = useState('');
@@ -62,6 +68,54 @@ const NumaLogin = () => {
 
   // MFA reset grace period state
   const [mfaResetPending, setMfaResetPending] = useState(false);
+
+  // Fetch SSO login config (public endpoint, no auth needed)
+  useEffect(() => {
+    if (!getFlag('SSO_ENABLED')) return;
+    let cancelled = false;
+    AdminSSOSettingsService.getLoginConfig()
+      .then((config) => {
+        if (!cancelled) setSsoConfig(config);
+      })
+      .catch(() => {
+        // SSO not available — ignore
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fix #5: break-glass param bypasses SSO-only auto-redirect
+  const breakGlass = new URLSearchParams(window.location.search).get('breakglass') === '1';
+
+  // SSO-only mode: auto-redirect to IdP, no login form shown (unless break-glass)
+  useEffect(() => {
+    if (ssoConfig?.ssoOnlyMode && ssoConfig.providerName && !breakGlass) {
+      handleSSOLogin();
+    }
+  }, [ssoConfig]);
+
+  const handleSSOLogin = () => {
+    if (!ssoConfig?.providerName) return;
+    setSsoLoading(true);
+    const clientName = sessionStorage.getItem('CLIENT_NAME') || '';
+    const region = sessionStorage.getItem('REGION') || 'us-east-1';
+    const clientId = sessionStorage.getItem('CLIENT_ID') || '';
+    const redirectUri = `${window.location.origin}/`;
+    const cognitoDomain = `numa-${clientName}`;
+    // Generate CSRF state token to prevent cross-site request forgery
+    const stateArray = new Uint8Array(32);
+    crypto.getRandomValues(stateArray);
+    const state = Array.from(stateArray, (b) => b.toString(16).padStart(2, '0')).join('');
+    sessionStorage.setItem('sso_oauth_state', state);
+    // `aws.cognito.signin.user.admin` is required so the federated access token
+    // can call user pool APIs (GetUser, GlobalSignOut, etc.). SRP auth includes
+    // it automatically; OAuth/SAML federation must request it explicitly, or
+    // validateTokenWithCognito() → GetUser returns NotAuthorizedException and
+    // triggers a logout loop.
+    const authorizeUrl = `https://${cognitoDomain}.auth.${region}.amazoncognito.com/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&identity_provider=${encodeURIComponent(ssoConfig.providerName)}&scope=openid+email+profile+aws.cognito.signin.user.admin&state=${encodeURIComponent(state)}`;
+    window.location.href = authorizeUrl;
+  };
 
   // Fetch MFA remember duration when MFA form appears, and reset the checkbox
   useEffect(() => {
@@ -520,6 +574,18 @@ const NumaLogin = () => {
   const showLoginForm = !isSettingNewPassword && !mfaSetupRequired && !mfaCodeRequired;
   const showNewPasswordForm = isSettingNewPassword && !mfaSetupRequired && !mfaCodeRequired;
 
+  // SSO-only mode: show redirect spinner instead of login form (unless break-glass)
+  if (ssoConfig?.ssoOnlyMode && ssoConfig.providerName && !breakGlass) {
+    return (
+      <LayoutForm>
+        <div className="d-flex flex-column align-items-center justify-content-center py-5">
+          <Spinner animation="border" role="status" className="mb-3" />
+          <p className="text-muted">{t('login.ssoRedirecting')}</p>
+        </div>
+      </LayoutForm>
+    );
+  }
+
   const loginContent = (
     <>
       {loginTitle && <h2>{loginTitle}</h2>}
@@ -576,6 +642,35 @@ const NumaLogin = () => {
             )}
           </Button>
         </Form>
+      )}
+
+      {showLoginForm && ssoConfig?.enabled && (
+        <div className="mt-2">
+          <div className="d-flex align-items-center mb-3">
+            <hr className="flex-grow-1" />
+            <span className="px-3 text-muted small">{'OR'}</span>
+            <hr className="flex-grow-1" />
+          </div>
+          <Button
+            variant="outline-primary"
+            className="w-100"
+            onClick={handleSSOLogin}
+            disabled={ssoLoading}
+            data-testid="sso-login-button"
+          >
+            {ssoLoading ? (
+              <>
+                <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                {t('login.ssoRedirecting')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-shield-lock me-2"></i>
+                {t('login.ssoButton')}
+              </>
+            )}
+          </Button>
+        </div>
       )}
 
       {showNewPasswordForm && (

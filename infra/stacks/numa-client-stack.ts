@@ -247,6 +247,7 @@ export class NumaClientStack extends TerraformStack {
         region: clientConfig.region,
         sourceBuckets,
         userPoolId: core.userPoolId,
+        qBusinessApplicationId: core.qBusinessApplicationId,
       });
     }
 
@@ -878,6 +879,8 @@ export class NumaClientStack extends TerraformStack {
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         PUBLIC_DEMO: clientConfig.publicDemo ?? false,
         PUBLIC_DEMO_PROXY_URL: publicDemoProxy?.functionUrl ?? '',
+        SSO_ENABLED: clientConfig.ssoEnabled ?? true,
+        SSO_ENTERPRISE: clientConfig.ssoEnterprise ?? false,
         NUMA_VERSION: siteVersion,
       }),
       contentType: 'application/json',
@@ -1392,6 +1395,22 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default 10
          */
         publicDemoDailyLimitUsd: z.number().optional().default(10),
+
+        /**
+         * Whether to enable SSO (SAML 2.0) self-service configuration.
+         * When true, the SSO admin tab is visible and admins can configure identity providers.
+         *
+         * @default true
+         */
+        ssoEnabled: z.boolean().optional().default(true),
+
+        /**
+         * Whether to enable enterprise SSO features (group mapping, OIDC, SSO-only, SCIM, user management).
+         * Requires ssoEnabled to be true.
+         *
+         * @default false
+         */
+        ssoEnterprise: z.boolean().optional().default(false),
       })
       .strict()
   );
