@@ -15,7 +15,9 @@ import {
   getSecret,
   listCompanySecrets,
   getCompanySecret,
+  updateCompanySecret,
   deleteCompanySecret,
+  isGeneratedSecret,
 } from '../Services/VaultService';
 import type {
   VaultSecretMetadata,
@@ -27,12 +29,21 @@ import { VaultSecretsList } from '../Components/Vault/VaultSecretsList';
 import { VaultSecretForm } from '../Components/Vault/VaultSecretForm';
 import { VaultSecretDetail } from '../Components/Vault/VaultSecretDetail';
 import { VaultAuditLog } from '../Components/Vault/VaultAuditLog';
+import { VaultElevationModal } from '../Components/Vault/VaultElevationModal';
 import { useAuth } from '../Providers/AuthProvider';
 
 export function VaultSecretsPage() {
   const { t } = useTranslation('vault');
   const { user } = useAuth();
-  const isAdmin = Boolean(user?.groups?.includes('admin'));
+  const isAdmin = (() => {
+    const raw = (user as { groups?: unknown } | null)?.groups;
+    const groups: string[] = Array.isArray(raw)
+      ? raw.map(String)
+      : typeof raw === 'string'
+        ? raw.split(',').map((g) => g.trim())
+        : [];
+    return groups.includes('admin');
+  })();
   const [secrets, setSecrets] = useState<VaultSecretMetadata[]>([]);
   const [companySecrets, setCompanySecrets] = useState<VaultSecretMetadata[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -52,27 +63,54 @@ export function VaultSecretsPage() {
 
   // Company secret modals
   const [viewingCompanySecret, setViewingCompanySecret] = useState<VaultSecretMetadata | null>(null);
-  const [companySecretDetail, setCompanySecretDetail] = useState<VaultSecretWithFields | null>(null);
   const [deletingCompanySecret, setDeletingCompanySecret] = useState<VaultSecretMetadata | null>(null);
+  const [editingCompanySecret, setEditingCompanySecret] = useState<VaultSecretWithFields | null>(null);
+  const [showCompanyForm, setShowCompanyForm] = useState(false);
+
+  // Admin step-up — in-memory only; refreshing or leaving the page requires re-auth
+  const [companyElevated, setCompanyElevated] = useState(false);
+  const [showElevationModal, setShowElevationModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('secrets');
+  const [companyLoading, setCompanyLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    if (isAdmin && companyElevated) setCompanyLoading(true);
     try {
       const [secretsList, catsList, companyList] = await Promise.all([
         listSecrets(),
         listCategories(),
-        listCompanySecrets().catch(() => [] as VaultSecretMetadata[]),
+        isAdmin && companyElevated
+          ? listCompanySecrets().catch(() => [] as VaultSecretMetadata[])
+          : Promise.resolve([] as VaultSecretMetadata[]),
       ]);
       setSecrets(secretsList);
       setCategories(catsList);
       setCompanySecrets(companyList);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(t('vault.errors.loadFailed', { message: msg }));
     } finally {
       setLoading(false);
+      setCompanyLoading(false);
     }
-  }, []);
+  }, [isAdmin, companyElevated, t]);
+
+  const handleTabSelect = (key: string | null) => {
+    if (!key) return;
+    if (key === 'company' && !companyElevated) {
+      setShowElevationModal(true);
+      return;
+    }
+    setActiveTab(key);
+  };
+
+  const handleElevationSuccess = () => {
+    setCompanyElevated(true);
+    setShowElevationModal(false);
+    setActiveTab('company');
+  };
 
   useEffect(() => {
     loadData();
@@ -114,19 +152,35 @@ export function VaultSecretsPage() {
       setDeletingSecret(null);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(t('vault.errors.deleteFailed', { message: msg }));
     }
   };
 
   // Company secret actions (admin only)
   const handleViewCompanySecret = async (secret: VaultSecretMetadata) => {
+    setViewingCompanySecret(secret);
+  };
+
+  const handleEditCompanySecret = async (secret: VaultSecretMetadata) => {
     try {
       const full = await getCompanySecret(secret.name);
-      setCompanySecretDetail(full);
-      setViewingCompanySecret(secret);
+      setEditingCompanySecret(full);
+      setViewingCompanySecret(null);
+      setShowCompanyForm(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(t('vault.errors.loadFailed', { message: msg }));
     }
+  };
+
+  const handleUpdateCompanySecret = async (payload: CreateSecretPayload | UpdateSecretPayload) => {
+    if (!editingCompanySecret) return;
+    await updateCompanySecret(editingCompanySecret.name, payload as UpdateSecretPayload);
+    setSuccessMsg(t('vault.success.updated', { name: editingCompanySecret.name }));
+    setEditingCompanySecret(null);
+    setShowCompanyForm(false);
+    await loadData();
   };
 
   const handleDeleteCompanySecret = async () => {
@@ -137,7 +191,8 @@ export function VaultSecretsPage() {
       setDeletingCompanySecret(null);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(t('vault.errors.deleteFailed', { message: msg }));
     }
   };
 
@@ -159,6 +214,10 @@ export function VaultSecretsPage() {
 
   return (
     <div className="container-fluid py-4">
+      <style>{`
+        .vault-detail-modal { max-width: min(1400px, 95vw); margin: 1.75rem auto; }
+        .vault-detail-modal .modal-content { max-height: calc(100vh - 3.5rem); }
+      `}</style>
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h2 className="mb-1">
@@ -181,7 +240,7 @@ export function VaultSecretsPage() {
 
       {error && (
         <Alert variant="danger" dismissible onClose={() => setError(null)}>
-          {t('vault.errors.loadFailed', { message: error })}
+          {error}
         </Alert>
       )}
       {successMsg && (
@@ -190,7 +249,7 @@ export function VaultSecretsPage() {
         </Alert>
       )}
 
-      <Tabs defaultActiveKey="secrets" className="mb-3">
+      <Tabs activeKey={activeTab} onSelect={handleTabSelect} className="mb-3">
         <Tab eventKey="secrets" title={t('vault.tabs.secrets')}>
           {/* Search and category filter */}
           <div className="d-flex gap-3 mb-3">
@@ -232,63 +291,77 @@ export function VaultSecretsPage() {
           )}
         </Tab>
 
-        <Tab eventKey="company" title={t('vault.tabs.companySecrets')}>
-          <p className="text-muted mb-3">{t('vault.companySecrets.description')}</p>
-          {companySecrets.length === 0 ? (
-            <p className="text-muted">{t('vault.companySecrets.empty')}</p>
-          ) : (
-            <div className="list-group">
-              {companySecrets.map((s) => (
-                <div key={s.name} className="list-group-item d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 className="mb-0">{s.name}</h6>
-                    <small className="text-muted">{s.description}</small>
-                    <div className="d-flex gap-2 mt-1">
-                      <span className="badge bg-secondary-subtle text-secondary">{s.category}</span>
-                      <span className="badge bg-primary-subtle text-primary">{t(`vault.types.${s.type}`)}</span>
+        {isAdmin && (
+          <Tab eventKey="company" title={t('vault.tabs.companySecrets')}>
+            <p className="text-muted mb-3">{t('vault.companySecrets.description')}</p>
+            {companyLoading ? (
+              <div className="text-center py-5">
+                <div className="spinner-border" role="status" />
+              </div>
+            ) : companySecrets.length === 0 ? (
+              <p className="text-muted">{t('vault.companySecrets.empty')}</p>
+            ) : (
+              <div className="list-group">
+                {companySecrets.map((s) => (
+                  <div key={s.name} className="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 className="mb-0">{s.name}</h6>
+                      <small className="text-muted">{s.description}</small>
+                      <div className="d-flex gap-2 mt-1">
+                        <span className="badge bg-secondary-subtle text-secondary">{s.category}</span>
+                        <span className="badge bg-primary-subtle text-primary">
+                          {t(`vault.types.${s.type ?? 'custom'}`)}
+                        </span>
+                      </div>
+                      {s.help_url && (
+                        <a href={s.help_url} target="_blank" rel="noopener noreferrer" className="small mt-1 d-block">
+                          <i className="bi bi-box-arrow-up-right me-1" />
+                          {t('vault.detail.helpLink')}
+                        </a>
+                      )}
                     </div>
-                    {s.help_url && (
-                      <a href={s.help_url} target="_blank" rel="noopener noreferrer" className="small mt-1 d-block">
-                        <i className="bi bi-box-arrow-up-right me-1" />
-                        {t('vault.detail.helpLink')}
-                      </a>
-                    )}
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="badge bg-success-subtle text-success">
+                        {t('vault.companySecrets.configured')}
+                      </span>
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => handleViewCompanySecret(s)}
+                        title={t('vault.detail.reveal')}
+                      >
+                        <i className="bi bi-eye" />
+                      </Button>
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => handleEditCompanySecret(s)}
+                        title={t('vault.editSecret')}
+                      >
+                        <i className="bi bi-pencil" />
+                      </Button>
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={() => setDeletingCompanySecret(s)}
+                        title={t('vault.deleteSecret')}
+                      >
+                        <i className="bi bi-trash" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="badge bg-success-subtle text-success">{t('vault.companySecrets.configured')}</span>
-                    {isAdmin && (
-                      <>
-                        <Button
-                          variant="outline-primary"
-                          size="sm"
-                          onClick={() => handleViewCompanySecret(s)}
-                          title={t('vault.detail.reveal')}
-                        >
-                          <i className="bi bi-eye" />
-                        </Button>
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          onClick={() => setDeletingCompanySecret(s)}
-                          title={t('vault.deleteSecret')}
-                        >
-                          <i className="bi bi-trash" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Tab>
+                ))}
+              </div>
+            )}
+          </Tab>
+        )}
 
         <Tab eventKey="audit" title={t('vault.tabs.auditLog')}>
           <VaultAuditLog />
         </Tab>
       </Tabs>
 
-      {/* Create / Edit Modal */}
+      {/* Create / Edit Modal (user secrets) */}
       <VaultSecretForm
         show={showForm}
         onHide={() => {
@@ -298,9 +371,10 @@ export function VaultSecretsPage() {
         onSubmit={editingSecret ? handleUpdate : handleCreate}
         existingSecret={editingSecret}
         categories={categories}
+        readOnlyMetadata={editingSecret ? isGeneratedSecret(editingSecret) : false}
       />
 
-      {/* Detail View Modal */}
+      {/* Detail View Modal (user secrets) */}
       <VaultSecretDetail
         show={!!viewingSecret}
         onHide={() => setViewingSecret(null)}
@@ -308,7 +382,37 @@ export function VaultSecretsPage() {
         onEdit={handleEdit}
       />
 
-      {/* Delete Confirmation */}
+      {/* Company Secret Detail Modal */}
+      <VaultSecretDetail
+        show={!!viewingCompanySecret}
+        onHide={() => setViewingCompanySecret(null)}
+        secret={viewingCompanySecret}
+        onEdit={handleEditCompanySecret}
+        fetchSecret={getCompanySecret}
+        showEditButton={isAdmin}
+      />
+
+      {/* Company Secret Edit Modal */}
+      <VaultSecretForm
+        show={showCompanyForm}
+        onHide={() => {
+          setShowCompanyForm(false);
+          setEditingCompanySecret(null);
+        }}
+        onSubmit={handleUpdateCompanySecret}
+        existingSecret={editingCompanySecret}
+        categories={categories}
+        readOnlyMetadata={editingCompanySecret ? isGeneratedSecret(editingCompanySecret) : false}
+      />
+
+      {/* Admin Step-Up Password Prompt */}
+      <VaultElevationModal
+        show={showElevationModal}
+        onCancel={() => setShowElevationModal(false)}
+        onSuccess={handleElevationSuccess}
+      />
+
+      {/* Delete Confirmation (user secrets) */}
       {deletingSecret && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-dialog-centered">
@@ -327,73 +431,6 @@ export function VaultSecretsPage() {
                 <button className="btn btn-danger" onClick={handleDelete}>
                   <i className="bi bi-trash me-1" />
                   {t('vault.deleteSecret')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Company Secret Detail Modal */}
-      {viewingCompanySecret && companySecretDetail && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">{viewingCompanySecret.name}</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => {
-                    setViewingCompanySecret(null);
-                    setCompanySecretDetail(null);
-                  }}
-                />
-              </div>
-              <div className="modal-body">
-                {companySecretDetail.description && <p className="text-muted">{companySecretDetail.description}</p>}
-                <div className="d-flex gap-2 mb-3">
-                  <span className="badge bg-secondary-subtle text-secondary">{companySecretDetail.category}</span>
-                  <span className="badge bg-primary-subtle text-primary">
-                    {t(`vault.types.${companySecretDetail.type}`)}
-                  </span>
-                </div>
-                {companySecretDetail.fields && Object.entries(companySecretDetail.fields).length > 0 && (
-                  <div className="table-responsive">
-                    <table className="table table-sm">
-                      <thead>
-                        <tr>
-                          <th>{t('vault.form.fieldKey')}</th>
-                          <th>{t('vault.form.fieldValue')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.entries(companySecretDetail.fields).map(([key, value]) => (
-                          <tr key={key}>
-                            <td className="fw-semibold">{key}</td>
-                            <td>
-                              <code className="text-break" style={{ fontSize: '0.85em' }}>
-                                {key.toLowerCase().includes('secret') || key.toLowerCase().includes('password')
-                                  ? '••••••••'
-                                  : String(value)}
-                              </code>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setViewingCompanySecret(null);
-                    setCompanySecretDetail(null);
-                  }}
-                >
-                  {t('common:common.close', 'Close')}
                 </button>
               </div>
             </div>
