@@ -111,6 +111,7 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
         numaPut
       );
       setSaveStatus({ variant: 'success', message: t('securitySettings.saveSuccess') });
+      window.location.reload();
     } catch (e) {
       setSaveStatus({
         variant: 'danger',
