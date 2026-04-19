@@ -23,7 +23,6 @@ type BrandingAssets = NonNullable<BrandingTheme['assets']>;
 
 type BrandingApiTheme = BrandingTheme & {
   assets?: BrandingAssets;
-  componentGroups?: Record<string, boolean>;
 };
 
 type BrandingApiResponse = {
@@ -159,6 +158,13 @@ class BrandingService {
     const mergedResolved = { ...baseResolved, ...providedResolved };
     if (Object.keys(mergedResolved).length > 0) {
       merged.resolvedAssets = mergedResolved;
+    }
+
+    const baseComponentGroups = base.componentGroups ?? {};
+    const providedComponentGroups = provided.componentGroups ?? {};
+    const mergedComponentGroups = { ...baseComponentGroups, ...providedComponentGroups };
+    if (Object.keys(mergedComponentGroups).length > 0) {
+      merged.componentGroups = mergedComponentGroups;
     }
 
     return merged;
@@ -624,6 +630,7 @@ class BrandingService {
       splashScreen: theme.splashScreen ? { ...theme.splashScreen } : undefined,
       loginPage: theme.loginPage ? { ...theme.loginPage } : undefined,
       colors: { ...theme.colors },
+      componentGroups: theme.componentGroups ? { ...theme.componentGroups } : undefined,
     };
 
     if (!stripAssets && theme.assets) {

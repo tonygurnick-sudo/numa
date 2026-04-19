@@ -56,6 +56,12 @@ export type BrandingTheme = {
     logoLoginRight?: string;
     favicon?: string;
   };
+  aiPersonaName?: string;
+  aiPersonaDescription?: string;
+  supportEmail?: string;
+  supportUrl?: string;
+  defaultEmailSignature?: string;
+  componentGroups?: Record<string, boolean>;
 };
 
 export type BrandingContextType = {
@@ -104,6 +110,10 @@ export const DEFAULT_BRANDING_THEME: BrandingTheme = {
     buttonSecondaryHover: '#8e50a7',
     buttonSecondaryHoverText: '#ffffff',
     buttonSecondaryBorder: '#6b3c85',
+  },
+  componentGroups: {
+    showArcanumSupportChat: true,
+    allowUserEmailSignature: true,
   },
 };
 
