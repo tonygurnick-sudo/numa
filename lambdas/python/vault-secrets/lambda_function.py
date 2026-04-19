@@ -44,6 +44,12 @@ CLIENT_NAME = os.environ.get("CLIENT_NAME")
 # Constants
 VAULT_VERSION = "2.0"
 
+# Path segments under /vault/company-secrets/ that are reserved for non-CRUD routes
+# (step-up, step-up-failed, etc.). A secret with one of these names would be
+# unreachable via GET/PUT/DELETE because the router would hit the reserved route
+# first, so we also forbid creating one.
+RESERVED_COMPANY_PATHS = frozenset({"step-up", "step-up-failed"})
+
 
 def _response(status: int, body: Dict[str, Any]) -> Dict[str, Any]:
     """Return a JSON API response with CORS headers."""
@@ -624,7 +630,7 @@ def _handle_template_stats() -> Dict[str, Any]:
 
 
 def _handle_list_company_secrets() -> Dict[str, Any]:
-    """List all company secrets (metadata only). Any authenticated user can call."""
+    """List all company secrets (metadata only). Admin only — matches frontend gating."""
     try:
         secrets_list = list_vault_secrets(COMPANY_USER_ID, CLIENT_NAME)
 
@@ -892,8 +898,45 @@ def _route(
         and path_segments[1] == "company-secrets"
     ):
 
-        # GET /vault/company-secrets - list company secrets (any user)
+        # POST /vault/company-secrets/step-up - record step-up auth grant (admin only)
+        # The frontend re-verifies the user's password via Cognito SRP before calling this;
+        # we just write an audit entry so there's a server-side record of the grant.
+        if (
+            method == "POST"
+            and len(path_segments) == 3
+            and path_segments[2] == "step-up"
+        ):
+            if not is_admin:
+                return _response(403, {"error": "Admin access required"})
+            _write_audit_log(
+                COMPANY_USER_ID,
+                "*",
+                "admin_step_up_grant",
+                accessor=user_id,
+            )
+            return _response(200, {"ok": True})
+
+        # POST /vault/company-secrets/step-up-failed - record failed step-up attempt (admin only)
+        # Called by the frontend when Cognito rejects the re-entered password.
+        if (
+            method == "POST"
+            and len(path_segments) == 3
+            and path_segments[2] == "step-up-failed"
+        ):
+            if not is_admin:
+                return _response(403, {"error": "Admin access required"})
+            _write_audit_log(
+                COMPANY_USER_ID,
+                "*",
+                "admin_step_up_failed",
+                accessor=user_id,
+            )
+            return _response(200, {"ok": True})
+
+        # GET /vault/company-secrets - list company secrets (admin only)
         if method == "GET" and len(path_segments) == 2:
+            if not is_admin:
+                return _response(403, {"error": "Admin access required"})
             return _handle_list_company_secrets()
 
         # GET /vault/company-secrets/{secret_name} - get company secret (admin only)
@@ -901,12 +944,20 @@ def _route(
             if not is_admin:
                 return _response(403, {"error": "Admin access required"})
             secret_name = path_segments[2]
+            if secret_name in RESERVED_COMPANY_PATHS:
+                return _response(404, {"error": "Endpoint not found"})
             return _handle_get_company_secret(secret_name, user_id)
 
         # POST /vault/company-secrets - create company secret (admin only)
         if method == "POST" and len(path_segments) == 2:
             if not is_admin:
                 return _response(403, {"error": "Admin access required"})
+            body = _parse_body(event)
+            if body.get("name") in RESERVED_COMPANY_PATHS:
+                return _response(
+                    400,
+                    {"error": "Secret name is reserved"},
+                )
             return _handle_create_company_secret(event, user_id)
 
         # PUT /vault/company-secrets/{secret_name} - update company secret (admin only)
@@ -914,6 +965,14 @@ def _route(
             if not is_admin:
                 return _response(403, {"error": "Admin access required"})
             secret_name = path_segments[2]
+            if secret_name in RESERVED_COMPANY_PATHS:
+                return _response(404, {"error": "Endpoint not found"})
+            body = _parse_body(event)
+            if body.get("name") in RESERVED_COMPANY_PATHS:
+                return _response(
+                    400,
+                    {"error": "Secret name is reserved"},
+                )
             return _handle_update_company_secret(event, secret_name, user_id)
 
         # DELETE /vault/company-secrets/{secret_name} - delete company secret (admin only)
@@ -921,6 +980,8 @@ def _route(
             if not is_admin:
                 return _response(403, {"error": "Admin access required"})
             secret_name = path_segments[2]
+            if secret_name in RESERVED_COMPANY_PATHS:
+                return _response(404, {"error": "Endpoint not found"})
             return _handle_delete_company_secret(secret_name, user_id)
 
     # No matching route

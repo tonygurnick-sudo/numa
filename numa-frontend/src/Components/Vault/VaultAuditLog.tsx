@@ -55,6 +55,8 @@ export function VaultAuditLog() {
       user_view: 'bg-info-subtle text-info',
       user_update: 'bg-primary-subtle text-primary',
       user_delete: 'bg-danger-subtle text-danger',
+      admin_step_up_grant: 'bg-success-subtle text-success',
+      admin_step_up_failed: 'bg-danger-subtle text-danger',
     };
     return variants[action] || 'bg-secondary-subtle text-secondary';
   };

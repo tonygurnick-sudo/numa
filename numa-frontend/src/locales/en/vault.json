@@ -16,7 +16,7 @@
     },
     "companySecrets": {
       "heading": "Company Secrets",
-      "description": "Shared credentials managed by administrators. Regular users can see these exist but cannot view their values.",
+      "description": "Shared credentials managed by administrators. Only admins can view or manage these.",
       "empty": "No company secrets configured. An administrator can add them.",
       "adminOnly": "Admin access required to view details",
       "configured": "Configured",
@@ -35,7 +35,8 @@
       "api_key": "API Key",
       "bearer_token": "Bearer Token",
       "secure_note": "Secure Note",
-      "custom": "Custom"
+      "custom": "Custom",
+      "system": "System Generated"
     },
     "typeDescriptions": {
       "login": "Username and password with optional URL",
@@ -54,6 +55,7 @@
       "description": "Description",
       "descriptionPlaceholder": "Optional description for this secret",
       "dangerMode": "Danger Mode",
+      "generatedSecretInfo": "This is a system-generated secret. Metadata fields cannot be modified, but you can update the secret values.",
       "dangerModeDescription": "Allow AI to access this secret without approval. Use with caution.",
       "dangerModeWarning": "When enabled, the AI assistant can use this secret automatically without asking for your permission.",
       "favorite": "Favorite",
@@ -96,6 +98,13 @@
       "autoHideWarning": "Values auto-hide after 30 seconds",
       "helpLink": "Setup instructions"
     },
+    "elevation": {
+      "title": "Confirm Access to Company Secrets",
+      "description": "Re-enter your password to view and manage shared company secrets. This access is audited.",
+      "passwordLabel": "Password",
+      "confirm": "Unlock",
+      "invalidPassword": "Password verification failed"
+    },
     "audit": {
       "title": "Access Audit Log",
       "empty": "No access history recorded yet.",
@@ -116,6 +125,8 @@
         "admin_create": "Admin Create",
         "admin_update": "Admin Update",
         "admin_delete": "Admin Delete",
+        "admin_step_up_grant": "Admin Step-Up Granted",
+        "admin_step_up_failed": "Admin Step-Up Failed",
         "system_access": "System Access"
       },
       "approvals": {
@@ -128,7 +139,8 @@
       "createFailed": "Failed to create secret: {{message}}",
       "updateFailed": "Failed to update secret: {{message}}",
       "deleteFailed": "Failed to delete secret: {{message}}",
-      "loadAuditFailed": "Failed to load audit log: {{message}}"
+      "loadAuditFailed": "Failed to load audit log: {{message}}",
+      "clipboardFailed": "Could not copy to clipboard. Copy manually instead."
     },
     "success": {
       "created": "Secret \"{{name}}\" created successfully",
