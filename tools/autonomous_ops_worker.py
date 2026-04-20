@@ -65,11 +65,43 @@ def fetch_next_queued_ticket(client_name: str, profile: str = None) -> dict:
     )
     table = dynamodb.Table(table_name)
 
+    # 1. Discover Active Sprints
+    sprints_resp = table.scan(
+        FilterExpression="entityType = :e AND #st = :act",
+        ExpressionAttributeNames={"#st": "status"},
+        ExpressionAttributeValues={":e": "WORK_UNIT", ":act": "active"},
+    )
+    active_sprints = sprints_resp.get("Items", [])
+    active_sprint_ids = {s.get("id") for s in active_sprints if s.get("id")}
+
+    if active_sprints:
+        print("Detected Active Sprint(s):", file=sys.stderr)
+        for s in active_sprints:
+            print(f" -> {s.get('name', 'Unknown Sprint')}", file=sys.stderr)
+    else:
+        print(
+            "No active Sprints detected. Will fall back to any queued ticket.",
+            file=sys.stderr,
+        )
+
+    # 2. Fetch Queued Tickets
     response = table.scan(
         FilterExpression="entityType = :e AND statusType = :s",
         ExpressionAttributeValues={":e": "TICKET", ":s": "queued"},
     )
     items = response.get("Items", [])
+
+    # 3. Filter by Active Sprint
+    if active_sprint_ids:
+        sprint_items = [t for t in items if t.get("workUnitId") in active_sprint_ids]
+        if not sprint_items:
+            print(
+                "No 'To Do' (queued) tickets currently exist in the *ACTIVE* sprint!",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        items = sprint_items
+
     if not items:
         print(
             "No 'To Do' (queued) tickets currently exist in the backlog!",
