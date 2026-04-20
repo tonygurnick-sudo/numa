@@ -1019,6 +1019,12 @@
     "copy": "Copy",
     "delete": "Delete",
     "noAgents": "No agents found",
-    "confirmDelete": "Delete agent \"{{title}}\"? This is permanent."
+    "confirmDelete": "Delete agent \"{{title}}\"? This is permanent.",
+    "copyModal": {
+      "title": "Copy Agent",
+      "description": "Where would you like to copy \"{{title}}\"?",
+      "toWorkspace": "Copy as Company Agent",
+      "toPersonal": "Copy to My Personal Agents"
+    }
   }
 }

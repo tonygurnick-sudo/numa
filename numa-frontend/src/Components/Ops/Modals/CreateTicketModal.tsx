@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Modal, Form, Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import * as OpsService from '../../../Services/OpsService';
@@ -103,8 +104,8 @@ export function CreateTicketModal({
 }: CreateTicketModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaPost, numaGet } = useNumaRequest();
-  const { config, teamData, workUnits, refreshTickets, refreshCrmData } = useOps();
   const { user } = useAuth();
+  const { config, teamData, workUnits, refreshTickets, refreshCrmData } = useOps();
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [selectedTypeId, setSelectedTypeId] = useState<string>('');
@@ -302,7 +303,8 @@ export function CreateTicketModal({
       // Extract known field IDs into their canonical ticket properties
       const cfPriority = customFields['field-priority'] as TicketPriority | undefined;
       const cfAssigneeId = customFields['field-assignee'] ? String(customFields['field-assignee']) : null;
-      const cfReporterId = customFields['field-reporter'] ? String(customFields['field-reporter']) : null;
+      const currentUserSub = user?.decoded_tokens?.idToken?.sub ?? null;
+      const cfReporterId = customFields['field-reporter'] ? String(customFields['field-reporter']) : currentUserSub;
       const cfWorkUnitId = customFields['field-work-unit-id'] ? String(customFields['field-work-unit-id']) : null;
       const cfCustomerId = customFields['field-client'] ? String(customFields['field-client']) : null;
       const cfSupplierId = customFields['field-supplier'] ? String(customFields['field-supplier']) : null;

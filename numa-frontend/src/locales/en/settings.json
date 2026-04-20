@@ -724,12 +724,12 @@
         "textLabel": "Signature text"
       },
       "chatScrollMode": {
-        "label": "Chat Scroll Mode",
-        "help": "Determine how new messages scroll into view during generation.",
-        "auto": "Automatic",
-        "autoHelp": "Always pin to the bottom when new text arrives.",
-        "manual": "Manual",
-        "manualHelp": "Let me scroll freely without pinning to bottom."
+        "label": "Chat scroll behavior",
+        "help": "Control how the chat automatically scrolls to new messages.",
+        "auto": "Auto-scroll",
+        "autoHelp": "Chat automatically scrolls to the latest message.",
+        "manual": "Manual scroll",
+        "manualHelp": "Chat does not automatically scroll; you control the scroll position."
       }
     },
     "approval": {
@@ -1153,7 +1153,6 @@
       "showing": "Showing {{count}} notifications"
     }
   },
-  "numaLibraries": "Numa Libraries",
   "rebuildTranscripts": "Rebuild from S3",
   "rebuilding": "Rebuilding...",
   "rebuildResult": "Created: {{created}}, Skipped: {{skipped}}, Failed: {{failed}}",

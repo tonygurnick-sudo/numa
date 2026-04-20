@@ -483,15 +483,17 @@ const BoardView = () => {
       );
 
       try {
-        await OpsService.updateTicket(numaPut, ticketId, {
+        const updated = await OpsService.updateTicket(numaPut, ticketId, {
           teamId: ticket.teamId,
           stageId: newStageId,
           zoneId: newZoneId,
           order: newOrder,
           version: ticket.version,
         });
-        // Sync version numbers and server-derived fields (e.g. statusType)
-        await refreshTickets();
+        // Merge server response (updated version + server-derived fields) into
+        // local state instead of a full refresh to avoid DynamoDB eventual-consistency
+        // causing a brief yoyo back to the old position.
+        setTickets((prev) => prev.map((tk) => (tk.id === ticketId ? updated : tk)));
       } catch (err) {
         console.error('[BoardView] Failed to move ticket:', err);
         // Revert to server state on failure

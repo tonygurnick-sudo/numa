@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Form, Spinner, Table } from 'react-bootstrap';
+import { Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { ChevronDown, ChevronRight, Copy, Shield, Trash2 } from 'lucide-react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { adminListAgents, deleteAgent, duplicateAgent } from '../../Services/AgentsService';
@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 
 type Props = {
   onAgentDeleted?: () => void;
+  onAgentDuplicated?: () => void;
 };
 
 const scopeStyle = (scope: string) => {
@@ -21,7 +22,7 @@ const scopeStyle = (scope: string) => {
   }
 };
 
-export const AgentAdminPanel = ({ onAgentDeleted }: Props) => {
+export const AgentAdminPanel = ({ onAgentDeleted, onAgentDuplicated }: Props) => {
   const { t } = useTranslation('agents');
   const { numaGet, numaDelete, numaPost } = useNumaRequest();
   const [expanded, setExpanded] = useState(false);
@@ -29,6 +30,8 @@ export const AgentAdminPanel = ({ onAgentDeleted }: Props) => {
   const [loading, setLoading] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [scopeFilter, setScopeFilter] = useState<string>('all');
+  const [copyModalAgent, setCopyModalAgent] = useState<AdminAgentEntry | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
 
   useEffect(() => {
     if (!expanded) return;
@@ -50,11 +53,26 @@ export const AgentAdminPanel = ({ onAgentDeleted }: Props) => {
     }
   };
 
-  const handleDuplicate = async (agentId: string) => {
+  const reloadAgents = () => {
+    setLoading(true);
+    adminListAgents(numaGet)
+      .then(setAgents)
+      .catch(() => setAgents([]))
+      .finally(() => setLoading(false));
+  };
+
+  const handleDuplicateConfirm = async (targetVisibility: 'personal' | 'workspace') => {
+    if (!copyModalAgent) return;
+    setDuplicating(true);
     try {
-      await duplicateAgent(numaPost, agentId);
+      await duplicateAgent(numaPost, copyModalAgent.agentId, { targetVisibility });
+      setCopyModalAgent(null);
+      reloadAgents();
+      onAgentDuplicated?.();
     } catch (err) {
       console.error('Admin duplicate failed', err);
+    } finally {
+      setDuplicating(false);
     }
   };
 
@@ -194,7 +212,7 @@ export const AgentAdminPanel = ({ onAgentDeleted }: Props) => {
                         <Button
                           variant="outline-secondary"
                           size="sm"
-                          onClick={() => handleDuplicate(agent.agentId)}
+                          onClick={() => setCopyModalAgent(agent)}
                           title={t('adminPanel.copy')}
                           style={{ padding: '3px 10px', fontSize: '0.75rem', borderRadius: 6 }}
                         >
@@ -227,6 +245,36 @@ export const AgentAdminPanel = ({ onAgentDeleted }: Props) => {
           )}
         </div>
       )}
+      <Modal show={!!copyModalAgent} onHide={() => setCopyModalAgent(null)} centered size="sm">
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: '1rem' }}>{t('adminPanel.copyModal.title')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-3" style={{ fontSize: '0.85rem' }}>
+            {t('adminPanel.copyModal.description', { title: copyModalAgent?.title })}
+          </p>
+          <div className="d-grid gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={duplicating}
+              onClick={() => handleDuplicateConfirm('workspace')}
+            >
+              {duplicating ? <Spinner animation="border" size="sm" className="me-1" /> : null}
+              {t('adminPanel.copyModal.toWorkspace')}
+            </Button>
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              disabled={duplicating}
+              onClick={() => handleDuplicateConfirm('personal')}
+            >
+              {duplicating ? <Spinner animation="border" size="sm" className="me-1" /> : null}
+              {t('adminPanel.copyModal.toPersonal')}
+            </Button>
+          </div>
+        </Modal.Body>
+      </Modal>
     </div>
   );
 };

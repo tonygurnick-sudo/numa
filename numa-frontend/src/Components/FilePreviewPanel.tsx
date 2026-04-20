@@ -92,7 +92,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
   embedded = false,
   initialContent,
   convertDocxFn,
-  fullScreenBasePath = '/file-preview',
+  fullScreenBasePath: _fullScreenBasePath,
 }) => {
   const { t } = useTranslation('chat');
   // Content state
@@ -558,13 +558,25 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
           onOpenFullScreen={
             preview.type === 'file'
               ? () => {
-                  const params = new URLSearchParams({
-                    key: preview.fullPath,
-                    name: preview.filename,
-                    ext: preview.extension,
-                    bucket,
-                  });
-                  window.open(`${fullScreenBasePath}?${params.toString()}`, '_blank');
+                  if (initialContent != null && !preview.fullPath) {
+                    // Inline document: pass content via localStorage (sessionStorage is per-tab)
+                    const contentKey = `inline-doc-${Date.now()}`;
+                    localStorage.setItem(contentKey, initialContent);
+                    const params = new URLSearchParams({
+                      contentKey,
+                      name: preview.filename,
+                      ext: preview.extension,
+                    });
+                    window.open(`/file-preview?${params.toString()}`, '_blank');
+                  } else {
+                    const params = new URLSearchParams({
+                      key: preview.fullPath,
+                      name: preview.filename,
+                      ext: preview.extension,
+                      bucket,
+                    });
+                    window.open(`/file-preview?${params.toString()}`, '_blank');
+                  }
                 }
               : undefined
           }

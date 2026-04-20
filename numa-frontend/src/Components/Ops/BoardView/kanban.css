@@ -382,10 +382,10 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-radius: var(--ops-radius);
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   cursor: grab;
   border: 1px solid var(--ops-border);
-  padding: 14px 16px;
+  padding: 10px 12px;
   transition:
     box-shadow var(--ops-transition-smooth),
     border-color var(--ops-transition-smooth),
@@ -458,23 +458,25 @@
   border-color: #fca5a5;
 }
 
-/* Top row: type badge + meta counts */
+/* Top row: meta counts (type badge moved to footer) */
 .ticket-card-top {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
-  min-height: 22px;
+  margin-bottom: 4px;
+  min-height: 18px;
 }
 
-/* Type badge */
+/* Type badge (icon-only in footer) */
 .ticket-type-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 0.68rem;
+  justify-content: center;
+  font-size: 0.6rem;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 100px;
-  letter-spacing: 0.01em;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 4px;
   flex-shrink: 0;
 }
 
@@ -524,11 +526,11 @@
 
 /* Title */
 .ticket-title {
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.45;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.4;
   color: #111827;
-  margin: 0 0 10px 0;
+  margin: 0 0 8px 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -561,7 +563,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
+  margin-top: 4px;
   gap: 4px;
 }
 
@@ -619,6 +621,16 @@
 .ticket-avatar-empty {
   background: #d1d5db;
   color: #4b5563;
+}
+
+/* Sharpen avatars at card size — the global 2px border is too heavy at 24px */
+.ticket-card .profile-avatar-image {
+  border: none;
+}
+
+.ticket-card .profile-avatar-fallback {
+  border: none;
+  font-weight: 600;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

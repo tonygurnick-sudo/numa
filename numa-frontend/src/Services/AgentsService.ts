@@ -89,8 +89,13 @@ export const deleteAgent = async (numaDelete: NumaDelete, agentId: string): Prom
   await numaDelete(`${BASE_URL}/${encodeURIComponent(agentId)}`);
 };
 
-export const duplicateAgent = async (numaPost: NumaPost, agentId: string): Promise<AgentSummary> => {
-  const response = (await numaPost(`${BASE_URL}/${encodeURIComponent(agentId)}/duplicate`)) as AgentResponse;
+export const duplicateAgent = async (
+  numaPost: NumaPost,
+  agentId: string,
+  options?: { targetVisibility?: 'personal' | 'workspace' }
+): Promise<AgentSummary> => {
+  const body = options?.targetVisibility ? { targetVisibility: options.targetVisibility } : undefined;
+  const response = (await numaPost(`${BASE_URL}/${encodeURIComponent(agentId)}/duplicate`, body)) as AgentResponse;
   if (!response?.agent) {
     throw new Error(i18n.t('errors:agents.duplicateFailed'));
   }
