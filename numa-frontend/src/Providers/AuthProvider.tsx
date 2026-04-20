@@ -38,6 +38,7 @@ import { withPRM } from '../utils/prmUtils';
 import { useTranslation } from 'react-i18next';
 import { hasConfigInSession, fetchConfigAddtoSession } from '../Components/ConfigSetup';
 import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
+import { AdminSSOSettingsService } from '../Services/AdminSSOSettingsService';
 import { getFlag } from '../utils/featureFlags';
 
 const AuthContext = createContext(null);
@@ -411,6 +412,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       sessionStorage.removeItem('currentConversationId-v2');
       sessionStorage.removeItem('isWorkspaceConversation-v2');
       sessionStorage.removeItem('numa-chat-draft');
+      localStorage.removeItem('authMethod');
       sessionStartRef.current = 0;
       clearAllSwrCaches();
       tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
@@ -495,40 +497,64 @@ export const AuthProvider = ({ children, initialTokens }) => {
               return false;
             }
 
-            const SECRET_HASH = await fetchSecretHash(username);
+            // Federation-issued refresh tokens (Hosted-UI SAML/OAuth2 flow)
+            // cannot be refreshed via InitiateAuth REFRESH_TOKEN_AUTH — Cognito
+            // binds them to the /oauth2/token endpoint and rejects them here.
+            // We flag the session at login time (authMethod in localStorage)
+            // rather than inspecting idToken.identities, because linked users
+            // carry `identities` even on password logins. localStorage so new
+            // tabs restoring the same session see the flag. See MR 1316.
+            const authMethod = window.localStorage.getItem('authMethod');
+            let AccessToken: string | undefined;
+            let IdToken: string | undefined;
 
-            const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+            if (authMethod === 'sso') {
+              const refreshed = await AdminSSOSettingsService.refreshTokenExchange(refreshToken);
+              AccessToken = refreshed.access_token;
+              IdToken = refreshed.id_token;
+            } else {
+              const SECRET_HASH = await fetchSecretHash(username);
 
-            const authParameters: Record<string, string> = {
-              REFRESH_TOKEN: refreshToken,
-              SECRET_HASH: SECRET_HASH,
-            };
+              const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
 
-            // When device tracking is enabled, Cognito requires DEVICE_KEY
-            // in REFRESH_TOKEN_AUTH requests — without it the refresh token
-            // is rejected with "Invalid Refresh Token".
-            const deviceKey = getStoredDeviceKey();
-            if (deviceKey) {
-              authParameters.DEVICE_KEY = deviceKey;
+              const authParameters: Record<string, string> = {
+                REFRESH_TOKEN: refreshToken,
+                SECRET_HASH: SECRET_HASH,
+              };
+
+              // When device tracking is enabled, Cognito requires DEVICE_KEY
+              // in REFRESH_TOKEN_AUTH requests — without it the refresh token
+              // is rejected with "Invalid Refresh Token".
+              const deviceKey = getStoredDeviceKey();
+              if (deviceKey) {
+                authParameters.DEVICE_KEY = deviceKey;
+              }
+
+              const params = {
+                AuthFlow: 'REFRESH_TOKEN_AUTH',
+                ClientId: CLIENT_ID,
+                AuthParameters: authParameters,
+              };
+
+              const command = new InitiateAuthCommand(params);
+              const response = await cognitoClient.send(command);
+
+              if (!response.AuthenticationResult) {
+                // Cognito responded but without tokens — this is a permanent auth failure, not a network issue
+                const err = new Error('Token refresh failed - no AuthenticationResult in response');
+                err.name = 'TokenRefreshException';
+                throw err;
+              }
+
+              AccessToken = response.AuthenticationResult.AccessToken;
+              IdToken = response.AuthenticationResult.IdToken;
             }
 
-            const params = {
-              AuthFlow: 'REFRESH_TOKEN_AUTH',
-              ClientId: CLIENT_ID,
-              AuthParameters: authParameters,
-            };
-
-            const command = new InitiateAuthCommand(params);
-            const response = await cognitoClient.send(command);
-
-            if (!response.AuthenticationResult) {
-              // Cognito responded but without tokens — this is a permanent auth failure, not a network issue
-              const err = new Error('Token refresh failed - no AuthenticationResult in response');
+            if (!AccessToken || !IdToken) {
+              const err = new Error('Token refresh failed - missing AccessToken or IdToken in response');
               err.name = 'TokenRefreshException';
               throw err;
             }
-
-            const { AccessToken, IdToken } = response.AuthenticationResult;
 
             // Update tokensRef directly
             tokensRef.current = {
@@ -2263,6 +2289,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const now = Date.now().toString();
     localStorage.setItem('lastTokenValidation', now);
     localStorage.setItem('lastGroupCheck', now);
+
+    // Default any login passing through here to 'password' — the SSO callback
+    // handler overrides this to 'sso' after awaiting loginWithTokens, so SSO
+    // flows still get routed to the OAuth2 refresh endpoint. localStorage (not
+    // sessionStorage) so the flag survives tab restore and is visible to
+    // sibling tabs, matching how accessToken/refreshToken are scoped.
+    localStorage.setItem('authMethod', 'password');
 
     return { features: features || [] };
   };

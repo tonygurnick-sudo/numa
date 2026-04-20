@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Spinner } from 'react-bootstrap';
@@ -8,6 +8,14 @@ import { AdminSSOSettingsService } from '../../Services/AdminSSOSettingsService'
 interface SSOCallbackHandlerProps {
   children: ReactNode;
 }
+
+// Module-level guard keyed by the Cognito authorization code. Cognito codes are
+// single-use — a second exchange of the same code returns `invalid_grant` (400)
+// and previously kicked the user back to /login even though the first call had
+// already succeeded. A component-local ref was insufficient because it resets
+// on unmount+remount (e.g. parent re-renders that collapse/expand the route
+// tree). A module-level Set survives re-mounts and any other effect re-entry.
+const processedSsoCodes = new Set<string>();
 
 /**
  * Intercepts the Cognito hosted UI OAuth callback on the root `/` route.
@@ -22,20 +30,27 @@ interface SSOCallbackHandlerProps {
 const SSOCallbackHandler = ({ children }: SSOCallbackHandlerProps) => {
   const { t } = useTranslation('auth');
   const navigate = useNavigate();
-  const { loginWithTokens } = useAuth();
+  const { loginWithTokens, user } = useAuth();
   // Detect ?code= synchronously on initial render to prevent Navigate from firing before useEffect
   const hasCodeParam = new URLSearchParams(window.location.search).has('code');
   const [processing, setProcessing] = useState(hasCodeParam);
   const [error, setError] = useState<string | null>(null);
-  const processedRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
 
     // No SSO callback — let children render
-    if (!code || processedRef.current) return;
-    processedRef.current = true;
+    if (!code) return;
+
+    // Double-fire guard: if we've already started exchanging this exact code
+    // (same tab, this module's lifetime), don't do it again. Prevents remount
+    // races from burning Cognito's single-use code.
+    if (processedSsoCodes.has(code)) {
+      setProcessing(false);
+      return;
+    }
+    processedSsoCodes.add(code);
 
     // Clear the code from the URL immediately to prevent replay
     window.history.replaceState({}, '', window.location.pathname);
@@ -70,10 +85,24 @@ const SSOCallbackHandler = ({ children }: SSOCallbackHandlerProps) => {
 
         console.log('SSO login: token exchange successful');
         const result = await loginWithTokens(tokenData);
+        // Mark the session as federated so refreshTokens() routes through the
+        // OAuth2 /token proxy instead of InitiateAuth REFRESH_TOKEN_AUTH (which
+        // Cognito rejects for federation-issued refresh tokens). Set AFTER
+        // loginWithTokens because handleLoginSuccess writes 'password' by
+        // default; this overrides it. Cleared on logout().
+        localStorage.setItem('authMethod', 'sso');
         navigate(result.features?.includes('chat') ? '/chat' : '/dash', { replace: true });
       } catch (err) {
         console.error('SSO token exchange failed:', err);
         sessionStorage.removeItem('sso_oauth_state');
+        // If an earlier exchange for this code already succeeded, the user is
+        // now authenticated — don't kick them back to /login just because a
+        // duplicate request got `invalid_grant`.
+        if (user) {
+          setProcessing(false);
+          navigate(user.features?.includes('chat') ? '/chat' : '/dash', { replace: true });
+          return;
+        }
         setError((err as Error).message || t('login.ssoCallback.failed'));
         setProcessing(false);
         setTimeout(() => navigate('/login', { replace: true }), 3000);
@@ -81,7 +110,7 @@ const SSOCallbackHandler = ({ children }: SSOCallbackHandlerProps) => {
     };
 
     exchangeCode();
-  }, [loginWithTokens, navigate, t]);
+  }, [loginWithTokens, navigate, t, user]);
 
   if (processing) {
     return (

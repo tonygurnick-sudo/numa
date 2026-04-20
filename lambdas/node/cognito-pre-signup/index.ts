@@ -21,40 +21,53 @@ export const handler: PreSignUpTriggerHandler = async (event) => {
     return event;
   }
 
-  const email = event.request.userAttributes.email;
-  if (!email) {
-    console.warn('SSO pre-signup: no email in user attributes, skipping link');
-    return event;
-  }
-
-  // event.userName is "ProviderName_providerUserId" (e.g. "AzureAD_abc123")
+  // event.userName is "ProviderName_providerUserId" (e.g. "AzureAD_abc123",
+  // "GoogleWorkspace_user@example.com"). For SAML the providerUserId is the
+  // NameID — which is the user's email for every IdP config we support.
   const parts = event.userName.split('_');
   const providerName = parts[0];
   const providerUserId = parts.slice(1).join('_');
 
+  // Prefer the mapped SAML `email` attribute, but fall back to NameID for
+  // IdPs whose default SAML app does not emit a dedicated email attribute
+  // (Google Workspace's default app only emits NameID). Cognito eventually
+  // derives email from NameID when the user is materialised, but that happens
+  // AFTER PreSignUp — without this fallback we'd skip linking and Cognito
+  // would create a duplicate EXTERNAL_PROVIDER account.
+  let email = event.request.userAttributes.email?.toLowerCase();
+  if (!email && providerUserId.includes('@')) {
+    email = providerUserId.toLowerCase();
+    console.log(
+      JSON.stringify({ _name: 'SSO_EMAIL_FROM_NAMEID', userName: event.userName, email, provider: providerName })
+    );
+  }
+
+  if (!email) {
+    console.warn(`SSO pre-signup: no email in user attributes or NameID for userName=${event.userName}, skipping link`);
+    return event;
+  }
+
   console.log(`SSO pre-signup: email=${email}, provider=${providerName}, triggerSource=${event.triggerSource}`);
 
   try {
-    // Look up existing user by email in this User Pool
+    // Look up existing user by email. Fetch a handful so we can reliably pick
+    // the native account even if stale EXTERNAL_PROVIDER duplicates exist.
     const listResult = await getCognito().send(
       new ListUsersCommand({
         UserPoolId: event.userPoolId,
         Filter: `email = "${email}"`,
-        Limit: 1,
+        Limit: 10,
       })
     );
 
     const existingUsers = listResult.Users || [];
+    const nativeUser = existingUsers.find((u) => u.UserStatus !== 'EXTERNAL_PROVIDER');
 
-    if (existingUsers.length > 0) {
-      const existingUser = existingUsers[0];
+    if (nativeUser) {
+      const existingUser = nativeUser;
       const existingSub = existingUser.Attributes?.find((a) => a.Name === 'sub')?.Value;
 
-      // Only link if the existing user is a native (non-federated) user
-      // Avoid linking to another federated user
-      const isNativeUser = !existingUser.UserStatus?.includes('EXTERNAL_PROVIDER');
-
-      if (isNativeUser && existingSub) {
+      if (existingSub) {
         console.log(JSON.stringify({ _name: 'SSO_LINK_ATTEMPT', email, existingSub, provider: providerName }));
 
         try {

@@ -963,6 +963,20 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'POST', path: 'auth/sso/token-exchange' },
     });
 
+    // SSO Token Refresh — same client_secret proxy pattern. Federation refresh
+    // tokens can only be refreshed against the OAuth2 /token endpoint, not via
+    // Cognito InitiateAuth REFRESH_TOKEN_AUTH, so SSO-authenticated sessions
+    // route their periodic refreshes here while native (SRP) sessions keep
+    // using InitiateAuth in the browser.
+    this.addLambdaFunction(this, 'sso-token-refresh', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/sso-token-refresh',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: ssoTokenExchangeEnv,
+      route: { verb: 'POST', path: 'auth/sso/token-refresh' },
+    });
+
     // User Chat Settings API (per-user defaults for tools, KBs, integrations)
     const chatSettingsEnv = {
       CLIENT_NAME: props.clientName,

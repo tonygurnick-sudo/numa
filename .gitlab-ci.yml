@@ -138,6 +138,7 @@ pre-commit:
         - lambdas/node/scim-endpoint
         - lambdas/node/sso-group-mapper
         - lambdas/node/sso-token-exchange
+        - lambdas/node/sso-token-refresh
         - lambdas/node/step-function-shim
         - lambdas/node/system-user-creator
         - lambdas/node/token-adjuster

@@ -9,9 +9,10 @@ import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 
 const TABLE_NAME = process.env.GROUP_MAPPING_TABLE_NAME as string;
 
-// Numa has exactly two role groups. 'admin' is a strict superset of 'standard'
-// (features-wise), so users in 'admin' don't also need 'standard'.
-const STANDARD = 'standard';
+// Numa has exactly two roles: 'admin' and 'standard'. Only 'admin' is a real
+// Cognito group — 'standard' is the implicit default, synthesized by the
+// token-adjuster Lambda when a user has no Numa-role group membership. This
+// lambda therefore only needs to manage 'admin' promotion.
 const ADMIN = 'admin';
 
 let cognitoClient: CognitoIdentityProviderClient | null = null;
@@ -40,10 +41,11 @@ interface GroupMappingConfig {
 /**
  * Post-Authentication trigger for federated (SSO) sign-ins.
  *
- * Enforced policy: every SSO user is at minimum in the 'standard' group. If an
- * optional IdP group-claim mapping is configured and matches, the user is also
- * added to 'admin'. Admin membership is never auto-removed — manual promotion
- * (or prior IdP-claim match) sticks until an operator revokes it explicitly.
+ * Policy: SSO users default to 'standard' (handled implicitly by the
+ * token-adjuster Lambda — no action needed here). If an IdP group-claim
+ * mapping is configured and matches, the user is promoted to 'admin'. Admin
+ * membership is never auto-removed — manual promotion (or prior IdP-claim
+ * match) sticks until an operator revokes it explicitly.
  */
 export const handler: PostAuthenticationTriggerHandler = async (event) => {
   const identities = event.request.userAttributes['identities'];
@@ -83,12 +85,6 @@ export const handler: PostAuthenticationTriggerHandler = async (event) => {
       console.error(`SSO group-mapper: failed to add ${email} to group '${group}':`, err);
     }
   };
-
-  // Default-role enforcement: every SSO user must be in 'standard' or 'admin'.
-  // Admins stay admins; anyone else gets 'standard' as a baseline.
-  if (!currentGroups.includes(ADMIN) && !currentGroups.includes(STANDARD)) {
-    await addToGroup(STANDARD, 'default role');
-  }
 
   // Optional: IdP group-claim mapping can promote users to 'admin'.
   let config: GroupMappingConfig | undefined;
@@ -135,11 +131,11 @@ export const handler: PostAuthenticationTriggerHandler = async (event) => {
     }
   }
 
-  for (const group of mappedGroups) {
-    if (group !== ADMIN && group !== STANDARD) continue;
-    if (!currentGroups.includes(group)) {
-      await addToGroup(group, `IdP claim '${config.groupClaimName}'`);
-    }
+  // Only 'admin' is a real Cognito group that can be assigned. Mappings to
+  // 'standard' are ignored — that role is implicit via the token-adjuster
+  // fallback.
+  if (mappedGroups.has(ADMIN) && !currentGroups.includes(ADMIN)) {
+    await addToGroup(ADMIN, `IdP claim '${config.groupClaimName}'`);
   }
 
   console.log(
