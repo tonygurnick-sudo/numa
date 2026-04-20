@@ -159,7 +159,13 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
 
   const email = event.request.userAttributes.email;
   const userSub = event.request.userAttributes.sub;
-  const groups = groupsToOverride && groupsToOverride.length > 0 ? groupsToOverride : ['standard'];
+
+  // Cognito auto-creates a per-IdP group (e.g. "us-east-1_abc_GoogleWorkspace")
+  // for every federated sign-in. Those aren't Numa roles — ignore them when
+  // deciding the effective role so SSO users fall through to 'standard' the
+  // same way native users with no group do.
+  const numaRoleGroups = (groupsToOverride || []).filter((g) => !g.startsWith(`${event.userPoolId}_`));
+  const groups = numaRoleGroups.length > 0 ? numaRoleGroups : ['standard'];
 
   // Check for MFA reset grace period
   const graceExpiresAt = await checkMfaResetGracePeriod(userSub);

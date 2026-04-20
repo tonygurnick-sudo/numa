@@ -14,6 +14,7 @@ export interface SSOConfig {
   providerName?: string;
   metadataUrl?: string | null;
   hasMetadataXml?: boolean;
+  metadataXml?: string | null;
   oidcIssuer?: string | null;
   hasOidcClientSecret?: boolean;
   attributeMapping?: Record<string, string>;
@@ -172,6 +173,35 @@ export const AdminSSOSettingsService = {
     if (!resp.ok) {
       const errorData = await resp.json().catch(() => ({}));
       throw new Error((errorData as { error?: string }).error || 'Token exchange failed');
+    }
+    return resp.json();
+  },
+
+  /**
+   * Refresh federated (SSO) tokens via Cognito's OAuth2 /token endpoint.
+   * Required instead of InitiateAuth REFRESH_TOKEN_AUTH for users who logged
+   * in through the Hosted UI — Cognito rejects federation refresh tokens
+   * against InitiateAuth. Response mirrors the OAuth2 spec (no refresh_token
+   * returned; the existing one remains valid).
+   */
+  async refreshTokenExchange(refreshToken: string): Promise<{ access_token: string; id_token: string }> {
+    const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+    const resp = await fetch(`${API_ENDPOINT}/auth/sso/token-refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!resp.ok) {
+      const errorData = await resp.json().catch(() => ({}));
+      const err = new Error((errorData as { error?: string }).error || 'Token refresh failed');
+      // Mark 5xx / network-ish responses as transient so the retry/backoff
+      // path in AuthProvider.refreshTokens treats them like InitiateAuth's
+      // transient errors rather than destroying the session. 4xx from Cognito
+      // (invalid_grant, invalid_token) stays permanent.
+      if (resp.status >= 500) {
+        (err as Error & { isTransient?: boolean }).isTransient = true;
+      }
+      throw err;
     }
     return resp.json();
   },

@@ -404,6 +404,10 @@ async function handleGetConfig(event: {
       providerName: config.providerName,
       metadataUrl: config.metadataUrl || null,
       hasMetadataXml: !!config.metadataXml,
+      // Return the raw XML so the admin wizard can show the current value when
+      // editing (paste-to-replace UX only works if you can see what's there).
+      // Endpoint is admin-gated; SAML IdP metadata is not a secret in any case.
+      metadataXml: config.metadataXml || null,
       oidcIssuer: config.oidcIssuer || null,
       hasOidcClientSecret: !!config.oidcClientSecret,
       attributeMapping: config.attributeMapping,

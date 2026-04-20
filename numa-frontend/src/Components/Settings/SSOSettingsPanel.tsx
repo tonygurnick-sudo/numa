@@ -189,7 +189,7 @@ const SSOSettingsPanel = ({ numaGet, numaPut, numaPost, numaDelete }: SSOSetting
       setIdpType((config.idpType as IdpType) || 'azure-ad');
       setProviderProtocol(config.providerProtocol || 'SAML');
       setMetadataUrl(config.metadataUrl || '');
-      setMetadataXml('');
+      setMetadataXml(config.metadataXml || '');
       setOidcIssuer(config.oidcIssuer || '');
       setOidcClientId('');
       setOidcClientSecret('');
