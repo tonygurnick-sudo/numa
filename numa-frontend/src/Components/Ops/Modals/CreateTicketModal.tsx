@@ -3,6 +3,7 @@ import { Modal, Form, Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
+import { useAuth } from '../../../Providers/AuthProvider';
 import * as OpsService from '../../../Services/OpsService';
 import { RichTextEditor } from '../Shared/RichTextEditor';
 import { DynamicField } from '../Shared/DynamicField';
@@ -103,6 +104,7 @@ export function CreateTicketModal({
   const { t } = useTranslation('ops');
   const { numaPost, numaGet } = useNumaRequest();
   const { config, teamData, workUnits, refreshTickets, refreshCrmData } = useOps();
+  const { user } = useAuth();
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [selectedTypeId, setSelectedTypeId] = useState<string>('');
@@ -224,9 +226,13 @@ export function CreateTicketModal({
     setSelectedTypeId('');
     setTitle('');
     setDescription('');
+
+    const currentUserId = user?.decoded_tokens?.idToken?.sub as string | undefined;
+
     setCustomFields({
       ...(prefilledCustomerId ? { 'field-client': prefilledCustomerId } : {}),
       ...(prefilledSupplierId ? { 'field-supplier': prefilledSupplierId } : {}),
+      ...(currentUserId ? { 'field-reporter': currentUserId } : {}),
     });
     setInitialComment('');
     setTagsInput('');
@@ -240,7 +246,7 @@ export function CreateTicketModal({
     } else {
       setStageId('');
     }
-  }, [teamData, prefilledCustomerId, prefilledSupplierId, prefilledZoneId]);
+  }, [teamData, prefilledCustomerId, prefilledSupplierId, prefilledZoneId, user?.decoded_tokens?.idToken?.sub]);
 
   useEffect(() => {
     if (!show) resetForm();
