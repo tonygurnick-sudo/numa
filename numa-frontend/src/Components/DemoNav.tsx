@@ -24,7 +24,7 @@ import {
   UserRound,
   Zap,
 } from 'lucide-react';
-import DefaultLogo from '../../public/numa-logo.svg';
+import DefaultLogo from '../../public/asknuma-icon.png';
 
 interface DemoNavProps {
   isCollapsed: boolean;

@@ -3,11 +3,11 @@ Public Demo Chat Proxy Lambda
 
 Unauthenticated proxy for the public demo chat page. Bridges CloudFront HTTP
 requests to AgentCore SDK calls, similar to the workspace-chat-agent-proxy but
-with no JWT validation, forced Haiku 4.5 model, and daily cost limits.
+with no JWT validation, forced Sonnet 4.6 model, and daily cost limits.
 
 Key differences from the workspace proxy:
 - No authentication (no Cognito, no CloudFront secret)
-- Forced model: Haiku 4.5 (overrides any frontend request)
+- Forced model: Sonnet 4.6 (overrides any frontend request)
 - Daily cost limit enforced via DynamoDB counters
 - Simple per-IP rate limiting
 - Synthetic user identity (public-demo-user)
@@ -57,8 +57,8 @@ DEMO_S3_ROLE_ARN = os.environ.get("DEMO_S3_ROLE_ARN", "")
 # Fixed synthetic user identity for all public demo requests
 PUBLIC_DEMO_USER_SUB = "public-demo-user"
 
-# Forced model: Haiku 4.5 (bare ID - workspace agent will regionalize)
-FORCED_MODEL_ID = "anthropic.claude-haiku-4-5-20251001-v1:0"
+# Forced model: Sonnet 4.6 (bare ID - workspace agent will regionalize)
+FORCED_MODEL_ID = "anthropic.claude-sonnet-4-6"
 
 # ── Request Constraints ───────────────────────────────────────────────────────
 
@@ -306,7 +306,7 @@ def _extract_cost_from_event(event_bytes: bytes) -> float | None:
 def _sanitize_request_body(body: dict) -> dict:
     """Sanitize and constrain the request body for the public demo.
 
-    Forces Haiku 4.5 model, restricts tools, strips enterprise features.
+    Forces Sonnet 4.6 model, restricts tools, strips enterprise features.
     Returns a new dict (does not mutate the input).
     """
     sanitized = {
@@ -315,7 +315,7 @@ def _sanitize_request_body(body: dict) -> dict:
         "conversationId": body.get("conversationId", ""),
         "timezone": body.get("timezone", "UTC"),
         "todayString": body.get("todayString", ""),
-        # Force Haiku 4.5 -- ignore any model the frontend sends
+        # Force Sonnet 4.6 -- ignore any model the frontend sends
         "modelId": FORCED_MODEL_ID,
         # Use the demo-specific agent type (tailored identity + restricted tools)
         "type": "numa-chat-demo",
@@ -649,7 +649,7 @@ async def invocations(request: Request):
     No authentication required. Enforces:
     - Rate limiting per IP
     - Daily cost limit
-    - Forced Haiku 4.5 model
+    - Forced Sonnet 4.6 model
     - Restricted tool set
     - Message length limit
     """
