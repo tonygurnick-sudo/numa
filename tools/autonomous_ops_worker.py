@@ -185,15 +185,15 @@ def main():
     )
     parser.add_argument(
         "--client",
-        default="nd-labs",
-        help="Client name prefix for DynamoDB (default: nd-labs)",
+        default="numa",
+        help="Client name prefix for DynamoDB (default: numa)",
     )
     parser.add_argument(
         "--region", default="us-east-1", help="AWS Region (default: us-east-1)"
     )
     parser.add_argument(
         "--profile",
-        default="q-demo",
+        default="arcanum-prod-numa-demo",
         help="AWS Profile to use for boto3 authentication",
     )
 
