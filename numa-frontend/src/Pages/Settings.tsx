@@ -27,7 +27,7 @@ import BrandingAdminPanel from '../Components/Branding/BrandingAdminPanel';
 import UsageAnalyticsPanel from '../Components/UsageAnalytics/UsageAnalyticsPanel';
 import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
-import { NumaLibrariesPanel } from '../Components/Settings/NumaLibrariesPanel';
+
 import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab';
 // CHOSE HEAD: TranscriptionService import needed for rebuild button and filesTable loading.
 // 3af3ef8e only imported TranscriptionJobsPanel (no service). To revert: remove TranscriptionService import.
@@ -1640,24 +1640,6 @@ export default function SettingsPage() {
                       </Form>
                     )}
                   </div>
-                </Tab>
-              )}
-              {isAdmin && (
-                <Tab
-                  eventKey="numa-libraries"
-                  title={
-                    <span>
-                      <i className="bi bi-journal-code me-2"></i>
-                      {t('numaLibraries', 'Numa Libraries')}
-                    </span>
-                  }
-                >
-                  <NumaLibrariesPanel
-                    globalChatSettings={globalChatSettings}
-                    setGlobalChatSettings={setGlobalChatSettings}
-                    setChatDefaultsDirty={setChatDefaultsDirty}
-                    isAdmin={isAdmin}
-                  />
                 </Tab>
               )}
               {isAdmin && (
