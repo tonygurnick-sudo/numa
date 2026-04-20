@@ -650,6 +650,67 @@ def handle_connect_synergy_download(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# NetSuite MCP Handler
+# ---------------------------------------------------------------------------
+
+
+def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute a JSON-RPC 2.0 MCP method against NetSuite AI Connector Service."""
+    import asyncio
+
+    try:
+        user_sub = params.get("user_sub", "")
+        method = params.get("method", "").strip()
+        arguments = params.get("arguments", {})
+
+        if not user_sub:
+            return {"status": "error", "result": None, "error": "Missing user_sub"}
+        if not method:
+            return {"status": "error", "result": None, "error": "Missing method"}
+
+        async def do_call():
+            from oauth_providers import create_provider
+
+            access_token = await get_oauth_token("netsuite", user_sub)
+            if not access_token:
+                return {
+                    "status": "error",
+                    "result": None,
+                    "error": "No valid NetSuite OAuth token. Please connect your account first.",
+                }
+
+            vault_data = _get_user_consolidated_vault(user_sub)
+            user_secrets = vault_data.get("secrets", {}) if vault_data else {}
+            entry = user_secrets.get("oauth-netsuite")
+            if not entry:
+                return {
+                    "status": "error",
+                    "result": None,
+                    "error": "Missing NetSuite provider credentials in vault.",
+                }
+
+            fields = entry.get("fields") or entry
+            provider = create_provider(
+                "netsuite",
+                fields.get("client_id", ""),
+                client_secret=None,
+                credentials=fields,
+            )
+
+            try:
+                result = await provider._mcp_call(access_token, method, arguments)  # type: ignore
+                return {"status": "success", "result": result, "error": None}
+            except Exception as e:
+                return {"status": "error", "result": None, "error": str(e)}
+
+        return asyncio.run(do_call())
+
+    except Exception as e:
+        logger.error("Error in connect_netsuite_mcp", error=str(e), exc_info=True)
+        return {"status": "error", "result": None, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # Generic HTTP handler (for ad-hoc OAuth APIs)
 # ---------------------------------------------------------------------------
 

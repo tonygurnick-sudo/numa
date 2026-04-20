@@ -31,6 +31,7 @@ import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from tools import (
+    handle_connect_netsuite_mcp,
     handle_connect_request,
     handle_connect_status,
     handle_connect_synergy_download,
@@ -96,6 +97,7 @@ OAUTH_TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "connect_synergy_search": handle_connect_synergy_search,
     "connect_synergy_download": handle_connect_synergy_download,
     "connect_request": handle_connect_request,
+    "connect_netsuite_mcp": handle_connect_netsuite_mcp,
 }
 
 

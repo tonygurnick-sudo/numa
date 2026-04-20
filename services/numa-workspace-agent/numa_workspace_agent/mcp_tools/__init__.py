@@ -9,6 +9,19 @@ from numa_workspace_agent.mcp_tools.integrations import (
     proxy_request,
     run_action,
 )
+from numa_workspace_agent.mcp_tools.netsuite import (
+    ns_createRecord,
+    ns_getRecord,
+    ns_getRecordTypeMetadata,
+    ns_getSubsidiaries,
+    ns_getSuiteQLMetadata,
+    ns_listAllReports,
+    ns_listSavedSearches,
+    ns_runCustomSuiteQL,
+    ns_runReport,
+    ns_runSavedSearch,
+    ns_updateRecord,
+)
 from numa_workspace_agent.mcp_tools.numa_tool import numa_tool
 from numa_workspace_agent.mcp_tools.vault import vault
 
@@ -21,6 +34,17 @@ __all__ = [
     "connectors",
     "_invoke_connect_tool",
     "vault",
+    "ns_getRecordTypeMetadata",
+    "ns_getRecord",
+    "ns_listAllReports",
+    "ns_runReport",
+    "ns_getSubsidiaries",
+    "ns_listSavedSearches",
+    "ns_runSavedSearch",
+    "ns_runCustomSuiteQL",
+    "ns_getSuiteQLMetadata",
+    "ns_createRecord",
+    "ns_updateRecord",
 ]
 
 # Conditionally export numa_ops_tool when the feature flag is enabled.
