@@ -217,8 +217,8 @@ def main():
     )
     parser.add_argument(
         "--client",
-        default="numa",
-        help="Client name prefix for DynamoDB (default: numa)",
+        default="hq",
+        help="Client name prefix for DynamoDB (default: hq)",
     )
     parser.add_argument(
         "--region", default="us-east-1", help="AWS Region (default: us-east-1)"
