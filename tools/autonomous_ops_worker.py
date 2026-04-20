@@ -185,14 +185,16 @@ def main():
     )
     parser.add_argument(
         "--client",
-        default="hq",
-        help="Client name prefix for DynamoDB (default: hq)",
+        default="nd-labs",
+        help="Client name prefix for DynamoDB (default: nd-labs)",
     )
     parser.add_argument(
         "--region", default="us-east-1", help="AWS Region (default: us-east-1)"
     )
     parser.add_argument(
-        "--profile", default=None, help="AWS Profile to use for boto3 authentication"
+        "--profile",
+        default="q-demo",
+        help="AWS Profile to use for boto3 authentication",
     )
 
     args = parser.parse_args()
