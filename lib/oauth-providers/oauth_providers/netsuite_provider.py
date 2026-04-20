@@ -36,7 +36,11 @@ class NetSuiteProvider(OAuthProvider):
             or self.credentials.get("accountId", "")
             or self.credentials.get("account_id", "")
         )
-        self.base_url = f"https://{self.account_id}.suitetalk.api.netsuite.com"
+
+        # NetSuite API domains strictly require account IDs to be lowercased
+        # and underscores replaced with hyphens (e.g. 1234567_SB1 -> 1234567-sb1)
+        sanitized_account_id = self.account_id.lower().replace("_", "-")
+        self.base_url = f"https://{sanitized_account_id}.suitetalk.api.netsuite.com"
         self.mcp_url = f"{self.base_url}{self.MCP_PATH}"
 
     @property
