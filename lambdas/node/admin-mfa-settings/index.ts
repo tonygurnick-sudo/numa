@@ -1192,11 +1192,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       if (!userSub) {
         return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
       }
-      // Check recovery codes feature is enabled
+      // Check recovery codes feature is enabled — default is disabled if no config record exists
       const configRes = await ddb.send(
         new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'recovery-codes-config' } })
       );
-      if (configRes.Item && !configRes.Item.enabled) {
+      if (!configRes.Item || !configRes.Item.enabled) {
         return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Recovery codes are not enabled' }) };
       }
       // Verify the user actually has MFA enabled — codes are meaningless without a TOTP secret
@@ -1274,12 +1274,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         };
       }
 
-      // Check recovery codes feature is enabled (default to enabled when no record exists,
-      // consistent with the GET /settings/mfa and generate endpoints)
+      // Check recovery codes feature is enabled — default is disabled if no config record exists
       const configRes = await ddb.send(
         new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'recovery-codes-config' } })
       );
-      if (configRes.Item && !configRes.Item.enabled) {
+      if (!configRes.Item || !configRes.Item.enabled) {
         return {
           statusCode: 403,
           headers: HEADERS,
@@ -1496,11 +1495,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
       }
 
-      // Check if feature is enabled
+      // Check if feature is enabled — default is disabled if no config record exists
       const configRes = await ddb.send(
         new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'recovery-codes-config' } })
       );
-      if (configRes.Item && !configRes.Item.enabled) {
+      if (!configRes.Item || !configRes.Item.enabled) {
         return {
           statusCode: 200,
           headers: HEADERS,
