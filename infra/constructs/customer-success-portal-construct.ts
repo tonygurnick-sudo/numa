@@ -612,6 +612,12 @@ export class CustomerSuccessPortalConstruct extends Construct {
             key: relativePath,
             source,
             sourceHash: Fn.filemd5(source),
+            // `source` resolves to the developer's absolute filesystem path, which
+            // causes spurious drift every time someone else runs plan from a
+            // different working copy. `sourceHash` (filemd5) is the real change
+            // detector -- a real content change updates the object; the path
+            // string is purely "where to read the bytes from at apply time".
+            lifecycle: { ignoreChanges: ['source'] },
           });
         });
     } catch {

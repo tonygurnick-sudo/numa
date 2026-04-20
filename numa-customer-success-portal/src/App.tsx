@@ -31,6 +31,7 @@ import DeploymentLogs from './pages/DeploymentLogs';
 import Activity from './pages/Activity';
 import Tools from './pages/Tools';
 import Docs from './pages/Docs';
+import PublicDemoConversations from './pages/PublicDemoConversations';
 
 function App() {
   return (
@@ -74,6 +75,7 @@ function App() {
                       <Route path="/deployments/:id/logs" element={<DeploymentLogs />} />
                       <Route path="/deployments/group/:groupRunId" element={<GroupDeploymentDetail />} />
                       <Route path="/activity" element={<Activity />} />
+                      <Route path="/public-demo-conversations/:clientName" element={<PublicDemoConversations />} />
                     </Routes>
                   </Container>
                 </div>

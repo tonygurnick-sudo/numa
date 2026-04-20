@@ -41,6 +41,7 @@ import { extractSingleDocBlock } from '../utils/streamingProcessors';
 import type { SDKEventContext, WorkspaceChatMessage } from '../types/workspaceChatTypes';
 import type { FilePreview } from '../hooks/useFilePreviewProcessor';
 import numaLogo from '/numa-logo.svg?url';
+import asknumaIcon from '/asknuma-icon.png?url';
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ export const PublicDemoChat = () => {
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isFirstMessagePending, setIsFirstMessagePending] = useState(false);
+  const [showTrialModal, setShowTrialModal] = useState(false);
   const [stagedFiles, setStagedFiles] = useState<
     Array<{ kind: 'file'; filename: string; path: string; size: number; uploadedAt: number }>
   >([]);
@@ -103,6 +105,25 @@ export const PublicDemoChat = () => {
       setIsFirstMessagePending(false);
     }
   }, [messages, isFirstMessagePending]);
+
+  // Prompt the user to sign up for a free trial after they've sent a few
+  // messages -- the demo has had enough time to impress by this point.
+  // Once dismissed (via localStorage) we never re-show on this browser.
+  const TRIAL_MODAL_DISMISSED_KEY = 'numa_demo_trial_modal_dismissed';
+  const TRIAL_MODAL_TRIGGER_COUNT = 3;
+  useEffect(() => {
+    if (showTrialModal) return;
+    if (localStorage.getItem(TRIAL_MODAL_DISMISSED_KEY) === 'true') return;
+    const userMessageCount = messages.filter((m) => m.role === 'user').length;
+    if (userMessageCount >= TRIAL_MODAL_TRIGGER_COUNT) {
+      setShowTrialModal(true);
+    }
+  }, [messages, showTrialModal]);
+
+  const handleDismissTrialModal = useCallback(() => {
+    setShowTrialModal(false);
+    localStorage.setItem(TRIAL_MODAL_DISMISSED_KEY, 'true');
+  }, []);
 
   // Fetch scoped credentials on mount so bucket/region are available for file reference rendering.
   // Also populate storage so the upload service can find bucket/region/userSub.
@@ -340,8 +361,10 @@ export const PublicDemoChat = () => {
   );
 
   // ── Quick Actions (demo-specific) ──────────────────────────────────────
+  // Prompts are short triggers -- the actual flow (Q&A, PDF generation,
+  // free-trial pitch) is driven by the numa-chat-demo agent system prompt.
 
-  // Row layout: 2 featured (large) | 4 middle | 3 bottom
+  // Row layout: 2 featured (large) | 3 middle | 3 bottom
   const featuredActions = [
     {
       id: 'draft',
@@ -358,10 +381,11 @@ export const PublicDemoChat = () => {
   ];
   const middleActions = [
     {
-      id: 'search',
-      label: 'Search the web',
-      icon: 'bi-search',
-      prompt: 'Can you search the web for the latest news on AI in business?',
+      id: 'business-impact',
+      label: 'What can Numa do for my business?',
+      icon: 'bi-graph-up-arrow',
+      prompt:
+        "I'd like to understand what Numa can do for my business. Please ask me some questions and then create a one-page PDF I can download.",
     },
     {
       id: 'email',
@@ -370,12 +394,11 @@ export const PublicDemoChat = () => {
       prompt: 'Can you help me write a professional email?',
     },
     {
-      id: 'brainstorm',
-      label: 'Brainstorm ideas',
-      icon: 'bi-lightbulb',
-      prompt: 'I need help brainstorming ideas for my business.',
+      id: 'create-agent',
+      label: 'Create an agent',
+      icon: 'bi-robot',
+      prompt: "I'd like to create an agent in Numa. Can you walk me through designing one?",
     },
-    { id: 'code', label: 'Write some code', icon: 'bi-code-slash', prompt: 'Can you help me write a Python script?' },
   ];
   const bottomActions = [
     {
@@ -401,14 +424,15 @@ export const PublicDemoChat = () => {
   // Use-case cards for embed mode -- fills the space and communicates capabilities
   const embedCards = [
     {
-      id: 'search',
-      icon: 'bi-search',
-      title: t('demo.embed.cardSearchTitle', 'Search the web'),
+      id: 'business-impact',
+      icon: 'bi-graph-up-arrow',
+      title: t('demo.embed.cardBusinessTitle', 'What can Numa do for my business?'),
       description: t(
-        'demo.embed.cardSearchDesc',
-        'Find current information, research topics, and gather data from across the internet.'
+        'demo.embed.cardBusinessDesc',
+        'Answer a few quick questions and get a personalised one-page PDF you can download.'
       ),
-      prompt: 'Can you search the web for the latest news on AI in business?',
+      prompt:
+        "I'd like to understand what Numa can do for my business. Please ask me some questions and then create a one-page PDF I can download.",
     },
     {
       id: 'draft',
@@ -431,14 +455,14 @@ export const PublicDemoChat = () => {
       prompt: "I have some data I'd like you to analyze. What formats can you work with?",
     },
     {
-      id: 'brainstorm',
-      icon: 'bi-lightbulb',
-      title: t('demo.embed.cardBrainstormTitle', 'Brainstorm ideas'),
+      id: 'create-agent',
+      icon: 'bi-robot',
+      title: t('demo.embed.cardAgentTitle', 'Create an agent'),
       description: t(
-        'demo.embed.cardBrainstormDesc',
-        'Explore ideas, challenge assumptions, and think through business problems.'
+        'demo.embed.cardAgentDesc',
+        'Walk through designing your own AI agent -- see how Numa automates your workflows.'
       ),
-      prompt: 'I need help brainstorming ideas for my business.',
+      prompt: "I'd like to create an agent in Numa. Can you walk me through designing one?",
     },
   ];
 
@@ -475,6 +499,10 @@ export const PublicDemoChat = () => {
           isEmbed ? (
             /* ── Embed welcome: use-case cards for iframe ── */
             <div className="demo-welcome demo-welcome--embed">
+              <p className="demo-embed-tagline">
+                <img src={asknumaIcon} alt="" aria-hidden="true" className="demo-embed-tagline-icon" />
+                <span>{t('demo.embed.tagline', 'Helping grow businesses more profitably')}</span>
+              </p>
               <div className="demo-embed-cards" role="group" aria-label="Quick actions">
                 {embedCards.map((card) => (
                   <button
@@ -752,6 +780,44 @@ export const PublicDemoChat = () => {
             />
           )}
         </Modal.Body>
+      </Modal>
+
+      {/* Free-trial prompt -- appears after a few messages, persists dismissal */}
+      <Modal
+        show={showTrialModal}
+        onHide={handleDismissTrialModal}
+        centered
+        dialogClassName="demo-trial-modal"
+        backdrop={true}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>{t('demo.trial.title', 'Enjoying the demo?')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">
+            {t(
+              'demo.trial.body',
+              "What you're seeing is a lightweight taste of Numa. On the full platform you can connect your own tools, build custom agents, access your company's knowledge base, schedule automations, and much more."
+            )}
+          </p>
+          <p className="mb-0 text-muted">
+            {t('demo.trial.bodyCta', 'Start a free trial and have it running for your business in minutes.')}
+          </p>
+        </Modal.Body>
+        <Modal.Footer className="d-flex justify-content-between">
+          <button type="button" className="btn btn-link text-muted" onClick={handleDismissTrialModal}>
+            {t('demo.trial.dismiss', 'Maybe later')}
+          </button>
+          <a
+            href="https://asknuma.ai/freetrial"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary"
+            onClick={handleDismissTrialModal}
+          >
+            {t('demo.trial.cta', 'Start free trial')}
+          </a>
+        </Modal.Footer>
       </Modal>
     </div>
   );

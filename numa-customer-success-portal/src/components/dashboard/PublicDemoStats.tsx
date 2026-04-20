@@ -1,5 +1,6 @@
-import { Alert, Badge, Card, Col, ProgressBar, Row, Spinner } from 'react-bootstrap';
-import { ChatDots, ChatLeftText, CurrencyDollar, Globe } from 'react-bootstrap-icons';
+import { Alert, Badge, Button, Card, Col, ProgressBar, Row, Spinner } from 'react-bootstrap';
+import { ArrowRight, ChatDots, ChatLeftText, CurrencyDollar, Globe } from 'react-bootstrap-icons';
+import { useNavigate } from 'react-router-dom';
 import type { PublicDemoStats as Stats } from '@/services/publicDemoService';
 
 interface PublicDemoStatsProps {
@@ -19,6 +20,7 @@ function formatUsd(value: number): string {
 }
 
 function DemoClientCard({ stat }: { stat: Stats }) {
+  const navigate = useNavigate();
   const ratio = stat.dailyLimitUsd > 0 ? stat.todayCostUsd / stat.dailyLimitUsd : 0;
   const pct = Math.min(Math.round(ratio * 100), 100);
   const variant = getCostVariant(ratio);
@@ -32,6 +34,15 @@ function DemoClientCard({ stat }: { stat: Stats }) {
           <Badge bg="primary" className="ms-2">
             {stat.clientName}
           </Badge>
+          <Button
+            variant="primary"
+            size="sm"
+            className="ms-auto d-flex align-items-center"
+            onClick={() => navigate(`/public-demo-conversations/${stat.clientName}`)}
+          >
+            View Conversations
+            <ArrowRight className="ms-1" size={14} />
+          </Button>
         </div>
 
         <Row className="g-4">
