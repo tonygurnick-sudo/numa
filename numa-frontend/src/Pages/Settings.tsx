@@ -903,7 +903,6 @@ export default function SettingsPage() {
       { key: 'users', label: t('tabs.users'), iconClassName: 'bi bi-people' },
       ...(allowBrandingTab ? [{ key: 'branding', label: t('tabs.branding'), iconClassName: 'bi bi-palette' }] : []),
       { key: 'chat-defaults', label: t('tabs.chatDefaults'), iconClassName: 'bi bi-chat-dots' },
-      { key: 'numa-libraries', label: 'Numa Libraries', iconClassName: 'bi bi-journal-code' },
       { key: 'company-profile', label: t('tabs.companyProfile'), iconClassName: 'bi bi-building' },
       ...(agentsFeatureEnabled ? [{ key: 'agents', label: t('tabs.agents'), iconClassName: 'bi bi-robot' }] : []),
       ...(schedulingEnabled
