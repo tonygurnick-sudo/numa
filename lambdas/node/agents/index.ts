@@ -1240,18 +1240,127 @@ const duplicatePersonalAgent = async (
   return jsonResponse(201, { agent: mapUserAgent(userItem) });
 };
 
-const handleDuplicateAgent = async (agentId: string, auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {
+type DuplicateOptions = { targetVisibility?: 'personal' | 'workspace' };
+
+const duplicateAsWorkspaceAgent = async (
+  agent: WorkspaceAgentItem | UserAgentItem,
+  auth: AuthContext
+): Promise<ReturnType<typeof jsonResponse>> => {
+  const existingWorkspace = await listWorkspaceAgentsForTenant();
+  const duplicateTitle = generateDuplicateTitle(agent.title, existingWorkspace as unknown as UserAgentItem[]);
+
+  const referenceFiles = normaliseReferenceFiles(agent.reference_files);
+  const processedReferenceFiles = referenceFiles.length
+    ? referenceFiles.map((file) => (!file.source ? { ...file, source: 'workspace' } : file))
+    : undefined;
+
+  const payload: CreateAgentPayload = {
+    visibility: 'public',
+    agentType: agent.agent_type,
+    title: duplicateTitle,
+    description: agent.description,
+    systemPrompt: agent.system_prompt,
+    userWelcomeMessage: agent.user_instructions,
+    estimatedTimeSavedMinutes: agent.estimated_time_saved_minutes,
+    icon: agent.icon,
+    iconImage: agent.icon_image,
+    requiredIntegrations: agent.required_integrations ?? [],
+    toolsConfig: agent.tools_config ?? {},
+    referenceFiles: processedReferenceFiles,
+    sourceAgentId: resolveSourceAgentId(agent),
+    tags: agent.tags ?? [],
+  };
+
+  const now = Date.now();
+  const newId = generateAgentId();
+
+  if (agent.icon_image?.s3Bucket && agent.icon_image?.s3Key && OUTPUTS_BUCKET_NAME) {
+    try {
+      const s3 = withPRM(S3Client, {});
+      const srcBucket = agent.icon_image.s3Bucket;
+      const srcKey = agent.icon_image.s3Key;
+      const extMatch = srcKey.match(/\.([a-zA-Z0-9]+)$/);
+      const ext = (extMatch?.[1] || 'png').toLowerCase();
+      const randomId = Math.random().toString(36).slice(2, 10);
+      const destKey = `numa-chat/agent-icons/workspace/${now}_${randomId}.${ext}`;
+
+      await s3.send(
+        new CopyObjectCommand({
+          Bucket: OUTPUTS_BUCKET_NAME,
+          Key: destKey,
+          CopySource: `${srcBucket}/${encodeURIComponent(srcKey)}`,
+          MetadataDirective: 'COPY',
+        })
+      );
+      payload.iconImage = { s3Bucket: OUTPUTS_BUCKET_NAME, s3Key: destKey };
+      delete payload.icon;
+    } catch (e) {
+      console.warn('DuplicateAgent: failed to copy icon image', { error: (e as Error)?.message });
+    }
+  }
+
+  const workspaceItem = buildWorkspaceItem(payload, auth, now, newId);
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: WORKSPACE_TABLE,
+      Item: workspaceItem,
+      ConditionExpression: 'attribute_not_exists(agent_id) AND attribute_not_exists(tenant_id)',
+    })
+  );
+
+  return jsonResponse(201, {
+    agent: {
+      agentId: workspaceItem.agent_id,
+      title: workspaceItem.title,
+      scope: 'workspace',
+      visibility: workspaceItem.visibility,
+      owner: { userId: workspaceItem.created_by_user_id, name: workspaceItem.created_by_name },
+      updatedAt: workspaceItem.updated_at,
+      tags: workspaceItem.tags || [],
+    },
+  });
+};
+
+const handleDuplicateAgent = async (
+  agentId: string,
+  auth: AuthContext,
+  options?: DuplicateOptions
+): Promise<ReturnType<typeof jsonResponse>> => {
+  const targetVisibility = options?.targetVisibility ?? 'personal';
+
+  // Try own personal agent first
   const personalAgent = await getUserAgentById(agentId, auth.sub);
   if (personalAgent) {
+    if (targetVisibility === 'workspace') {
+      if (!isAdmin(auth)) return errorResponse(403, 'Admin access required to duplicate as workspace agent');
+      return duplicateAsWorkspaceAgent(personalAgent, auth);
+    }
     return duplicatePersonalAgent(personalAgent, auth);
   }
 
+  // Try workspace agent
   const workspaceAgent = await getWorkspaceAgentById(agentId);
-  if (!workspaceAgent) {
-    return errorResponse(404, 'Agent not found');
+  if (workspaceAgent) {
+    if (targetVisibility === 'workspace') {
+      if (!isAdmin(auth)) return errorResponse(403, 'Admin access required to duplicate as workspace agent');
+      return duplicateAsWorkspaceAgent(workspaceAgent, auth);
+    }
+    return duplicateWorkspaceAgent(agentId, workspaceAgent, auth);
   }
 
-  return duplicateWorkspaceAgent(agentId, workspaceAgent, auth);
+  // Admin: try any user's personal agent via GSI
+  if (isAdmin(auth)) {
+    const anyUserAgent = await getUserAgentByAgentIdOnly(agentId);
+    if (anyUserAgent) {
+      if (targetVisibility === 'workspace') {
+        return duplicateAsWorkspaceAgent(anyUserAgent, auth);
+      }
+      return duplicatePersonalAgent({ ...anyUserAgent, user_id: auth.sub } as UserAgentItem, auth);
+    }
+  }
+
+  return errorResponse(404, 'Agent not found');
 };
 
 // ─── Prefs ───────────────────────────────────────────────────────────────────
@@ -1989,7 +2098,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }
         if (actionSegments.length === 2 && actionSegments[1] === 'duplicate') {
           if (agentsMode === 'off') return errorResponse(403, 'Agents are disabled');
-          return await handleDuplicateAgent(decodeURIComponent(actionSegments[0]), auth);
+          const dupOpts = parseJsonBody<DuplicateOptions>(event.body);
+          return await handleDuplicateAgent(decodeURIComponent(actionSegments[0]), auth, dupOpts ?? undefined);
         }
         break;
       }

@@ -490,8 +490,10 @@ export function TicketDetailModal({
       'field-supplier', // Supplier sidebar row
       'field-labels', // Tags sidebar row
       'field-watchers', // not yet implemented
-      // Hide sprint & effort when work units are not enabled for this team
-      ...(!hasWorkUnits ? ['field-work-unit-id', 'field-effort-points'] : []),
+      // Sprint & effort always have dedicated sidebar rows — exclude from
+      // additional fields unconditionally to prevent duplication.
+      'field-work-unit-id',
+      'field-effort-points',
     ]);
 
     return ticketType.defaultFields
@@ -747,7 +749,7 @@ export function TicketDetailModal({
                     <>
                       <StaffAvatar staff={assignee} name={ticket.assigneeName} size={28} />
                       <span className={!ticket.assigneeId ? 'sidebar-dropdown-placeholder' : ''}>
-                        {ticket.assigneeName || t('fields.unassigned')}
+                        {assignee?.name || assignee?.email || ticket.assigneeName || t('fields.unassigned')}
                       </span>
                     </>
                   );
@@ -787,7 +789,7 @@ export function TicketDetailModal({
                     <>
                       <StaffAvatar staff={reporter} name={ticket.reporterName} size={28} />
                       <span className={!ticket.reporterId ? 'sidebar-dropdown-placeholder' : ''}>
-                        {ticket.reporterName || t('fields.unassigned')}
+                        {reporter?.name || reporter?.email || ticket.reporterName || t('fields.unassigned')}
                       </span>
                     </>
                   );

@@ -229,8 +229,6 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
       className={`ticket-card${isDragging ? ' ticket-card--dragging' : ''}`}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
       {...attributes}
       {...listeners}
     >
@@ -258,23 +256,9 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
         </button>
       </div>
 
-      {/* ── Top: type badge + meta counts ──────────────────────────── */}
-      <div className="ticket-card-top">
-        <span
-          className="ticket-type-badge"
-          style={{
-            backgroundColor: `${typeColor}18`,
-            color: typeColor,
-            border: `1px solid ${typeColor}35`,
-          }}
-        >
-          {ticketType?.icon && (
-            <i className={`${getTicketTypeIconClass(ticketType.icon)} me-1`} style={{ fontSize: '0.65rem' }} />
-          )}
-          {ticketType?.name ?? '—'}
-        </span>
-
-        {(ticket.linkCount > 0 || ticket.commentCount > 0 || ticket.hasUnresolvedDependencies || ticket.isBlocking) && (
+      {/* ── Top: meta counts ──────────────────────────────────────── */}
+      {(ticket.linkCount > 0 || ticket.commentCount > 0 || ticket.hasUnresolvedDependencies || ticket.isBlocking) && (
+        <div className="ticket-card-top">
           <div className="d-flex align-items-center gap-2 ms-auto">
             {ticket.linkCount > 0 && (
               <OverlayTrigger
@@ -333,12 +317,15 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
               </OverlayTrigger>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* ── Title ──────────────────────────────────────────────────── */}
+      <p className="ticket-title">{ticket.title}</p>
 
       {/* ── Context badges (customer / project / supplier / sprint) ── */}
       {(ticket.customerName || projectName || ticket.supplierName || workUnit) && (
-        <div className="d-flex flex-wrap gap-1 mb-2">
+        <div className="d-flex flex-wrap gap-1 mb-1">
           {ticket.customerName && (
             <span className="ticket-badge ticket-badge-customer">
               <i className="bi bi-building me-1" />
@@ -366,12 +353,9 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
         </div>
       )}
 
-      {/* ── Title ──────────────────────────────────────────────────── */}
-      <p className="ticket-title">{ticket.title}</p>
-
       {/* ── Tags (max 2 + overflow count) ──────────────────────────── */}
       {ticket.tags && ticket.tags.length > 0 && (
-        <div className="d-flex flex-wrap gap-1 mb-2">
+        <div className="d-flex flex-wrap gap-1 mb-1">
           {ticket.tags.slice(0, 2).map((tag) => (
             <span key={tag} className="ticket-tag">
               {tag}
@@ -384,6 +368,18 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
       {/* ── Footer: ID · effort · due date | priority · avatar ─────── */}
       <div className="ticket-card-footer">
         <div className="d-flex align-items-center gap-2">
+          <span
+            className="ticket-type-badge"
+            style={{
+              backgroundColor: `${typeColor}18`,
+              color: typeColor,
+              border: `1px solid ${typeColor}35`,
+            }}
+          >
+            {ticketType?.icon && (
+              <i className={`${getTicketTypeIconClass(ticketType.icon)}`} style={{ fontSize: '0.6rem' }} />
+            )}
+          </span>
           <span className="ticket-id">{ticket.displayId}</span>
 
           {ticket.effortPoints != null && (

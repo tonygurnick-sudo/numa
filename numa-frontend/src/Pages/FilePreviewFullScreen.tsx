@@ -19,14 +19,29 @@ export const FilePreviewFullScreen = () => {
   const name = searchParams.get('name');
   const ext = searchParams.get('ext');
   const bucket = searchParams.get('bucket');
+  const contentKey = searchParams.get('contentKey');
 
   const [REGION] = useState(() => window.sessionStorage.getItem('REGION'));
+
+  // Retrieve inline document content from localStorage (if passed via contentKey)
+  const [inlineContent] = useState(() => {
+    if (!contentKey) return null;
+    const content = localStorage.getItem(contentKey);
+    if (content != null) {
+      localStorage.removeItem(contentKey);
+    }
+    return content;
+  });
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!key || !name || !ext || !bucket) {
+  // Valid if we have either an S3 key+bucket or inline content via contentKey
+  const hasS3Source = key && bucket;
+  const hasInlineSource = inlineContent != null;
+
+  if (!name || !ext || (!hasS3Source && !hasInlineSource)) {
     return (
       <div className="d-flex justify-content-center align-items-center vh-100">
         <div className="text-center text-muted">
@@ -41,7 +56,7 @@ export const FilePreviewFullScreen = () => {
     type: 'file',
     filename: name,
     extension: ext,
-    fullPath: key,
+    fullPath: key || '',
     relativePath: name,
   };
 
@@ -58,9 +73,10 @@ export const FilePreviewFullScreen = () => {
       <FilePreviewPanel
         preview={preview}
         onClose={() => window.close()}
-        bucket={bucket}
+        bucket={bucket || ''}
         region={REGION || ''}
         getCredentials={getCredentials}
+        initialContent={inlineContent ?? undefined}
       />
     </div>
   );
