@@ -997,7 +997,7 @@ export const AgentsManagement = () => {
         {/* Admin Panel (admin users only) -- above tag filter */}
         {agentsFeatureEnabled && user?.groups?.includes('admin') && (
           <Container fluid className="px-0 mb-3">
-            <AgentAdminPanel onAgentDeleted={loadAgents} />
+            <AgentAdminPanel onAgentDeleted={loadAgents} onAgentDuplicated={loadAgents} />
           </Container>
         )}
 
