@@ -69,6 +69,7 @@ vi.mock('docx', () => {
 // Mock your S3 uploader if necessary
 vi.mock('../../utils/s3Utils', () => ({
   uploadFileToS3: vi.fn().mockResolvedValue('mock-file-name.pdf'),
+  listFoldersInKB: vi.fn().mockResolvedValue(['folder1', 'folder2']),
 }));
 
 // Mock document converter service to force client-side fallback

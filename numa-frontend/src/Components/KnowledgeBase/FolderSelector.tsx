@@ -23,14 +23,21 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({
   return (
     <Form.Group className="mb-3">
       <Form.Label>{resolvedLabel}</Form.Label>
-      <Form.Select value={selectedFolder} onChange={(e) => onFolderChange(e.target.value)} disabled={disabled}>
-        <option value="">{t('folderSelector.rootOption')}</option>
+      <Form.Control
+        type="text"
+        list="folder-options"
+        value={selectedFolder}
+        onChange={(e) => onFolderChange(e.target.value)}
+        disabled={disabled}
+        placeholder={t('folderSelector.rootOption')}
+      />
+      <datalist id="folder-options">
         {folderOptions.map((folder) => (
           <option key={folder} value={folder}>
             /{folder}
           </option>
         ))}
-      </Form.Select>
+      </datalist>
       {selectedFolder && (
         <Form.Text className="text-muted">{t('folderSelector.uploadHint', { folder: `/${selectedFolder}` })}</Form.Text>
       )}

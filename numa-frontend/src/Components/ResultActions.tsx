@@ -10,10 +10,11 @@ import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import { UserKB } from '../Services/knowledgeBaseService';
-import { uploadFileToS3 } from '../utils/s3Utils';
 import { createDocxBlob } from '../Services/fileConverter';
 import { downloadDocx, downloadPdf } from '../Services/documentConverterService';
 import { getExportOptionsForApp } from '../config/exportConfig';
+import { uploadFileToS3, listFoldersInKB } from '../utils/s3Utils';
+import FolderSelector from './KnowledgeBase/FolderSelector';
 
 // Helper function to convert markdown to formatted plain text
 const convertMarkdownToPlainText = (markdown: string): string => {
@@ -138,6 +139,9 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
   const [docName, setDocName] = useState(resolvedTitle);
   const [successMessage, setSuccessMessage] = useState('');
   const [selectedKB, setSelectedKB] = useState<UserKB | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<string>('');
+  const [folderOptions, setFolderOptions] = useState<string[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState<boolean>(false);
 
   // Download loading state
   const [isDownloading, setIsDownloading] = useState(false);
@@ -621,11 +625,27 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
 
   // ─────────────────────────────────────────────────────────────
   // KB Selection -> Upload as TEXT file to Knowledge Base
-  const handleSelectKBAndShowModal = (kb: UserKB) => {
+  const handleSelectKBAndShowModal = async (kb: UserKB) => {
     setSelectedKB(kb);
     setDocName(resolvedTitle);
+    setSelectedFolder('');
     setModalStep('confirm');
     setShowModal(true);
+
+    const kb_id = kb.kb_id;
+    try {
+      setLoadingFolders(true);
+      const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
+      const regionStr = window.sessionStorage.getItem('REGION') || 'ap-southeast-2';
+      const bucket = `numa-${CLIENT_NAME}-data`;
+      const folders = await listFoldersInKB(kb_id, bucket, regionStr, getCredentials);
+      setFolderOptions(folders);
+    } catch (error) {
+      console.error('Error fetching folders:', error);
+      setFolderOptions([]);
+    } finally {
+      setLoadingFolders(false);
+    }
   };
 
   const doUploadToS3 = async () => {
@@ -644,9 +664,10 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
       const fileName = `${docName}-${dateStr}-${timeStr}.${extension}`;
       const region = window.sessionStorage.getItem('REGION');
 
-      // Build S3 key with KB prefix
+      // Build S3 key with KB prefix and optional folder prefix
       const prefix = buildKbPrefix(selectedKB?.kb_id);
-      const s3Key = `${prefix}${fileName}`;
+      const folderPrefix = selectedFolder ? `${selectedFolder}/` : '';
+      const s3Key = `${prefix}${folderPrefix}${fileName}`;
 
       const arrayBuffer = await blob.arrayBuffer();
 
@@ -955,6 +976,12 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
                 <Form.Label>{t('resultActions.modal.documentTitle')}</Form.Label>
                 <Form.Control type="text" value={docName} onChange={(e) => setDocName(e.target.value)} />
               </Form.Group>
+              <FolderSelector
+                selectedFolder={selectedFolder}
+                onFolderChange={setSelectedFolder}
+                folderOptions={folderOptions}
+                disabled={loadingFolders}
+              />
             </Modal.Body>
             <Modal.Footer>
               <Button variant="secondary" onClick={handleModalCancel}>
