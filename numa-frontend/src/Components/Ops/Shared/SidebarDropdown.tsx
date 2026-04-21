@@ -7,6 +7,8 @@ export interface DropdownOption {
   label: string;
   /** Optional icon/element rendered before the label */
   icon?: React.ReactNode;
+  /** Optional action button rendered at the end of the row (e.g. open link) */
+  action?: React.ReactNode;
   /** Optional group header this option belongs to */
   group?: string;
   disabled?: boolean;
@@ -111,6 +113,15 @@ export function SidebarDropdown({
                 >
                   {opt.icon && <span className="sidebar-dropdown-item-icon">{opt.icon}</span>}
                   <span className="sidebar-dropdown-item-label">{opt.label}</span>
+                  {opt.action && (
+                    <span
+                      className="sidebar-dropdown-item-action"
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      {opt.action}
+                    </span>
+                  )}
                   {opt.value === value && <i className="bi bi-check2 sidebar-dropdown-check" />}
                 </button>
               ))}

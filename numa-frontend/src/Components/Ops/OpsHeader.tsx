@@ -26,6 +26,7 @@ const OPS_TOP_VIEWS: { key: OpsTopView; labelKey: string; icon: string }[] = [
   { key: 'customers', labelKey: 'tabs.customers', icon: 'bi-people' },
   { key: 'allTickets', labelKey: 'tabs.allTickets', icon: 'bi-list-task' },
   { key: 'suppliers', labelKey: 'tabs.suppliers', icon: 'bi-truck' },
+  { key: 'projects', labelKey: 'tabs.projects', icon: 'bi-folder' },
   { key: 'roadmap', labelKey: 'tabs.roadmap', icon: 'bi-signpost-split' },
 ];
 

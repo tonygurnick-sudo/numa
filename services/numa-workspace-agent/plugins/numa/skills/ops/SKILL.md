@@ -38,7 +38,7 @@ mcp__numa__numa_ops_tool(
 | Operation        | Description                                                      | Approval |
 | ---------------- | ---------------------------------------------------------------- | -------- |
 | `get_config`     | Load all config: ticket types, statuses, fields, staff, projects | No       |
-| `list_projects`  | List all projects                                                | No       |
+| `list_projects`  | List projects accessible to the current user                     | No       |
 | `create_project` | Create a new project                                             | Yes      |
 | `update_project` | Update an existing project                                       | Yes      |
 | `delete_project` | Delete a project (admin-only)                                    | Yes      |
@@ -57,27 +57,35 @@ mcp__numa__numa_ops_tool(
 
 #### create_project
 
-| Parameter     | Type   | Required | Description                                |
-| ------------- | ------ | -------- | ------------------------------------------ |
-| `name`        | string | Yes      | Project name                               |
-| `description` | string | No       | Project description                        |
-| `color`       | string | No       | Hex color code                             |
-| `status`      | string | No       | Status: active, planned, on_hold, complete |
-| `owner_id`    | string | No       | Owner user sub (from get_config staff)     |
-| `owner_name`  | string | No       | Owner display name                         |
+| Parameter     | Type     | Required | Description                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------- |
+| `name`        | string   | Yes      | Project name                                            |
+| `description` | string   | No       | Brief project description                               |
+| `color`       | string   | No       | Hex color code                                          |
+| `status`      | string   | No       | Status: active, planned, on_hold, complete              |
+| `owner_id`    | string   | No       | Owner user sub (from get_config staff)                  |
+| `owner_name`  | string   | No       | Owner display name                                      |
+| `goals`       | string   | No       | Project goals/objectives (HTML rich text)               |
+| `start_date`  | string   | No       | Project start date (ISO format, e.g. 2026-04-01)        |
+| `end_date`    | string   | No       | Project end date (ISO format)                           |
+| `board_ids`   | string[] | No       | Board/team IDs this project is visible on (empty = all) |
 
 #### update_project
 
-| Parameter     | Type    | Required | Description                                |
-| ------------- | ------- | -------- | ------------------------------------------ |
-| `project_id`  | string  | Yes      | Project ID                                 |
-| `name`        | string  | No       | New project name                           |
-| `description` | string  | No       | New description                            |
-| `color`       | string  | No       | New color                                  |
-| `is_active`   | boolean | No       | Set false to deactivate, true to restore   |
-| `status`      | string  | No       | Status: active, planned, on_hold, complete |
-| `owner_id`    | string  | No       | Owner user sub                             |
-| `owner_name`  | string  | No       | Owner display name                         |
+| Parameter     | Type     | Required | Description                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------- |
+| `project_id`  | string   | Yes      | Project ID                                              |
+| `name`        | string   | No       | New project name                                        |
+| `description` | string   | No       | New description                                         |
+| `color`       | string   | No       | New color                                               |
+| `is_active`   | boolean  | No       | Set false to deactivate, true to restore                |
+| `status`      | string   | No       | Status: active, planned, on_hold, complete              |
+| `owner_id`    | string   | No       | Owner user sub                                          |
+| `owner_name`  | string   | No       | Owner display name                                      |
+| `goals`       | string   | No       | Project goals/objectives (HTML rich text)               |
+| `start_date`  | string   | No       | Project start date (ISO format)                         |
+| `end_date`    | string   | No       | Project end date (ISO format)                           |
+| `board_ids`   | string[] | No       | Board/team IDs this project is visible on (empty = all) |
 
 #### delete_project
 

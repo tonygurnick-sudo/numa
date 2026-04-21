@@ -81,6 +81,10 @@ export type Project = {
   status?: ProjectStatus;
   ownerId?: string | null;
   ownerName?: string | null;
+  goals?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  boardIds?: string[];
 };
 
 export type CrmLifecycleStage = {

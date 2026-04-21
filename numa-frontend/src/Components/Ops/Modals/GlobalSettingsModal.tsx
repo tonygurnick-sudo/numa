@@ -27,8 +27,6 @@ import type {
   FieldCategory,
   FieldType,
   StaffProfile,
-  Project,
-  ProjectStatus,
   CrmConfig,
   CrmLifecycleStage,
   SupplierConfig,
@@ -52,8 +50,6 @@ interface GlobalSettingsModalProps {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const generateId = () => `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-const PROJECT_STATUSES: ProjectStatus[] = ['active', 'planned', 'on_hold', 'complete'];
 
 const STATUS_TYPES: StatusType[] = ['backlog', 'scoped', 'queued', 'active', 'completed', 'ended'];
 const FIELD_CATEGORIES: string[] = ['common', 'mining', 'vehicle', 'crm', 'support', 'development', 'operations'];
@@ -148,7 +144,6 @@ export function GlobalSettingsModal({
   const { config, teams, refreshTeams, refreshStaff, refreshConfig } = useOps();
 
   // ── Local state (edited copies of config) ──────────────────────────────────
-  const [projects, setProjects] = useState<Project[]>([]);
   const [staff, setStaff] = useState<StaffProfile[]>([]);
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
   // statuses are read-only (fixed StatusType categories) — no longer editable
@@ -323,7 +318,6 @@ export function GlobalSettingsModal({
   const prevShowRef = useRef(false);
   useEffect(() => {
     if (show && !prevShowRef.current && config) {
-      setProjects(config.projects ? structuredClone(config.projects) : []);
       setStaff(config.staff ? structuredClone(config.staff) : []);
       setTicketTypes(config.ticketTypes ? structuredClone(config.ticketTypes) : []);
       // statuses no longer editable — status categories are fixed
@@ -478,32 +472,6 @@ export function GlobalSettingsModal({
         }
       }
 
-      // 4. Projects Diff
-      const originalProjects = config?.projects ?? [];
-      const newProjectIds = new Set(projects.map((p) => p.id));
-
-      // Deleted
-      for (const orig of originalProjects) {
-        if (!newProjectIds.has(orig.id)) {
-          promises.push(OpsService.deleteProject(numaDelete, orig.id));
-        }
-      }
-
-      // Added / Updated
-      for (const project of projects) {
-        if (project.id.startsWith('custom-')) {
-          // New project
-          const { id: _id, ...payload } = project;
-          promises.push(OpsService.createProject(numaPost, payload));
-        } else {
-          // Existing - Check if changed
-          const orig = originalProjects.find((o) => o.id === project.id);
-          if (orig && JSON.stringify(orig) !== JSON.stringify(project)) {
-            promises.push(OpsService.updateProject(numaPut, project.id, project));
-          }
-        }
-      }
-
       // Await all mutations
       const results = await Promise.allSettled(promises);
       const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
@@ -534,11 +502,9 @@ export function GlobalSettingsModal({
   }, [
     ticketTypes,
     fields,
-    projects,
     crmConfig,
     config?.ticketTypes,
     config?.fields,
-    config?.projects,
     numaPut,
     numaDelete,
     numaPost,
@@ -680,182 +646,7 @@ export function GlobalSettingsModal({
   // TAB RENDERERS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Tab 1: Projects ────────────────────────────────────────────────────────
-  const renderProjectsTab = () => (
-    <div className="d-flex flex-column gap-3">
-      {projects.map((project, idx) => (
-        <div
-          key={project.id}
-          className="border rounded-3 p-3"
-          style={{
-            backgroundColor: '#f9fafb',
-            borderLeft: `4px solid ${project.color || '#6c757d'}`,
-          }}
-        >
-          {/* Row 1: Name + Description */}
-          <div className="row g-3 mb-3">
-            <div className="col-12 col-md-5">
-              <Form.Label className="fw-medium small mb-1">{t('common.name')}</Form.Label>
-              <Form.Control
-                type="text"
-                size="sm"
-                value={project.name}
-                onChange={(e) => {
-                  const updated = [...projects];
-                  updated[idx] = { ...updated[idx], name: e.target.value };
-                  setProjects(updated);
-                }}
-              />
-            </div>
-            <div className="col-12 col-md-7">
-              <Form.Label className="fw-medium small mb-1">{t('common.description')}</Form.Label>
-              <Form.Control
-                type="text"
-                size="sm"
-                value={project.description ?? ''}
-                placeholder={t('globalSettings.projectDescriptionPlaceholder', 'Brief project description...')}
-                onChange={(e) => {
-                  const updated = [...projects];
-                  updated[idx] = { ...updated[idx], description: e.target.value };
-                  setProjects(updated);
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Row 2: Color + Status + Owner + Active + Delete */}
-          <div className="row g-3 align-items-end">
-            <div className="col-auto">
-              <Form.Label className="fw-medium small mb-1">{t('common.color')}</Form.Label>
-              <div className="d-flex align-items-center gap-2">
-                <Form.Control
-                  type="color"
-                  value={project.color}
-                  onChange={(e) => {
-                    const updated = [...projects];
-                    updated[idx] = { ...updated[idx], color: e.target.value };
-                    setProjects(updated);
-                  }}
-                  className="p-1"
-                  style={{ width: '32px', height: '32px', cursor: 'pointer', borderRadius: '4px' }}
-                />
-                <Form.Control
-                  type="text"
-                  size="sm"
-                  value={project.color}
-                  onChange={(e) => {
-                    const updated = [...projects];
-                    updated[idx] = { ...updated[idx], color: e.target.value };
-                    setProjects(updated);
-                  }}
-                  placeholder="#000000"
-                  style={{ width: '90px' }}
-                />
-              </div>
-            </div>
-            <div className="col">
-              <Form.Label className="fw-medium small mb-1">{t('common.status')}</Form.Label>
-              <Form.Select
-                size="sm"
-                value={project.status ?? 'active'}
-                onChange={(e) => {
-                  const updated = [...projects];
-                  updated[idx] = { ...updated[idx], status: e.target.value as ProjectStatus };
-                  setProjects(updated);
-                }}
-              >
-                {PROJECT_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {t(`globalSettings.projectStatus.${s}`)}
-                  </option>
-                ))}
-              </Form.Select>
-            </div>
-            <div className="col">
-              <Form.Label className="fw-medium small mb-1">{t('globalSettings.owner')}</Form.Label>
-              <Form.Select
-                size="sm"
-                value={project.ownerId ?? ''}
-                onChange={(e) => {
-                  const selectedId = e.target.value || null;
-                  const selectedStaff = staff.find((s) => s.id === selectedId);
-                  const updated = [...projects];
-                  updated[idx] = {
-                    ...updated[idx],
-                    ownerId: selectedId,
-                    ownerName: selectedStaff?.name ?? selectedStaff?.email ?? null,
-                  };
-                  setProjects(updated);
-                }}
-              >
-                <option value="">{t('globalSettings.unassigned')}</option>
-                {staff
-                  .filter((s) => s.isActive)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name ?? s.email}
-                    </option>
-                  ))}
-              </Form.Select>
-            </div>
-            <div className="col-auto d-flex align-items-center gap-3 pb-1">
-              <Form.Check
-                type="switch"
-                id={`project-active-${project.id}`}
-                label={<span className="small fw-medium">{t('globalSettings.active')}</span>}
-                checked={project.isActive}
-                onChange={(e) => {
-                  const updated = [...projects];
-                  updated[idx] = { ...updated[idx], isActive: e.target.checked };
-                  setProjects(updated);
-                }}
-              />
-              <Button
-                variant="outline-danger"
-                size="sm"
-                onClick={() => setProjects((prev) => prev.filter((_, i) => i !== idx))}
-              >
-                <i className="bi bi-trash" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {projects.length === 0 && (
-        <div className="text-muted text-center py-4">
-          <i className="bi bi-folder2-open d-block mb-2" style={{ fontSize: '1.5rem' }} />
-          {t('globalSettings.noProjects', 'No projects yet. Create one to start organising your work.')}
-        </div>
-      )}
-
-      <Button
-        variant="outline-primary"
-        size="sm"
-        className="align-self-start"
-        onClick={() =>
-          setProjects((prev) => [
-            ...prev,
-            {
-              id: generateId(),
-              name: '',
-              description: '',
-              color: BOARD_COLORS[prev.length % BOARD_COLORS.length],
-              status: 'active' as ProjectStatus,
-              ownerId: null,
-              ownerName: null,
-              isActive: true,
-            },
-          ])
-        }
-      >
-        <i className="bi bi-plus me-1" />
-        {t('globalSettings.addProject')}
-      </Button>
-    </div>
-  );
-
-  // ── Tab 2: Staff ───────────────────────────────────────────────────────────
+  // ── Tab: Staff ─────────────────────────────────────────────────────────────
   const renderStaffTab = () => (
     <div>
       <div className="alert alert-info mb-3">
@@ -2309,14 +2100,9 @@ export function GlobalSettingsModal({
             </div>
           )}
 
-          <Tab.Container defaultActiveKey={defaultTab ?? 'projects'}>
+          <Tab.Container defaultActiveKey={defaultTab ?? 'staff'}>
             {/* Horizontal tab bar */}
             <Nav variant="pills" className="d-flex flex-row flex-wrap gap-2 pb-3 mb-3 border-bottom ops-settings-nav">
-              <Nav.Item>
-                <Nav.Link eventKey="projects">
-                  {t('settings.projects')} ({projects.length})
-                </Nav.Link>
-              </Nav.Item>
               <Nav.Item>
                 <Nav.Link eventKey="staff">
                   {t('settings.staff')} ({staff.length})
@@ -2369,7 +2155,6 @@ export function GlobalSettingsModal({
 
             {/* Tab Content */}
             <Tab.Content className="overflow-auto" style={{ maxHeight: 'calc(85vh - 220px)' }}>
-              <Tab.Pane eventKey="projects">{renderProjectsTab()}</Tab.Pane>
               <Tab.Pane eventKey="staff">{renderStaffTab()}</Tab.Pane>
               <Tab.Pane eventKey="ticketTypes">{renderTicketTypesTab()}</Tab.Pane>
               <Tab.Pane eventKey="prefixes">{renderPrefixesTab()}</Tab.Pane>

@@ -88,10 +88,11 @@ describe('CreateTicketModal (FEAT-108 validation)', () => {
     const typeButton = screen.getByText('Bug');
     typeButton.click();
 
-    // Now the modal opens to Phase 2 (the full form)
-    // Find the option by its rendered text. Since "Frontend Dev" is in both Assignee and Reporter dropdowns,
-    // we use getAllByRole and grab the second one (which corresponds to Reporter).
-    const reporterOptions = (await screen.findAllByRole('option', { name: 'Frontend Dev' })) as HTMLOptionElement[];
-    expect(reporterOptions[1].selected).toBe(true);
+    // Now the modal opens to Phase 2 (the full form).
+    // Reporter uses a SidebarDropdown (custom component with buttons, not native <select>).
+    // The trigger button renders a StaffAvatar + name for the selected reporter.
+    // Verify the authenticated user's name appears as the reporter value.
+    const reporterName = await screen.findByText('Frontend Dev');
+    expect(reporterName).toBeInTheDocument();
   });
 });

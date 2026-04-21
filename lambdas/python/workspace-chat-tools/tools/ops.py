@@ -253,10 +253,16 @@ def _resolve_lambda_and_request(
             "status": "status",
             "owner_id": "ownerId",
             "owner_name": "ownerName",
+            "goals": "goals",
+            "start_date": "startDate",
+            "end_date": "endDate",
         }
         for snake, camel in mapping.items():
             if params.get(snake) is not None:
                 body[camel] = params[snake]
+        # board_ids is a list, pass through directly
+        if params.get("board_ids") is not None:
+            body["boardIds"] = params["board_ids"]
         return (OPS_CONFIG_API_LAMBDA, "POST", "ops/config/projects", body, None)
 
     if operation == "update_project":
@@ -270,10 +276,16 @@ def _resolve_lambda_and_request(
             "status": "status",
             "owner_id": "ownerId",
             "owner_name": "ownerName",
+            "goals": "goals",
+            "start_date": "startDate",
+            "end_date": "endDate",
         }
         for snake, camel in mapping.items():
             if params.get(snake) is not None:
                 body[camel] = params[snake]
+        # board_ids is a list, pass through directly
+        if params.get("board_ids") is not None:
+            body["boardIds"] = params["board_ids"]
         return (
             OPS_CONFIG_API_LAMBDA,
             "PUT",
@@ -790,6 +802,56 @@ def _resolve_lambda_and_request(
     raise ValueError(f"Unknown ops operation: {operation}")
 
 
+def _filter_projects_by_access(
+    result: Dict[str, Any],
+    operation: str,
+    user_sub: str,
+    user_email: str,
+    user_name: str,
+    user_groups: list | None,
+) -> Dict[str, Any]:
+    """Filter projects in list_projects / get_config results by board access.
+
+    Projects with no boardIds (all-boards) pass through. Projects with
+    boardIds are only included if at least one board is accessible to the user.
+    """
+    # Fetch the user's accessible teams (list_teams already filters by access)
+    try:
+        teams_result = _invoke_ops_lambda(
+            lambda_name=OPS_API_LAMBDA,
+            method="GET",
+            path="ops/teams",
+            body=None,
+            query_params=None,
+            user_sub=user_sub,
+            user_email=user_email,
+            user_name=user_name,
+            user_groups=user_groups,
+        )
+        accessible_team_ids = {
+            t["id"] for t in teams_result.get("teams", []) if "id" in t
+        }
+    except Exception:
+        # If team lookup fails, don't block — return unfiltered
+        logger.warning("Failed to fetch teams for project access filtering")
+        return result
+
+    def is_accessible(project: dict) -> bool:
+        board_ids = project.get("boardIds")
+        if not board_ids:
+            return True  # No boards = visible to all
+        return bool(set(board_ids) & accessible_team_ids)
+
+    if operation == "list_projects":
+        projects = result.get("projects", [])
+        result["projects"] = [p for p in projects if is_accessible(p)]
+    elif operation == "get_config":
+        projects = result.get("projects", [])
+        result["projects"] = [p for p in projects if is_accessible(p)]
+
+    return result
+
+
 def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
     """Handle a generic ops operation.
 
@@ -922,6 +984,13 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
             user_name=user_name,
             user_groups=user_groups,
         )
+
+        # Filter projects by board access: only show projects whose boardIds
+        # overlap with the user's accessible teams (or have no boardIds = all).
+        if operation in ("list_projects", "get_config") and isinstance(result, dict):
+            result = _filter_projects_by_access(
+                result, operation, user_sub, user_email, user_name, user_groups
+            )
 
         return result
 

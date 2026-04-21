@@ -820,8 +820,10 @@ const BacklogView = () => {
   const projectOptions = useMemo(() => {
     if (!config?.projects) return [];
     const usedIds = new Set(backlogTickets.map((tk) => tk.projectId).filter(Boolean));
-    return config.projects.filter((p) => usedIds.has(p.id)).map((p) => ({ id: p.id, label: p.name, color: p.color }));
-  }, [config?.projects, backlogTickets]);
+    return config.projects
+      .filter((p) => usedIds.has(p.id) && (!p.boardIds?.length || p.boardIds.includes(teamId)))
+      .map((p) => ({ id: p.id, label: p.name, color: p.color }));
+  }, [config?.projects, backlogTickets, teamId]);
 
   // ── Customer options for filter ────────────────────────────────
   const customerOptions = useMemo(() => {
