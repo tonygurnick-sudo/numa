@@ -19,6 +19,10 @@
     "documents": "Documents",
     "role": "Role",
     "actions": "Actions",
+    "sharing": "Sharing",
+    "files": "Files",
+    "private": "Private",
+    "settings": "Settings",
     "loading": "Loading folders...",
     "empty": {
       "title": "No folders yet",

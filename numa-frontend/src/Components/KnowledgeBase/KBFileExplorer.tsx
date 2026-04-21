@@ -10,8 +10,8 @@ import '../../assets/styles/components/_knowledge_base_management.scss';
 import { withPRM } from '../../utils/prmUtils';
 import i18n from '../../i18n';
 
-// Type definitions
-interface S3Object {
+// Type definitions — exported for reuse in UserFilesTab
+export interface S3Object {
   Key: string;
   LastModified: Date;
   Size: number;
@@ -21,13 +21,13 @@ interface S3Object {
   uploadedAt?: string;
 }
 
-interface TreeNode {
+export interface TreeNode {
   name: string;
   children: Record<string, TreeNode>;
   files: S3Object[];
 }
 
-interface TableRow {
+export interface TableRow {
   id: string;
   type: 'folder' | 'file';
   name: string;
@@ -53,8 +53,8 @@ interface BulkDeleteProgress {
   failed: number;
 }
 
-type SortColumn = 'name' | 'date' | 'size' | 'status';
-type SortDirection = 'asc' | 'desc';
+export type SortColumn = 'name' | 'date' | 'size' | 'status';
+export type SortDirection = 'asc' | 'desc';
 type StatusFilter = 'all' | 'pending' | 'indexed' | 'failed' | 'warning';
 type Status = 'pending' | 'indexed' | 'failed' | 'warning';
 
@@ -74,7 +74,7 @@ export interface KBFileExplorerHandle {
 /**
  * Safely decode a URI component
  */
-function safeDecodeURIComponent(str: string): string {
+export function safeDecodeURIComponent(str: string): string {
   try {
     if (/%[0-9A-Fa-f]{2}/.test(str)) {
       return decodeURIComponent(str);
@@ -89,18 +89,18 @@ function safeDecodeURIComponent(str: string): string {
 /**
  * Convert bytes to KB format
  */
-function formatKB(bytes: number): string {
+export function formatKB(bytes: number): string {
   return i18n.t('common:fileSize.kb', { size: (bytes / 1024).toFixed(2) });
 }
 
-function formatDateSafe(date: Date | undefined, emptyLabel: string): string {
+export function formatDateSafe(date: Date | undefined, emptyLabel: string): string {
   if (!date) return emptyLabel;
   const parsed = new Date(date);
   if (Number.isNaN(parsed.getTime())) return emptyLabel;
   return parsed.toLocaleString(i18n.language);
 }
 
-function formatSizeSafe(size: number | undefined, emptyLabel: string): string {
+export function formatSizeSafe(size: number | undefined, emptyLabel: string): string {
   if (!size || Number.isNaN(size)) return emptyLabel;
   return formatKB(size);
 }
@@ -165,7 +165,7 @@ function getStatusDisplayText(
 /**
  * Build a nested folder tree from S3 object keys
  */
-function buildFileTree(s3Objects: S3Object[]): TreeNode {
+export function buildFileTree(s3Objects: S3Object[]): TreeNode {
   const root: TreeNode = {
     name: '(root)',
     children: {},
@@ -245,7 +245,7 @@ function collectFoldersToExpand(
 /**
  * Sort tree by column and direction
  */
-function sortTree(node: TreeNode, sortColumn: SortColumn = 'name', sortDirection: SortDirection = 'asc'): void {
+export function sortTree(node: TreeNode, sortColumn: SortColumn = 'name', sortDirection: SortDirection = 'asc'): void {
   node.files.sort((a, b) => {
     let comparison = 0;
     const multiplier = sortDirection === 'asc' ? 1 : -1;
@@ -362,7 +362,7 @@ function calculateFolderStatus(node: TreeNode): { status: Status; hasWebCrawlerC
 /**
  * Build rows for tree with status
  */
-function buildRowsForTree(
+export function buildRowsForTree(
   node: TreeNode,
   depth: number,
   parentPath: string,
@@ -438,7 +438,7 @@ function buildRowsForTree(
 /**
  * Flatten rows based on expanded set
  */
-function flattenRows(rows: TableRow[], expandedSet: Set<string>): TableRow[] {
+export function flattenRows(rows: TableRow[], expandedSet: Set<string>): TableRow[] {
   const flat: TableRow[] = [];
 
   function visit(row: TableRow): void {
@@ -455,7 +455,7 @@ function flattenRows(rows: TableRow[], expandedSet: Set<string>): TableRow[] {
  * Unwrap single root folders (like 'documents', 'company', or 'kb-{uuid}')
  * This flattens the view to show actual content directly
  */
-function unwrapSingleRootFolders(rows: TableRow[]): TableRow[] {
+export function unwrapSingleRootFolders(rows: TableRow[]): TableRow[] {
   // Keep unwrapping if there's only one folder at the root
   let currentRows = rows;
 
