@@ -99,6 +99,34 @@ export type CrmFlag = {
 
 export type DocTypeEntry = { id: string; name: string };
 
+/**
+ * A section of the customer record (e.g. "Company Details", "Contract").
+ * fieldIds is ordered; each id may reference a built-in Customer property
+ * (e.g. "companyName") or a FieldDefinition id for a custom field stored
+ * on Customer.customFields.
+ */
+export type CustomerRecordSection = {
+  id: string;
+  name: string;
+  fieldIds: string[];
+};
+
+export type CustomerRecordConfig = {
+  sections: CustomerRecordSection[];
+};
+
+/**
+ * Visual layout controls for the customer record. Affects the customer
+ * detail modal — column count, density, default expand state, and label
+ * placement. All fields are optional so existing configs keep working.
+ */
+export type CustomerRecordLayout = {
+  columnsPerSection?: 2 | 3 | 4;
+  density?: 'compact' | 'comfortable';
+  defaultSectionsExpanded?: boolean;
+  labelPosition?: 'above' | 'inline';
+};
+
 export type CrmConfig = {
   lifecycleStages: CrmLifecycleStage[];
   customerFlags: CrmFlag[];
@@ -107,6 +135,8 @@ export type CrmConfig = {
   industries: string[];
   defaultStage?: string;
   useAutoColors?: boolean;
+  customerRecord?: CustomerRecordConfig;
+  layout?: CustomerRecordLayout;
 };
 
 export type SupplierFlag = {
@@ -407,6 +437,7 @@ export type Customer = {
   productNotes?: string | null;
   notes: string;
   contacts: Contact[];
+  customFields?: Record<string, unknown>;
   openTicketCount: number;
   lastContactDate?: string | null;
   createdBy: string;
@@ -588,6 +619,7 @@ export type CreateCustomerPayload = {
   productNotes?: string | null;
   notes?: string;
   contacts?: Contact[];
+  customFields?: Record<string, unknown>;
   order?: number;
 };
 

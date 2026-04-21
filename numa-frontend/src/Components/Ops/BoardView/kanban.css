@@ -1235,6 +1235,41 @@
   padding: 12px 20px;
 }
 
+.crm-section-body-comfortable {
+  padding: 20px 24px;
+  font-size: 0.95rem;
+}
+
+.crm-section-body-comfortable .form-label {
+  font-size: 0.85rem;
+}
+
+.crm-section-body-comfortable .form-control,
+.crm-section-body-comfortable .form-select {
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+/* Inline labels: label + input on the same row inside each grid cell. */
+.crm-section-body-inline-labels .row > [class*='col-'] > div {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.crm-section-body-inline-labels .form-label {
+  margin-bottom: 0;
+  white-space: nowrap;
+  min-width: 110px;
+}
+
+.crm-section-body-inline-labels .form-control,
+.crm-section-body-inline-labels .form-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* ── CRM field rows (label + value in a horizontal row) ──────────────────── */
 
 .crm-field-row {
@@ -1288,6 +1323,40 @@
 .crm-field-value--empty {
   color: #9ca3af;
   font-style: normal;
+}
+
+/* Compact read-mode field layout (Customer record section display) */
+.crm-compact-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.crm-compact-label {
+  font-size: 0.7rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+
+.crm-compact-value {
+  font-size: 0.85rem;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.crm-compact-value a {
+  color: #4f46e5;
+  text-decoration: none;
+}
+
+.crm-compact-value a:hover {
+  text-decoration: underline;
 }
 
 /* Selects in CRM modals — visible but subtle border to differentiate from text */

@@ -396,6 +396,39 @@ export const DEFAULT_CRM_CONFIG = {
     'Other',
   ],
   defaultStageId: 'stage-prospect',
+  // Default customer record layout — mirrors the built-in Company Details
+  // and Contract sections of CustomerDetailModal. Field ids that match a
+  // Customer property name are built-ins; custom field ids point at
+  // FieldDefinitions (category: 'crm') and resolve through customFields.
+  customerRecord: {
+    sections: [
+      {
+        id: 'section-company-details',
+        name: 'Company Details',
+        fieldIds: [
+          'companyName',
+          'industry',
+          'companySize',
+          'website',
+          'territory',
+          'source',
+          'ownerId',
+          'lifecycleStage',
+        ],
+      },
+      {
+        id: 'section-contract',
+        name: 'Contract',
+        fieldIds: ['contractValue', 'contractTerm', 'contractStartDate', 'renewalDate', 'products', 'productNotes'],
+      },
+    ],
+  },
+  layout: {
+    columnsPerSection: 3,
+    density: 'compact',
+    defaultSectionsExpanded: false,
+    labelPosition: 'above',
+  },
   updatedAt: now,
 };
 
