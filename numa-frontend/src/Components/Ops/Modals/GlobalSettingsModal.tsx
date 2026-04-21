@@ -16,7 +16,9 @@ import { STATUS_TYPE_TO_ZONES, getTicketTypeIconClass } from '../../../constants
 import TicketTypeIconPicker from '../Shared/TicketTypeIconPicker';
 import { ConfirmModal } from './ConfirmModal';
 import { CustomerDetailModal } from './CustomerDetailModal';
+import { CustomerRecordConfigBlock } from './CustomerRecordConfigBlock';
 import { SupplierDetailModal } from './SupplierDetailModal';
+import { DEFAULT_CUSTOMER_RECORD } from '../Shared/customerRecordFields';
 import { StaffAvatar } from '../Shared/StaffAvatar';
 import type {
   TicketType,
@@ -221,6 +223,7 @@ export function GlobalSettingsModal({
     documentTypes: [],
     territories: [],
     industries: [],
+    customerRecord: structuredClone(DEFAULT_CUSTOMER_RECORD),
   });
   const [supplierConfig, setSupplierConfig] = useState<SupplierConfig>({
     lifecycleStages: [],
@@ -325,8 +328,8 @@ export function GlobalSettingsModal({
       setTicketTypes(config.ticketTypes ? structuredClone(config.ticketTypes) : []);
       // statuses no longer editable — status categories are fixed
       setFields(config.fields ? structuredClone(config.fields) : []);
-      setCrmConfig(
-        config.crmConfig
+      setCrmConfig(() => {
+        const base = config.crmConfig
           ? structuredClone(config.crmConfig)
           : {
               lifecycleStages: [],
@@ -334,8 +337,12 @@ export function GlobalSettingsModal({
               documentTypes: [],
               territories: [],
               industries: [],
-            }
-      );
+            };
+        if (!base.customerRecord || !base.customerRecord.sections?.length) {
+          base.customerRecord = structuredClone(DEFAULT_CUSTOMER_RECORD);
+        }
+        return base;
+      });
       setSupplierConfig(
         config.supplierConfig
           ? structuredClone(config.supplierConfig)
@@ -1207,6 +1214,43 @@ export function GlobalSettingsModal({
 
       {/* Scrollable Content */}
       <div className="flex-grow-1 overflow-auto p-4 pe-4">
+        {/* Customer Record Layout */}
+        <CustomerRecordConfigBlock
+          value={crmConfig.customerRecord ?? structuredClone(DEFAULT_CUSTOMER_RECORD)}
+          onChange={(next) => {
+            const updated = structuredClone(crmConfig);
+            updated.customerRecord = next;
+            setCrmConfig(updated);
+          }}
+          allFields={fields}
+          t={t}
+          onCreateField={async ({ name, fieldType, options }) => {
+            // Persist immediately — using a `crm-` prefix avoids the modal's
+            // own Save flow re-creating it (that branch triggers on `custom-`
+            // prefixed ids). Layout change (adding id to section) is saved
+            // with the rest of the modal.
+            const fieldId = `crm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const payload: FieldDefinition = {
+              id: fieldId,
+              name,
+              category: 'crm',
+              fieldType,
+              options,
+              isSystem: false,
+              order: fields.length,
+            };
+            try {
+              const created = await OpsService.createField(numaPost, payload);
+              const newField: FieldDefinition = { ...payload, ...created, id: created?.id ?? fieldId };
+              setFields((prev) => [...prev, newField]);
+              return newField.id;
+            } catch (err) {
+              console.error('[GlobalSettingsModal] Failed to create CRM custom field', err);
+              return null;
+            }
+          }}
+        />
+
         {/* Lifecycle Stages Section */}
         <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
@@ -1502,6 +1546,104 @@ export function GlobalSettingsModal({
             }}
             placeholder={t('globalSettings.addItem', 'Add Item')}
           />
+        </div>
+
+        {/* Layout Settings */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+          <div className="mb-3">
+            <h6 className="fw-bold text-dark mb-1">
+              {t('globalSettings.crmLayout', 'Customer Record Layout Settings')}
+            </h6>
+            <div className="text-muted small">
+              {t('globalSettings.crmLayoutHint', 'Controls how the customer detail view renders sections and fields.')}
+            </div>
+          </div>
+
+          <div className="row g-3">
+            <div className="col-12 col-md-6 col-lg-3">
+              <Form.Label className="small fw-medium mb-1">
+                {t('globalSettings.crmLayout.columns', 'Columns per section')}
+              </Form.Label>
+              <Form.Select
+                size="sm"
+                value={String(crmConfig.layout?.columnsPerSection ?? 3)}
+                onChange={(e) => {
+                  const updated = structuredClone(crmConfig);
+                  const cols = Number(e.target.value) as 2 | 3 | 4;
+                  updated.layout = { ...(updated.layout ?? {}), columnsPerSection: cols };
+                  setCrmConfig(updated);
+                }}
+              >
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </Form.Select>
+            </div>
+
+            <div className="col-12 col-md-6 col-lg-3">
+              <Form.Label className="small fw-medium mb-1">
+                {t('globalSettings.crmLayout.density', 'Density')}
+              </Form.Label>
+              <Form.Select
+                size="sm"
+                value={crmConfig.layout?.density ?? 'compact'}
+                onChange={(e) => {
+                  const updated = structuredClone(crmConfig);
+                  updated.layout = {
+                    ...(updated.layout ?? {}),
+                    density: e.target.value as 'compact' | 'comfortable',
+                  };
+                  setCrmConfig(updated);
+                }}
+              >
+                <option value="compact">{t('globalSettings.crmLayout.compact', 'Compact')}</option>
+                <option value="comfortable">{t('globalSettings.crmLayout.comfortable', 'Comfortable')}</option>
+              </Form.Select>
+            </div>
+
+            <div className="col-12 col-md-6 col-lg-3">
+              <Form.Label className="small fw-medium mb-1">
+                {t('globalSettings.crmLayout.labelPosition', 'Label position')}
+              </Form.Label>
+              <Form.Select
+                size="sm"
+                value={crmConfig.layout?.labelPosition ?? 'above'}
+                onChange={(e) => {
+                  const updated = structuredClone(crmConfig);
+                  updated.layout = {
+                    ...(updated.layout ?? {}),
+                    labelPosition: e.target.value as 'above' | 'inline',
+                  };
+                  setCrmConfig(updated);
+                }}
+              >
+                <option value="above">{t('globalSettings.crmLayout.labelAbove', 'Above field')}</option>
+                <option value="inline">{t('globalSettings.crmLayout.labelInline', 'Inline')}</option>
+              </Form.Select>
+            </div>
+
+            <div className="col-12 col-md-6 col-lg-3 d-flex align-items-end">
+              <Form.Check
+                type="switch"
+                id="crmLayoutDefaultExpanded"
+                className="mb-1"
+                checked={crmConfig.layout?.defaultSectionsExpanded === true}
+                onChange={(e) => {
+                  const updated = structuredClone(crmConfig);
+                  updated.layout = {
+                    ...(updated.layout ?? {}),
+                    defaultSectionsExpanded: e.target.checked,
+                  };
+                  setCrmConfig(updated);
+                }}
+                label={
+                  <span className="small">
+                    {t('globalSettings.crmLayout.expandAll', 'Expand all sections by default')}
+                  </span>
+                }
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -24,6 +24,8 @@ interface DynamicFieldProps {
   suppliers?: Supplier[];
   workUnits?: WorkUnit[];
   projects?: Project[];
+  /** Suppress the built-in label — useful when the caller renders its own. */
+  hideLabel?: boolean;
 }
 
 /**
@@ -62,6 +64,7 @@ export function DynamicField({
   suppliers,
   workUnits,
   projects,
+  hideLabel = false,
 }: DynamicFieldProps): React.JSX.Element | null {
   const { t } = useTranslation('ops');
 
@@ -84,7 +87,7 @@ export function DynamicField({
   const isRequired = fieldOverride?.required === true;
   const compactStyle: React.CSSProperties = compact ? { fontSize: '0.85rem', padding: '0.2rem 0.4rem' } : {};
 
-  const label = (
+  const label = hideLabel ? null : (
     <Form.Label className="mb-1" style={compact ? { fontSize: '0.85rem' } : {}}>
       {field.name}
       {isRequired && <span className="text-danger ms-1">*</span>}
