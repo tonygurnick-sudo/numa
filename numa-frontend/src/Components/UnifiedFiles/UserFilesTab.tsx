@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Table, Badge, Button, Spinner, Alert, OverlayTrigger, Tooltip, Modal, Form } from 'react-bootstrap';
+import { Spinner, Alert, Modal } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import {
@@ -10,7 +10,6 @@ import {
   sortTree,
   formatDateSafe,
   formatSizeSafe,
-  safeDecodeURIComponent,
 } from '../KnowledgeBase/KBFileExplorer';
 import type { S3Object, TableRow, SortColumn, SortDirection } from '../KnowledgeBase/KBFileExplorer';
 import { FileUploader } from '../FileUploader';
@@ -29,13 +28,11 @@ import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 import type { S3FileInfo } from '../../Services/knowledgeBaseService';
 import { CreateFolderModal } from './CreateFolderModal';
 import { FolderSettingsDrawer } from './FolderSettingsDrawer';
-import i18n from '../../i18n';
 
 interface UserFilesTabProps {
   onActionChange?: (actions: React.ReactNode) => void;
 }
 
-/** Per-KB file data state */
 interface KBFileState {
   files: S3Object[];
   isLoading: boolean;
@@ -44,7 +41,15 @@ interface KBFileState {
   loadingFolders: Set<string>;
 }
 
-/** Convert API response to S3Objects, matching KBFileExplorer's pattern */
+/** Where we are navigated to. null = root (all KBs). Set = inside a specific KB. */
+interface NavigationState {
+  kbId: string;
+  kbName: string;
+  role: 'VIEWER' | 'EDITOR' | 'OWNER';
+  /** Stack of subfolder IDs we've navigated into within this KB */
+  subfolderPath: { id: string; name: string }[];
+}
+
 function apiToS3Objects(fileInfos: S3FileInfo[], folderNames: string[], parentPrefix: string): S3Object[] {
   const s3Files: S3Object[] = fileInfos.map((f) => ({
     Key: f.key,
@@ -54,12 +59,9 @@ function apiToS3Objects(fileInfos: S3FileInfo[], folderNames: string[], parentPr
     uploadedBy: f.uploadedBy,
     uploadedAt: f.uploadedAt,
   }));
-
   for (const folder of folderNames) {
-    const markerKey = `${parentPrefix}${folder}/`;
-    s3Files.push({ Key: markerKey, LastModified: new Date(), Size: 0 });
+    s3Files.push({ Key: `${parentPrefix}${folder}/`, LastModified: new Date(), Size: 0 });
   }
-
   return s3Files;
 }
 
@@ -69,21 +71,23 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const { availableKBs, isLoadingKBs, refreshKBs, fetchKBDetails } = useKnowledgeBase();
   const { getCredentials, region: authRegion } = useAuth();
 
-  // Which KBs are expanded (top-level folders)
+  // Navigation: null = root, set = inside a KB
+  const [currentFolder, setCurrentFolder] = useState<NavigationState | null>(null);
+
+  // Inline expansion at root level
   const [expandedKbs, setExpandedKbs] = useState<Set<string>>(new Set());
-  // Per-KB file data
+  // Per-KB file state
   const [kbFileStates, setKbFileStates] = useState<Map<string, KBFileState>>(new Map());
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [settingsKb, setSettingsKb] = useState<UserKB | null>(null);
 
-  // Search and sort
   const [searchValue, setSearchValue] = useState('');
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-  // Upload state
+  // Upload
   const [uploadTargetKb, setUploadTargetKb] = useState<UserKB | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [fileValidationError, setFileValidationError] = useState<string | null>(null);
@@ -116,25 +120,19 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const region = authRegion || window.sessionStorage.getItem('REGION') || 'ap-southeast-2';
   const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
   const dataBucket = `numa-${CLIENT_NAME}-data`;
-
   const emptyValue = tKb('fileExplorer.emptyValue');
   const formatDate = useCallback((date: Date | undefined) => formatDateSafe(date, emptyValue), [emptyValue]);
   const formatSize = useCallback((size: number | undefined) => formatSizeSafe(size, emptyValue), [emptyValue]);
 
   const allUserKBs = useMemo(() => availableKBs.filter((kb) => !SYSTEM_KB_IDS.has(kb.kb_id)), [availableKBs]);
 
-  // Update parent action buttons
+  // Hide parent page actions -- we handle them in the toolbar
   useEffect(() => {
-    if (!onActionChange) return;
-    onActionChange(
-      <Button variant="primary" size="sm" onClick={() => setShowCreateModal(true)}>
-        <i className="bi bi-folder-plus me-2" />
-        {t('actions.newFolder')}
-      </Button>
-    );
-  }, [onActionChange, t]);
+    onActionChange?.(null);
+  }, [onActionChange]);
 
-  /** Fetch files for a KB */
+  // ── Data fetching ──────────────────────────────────────────
+
   const fetchKbFiles = useCallback(async (kbId: string) => {
     setKbFileStates((prev) => {
       const next = new Map(prev);
@@ -150,16 +148,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
     try {
       const { files: fileInfos, folders: folderNames = [] } = await knowledgeBaseService.listKBFiles(kbId);
-      const basePrefix = `documents/kb-${kbId}/`;
-      const s3Files = apiToS3Objects(fileInfos, folderNames, basePrefix);
-
+      const s3Files = apiToS3Objects(fileInfos, folderNames, `documents/kb-${kbId}/`);
       setKbFileStates((prev) => {
         const next = new Map(prev);
-        const existing = prev.get(kbId);
         next.set(kbId, {
           files: s3Files,
           isLoading: false,
-          expandedFolders: existing?.expandedFolders ?? new Set(),
+          expandedFolders: prev.get(kbId)?.expandedFolders ?? new Set(),
           loadedFolders: new Set(),
           loadingFolders: new Set(),
         });
@@ -169,44 +164,72 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       console.error('Failed to fetch KB files:', kbId, err);
       setKbFileStates((prev) => {
         const next = new Map(prev);
-        const existing = prev.get(kbId);
         next.set(kbId, {
-          ...(existing ?? {
-            files: [],
-            expandedFolders: new Set(),
-            loadedFolders: new Set(),
-            loadingFolders: new Set(),
-          }),
+          files: [],
           isLoading: false,
+          expandedFolders: new Set(),
+          loadedFolders: new Set(),
+          loadingFolders: new Set(),
         });
         return next;
       });
     }
   }, []);
 
-  /** Toggle a top-level KB folder */
+  const ensureKbLoaded = useCallback(
+    (kbId: string) => {
+      if (!kbFileStates.has(kbId)) {
+        fetchKbFiles(kbId);
+        fetchKBDetails(kbId);
+      }
+    },
+    [kbFileStates, fetchKbFiles, fetchKBDetails]
+  );
+
+  // ── Interactions ───────────────────────────────────────────
+
+  /** Chevron click: expand/collapse inline */
   const toggleKbExpansion = useCallback(
-    (kb: UserKB) => {
-      const kbId = kb.kb_id;
+    (kbId: string) => {
       setExpandedKbs((prev) => {
         const next = new Set(prev);
         if (next.has(kbId)) {
           next.delete(kbId);
         } else {
           next.add(kbId);
-          fetchKBDetails(kbId);
-          // Fetch files if not already loaded
-          if (!kbFileStates.has(kbId)) {
-            fetchKbFiles(kbId);
-          }
+          ensureKbLoaded(kbId);
         }
         return next;
       });
     },
-    [fetchKBDetails, kbFileStates, fetchKbFiles]
+    [ensureKbLoaded]
   );
 
-  /** Toggle a subfolder within a KB */
+  /** Double-click: navigate into KB folder */
+  const navigateIntoKb = useCallback(
+    (kb: UserKB) => {
+      setCurrentFolder({ kbId: kb.kb_id, kbName: kb.kb_name, role: kb.role, subfolderPath: [] });
+      setSearchValue('');
+      ensureKbLoaded(kb.kb_id);
+    },
+    [ensureKbLoaded]
+  );
+
+  const navigateBack = useCallback(() => {
+    setCurrentFolder((prev) => {
+      if (!prev) return null;
+      if (prev.subfolderPath.length > 0) {
+        // Go up one subfolder level
+        return { ...prev, subfolderPath: prev.subfolderPath.slice(0, -1) };
+      }
+      // Back to root
+      return null;
+    });
+    setSearchValue('');
+    closeFilePreview();
+  }, [closeFilePreview]);
+
+  /** Toggle subfolder within a KB */
   const toggleSubfolder = useCallback(
     (kbId: string, folderId: string) => {
       const state = kbFileStates.get(kbId);
@@ -214,28 +237,21 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
       const isExpanding = !state.expandedFolders.has(folderId);
 
-      // Toggle visual expand/collapse
       setKbFileStates((prev) => {
         const next = new Map(prev);
         const s = { ...prev.get(kbId)! };
         const newExpanded = new Set(s.expandedFolders);
-        if (isExpanding) {
-          newExpanded.add(folderId);
-        } else {
-          newExpanded.delete(folderId);
-        }
+        isExpanding ? newExpanded.add(folderId) : newExpanded.delete(folderId);
         next.set(kbId, { ...s, expandedFolders: newExpanded });
         return next;
       });
 
-      // Lazy load if expanding and not yet loaded
       if (!isExpanding || state.loadedFolders.has(folderId)) return;
 
       const basePrefix = `documents/kb-${kbId}/`;
       const basePrefixNoSlash = basePrefix.replace(/\/$/, '');
       const subpath = folderId.startsWith(basePrefixNoSlash) ? folderId.slice(basePrefixNoSlash.length + 1) : folderId;
 
-      // Mark as loading
       setKbFileStates((prev) => {
         const next = new Map(prev);
         const s = { ...prev.get(kbId)! };
@@ -254,16 +270,15 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             const next = new Map(prev);
             const s = { ...prev.get(kbId)! };
             const existingKeys = new Set(s.files.map((f) => f.Key));
-            const merged = [...s.files];
-            for (const f of s3Files) {
-              if (!existingKeys.has(f.Key)) merged.push(f);
-            }
-            s.files = merged;
-            s.loadedFolders = new Set(s.loadedFolders).add(folderId);
+            const merged = [...s.files, ...s3Files.filter((f) => !existingKeys.has(f.Key))];
             const newLoading = new Set(s.loadingFolders);
             newLoading.delete(folderId);
-            s.loadingFolders = newLoading;
-            next.set(kbId, s);
+            next.set(kbId, {
+              ...s,
+              files: merged,
+              loadedFolders: new Set(s.loadedFolders).add(folderId),
+              loadingFolders: newLoading,
+            });
             return next;
           });
         })
@@ -274,8 +289,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             const s = { ...prev.get(kbId)! };
             const newLoading = new Set(s.loadingFolders);
             newLoading.delete(folderId);
-            s.loadingFolders = newLoading;
-            next.set(kbId, s);
+            next.set(kbId, { ...s, loadingFolders: newLoading });
             return next;
           });
         });
@@ -283,20 +297,37 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     [kbFileStates]
   );
 
-  /** Build flattened rows for an expanded KB (child rows at depth 1+) */
+  /** Double-click: navigate into a subfolder within a KB */
+  const navigateIntoSubfolder = useCallback(
+    (kbId: string, folderId: string, folderName: string) => {
+      // Ensure the folder is expanded and loaded
+      const state = kbFileStates.get(kbId);
+      if (state && !state.expandedFolders.has(folderId)) {
+        toggleSubfolder(kbId, folderId);
+      }
+      setCurrentFolder((prev) => {
+        if (!prev) return prev;
+        return { ...prev, subfolderPath: [...prev.subfolderPath, { id: folderId, name: folderName }] };
+      });
+      setSearchValue('');
+    },
+    [kbFileStates, toggleSubfolder]
+  );
+
+  /** Build child rows for a KB */
   const buildKbChildRows = useCallback(
-    (kbId: string): TableRow[] => {
+    (kbId: string, startDepth: number): TableRow[] => {
       const state = kbFileStates.get(kbId);
       if (!state || state.files.length === 0) return [];
-
       const tree = buildFileTree(state.files);
       sortTree(tree, sortColumn, sortDirection);
-      // Build rows starting at depth 1 (since depth 0 is the KB folder itself)
-      const nested = unwrapSingleRootFolders(buildRowsForTree(tree, 1, '', formatDate, formatSize));
+      const nested = unwrapSingleRootFolders(buildRowsForTree(tree, startDepth, '', formatDate, formatSize));
       return flattenRows(nested, state.expandedFolders);
     },
     [kbFileStates, sortColumn, sortDirection, formatDate, formatSize]
   );
+
+  // ── File preview / download ────────────────────────────────
 
   const handleOpenFilePreview = useCallback(
     (ref: FileReference) => {
@@ -317,14 +348,19 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     [dataBucket, region, getCredentials]
   );
 
-  // Upload handlers
+  // ── Upload handlers ────────────────────────────────────────
+
   useEffect(() => {
     if (showUploadModal && uploadTargetKb) {
       const fetchFoldersForUpload = async () => {
         try {
           setLoadingFolders(true);
-          const bucket = `numa-${CLIENT_NAME}-data`;
-          const folders = await listFoldersInKB(uploadTargetKb.kb_id, bucket, region, getCredentials);
+          const folders = await listFoldersInKB(
+            uploadTargetKb.kb_id,
+            `numa-${CLIENT_NAME}-data`,
+            region,
+            getCredentials
+          );
           setFolderOptions(folders);
         } catch {
           setFolderOptions([]);
@@ -370,25 +406,21 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     setShowUploadModal(false);
     setUploadSuccess(true);
     setTimeout(() => setUploadSuccess(false), 3000);
-    if (uploadTargetKb) {
-      fetchKbFiles(uploadTargetKb.kb_id);
-    }
+    if (uploadTargetKb) fetchKbFiles(uploadTargetKb.kb_id);
   }
 
-  const handleFolderCreated = useCallback(() => {
-    refreshKBs();
-  }, [refreshKBs]);
-
+  const handleFolderCreated = useCallback(() => refreshKBs(), [refreshKBs]);
   const handleFolderDeleted = useCallback(() => {
     if (settingsKb) {
       setExpandedKbs((prev) => {
-        const next = new Set(prev);
-        next.delete(settingsKb.kb_id);
-        return next;
+        const n = new Set(prev);
+        n.delete(settingsKb.kb_id);
+        return n;
       });
+      if (currentFolder?.kbId === settingsKb.kb_id) setCurrentFolder(null);
     }
     refreshKBs();
-  }, [refreshKBs, settingsKb]);
+  }, [refreshKBs, settingsKb, currentFolder]);
 
   const openSettings = useCallback((kb: UserKB, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -411,27 +443,29 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     }
   }
 
-  // Loading state
+  // ── Loading / empty states ─────────────────────────────────
+
   if (isLoadingKBs) {
     return (
-      <div className="text-center py-5">
-        <Spinner animation="border" variant="primary" />
-        <p className="mt-3 text-muted">{t('folderList.loading')}</p>
+      <div className="finder-files">
+        <div className="finder-loading">
+          <Spinner animation="border" size="sm" variant="secondary" />
+          <span>{t('folderList.loading')}</span>
+        </div>
       </div>
     );
   }
 
-  // Empty state
   if (allUserKBs.length === 0) {
     return (
-      <div className="text-center py-5">
-        <i className="bi bi-folder display-1 text-muted" />
-        <h5 className="mt-3 text-muted">{t('folderList.empty.title')}</h5>
-        <p className="text-muted">{t('folderList.empty.message')}</p>
-        <Button variant="primary" onClick={() => setShowCreateModal(true)}>
-          <i className="bi bi-folder-plus me-2" />
-          {t('actions.newFolder')}
-        </Button>
+      <div className="finder-files">
+        <div className="finder-empty">
+          <i className="bi bi-folder" />
+          <span>{t('folderList.empty.title')}</span>
+          <button className="finder-btn finder-btn--primary mt-2" onClick={() => setShowCreateModal(true)}>
+            <i className="bi bi-folder-plus" /> {t('actions.newFolder')}
+          </button>
+        </div>
         <CreateFolderModal
           show={showCreateModal}
           onHide={() => setShowCreateModal(false)}
@@ -441,414 +475,401 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     );
   }
 
-  // Build all rows: KB folders at depth 0 + their children at depth 1+
-  const allRows: { row: TableRow; kbId: string; isKbFolder: boolean; kb?: UserKB }[] = [];
-  for (const kb of allUserKBs) {
-    const isExpanded = expandedKbs.has(kb.kb_id);
-    const kbState = kbFileStates.get(kb.kb_id);
+  // ── Build rows ─────────────────────────────────────────────
 
-    // KB folder row at depth 0
-    allRows.push({
-      row: {
-        id: `kb-${kb.kb_id}`,
-        type: 'folder',
-        name: kb.kb_name,
-        depth: 0,
-        uploadDate: '\u2014',
-        size: '\u2014',
-        status: 'indexed',
-        children: [],
-      },
-      kbId: kb.kb_id,
-      isKbFolder: true,
-      kb,
-    });
+  const isInsideFolder = currentFolder !== null;
+  const currentKb = isInsideFolder ? allUserKBs.find((kb) => kb.kb_id === currentFolder.kbId) : null;
+  const canEditCurrent = currentKb && (currentKb.role === 'OWNER' || currentKb.role === 'EDITOR');
 
-    // If expanded, add loading row or child rows
-    if (isExpanded) {
-      if (kbState?.isLoading) {
-        allRows.push({
-          row: {
-            id: `kb-${kb.kb_id}-loading`,
-            type: 'file',
-            name: '',
-            depth: 1,
-            uploadDate: '',
-            size: '',
-            status: 'pending',
-          },
-          kbId: kb.kb_id,
+  type RowEntry = {
+    row: TableRow;
+    kbId: string;
+    isKbFolder: boolean;
+    kb?: UserKB;
+    special?: 'loading' | 'empty';
+  };
+
+  const rows: RowEntry[] = [];
+
+  if (isInsideFolder) {
+    // Inside a specific KB -- show its contents at depth 0
+    const kbState = kbFileStates.get(currentFolder.kbId);
+    if (kbState?.isLoading) {
+      rows.push({
+        row: { id: 'loading', type: 'file', name: '', depth: 0, uploadDate: '', size: '', status: 'pending' },
+        kbId: currentFolder.kbId,
+        isKbFolder: false,
+        special: 'loading',
+      });
+    } else {
+      let childRows = buildKbChildRows(currentFolder.kbId, 0);
+
+      // If we've navigated into subfolders, drill down to the target
+      if (currentFolder.subfolderPath.length > 0) {
+        const allFlat = childRows;
+        const targetFolderId = currentFolder.subfolderPath[currentFolder.subfolderPath.length - 1].id;
+        const folderIdx = allFlat.findIndex((r) => r.id === targetFolderId);
+        if (folderIdx !== -1) {
+          const folderDepth = allFlat[folderIdx].depth;
+          const children: TableRow[] = [];
+          for (let i = folderIdx + 1; i < allFlat.length; i++) {
+            if (allFlat[i].depth <= folderDepth) break;
+            children.push({ ...allFlat[i], depth: allFlat[i].depth - folderDepth - 1 });
+          }
+          childRows = children;
+        }
+      }
+
+      if (childRows.length === 0 && kbState) {
+        rows.push({
+          row: { id: 'empty', type: 'file', name: '', depth: 0, uploadDate: '', size: '', status: 'indexed' },
+          kbId: currentFolder.kbId,
           isKbFolder: false,
+          special: 'empty',
         });
       } else {
-        const childRows = buildKbChildRows(kb.kb_id);
-        for (const childRow of childRows) {
-          allRows.push({
-            row: childRow,
-            kbId: kb.kb_id,
-            isKbFolder: false,
-          });
-        }
-        // Empty folder state
-        if (childRows.length === 0 && kbState && !kbState.isLoading) {
-          allRows.push({
+        for (const r of childRows) rows.push({ row: r, kbId: currentFolder.kbId, isKbFolder: false });
+      }
+    }
+  } else {
+    // Root view -- KB folders at depth 0 + expanded children at depth 1+
+    for (const kb of allUserKBs) {
+      const isExpanded = expandedKbs.has(kb.kb_id);
+      rows.push({
+        row: {
+          id: `kb-${kb.kb_id}`,
+          type: 'folder',
+          name: kb.kb_name,
+          depth: 0,
+          uploadDate: '\u2014',
+          size: '\u2014',
+          status: 'indexed',
+        },
+        kbId: kb.kb_id,
+        isKbFolder: true,
+        kb,
+      });
+
+      if (isExpanded) {
+        const kbState = kbFileStates.get(kb.kb_id);
+        if (kbState?.isLoading) {
+          rows.push({
             row: {
-              id: `kb-${kb.kb_id}-empty`,
+              id: `kb-${kb.kb_id}-loading`,
               type: 'file',
-              name: tKb('fileExplorer.empty'),
+              name: '',
               depth: 1,
               uploadDate: '',
               size: '',
-              status: 'indexed',
+              status: 'pending',
             },
             kbId: kb.kb_id,
             isKbFolder: false,
+            special: 'loading',
           });
+        } else {
+          const childRows = buildKbChildRows(kb.kb_id, 1);
+          if (childRows.length === 0 && kbState) {
+            rows.push({
+              row: {
+                id: `kb-${kb.kb_id}-empty`,
+                type: 'file',
+                name: '',
+                depth: 1,
+                uploadDate: '',
+                size: '',
+                status: 'indexed',
+              },
+              kbId: kb.kb_id,
+              isKbFolder: false,
+              special: 'empty',
+            });
+          } else {
+            for (const r of childRows) rows.push({ row: r, kbId: kb.kb_id, isKbFolder: false });
+          }
         }
       }
     }
   }
 
-  // Main content
+  // ── Render ─────────────────────────────────────────────────
+
   const mainContent = (
-    <div className="py-3 kb-file-explorer">
+    <div className="finder-files">
       {uploadSuccess && (
-        <Alert variant="success" dismissible onClose={() => setUploadSuccess(false)} className="mb-3">
+        <Alert variant="success" dismissible onClose={() => setUploadSuccess(false)} className="mx-3 mt-2 mb-0">
           <i className="bi bi-check-circle me-2" />
           {t('upload.success')}
         </Alert>
       )}
 
-      {/* Action Bar - matching KBFileExplorer's layout */}
-      <div className="mb-3 p-3 bg-light rounded">
-        <div className="d-flex flex-wrap justify-content-between align-items-center gap-3">
-          <div className="d-flex align-items-center gap-3 flex-wrap">
-            <Form.Control
+      {/* Toolbar */}
+      <div className="finder-toolbar">
+        <div className="finder-toolbar__location">
+          {isInsideFolder ? (
+            <>
+              <button className="finder-toolbar__back" onClick={navigateBack}>
+                <i className="bi bi-chevron-left" />
+                {currentFolder.subfolderPath.length > 0
+                  ? currentFolder.subfolderPath.length === 1
+                    ? currentFolder.kbName
+                    : currentFolder.subfolderPath[currentFolder.subfolderPath.length - 2].name
+                  : t('breadcrumb.userFiles')}
+              </button>
+              <span className="finder-toolbar__title">
+                {currentFolder.subfolderPath.length > 0
+                  ? currentFolder.subfolderPath[currentFolder.subfolderPath.length - 1].name
+                  : currentFolder.kbName}
+              </span>
+            </>
+          ) : (
+            <span className="finder-toolbar__title">{t('tabs.userFiles')}</span>
+          )}
+        </div>
+        <div className="finder-toolbar__actions">
+          <div className="finder-search">
+            <i className="bi bi-search finder-search__icon" />
+            <input
               type="text"
               placeholder={tKb('fileExplorer.searchPlaceholder')}
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              className="flex-shrink-0"
-              style={{ width: '250px', minWidth: '150px' }}
             />
           </div>
-          <div className="d-flex flex-wrap align-items-center gap-2">
-            <Button
-              variant="outline-secondary"
-              size="sm"
-              onClick={() => setShowCreateModal(true)}
-              className="text-nowrap"
-            >
-              <i className="bi bi-folder-plus me-1" />
-              <span className="d-none d-sm-inline">{tKb('fileExplorer.actions.newFolder')}</span>
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                // Refresh all expanded KBs
+          {(!isInsideFolder || canEditCurrent) && (
+            <button className="finder-btn" onClick={() => setShowCreateModal(true)}>
+              <i className="bi bi-folder-plus" />
+            </button>
+          )}
+          {isInsideFolder && canEditCurrent && currentKb && (
+            <button className="finder-btn" onClick={(e) => openUploadForKb(currentKb, e)}>
+              <i className="bi bi-upload" />
+            </button>
+          )}
+          <button
+            className="finder-btn"
+            onClick={() => {
+              if (isInsideFolder) {
+                fetchKbFiles(currentFolder!.kbId);
+              } else {
                 expandedKbs.forEach((kbId) => fetchKbFiles(kbId));
-              }}
-              className="text-nowrap"
-            >
-              <i className="bi bi-arrow-clockwise me-1" />
-              <span className="d-none d-sm-inline">{tKb('fileExplorer.actions.refresh')}</span>
-            </Button>
-          </div>
+              }
+            }}
+          >
+            <i className="bi bi-arrow-clockwise" />
+          </button>
         </div>
       </div>
 
-      {/* File Table */}
-      <div className="file-table-container">
-        <Table hover size="sm" className="mb-0 file-table">
-          <thead className="sticky-table-header numa-table-header">
-            <tr>
-              <th
-                className="sortable-header"
-                onClick={() => handleSortToggle('name')}
-                style={{
-                  width: '40%',
-                  minWidth: '150px',
-                  maxWidth: '300px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <div className="d-flex align-items-center justify-content-between">
-                  <span className="text-truncate">{tKb('fileExplorer.table.name')}</span>
-                  {sortColumn === 'name' && (
-                    <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`} />
-                  )}
-                </div>
-              </th>
-              <th className="d-none d-lg-table-cell" style={{ width: '150px', minWidth: '100px', maxWidth: '200px' }}>
-                <span>{tKb('fileExplorer.table.addedBy')}</span>
-              </th>
-              <th
-                className="sortable-header d-none d-md-table-cell"
-                onClick={() => handleSortToggle('date')}
-                style={{ width: '140px', minWidth: '120px', maxWidth: '160px' }}
-              >
-                <div className="d-flex align-items-center justify-content-between">
-                  <span className="text-nowrap">{tKb('fileExplorer.table.uploadDate')}</span>
-                  {sortColumn === 'date' && (
-                    <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`} />
-                  )}
-                </div>
-              </th>
-              <th
-                className="sortable-header d-none d-sm-table-cell"
-                onClick={() => handleSortToggle('size')}
-                style={{ width: '80px', minWidth: '70px', maxWidth: '90px' }}
-              >
-                <div className="d-flex align-items-center justify-content-between">
-                  <span>{tKb('fileExplorer.table.size')}</span>
-                  {sortColumn === 'size' && (
-                    <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`} />
-                  )}
-                </div>
-              </th>
-              <th style={{ width: '70px', minWidth: '60px' }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {allRows.map(({ row, kbId, isKbFolder, kb }) => {
-              const isFolder = row.type === 'folder';
-              const kbState = kbFileStates.get(kbId);
-
-              // Loading placeholder row
-              if (row.id.endsWith('-loading')) {
-                return (
-                  <tr key={row.id}>
-                    <td colSpan={5} className="text-center py-3">
-                      <Spinner animation="border" size="sm" variant="secondary" className="me-2" />
-                      <span className="text-muted">{tKb('fileExplorer.loadingFiles')}</span>
-                    </td>
-                  </tr>
-                );
-              }
-
-              // Empty folder placeholder row
-              if (row.id.endsWith('-empty')) {
-                return (
-                  <tr key={row.id}>
-                    <td colSpan={5} className="text-center py-3 text-muted">
-                      <i className="bi bi-inbox me-2" />
-                      {tKb('fileExplorer.empty')}
-                    </td>
-                  </tr>
-                );
-              }
-
-              // KB folder row (depth 0)
-              if (isKbFolder && kb) {
-                const isExpanded = expandedKbs.has(kb.kb_id);
-                const isShared = kb.is_shared || kb.role === 'VIEWER';
-                const isOwner = kb.role === 'OWNER';
-                const isEditor = kb.role === 'EDITOR';
-                const canEdit = isOwner || isEditor;
-
-                return (
-                  <tr
-                    key={row.id}
-                    onClick={() => toggleKbExpansion(kb)}
-                    style={{ cursor: 'pointer' }}
-                    className={isExpanded ? 'table-active' : ''}
-                  >
-                    <td
-                      style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}
-                    >
-                      <div className="file-tree-item depth-0" title={kb.kb_name}>
-                        <i
-                          className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle flex-shrink-0`}
-                        />
-                        <i className="bi bi-folder me-2 folder-icon flex-shrink-0" />
-                        <strong className="text-truncate">{kb.kb_name}</strong>
-                        {isShared && (
-                          <OverlayTrigger
-                            placement="top"
-                            overlay={
-                              <Tooltip>
-                                {kb.role === 'VIEWER' ? t('folderList.sharedWithYou') : t('badges.shared')}
-                              </Tooltip>
-                            }
-                          >
-                            <i className="bi bi-people-fill text-muted ms-2" style={{ fontSize: '0.85rem' }} />
-                          </OverlayTrigger>
-                        )}
-                        {!isOwner && (
-                          <Badge
-                            bg="none"
-                            className="border text-muted ms-2"
-                            style={{ fontSize: '0.65rem', fontWeight: 500 }}
-                          >
-                            {isEditor ? t('badges.editor') : t('badges.viewer')}
-                          </Badge>
-                        )}
-                      </div>
-                    </td>
-                    <td className="d-none d-lg-table-cell"></td>
-                    <td className="d-none d-md-table-cell"></td>
-                    <td className="d-none d-sm-table-cell"></td>
-                    <td>
-                      <div className="d-flex align-items-center justify-content-end gap-1">
-                        {canEdit && (
-                          <>
-                            <OverlayTrigger placement="top" overlay={<Tooltip>{t('actions.uploadFiles')}</Tooltip>}>
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-1 text-muted"
-                                onClick={(e) => openUploadForKb(kb, e)}
-                              >
-                                <i className="bi bi-upload" />
-                              </Button>
-                            </OverlayTrigger>
-                            <OverlayTrigger placement="top" overlay={<Tooltip>{t('folderList.settings')}</Tooltip>}>
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-1 text-muted"
-                                onClick={(e) => openSettings(kb, e)}
-                              >
-                                <i className="bi bi-gear" />
-                              </Button>
-                            </OverlayTrigger>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              }
-
-              // Child rows (files and subfolders within a KB)
-              const isSubfolder = isFolder;
-              const isSubfolderExpanded = isSubfolder && (kbState?.expandedFolders.has(row.id) ?? false);
-              const isSubfolderLoading = isSubfolder && (kbState?.loadingFolders.has(row.id) ?? false);
-              const isSubfolderLoaded = isSubfolder && (kbState?.loadedFolders.has(row.id) ?? false);
-              const isEmptySubfolder =
-                isSubfolder && !isSubfolderLoading && isSubfolderLoaded && (row.children?.length ?? 0) === 0;
-
-              return (
-                <tr key={row.id}>
-                  <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
-                    <div className={`file-tree-item depth-${row.depth}`} title={row.displayName || row.name}>
-                      {isSubfolder ? (
-                        isSubfolderLoading ? (
-                          <Spinner
-                            animation="border"
-                            size="sm"
-                            variant="secondary"
-                            className="me-1 flex-shrink-0"
-                            style={{ width: '0.75rem', height: '0.75rem' }}
-                          />
-                        ) : (
-                          <i
-                            className={`bi bi-chevron-${isSubfolderExpanded ? 'down' : 'right'} me-1 folder-toggle flex-shrink-0`}
-                            onClick={() => toggleSubfolder(kbId, row.id)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        )
-                      ) : (
-                        <span className="file-icon-spacer flex-shrink-0" />
-                      )}
-                      {isSubfolder ? (
-                        <>
-                          <i
-                            className={`bi ${row.urlTag === 'web-crawler-folder' ? 'bi-globe2' : 'bi-folder'} me-2 folder-icon flex-shrink-0`}
-                          />
-                          <strong className="text-truncate">{row.name}</strong>
-                          {row.urlTag === 'web-crawler-folder' && (
-                            <Badge bg="info" className="ms-2 flex-shrink-0 small">
-                              {tKb('fileExplorer.webCrawlerBadge')}
-                            </Badge>
-                          )}
-                          {isEmptySubfolder && (
-                            <Badge bg="secondary" className="ms-2 flex-shrink-0 small">
-                              {tKb('fileExplorer.badges.empty')}
-                            </Badge>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <i className="bi bi-file-earmark me-2 file-icon flex-shrink-0" />
-                          <span className="text-truncate" style={{ minWidth: 0 }}>
-                            {row.displayName || row.name}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                  <td
-                    className="d-none d-lg-table-cell text-truncate"
-                    style={{ maxWidth: '200px' }}
-                    title={row.uploadedBy || undefined}
-                  >
-                    {!isSubfolder && (row.uploadedBy || '')}
-                  </td>
-                  <td className="d-none d-md-table-cell">{!isSubfolder ? row.uploadDate : ''}</td>
-                  <td className="d-none d-sm-table-cell">{!isSubfolder ? row.size : ''}</td>
-                  <td>
-                    {!isSubfolder && row.originalKey && (
-                      <div className="d-flex align-items-center gap-1">
-                        <OverlayTrigger
-                          placement="top"
-                          overlay={<Tooltip>{tKb('fileExplorer.actions.previewInPanel')}</Tooltip>}
-                        >
-                          <button
-                            className="btn btn-sm btn-link p-0 kb-file-action-btn"
-                            onClick={() => {
-                              const filename = row.name;
-                              const isWebCrawlerFile =
-                                row.originalKey?.includes('web-crawler/') ||
-                                row.originalKey?.includes('scraped-content/');
-                              const extension = isWebCrawlerFile
-                                ? 'md'
-                                : filename.includes('.')
-                                  ? filename.split('.').pop() || ''
-                                  : '';
-                              handleOpenFilePreview({
-                                filename,
-                                fullPath: row.originalKey!,
-                                relativePath: row.originalKey!,
-                                extension,
-                              });
-                            }}
-                          >
-                            <i className="bi bi-eye" />
-                          </button>
-                        </OverlayTrigger>
-                        <OverlayTrigger
-                          placement="top"
-                          overlay={<Tooltip>{tKb('fileExplorer.actions.downloadFile')}</Tooltip>}
-                        >
-                          <button
-                            className="btn btn-sm btn-link p-0 kb-file-action-btn"
-                            onClick={() => handleDownloadFile(row.originalKey!, row.name)}
-                          >
-                            <i className="bi bi-download" />
-                          </button>
-                        </OverlayTrigger>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </Table>
+      {/* Column headers */}
+      <div className="finder-columns finder-grid-5">
+        <div
+          className={`finder-col ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
+          onClick={() => handleSortToggle('name')}
+        >
+          {tKb('fileExplorer.table.name')}
+          {sortColumn === 'name' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+        </div>
+        <div className="finder-col d-none d-lg-flex">{tKb('fileExplorer.table.addedBy')}</div>
+        <div
+          className={`finder-col d-none d-md-flex ${sortColumn === 'date' ? 'finder-col--active' : ''}`}
+          onClick={() => handleSortToggle('date')}
+        >
+          {tKb('fileExplorer.table.uploadDate')}
+          {sortColumn === 'date' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+        </div>
+        <div
+          className={`finder-col d-none d-sm-flex ${sortColumn === 'size' ? 'finder-col--active' : ''}`}
+          onClick={() => handleSortToggle('size')}
+        >
+          {tKb('fileExplorer.table.size')}
+          {sortColumn === 'size' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+        </div>
+        <div className="finder-col"></div>
       </div>
 
-      {/* Create Folder Modal */}
+      {/* File list */}
+      <div className="finder-list">
+        {rows.map(({ row, kbId, isKbFolder, kb, special }) => {
+          if (special === 'loading') {
+            return (
+              <div key={row.id} className="finder-loading">
+                <Spinner animation="border" size="sm" variant="secondary" />
+                <span>{tKb('fileExplorer.loadingFiles')}</span>
+              </div>
+            );
+          }
+          if (special === 'empty') {
+            return (
+              <div key={row.id} className="finder-empty" style={{ padding: '1.5rem' }}>
+                <i className="bi bi-inbox" style={{ fontSize: '1.5rem' }} />
+                <span>{tKb('fileExplorer.empty')}</span>
+              </div>
+            );
+          }
+
+          const isFolder = row.type === 'folder';
+          const kbState = kbFileStates.get(kbId);
+
+          // KB folder row at root level
+          if (isKbFolder && kb) {
+            const isExpanded = expandedKbs.has(kb.kb_id);
+            const isShared = kb.is_shared || kb.role === 'VIEWER';
+            const isOwner = kb.role === 'OWNER';
+            const isEditor = kb.role === 'EDITOR';
+            const canEdit = isOwner || isEditor;
+
+            return (
+              <div
+                key={row.id}
+                className={`finder-row finder-row--folder finder-grid-5 ${isExpanded ? 'finder-row--expanded' : ''}`}
+                onDoubleClick={() => navigateIntoKb(kb)}
+              >
+                <div className="finder-row__name-content">
+                  <span
+                    className="finder-chevron"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleKbExpansion(kb.kb_id);
+                    }}
+                  >
+                    <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
+                  </span>
+                  <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
+                  <span className="finder-name">{kb.kb_name}</span>
+                  {isShared ? (
+                    <i
+                      className="bi bi-people-fill"
+                      style={{ fontSize: '0.7rem', color: '#86868b' }}
+                      title={isOwner ? t('folderList.sharing') : t('folderList.sharedWithYou')}
+                    />
+                  ) : (
+                    <i
+                      className="bi bi-person-fill"
+                      style={{ fontSize: '0.7rem', color: '#86868b' }}
+                      title={t('folderList.private')}
+                    />
+                  )}
+                  {!isOwner && (
+                    <span className="finder-row__badge">{isEditor ? t('badges.editor') : t('badges.viewer')}</span>
+                  )}
+                </div>
+                <div className="finder-row__meta d-none d-lg-block"></div>
+                <div className="finder-row__meta d-none d-md-block"></div>
+                <div className="finder-row__meta d-none d-sm-block">
+                  {kb.document_count != null && kb.document_count > 0
+                    ? `${kb.document_count} ${kb.document_count === 1 ? 'item' : 'items'}`
+                    : ''}
+                </div>
+                <div className="finder-row__actions">
+                  {canEdit && (
+                    <>
+                      <button onClick={(e) => openUploadForKb(kb, e)} title={t('actions.uploadFiles')}>
+                        <i className="bi bi-upload" />
+                      </button>
+                      <button onClick={(e) => openSettings(kb, e)} title={t('folderList.settings')}>
+                        <i className="bi bi-gear" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          // Child rows (files and subfolders)
+          const isSubfolder = isFolder;
+          const isSubfolderExpanded = isSubfolder && (kbState?.expandedFolders.has(row.id) ?? false);
+          const isSubfolderLoading = isSubfolder && (kbState?.loadingFolders.has(row.id) ?? false);
+
+          return (
+            <div
+              key={row.id}
+              className={`finder-row finder-grid-5 ${isSubfolder ? 'finder-row--folder' : ''} finder-row--depth-${row.depth}`}
+              onDoubleClick={() => {
+                if (isSubfolder) {
+                  navigateIntoSubfolder(kbId, row.id, row.displayName || row.name);
+                } else if (row.originalKey) {
+                  const filename = row.name;
+                  const isWc =
+                    row.originalKey?.includes('web-crawler/') || row.originalKey?.includes('scraped-content/');
+                  const ext = isWc ? 'md' : filename.includes('.') ? filename.split('.').pop() || '' : '';
+                  handleOpenFilePreview({
+                    filename,
+                    fullPath: row.originalKey!,
+                    relativePath: row.originalKey!,
+                    extension: ext,
+                  });
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              <div className="finder-row__name-content">
+                {isSubfolder ? (
+                  isSubfolderLoading ? (
+                    <Spinner
+                      animation="border"
+                      size="sm"
+                      variant="secondary"
+                      style={{ width: '0.6rem', height: '0.6rem', flexShrink: 0 }}
+                    />
+                  ) : (
+                    <span className="finder-chevron" onClick={() => toggleSubfolder(kbId, row.id)}>
+                      <i className={`bi bi-chevron-${isSubfolderExpanded ? 'down' : 'right'}`} />
+                    </span>
+                  )
+                ) : (
+                  <span className="finder-chevron-spacer" />
+                )}
+                <i
+                  className={`bi ${isSubfolder ? 'bi-folder-fill finder-icon--folder' : 'bi-file-earmark finder-icon--file'} finder-icon`}
+                />
+                <span className="finder-name">{row.displayName || row.name}</span>
+              </div>
+              <div className="finder-row__meta d-none d-lg-block">{!isSubfolder ? row.uploadedBy || '' : ''}</div>
+              <div className="finder-row__meta d-none d-md-block">{!isSubfolder ? row.uploadDate : ''}</div>
+              <div className="finder-row__meta d-none d-sm-block">{!isSubfolder ? row.size : ''}</div>
+              <div className="finder-row__actions">
+                {!isSubfolder && row.originalKey && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const filename = row.name;
+                        const isWc =
+                          row.originalKey?.includes('web-crawler/') || row.originalKey?.includes('scraped-content/');
+                        const ext = isWc ? 'md' : filename.includes('.') ? filename.split('.').pop() || '' : '';
+                        handleOpenFilePreview({
+                          filename,
+                          fullPath: row.originalKey!,
+                          relativePath: row.originalKey!,
+                          extension: ext,
+                        });
+                      }}
+                      title={tKb('fileExplorer.actions.previewInPanel')}
+                    >
+                      <i className="bi bi-eye" />
+                    </button>
+                    <button
+                      onClick={() => handleDownloadFile(row.originalKey!, row.name)}
+                      title={tKb('fileExplorer.actions.downloadFile')}
+                    >
+                      <i className="bi bi-download" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modals */}
       <CreateFolderModal
         show={showCreateModal}
         onHide={() => setShowCreateModal(false)}
         onSuccess={handleFolderCreated}
       />
 
-      {/* Folder Settings Drawer */}
       {settingsKb && (
         <FolderSettingsDrawer
           show={showSettingsDrawer}
@@ -859,7 +880,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         />
       )}
 
-      {/* Upload Modal */}
       {showUploadModal && uploadTargetKb && (
         <div className="modal show d-block kb-upload-modal-backdrop" onClick={() => setShowUploadModal(false)}>
           <div
@@ -913,7 +933,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         </div>
       )}
 
-      {/* Large Data File Warning */}
       {showNotificationModal && (
         <NotificationModal
           type="warning"
@@ -922,18 +941,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             <div>
               <p>{t('largeFile.description')}</p>
               <ul className="mb-3">
-                {pendingLargeFiles.map((file, index) => (
-                  <li key={index}>
+                {pendingLargeFiles.map((file, i) => (
+                  <li key={i}>
                     <strong>{file.name}</strong> ({formatFileSize(file.size)})
                   </li>
                 ))}
               </ul>
               <p className="mb-0">{t('largeFile.warning')}</p>
-              <div className="alert alert-info mb-3 mt-3">
-                <i className="bi bi-info-circle me-2" />
-                <strong>{t('largeFile.recommendationLabel')}</strong> {t('largeFile.recommendation')}
-              </div>
-              <p className="mb-0">{t('largeFile.confirm')}</p>
             </div>
           }
           show={showNotificationModal}
@@ -953,7 +967,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         />
       )}
 
-      {/* Mobile file preview modal */}
       <Modal
         show={isMobile && showFilePreviewModal && !!filePreview}
         onHide={() => {

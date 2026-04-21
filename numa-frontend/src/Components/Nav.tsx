@@ -80,7 +80,7 @@ const SIMPLE_LIBRARY_NAV_ITEM_DEFINITIONS = [
     fallbackTo: '__library_files__',
     labelKey: 'nav.items.unifiedFiles',
     staticIcon: 'unifiedFiles',
-    routePaths: ['/unified-files'],
+    routePaths: ['/numa-files'],
   },
 ];
 const ADVANCED_BUILD_NAV_ITEMS = [

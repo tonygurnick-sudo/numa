@@ -60,8 +60,8 @@ export function UnifiedFilesPage(): React.JSX.Element {
         subtitle={t('subtitle')}
         icon={{
           element: <i className="bi bi-folder-fill" />,
-          backgroundColor: '#e8f4fd',
-          color: '#0d6efd',
+          backgroundColor: 'color-mix(in srgb, var(--brand-primary, #8e50a7) 12%, white 88%)',
+          color: 'var(--brand-primary, #8e50a7)',
         }}
         actions={tabActions}
       />

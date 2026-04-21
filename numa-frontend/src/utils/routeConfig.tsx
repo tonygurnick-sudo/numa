@@ -187,11 +187,11 @@ export const ROUTE_CONFIG = [
 
   // Unified Files (replaces KB section in nav)
   {
-    path: '/unified-files',
+    path: '/numa-files',
     element: () => <UnifiedFilesPage />,
     featureFlag: 'KNOWLEDGE_BASES',
     nav: {
-      label: 'Files',
+      label: 'Numa Files',
       labelKey: 'nav.items.unifiedFiles',
       icon: 'bi bi-folder-fill',
       section: 'knowledgeBases',
@@ -204,13 +204,13 @@ export const ROUTE_CONFIG = [
   // Legacy KB routes -- redirect to unified files, no nav entries
   {
     path: '/company-knowledge-base',
-    element: () => <Navigate to="/unified-files?tab=company" replace />,
+    element: () => <Navigate to="/numa-files?tab=company" replace />,
     requiredFeature: 'useCompanyData',
     featureFlag: 'KNOWLEDGE_BASES',
   },
   {
     path: '/user-knowledge-bases',
-    element: () => <Navigate to="/unified-files?tab=user" replace />,
+    element: () => <Navigate to="/numa-files?tab=user" replace />,
     requiredFeature: 'useCompanyData',
     featureFlag: 'KNOWLEDGE_BASES',
   },

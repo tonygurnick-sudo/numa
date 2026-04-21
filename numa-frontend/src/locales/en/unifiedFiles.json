@@ -1,10 +1,10 @@
 {
-  "title": "Files",
+  "title": "Numa Files",
   "subtitle": "Browse and manage your files and folders",
   "tabs": {
     "userFiles": "User Files",
     "companyFiles": "Company Files",
-    "shared": "Shared",
+    "shared": "External Share",
     "remote": "Remote",
     "webCrawler": "Web Crawler"
   },
@@ -19,7 +19,7 @@
     "documents": "Documents",
     "role": "Role",
     "actions": "Actions",
-    "sharing": "Sharing",
+    "sharing": "Shared with others",
     "files": "Files",
     "private": "Private",
     "settings": "Settings",

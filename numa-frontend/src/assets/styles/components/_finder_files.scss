@@ -1,0 +1,438 @@
+// Finder-inspired file browser with Numa v2 brand styling
+
+// Remove side padding for the finder layout — edge-to-edge content
+.unified-files-page {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+
+  // Keep a small left indent on the page header so it doesn't
+  // press against the sidebar edge
+  .page-header {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  .sub-header-tabs-bar {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  .app-content {
+    padding: 0 !important;
+  }
+}
+
+.finder-files {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  // ── Toolbar ──────────────────────────────────────────────────
+  // Designed to feel like a continuation of the tab bar above:
+  // same white bg, same border style, same font family
+  .finder-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 1.5rem;
+    border-bottom: 1px solid #e4e4e7;
+    background: #fff;
+    min-height: 40px;
+    flex-shrink: 0;
+
+    .finder-toolbar__location {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      min-width: 0;
+
+      .finder-toolbar__back {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.2rem 0.4rem;
+        border: none;
+        background: none;
+        color: var(--brand-primary, var(--color-primary));
+        font-family: 'Metropolis Regular', sans-serif;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        cursor: pointer;
+        border-radius: 4px;
+        white-space: nowrap;
+        transition: background 0.1s;
+
+        &:hover {
+          background: var(--nav-hover-bg, #f4f4f5);
+        }
+
+        i {
+          font-size: 0.625rem;
+        }
+      }
+
+      .finder-toolbar__separator {
+        color: #d4d4d8;
+        font-size: 0.75rem;
+      }
+
+      .finder-toolbar__title {
+        font-family: 'Metropolis Semi Bold', sans-serif;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #18181b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+
+    .finder-toolbar__actions {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      flex-shrink: 0;
+
+      .finder-search {
+        position: relative;
+
+        input {
+          width: 180px;
+          height: 28px;
+          padding: 0 0.5rem 0 1.75rem;
+          border: 1px solid #e4e4e7;
+          border-radius: 6px;
+          background: #fafafa;
+          font-family: 'Metropolis Regular', sans-serif;
+          font-size: 0.8125rem;
+          color: #18181b;
+          outline: none;
+          transition:
+            border-color 0.15s,
+            box-shadow 0.15s,
+            background 0.15s;
+
+          &::placeholder {
+            color: #a1a1aa;
+          }
+
+          &:focus {
+            background: #fff;
+            border-color: var(--brand-primary, var(--color-primary));
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-primary, var(--color-primary)) 12%, transparent);
+          }
+        }
+
+        .finder-search__icon {
+          position: absolute;
+          left: 0.5rem;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: 0.6875rem;
+          color: #a1a1aa;
+          pointer-events: none;
+        }
+      }
+
+      .finder-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 28px;
+        padding: 0 0.5rem;
+        border: 1px solid #e4e4e7;
+        border-radius: 6px;
+        background: #fff;
+        color: #71717a;
+        font-size: 0.8125rem;
+        cursor: pointer;
+        transition:
+          background 0.1s,
+          color 0.1s,
+          border-color 0.1s;
+        white-space: nowrap;
+        gap: 0.25rem;
+
+        &:hover {
+          background: var(--nav-hover-bg, #f4f4f5);
+          color: #3f3f46;
+          border-color: #d4d4d8;
+        }
+
+        &:active {
+          background: #e4e4e7;
+        }
+
+        &.finder-btn--primary {
+          background: var(--brand-primary, var(--color-primary));
+          border-color: var(--brand-primary, var(--color-primary));
+          color: #fff;
+
+          &:hover {
+            filter: brightness(1.08);
+          }
+        }
+
+        i {
+          font-size: 0.75rem;
+        }
+      }
+    }
+  }
+
+  // ── Column Headers ───────────────────────────────────────────
+  // Light and minimal -- continuation of the toolbar surface
+  .finder-columns {
+    display: grid;
+    align-items: center;
+    padding: 0 1.5rem;
+    height: 26px;
+    border-bottom: 1px solid #e4e4e7;
+    background: #fafafa;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: #a1a1aa;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    user-select: none;
+
+    .finder-col {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      transition: color 0.1s;
+
+      &:hover {
+        color: #3f3f46;
+      }
+
+      &.finder-col--active {
+        color: var(--brand-primary, var(--color-primary));
+      }
+    }
+  }
+
+  // ── File List ────────────────────────────────────────────────
+  .finder-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: #fff;
+  }
+
+  .finder-row {
+    display: grid;
+    align-items: center;
+    padding: 0 1.5rem;
+    height: 32px;
+    border-bottom: none;
+    position: relative;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.875rem;
+    color: #3f3f46;
+    cursor: default;
+    transition: background-color 0.05s;
+
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0.75rem;
+      right: 0.75rem;
+      height: 1px;
+      background: linear-gradient(to right, transparent, #e8e8eb 1%, #e8e8eb 99%, transparent);
+    }
+
+    &:hover {
+      background: var(--nav-hover-bg, #f4f4f5);
+    }
+
+    &.finder-row--selected {
+      background: var(--brand-primary, var(--color-primary));
+      color: #fff;
+
+      .finder-row__meta,
+      .finder-row__actions button {
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      .finder-row__badge {
+        background: rgba(255, 255, 255, 0.2) !important;
+        color: #fff !important;
+        border-color: rgba(255, 255, 255, 0.3) !important;
+      }
+    }
+
+    &.finder-row--folder {
+      font-weight: 500;
+      color: #18181b;
+    }
+
+    &.finder-row--expanded {
+      background: var(--nav-active-bg, color-mix(in srgb, var(--brand-primary, #8e50a7) 5%, white 95%));
+    }
+
+    &.finder-row--depth-1 .finder-row__name-content {
+      padding-left: 20px;
+    }
+    &.finder-row--depth-2 .finder-row__name-content {
+      padding-left: 40px;
+    }
+    &.finder-row--depth-3 .finder-row__name-content {
+      padding-left: 60px;
+    }
+    &.finder-row--depth-4 .finder-row__name-content {
+      padding-left: 80px;
+    }
+    &.finder-row--depth-5 .finder-row__name-content {
+      padding-left: 100px;
+    }
+  }
+
+  .finder-row__name-content {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-width: 0;
+    overflow: hidden;
+
+    .finder-chevron {
+      flex-shrink: 0;
+      width: 14px;
+      font-size: 0.5625rem;
+      color: #a1a1aa;
+      cursor: pointer;
+      text-align: center;
+      transition: color 0.1s;
+
+      &:hover {
+        color: var(--brand-primary, var(--color-primary));
+      }
+    }
+
+    .finder-chevron-spacer {
+      flex-shrink: 0;
+      width: 14px;
+    }
+
+    .finder-icon {
+      flex-shrink: 0;
+      font-size: 1rem;
+
+      &.finder-icon--folder {
+        color: var(--brand-primary, var(--color-primary));
+      }
+
+      &.finder-icon--file {
+        color: #a1a1aa;
+      }
+    }
+
+    .finder-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .finder-row__badge {
+      flex-shrink: 0;
+      font-family: 'Metropolis Regular', sans-serif;
+      font-size: 0.625rem;
+      font-weight: 500;
+      padding: 0.0625rem 0.375rem;
+      border-radius: 3px;
+      border: 1px solid #e4e4e7;
+      background: #fafafa;
+      color: #a1a1aa;
+    }
+  }
+
+  .finder-row__meta {
+    font-size: 0.75rem;
+    color: #a1a1aa;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .finder-row__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.125rem;
+
+    button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: none;
+      color: #a1a1aa;
+      font-size: 0.75rem;
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 0;
+      transition:
+        background 0.1s,
+        color 0.1s;
+
+      &:hover {
+        background: var(--nav-hover-bg, #f4f4f5);
+        color: var(--brand-primary, var(--color-primary));
+      }
+    }
+  }
+
+  // ── Loading / Empty states ───────────────────────────────────
+  .finder-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    color: #a1a1aa;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.875rem;
+
+    i {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+      opacity: 0.4;
+    }
+  }
+
+  .finder-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    gap: 0.5rem;
+    color: #a1a1aa;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.8125rem;
+  }
+
+  // ── Grid template for columns ────────────────────────────────
+  .finder-grid-5 {
+    grid-template-columns: 1fr 150px 140px 80px 60px;
+  }
+
+  @media (max-width: 992px) {
+    .finder-grid-5 {
+      grid-template-columns: 1fr 120px 60px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .finder-grid-5 {
+      grid-template-columns: 1fr 60px;
+    }
+  }
+}
