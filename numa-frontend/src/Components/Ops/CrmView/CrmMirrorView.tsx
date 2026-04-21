@@ -617,7 +617,10 @@ const CrmMirrorView = (): React.JSX.Element => {
     <>
       <div className="d-flex flex-column h-100">
         {/* ── Toolbar ────────────────────────────────────────────────────── */}
-        <div className="d-flex flex-wrap align-items-center gap-2 px-3 pt-3 pb-2">
+        <div
+          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white"
+          style={{ minHeight: 64 }}
+        >
           <Form.Control
             type="text"
             size="sm"
@@ -737,7 +740,7 @@ const CrmMirrorView = (): React.JSX.Element => {
             </Alert>
           </div>
         )}
-        <div className="flex-grow-1 overflow-auto px-3 pb-3 pt-1">
+        <div className="flex-grow-1 overflow-auto px-3 pb-3 pt-3">
           {viewMode === 'list' ? (
             <CustomerListView
               customers={filteredCustomers}

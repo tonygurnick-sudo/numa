@@ -4,10 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
-import { useAuth } from '../../../Providers/AuthProvider';
 import * as OpsService from '../../../Services/OpsService';
 import { RichTextEditor } from '../Shared/RichTextEditor';
 import { DynamicField } from '../Shared/DynamicField';
+import { SidebarDropdown } from '../Shared/SidebarDropdown';
+import type { DropdownOption } from '../Shared/SidebarDropdown';
+import { PriorityIndicator } from '../Shared/PriorityIndicator';
+import { getPriorityColor } from '../Shared/colorUtils';
 import type {
   Ticket,
   TicketType,
@@ -34,6 +37,8 @@ interface CreateTicketModalProps {
   prefilledSupplierName?: string | null;
   /** Pre-fill the zone (e.g. when creating from a backlog group "+" button) */
   prefilledZoneId?: string;
+  /** Pre-fill the project (e.g. when creating from a project detail view) */
+  prefilledProjectId?: string | null;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -55,6 +60,8 @@ const SYSTEM_FIELD_IDS = new Set([
   'field-supplier',
   'field-labels',
   'field-watchers',
+  'field-work-unit-id',
+  'field-effort-points',
 ]);
 
 /**
@@ -101,6 +108,7 @@ export function CreateTicketModal({
   prefilledSupplierId,
   prefilledSupplierName,
   prefilledZoneId,
+  prefilledProjectId,
 }: CreateTicketModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaPost, numaGet } = useNumaRequest();
@@ -233,6 +241,7 @@ export function CreateTicketModal({
     setCustomFields({
       ...(prefilledCustomerId ? { 'field-client': prefilledCustomerId } : {}),
       ...(prefilledSupplierId ? { 'field-supplier': prefilledSupplierId } : {}),
+      ...(prefilledProjectId ? { 'field-project': prefilledProjectId } : {}),
       ...(currentUserId ? { 'field-reporter': currentUserId } : {}),
     });
     setInitialComment('');
@@ -247,7 +256,14 @@ export function CreateTicketModal({
     } else {
       setStageId('');
     }
-  }, [teamData, prefilledCustomerId, prefilledSupplierId, prefilledZoneId, user?.decoded_tokens?.idToken?.sub]);
+  }, [
+    teamData,
+    prefilledCustomerId,
+    prefilledSupplierId,
+    prefilledProjectId,
+    prefilledZoneId,
+    user?.decoded_tokens?.idToken?.sub,
+  ]);
 
   useEffect(() => {
     if (!show) resetForm();
@@ -487,7 +503,13 @@ export function CreateTicketModal({
 
   return (
     <Modal show={show} onHide={onHide} size="xl" centered dialogClassName="ticket-detail-modal">
-      <Form noValidate validated={validated} onSubmit={handleSubmit}>
+      <Form
+        noValidate
+        validated={validated}
+        onSubmit={handleSubmit}
+        className="d-flex flex-column"
+        style={{ overflow: 'hidden', flex: 1, minHeight: 0 }}
+      >
         {/* ── Header: back + type badge + title input ─────────────────── */}
         <Modal.Header closeButton className="flex-column align-items-start pb-1">
           <div className="d-flex align-items-center gap-2 w-100 mb-2">
@@ -659,65 +681,102 @@ export function CreateTicketModal({
                   {/* Priority */}
                   <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.priority')}</div>
-                    <Form.Select
-                      size="sm"
+                    <SidebarDropdown
                       value={(customFields['field-priority'] as string) || 'medium'}
-                      onChange={(e) => setFieldValue('field-priority', e.target.value)}
-                    >
-                      {PRIORITY_OPTIONS.map((p) => (
-                        <option key={p} value={p}>
-                          {t(`priority.${p}`)}
-                        </option>
-                      ))}
-                    </Form.Select>
+                      onChange={(val) => setFieldValue('field-priority', val)}
+                      options={PRIORITY_OPTIONS.map((p) => ({
+                        value: p,
+                        label: t(`priority.${p}`),
+                        icon: (
+                          <span
+                            style={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: '50%',
+                              backgroundColor: getPriorityColor(p),
+                              display: 'inline-block',
+                              flexShrink: 0,
+                            }}
+                          />
+                        ),
+                      }))}
+                      renderValue={(opt) => (
+                        <>
+                          <PriorityIndicator
+                            priority={((customFields['field-priority'] as string) || 'medium') as TicketPriority}
+                          />
+                          <span>{opt?.label ?? t('tickets.priority')}</span>
+                        </>
+                      )}
+                    />
                   </div>
 
                   {/* Assignee */}
                   <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
-                    <div className="d-flex align-items-center gap-2">
-                      <StaffAvatar
-                        staff={
-                          customFields['field-assignee']
-                            ? (config?.staff ?? []).find((s) => s.id === customFields['field-assignee'])
-                            : undefined
-                        }
-                        size={28}
-                      />
-                      <Form.Select
-                        size="sm"
-                        value={(customFields['field-assignee'] as string) || ''}
-                        onChange={(e) => setFieldValue('field-assignee', e.target.value || null)}
-                      >
-                        <option value="">{t('fields.unassigned')}</option>
-                        {(config?.staff ?? [])
+                    <SidebarDropdown
+                      value={(customFields['field-assignee'] as string) || ''}
+                      onChange={(val) => setFieldValue('field-assignee', val || null)}
+                      options={[
+                        { value: '', label: t('fields.unassigned') },
+                        ...(config?.staff ?? [])
                           .filter((s) => s.isActive)
-                          .map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name || s.email}
-                            </option>
-                          ))}
-                      </Form.Select>
-                    </div>
+                          .map(
+                            (s): DropdownOption => ({
+                              value: s.id,
+                              label: s.name || s.email,
+                              icon: <StaffAvatar staff={s} size={22} />,
+                            })
+                          ),
+                      ]}
+                      renderValue={() => {
+                        const assignee = customFields['field-assignee']
+                          ? (config?.staff ?? []).find((s) => s.id === customFields['field-assignee'])
+                          : undefined;
+                        return (
+                          <>
+                            <StaffAvatar staff={assignee} size={28} />
+                            <span className={!customFields['field-assignee'] ? 'sidebar-dropdown-placeholder' : ''}>
+                              {assignee?.name || assignee?.email || t('fields.unassigned')}
+                            </span>
+                          </>
+                        );
+                      }}
+                    />
                   </div>
 
                   {/* Reporter */}
                   <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.reporter')}</div>
-                    <Form.Select
-                      size="sm"
+                    <SidebarDropdown
                       value={(customFields['field-reporter'] as string) || ''}
-                      onChange={(e) => setFieldValue('field-reporter', e.target.value || null)}
-                    >
-                      <option value="">{t('fields.unassigned')}</option>
-                      {(config?.staff ?? [])
-                        .filter((s) => s.isActive)
-                        .map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name || s.email}
-                          </option>
-                        ))}
-                    </Form.Select>
+                      onChange={(val) => setFieldValue('field-reporter', val || null)}
+                      options={[
+                        { value: '', label: t('fields.unassigned') },
+                        ...(config?.staff ?? [])
+                          .filter((s) => s.isActive)
+                          .map(
+                            (s): DropdownOption => ({
+                              value: s.id,
+                              label: s.name || s.email,
+                              icon: <StaffAvatar staff={s} size={22} />,
+                            })
+                          ),
+                      ]}
+                      renderValue={() => {
+                        const reporter = customFields['field-reporter']
+                          ? (config?.staff ?? []).find((s) => s.id === customFields['field-reporter'])
+                          : undefined;
+                        return (
+                          <>
+                            <StaffAvatar staff={reporter} size={28} />
+                            <span className={!customFields['field-reporter'] ? 'sidebar-dropdown-placeholder' : ''}>
+                              {reporter?.name || reporter?.email || t('fields.unassigned')}
+                            </span>
+                          </>
+                        );
+                      }}
+                    />
                   </div>
 
                   {/* Due Date */}
@@ -734,92 +793,142 @@ export function CreateTicketModal({
                   {/* Project */}
                   <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.project')}</div>
-                    <Form.Select
-                      size="sm"
+                    <SidebarDropdown
                       value={(customFields['field-project'] as string) || ''}
-                      onChange={(e) => setFieldValue('field-project', e.target.value || null)}
-                    >
-                      <option value="">{t('common.none')}</option>
-                      {(config?.projects ?? [])
-                        .filter((p) => p.isActive)
-                        .map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                    </Form.Select>
+                      onChange={(val) => setFieldValue('field-project', val || null)}
+                      options={[
+                        { value: '', label: t('common.none') },
+                        ...(config?.projects ?? [])
+                          .filter(
+                            (p) => p.isActive && (!p.boardIds?.length || p.boardIds.includes(teamData?.team?.id ?? ''))
+                          )
+                          .map(
+                            (p): DropdownOption => ({
+                              value: p.id,
+                              label: p.name,
+                              icon: (
+                                <i
+                                  className="bi bi-folder"
+                                  style={{ fontSize: '0.78rem', color: p.color || '#6d28d9' }}
+                                />
+                              ),
+                            })
+                          ),
+                      ]}
+                      renderValue={(opt) => {
+                        if (!opt?.value)
+                          return <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>;
+                        const proj = (config?.projects ?? []).find((p) => p.id === opt.value);
+                        const pColor = proj?.color || '#6d28d9';
+                        return (
+                          <span
+                            className="ticket-badge ticket-badge-project"
+                            style={{
+                              margin: 0,
+                              backgroundColor: `${pColor}18`,
+                              color: pColor,
+                              borderColor: `${pColor}30`,
+                            }}
+                          >
+                            <i className="bi bi-folder me-1" />
+                            {opt.label}
+                          </span>
+                        );
+                      }}
+                    />
                   </div>
 
                   {/* Customer */}
                   <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.customer')}</div>
-                    {prefilledCustomerId ? (
-                      <div
-                        className="form-control form-control-sm text-truncate"
-                        style={{ backgroundColor: '#f3f4f6', cursor: 'default', color: '#374151' }}
-                        title={prefilledCustomerName ?? prefilledCustomerId}
-                      >
-                        {prefilledCustomerName ?? prefilledCustomerId}
-                      </div>
-                    ) : (
-                      <Form.Select
-                        size="sm"
-                        value={(customFields['field-client'] as string) || ''}
-                        onChange={(e) => setFieldValue('field-client', e.target.value || null)}
-                      >
-                        <option value="">{t('common.none')}</option>
-                        {customers.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.companyName}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    )}
+                    <SidebarDropdown
+                      value={(customFields['field-client'] as string) || ''}
+                      onChange={(val) => setFieldValue('field-client', val || null)}
+                      disabled={!!prefilledCustomerId}
+                      options={[
+                        { value: '', label: t('common.none') },
+                        ...customers.map(
+                          (c): DropdownOption => ({
+                            value: c.id,
+                            label: c.companyName,
+                            icon: <i className="bi bi-building" style={{ fontSize: '0.78rem', color: '#1d4ed8' }} />,
+                          })
+                        ),
+                      ]}
+                      renderValue={(opt) =>
+                        opt?.value ? (
+                          <span className="ticket-badge ticket-badge-customer" style={{ margin: 0 }}>
+                            <i className="bi bi-building me-1" />
+                            {opt.label}
+                          </span>
+                        ) : (
+                          <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                        )
+                      }
+                    />
                   </div>
 
                   {/* Supplier */}
                   <div className="ticket-sidebar-field">
                     <div className="ticket-sidebar-field-label">{t('tickets.supplier')}</div>
-                    {prefilledSupplierId ? (
-                      <div
-                        className="form-control form-control-sm text-truncate"
-                        style={{ backgroundColor: '#f3f4f6', cursor: 'default', color: '#374151' }}
-                        title={prefilledSupplierName ?? prefilledSupplierId}
-                      >
-                        {prefilledSupplierName ?? prefilledSupplierId}
-                      </div>
-                    ) : (
-                      <Form.Select
-                        size="sm"
-                        value={(customFields['field-supplier'] as string) || ''}
-                        onChange={(e) => setFieldValue('field-supplier', e.target.value || null)}
-                      >
-                        <option value="">{t('common.none')}</option>
-                        {suppliers.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.companyName}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    )}
+                    <SidebarDropdown
+                      value={(customFields['field-supplier'] as string) || ''}
+                      onChange={(val) => setFieldValue('field-supplier', val || null)}
+                      disabled={!!prefilledSupplierId}
+                      options={[
+                        { value: '', label: t('common.none') },
+                        ...suppliers.map(
+                          (s): DropdownOption => ({
+                            value: s.id,
+                            label: s.companyName,
+                            icon: <i className="bi bi-truck" style={{ fontSize: '0.78rem', color: '#c2410c' }} />,
+                          })
+                        ),
+                      ]}
+                      renderValue={(opt) =>
+                        opt?.value ? (
+                          <span className="ticket-badge ticket-badge-supplier" style={{ margin: 0 }}>
+                            <i className="bi bi-truck me-1" />
+                            {opt.label}
+                          </span>
+                        ) : (
+                          <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                        )
+                      }
+                    />
                   </div>
 
                   {/* Sprint */}
                   {hasWorkUnits && (
                     <div className="ticket-sidebar-field">
                       <div className="ticket-sidebar-field-label">{t('tickets.workUnit')}</div>
-                      <Form.Select
-                        size="sm"
+                      <SidebarDropdown
                         value={(customFields['field-work-unit-id'] as string) || ''}
-                        onChange={(e) => setFieldValue('field-work-unit-id', e.target.value || null)}
-                      >
-                        <option value="">{t('common.none')}</option>
-                        {workUnits.map((wu) => (
-                          <option key={wu.id} value={wu.id}>
-                            {wu.name}
-                          </option>
-                        ))}
-                      </Form.Select>
+                        onChange={(val) => setFieldValue('field-work-unit-id', val || null)}
+                        options={[
+                          { value: '', label: t('common.none') },
+                          ...workUnits.map(
+                            (wu): DropdownOption => ({
+                              value: wu.id,
+                              label: wu.name,
+                              icon: <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />,
+                            })
+                          ),
+                        ]}
+                        renderValue={(opt) =>
+                          opt?.value ? (
+                            <span className="ticket-badge ticket-badge-sprint" style={{ margin: 0 }}>
+                              <i
+                                className="bi bi-circle-fill me-1"
+                                style={{ fontSize: '0.28rem', verticalAlign: 'middle' }}
+                              />
+                              {opt.label}
+                            </span>
+                          ) : (
+                            <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                          )
+                        }
+                      />
                     </div>
                   )}
 
@@ -874,7 +983,7 @@ export function CreateTicketModal({
         </Modal.Body>
 
         {/* ── Footer ──────────────────────────────────────────────────── */}
-        <Modal.Footer className="border-top" style={{ backgroundColor: '#f9fafb' }}>
+        <Modal.Footer className="border-top" style={{ backgroundColor: '#f9fafb', flexShrink: 0 }}>
           <Button variant="outline-secondary" onClick={onHide} disabled={saving}>
             {t('common.cancel')}
           </Button>

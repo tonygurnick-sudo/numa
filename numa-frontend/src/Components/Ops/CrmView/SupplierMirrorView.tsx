@@ -607,10 +607,7 @@ export function SupplierMirrorView(): React.JSX.Element {
   return (
     <div className="d-flex flex-column h-100">
       {/* ── Toolbar ────────────────────────────────────────────────────────── */}
-      <div
-        className="d-flex flex-wrap align-items-center gap-2 px-3 border-bottom bg-white"
-        style={{ minHeight: 68, paddingTop: 14, paddingBottom: 14 }}
-      >
+      <div className="d-flex flex-wrap align-items-center gap-2 px-3 border-bottom bg-white" style={{ minHeight: 64 }}>
         {/* Filter toggles */}
         <div className="d-flex gap-1">
           <Button

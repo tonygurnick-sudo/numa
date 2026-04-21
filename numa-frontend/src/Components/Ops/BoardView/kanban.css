@@ -1543,6 +1543,18 @@
   white-space: nowrap;
 }
 
+.sidebar-dropdown-item-action {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.sidebar-dropdown-item:hover .sidebar-dropdown-item-action {
+  opacity: 1;
+}
+
 .sidebar-dropdown-check {
   font-size: 0.82rem;
   color: #7c3aed;

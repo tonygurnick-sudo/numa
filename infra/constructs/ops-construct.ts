@@ -175,6 +175,7 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
       environment: {
         CLIENT_NAME: clientName,
         OPS_CONFIG_TABLE: this.opsConfigTable.name,
+        OPS_TABLE: this.opsTable.name,
         USER_POOL_ID: props.userPoolId ?? '',
         CHAT_SETTINGS_TABLE: props.chatSettingsTableName ?? '',
         OTEL_METRICS_EXPORTER: 'none',
@@ -184,6 +185,12 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
           effect: 'Allow',
           actions: dynamoFullActions,
           resources: [this.opsConfigTable.arn],
+        },
+        // Read-only access to ops table for team access checks (project filtering)
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query'],
+          resources: [`${this.opsTable.arn}/index/*`],
         },
         // Cognito ListUsers permission for staff sync
         ...(props.userPoolArn

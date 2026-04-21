@@ -15,7 +15,7 @@ const LS_MY_WORK_FILTER = 'numa_ops_my_work_filter';
 
 // ─── View Types ─────────────────────────────────────────────────────────────
 
-export type OpsTopView = 'home' | 'board' | 'allTickets' | 'customers' | 'suppliers' | 'roadmap';
+export type OpsTopView = 'home' | 'board' | 'allTickets' | 'customers' | 'suppliers' | 'projects' | 'roadmap';
 export type BoardViewMode = 'allTeams' | 'singleTeam';
 
 // ─── Return Shape ───────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ export const useOpsData = (): OpsDataState => {
   const [topView, setTopViewState] = useState<OpsTopView>(() => {
     try {
       const saved = localStorage.getItem(LS_TOP_VIEW);
-      if (saved && ['home', 'board', 'allTickets', 'customers', 'suppliers', 'roadmap'].includes(saved)) {
+      if (saved && ['home', 'board', 'allTickets', 'customers', 'suppliers', 'projects', 'roadmap'].includes(saved)) {
         return saved as OpsTopView;
       }
     } catch {
