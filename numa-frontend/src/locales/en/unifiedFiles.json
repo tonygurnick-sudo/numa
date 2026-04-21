@@ -1,0 +1,132 @@
+{
+  "title": "Files",
+  "subtitle": "Browse and manage your files and folders",
+  "tabs": {
+    "userFiles": "User Files",
+    "companyFiles": "Company Files",
+    "shared": "Shared",
+    "remote": "Remote",
+    "webCrawler": "Web Crawler"
+  },
+  "actions": {
+    "newFolder": "New Folder",
+    "uploadFiles": "Upload Files",
+    "settings": "Settings",
+    "refresh": "Refresh"
+  },
+  "folderList": {
+    "name": "Name",
+    "documents": "Documents",
+    "role": "Role",
+    "actions": "Actions",
+    "loading": "Loading folders...",
+    "empty": {
+      "title": "No folders yet",
+      "message": "Create your first folder to start organizing files"
+    },
+    "sharedTooltip": "Shared with {{count}} users",
+    "sharedWithYou": "Shared with you"
+  },
+  "badges": {
+    "owner": "Owner",
+    "editor": "Editor",
+    "viewer": "Viewer",
+    "shared": "Shared",
+    "personal": "Personal"
+  },
+  "breadcrumb": {
+    "userFiles": "User Files",
+    "companyFiles": "Company Files",
+    "shared": "Shared"
+  },
+  "createFolder": {
+    "title": "Create New Folder",
+    "nameLabel": "Folder Name",
+    "namePlaceholder": "e.g., Project Documents",
+    "nameHelp": "Choose a descriptive name for your folder.",
+    "typeLabel": "Folder Visibility",
+    "typePersonalHelp": "Only you will have access to this folder.",
+    "typeSharedHelp": "Share this folder with specific users who can view or edit.",
+    "viewersLabel": "Viewers (user IDs or emails)",
+    "viewersPlaceholder": "Type an email or ID and press Add/Enter",
+    "viewersHelp": "Editors are automatically included as viewers.",
+    "editorsLabel": "Editors (user IDs or emails)",
+    "editorsPlaceholder": "Type an email or ID and press Add/Enter",
+    "editorsHelp": "Editors can upload files and modify this folder; they automatically gain viewer access.",
+    "invalidEmails": "These look unusual as emails: {{values}}",
+    "noteTitle": "Note:",
+    "notes": {
+      "creator": "You will be set as the creator and automatically added as an editor.",
+      "personal": "Personal folders: Only you have access.",
+      "shared": "Shared folders: Specify viewers (can query) and editors (can upload/modify). Editors automatically have viewer permissions.",
+      "isolation": "Files uploaded to this folder are isolated from other folders."
+    },
+    "creating": "Creating...",
+    "createButton": "Create Folder",
+    "errors": {
+      "nameRequired": "Please provide a name for the folder.",
+      "editorsMustBeViewers": "Editors must also be viewers for shared folders."
+    }
+  },
+  "folderSettings": {
+    "title": "Folder Settings",
+    "nameLabel": "Folder Name",
+    "visibility": "Visibility",
+    "personal": "Personal (only you)",
+    "shared": "Shared (specific users)",
+    "public": "Public (everyone can view)",
+    "publicEditor": "Public (everyone can view and edit)",
+    "viewers": "Viewers",
+    "editors": "Editors",
+    "noViewers": "No viewers",
+    "noEditors": "No editors",
+    "delete": "Delete Folder",
+    "deleteConfirm": "Are you sure you want to delete this folder? This action cannot be undone.",
+    "deleteWarning": "This will permanently delete this folder configuration. Files will remain in storage but will no longer be associated with this folder.",
+    "deleting": "Deleting...",
+    "close": "Close"
+  },
+  "webCrawler": {
+    "destinationLabel": "Destination Folder",
+    "destinationHint": "Crawled content will be added to this folder.",
+    "selectDestination": "Select a destination folder",
+    "companyFiles": "Company Files"
+  },
+  "shared": {
+    "title": "Shared Files",
+    "subtitle": "Share files and create drop zones for external document collection.",
+    "hint": "File sharing and drop zones will be available here."
+  },
+  "remote": {
+    "title": "Remote Files",
+    "subtitle": "Connect to external file providers to browse and import files.",
+    "comingSoon": "Remote file browsing will be available here.",
+    "connectProvider": "Connect a provider from Data Connectors to get started."
+  },
+  "upload": {
+    "title": "Upload Files to {{name}}",
+    "body": "Files will be automatically indexed and made available for querying in Numa Chat.",
+    "noteLabel": "Note:",
+    "note": "Maximum file size is 50MB per file.",
+    "folderLabel": "Upload to subfolder",
+    "validationTitle": "File Validation Error:",
+    "success": "Files uploaded successfully!"
+  },
+  "largeFile": {
+    "title": "Large Raw Data File Detected",
+    "description": "You are about to upload large raw data files that may not be optimal for indexing:",
+    "warning": "This can incur higher than expected cost, or may fail to index successfully.",
+    "recommendationLabel": "Recommendation:",
+    "recommendation": "For better performance, consider breaking large raw data files into smaller chunks.",
+    "confirm": "Do you want to proceed with uploading these files anyway?",
+    "confirmButton": "Proceed Anyway",
+    "cancelButton": "Cancel Upload"
+  },
+  "validation": {
+    "unsupportedFiles": "The following files are not supported: {{files}}. Please upload supported file types."
+  },
+  "nav": {
+    "files": "Files",
+    "expandTooltip": "Show file categories"
+  }
+}

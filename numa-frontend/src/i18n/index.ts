@@ -31,6 +31,7 @@ i18n
       'ops',
       'support',
       'automations',
+      'unifiedFiles',
     ],
     interpolation: { escapeValue: false },
     detection: {

@@ -61,6 +61,7 @@ type Status = 'pending' | 'indexed' | 'failed' | 'warning';
 interface KBFileExplorerProps {
   kbId: string;
   role?: 'VIEWER' | 'EDITOR' | 'OWNER';
+  hideStatusColumn?: boolean;
   onOpenFilePreview?: (ref: { filename: string; fullPath: string; relativePath: string; extension: string }) => void;
   onDownloadFile?: (s3Key: string, filename: string) => void;
 }
@@ -497,7 +498,7 @@ function adjustChildDepth(children: TableRow[]): TableRow[] {
  * KBFileExplorer Component
  */
 export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerProps>(
-  ({ kbId, role = 'VIEWER', onOpenFilePreview, onDownloadFile }, ref): React.JSX.Element => {
+  ({ kbId, role = 'VIEWER', hideStatusColumn = false, onOpenFilePreview, onDownloadFile }, ref): React.JSX.Element => {
     const { t } = useTranslation('knowledgeBase');
     // Use KB state from context
     const { kbState, isLoading: kbStateLoading, error: kbStateError, refreshKBState, invalidateCache } = useKBState();
@@ -1211,18 +1212,20 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
               />
 
               {/* Status Filter */}
-              <Form.Select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                className="flex-shrink-0"
-                style={{ width: '150px', minWidth: '120px' }}
-              >
-                <option value="all">{t('fileExplorer.filters.all')}</option>
-                <option value="pending">{statusLabels.pending}</option>
-                <option value="indexed">{statusLabels.indexed}</option>
-                <option value="warning">{statusLabels.warning}</option>
-                <option value="failed">{statusLabels.failed}</option>
-              </Form.Select>
+              {!hideStatusColumn && (
+                <Form.Select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                  className="flex-shrink-0"
+                  style={{ width: '150px', minWidth: '120px' }}
+                >
+                  <option value="all">{t('fileExplorer.filters.all')}</option>
+                  <option value="pending">{statusLabels.pending}</option>
+                  <option value="indexed">{statusLabels.indexed}</option>
+                  <option value="warning">{statusLabels.warning}</option>
+                  <option value="failed">{statusLabels.failed}</option>
+                </Form.Select>
+              )}
             </div>
 
             {/* Button Toolbar Group */}
@@ -1348,22 +1351,26 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                   >
                     <span>{t('fileExplorer.table.addedBy')}</span>
                   </th>
-                  <th
-                    className="sortable-header"
-                    onClick={() => handleSortToggle('status')}
-                    style={{
-                      width: '120px',
-                      minWidth: '100px',
-                      maxWidth: '120px',
-                    }}
-                  >
-                    <div className="d-flex align-items-center justify-content-between">
-                      <span>{t('fileExplorer.table.status')}</span>
-                      {sortColumn === 'status' && (
-                        <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}></i>
-                      )}
-                    </div>
-                  </th>
+                  {!hideStatusColumn && (
+                    <th
+                      className="sortable-header"
+                      onClick={() => handleSortToggle('status')}
+                      style={{
+                        width: '120px',
+                        minWidth: '100px',
+                        maxWidth: '120px',
+                      }}
+                    >
+                      <div className="d-flex align-items-center justify-content-between">
+                        <span>{t('fileExplorer.table.status')}</span>
+                        {sortColumn === 'status' && (
+                          <i
+                            className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}
+                          ></i>
+                        )}
+                      </div>
+                    </th>
+                  )}
                   <th
                     className="sortable-header d-none d-md-table-cell"
                     onClick={() => handleSortToggle('date')}
@@ -1482,55 +1489,13 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                       >
                         {!isFolder && (row.uploadedBy || '')}
                       </td>
-                      <td>
-                        {!isStatusReady ? (
-                          <Spinner animation="border" size="sm" variant="secondary" />
-                        ) : isFolder ? (
-                          // Show status for web crawler folders
-                          row.urlTag === 'web-crawler-folder' ? (
-                            <Badge
-                              bg={
-                                row.status === 'indexed'
-                                  ? 'success'
-                                  : row.status === 'failed'
-                                    ? 'danger'
-                                    : row.status === 'warning'
-                                      ? 'warning'
-                                      : 'secondary'
-                              }
-                              text={row.status === 'warning' ? 'dark' : undefined}
-                            >
-                              {row.status === 'indexed'
-                                ? statusLabels.indexed
-                                : row.status === 'failed'
-                                  ? statusLabels.failed
-                                  : row.status === 'warning'
-                                    ? statusLabels.warning
-                                    : statusLabels.indexing}
-                            </Badge>
-                          ) : null
-                        ) : (
-                          <>
-                            {(row.status === 'failed' || row.status === 'warning') && row.errorMessage ? (
-                              <OverlayTrigger
-                                placement="top"
-                                overlay={<Tooltip id={`tooltip-${row.id}`}>{row.errorMessage}</Tooltip>}
-                              >
-                                <Badge
-                                  bg={row.status === 'failed' ? 'danger' : 'warning'}
-                                  text={row.status === 'warning' ? 'dark' : undefined}
-                                >
-                                  {row.status === 'failed' ? (
-                                    statusLabels.failed
-                                  ) : (
-                                    <>
-                                      <i className="bi bi-exclamation-triangle me-1"></i>
-                                      {statusLabels.warning}
-                                    </>
-                                  )}
-                                </Badge>
-                              </OverlayTrigger>
-                            ) : (
+                      {!hideStatusColumn && (
+                        <td>
+                          {!isStatusReady ? (
+                            <Spinner animation="border" size="sm" variant="secondary" />
+                          ) : isFolder ? (
+                            // Show status for web crawler folders
+                            row.urlTag === 'web-crawler-folder' ? (
                               <Badge
                                 bg={
                                   row.status === 'indexed'
@@ -1539,37 +1504,81 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                                       ? 'danger'
                                       : row.status === 'warning'
                                         ? 'warning'
-                                        : row.fileObject?.urlTag &&
-                                            (row.fileObject?.kbDoc?.status === 'INDEXING' ||
-                                              row.fileObject?.kbDoc?.status === 'PROCESSING' ||
-                                              row.fileObject?.kbDoc?.status === 'SYNCING')
-                                          ? 'warning'
-                                          : 'secondary'
+                                        : 'secondary'
                                 }
-                                text={
-                                  row.status === 'warning' ||
-                                  (row.fileObject?.urlTag &&
-                                    (row.fileObject?.kbDoc?.status === 'INDEXING' ||
-                                      row.fileObject?.kbDoc?.status === 'PROCESSING' ||
-                                      row.fileObject?.kbDoc?.status === 'SYNCING'))
-                                    ? 'dark'
-                                    : undefined
-                                }
+                                text={row.status === 'warning' ? 'dark' : undefined}
                               >
-                                {row.fileObject
-                                  ? getStatusDisplayText(row.fileObject, row.status, statusLabels)
-                                  : row.status === 'indexed'
-                                    ? statusLabels.indexed
-                                    : row.status === 'failed'
-                                      ? statusLabels.failed
-                                      : row.status === 'warning'
-                                        ? statusLabels.warning
-                                        : statusLabels.pending}
+                                {row.status === 'indexed'
+                                  ? statusLabels.indexed
+                                  : row.status === 'failed'
+                                    ? statusLabels.failed
+                                    : row.status === 'warning'
+                                      ? statusLabels.warning
+                                      : statusLabels.indexing}
                               </Badge>
-                            )}
-                          </>
-                        )}
-                      </td>
+                            ) : null
+                          ) : (
+                            <>
+                              {(row.status === 'failed' || row.status === 'warning') && row.errorMessage ? (
+                                <OverlayTrigger
+                                  placement="top"
+                                  overlay={<Tooltip id={`tooltip-${row.id}`}>{row.errorMessage}</Tooltip>}
+                                >
+                                  <Badge
+                                    bg={row.status === 'failed' ? 'danger' : 'warning'}
+                                    text={row.status === 'warning' ? 'dark' : undefined}
+                                  >
+                                    {row.status === 'failed' ? (
+                                      statusLabels.failed
+                                    ) : (
+                                      <>
+                                        <i className="bi bi-exclamation-triangle me-1"></i>
+                                        {statusLabels.warning}
+                                      </>
+                                    )}
+                                  </Badge>
+                                </OverlayTrigger>
+                              ) : (
+                                <Badge
+                                  bg={
+                                    row.status === 'indexed'
+                                      ? 'success'
+                                      : row.status === 'failed'
+                                        ? 'danger'
+                                        : row.status === 'warning'
+                                          ? 'warning'
+                                          : row.fileObject?.urlTag &&
+                                              (row.fileObject?.kbDoc?.status === 'INDEXING' ||
+                                                row.fileObject?.kbDoc?.status === 'PROCESSING' ||
+                                                row.fileObject?.kbDoc?.status === 'SYNCING')
+                                            ? 'warning'
+                                            : 'secondary'
+                                  }
+                                  text={
+                                    row.status === 'warning' ||
+                                    (row.fileObject?.urlTag &&
+                                      (row.fileObject?.kbDoc?.status === 'INDEXING' ||
+                                        row.fileObject?.kbDoc?.status === 'PROCESSING' ||
+                                        row.fileObject?.kbDoc?.status === 'SYNCING'))
+                                      ? 'dark'
+                                      : undefined
+                                  }
+                                >
+                                  {row.fileObject
+                                    ? getStatusDisplayText(row.fileObject, row.status, statusLabels)
+                                    : row.status === 'indexed'
+                                      ? statusLabels.indexed
+                                      : row.status === 'failed'
+                                        ? statusLabels.failed
+                                        : row.status === 'warning'
+                                          ? statusLabels.warning
+                                          : statusLabels.pending}
+                                </Badge>
+                              )}
+                            </>
+                          )}
+                        </td>
+                      )}
                       <td className="d-none d-md-table-cell">{row.uploadDate}</td>
                       <td className="d-none d-sm-table-cell">{row.size}</td>
                       {(onOpenFilePreview || onDownloadFile) && (
