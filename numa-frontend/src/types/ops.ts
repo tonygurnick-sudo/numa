@@ -374,6 +374,14 @@ export type WorkUnit = {
   order: number;
   createdAt: string;
   updatedAt: string;
+  // Sprint metrics (populated during activation/completion)
+  startedAt?: string | null;
+  completedAt?: string | null;
+  ticketCountAtStart?: number | null;
+  ticketCountAtEnd?: number | null;
+  completedCount?: number | null;
+  incompleteCount?: number | null;
+  addedDuringSprint?: number | null;
 };
 
 export type AuditAction = 'created' | 'updated' | 'moved' | 'commented' | 'linked' | 'deleted' | 'restored';

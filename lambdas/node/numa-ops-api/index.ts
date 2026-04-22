@@ -800,6 +800,7 @@ const handleTeams = async (
 
     // ── Sprint Activation: planning → active ──────────────────────────────
     let movedCount = 0;
+    let ticketCountAtStart = 0;
     if (prevStatus === 'planning' && unitStatus === 'active') {
       // Enforce single active sprint
       const allUnits = await queryGSI1(`TEAM#${teamId}`, 'WORKUNIT#STATUS#active#');
@@ -819,6 +820,12 @@ const handleTeams = async (
       const backlogZoneIds = new Set(zones.filter((z) => z.zoneType === 'backlog').map((z) => String(z.id)));
       const boardZone = zones.find((z) => z.zoneType === 'board');
 
+      // Count total tickets assigned to this sprint at activation
+      const activationIndexItems = await queryGSI2(`WORKUNIT#${id}`, 'TICKET#');
+      ticketCountAtStart = activationIndexItems.items.filter(
+        (idx) => String(idx.entityType ?? '') === 'TICKET_INDEX'
+      ).length;
+
       if (boardZone) {
         const boardZoneId = String(boardZone.id);
         const firstKanbanStage = stages.find((s) => String(s.zoneId) === boardZoneId);
@@ -828,10 +835,15 @@ const handleTeams = async (
           const targetStatusType = String(firstKanbanStage.statusType ?? 'queued');
 
           // Find all tickets assigned to this sprint that are in backlog zones
-          const sprintTickets = await queryGSI2(`WORKUNIT#${id}`, 'TICKET#');
-          const ticketsToMove = sprintTickets.items.filter(
-            (t) => String(t.entityType ?? '') === 'TICKET' && backlogZoneIds.has(String(t.zoneId))
-          );
+          // GSI2 returns TICKET_INDEX items — resolve to actual ticket entities
+          const sprintTicketEntities = (
+            await Promise.all(
+              activationIndexItems.items
+                .filter((idx) => String(idx.entityType ?? '') === 'TICKET_INDEX')
+                .map((idx) => getItem(`TEAM#${String(idx.teamId)}`, `TICKET#${String(idx.ticketId)}`))
+            )
+          ).filter(Boolean) as Record<string, unknown>[];
+          const ticketsToMove = sprintTicketEntities.filter((t) => backlogZoneIds.has(String(t.zoneId)));
 
           // Batch-update tickets to move to the board zone
           const ts = now();
@@ -856,6 +868,9 @@ const handleTeams = async (
 
     // ── Sprint Completion: active → completed ─────────────────────────────
     let rolloverCount = 0;
+    let completedCount = 0;
+    let incompleteCount = 0;
+    let addedDuringSprint = 0;
     if (prevStatus === 'active' && unitStatus === 'completed') {
       // Load team zones to find the backlog zone
       const teamItems = await queryGSI1(`TEAM#${teamId}`);
@@ -870,11 +885,38 @@ const handleTeams = async (
       const backlogZoneId = backlogZone ? String(backlogZone.id) : undefined;
       const firstBacklogStage = backlogZoneId ? stages.find((s) => String(s.zoneId) === backlogZoneId) : undefined;
 
-      // Find incomplete tickets for this sprint
-      const sprintTickets = await queryGSI2(`WORKUNIT#${id}`, 'TICKET#');
-      const incompleteTickets = sprintTickets.items.filter(
-        (t) => String(t.entityType ?? '') === 'TICKET' && t.statusType !== 'completed' && t.statusType !== 'ended'
+      // Find all tickets for this sprint via GSI2 index items, then resolve to entities
+      const sprintIndexItems = await queryGSI2(`WORKUNIT#${id}`, 'TICKET#');
+      const allSprintTickets = (
+        await Promise.all(
+          sprintIndexItems.items
+            .filter((idx) => String(idx.entityType ?? '') === 'TICKET_INDEX')
+            .map((idx) => getItem(`TEAM#${String(idx.teamId)}`, `TICKET#${String(idx.ticketId)}`))
+        )
+      ).filter(Boolean) as Record<string, unknown>[];
+
+      const incompleteTickets = allSprintTickets.filter(
+        (t) => t.statusType !== 'completed' && t.statusType !== 'ended'
       );
+      const doneTickets = allSprintTickets.filter((t) => t.statusType === 'completed' || t.statusType === 'ended');
+
+      // Sprint metadata
+      completedCount = doneTickets.length;
+      incompleteCount = incompleteTickets.length;
+      const startCount = (existing.ticketCountAtStart as number) ?? 0;
+      addedDuringSprint = startCount > 0 ? Math.max(0, allSprintTickets.length - startCount) : 0;
+
+      // Archive completed/ended tickets
+      if (doneTickets.length > 0) {
+        const ts = now();
+        for (const ticket of doneTickets) {
+          await putItem({
+            ...ticket,
+            archived: true,
+            updatedAt: ts,
+          });
+        }
+      }
 
       if (incompleteTickets.length > 0 && backlogZoneId && firstBacklogStage) {
         const targetStageId = String(firstBacklogStage.id);
@@ -954,6 +996,20 @@ const handleTeams = async (
       order,
       updatedAt: now(),
     };
+
+    // Sprint metadata: snapshot counts at activation and completion
+    if (prevStatus === 'planning' && unitStatus === 'active') {
+      updated.startedAt = now();
+      updated.ticketCountAtStart = ticketCountAtStart;
+    }
+    if (prevStatus === 'active' && unitStatus === 'completed') {
+      updated.completedAt = now();
+      updated.ticketCountAtEnd = completedCount + incompleteCount;
+      updated.completedCount = completedCount;
+      updated.incompleteCount = incompleteCount;
+      updated.addedDuringSprint = addedDuringSprint;
+    }
+
     await putItem(updated);
 
     return jsonResponse(200, { workUnit: updated, movedCount, rolloverCount });
