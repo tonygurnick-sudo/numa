@@ -331,29 +331,34 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   );
 
   const toggleHtmlMode = useCallback(() => {
-    setIsHtmlMode((prev) => {
-      const nextMode = !prev;
-      if (nextMode) {
-        // visual -> HTML: read directly from DOM to avoid stale closures
-        const el = editorRef.current;
-        if (el) {
-          let html = el.innerHTML;
-          if (html === '<br>' || html === '<div><br></div>' || html === '<p><br></p>') {
-            html = '';
-          }
-          setHtmlValue(html);
+    if (!isHtmlMode) {
+      // visual -> HTML: read directly from DOM
+      const el = editorRef.current;
+      if (el) {
+        let html = el.innerHTML;
+        if (html === '<br>' || html === '<div><br></div>' || html === '<p><br></p>') {
+          html = '';
         }
-      } else {
-        // HTML -> visual: use functional updater to get current htmlValue
-        setHtmlValue((currentHtml) => {
-          const el = editorRef.current;
-          if (el) el.innerHTML = currentHtml;
-          return currentHtml;
-        });
+        setHtmlValue(html);
       }
-      return nextMode;
-    });
-  }, []);
+      setIsHtmlMode(true);
+    } else {
+      // HTML -> visual
+      setIsHtmlMode(false);
+    }
+  }, [isHtmlMode]);
+
+  // When switching from HTML mode back to visual mode, the div remounts.
+  // We must seed its innerHTML with the latest htmlValue.
+  React.useLayoutEffect(() => {
+    if (!isHtmlMode && initializedRef.current) {
+      const el = editorRef.current;
+      if (el && el.innerHTML !== htmlValue) {
+        el.innerHTML = htmlValue;
+      }
+    }
+     
+  }, [isHtmlMode]);
 
   // Expose flush() to the parent via ref
   useImperativeHandle(ref, () => ({ flush }), [flush]);
