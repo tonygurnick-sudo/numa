@@ -13,6 +13,12 @@ interface CreateFieldInput {
   options?: string[];
 }
 
+interface UpdateFieldInput {
+  name: string;
+  fieldType: FieldType;
+  options?: string[];
+}
+
 interface CustomerRecordConfigBlockProps {
   value: CustomerRecordConfig;
   onChange: (next: CustomerRecordConfig) => void;
@@ -24,6 +30,11 @@ interface CustomerRecordConfigBlockProps {
    * If undefined, the inline "Create new" affordance is hidden.
    */
   onCreateField?: (input: CreateFieldInput) => Promise<string | null>;
+  /**
+   * Update an existing custom CRM field (rename, retype, change options).
+   * Called with the field id and the new values. If undefined, edit buttons are hidden.
+   */
+  onUpdateField?: (fieldId: string, input: UpdateFieldInput) => Promise<boolean>;
 }
 
 const ADDABLE_FIELD_TYPES: FieldType[] = [
@@ -54,6 +65,7 @@ export function CustomerRecordConfigBlock({
   allFields,
   t,
   onCreateField,
+  onUpdateField,
 }: CustomerRecordConfigBlockProps): React.JSX.Element {
   const [newSectionName, setNewSectionName] = useState('');
   // Inline "Create new custom field" form state. Only one form is open at a
@@ -62,8 +74,17 @@ export function CustomerRecordConfigBlock({
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<FieldType>('text');
   const [newFieldOptions, setNewFieldOptions] = useState('');
+  const [newFieldRequired, setNewFieldRequired] = useState(false);
   const [creatingField, setCreatingField] = useState(false);
   const [createFieldError, setCreateFieldError] = useState<string | null>(null);
+
+  // Inline edit form state — keyed by field id
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [editFieldName, setEditFieldName] = useState('');
+  const [editFieldType, setEditFieldType] = useState<FieldType>('text');
+  const [editFieldOptions, setEditFieldOptions] = useState('');
+  const [savingField, setSavingField] = useState(false);
+  const [editFieldError, setEditFieldError] = useState<string | null>(null);
 
   const crmFields = useMemo(() => allFields.filter((f) => f.category === 'crm'), [allFields]);
 
@@ -148,16 +169,32 @@ export function CustomerRecordConfigBlock({
 
   const removeField = (sectionIdx: number, fieldIdx: number) => {
     updateSections((sections) => {
-      const ids = sections[sectionIdx].fieldIds.filter((_, i) => i !== fieldIdx);
-      sections[sectionIdx] = { ...sections[sectionIdx], fieldIds: ids };
+      const section = sections[sectionIdx];
+      const removedId = section.fieldIds[fieldIdx];
+      const ids = section.fieldIds.filter((_, i) => i !== fieldIdx);
+      const requiredIds = section.requiredFieldIds?.filter((id) => id !== removedId);
+      sections[sectionIdx] = { ...section, fieldIds: ids, requiredFieldIds: requiredIds };
       return sections;
     });
   };
 
-  const addField = (sectionIdx: number, fieldId: string) => {
+  const addField = (sectionIdx: number, fieldId: string, required = false) => {
     updateSections((sections) => {
-      const ids = [...sections[sectionIdx].fieldIds, fieldId];
-      sections[sectionIdx] = { ...sections[sectionIdx], fieldIds: ids };
+      const section = sections[sectionIdx];
+      const ids = [...section.fieldIds, fieldId];
+      const requiredIds = required ? [...(section.requiredFieldIds ?? []), fieldId] : section.requiredFieldIds;
+      sections[sectionIdx] = { ...section, fieldIds: ids, requiredFieldIds: requiredIds };
+      return sections;
+    });
+  };
+
+  const toggleFieldRequired = (sectionIdx: number, fieldId: string) => {
+    updateSections((sections) => {
+      const section = sections[sectionIdx];
+      const current = new Set(section.requiredFieldIds ?? []);
+      if (current.has(fieldId)) current.delete(fieldId);
+      else current.add(fieldId);
+      sections[sectionIdx] = { ...section, requiredFieldIds: Array.from(current) };
       return sections;
     });
   };
@@ -166,7 +203,59 @@ export function CustomerRecordConfigBlock({
     setNewFieldName('');
     setNewFieldType('text');
     setNewFieldOptions('');
+    setNewFieldRequired(false);
     setCreateFieldError(null);
+  };
+
+  const openEditField = (fieldId: string) => {
+    const field = fieldDefById.get(fieldId);
+    if (!field) return;
+    setEditingFieldId(fieldId);
+    setEditFieldName(field.name);
+    setEditFieldType(field.fieldType);
+    setEditFieldOptions((field.options ?? []).join(', '));
+    setEditFieldError(null);
+    // Close create form if open
+    setCreateForSectionId(null);
+    resetCreateForm();
+  };
+
+  const cancelEditField = () => {
+    setEditingFieldId(null);
+    setEditFieldError(null);
+  };
+
+  const handleUpdateField = async () => {
+    if (!onUpdateField || !editingFieldId) return;
+    const name = editFieldName.trim();
+    if (!name) return;
+
+    const requiresOptions = editFieldType === 'select' || editFieldType === 'multi_select';
+    const parsedOptions = requiresOptions
+      ? editFieldOptions
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
+    if (requiresOptions && (!parsedOptions || parsedOptions.length === 0)) {
+      setEditFieldError(t('crm.addCustomField.optionsRequired', 'Add at least one option'));
+      return;
+    }
+
+    setSavingField(true);
+    setEditFieldError(null);
+    try {
+      const ok = await onUpdateField(editingFieldId, { name, fieldType: editFieldType, options: parsedOptions });
+      if (ok) {
+        setEditingFieldId(null);
+      } else {
+        setEditFieldError(t('crm.addCustomField.error', 'Could not update field. Please try again.'));
+      }
+    } catch {
+      setEditFieldError(t('crm.addCustomField.error', 'Could not update field. Please try again.'));
+    } finally {
+      setSavingField(false);
+    }
   };
 
   const openCreateFor = (sectionId: string) => {
@@ -199,12 +288,16 @@ export function CustomerRecordConfigBlock({
     setCreatingField(true);
     setCreateFieldError(null);
     try {
-      const newId = await onCreateField({ name, fieldType: newFieldType, options: parsedOptions });
+      const newId = await onCreateField({
+        name,
+        fieldType: newFieldType,
+        options: parsedOptions,
+      });
       if (!newId) {
         setCreateFieldError(t('crm.addCustomField.error', 'Could not create field. Please try again.'));
         return;
       }
-      addField(sectionIdx, newId);
+      addField(sectionIdx, newId, newFieldRequired);
       setCreateForSectionId(null);
       resetCreateForm();
     } catch (err) {
@@ -275,46 +368,146 @@ export function CustomerRecordConfigBlock({
               {section.fieldIds.map((fieldId, fieldIdx) => {
                 const builtin = isBuiltinField(fieldId);
                 const label = labelFor(fieldId);
+                const isRequired = (section.requiredFieldIds ?? []).includes(fieldId);
+                const isEditing = editingFieldId === fieldId;
                 return (
-                  <div
-                    key={fieldId}
-                    className="d-flex align-items-center gap-2 bg-white rounded border px-2 py-1"
-                    style={{ fontSize: '0.85rem' }}
-                  >
-                    <span className="text-muted" style={{ width: 18 }}>
-                      <i
-                        className={`bi bi-${builtin ? 'lock' : 'wrench-adjustable'}`}
-                        title={builtin ? 'Built-in' : 'Custom'}
-                      />
-                    </span>
-                    <span className="flex-grow-1">{label}</span>
-                    <span className="text-muted small">{builtin ? 'built-in' : 'custom'}</span>
-                    <Button
-                      variant="link"
-                      className="text-muted p-1"
-                      disabled={fieldIdx === 0}
-                      onClick={() => moveField(sectionIdx, fieldIdx, -1)}
-                      title="Move up"
+                  <div key={fieldId}>
+                    <div
+                      className="d-flex align-items-center gap-2 bg-white rounded border px-2 py-1"
+                      style={{ fontSize: '0.85rem' }}
                     >
-                      <i className="bi bi-arrow-up" />
-                    </Button>
-                    <Button
-                      variant="link"
-                      className="text-muted p-1"
-                      disabled={fieldIdx === section.fieldIds.length - 1}
-                      onClick={() => moveField(sectionIdx, fieldIdx, 1)}
-                      title="Move down"
-                    >
-                      <i className="bi bi-arrow-down" />
-                    </Button>
-                    <Button
-                      variant="link"
-                      className="text-danger p-1"
-                      onClick={() => removeField(sectionIdx, fieldIdx)}
-                      title="Remove field"
-                    >
-                      <i className="bi bi-x-lg" />
-                    </Button>
+                      <span className="text-muted" style={{ width: 18 }}>
+                        <i
+                          className={`bi bi-${builtin ? 'lock' : 'wrench-adjustable'}`}
+                          title={builtin ? 'Built-in' : 'Custom'}
+                        />
+                      </span>
+                      <span className="flex-grow-1">{label}</span>
+                      <label
+                        htmlFor={`req-${section.id}-${fieldId}`}
+                        className="d-flex align-items-center gap-1 small text-muted mb-0"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <input
+                          id={`req-${section.id}-${fieldId}`}
+                          type="checkbox"
+                          className="form-check-input m-0"
+                          checked={isRequired}
+                          onChange={() => toggleFieldRequired(sectionIdx, fieldId)}
+                        />
+                        {t('globalSettings.required', 'Required')}
+                      </label>
+                      <span className="text-muted small">{builtin ? 'built-in' : 'custom'}</span>
+                      {!builtin && onUpdateField && (
+                        <Button
+                          variant="link"
+                          className="text-muted p-1"
+                          onClick={() => (isEditing ? cancelEditField() : openEditField(fieldId))}
+                          title={isEditing ? 'Cancel edit' : 'Edit field'}
+                        >
+                          <i className={`bi bi-${isEditing ? 'x' : 'pencil'}`} />
+                        </Button>
+                      )}
+                      <Button
+                        variant="link"
+                        className="text-muted p-1"
+                        disabled={fieldIdx === 0}
+                        onClick={() => moveField(sectionIdx, fieldIdx, -1)}
+                        title="Move up"
+                      >
+                        <i className="bi bi-arrow-up" />
+                      </Button>
+                      <Button
+                        variant="link"
+                        className="text-muted p-1"
+                        disabled={fieldIdx === section.fieldIds.length - 1}
+                        onClick={() => moveField(sectionIdx, fieldIdx, 1)}
+                        title="Move down"
+                      >
+                        <i className="bi bi-arrow-down" />
+                      </Button>
+                      <Button
+                        variant="link"
+                        className="text-danger p-1"
+                        onClick={() => removeField(sectionIdx, fieldIdx)}
+                        title="Remove field"
+                      >
+                        <i className="bi bi-x-lg" />
+                      </Button>
+                    </div>
+                    {isEditing && (
+                      <div className="border rounded p-3 bg-white mt-1">
+                        <div className="row g-2 align-items-end">
+                          <div className="col-12 col-md-5">
+                            <Form.Label className="small text-muted mb-1">{t('common.name')}</Form.Label>
+                            <Form.Control
+                              size="sm"
+                              autoFocus
+                              value={editFieldName}
+                              onChange={(e) => setEditFieldName(e.target.value)}
+                              disabled={savingField}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleUpdateField();
+                                }
+                                if (e.key === 'Escape') cancelEditField();
+                              }}
+                            />
+                          </div>
+                          <div className="col-6 col-md-3">
+                            <Form.Label className="small text-muted mb-1">
+                              {t('globalSettings.fieldType', 'Type')}
+                            </Form.Label>
+                            <Form.Select
+                              size="sm"
+                              value={editFieldType}
+                              onChange={(e) => setEditFieldType(e.target.value as FieldType)}
+                              disabled={savingField}
+                            >
+                              {ADDABLE_FIELD_TYPES.map((ft) => (
+                                <option key={ft} value={ft}>
+                                  {ft}
+                                </option>
+                              ))}
+                            </Form.Select>
+                          </div>
+                          {(editFieldType === 'select' || editFieldType === 'multi_select') && (
+                            <div className="col-12 col-md-4">
+                              <Form.Label className="small text-muted mb-1">
+                                {t('globalSettings.options', 'Options')}
+                              </Form.Label>
+                              <Form.Control
+                                size="sm"
+                                value={editFieldOptions}
+                                placeholder="Red, Blue, Green"
+                                onChange={(e) => setEditFieldOptions(e.target.value)}
+                                disabled={savingField}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        {editFieldError && <div className="text-danger small mt-2">{editFieldError}</div>}
+                        <div className="d-flex justify-content-end gap-2 mt-2">
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={cancelEditField}
+                            disabled={savingField}
+                          >
+                            {t('common.cancel')}
+                          </Button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleUpdateField}
+                            disabled={savingField || !editFieldName.trim()}
+                          >
+                            {savingField ? t('common.saving') : t('common.save')}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -389,6 +582,16 @@ export function CustomerRecordConfigBlock({
                       />
                     </div>
                   )}
+                </div>
+                <div className="mt-2">
+                  <Form.Check
+                    type="checkbox"
+                    id={`crm-create-field-required-${section.id}`}
+                    label={t('globalSettings.required', 'Required')}
+                    checked={newFieldRequired}
+                    onChange={(e) => setNewFieldRequired(e.target.checked)}
+                    disabled={creatingField}
+                  />
                 </div>
                 {createFieldError && <div className="text-danger small mt-2">{createFieldError}</div>}
                 <div className="d-flex justify-content-end gap-2 mt-2">

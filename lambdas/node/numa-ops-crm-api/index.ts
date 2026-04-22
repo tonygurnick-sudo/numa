@@ -100,6 +100,17 @@ const parseBody = (event: APIGatewayProxyEventV2): Item => {
 
 const now = (): string => new Date().toISOString();
 
+/**
+ * Normalise a customFields value from a request body. Accepts a plain object
+ * keyed by field id; returns `{}` for anything else (undefined, null, array,
+ * primitive). Values are pass-through — the field's declared type lives in
+ * the ops-config table and is enforced at the UI/tool layer.
+ */
+const sanitizeCustomFields = (raw: unknown): Record<string, unknown> => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return { ...(raw as Record<string, unknown>) };
+};
+
 // ─── DynamoDB Helpers ───────────────────────────────────────────────────────────
 
 const getItem = async (pk: string, sk: string): Promise<Item | undefined> => {
@@ -314,6 +325,7 @@ const handleCustomers = async (
       productNotes: body.productNotes ? String(body.productNotes) : undefined,
       notes: body.notes ? String(body.notes) : undefined,
       contacts: Array.isArray(body.contacts) ? body.contacts : [],
+      customFields: sanitizeCustomFields(body.customFields),
       openTicketCount: 0,
       lastContactDate: undefined,
       createdBy: auth.sub,
@@ -345,6 +357,10 @@ const handleCustomers = async (
       id,
       lifecycleStage: stage,
       ownerId: owner || undefined,
+      customFields:
+        body.customFields !== undefined
+          ? sanitizeCustomFields(body.customFields)
+          : sanitizeCustomFields(existing.customFields),
       updatedAt: now(),
     };
     await putItem(updated);
@@ -474,6 +490,7 @@ const handleSuppliers = async (
       paymentTerms: body.paymentTerms ? String(body.paymentTerms) : undefined,
       notes: body.notes ? String(body.notes) : undefined,
       contacts: Array.isArray(body.contacts) ? body.contacts : [],
+      customFields: sanitizeCustomFields(body.customFields),
       openTicketCount: 0,
       lastContactDate: undefined,
       createdBy: auth.sub,
@@ -505,6 +522,10 @@ const handleSuppliers = async (
       id,
       lifecycleStage: stage,
       ownerId: owner || undefined,
+      customFields:
+        body.customFields !== undefined
+          ? sanitizeCustomFields(body.customFields)
+          : sanitizeCustomFields(existing.customFields),
       updatedAt: now(),
     };
     await putItem(updated);
