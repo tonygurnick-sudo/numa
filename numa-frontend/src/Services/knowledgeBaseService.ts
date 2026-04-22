@@ -26,6 +26,7 @@ export interface UserKB {
   kb_name: string;
   role: 'VIEWER' | 'EDITOR' | 'OWNER';
   is_shared?: boolean; // Whether KB is shared with other users
+  is_root?: boolean; // Whether this is the user's root files KB
   document_count?: number; // Cached count, updated when KB is viewed
 }
 

@@ -198,16 +198,6 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: ['NUMA_APPS'],
   },
   {
-    flag: 'TRANSCRIPTION_SERVICE',
-    title: 'Transcription Service',
-    description: 'Document transcription and content extraction pipeline.',
-    icon: 'bi-mic',
-    system_only: false,
-    dev_only: false,
-    enabled: true,
-    dependencies: ['NUMA_FILES'],
-  },
-  {
     flag: 'USAGE_REPORTING',
     title: 'Usage Reporting',
     description: 'Login activity heatmaps and usage analytics for admins.',

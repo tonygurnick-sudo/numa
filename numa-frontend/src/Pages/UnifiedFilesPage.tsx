@@ -45,11 +45,11 @@ export function UnifiedFilesPage(): React.JSX.Element {
     if (canViewCompany) {
       items.push({ key: 'company', label: t('tabs.companyFiles'), iconClassName: 'bi bi-building' });
     }
-    items.push({ key: 'shared', label: t('tabs.shared'), iconClassName: 'bi bi-people' });
     if (dataConnectorsEnabled) {
       items.push({ key: 'remote', label: t('tabs.remote'), iconClassName: 'bi bi-cloud' });
     }
     items.push({ key: 'crawler', label: t('tabs.webCrawler'), iconClassName: 'bi bi-globe2' });
+    items.push({ key: 'shared', label: t('tabs.shared'), iconClassName: 'bi bi-people' });
     return items;
   }, [t, canViewCompany, dataConnectorsEnabled]);
 
@@ -71,8 +71,8 @@ export function UnifiedFilesPage(): React.JSX.Element {
       <LayoutDashboard>
         {activeTab === 'user' && <UserFilesTab onActionChange={handleActionChange} />}
         {activeTab === 'company' && <CompanyFilesTab onActionChange={handleActionChange} />}
-        {activeTab === 'shared' && <SharedFoldersTab />}
-        {activeTab === 'remote' && <RemoteTab />}
+        {activeTab === 'shared' && <SharedFoldersTab onActionChange={handleActionChange} />}
+        {activeTab === 'remote' && <RemoteTab onActionChange={handleActionChange} />}
         {activeTab === 'crawler' && <WebCrawlerTab />}
       </LayoutDashboard>
     </div>

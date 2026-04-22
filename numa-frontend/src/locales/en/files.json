@@ -6,35 +6,7 @@
     "company": "Company",
     "myFiles": "My Files",
     "shared": "Shared",
-    "remote": "Remote",
-    "transcripts": "Transcripts",
-    "uploads": "Uploads"
-  },
-  "transcripts": {
-    "empty": "No transcripts yet",
-    "emptyMessage": "Completed transcriptions will appear here",
-    "viewOutput": "View transcript",
-    "loadMore": "Load more",
-    "headers": {
-      "format": "Format"
-    },
-    "viewer": {
-      "title": "Transcript",
-      "page": "Page {{num}}",
-      "noContent": "No content available",
-      "metadata": {
-        "fileName": "Source file",
-        "fileSize": "File size",
-        "format": "Format",
-        "transcribed": "Transcribed"
-      }
-    },
-    "errors": {
-      "loadOutputFailed": "Failed to load transcript content"
-    },
-    "rebuild": "Rebuild from S3",
-    "rebuilding": "Rebuilding...",
-    "rebuildResult": "Created: {{created}}, Skipped: {{skipped}}, Failed: {{failed}}"
+    "remote": "Remote"
   },
   "remote": {
     "rootLabel": "Remote",
@@ -85,16 +57,6 @@
     "listView": "List view",
     "gridView": "Folder view",
     "galleryView": "Gallery view"
-  },
-  "uploads": {
-    "ignoreList": "Ignore List",
-    "ignoreModal": {
-      "title": "Ignored File Patterns",
-      "description": "Files matching these patterns are hidden everywhere and skipped during upload.",
-      "placeholder": "e.g. *.log or .env",
-      "add": "Add",
-      "remove": "Remove"
-    }
   },
   "dropZone": {
     "message": "Drop files to upload"

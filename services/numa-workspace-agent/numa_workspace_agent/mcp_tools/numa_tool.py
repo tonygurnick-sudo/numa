@@ -80,6 +80,11 @@ def _get_kb_config() -> tuple[list[dict], list[str], str]:
     allowed_kb_ids = [kb.get("id") for kb in allowed_kbs if kb.get("id")]
     user_sub = os.environ.get("NUMA_USER_SUB", "")
 
+    # Auto-inject root KB (user_sub) so users can always access their root files
+    if user_sub and user_sub not in allowed_kb_ids:
+        allowed_kb_ids.append(user_sub)
+        allowed_kbs.append({"id": user_sub, "name": "My Files"})
+
     return allowed_kbs, allowed_kb_ids, user_sub
 
 
@@ -113,12 +118,17 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
 
     max_results = min(max(int(params.get("max_results", 6)), 1), 15)
 
+    # Resolve "root" shorthand to user's root KB (user_sub)
+    raw_kb_id = params.get("kb_id", "company")
+    if raw_kb_id == "root" and user_sub:
+        raw_kb_id = user_sub
+
     lambda_params: dict[str, Any] = {
         "query": query,
         "user_intent": user_intent,
         "max_results": max_results,
-        "kb_id": params.get("kb_id", "company"),
-        "summarise_results": params.get("summarise_results", False),
+        "kb_id": raw_kb_id,
+        "summarise_results": params.get("summarise_results", True),
         "all_kbs": params.get("all_kbs", False),
     }
 
@@ -617,9 +627,14 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
                 str(Path(kb_path).parent) if str(Path(kb_path).parent) != "." else ""
             )
 
+    # Resolve "root" shorthand to user's root KB (user_sub)
+    raw_kb_id = params.get("kb_id", "company")
+    if raw_kb_id == "root" and user_sub:
+        raw_kb_id = user_sub
+
     lambda_params: dict[str, Any] = {
         "filename": upload_filename,
-        "kb_id": params.get("kb_id", "company"),
+        "kb_id": raw_kb_id,
         "kb_path": kb_path,
         "size_bytes": file_size,
     }
@@ -714,7 +729,10 @@ async def _handle_kb_download(params: dict[str, Any]) -> dict[str, Any]:
         dl_params["uri"] = uri
     else:
         dl_params["file"] = file_name
-        dl_params["kb_id"] = params.get("kb_id", "company")
+        raw_kb_id = params.get("kb_id", "company")
+        if raw_kb_id == "root" and user_sub:
+            raw_kb_id = user_sub
+        dl_params["kb_id"] = raw_kb_id
 
     # Inject approval fields if approval was requested for this operation
     approval_key = "numa_knowledgeBases_download"
@@ -787,9 +805,13 @@ async def _handle_kb_list(params: dict[str, Any]) -> dict[str, Any]:
     """List files in a KB — ports knowledge_base.py cmd_list."""
     allowed_kbs, allowed_kb_ids, user_sub = _get_kb_config()
 
+    raw_kb_id = params.get("kb_id", "company")
+    if raw_kb_id == "root" and user_sub:
+        raw_kb_id = user_sub
+
     lambda_params: dict[str, Any] = {
         "mode": "list",
-        "kb_id": params.get("kb_id", "company"),
+        "kb_id": raw_kb_id,
         "pattern": params.get("pattern"),
     }
 
@@ -838,9 +860,13 @@ async def _handle_kb_download_folder(params: dict[str, Any]) -> dict[str, Any]:
     """Download KB folder as zip — ports knowledge_base.py cmd_download_folder."""
     allowed_kbs, allowed_kb_ids, user_sub = _get_kb_config()
 
+    raw_kb_id = params.get("kb_id", "company")
+    if raw_kb_id == "root" and user_sub:
+        raw_kb_id = user_sub
+
     lambda_params: dict[str, Any] = {
         "mode": "download_folder",
-        "kb_id": params.get("kb_id", "company"),
+        "kb_id": raw_kb_id,
         "folder_path": params.get("folder_path", ""),
     }
 
@@ -924,9 +950,13 @@ async def _handle_kb_delete(params: dict[str, Any]) -> dict[str, Any]:
 
     allowed_kbs, allowed_kb_ids, user_sub = _get_kb_config()
 
+    raw_kb_id = params.get("kb_id", "company")
+    if raw_kb_id == "root" and user_sub:
+        raw_kb_id = user_sub
+
     lambda_params: dict[str, Any] = {
         "filename": filename,
-        "kb_id": params.get("kb_id", "company"),
+        "kb_id": raw_kb_id,
     }
 
     # Inject approval fields for KB delete

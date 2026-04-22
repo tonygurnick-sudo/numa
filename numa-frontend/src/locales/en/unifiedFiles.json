@@ -5,7 +5,7 @@
     "userFiles": "User Files",
     "companyFiles": "Company Files",
     "shared": "External Share",
-    "remote": "Remote",
+    "remote": "Connector Files",
     "webCrawler": "Web Crawler"
   },
   "actions": {
@@ -99,13 +99,28 @@
   "shared": {
     "title": "Shared Files",
     "subtitle": "Share files and create drop zones for external document collection.",
-    "hint": "File sharing and drop zones will be available here."
+    "hint": "File sharing and drop zones will be available here.",
+    "helpers": {
+      "sharing": {
+        "title": "Document Sharing",
+        "description": "Share files with external users via a secure link. Visitors can view, download, and ask AI questions about the document."
+      },
+      "dropZone": {
+        "title": "Drop Zones",
+        "description": "Create an upload link for external users to submit files to you. Great for collecting documents, reports, or submissions."
+      }
+    }
   },
   "remote": {
     "title": "Remote Files",
     "subtitle": "Connect to external file providers to browse and import files.",
     "comingSoon": "Remote file browsing will be available here.",
     "connectProvider": "Connect a provider from Data Connectors to get started."
+  },
+  "rootFiles": {
+    "title": "My Files",
+    "upload": "Upload files",
+    "empty": "No loose files. Upload files here or create a folder to organise them."
   },
   "upload": {
     "title": "Upload Files to {{name}}",

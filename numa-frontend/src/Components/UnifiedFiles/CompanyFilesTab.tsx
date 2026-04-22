@@ -22,7 +22,7 @@ import type { FileReference } from '../../hooks/useFilePreviewProcessor';
 import ResizableSplitView from '../ResizableSplitView';
 import { FilePreviewPanel } from '../FilePreviewPanel';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
-import type { S3FileInfo } from '../../Services/knowledgeBaseService';
+import type { S3FileInfo, ListKBFilesResponse } from '../../Services/knowledgeBaseService';
 
 interface CompanyFilesTabProps {
   onActionChange?: (actions: React.ReactNode) => void;
@@ -56,12 +56,25 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const { t: tKb } = useTranslation('knowledgeBase');
   const { user, getCredentials, region: authRegion } = useAuth();
 
-  const [fileState, setFileState] = useState<FileState>({
-    files: [],
-    isLoading: true,
-    expandedFolders: new Set(),
-    loadedFolders: new Set(),
-    loadingFolders: new Set(),
+  const [fileState, setFileState] = useState<FileState>(() => {
+    const cached = knowledgeBaseService.getCachedKBFiles('company');
+    if (cached?.files?.length) {
+      const s3Files = apiToS3Objects(cached.files, cached.folders ?? [], 'documents/company/');
+      return {
+        files: s3Files,
+        isLoading: true,
+        expandedFolders: new Set(),
+        loadedFolders: new Set(),
+        loadingFolders: new Set(),
+      };
+    }
+    return {
+      files: [],
+      isLoading: true,
+      expandedFolders: new Set(),
+      loadedFolders: new Set(),
+      loadingFolders: new Set(),
+    };
   });
 
   /** Current folder navigation. null = root view, string = navigated into a subfolder by its row id */
@@ -353,18 +366,9 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     );
   }
 
-  if (fileState.isLoading && fileState.files.length === 0) {
-    return (
-      <div className="finder-files">
-        <div className="finder-loading">
-          <Spinner animation="border" size="sm" variant="secondary" />
-          <span>{tKb('fileExplorer.loadingFiles')}</span>
-        </div>
-      </div>
-    );
-  }
+  const isInitialLoad = fileState.isLoading && fileState.files.length === 0;
 
-  const rows = buildRows();
+  const rows = isInitialLoad ? [] : buildRows();
 
   // ── Render ─────────────────────────────────────────────────
 
@@ -389,7 +393,18 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
               <span className="finder-toolbar__title">{currentFolderName}</span>
             </>
           ) : (
-            <span className="finder-toolbar__title">{t('tabs.companyFiles')}</span>
+            <span className="finder-toolbar__title">
+              {t('tabs.companyFiles')}
+              {fileState.isLoading && (
+                <Spinner
+                  animation="border"
+                  size="sm"
+                  variant="secondary"
+                  className="ms-2"
+                  style={{ width: '0.75rem', height: '0.75rem', verticalAlign: 'middle' }}
+                />
+              )}
+            </span>
           )}
         </div>
         <div className="finder-toolbar__actions">

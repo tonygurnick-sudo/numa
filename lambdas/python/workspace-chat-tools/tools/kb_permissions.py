@@ -21,6 +21,9 @@ CLIENT_NAME = os.getenv("CLIENT_NAME", "")
 # System KBs that are accessible to all authenticated users.
 SYSTEM_KB_IDS = {"company", "numa-support"}
 
+# Cognito user sub pattern (UUID v4)
+_UUID_PATTERN_LEN = 36  # e.g. "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
 # DynamoDB client (lazy initialization)
 _dynamodb_client = None
 
@@ -93,6 +96,15 @@ def verify_kb_access(
         )
         return True
 
+    # Root KB: user's own root files (kb_id == user_sub). Owner-only access.
+    if is_root_kb(kb_id, user_sub):
+        logger.debug(
+            "Root KB access granted (owner)",
+            kb_id=kb_id[:8] + "...",
+            user_sub=user_sub[:8] + "...",
+        )
+        return True
+
     # Look up KB permissions in DynamoDB
     table_name = f"numa-{client_name}-knowledge-bases"
 
@@ -154,3 +166,15 @@ def verify_kb_access(
         )
         # Fail closed on errors
         return False
+
+
+def is_root_kb(kb_id: str, user_sub: str) -> bool:
+    """
+    Check if a kb_id represents the user's root files KB.
+
+    Root KBs use the user's Cognito sub as the kb_id, providing a
+    deterministic, per-user root file storage without DynamoDB records.
+    """
+    if not kb_id or not user_sub:
+        return False
+    return kb_id == user_sub

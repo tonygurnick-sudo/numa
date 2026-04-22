@@ -22,7 +22,7 @@ import { useFilePreviewProcessor } from '../../hooks/useFilePreviewProcessor';
 import type { FileReference } from '../../hooks/useFilePreviewProcessor';
 import ResizableSplitView from '../ResizableSplitView';
 import { FilePreviewPanel } from '../FilePreviewPanel';
-import { SYSTEM_KB_IDS } from '../../constants/knowledgeBase';
+import { SYSTEM_KB_IDS, isRootKB } from '../../constants/knowledgeBase';
 import type { UserKB } from '../../Services/knowledgeBaseService';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 import type { S3FileInfo } from '../../Services/knowledgeBaseService';
@@ -69,7 +69,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const { t } = useTranslation('unifiedFiles');
   const { t: tKb } = useTranslation('knowledgeBase');
   const { availableKBs, isLoadingKBs, refreshKBs, fetchKBDetails } = useKnowledgeBase();
-  const { getCredentials, region: authRegion } = useAuth();
+  const { getCredentials, region: authRegion, user } = useAuth();
 
   // Navigation: null = root, set = inside a KB
   const [currentFolder, setCurrentFolder] = useState<NavigationState | null>(null);
@@ -124,7 +124,20 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const formatDate = useCallback((date: Date | undefined) => formatDateSafe(date, emptyValue), [emptyValue]);
   const formatSize = useCallback((size: number | undefined) => formatSizeSafe(size, emptyValue), [emptyValue]);
 
-  const allUserKBs = useMemo(() => availableKBs.filter((kb) => !SYSTEM_KB_IDS.has(kb.kb_id)), [availableKBs]);
+  const userSub = user?.decoded_tokens?.idToken?.sub ?? '';
+
+  // Separate root KB from regular folder KBs
+  const rootKB = useMemo(
+    () => availableKBs.find((kb) => kb.is_root || (userSub && isRootKB(kb.kb_id, userSub))),
+    [availableKBs, userSub]
+  );
+  const allUserKBs = useMemo(
+    () =>
+      availableKBs.filter(
+        (kb) => !SYSTEM_KB_IDS.has(kb.kb_id) && !(kb.is_root || (userSub && isRootKB(kb.kb_id, userSub)))
+      ),
+    [availableKBs, userSub]
+  );
 
   // Hide parent page actions -- we handle them in the toolbar
   useEffect(() => {
@@ -185,6 +198,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     },
     [kbFileStates, fetchKbFiles, fetchKBDetails]
   );
+
+  // Auto-load root KB files when at root level
+  useEffect(() => {
+    if (rootKB && !kbFileStates.has(rootKB.kb_id)) {
+      fetchKbFiles(rootKB.kb_id);
+    }
+  }, [rootKB?.kb_id]);
 
   // ── Interactions ───────────────────────────────────────────
 
@@ -445,26 +465,28 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   // ── Loading / empty states ─────────────────────────────────
 
-  if (isLoadingKBs) {
-    return (
-      <div className="finder-files">
-        <div className="finder-loading">
-          <Spinner animation="border" size="sm" variant="secondary" />
-          <span>{t('folderList.loading')}</span>
-        </div>
-      </div>
-    );
-  }
+  const isInitialLoad = isLoadingKBs;
+  const isRootKbLoading = rootKB ? (kbFileStates.get(rootKB.kb_id)?.isLoading ?? false) : false;
 
-  if (allUserKBs.length === 0) {
+  // Only show empty state if there are no folders AND no root files
+  const rootState = rootKB ? kbFileStates.get(rootKB.kb_id) : undefined;
+  const hasRootFiles = rootState && rootState.files.length > 0;
+  if (allUserKBs.length === 0 && !hasRootFiles && !rootState?.isLoading) {
     return (
       <div className="finder-files">
         <div className="finder-empty">
           <i className="bi bi-folder" />
           <span>{t('folderList.empty.title')}</span>
-          <button className="finder-btn finder-btn--primary mt-2" onClick={() => setShowCreateModal(true)}>
-            <i className="bi bi-folder-plus" /> {t('actions.newFolder')}
-          </button>
+          <div className="d-flex gap-2 mt-2">
+            <button className="finder-btn finder-btn--primary" onClick={() => setShowCreateModal(true)}>
+              <i className="bi bi-folder-plus" /> {t('actions.newFolder')}
+            </button>
+            {rootKB && (
+              <button className="finder-btn finder-btn--primary" onClick={(e) => openUploadForKb(rootKB, e)}>
+                <i className="bi bi-upload" /> {t('rootFiles.upload')}
+              </button>
+            )}
+          </div>
         </div>
         <CreateFolderModal
           show={showCreateModal}
@@ -478,7 +500,10 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   // ── Build rows ─────────────────────────────────────────────
 
   const isInsideFolder = currentFolder !== null;
-  const currentKb = isInsideFolder ? allUserKBs.find((kb) => kb.kb_id === currentFolder.kbId) : null;
+  const currentKb = isInsideFolder
+    ? (allUserKBs.find((kb) => kb.kb_id === currentFolder.kbId) ??
+      (rootKB && currentFolder.kbId === rootKB.kb_id ? rootKB : null))
+    : null;
   const canEditCurrent = currentKb && (currentKb.role === 'OWNER' || currentKb.role === 'EDITOR');
 
   type RowEntry = {
@@ -532,7 +557,23 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       }
     }
   } else {
-    // Root view -- KB folders at depth 0 + expanded children at depth 1+
+    // Root view -- root files at depth 0, then KB folders at depth 0
+
+    // Show root files (loose files not in any folder) at the top
+    if (rootKB) {
+      const rootState = kbFileStates.get(rootKB.kb_id);
+      if (rootState && !rootState.isLoading) {
+        const rootChildRows = buildKbChildRows(rootKB.kb_id, 0);
+        // Only show file rows (not folders) as root-level loose files
+        for (const r of rootChildRows) {
+          if (r.type === 'file') {
+            rows.push({ row: r, kbId: rootKB.kb_id, isKbFolder: false });
+          }
+        }
+      }
+    }
+
+    // Then show KB folders
     for (const kb of allUserKBs) {
       const isExpanded = expandedKbs.has(kb.kb_id);
       rows.push({
@@ -623,7 +664,18 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               </span>
             </>
           ) : (
-            <span className="finder-toolbar__title">{t('tabs.userFiles')}</span>
+            <span className="finder-toolbar__title">
+              {t('tabs.userFiles')}
+              {(isInitialLoad || isRootKbLoading) && (
+                <Spinner
+                  animation="border"
+                  size="sm"
+                  variant="secondary"
+                  className="ms-2"
+                  style={{ width: '0.75rem', height: '0.75rem', verticalAlign: 'middle' }}
+                />
+              )}
+            </span>
           )}
         </div>
         <div className="finder-toolbar__actions">
@@ -641,17 +693,23 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               <i className="bi bi-folder-plus" />
             </button>
           )}
-          {isInsideFolder && canEditCurrent && currentKb && (
+          {/* Upload button: at root level (uploads to root KB) or inside a folder */}
+          {!isInsideFolder && rootKB ? (
+            <button className="finder-btn" onClick={(e) => openUploadForKb(rootKB, e)} title={t('rootFiles.upload')}>
+              <i className="bi bi-upload" />
+            </button>
+          ) : isInsideFolder && canEditCurrent && currentKb ? (
             <button className="finder-btn" onClick={(e) => openUploadForKb(currentKb, e)}>
               <i className="bi bi-upload" />
             </button>
-          )}
+          ) : null}
           <button
             className="finder-btn"
             onClick={() => {
               if (isInsideFolder) {
                 fetchKbFiles(currentFolder!.kbId);
               } else {
+                if (rootKB) fetchKbFiles(rootKB.kb_id);
                 expandedKbs.forEach((kbId) => fetchKbFiles(kbId));
               }
             }}
@@ -864,6 +922,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       </div>
 
       {/* Modals */}
+
       <CreateFolderModal
         show={showCreateModal}
         onHide={() => setShowCreateModal(false)}

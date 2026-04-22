@@ -55,7 +55,6 @@ import { NumaLambda } from '../constructs/numa-lambda';
 import { OAuthIntegrationConstruct } from '../constructs/oauth-integration-construct';
 import { OpsConstruct } from '../constructs/ops-construct';
 import { SearchConstruct } from '../constructs/search-construct';
-import { TranscriptionServiceConstruct } from '../constructs/transcription-service-construct';
 import { RacetechDataFeedConstruct } from '../constructs/racetech-data-feed-construct';
 import { VaultSecretsConstruct } from '../constructs/vault-secrets-construct';
 import { DisasterRecoveryConstruct } from '../constructs/disaster-recovery-construct';
@@ -716,28 +715,6 @@ export class NumaClientStack extends TerraformStack {
       });
     }
 
-    // Transcription Service (async job queue for document transcription)
-    if (clientConfig.transcriptionService) {
-      new TranscriptionServiceConstruct(this, safeConstructId + '-transcription', {
-        apiGatewayAuthorizerId: fe.authorizer.id,
-        apiGatewayId: fe.apiGateway.id,
-        clientName: props.clientName,
-        region: clientConfig.region,
-        dataBucketArn: core.dataBucket.bucket.arn,
-        dataBucketName: core.dataBucket.bucket.bucket,
-        outputsBucketArn: core.outputsBucket.bucket.arn,
-        extractContentLambdaArn: coreApis.extractContentLambda.arn,
-        extractContentLambdaName: coreApis.extractContentLambda.functionName,
-        notificationsTableName: core.notificationsTable.name,
-        notificationsTableArn: core.notificationsTable.arn,
-        usageAnalyticsEventsTableName: core.usageAnalyticsEventsTable.name,
-        usageAnalyticsEventsTableArn: core.usageAnalyticsEventsTable.arn,
-        auditAutomationTableName: core.auditAutomationTable.name,
-        auditAutomationTableArn: core.auditAutomationTable.arn,
-        deployerRoleArn: deployerRole,
-      });
-    }
-
     // OAuth cloud storage integration (Google Drive, OneDrive, Dropbox)
     // Also deploys the workspace tools Lambda for unified connect access
     // (OAuth, Synergy, S3 data bucket, generic HTTP)
@@ -906,7 +883,6 @@ export class NumaClientStack extends TerraformStack {
         V2_APPS: clientConfig.v2Apps ?? false,
         NUMA_APPS: clientConfig.allApps ?? false,
         JOB_HISTORY: (clientConfig.allApps ?? false) ? (clientConfig.jobHistory ?? true) : false,
-        TRANSCRIPTION_SERVICE: (clientConfig.numaFiles ?? false) ? (clientConfig.transcriptionService ?? false) : false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         PUBLIC_DEMO: clientConfig.publicDemo ?? false,
@@ -1398,13 +1374,6 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         v2Apps: z.boolean().optional().default(false),
-
-        /**
-         * Whether to enable the Transcription Service (async job queue for document transcription).
-         *
-         * @default false
-         */
-        transcriptionService: z.boolean().optional().default(false),
 
         /**
          * Enable job history viewer.

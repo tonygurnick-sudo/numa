@@ -1493,8 +1493,11 @@ def build_kb_context(
         kb_name = kb.get("name", kb_id)
 
         # Build KB header
+        user_sub = os.environ.get("NUMA_USER_SUB", "")
         if kb_id == "company":
-            lines.append(f"\n- `company` - Company knowledge base (default)")
+            lines.append(f"\n- `company` - Company files (default)")
+        elif user_sub and kb_id == user_sub:
+            lines.append(f"\n- `{kb_id}` - My Files (user's root files)")
         else:
             lines.append(f"\n- `{kb_id}` - {kb_name}")
 

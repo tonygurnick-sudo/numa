@@ -22,7 +22,6 @@ import { streamWorkspaceChatAgent } from '../../Services/workspaceChatAgentServi
 import type { SDKEvent } from '../../types/workspaceChatTypes';
 import { getEffectiveLanguage } from '../../utils/languagePreference';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
-import { TranscriptionService } from '../../Services/TranscriptionService';
 
 /**
  * ARCHITECTURE NOTE: Files system uses DATA bucket as primary storage
@@ -104,7 +103,6 @@ const DOCUMENT_EXTENSIONS = ['.docx', '.xlsx', '.msg'];
 /** Vision/image file extensions that require extraction */
 const VISION_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg'];
 
-/** Audio/video file extensions that require transcription */
 const AUDIO_VIDEO_EXTENSIONS = ['.mp3', '.mp4', '.wav', '.flac', '.ogg', '.amr', '.webm', '.m4a'];
 
 const isTextFile = (name: string): boolean => {
@@ -269,9 +267,11 @@ export const CreateShareModal = ({
   // ─── Dropzone Quick Create vs Customize mode ────────────────────
   const [isDropzoneCustomizing, setIsDropzoneCustomizing] = useState(false);
 
-  // ─── Dropzone folder browser state ──────────────────────────────
+  // ─── Dropzone folder browser state (uses KB folders) ─────────────
   const [dzBrowsePath, setDzBrowsePath] = useState('/');
   const [dzFolders, setDzFolders] = useState<FolderItem[]>([]);
+  const [dzKbFolders, setDzKbFolders] = useState<UserKB[]>([]);
+  const [dzSelectedKbId, setDzSelectedKbId] = useState<string | null>(null);
   const [dzLoadingFolders, setDzLoadingFolders] = useState(false);
   const [dzCreatingFolder, setDzCreatingFolder] = useState(false);
   const [dzNewFolderName, setDzNewFolderName] = useState('');
@@ -440,43 +440,47 @@ export const CreateShareModal = ({
     }
   }, [dropzoneWizardStep, isDropzone, enableChat, availableKbs.length, kbsLoading]);
 
-  // ─── Load folders for dropzone folder browser (step 1) ──────────
-  const loadDzFolders = useCallback(
-    async (path: string) => {
-      setDzLoadingFolders(true);
-      try {
-        const result = await listFolder(dropzoneScope, path);
-        setDzFolders(result.folders);
-      } catch {
-        setDzFolders([]);
-      } finally {
-        setDzLoadingFolders(false);
-      }
-    },
-    [dropzoneScope]
-  );
+  // ─── Load KB folders for dropzone folder browser (step 1) ───────
+  const loadDzKbFolders = useCallback(async () => {
+    setDzLoadingFolders(true);
+    try {
+      const kbs = await knowledgeBaseService.listUserKBs();
+      // Filter: no system KBs, no root KB, must have EDITOR or OWNER access
+      const userKbs = kbs.filter(
+        (kb) =>
+          kb.kb_id !== 'company' &&
+          kb.kb_id !== 'numa-support' &&
+          !kb.is_root &&
+          (kb.role === 'OWNER' || kb.role === 'EDITOR')
+      );
+      setDzKbFolders(userKbs);
+    } catch {
+      setDzKbFolders([]);
+    } finally {
+      setDzLoadingFolders(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (show && isDropzone && dropzoneWizardStep === 1) {
-      loadDzFolders(dzBrowsePath);
+      loadDzKbFolders();
     }
-  }, [show, isDropzone, dropzoneWizardStep, dzBrowsePath, loadDzFolders]);
+  }, [show, isDropzone, dropzoneWizardStep, loadDzKbFolders]);
 
   const handleDzCreateFolder = useCallback(async () => {
     if (!dzNewFolderName.trim()) return;
     setDzCreatingFolder(true);
     try {
-      const { createFolder } = await import('../../Services/filesService');
-      await createFolder(dropzoneScope, dzBrowsePath, dzNewFolderName.trim());
+      await knowledgeBaseService.createKB({ name: dzNewFolderName.trim(), is_shared: false, viewers: [], editors: [] });
       setDzNewFolderName('');
       setDzShowNewFolder(false);
-      await loadDzFolders(dzBrowsePath);
+      await loadDzKbFolders();
     } catch {
       // Folder creation failed silently
     } finally {
       setDzCreatingFolder(false);
     }
-  }, [dzNewFolderName, dropzoneScope, dzBrowsePath, loadDzFolders]);
+  }, [dzNewFolderName, loadDzKbFolders]);
 
   const dzBreadcrumbs = dzBrowsePath === '/' ? ['/'] : ['/', ...dzBrowsePath.split('/').filter(Boolean)];
 
@@ -588,22 +592,6 @@ export const CreateShareModal = ({
       const fileScopePath = buildFilePath(selectedFile);
       const { url } = await getDownloadUrl(effectiveScope, fileScopePath);
 
-      // Submit file for transcription if not already transcribed (fire-and-forget)
-      if (enableChat && userSub) {
-        const s3Key = buildS3Key(effectiveScope, selectedFile.name, effectiveCurrentPath, userSub);
-        try {
-          const lookupResult = await TranscriptionService.lookupByPath(s3Key, numaGet);
-          const jobs = lookupResult.jobs || [];
-          const completed = jobs.find((j: { status: string }) => j.status === 'COMPLETED');
-          if (!completed) {
-            TranscriptionService.submit(selectedFile.name, s3Key, numaPost).catch(() => {});
-          }
-        } catch {
-          // No existing transcription — submit new one
-          TranscriptionService.submit(selectedFile.name, s3Key, numaPost).catch(() => {});
-        }
-      }
-
       const result = await createShare({
         s3_signed_url: url,
         system_prompt: DEFAULT_SYSTEM_PROMPT,
@@ -635,8 +623,6 @@ export const CreateShareModal = ({
     allowDownload,
     selectedKbId,
     onCreated,
-    numaGet,
-    numaPost,
     t,
   ]);
 
@@ -661,21 +647,6 @@ export const CreateShareModal = ({
       const fileScopePath = buildFilePath(selectedFile);
       const { url } = await getDownloadUrl(effectiveScope, fileScopePath);
 
-      // Submit file for transcription if not already transcribed (fire-and-forget)
-      if (userSub) {
-        const s3Key = buildS3Key(effectiveScope, selectedFile.name, effectiveCurrentPath, userSub);
-        try {
-          const lookupResult = await TranscriptionService.lookupByPath(s3Key, numaGet);
-          const jobs = lookupResult.jobs || [];
-          const completed = jobs.find((j: { status: string }) => j.status === 'COMPLETED');
-          if (!completed) {
-            TranscriptionService.submit(selectedFile.name, s3Key, numaPost).catch(() => {});
-          }
-        } catch {
-          TranscriptionService.submit(selectedFile.name, s3Key, numaPost).catch(() => {});
-        }
-      }
-
       const result = await createShare({
         s3_signed_url: url,
         system_prompt: DEFAULT_SYSTEM_PROMPT,
@@ -695,7 +666,7 @@ export const CreateShareModal = ({
     } finally {
       setSubmitting(false);
     }
-  }, [selectedFile, user, effectiveScope, effectiveCurrentPath, selectedKbId, onCreated, numaGet, numaPost, t]);
+  }, [selectedFile, user, effectiveScope, effectiveCurrentPath, selectedKbId, onCreated, t]);
 
   // ---------------------------------------------------------------------------
   // Dropzone submission (unchanged)
@@ -709,16 +680,13 @@ export const CreateShareModal = ({
       const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
       if (!userSub) throw new Error('User not authenticated');
 
-      const pathSegment = selectedFolder.replace(/^\//, '');
-      let s3FolderPrefix: string;
-      if (dropzoneScope.type === 'company') {
-        s3FolderPrefix = `files/company/${pathSegment}`;
-      } else {
-        s3FolderPrefix = `files/user/${userSub}/${pathSegment}`;
-      }
+      // Use KB folder as destination -- S3 prefix is documents/kb-{kbId}/
+      const targetKbId = dzSelectedKbId || userSub;
+      const s3FolderPrefix = `documents/kb-${targetKbId}/`;
+      const folderName = dzKbFolders.find((kb) => kb.kb_id === targetKbId)?.kb_name || 'My Files';
 
       const result = await createDropZone({
-        folder_path: selectedFolder,
+        folder_path: folderName,
         s3_folder_prefix: s3FolderPrefix,
         instructions,
         auth_mode: authMode,
@@ -880,16 +848,13 @@ export const CreateShareModal = ({
       const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
       if (!userSub) throw new Error('User not authenticated');
 
-      const pathSegment = selectedFolder.replace(/^\//, '');
-      let s3FolderPrefix: string;
-      if (dropzoneScope.type === 'company') {
-        s3FolderPrefix = `files/company/${pathSegment}`;
-      } else {
-        s3FolderPrefix = `files/user/${userSub}/${pathSegment}`;
-      }
+      // Use KB folder as destination -- S3 prefix is documents/kb-{kbId}/
+      const targetKbId = dzSelectedKbId || userSub;
+      const s3FolderPrefix = `documents/kb-${targetKbId}/`;
+      const folderName = dzKbFolders.find((kb) => kb.kb_id === targetKbId)?.kb_name || 'My Files';
 
       const result = await createDropZone({
-        folder_path: selectedFolder,
+        folder_path: folderName,
         s3_folder_prefix: s3FolderPrefix,
         instructions: t('dropzoneWizard.instructionsDefault'),
         auth_mode: 'none',
@@ -1017,36 +982,79 @@ export const CreateShareModal = ({
                 </ol>
               </nav>
 
-              {/* Folder list */}
+              {/* KB Folder list */}
               <div className="border rounded" style={{ height: 280, overflowY: 'auto', backgroundColor: '#f8f9fa' }}>
                 {dzLoadingFolders ? (
                   <div className="text-center py-4">
                     <Spinner size="sm" className="me-2" />
                     <span className="text-muted">{t('dropzoneWizard.folderBrowser.loading')}</span>
                   </div>
-                ) : dzFolders.length === 0 && !dzShowNewFolder ? (
+                ) : dzKbFolders.length === 0 && !dzShowNewFolder ? (
                   <div className="text-center text-muted py-4">
                     <i className="bi bi-folder2-open d-block mb-2" style={{ fontSize: '2rem' }} />
                     <p className="mb-0">{t('dropzoneWizard.folderBrowser.empty')}</p>
                   </div>
                 ) : (
                   <div className="list-group list-group-flush">
-                    {dzFolders.map((folder) => (
-                      <button
-                        key={folder.name}
-                        type="button"
-                        className="list-group-item list-group-item-action d-flex align-items-center gap-2"
-                        onClick={() => {
-                          const newPath = dzBrowsePath === '/' ? `/${folder.name}/` : `${dzBrowsePath}${folder.name}/`;
-                          setDzBrowsePath(newPath);
-                          setSelectedFolder(newPath);
-                        }}
-                      >
-                        <i className="bi bi-folder-fill text-warning" />
-                        <span className="flex-grow-1">{folder.name}</span>
-                        <i className="bi bi-chevron-right text-muted" style={{ fontSize: 12 }} />
-                      </button>
-                    ))}
+                    {/* Root files option (user's root KB) */}
+                    <button
+                      type="button"
+                      className="list-group-item list-group-item-action d-flex align-items-center gap-2"
+                      style={
+                        dzSelectedKbId === null
+                          ? {
+                              backgroundColor: 'var(--brand-primary, #8e50a7)',
+                              color: 'white',
+                              borderColor: 'var(--brand-primary, #8e50a7)',
+                            }
+                          : undefined
+                      }
+                      onClick={() => {
+                        setDzSelectedKbId(null);
+                        setSelectedFolder('/');
+                      }}
+                    >
+                      <i
+                        className="bi bi-person-fill"
+                        style={{ color: dzSelectedKbId === null ? 'white' : '#86868b' }}
+                      />
+                      <span className="flex-grow-1">My Files</span>
+                    </button>
+                    {dzKbFolders.map((kb) => {
+                      const isSelected = dzSelectedKbId === kb.kb_id;
+                      return (
+                        <button
+                          key={kb.kb_id}
+                          type="button"
+                          className="list-group-item list-group-item-action d-flex align-items-center gap-2"
+                          style={
+                            isSelected
+                              ? {
+                                  backgroundColor: 'var(--brand-primary, #8e50a7)',
+                                  color: 'white',
+                                  borderColor: 'var(--brand-primary, #8e50a7)',
+                                }
+                              : undefined
+                          }
+                          onClick={() => {
+                            setDzSelectedKbId(kb.kb_id);
+                            setSelectedFolder(kb.kb_name);
+                          }}
+                        >
+                          <i
+                            className="bi bi-folder-fill"
+                            style={{ color: isSelected ? 'white' : 'var(--finder-folder-color, #79b8ff)' }}
+                          />
+                          <span className="flex-grow-1">{kb.kb_name}</span>
+                          {kb.is_shared && (
+                            <i
+                              className="bi bi-people-fill"
+                              style={{ fontSize: '0.7rem', opacity: isSelected ? 0.8 : 0.6 }}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1096,10 +1104,15 @@ export const CreateShareModal = ({
                 )}
               </div>
 
-              {/* Selected path display */}
+              {/* Selected folder display */}
               <div className="mt-2 small text-muted">
                 <i className="bi bi-check-circle text-success me-1" />
-                {t('dropzoneWizard.quickCreate.folder')}: <strong>{selectedFolder || '/'}</strong>
+                {t('dropzoneWizard.quickCreate.folder')}:{' '}
+                <strong>
+                  {dzSelectedKbId
+                    ? dzKbFolders.find((kb) => kb.kb_id === dzSelectedKbId)?.kb_name || dzSelectedKbId
+                    : 'My Files'}
+                </strong>
               </div>
             </div>
           );

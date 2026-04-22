@@ -4,10 +4,8 @@ import { useTranslation } from 'react-i18next';
 import type { FileItem, FileScope } from '../../Services/filesService';
 import { buildS3Key, getFileIcon } from '../../Services/filesService';
 import { useAuth } from '../../Providers/AuthProvider';
-import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { getEffectiveLanguage } from '../../utils/languagePreference';
 import { streamWorkspaceChatAgent } from '../../Services/workspaceChatAgentService';
-import { TranscriptionService } from '../../Services/TranscriptionService';
 import type { SDKEvent } from '../../types/workspaceChatTypes';
 
 interface FileSummarizePanelProps {
@@ -21,8 +19,7 @@ type SummarizeStatus = 'idle' | 'streaming' | 'success' | 'error';
 
 const FileSummarizePanel = ({ file, scope, currentPath, onClose }: FileSummarizePanelProps) => {
   const { t } = useTranslation('files');
-  const { user, getCredentials } = useAuth();
-  const { numaGet, numaPost } = useNumaRequest();
+  const { user } = useAuth();
   const [status, setStatus] = useState<SummarizeStatus>('idle');
   const [summary, setSummary] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -106,34 +103,9 @@ const FileSummarizePanel = ({ file, scope, currentPath, onClose }: FileSummarize
     const { language: langLabel } = getEffectiveLanguage();
 
     try {
-      // Check for an existing transcription via hash-based dedup (submit returns duplicate if already transcribed)
-      let transcriptionText: string | null = null;
-      try {
-        const submitResult = await TranscriptionService.submit(targetFile.name, s3Key, numaPost);
-        if (submitResult.duplicate && submitResult.jobId) {
-          // Existing transcription found — fetch its output
-          const jobResult = (await numaGet(`/api/transcriptions/${encodeURIComponent(submitResult.jobId)}`)) as {
-            outputKey?: string;
-            status?: string;
-          };
-          if (jobResult.outputKey && jobResult.status === 'COMPLETED') {
-            const content = await TranscriptionService.getOutputContent(jobResult.outputKey, getCredentials);
-            transcriptionText = TranscriptionService.outputToText(content);
-          }
-        }
-      } catch {
-        // Silent fallback — proceed without cached transcription
-      }
-
-      if (transcriptionText) {
-        // Use the cached transcription text directly — no file attachment needed
-        const prompt = `Summarize the following file content concisely. Respond in ${langLabel}.\n\nFile: ${targetFile.name}\n\n---\n${transcriptionText}`;
-        await streamSummary(prompt, s3Key, targetFile, false);
-      } else {
-        // No transcription available — attach the file for extraction and summarize
-        const prompt = `Summarize the following file concisely. Respond in ${langLabel}.\n\nFile: ${targetFile.name}\nS3 Key: ${s3Key}`;
-        await streamSummary(prompt, s3Key, targetFile, true);
-      }
+      // Attach the file for extraction and summarize via workspace chat
+      const prompt = `Summarize the following file concisely. Respond in ${langLabel}.\n\nFile: ${targetFile.name}\nS3 Key: ${s3Key}`;
+      await streamSummary(prompt, s3Key, targetFile, true);
     } catch (err) {
       setStatus('error');
       setErrorMsg(err instanceof Error ? err.message : String(err));

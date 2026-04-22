@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PdfPreview, XlsxPreview, DocxPreview, CsvPreview, MarkdownPreview, PptxPreview } from '../FilePreview';
 import './DocumentViewer.scss';
 
 interface DocumentViewerProps {
@@ -9,14 +10,51 @@ interface DocumentViewerProps {
 
 /**
  * Document viewer for shared documents.
- * - PDF: Uses react-pdf for native rendering (white background, no browser toolbar)
- * - HTML: Direct display in iframe
- * - Other: Browser native iframe handling
+ * Uses the same preview renderers as FilePreviewPanel for consistent rendering
+ * across the app. Works with presigned URLs (no S3 credentials needed).
  */
 export const DocumentViewer = ({ url, allowDownload = true }: DocumentViewerProps) => {
   const { t } = useTranslation('shared');
   const [hasError, setHasError] = useState(false);
+  const [binaryContent, setBinaryContent] = useState<ArrayBuffer | null>(null);
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const fileType = getFileType(url);
+
+  // Fetch content from presigned URL
+  useEffect(() => {
+    const needsBinary = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'].includes(fileType);
+    const needsText = ['csv', 'md', 'markdown', 'txt'].includes(fileType);
+
+    // Images and HTML are handled directly via URL -- no fetch needed
+    if (!needsBinary && !needsText) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchContent = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+
+        if (needsBinary) {
+          const buffer = await response.arrayBuffer();
+          setBinaryContent(buffer);
+        } else {
+          const text = await response.text();
+          setTextContent(text);
+        }
+      } catch (err) {
+        console.error('Failed to fetch document content:', err);
+        setHasError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchContent();
+  }, [url, fileType]);
 
   if (hasError) {
     return (
@@ -36,14 +74,26 @@ export const DocumentViewer = ({ url, allowDownload = true }: DocumentViewerProp
     );
   }
 
-  if (fileType === 'pdf') {
+  if (loading) {
     return (
       <div className="document-viewer">
-        <PdfDocumentViewer url={url} onError={() => setHasError(true)} />
+        <div className="pdf-loading">
+          <div className="spinner-border text-primary spinner-border-sm" role="status" aria-hidden="true" />
+        </div>
       </div>
     );
   }
 
+  // PDF
+  if (fileType === 'pdf' && binaryContent) {
+    return (
+      <div className="document-viewer">
+        <PdfPreview data={binaryContent} />
+      </div>
+    );
+  }
+
+  // Images
   if (fileType === 'image') {
     return (
       <div className="document-viewer">
@@ -54,112 +104,112 @@ export const DocumentViewer = ({ url, allowDownload = true }: DocumentViewerProp
     );
   }
 
-  return (
-    <div className="document-viewer">
-      <iframe
-        src={url}
-        title="Shared Document"
-        className={`document-frame ${fileType}-frame`}
-        onError={() => setHasError(true)}
-      />
-    </div>
-  );
-};
-
-/**
- * PDF viewer using react-pdf for white background rendering.
- * Dynamically imports react-pdf following the established PdfPreview pattern.
- */
-const PdfDocumentViewer = ({ url, onError }: { url: string; onError: () => void }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [numPages, setNumPages] = useState(0);
-  const [containerWidth, setContainerWidth] = useState(800);
-
-  // Dynamic import of react-pdf (same pattern as FilePreview/PdfPreview)
-  const [pdfComponents, setPdfComponents] = useState<{
-    Document: React.ComponentType<{
-      file: string;
-      onLoadSuccess: (pdf: { numPages: number }) => void;
-      onLoadError: (err: Error) => void;
-      loading: React.ReactNode;
-      children: React.ReactNode;
-    }>;
-    Page: React.ComponentType<{
-      pageNumber: number;
-      width: number;
-      renderTextLayer: boolean;
-      renderAnnotationLayer: boolean;
-    }>;
-  } | null>(null);
-
-  useEffect(() => {
-    import('react-pdf').then((module) => {
-      module.pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${module.pdfjs.version}/build/pdf.worker.min.mjs`;
-      setPdfComponents({
-        Document: module.Document as unknown as typeof pdfComponents.Document,
-        Page: module.Page as unknown as typeof pdfComponents.Page,
-      });
-    });
-  }, []);
-
-  // Measure container width for responsive page sizing
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
-      }
-    });
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  if (!pdfComponents) {
+  // DOCX
+  if ((fileType === 'docx' || fileType === 'doc') && binaryContent) {
     return (
-      <div className="pdf-loading">
-        <div className="spinner-border text-primary spinner-border-sm" role="status" aria-hidden="true" />
+      <div className="document-viewer">
+        <DocxPreview data={binaryContent} />
       </div>
     );
   }
 
-  const { Document, Page } = pdfComponents;
+  // XLSX/XLS
+  if ((fileType === 'xlsx' || fileType === 'xls') && binaryContent) {
+    return (
+      <div className="document-viewer">
+        <XlsxPreview data={binaryContent} />
+      </div>
+    );
+  }
 
+  // PPTX/PPT
+  if ((fileType === 'pptx' || fileType === 'ppt') && binaryContent) {
+    return (
+      <div className="document-viewer">
+        <PptxPreview data={binaryContent} />
+      </div>
+    );
+  }
+
+  // CSV
+  if (fileType === 'csv' && textContent != null) {
+    return (
+      <div className="document-viewer">
+        <CsvPreview csvContent={textContent} />
+      </div>
+    );
+  }
+
+  // Markdown
+  if ((fileType === 'md' || fileType === 'markdown') && textContent != null) {
+    return (
+      <div className="document-viewer">
+        <MarkdownPreview content={textContent} />
+      </div>
+    );
+  }
+
+  // Plain text
+  if (fileType === 'txt' && textContent != null) {
+    return (
+      <div className="document-viewer">
+        <div style={{ padding: '1.5rem', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.9rem' }}>
+          {textContent}
+        </div>
+      </div>
+    );
+  }
+
+  // HTML
+  if (fileType === 'html') {
+    return (
+      <div className="document-viewer">
+        <iframe
+          src={url}
+          title="Shared Document"
+          className="document-frame html-frame"
+          onError={() => setHasError(true)}
+        />
+      </div>
+    );
+  }
+
+  // Unknown type -- show message instead of triggering auto-download via iframe
   return (
-    <div className="pdf-container" ref={containerRef}>
-      <Document
-        file={url}
-        onLoadSuccess={({ numPages: n }: { numPages: number }) => setNumPages(n)}
-        onLoadError={() => onError()}
-        loading={
-          <div className="pdf-loading">
-            <div className="spinner-border text-primary spinner-border-sm" role="status" aria-hidden="true" />
-          </div>
-        }
-      >
-        {Array.from({ length: numPages }, (_, i) => (
-          <div key={`page_${i + 1}`} className="pdf-page">
-            <Page pageNumber={i + 1} width={containerWidth} renderTextLayer={false} renderAnnotationLayer={false} />
-          </div>
-        ))}
-      </Document>
+    <div className="document-viewer">
+      <div className="document-error">
+        <i className="bi bi-file-earmark" />
+        <h3>{t('document.previewUnavailable', 'Preview not available')}</h3>
+        <p>{t('document.previewUnavailableMessage', 'This file type cannot be previewed in the browser.')}</p>
+        {allowDownload && (
+          <a href={url} target="_blank" rel="noopener noreferrer" className="btn btn-outline-primary btn-sm">
+            <i className="bi bi-download me-2" />
+            {t('document.tryDownload')}
+          </a>
+        )}
+      </div>
     </div>
   );
 };
 
 /**
- * Determine file type from URL path.
+ * Determine file type from URL path (strips query params from presigned URLs).
  */
 function getFileType(url: string): string {
   try {
     const path = new URL(url).pathname.toLowerCase();
     if (path.endsWith('.pdf')) return 'pdf';
     if (path.endsWith('.html') || path.endsWith('.htm')) return 'html';
-    if (path.endsWith('.docx') || path.endsWith('.doc')) return 'docx';
-    if (path.endsWith('.xlsx') || path.endsWith('.xls')) return 'xlsx';
-    if (path.endsWith('.pptx') || path.endsWith('.ppt')) return 'pptx';
+    if (path.endsWith('.docx')) return 'docx';
+    if (path.endsWith('.doc')) return 'doc';
+    if (path.endsWith('.xlsx')) return 'xlsx';
+    if (path.endsWith('.xls')) return 'xls';
+    if (path.endsWith('.pptx')) return 'pptx';
+    if (path.endsWith('.ppt')) return 'ppt';
+    if (path.endsWith('.csv')) return 'csv';
+    if (path.endsWith('.md')) return 'md';
+    if (path.endsWith('.markdown')) return 'markdown';
+    if (path.endsWith('.txt')) return 'txt';
     if (/\.(png|jpe?g|gif|webp|bmp|svg)$/.test(path)) return 'image';
     return 'unknown';
   } catch {

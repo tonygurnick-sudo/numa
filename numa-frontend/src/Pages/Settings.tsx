@@ -29,10 +29,6 @@ import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
 
 import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab';
-// CHOSE HEAD: TranscriptionService import needed for rebuild button and filesTable loading.
-// 3af3ef8e only imported TranscriptionJobsPanel (no service). To revert: remove TranscriptionService import.
-import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
-import { TranscriptionService, type TranscriptionJob as TxJob } from '../Services/TranscriptionService';
 import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
 import UserManagementAuditTab from '../Components/UsageAnalytics/UserManagementAuditTab';
 import { UNSAFE_NavigationContext, useParams, useNavigate } from 'react-router-dom';
@@ -93,7 +89,7 @@ const useNavigationConfirm = (when: boolean, message: string) => {
 const AUDIT_SUB_DEFAULTS: Record<string, string> = {
   activity: 'user-activity',
   index: 'web-crawler',
-  files: 'transcribe',
+  files: 'sync',
   users: 'user-management',
 };
 
@@ -122,14 +118,7 @@ export default function SettingsPage() {
     setAuditSubKey(AUDIT_SUB_DEFAULTS[key] ?? 'user-activity');
   }, []);
 
-  const [rebuilding, setRebuilding] = useState(false);
-  const [rebuildResult, setRebuildResult] = useState<{ created: number; skipped: number; failed: number } | null>(null);
-
   // Upload/Scan table state (shared data source)
-  const [filesTableJobs, setFilesTableJobs] = useState<TxJob[]>([]);
-  const [filesTableLoading, setFilesTableLoading] = useState(false);
-  const [filesTableNextToken, setFilesTableNextToken] = useState<string | undefined>();
-  const filesTableLoaded = useRef(false);
   const brandingFlag =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('BRANDING_PROVIDER_ENABLED') : null;
   const brandingApiEnabled = brandingFlag === 'true';
@@ -351,43 +340,6 @@ export default function SettingsPage() {
       .then(setDataConnectorSettings)
       .catch(() => setDataConnectorSettings({ synergy: { status: 'disabled' } }));
   }, [isAdmin, dataConnectorsEnabled, user, numaGet]);
-
-  // Load files table data when the files sub-tab is active (Upload / Scan tabs)
-  const loadFilesTable = useCallback(
-    async (token?: string) => {
-      setFilesTableLoading(true);
-      try {
-        const response = await TranscriptionService.listAll({ limit: 50, nextToken: token }, numaGet);
-        setFilesTableJobs((prev) => (token ? [...prev, ...(response.jobs ?? [])] : (response.jobs ?? [])));
-        setFilesTableNextToken(response.nextToken);
-      } catch (e) {
-        console.error('Failed to load files table data', e);
-      } finally {
-        setFilesTableLoading(false);
-      }
-    },
-    [numaGet]
-  );
-
-  useEffect(() => {
-    if (
-      isAdmin &&
-      currentScope === 'services' &&
-      auditTabKey === 'files' &&
-      (auditSubKey === 'upload' || auditSubKey === 'scan') &&
-      !filesTableLoaded.current
-    ) {
-      filesTableLoaded.current = true;
-      loadFilesTable();
-    }
-  }, [isAdmin, currentScope, auditTabKey, auditSubKey, loadFilesTable]);
-
-  const formatFileSizeSettings = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  };
 
   // Load Agents settings
   useEffect(() => {
@@ -2218,27 +2170,6 @@ export default function SettingsPage() {
               <>
                 <div className="d-flex gap-2 mb-3">
                   <button
-                    className={`btn btn-sm ${auditSubKey === 'upload' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('upload')}
-                  >
-                    <i className="bi bi-cloud-arrow-up me-1" />
-                    {t('auditTabs.upload')}
-                  </button>
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'scan' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('scan')}
-                  >
-                    <i className="bi bi-shield-check me-1" />
-                    {t('auditTabs.scan')}
-                  </button>
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'transcribe' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('transcribe')}
-                  >
-                    <i className="bi bi-file-earmark-text me-1" />
-                    {t('auditTabs.transcribe')}
-                  </button>
-                  <button
                     className={`btn btn-sm ${auditSubKey === 'sync' ? 'btn-primary' : 'btn-outline-secondary'}`}
                     onClick={() => setAuditSubKey('sync')}
                   >
@@ -2253,205 +2184,6 @@ export default function SettingsPage() {
                     {t('auditTabs.recovery')}
                   </button>
                 </div>
-                {auditSubKey === 'upload' && (
-                  <>
-                    {filesTableLoading && filesTableJobs.length === 0 ? (
-                      <div className="text-center py-5">
-                        <Spinner animation="border" />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="table-responsive">
-                          <Table striped bordered hover>
-                            <thead>
-                              <tr>
-                                <th>{t('auditTabs.uploadTable.fileName')}</th>
-                                <th>{t('auditTabs.uploadTable.fileSize')}</th>
-                                <th>{t('auditTabs.uploadTable.uploadedAt')}</th>
-                                <th>{t('auditTabs.uploadTable.status')}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filesTableJobs.length === 0 ? (
-                                <tr>
-                                  <td colSpan={4} className="text-center text-muted py-4">
-                                    {t('auditTabs.uploadTable.noUploads')}
-                                  </td>
-                                </tr>
-                              ) : (
-                                filesTableJobs.map((job) => (
-                                  <tr key={job.jobId}>
-                                    <td className="text-truncate" style={{ maxWidth: '300px' }} title={job.fileName}>
-                                      {job.fileName}
-                                    </td>
-                                    <td>{formatFileSizeSettings(job.fileSize)}</td>
-                                    <td>
-                                      {new Date(job.createdAt).toLocaleString(undefined, {
-                                        dateStyle: 'short',
-                                        timeStyle: 'medium',
-                                      })}
-                                    </td>
-                                    <td>
-                                      <Badge bg="success">{t('auditTabs.uploadTable.uploaded')}</Badge>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </Table>
-                        </div>
-                        <div className="d-flex justify-content-between align-items-center">
-                          <span className="text-muted small">
-                            {t('auditTabs.uploadTable.showing', { count: filesTableJobs.length })}
-                          </span>
-                          {filesTableNextToken && (
-                            <Button
-                              variant="outline-primary"
-                              size="sm"
-                              disabled={filesTableLoading}
-                              onClick={() => loadFilesTable(filesTableNextToken)}
-                            >
-                              {filesTableLoading ? (
-                                <Spinner as="span" animation="border" size="sm" />
-                              ) : (
-                                t('auditTabs.uploadTable.loadMore')
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-                {auditSubKey === 'scan' && (
-                  <>
-                    {filesTableLoading && filesTableJobs.length === 0 ? (
-                      <div className="text-center py-5">
-                        <Spinner animation="border" />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="table-responsive">
-                          <Table striped bordered hover>
-                            <thead>
-                              <tr>
-                                <th>{t('auditTabs.scanTable.fileName')}</th>
-                                <th>{t('auditTabs.scanTable.scannedAt')}</th>
-                                <th>{t('auditTabs.scanTable.scanResult')}</th>
-                                <th>{t('auditTabs.scanTable.duration')}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filesTableJobs.length === 0 ? (
-                                <tr>
-                                  <td colSpan={4} className="text-center text-muted py-4">
-                                    {t('auditTabs.scanTable.noScans')}
-                                  </td>
-                                </tr>
-                              ) : (
-                                filesTableJobs.map((job) => (
-                                  <tr key={job.jobId}>
-                                    <td className="text-truncate" style={{ maxWidth: '300px' }} title={job.fileName}>
-                                      {job.fileName}
-                                    </td>
-                                    <td>
-                                      {new Date(job.createdAt).toLocaleString(undefined, {
-                                        dateStyle: 'short',
-                                        timeStyle: 'medium',
-                                      })}
-                                    </td>
-                                    <td>
-                                      <Badge bg="secondary">{t('auditTabs.scanTable.skipped')}</Badge>
-                                    </td>
-                                    <td>{'-'}</td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </Table>
-                        </div>
-                        <div className="d-flex justify-content-between align-items-center">
-                          <span className="text-muted small">
-                            {t('auditTabs.scanTable.showing', { count: filesTableJobs.length })}
-                          </span>
-                          {filesTableNextToken && (
-                            <Button
-                              variant="outline-primary"
-                              size="sm"
-                              disabled={filesTableLoading}
-                              onClick={() => loadFilesTable(filesTableNextToken)}
-                            >
-                              {filesTableLoading ? (
-                                <Spinner as="span" animation="border" size="sm" />
-                              ) : (
-                                t('auditTabs.scanTable.loadMore')
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-                {/* CHOSE HEAD: TranscriptionJobsPanel used here instead of ec7ae674's GenericAuditLogTab.
-                    The rebuild button from ec7ae674 is placed above the panel.
-                    To revert to ec7ae674: replace this block with:
-                      <GenericAuditLogTab logType="transcripts" actionButton={...rebuild button...} /> */}
-                {/* CHOSE HEAD (kept across f9106bfc): button stays here, not in Files.tsx */}
-                {auditSubKey === 'transcribe' && (
-                  <>
-                    {/* Rebuild button — integrated into services/files/transcribe sub-tab */}
-                    <div className="d-flex align-items-center mb-3 gap-2">
-                      {rebuildResult && (
-                        <Alert
-                          variant="info"
-                          className="d-inline-block me-3 mb-0 py-1 px-3"
-                          style={{ fontSize: '0.875rem' }}
-                        >
-                          {t('rebuildResult', {
-                            created: rebuildResult.created,
-                            skipped: rebuildResult.skipped,
-                            failed: rebuildResult.failed,
-                          })}
-                        </Alert>
-                      )}
-                      <Button
-                        variant="outline-warning"
-                        size="sm"
-                        disabled={rebuilding}
-                        onClick={async () => {
-                          setRebuilding(true);
-                          setRebuildResult(null);
-                          try {
-                            const result = await TranscriptionService.rebuild(numaPost);
-                            setRebuildResult(result);
-                          } catch (e) {
-                            console.error('Rebuild failed', e);
-                          } finally {
-                            setRebuilding(false);
-                          }
-                        }}
-                      >
-                        {rebuilding ? (
-                          <>
-                            <Spinner animation="border" size="sm" className="me-1" />
-                            {t('rebuilding')}
-                          </>
-                        ) : (
-                          <>
-                            <i className="bi bi-arrow-repeat me-1"></i>
-                            {t('rebuildTranscripts')}
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                    <TranscriptionJobsPanel />
-                  </>
-                )}
-                {/* CHOSE HEAD (final): services panel already contains the rebuild button.
-                    392dea79 would have used 'audit' scope + GenericAuditLogTab for transcripts.
-                    To revert: swap scope to 'audit' and replace TranscriptionJobsPanel with
-                    GenericAuditLogTab + actionButton rebuild button (see 392dea79 diff). */}
                 {auditSubKey === 'sync' && <GenericAuditLogTab logType="sync" />}
                 {auditSubKey === 'recovery' && <GenericAuditLogTab logType="recovery" />}
               </>

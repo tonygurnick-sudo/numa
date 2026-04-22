@@ -214,6 +214,34 @@ class KnowledgeBaseManager:
             )
             return None
 
+    @staticmethod
+    def _synthesize_root_kb(user_id: str) -> Dict[str, Any]:
+        """Synthesize a virtual root KB record for a user's root files."""
+        return {
+            "kb_id": user_id,
+            "kb_name": "My Files",
+            "s3_prefix": f"documents/kb-{user_id}/",
+            "status": "ACTIVE",
+            "is_root": True,
+            "created_by": user_id,
+            "viewers": [user_id],
+            "editors": [user_id],
+        }
+
+    @staticmethod
+    def is_root_kb_id(kb_id: str) -> bool:
+        """Check if kb_id looks like a Cognito user sub (UUID v4 format)."""
+        # Cognito subs are UUID v4: 8-4-4-4-12 hex chars
+        import re
+
+        return bool(
+            re.match(
+                r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                kb_id,
+                re.IGNORECASE,
+            )
+        )
+
     def get_kb(self, kb_id: str) -> Optional[Dict[str, Any]]:
         """Get KB by ID. Auto-creates company KB if missing."""
         try:
@@ -226,6 +254,11 @@ class KnowledgeBaseManager:
             # If company KB doesn't exist, auto-create it
             if not item and kb_id == "company":
                 return self._ensure_company_kb_exists()
+
+            # If no DynamoDB record and kb_id looks like a user sub,
+            # synthesize a virtual root KB record
+            if not item and self.is_root_kb_id(kb_id):
+                return self._synthesize_root_kb(kb_id)
 
             return self._parse_kb_item(item) if item else None
         except Exception as e:
@@ -319,6 +352,19 @@ class KnowledgeBaseManager:
                         "is_public": visibility["is_public"],
                         "document_count": kb.get("document_count"),
                     }
+
+        # Always include the user's root KB (virtual, no DynamoDB record).
+        # Root KB uses user_sub as kb_id for deterministic per-user root storage.
+        if user_id not in memberships:
+            memberships[user_id] = {
+                "kb_id": user_id,
+                "kb_name": "My Files",
+                "role": "OWNER",
+                "is_shared": False,
+                "is_public": False,
+                "is_root": True,
+                "document_count": None,
+            }
 
         return sorted(
             memberships.values(),
@@ -547,6 +593,19 @@ class KnowledgeBaseManager:
         Returns:
             True if successful
         """
+        # Root KBs have no DynamoDB record -- skip count update
+        if self.is_root_kb_id(kb_id):
+            # Check if this is actually a regular KB with a UUID id
+            try:
+                response = self.dynamodb.get_item(
+                    TableName=self.table_name,
+                    Key={"PK": {"S": self.tenant_pk}, "SK": {"S": f"KB#{kb_id}"}},
+                    ProjectionExpression="kb_id",
+                )
+                if "Item" not in response:
+                    return True  # Root KB, nothing to update
+            except Exception:
+                return True  # Fail gracefully for root KBs
         try:
             self.dynamodb.update_item(
                 TableName=self.table_name,

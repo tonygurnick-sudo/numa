@@ -17,7 +17,7 @@ const OpsPage = lazy(() => import('../Pages/OpsPage').then((m) => ({ default: m.
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const NumaIntegrations = lazy(() => import('../Pages/NumaIntegrations').then((m) => ({ default: m.NumaIntegrations })));
 const JobHistoryManager = lazy(() => import('../Pages/JobHistoryManager'));
-const FilesPage = lazy(() => import('../Pages/Files').then((m) => ({ default: m.FilesPage })));
+// FilesPage removed -- replaced by UnifiedFilesPage
 const SchedulingPage = lazy(() => import('../Pages/SchedulingPage').then((m) => ({ default: m.SchedulingPage })));
 const DataConnectorsPage = lazy(() =>
   import('../Pages/DataConnectorsPage').then((m) => ({ default: m.DataConnectorsPage }))
@@ -121,20 +121,7 @@ export const ROUTE_CONFIG = [
     },
   },
 
-  {
-    path: '/files/*',
-    element: () => <FilesPage />,
-    featureFlag: 'NUMA_FILES',
-    nav: {
-      label: 'Files',
-      labelKey: 'nav.items.files',
-      icon: 'bi bi-folder-fill',
-      section: 'workflows',
-      sectionKey: 'nav.sections.workflows',
-      featureFlag: 'NUMA_FILES',
-      order: 5.7,
-    },
-  },
+  // Old /files page removed -- replaced by /numa-files (UnifiedFilesPage)
 
   // Ops
   {
@@ -185,19 +172,19 @@ export const ROUTE_CONFIG = [
     },
   },
 
-  // Unified Files (replaces KB section in nav)
+  // Files (unified KB + files page)
   {
     path: '/numa-files',
     element: () => <UnifiedFilesPage />,
     featureFlag: 'KNOWLEDGE_BASES',
     nav: {
-      label: 'Numa Files',
-      labelKey: 'nav.items.unifiedFiles',
+      label: 'Files',
+      labelKey: 'nav.items.files',
       icon: 'bi bi-folder-fill',
-      section: 'knowledgeBases',
-      sectionKey: 'nav.sections.knowledgeBases',
+      section: 'workflows',
+      sectionKey: 'nav.sections.workflows',
       featureFlag: 'KNOWLEDGE_BASES',
-      order: 9,
+      order: 5.7,
     },
   },
 

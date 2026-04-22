@@ -71,7 +71,13 @@
     "workspaceChatModelSelection": true,
     "scheduling": true,
     "v2Apps": true,
-    "developerMode":true
+    "developerMode":true,
+    "dataConnectorsEnabled": true,
+    "oauthIntegrationsEnabled": true,
+    "numaSharing": true,
+    "numaDropZones": true,
+    "numaFiles": true,
+    "secretsVaultEnabled": true
   },
   "nolia-id-gov-moh": {
     "additionalCognitoClientIds": "415r270afvm16t6fd4veli03tt",
