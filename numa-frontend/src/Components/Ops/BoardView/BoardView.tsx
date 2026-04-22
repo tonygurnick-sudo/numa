@@ -641,6 +641,9 @@ const BoardView = () => {
 
       const resolvedTypeId = ticketTypeId ?? config.ticketTypes[0].id;
 
+      const activeWorkUnit = workUnits.find((wu) => wu.status === 'active') ?? null;
+      const targetWorkUnitId = selectedWorkUnitId ?? activeWorkUnit?.id ?? undefined;
+
       try {
         await OpsService.createTicket(numaPost, {
           teamId: team.id,
@@ -649,14 +652,14 @@ const BoardView = () => {
           stageId,
           zoneId: stage.zoneId,
           priority: 'medium',
-          workUnitId: selectedWorkUnitId ?? undefined,
+          workUnitId: targetWorkUnitId,
         });
         await refreshTickets();
       } catch (err) {
         console.error('[BoardView] Quick add failed:', err);
       }
     },
-    [team, config?.ticketTypes, stages, filteredTickets, numaPost, refreshTickets, selectedWorkUnitId]
+    [team, config?.ticketTypes, stages, filteredTickets, numaPost, refreshTickets, selectedWorkUnitId, workUnits]
   );
 
   // ── Shared overlays (rendered regardless of board state) ─────────
