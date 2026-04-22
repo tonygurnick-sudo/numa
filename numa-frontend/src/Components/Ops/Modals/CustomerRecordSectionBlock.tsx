@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { useMemo, useState } from 'react';
 import Badge from 'react-bootstrap/Badge';
 import Button from 'react-bootstrap/Button';
@@ -107,12 +108,14 @@ export function CustomerRecordSectionBlock({
   const isAdmin = Boolean(user?.groups?.includes('admin'));
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
+  const [missingRequired, setMissingRequired] = useState<Set<string>>(new Set());
 
   // ── Add field state ────────────────────────────────────────────────────
   const [showAddField, setShowAddField] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<FieldType>('text');
   const [newFieldOptions, setNewFieldOptions] = useState('');
+  const [newFieldRequired, setNewFieldRequired] = useState(false);
   const [creatingField, setCreatingField] = useState(false);
   const [createFieldError, setCreateFieldError] = useState<string | null>(null);
   const [addingFromLibrary, setAddingFromLibrary] = useState(false);
@@ -124,6 +127,8 @@ export function CustomerRecordSectionBlock({
   }, [allFields]);
 
   const activeStaff = useMemo(() => staff.filter((s) => s.isActive), [staff]);
+
+  const requiredFieldIdSet = useMemo(() => new Set(section.requiredFieldIds ?? []), [section.requiredFieldIds]);
 
   // Field ids already used somewhere in the customerRecord (across all sections).
   const usedFieldIds = useMemo(() => {
@@ -177,15 +182,38 @@ export function CustomerRecordSectionBlock({
       initial[fieldId] = getCustomerFieldValue(customer, fieldId);
     }
     setDraft(initial);
+    setMissingRequired(new Set());
     setIsEditing(true);
   };
 
   const cancelEdit = () => {
     setDraft({});
+    setMissingRequired(new Set());
     setIsEditing(false);
   };
 
+  const setDraftField = (fieldId: string, value: unknown) => {
+    setDraft((prev) => ({ ...prev, [fieldId]: value }));
+    if (missingRequired.has(fieldId) && !isEmptyValue(value)) {
+      setMissingRequired((prev) => {
+        const next = new Set(prev);
+        next.delete(fieldId);
+        return next;
+      });
+    }
+  };
+
   const handleSave = async () => {
+    const missing = new Set<string>();
+    for (const fieldId of section.fieldIds) {
+      if (!requiredFieldIdSet.has(fieldId)) continue;
+      if (isEmptyValue(draft[fieldId])) missing.add(fieldId);
+    }
+    if (missing.size > 0) {
+      setMissingRequired(missing);
+      return;
+    }
+
     const updates: Record<string, unknown> = {};
     for (const fieldId of section.fieldIds) {
       const originalValue = getCustomerFieldValue(customer, fieldId);
@@ -199,6 +227,7 @@ export function CustomerRecordSectionBlock({
       return;
     }
     await onSave(buildSectionUpdatePayload(customer, updates));
+    setMissingRequired(new Set());
     setIsEditing(false);
     setDraft({});
   };
@@ -207,6 +236,7 @@ export function CustomerRecordSectionBlock({
     setNewFieldName('');
     setNewFieldType('text');
     setNewFieldOptions('');
+    setNewFieldRequired(false);
     setCreateFieldError(null);
   };
 
@@ -215,14 +245,29 @@ export function CustomerRecordSectionBlock({
     resetAddFieldForm();
   };
 
-  const persistSectionWithField = async (fieldId: string) => {
+  const persistSectionWithField = async (fieldId: string, required = false) => {
     const currentRecord =
       crmConfig.customerRecord && crmConfig.customerRecord.sections.length > 0
         ? crmConfig.customerRecord
-        : { sections: [{ id: section.id, name: section.name, fieldIds: [...section.fieldIds] }] };
+        : {
+            sections: [
+              {
+                id: section.id,
+                name: section.name,
+                fieldIds: [...section.fieldIds],
+                requiredFieldIds: section.requiredFieldIds ? [...section.requiredFieldIds] : undefined,
+              },
+            ],
+          };
     const nextRecord = {
       sections: currentRecord.sections.map((s) =>
-        s.id === section.id ? { ...s, fieldIds: [...s.fieldIds, fieldId] } : s
+        s.id === section.id
+          ? {
+              ...s,
+              fieldIds: [...s.fieldIds, fieldId],
+              requiredFieldIds: required ? [...(s.requiredFieldIds ?? []), fieldId] : s.requiredFieldIds,
+            }
+          : s
       ),
     };
     const nextCrmConfig: CrmConfig = { ...crmConfig, customerRecord: nextRecord };
@@ -273,7 +318,7 @@ export function CustomerRecordSectionBlock({
       });
 
       const newFieldId = created.id ?? fieldId;
-      await persistSectionWithField(newFieldId);
+      await persistSectionWithField(newFieldId, newFieldRequired);
 
       // Surface the new field in the open edit session.
       setDraft((prev) => ({ ...prev, [newFieldId]: null }));
@@ -327,22 +372,24 @@ export function CustomerRecordSectionBlock({
       <div className={sectionBodyClass}>
         {isEditing ? (
           <>
+            {missingRequired.size > 0 && (
+              <div className="alert alert-danger py-2 px-3 small mb-3">
+                {t('crm.requiredFieldsMissing', 'Please fill out all required fields before saving.')}
+              </div>
+            )}
             <div className="row g-3">
               {section.fieldIds.map((fieldId) => (
                 <div key={fieldId} className={editColClass}>
-                  {renderEditControl(
-                    fieldId,
-                    draft[fieldId],
-                    (next) => setDraft((prev) => ({ ...prev, [fieldId]: next })),
-                    {
-                      customer,
-                      crmConfig,
-                      staff: activeStaff,
-                      fieldDefById,
-                      saving,
-                      t,
-                    }
-                  )}
+                  {renderEditControl(fieldId, draft[fieldId], (next) => setDraftField(fieldId, next), {
+                    customer,
+                    crmConfig,
+                    staff: activeStaff,
+                    fieldDefById,
+                    saving,
+                    t,
+                    requiredFieldIds: requiredFieldIdSet,
+                    missingRequired,
+                  })}
                 </div>
               ))}
             </div>
@@ -403,6 +450,16 @@ export function CustomerRecordSectionBlock({
                           />
                         </div>
                       )}
+                    </div>
+                    <div className="mt-2">
+                      <Form.Check
+                        type="checkbox"
+                        id={`crm-section-create-field-required-${section.id}`}
+                        label={t('globalSettings.required', 'Required')}
+                        checked={newFieldRequired}
+                        onChange={(e) => setNewFieldRequired(e.target.checked)}
+                        disabled={creatingField}
+                      />
                     </div>
                     {createFieldError && <div className="text-danger small mt-2">{createFieldError}</div>}
                     <div className="d-flex justify-content-end gap-2 mt-2">
@@ -477,22 +534,39 @@ export function CustomerRecordSectionBlock({
 
 // ─── Edit control rendering ──────────────────────────────────────────────────
 
-interface FieldContext {
+export interface FieldContext {
+  /**
+   * The customer being edited. In create mode, pass a placeholder customer
+   * with any pre-filled defaults — it is only used by built-in field
+   * renderers that fall back to existing customer state for display.
+   */
   customer: Customer;
   crmConfig: CrmConfig;
   staff: StaffProfile[];
   fieldDefById: Map<string, FieldDefinition>;
   saving: boolean;
   t: TFunction<'ops'>;
+  requiredFieldIds: Set<string>;
+  missingRequired: Set<string>;
 }
 
-function renderEditControl(
+export function renderEditControl(
   fieldId: string,
   value: unknown,
   onChange: (next: unknown) => void,
   ctx: FieldContext
 ): React.ReactNode {
-  const labelNode = <Form.Label className="small text-muted mb-1">{labelFor(fieldId, ctx)}</Form.Label>;
+  const isRequired = ctx.requiredFieldIds.has(fieldId);
+  const hasError = ctx.missingRequired.has(fieldId);
+  const errorNode = hasError ? (
+    <div className="text-danger small mt-1">{ctx.t('crm.requiredFieldMessage', 'This field is required.')}</div>
+  ) : null;
+  const labelNode = (
+    <Form.Label className="small text-muted mb-1">
+      {labelFor(fieldId, ctx)}
+      {isRequired && <span className="text-danger ms-1">*</span>}
+    </Form.Label>
+  );
 
   if (!isBuiltinField(fieldId)) {
     const field = ctx.fieldDefById.get(fieldId);
@@ -501,14 +575,27 @@ function renderEditControl(
       return (
         <div>
           {labelNode}
-          <Form.Control size="sm" value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
+          <Form.Control
+            size="sm"
+            isInvalid={hasError}
+            value={String(value ?? '')}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          {errorNode}
         </div>
       );
     }
     return (
       <div>
         {labelNode}
-        <DynamicField field={field} value={value} onChange={onChange} staff={ctx.staff} hideLabel />
+        {hasError ? (
+          <div className="border border-danger rounded p-1">
+            <DynamicField field={field} value={value} onChange={onChange} staff={ctx.staff} hideLabel />
+          </div>
+        ) : (
+          <DynamicField field={field} value={value} onChange={onChange} staff={ctx.staff} hideLabel />
+        )}
+        {errorNode}
       </div>
     );
   }
@@ -521,7 +608,13 @@ function renderEditControl(
       return (
         <div>
           {labelNode}
-          <Form.Control size="sm" value={strVal} onChange={(e) => onChange(e.target.value || null)} />
+          <Form.Control
+            size="sm"
+            isInvalid={hasError}
+            value={strVal}
+            onChange={(e) => onChange(e.target.value || null)}
+          />
+          {errorNode}
         </div>
       );
     case 'textarea':
@@ -532,9 +625,11 @@ function renderEditControl(
             as="textarea"
             rows={3}
             size="sm"
+            isInvalid={hasError}
             value={strVal}
             onChange={(e) => onChange(e.target.value || null)}
           />
+          {errorNode}
         </div>
       );
     case 'url':
@@ -544,10 +639,12 @@ function renderEditControl(
           <Form.Control
             type="url"
             size="sm"
+            isInvalid={hasError}
             value={strVal}
             onChange={(e) => onChange(e.target.value || null)}
             placeholder="https://example.com"
           />
+          {errorNode}
         </div>
       );
     case 'date':
@@ -557,9 +654,11 @@ function renderEditControl(
           <Form.Control
             type="date"
             size="sm"
+            isInvalid={hasError}
             value={toDateInput(value)}
             onChange={(e) => onChange(e.target.value || null)}
           />
+          {errorNode}
         </div>
       );
     case 'currency':
@@ -569,23 +668,25 @@ function renderEditControl(
           <Form.Control
             type="number"
             size="sm"
+            isInvalid={hasError}
             value={strVal}
             onChange={(e) => {
               const next = e.target.value;
               onChange(next ? parseFloat(next) : null);
             }}
           />
+          {errorNode}
         </div>
       );
     case 'select-industry':
-      return selectControl(labelNode, strVal, onChange, ctx.crmConfig.industries ?? []);
+      return selectControl(labelNode, strVal, onChange, ctx.crmConfig.industries ?? [], hasError, errorNode);
     case 'select-territory':
-      return selectControl(labelNode, strVal, onChange, ctx.crmConfig.territories ?? []);
+      return selectControl(labelNode, strVal, onChange, ctx.crmConfig.territories ?? [], hasError, errorNode);
     case 'select-owner':
       return (
         <div>
           {labelNode}
-          <Form.Select size="sm" value={strVal} onChange={(e) => onChange(e.target.value || null)}>
+          <Form.Select size="sm" isInvalid={hasError} value={strVal} onChange={(e) => onChange(e.target.value || null)}>
             <option value="">{ctx.t('common.selectOption')}</option>
             {ctx.staff.map((s) => (
               <option key={s.id} value={s.id}>
@@ -593,13 +694,14 @@ function renderEditControl(
               </option>
             ))}
           </Form.Select>
+          {errorNode}
         </div>
       );
     case 'select-lifecycle':
       return (
         <div>
           {labelNode}
-          <Form.Select size="sm" value={strVal} onChange={(e) => onChange(e.target.value || null)}>
+          <Form.Select size="sm" isInvalid={hasError} value={strVal} onChange={(e) => onChange(e.target.value || null)}>
             <option value="">{ctx.t('common.selectOption')}</option>
             {(ctx.crmConfig.lifecycleStages ?? []).map((stage) => (
               <option key={stage.id} value={stage.id}>
@@ -607,12 +709,13 @@ function renderEditControl(
               </option>
             ))}
           </Form.Select>
+          {errorNode}
         </div>
       );
     case 'select-contract-term': {
       const options =
         CONTRACT_TERM_OPTIONS.includes(strVal) || !strVal ? CONTRACT_TERM_OPTIONS : [strVal, ...CONTRACT_TERM_OPTIONS];
-      return selectControl(labelNode, strVal, onChange, options);
+      return selectControl(labelNode, strVal, onChange, options, hasError, errorNode);
     }
     case 'product-list': {
       const asArray = Array.isArray(value) ? (value as string[]) : [];
@@ -622,6 +725,7 @@ function renderEditControl(
           {labelNode}
           <Form.Control
             size="sm"
+            isInvalid={hasError}
             value={displayVal}
             placeholder="Product A, Product B"
             onChange={(e) => {
@@ -632,6 +736,7 @@ function renderEditControl(
               onChange(list.length > 0 ? list : null);
             }}
           />
+          {errorNode}
         </div>
       );
     }
@@ -642,12 +747,14 @@ function selectControl(
   labelNode: React.ReactNode,
   value: string,
   onChange: (next: unknown) => void,
-  options: string[]
+  options: string[],
+  hasError: boolean,
+  errorNode: React.ReactNode
 ): React.ReactNode {
   return (
     <div>
       {labelNode}
-      <Form.Select size="sm" value={value} onChange={(e) => onChange(e.target.value || null)}>
+      <Form.Select size="sm" isInvalid={hasError} value={value} onChange={(e) => onChange(e.target.value || null)}>
         <option value="">—</option>
         {options.map((opt) => (
           <option key={opt} value={opt}>
@@ -655,6 +762,7 @@ function selectControl(
           </option>
         ))}
       </Form.Select>
+      {errorNode}
     </div>
   );
 }
@@ -764,6 +872,13 @@ function labelFor(fieldId: string, ctx: { fieldDefById: Map<string, FieldDefinit
   }
   const field = ctx.fieldDefById.get(fieldId);
   return field?.name ?? fieldId;
+}
+
+export function isEmptyValue(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {

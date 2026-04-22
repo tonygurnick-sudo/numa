@@ -183,6 +183,10 @@
     "historyFieldCleared": "{{field}} cleared"
   },
   "crm": {
+    "requiredFieldsMissing": "Please fill out all required fields before saving.",
+    "requiredFieldMessage": "This field is required.",
+    "createCustomerTitle": "New customer",
+    "createCustomer": "Create customer",
     "newCustomer": "New Customer",
     "searchCustomers": "Search customers...",
     "creatingCustomer": "Creating...",
@@ -743,6 +747,7 @@
   "common": {
     "myWork": "My Work",
     "save": "Save",
+    "saving": "Saving...",
     "cancel": "Cancel",
     "close": "Close",
     "edit": "Edit",
@@ -916,6 +921,7 @@
     "category": "Category",
     "options": "Options",
     "optionsHelp": "Comma-separated options for select fields",
+    "required": "Required",
     "searchFields": "Search fields...",
     "lifecycleStages": "Lifecycle Stages",
     "customerFlags": "Customer Flags",

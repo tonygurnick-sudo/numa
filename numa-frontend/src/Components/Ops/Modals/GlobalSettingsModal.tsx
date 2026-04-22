@@ -460,15 +460,12 @@ export function GlobalSettingsModal({
         }
       }
 
-      // Added / Updated
+      // Updated (creates are persisted inline by handleAddCustomField / CRM onCreateField,
+      // so any `custom-`/`crm-` temp ids should have already been replaced with server ids)
       for (const field of fields) {
-        if (field.id.startsWith('custom-')) {
-          promises.push(OpsService.createField(numaPost, field));
-        } else {
-          const orig = originalFields.find((f) => f.id === field.id);
-          if (orig && JSON.stringify(orig) !== JSON.stringify(field)) {
-            promises.push(OpsService.updateField(numaPut, field.id, field));
-          }
+        const orig = originalFields.find((f) => f.id === field.id);
+        if (orig && JSON.stringify(orig) !== JSON.stringify(field)) {
+          promises.push(OpsService.updateField(numaPut, field.id, field));
         }
       }
 
@@ -586,7 +583,14 @@ export function GlobalSettingsModal({
   }, [numaPost, t]);
 
   // ── Add custom field handler ───────────────────────────────────────────────
-  const handleAddCustomField = () => {
+  // New fields are persisted immediately so their server-assigned id can be
+  // referenced from ticket types and CRM layouts in the same session. If we
+  // kept the temp `custom-…` id locally and only persisted on main Save, the
+  // backend would rewrite the id (see numa-ops-config-api POST /fields) while
+  // the ticket type's defaultFields kept pointing at the dead temp id — which
+  // then got filtered out on reload, making the new field silently disappear
+  // from the ticket-type picker. Edits stay local-then-save.
+  const handleAddCustomField = async () => {
     if (!newFieldName.trim()) return;
     const parsedOptions = ['select', 'multi_select'].includes(newFieldType)
       ? newFieldOptions
@@ -595,10 +599,9 @@ export function GlobalSettingsModal({
           .filter(Boolean)
       : undefined;
 
-    setFields((prev) => {
-      if (editingFieldId) {
-        // Update existing field
-        return prev.map((f) =>
+    if (editingFieldId) {
+      setFields((prev) =>
+        prev.map((f) =>
           f.id === editingFieldId
             ? {
                 ...f,
@@ -608,21 +611,27 @@ export function GlobalSettingsModal({
                 options: parsedOptions,
               }
             : f
-        );
-      } else {
-        // Create new field
-        const newField: FieldDefinition = {
-          id: generateId(),
-          name: newFieldName.trim(),
-          category: newFieldCategory as FieldCategory,
-          fieldType: newFieldType,
-          options: parsedOptions,
-          isSystem: false,
-          order: prev.length,
-        };
-        return [...prev, newField];
+        )
+      );
+    } else {
+      const payload: FieldDefinition = {
+        id: generateId(),
+        name: newFieldName.trim(),
+        category: newFieldCategory as FieldCategory,
+        fieldType: newFieldType,
+        options: parsedOptions,
+        isSystem: false,
+        order: fields.length,
+      };
+      try {
+        const created = await OpsService.createField(numaPost, payload);
+        const newField: FieldDefinition = { ...payload, ...created, id: created?.id ?? payload.id };
+        setFields((prev) => [...prev, newField]);
+      } catch (err) {
+        setError(t('errors.saveFailed', { message: String(err) }));
+        return;
       }
-    });
+    }
     setNewFieldName('');
     setNewFieldType('text');
     setNewFieldCategory('common');
@@ -1005,6 +1014,104 @@ export function GlobalSettingsModal({
 
       {/* Scrollable Content */}
       <div className="flex-grow-1 overflow-auto p-4 pe-4">
+        {/* Layout Settings */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+          <div className="mb-3">
+            <h6 className="fw-bold text-dark mb-1">
+              {t('globalSettings.crmLayout', 'Customer Record Layout Settings')}
+            </h6>
+            <div className="text-muted small">
+              {t('globalSettings.crmLayoutHint', 'Controls how the customer detail view renders sections and fields.')}
+            </div>
+          </div>
+
+          <div className="row g-3">
+            <div className="col-12 col-md-6 col-lg-3">
+              <Form.Label className="small fw-medium mb-1">
+                {t('globalSettings.crmLayout.columns', 'Columns per section')}
+              </Form.Label>
+              <Form.Select
+                size="sm"
+                value={String(crmConfig.layout?.columnsPerSection ?? 3)}
+                onChange={(e) => {
+                  const updated = structuredClone(crmConfig);
+                  const cols = Number(e.target.value) as 2 | 3 | 4;
+                  updated.layout = { ...(updated.layout ?? {}), columnsPerSection: cols };
+                  setCrmConfig(updated);
+                }}
+              >
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </Form.Select>
+            </div>
+
+            <div className="col-12 col-md-6 col-lg-3">
+              <Form.Label className="small fw-medium mb-1">
+                {t('globalSettings.crmLayout.density', 'Density')}
+              </Form.Label>
+              <Form.Select
+                size="sm"
+                value={crmConfig.layout?.density ?? 'compact'}
+                onChange={(e) => {
+                  const updated = structuredClone(crmConfig);
+                  updated.layout = {
+                    ...(updated.layout ?? {}),
+                    density: e.target.value as 'compact' | 'comfortable',
+                  };
+                  setCrmConfig(updated);
+                }}
+              >
+                <option value="compact">{t('globalSettings.crmLayout.compact', 'Compact')}</option>
+                <option value="comfortable">{t('globalSettings.crmLayout.comfortable', 'Comfortable')}</option>
+              </Form.Select>
+            </div>
+
+            <div className="col-12 col-md-6 col-lg-3">
+              <Form.Label className="small fw-medium mb-1">
+                {t('globalSettings.crmLayout.labelPosition', 'Label position')}
+              </Form.Label>
+              <Form.Select
+                size="sm"
+                value={crmConfig.layout?.labelPosition ?? 'above'}
+                onChange={(e) => {
+                  const updated = structuredClone(crmConfig);
+                  updated.layout = {
+                    ...(updated.layout ?? {}),
+                    labelPosition: e.target.value as 'above' | 'inline',
+                  };
+                  setCrmConfig(updated);
+                }}
+              >
+                <option value="above">{t('globalSettings.crmLayout.labelAbove', 'Above field')}</option>
+                <option value="inline">{t('globalSettings.crmLayout.labelInline', 'Inline')}</option>
+              </Form.Select>
+            </div>
+
+            <div className="col-12 col-md-6 col-lg-3 d-flex align-items-end">
+              <Form.Check
+                type="switch"
+                id="crmLayoutDefaultExpanded"
+                className="mb-1"
+                checked={crmConfig.layout?.defaultSectionsExpanded === true}
+                onChange={(e) => {
+                  const updated = structuredClone(crmConfig);
+                  updated.layout = {
+                    ...(updated.layout ?? {}),
+                    defaultSectionsExpanded: e.target.checked,
+                  };
+                  setCrmConfig(updated);
+                }}
+                label={
+                  <span className="small">
+                    {t('globalSettings.crmLayout.expandAll', 'Expand all sections by default')}
+                  </span>
+                }
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Customer Record Layout */}
         <CustomerRecordConfigBlock
           value={crmConfig.customerRecord ?? structuredClone(DEFAULT_CUSTOMER_RECORD)}
@@ -1038,6 +1145,26 @@ export function GlobalSettingsModal({
             } catch (err) {
               console.error('[GlobalSettingsModal] Failed to create CRM custom field', err);
               return null;
+            }
+          }}
+          onUpdateField={async (fieldId, { name, fieldType, options }) => {
+            try {
+              const existing = fields.find((f) => f.id === fieldId);
+              const payload: Partial<FieldDefinition> = existing
+                ? { ...existing, name, fieldType, options }
+                : { name, fieldType, options };
+              await OpsService.updateField(numaPut, fieldId, payload);
+              setFields((prev) => prev.map((f) => (f.id === fieldId ? { ...f, name, fieldType, options } : f)));
+              // Refresh the ops context so the parent's cached `config.fields`
+              // reflects the persisted change — otherwise closing the modal
+              // without hitting main Save (and then reopening) would reset the
+              // form to the stale context value and make it look like the
+              // inline save didn't persist.
+              await refreshConfig();
+              return true;
+            } catch (err) {
+              console.error('[GlobalSettingsModal] Failed to update CRM custom field', err);
+              return false;
             }
           }}
         />
@@ -1337,104 +1464,6 @@ export function GlobalSettingsModal({
             }}
             placeholder={t('globalSettings.addItem', 'Add Item')}
           />
-        </div>
-
-        {/* Layout Settings */}
-        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
-          <div className="mb-3">
-            <h6 className="fw-bold text-dark mb-1">
-              {t('globalSettings.crmLayout', 'Customer Record Layout Settings')}
-            </h6>
-            <div className="text-muted small">
-              {t('globalSettings.crmLayoutHint', 'Controls how the customer detail view renders sections and fields.')}
-            </div>
-          </div>
-
-          <div className="row g-3">
-            <div className="col-12 col-md-6 col-lg-3">
-              <Form.Label className="small fw-medium mb-1">
-                {t('globalSettings.crmLayout.columns', 'Columns per section')}
-              </Form.Label>
-              <Form.Select
-                size="sm"
-                value={String(crmConfig.layout?.columnsPerSection ?? 3)}
-                onChange={(e) => {
-                  const updated = structuredClone(crmConfig);
-                  const cols = Number(e.target.value) as 2 | 3 | 4;
-                  updated.layout = { ...(updated.layout ?? {}), columnsPerSection: cols };
-                  setCrmConfig(updated);
-                }}
-              >
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-              </Form.Select>
-            </div>
-
-            <div className="col-12 col-md-6 col-lg-3">
-              <Form.Label className="small fw-medium mb-1">
-                {t('globalSettings.crmLayout.density', 'Density')}
-              </Form.Label>
-              <Form.Select
-                size="sm"
-                value={crmConfig.layout?.density ?? 'compact'}
-                onChange={(e) => {
-                  const updated = structuredClone(crmConfig);
-                  updated.layout = {
-                    ...(updated.layout ?? {}),
-                    density: e.target.value as 'compact' | 'comfortable',
-                  };
-                  setCrmConfig(updated);
-                }}
-              >
-                <option value="compact">{t('globalSettings.crmLayout.compact', 'Compact')}</option>
-                <option value="comfortable">{t('globalSettings.crmLayout.comfortable', 'Comfortable')}</option>
-              </Form.Select>
-            </div>
-
-            <div className="col-12 col-md-6 col-lg-3">
-              <Form.Label className="small fw-medium mb-1">
-                {t('globalSettings.crmLayout.labelPosition', 'Label position')}
-              </Form.Label>
-              <Form.Select
-                size="sm"
-                value={crmConfig.layout?.labelPosition ?? 'above'}
-                onChange={(e) => {
-                  const updated = structuredClone(crmConfig);
-                  updated.layout = {
-                    ...(updated.layout ?? {}),
-                    labelPosition: e.target.value as 'above' | 'inline',
-                  };
-                  setCrmConfig(updated);
-                }}
-              >
-                <option value="above">{t('globalSettings.crmLayout.labelAbove', 'Above field')}</option>
-                <option value="inline">{t('globalSettings.crmLayout.labelInline', 'Inline')}</option>
-              </Form.Select>
-            </div>
-
-            <div className="col-12 col-md-6 col-lg-3 d-flex align-items-end">
-              <Form.Check
-                type="switch"
-                id="crmLayoutDefaultExpanded"
-                className="mb-1"
-                checked={crmConfig.layout?.defaultSectionsExpanded === true}
-                onChange={(e) => {
-                  const updated = structuredClone(crmConfig);
-                  updated.layout = {
-                    ...(updated.layout ?? {}),
-                    defaultSectionsExpanded: e.target.checked,
-                  };
-                  setCrmConfig(updated);
-                }}
-                label={
-                  <span className="small">
-                    {t('globalSettings.crmLayout.expandAll', 'Expand all sections by default')}
-                  </span>
-                }
-              />
-            </div>
-          </div>
         </div>
       </div>
     </div>

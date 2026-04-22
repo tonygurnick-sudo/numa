@@ -171,6 +171,7 @@ export const customerRecordSectionSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
   fieldIds: z.array(z.string()).default([]),
+  requiredFieldIds: z.array(z.string()).optional(),
 });
 
 export const customerRecordConfigSchema = z.object({

@@ -660,7 +660,12 @@
         "ticketTypes": "Ticket Types",
         "statuses": "Statuses",
         "staff": "Staff",
-        "projects": "Projects"
+        "projects": "Projects",
+        "ticketFields": "Ticket Custom Fields",
+        "crmLifecycleStages": "CRM Lifecycle Stages",
+        "crmCustomFields": "CRM Custom Fields",
+        "crmRecordLayout": "CRM Record Layout",
+        "supplierLifecycleStages": "Supplier Lifecycle Stages"
       },
       "ticketTypes_one": "{{count}} type",
       "ticketTypes_other": "{{count}} types",

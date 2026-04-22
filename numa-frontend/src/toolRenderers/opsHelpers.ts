@@ -119,12 +119,53 @@ export interface OpsTeamDetail {
   stages?: OpsStage[];
 }
 
+export interface OpsFieldDefinition {
+  id?: string;
+  name?: string;
+  fieldType?: string;
+  category?: string;
+  isSystem?: boolean;
+  required?: boolean;
+  options?: string[];
+}
+
+export interface OpsLifecycleStage {
+  id?: string;
+  name?: string;
+  color?: string;
+  colorPosition?: number;
+}
+
+export interface OpsCustomerRecordSection {
+  id?: string;
+  name?: string;
+  fieldIds?: string[];
+}
+
+export interface OpsCrmConfig {
+  lifecycleStages?: OpsLifecycleStage[];
+  customerFlags?: Array<{ id?: string; name?: string; color?: string }>;
+  documentTypes?: Array<{ id?: string; name?: string }>;
+  territories?: string[];
+  industries?: string[];
+  customerRecord?: { sections?: OpsCustomerRecordSection[] };
+}
+
+export interface OpsSupplierConfig {
+  lifecycleStages?: OpsLifecycleStage[];
+  supplierFlags?: Array<{ id?: string; name?: string; color?: string }>;
+  documentTypes?: Array<{ id?: string; name?: string }>;
+}
+
 export interface OpsConfig {
   ticketTypes?: Array<{ id?: string; name?: string; icon?: string; color?: string }>;
   statuses?: Array<{ id?: string; name?: string; type?: string; icon?: string }>;
   staff?: Array<{ sub?: string; name?: string; email?: string }>;
   projects?: Array<{ id?: string; name?: string }>;
   priorities?: Array<{ id?: string; name?: string }>;
+  fields?: OpsFieldDefinition[];
+  crmConfig?: OpsCrmConfig;
+  supplierConfig?: OpsSupplierConfig;
 }
 
 export interface OpsComment {

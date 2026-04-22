@@ -113,6 +113,7 @@ export type CustomerRecordSection = {
   id: string;
   name: string;
   fieldIds: string[];
+  requiredFieldIds?: string[];
 };
 
 export type CustomerRecordConfig = {

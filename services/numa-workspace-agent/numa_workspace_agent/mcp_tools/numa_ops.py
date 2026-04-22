@@ -81,6 +81,17 @@ VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
         "update_project",
         "delete_project",
         "upload_attachment",
+        # Config management (admin-only at the backend)
+        "create_field",
+        "update_field",
+        "delete_field",
+        "create_ticket_type",
+        "update_ticket_type",
+        "delete_ticket_type",
+        "create_status",
+        "update_status",
+        "update_crm_config",
+        "update_supplier_config",
     }
 )
 
@@ -199,8 +210,11 @@ def _save_ops_result(result: Any, operation: str) -> str:
     name="numa_ops_tool",
     description=(
         "Manage Numa Ops boards — create/search tickets, manage teams, "
-        "customers, suppliers, and projects. Call get_config first to load "
-        "ticket types, statuses, and staff before creating tickets."
+        "customers, suppliers, and projects. Also supports admin config "
+        "management: custom fields (ticket and CRM), ticket types, statuses, "
+        "and CRM/supplier configuration (lifecycle stages, record layout, "
+        "industries, territories, flags). Call get_config first to load "
+        "ticket types, statuses, staff, and CRM config before mutating."
     ),
     input_schema={
         "type": "object",
@@ -219,6 +233,9 @@ def _save_ops_result(result: Any, operation: str) -> str:
                     "create_customer, update_customer, delete_customer, "
                     "create_supplier, update_supplier, delete_supplier, create_project, "
                     "update_project, delete_project, upload_attachment. "
+                    "Config management (admin-only): create_field, update_field, delete_field, "
+                    "create_ticket_type, update_ticket_type, delete_ticket_type, "
+                    "create_status, update_status, update_crm_config, update_supplier_config. "
                     "IMPORTANT: Ticket descriptions and comments use HTML format for rich text "
                     "(e.g. <p>, <strong>, <ul><li>), NOT markdown."
                 ),

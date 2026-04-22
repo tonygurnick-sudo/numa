@@ -464,6 +464,30 @@ const handleFields = async (
     return jsonResponse(200, updated);
   }
 
+  // DELETE /config/fields/{id} — refuse if system field or referenced by the CRM layout
+  if (method === 'DELETE' && segments.length === 1) {
+    const id = segments[0];
+    const existing = await getConfigItem(`FIELD#${id}`);
+    if (!existing) return errorResponse(404, 'Field not found');
+    if (existing.isSystem === true) {
+      return errorResponse(409, 'Cannot delete a built-in system field');
+    }
+    const crmConfig = await getConfigItem('CRM_CONFIG');
+    const customerRecord = crmConfig?.customerRecord as
+      | { sections?: { name?: string; fieldIds?: string[] }[] }
+      | undefined;
+    const sections = customerRecord?.sections ?? [];
+    const usedInSections = sections.filter((s) => s.fieldIds?.includes(id)).map((s) => s.name ?? '(unnamed)');
+    if (usedInSections.length > 0) {
+      return errorResponse(
+        409,
+        `Cannot delete field: still used in CRM layout sections [${usedInSections.join(', ')}]. Remove it from the layout first via update_crm_config.`
+      );
+    }
+    await deleteConfigItem(`FIELD#${id}`);
+    return jsonResponse(200, { deleted: true });
+  }
+
   return errorResponse(404, 'Route not found');
 };
 
