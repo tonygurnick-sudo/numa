@@ -267,6 +267,8 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
             setSuccessWorkUnit(activeWorkUnit);
             setSuccessAction('completed');
             setShowSuccess(true);
+            // Clear the sprint filter so the board doesn't stay stuck on the completed sprint
+            selectWorkUnit(null);
             await refreshTeam();
             await Promise.all([refreshTickets(), refreshWorkUnits()]);
           }}
