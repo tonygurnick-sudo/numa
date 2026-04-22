@@ -643,16 +643,6 @@ export class NumaFrontendInfra extends Construct {
       policy: policyDoc.json,
     });
 
-    new NumaCorsEnabledBucket(this, 'frontend-s3-datasource', {
-      clientName: props.clientName,
-      origin: props.domainName,
-      clientAccountId: props.accountId,
-      environmentName: props.environmentName,
-      bucketName: 'frontend-s3-datasource',
-      allowedMethods: ['GET', 'POST', 'PUT', 'DELETE'],
-      addTestObject: true,
-    });
-
     new Route53Record(this, 'record', {
       zoneId: hostedZone.zoneId,
       provider: hostedZone.provider,
