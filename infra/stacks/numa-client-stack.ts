@@ -53,6 +53,7 @@ import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { NumaLambda } from '../constructs/numa-lambda';
 import { OAuthIntegrationConstruct } from '../constructs/oauth-integration-construct';
 import { OpsConstruct } from '../constructs/ops-construct';
+import { SearchConstruct } from '../constructs/search-construct';
 import { TranscriptionServiceConstruct } from '../constructs/transcription-service-construct';
 import { RacetechDataFeedConstruct } from '../constructs/racetech-data-feed-construct';
 import { VaultSecretsConstruct } from '../constructs/vault-secrets-construct';
@@ -662,6 +663,16 @@ export class NumaClientStack extends TerraformStack {
       });
     }
 
+    // Site-wide search (DynamoDB index + GET /api/search query Lambda)
+    if (clientConfig.siteWideSearch) {
+      new SearchConstruct(this, safeConstructId + '-search', {
+        apiGatewayAuthorizerId: fe.authorizer.id,
+        apiGatewayId: fe.apiGateway.id,
+        clientName: props.clientName,
+        environmentName: props.environmentName,
+      });
+    }
+
     // Racetech external data feed (Glenn's daily SQLite upload via presigned URL)
     if (clientConfig.racetechDataFeed) {
       new RacetechDataFeedConstruct(this, safeConstructId + '-racetech-data-feed', {
@@ -858,6 +869,7 @@ export class NumaClientStack extends TerraformStack {
         KNOWLEDGE_BASES: true,
         DEVELOPER_MODE: clientConfig.developerMode ?? false,
         NUMA_OPS: clientConfig.numaOps ?? false,
+        SITE_WIDE_SEARCH: clientConfig.siteWideSearch ?? false,
         MFA_ENABLED: clientConfig.mfa ?? false,
         SECRETS_VAULT_ENABLED: clientConfig.secretsVaultEnabled ?? false,
         // Dependency cascade — children forced off when parent is off
@@ -1325,6 +1337,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         numaOps: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable site-wide search (DynamoDB search index + /api/search).
+         * Foundational only — producers populate the index in follow-up work.
+         *
+         * @default false
+         */
+        siteWideSearch: z.boolean().optional().default(false),
 
         /**
          * Whether to enable the Racetech external data feed upload endpoint.
