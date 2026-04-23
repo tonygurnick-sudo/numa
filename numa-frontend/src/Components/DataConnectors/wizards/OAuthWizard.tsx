@@ -50,6 +50,11 @@ interface OAuthFormState {
   rateLimitRpm: string;
   rateLimitDaily: string;
   customHeaders: CustomHeader[];
+  cacheTtl: string;
+  cacheStaleWhileRevalidate: boolean;
+  cachePrefetch: boolean;
+  cacheBackgroundRefresh: string;
+  customCredentials: Record<string, string>;
 }
 
 interface OAuthWizardProps {
@@ -136,6 +141,11 @@ export const OAuthWizard = ({
     rateLimitRpm: '',
     rateLimitDaily: '',
     customHeaders: [],
+    cacheTtl: '300',
+    cacheStaleWhileRevalidate: true,
+    cachePrefetch: true,
+    cacheBackgroundRefresh: '0',
+    customCredentials: {},
   };
 
   const [form, setForm] = useState<OAuthFormState>(emptyForm);
@@ -206,6 +216,16 @@ export const OAuthWizard = ({
       setLoading(true);
       getCompanySecret(existing.name)
         .then((full: VaultSecretWithFields) => {
+          // Parse custom credentials if any
+          const loadedCustomCredentials: Record<string, string> = {};
+          if (connectorEntry?.credentialFields) {
+            connectorEntry.credentialFields.forEach((field) => {
+              if (full.fields?.[field.key]) {
+                loadedCustomCredentials[field.key] = full.fields[field.key];
+              }
+            });
+          }
+
           // Load non-credential fields only — credentials stay in vault
           updateForm({
             ...baseForm,
@@ -222,6 +242,7 @@ export const OAuthWizard = ({
             rateLimitRpm: full.fields?.rate_limit_rpm || '',
             rateLimitDaily: full.fields?.rate_limit_daily || '',
             customHeaders: parseCustomHeaders(full.fields?.custom_headers),
+            customCredentials: loadedCustomCredentials,
           });
         })
         .catch(() => {
@@ -379,7 +400,19 @@ export const OAuthWizard = ({
       case 'guide':
         return true;
       case 'credentials':
-        return secretExists || (form.clientId.trim().length > 0 && form.clientSecret.trim().length > 0);
+        if (!secretExists) {
+          if (form.clientId.trim().length === 0) return false;
+          if (!registryEntry?.oauth?.hideClientSecret && form.clientSecret.trim().length === 0) return false;
+
+          if (registryEntry?.credentialFields) {
+            for (const field of registryEntry.credentialFields) {
+              if (field.required && !form.customCredentials[field.key]?.trim()) {
+                return false;
+              }
+            }
+          }
+        }
+        return true;
       case 'scopes':
       case 'advanced':
       case 'review':
@@ -477,10 +510,20 @@ export const OAuthWizard = ({
       // Build scopes string from checkboxes or raw input
       const scopeString = scopeDefs ? buildScopeString(pid, form.selectedScopeIds) : form.scopes.trim();
 
+      // Dynamic URL interpolation
+      let finalAuthUrl = form.authUrl.trim();
+      let finalTokenUrl = form.tokenUrl.trim();
+      Object.entries(form.customCredentials).forEach(([key, value]) => {
+        const placeholder = `<${key.toUpperCase()}>`;
+        finalAuthUrl = finalAuthUrl.replace(new RegExp(placeholder, 'g'), value.trim());
+        finalTokenUrl = finalTokenUrl.replace(new RegExp(placeholder, 'g'), value.trim());
+      });
+
       // Shared config fields (auth endpoints, extra params)
       const fields: Record<string, string> = {
-        auth_url: form.authUrl.trim(),
-        token_url: form.tokenUrl.trim(),
+        auth_url: finalAuthUrl,
+        token_url: finalTokenUrl,
+        ...form.customCredentials,
       };
 
       if (form.extraAuthParams.trim()) fields.extra_auth_params = form.extraAuthParams.trim();
@@ -742,16 +785,36 @@ export const OAuthWizard = ({
                 required
               />
             </Form.Group>
-            <Form.Group>
-              <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.clientSecret')}</Form.Label>
-              <Form.Control
-                type="password"
-                placeholder={t('dataConnectors.oauth.clientSecretPlaceholder')}
-                value={form.clientSecret}
-                onChange={(e) => updateForm({ clientSecret: e.target.value })}
-                required
-              />
-            </Form.Group>
+            {!registryEntry?.oauth?.hideClientSecret && (
+              <Form.Group className={registryEntry?.credentialFields?.length ? 'mb-3' : ''}>
+                <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.clientSecret')}</Form.Label>
+                <Form.Control
+                  type="password"
+                  placeholder={t('dataConnectors.oauth.clientSecretPlaceholder')}
+                  value={form.clientSecret}
+                  onChange={(e) => updateForm({ clientSecret: e.target.value })}
+                  required
+                />
+              </Form.Group>
+            )}
+
+            {registryEntry?.credentialFields?.map((field, idx) => (
+              <Form.Group key={field.key} className={idx < registryEntry.credentialFields!.length - 1 ? 'mb-3' : ''}>
+                <Form.Label className="small fw-semibold">{field.label}</Form.Label>
+                <Form.Control
+                  type={field.type === 'password' ? 'password' : 'text'}
+                  placeholder={field.placeholder}
+                  value={form.customCredentials[field.key] || ''}
+                  onChange={(e) =>
+                    updateForm({
+                      customCredentials: { ...form.customCredentials, [field.key]: e.target.value },
+                    })
+                  }
+                  required={field.required}
+                />
+                {field.helpText && <Form.Text className="text-muted">{field.helpText}</Form.Text>}
+              </Form.Group>
+            ))}
           </>
         )}
       </Col>

@@ -57,6 +57,7 @@ export interface ConnectorTemplate {
     scopes: string;
     extraAuthParams?: string;
     discoveryUrl?: string;
+    hideClientSecret?: boolean;
   };
 
   // Non-standard OAuth Authorization header scheme. Defaults to `Bearer`
@@ -587,15 +588,24 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       authUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/authorize',
       tokenUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token',
       scopes: 'mcp restlets',
+      hideClientSecret: true,
     },
+    credentialFields: [
+      {
+        key: 'account_id',
+        label: 'NetSuite Account ID',
+        type: 'text',
+        placeholder: 'e.g. 1234567 or 1234567_SB1',
+        required: true,
+        helpText: 'Your NetSuite Account ID. This is required for OAuth routing.',
+      },
+    ],
     helpUrl: 'https://docs.oracle.com/en/cloud/saas/netsuite/ns-go-live/chapter_1556006456.html',
     oauthSetupSteps: [
       'Create an Integration Record in NetSuite (Setup > Integration > Manage Integrations > New).',
       'Enable "OAuth 2.0" and "Public Client" (PKCE).',
       'Add the Numa Redirect URI shown below to your integration.',
       'Copy your NetSuite Client ID from the integration record.',
-      'NetSuite OAuth DOES NOT use a Client Secret. ENTER YOUR NETSUITE ACCOUNT ID IN THE "CLIENT SECRET" FIELD INSTEAD (e.g. 1234567 or 1234567_SB1).',
-      'Open the "Advanced & Customization" tab below and REplace <ACCOUNT_ID> in both the Auth URL and Token URL with your real Account ID.',
     ],
     cachingPolicy: {
       ttl: 3600,
