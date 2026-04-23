@@ -1,5 +1,6 @@
 import { DataAwsIamPolicyDocumentStatement } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
+import { Fn } from 'cdktf';
 import { Construct } from 'constructs';
 import * as path from 'node:path';
 import {
@@ -198,24 +199,42 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
     }
 
     const exemplar_policy_file_name = 'examplar_policy_nzsba.pdf.json';
+    const exemplar_policy_source = path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name);
     const exemplar_policy: S3Object = new S3Object(this, 'exemplar_policy', {
       bucket: props.outputsBucket.bucket,
       key: `${this.appId}/${exemplar_policy_file_name}`,
-      source: path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name),
+      source: exemplar_policy_source,
+      sourceHash: Fn.filemd5(exemplar_policy_source),
     });
 
     const board_assurance_statement_file_name = 'board_assurance_statement.pdf.json';
+    const board_assurance_statement_source = path.join(
+      import.meta.dirname,
+      '..',
+      '..',
+      'assets',
+      board_assurance_statement_file_name
+    );
     const board_assurance_statement: S3Object = new S3Object(this, 'board_assurance_statement', {
       bucket: props.outputsBucket.bucket,
       key: `${this.appId}/${board_assurance_statement_file_name}`,
-      source: path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name),
+      source: board_assurance_statement_source,
+      sourceHash: Fn.filemd5(board_assurance_statement_source),
     });
 
     const board_assurance_statement_guidelines_file_name = 'board_assurance_statement_guidelines.pdf.json';
+    const board_assurance_statement_guidelines_source = path.join(
+      import.meta.dirname,
+      '..',
+      '..',
+      'assets',
+      board_assurance_statement_guidelines_file_name
+    );
     const board_assurance_statement_guidelines: S3Object = new S3Object(this, 'board_assurance_statement_guidelines', {
       bucket: props.outputsBucket.bucket,
       key: `${this.appId}/${board_assurance_statement_guidelines_file_name}`,
-      source: path.join(import.meta.dirname, '..', '..', 'assets', exemplar_policy_file_name),
+      source: board_assurance_statement_guidelines_source,
+      sourceHash: Fn.filemd5(board_assurance_statement_guidelines_source),
     });
 
     const stepFunctionDefinition = {
