@@ -1035,6 +1035,25 @@ export interface WorkspaceChatInlineToolSegment {
     /** Unix epoch seconds when the backend created the approval — used to sync countdown */
     createdAt?: number;
   };
+  /** Credential-capture prompt — attached when a non-OAuth connector tool call returned
+   *  error_code "needs_credential". Renders an inline credential entry card;
+   *  on submit the credential is POSTed to the user vault and the user is told to retry. */
+  credentialRequest?: {
+    connectorId: string;
+    displayName: string;
+    authType: 'token' | 'api-key' | 'username-password' | string;
+    fields: Array<{
+      key: string;
+      label: string;
+      type?: string;
+      placeholder?: string;
+      required?: boolean;
+    }>;
+    /** Form state: which field values the user has entered so far */
+    values?: Record<string, string>;
+    status?: 'idle' | 'submitting' | 'submitted' | 'error';
+    error?: string;
+  };
 }
 
 /** Subagent container segment (for Task tool) */

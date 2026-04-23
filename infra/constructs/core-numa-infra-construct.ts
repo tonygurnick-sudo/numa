@@ -1313,6 +1313,10 @@ export class CoreNumaInfra extends Construct {
         userPoolClientId: this.userPoolClient.id,
         userPoolId: userPool.id,
         region: props.region,
+        // Numa frontend URL must survive every write to this client's
+        // CallbackURLs, forever. The Lambda enforces this — no caller
+        // (this construct or any future federation add-on) can drop it.
+        baselineCallbackUrls: [`https://${props.domainName}/`],
       });
 
       if (props.indexUnits) {

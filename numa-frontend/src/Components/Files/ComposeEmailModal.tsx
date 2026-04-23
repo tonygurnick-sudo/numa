@@ -3,7 +3,7 @@ import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Send } from 'lucide-react';
 import type { OAuthProviderType } from '../../types/oauthProviders';
-import { OAuthProvidersService } from '../../Services/OAuthProvidersService';
+import { ConnectorsService } from '../../Services/ConnectorsService';
 
 interface ComposeEmailModalProps {
   show: boolean;
@@ -25,7 +25,7 @@ export const ComposeEmailModal = ({ show, onHide, provider }: ComposeEmailModalP
     setSending(true);
     setError(null);
     try {
-      await OAuthProvidersService.sendEmail(provider, to.trim(), subject.trim(), body);
+      await ConnectorsService.files.sendEmail(provider, to.trim(), subject.trim(), body);
       setSuccess(true);
       setTimeout(() => {
         handleClose();

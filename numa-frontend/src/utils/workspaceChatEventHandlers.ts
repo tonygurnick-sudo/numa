@@ -1296,6 +1296,160 @@ function handleToolUseBlock(
   addToolCard(helpers, id, name, input);
 }
 
+/** Marker the workspace agent embeds in content text when a connector tool call
+ *  needs a per-user credential. Format: `[[NUMA_CREDENTIAL_REQUEST:{...json...}]]`.
+ *  See `_check_needs_credential` in services/numa-workspace-agent/.../connect.py. */
+const CREDENTIAL_REQUEST_MARKER = /\[\[NUMA_CREDENTIAL_REQUEST:(\{.*?\})\]\]/s;
+
+interface ExtractedCredentialRequest {
+  connectorId: string;
+  displayName: string;
+  authType: string;
+  fields: Array<{ key: string; label: string; type?: string; placeholder?: string; required?: boolean }>;
+}
+
+function extractCredentialRequest(content: SDKToolResultBlock['content']): ExtractedCredentialRequest | null {
+  // The marker is embedded inside the raw text of text blocks; run the regex
+  // against that text directly. JSON.stringify-ing an array here would
+  // double-escape the embedded JSON and break the subsequent JSON.parse.
+  let raw = '';
+  if (typeof content === 'string') {
+    raw = content;
+  } else if (Array.isArray(content)) {
+    for (const block of content) {
+      if (
+        block &&
+        typeof block === 'object' &&
+        'type' in block &&
+        (block as { type?: string }).type === 'text' &&
+        typeof (block as { text?: unknown }).text === 'string'
+      ) {
+        raw += (block as { text: string }).text + '\n';
+      }
+    }
+  } else if (content && typeof content === 'object') {
+    // Defensive fallback for unusual shapes
+    try {
+      raw = JSON.stringify(content);
+    } catch {
+      return null;
+    }
+  }
+  const match = raw.match(CREDENTIAL_REQUEST_MARKER);
+  if (!match) return null;
+  try {
+    const payload = JSON.parse(match[1]) as Record<string, unknown>;
+    const fields = Array.isArray(payload.credential_fields) ? payload.credential_fields : [];
+    return {
+      connectorId: String(payload.connector_id ?? ''),
+      displayName: String(payload.display_name ?? payload.connector_id ?? ''),
+      authType: String(payload.auth_type ?? 'token'),
+      fields: fields.map((f) => {
+        const ff = f as Record<string, unknown>;
+        return {
+          key: String(ff.key ?? ''),
+          label: String(ff.label ?? ff.key ?? ''),
+          type: ff.type ? String(ff.type) : undefined,
+          placeholder: ff.placeholder ? String(ff.placeholder) : undefined,
+          required: Boolean(ff.required),
+        };
+      }),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Strip the credential-request marker from tool result content so it doesn't
+ *  appear in the user-visible tool_card text. The extracted payload is already
+ *  attached as `credentialRequest` on the segment. */
+function stripCredentialMarker(content: SDKToolResultBlock['content']): SDKToolResultBlock['content'] {
+  if (typeof content === 'string') {
+    return content.replace(CREDENTIAL_REQUEST_MARKER, '').trimStart();
+  }
+  if (Array.isArray(content)) {
+    return content.map((block) => {
+      if (
+        block &&
+        typeof block === 'object' &&
+        'type' in block &&
+        block.type === 'text' &&
+        typeof block.text === 'string'
+      ) {
+        return { ...block, text: block.text.replace(CREDENTIAL_REQUEST_MARKER, '').trimStart() };
+      }
+      return block;
+    });
+  }
+  return content;
+}
+
+/** Attach a credential-capture prompt to the segment matching `toolUseId`.
+ *  If the segment is an inline_tool, mutate it in place. If it is a tool_card,
+ *  insert an approvalOnly inline_tool segment immediately after it — same
+ *  pattern Nathan uses for tool_approval fallback. */
+function attachCredentialRequest(
+  helpers: WorkspaceChatMessageHelpers,
+  toolUseId: string,
+  req: ExtractedCredentialRequest
+): void {
+  helpers.setMessages((prev) => {
+    const updated = [...prev];
+    for (let i = updated.length - 1; i >= 0; i--) {
+      const msg = updated[i];
+      if (msg.role !== 'assistant' || !msg.segments) continue;
+
+      const inlineIdx = msg.segments.findIndex(
+        (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === toolUseId
+      );
+      if (inlineIdx >= 0) {
+        const newMsg = { ...msg, segments: [...msg.segments] };
+        const seg = { ...newMsg.segments[inlineIdx] } as WorkspaceChatInlineToolSegment;
+        seg.credentialRequest = {
+          connectorId: req.connectorId,
+          displayName: req.displayName,
+          authType: req.authType,
+          fields: req.fields,
+          values: Object.fromEntries(req.fields.map((f) => [f.key, ''])),
+          status: 'idle',
+        };
+        newMsg.segments[inlineIdx] = seg;
+        updated[i] = newMsg;
+        return updated;
+      }
+
+      const cardIdx = msg.segments.findIndex(
+        (s) => s.kind === 'tool_card' && (s as WorkspaceChatToolCardSegment).toolUseId === toolUseId
+      );
+      if (cardIdx >= 0) {
+        const newMsg = { ...msg, segments: [...msg.segments] };
+        const captureSegment: WorkspaceChatInlineToolSegment = {
+          kind: 'inline_tool',
+          toolUseId,
+          toolName: 'mcp__connect__connectors',
+          displayText: `Connect ${req.displayName}`,
+          isComplete: false,
+          category: 'important' as ToolCategory,
+          iconName: 'bi-key',
+          approvalOnly: true,
+          credentialRequest: {
+            connectorId: req.connectorId,
+            displayName: req.displayName,
+            authType: req.authType,
+            fields: req.fields,
+            values: Object.fromEntries(req.fields.map((f) => [f.key, ''])),
+            status: 'idle',
+          },
+        };
+        newMsg.segments.splice(cardIdx + 1, 0, captureSegment);
+        updated[i] = newMsg;
+        return updated;
+      }
+    }
+    return prev;
+  });
+}
+
 /**
  * Handle a tool_result content block.
  */
@@ -1311,6 +1465,16 @@ function handleToolResultBlock(
     return;
   }
   context.completedTools.add(tool_use_id);
+
+  // Credential-request marker runs before segment completion so the card is
+  // attached regardless of whether the tool reported success or error. The
+  // marker is stripped from any rendered text via `stripCredentialMarker`.
+  let cleanedContent = block.content;
+  const credReq = extractCredentialRequest(block.content);
+  if (credReq && credReq.connectorId) {
+    attachCredentialRequest(helpers, tool_use_id, credReq);
+    cleanedContent = stripCredentialMarker(block.content);
+  }
 
   // Find the original tool
   const toolInfo = context.toolUseMap.get(tool_use_id);
@@ -1352,7 +1516,7 @@ function handleToolResultBlock(
 
   // Generic tool card
   if (!PLUMBING_TOOLS.has(name) && !HIDDEN_ITEMS.has(name)) {
-    completeToolCard(helpers, tool_use_id, block.content, is_error);
+    completeToolCard(helpers, tool_use_id, cleanedContent, is_error);
   }
 }
 

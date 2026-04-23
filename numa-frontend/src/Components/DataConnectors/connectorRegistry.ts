@@ -107,6 +107,12 @@ export interface ConnectorTemplate {
     discoveryUrl?: string;
   };
 
+  // Non-standard OAuth Authorization header scheme. Defaults to `Bearer`
+  // when omitted. Zoho uses `Zoho-oauthtoken`; most providers use `Bearer`.
+  // Persisted to the company vault at wizard save time so the backend
+  // request path picks it up without a redeploy.
+  authHeaderScheme?: string;
+
   // Non-OAuth credential fields
   credentialFields?: CredentialFieldDef[];
 
@@ -133,6 +139,12 @@ export interface ConnectorTemplate {
   // Caching policy — sensible defaults per connector, admin can override in wizard
   cachingPolicy?: CachingPolicy;
 
+  // Where the connector surfaces in the UI. A file-browsing connector (e.g. Google Drive,
+  // Dropbox, Gmail) shows up in Files > Remote; an API-only connector (e.g. Fergus, simPRO)
+  // only exposes itself from chat. Default is ['chat'] — explicitly opt a connector in to
+  // files surfacing by including 'files'.
+  surfaces?: ('files' | 'chat')[];
+
   // Tier 3 only
   contactInfo?: { email?: string; website?: string; notes?: string };
 }
@@ -151,15 +163,19 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Project Management',
     authType: 'token',
     tier: 1,
+    surfaces: ['files', 'chat'],
     cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Per-user credential: just the PAT. instance_url is admin-level
+    // (configured in ApiKeyWizard → connector-config-synergy.fields.instance_url)
+    // because Synergy is customer-hosted and the URL is the same for every
+    // user in a given workspace — no point asking each user to re-enter it.
     credentialFields: [
       {
-        key: 'instance_url',
-        label: 'dataConnectors.fields.instanceUrl',
-        type: 'url',
-        placeholder: 'https://synergy.yourcompany.co.nz',
+        key: 'access_token',
+        label: 'dataConnectors.fields.pat',
+        type: 'password',
+        placeholder: 'Paste your Synergy personal access token',
         required: true,
-        helpText: 'dataConnectors.fields.synergyUrlHint',
       },
     ],
     helpUrl: 'https://www.12d.com/products/synergy/',
@@ -181,6 +197,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     tier: 1,
     oauthPlatform: 'google',
+    surfaces: ['files', 'chat'],
     cachingPolicy: CACHING_PRESETS.cloudStorage,
     oauth: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -213,6 +230,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     tier: 1,
     oauthPlatform: 'google',
+    surfaces: ['files', 'chat'],
     cachingPolicy: CACHING_PRESETS.email,
     oauth: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -275,6 +293,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     tier: 1,
     oauthPlatform: 'microsoft',
+    surfaces: ['files', 'chat'],
     cachingPolicy: CACHING_PRESETS.cloudStorage,
     oauth: {
       authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
@@ -307,6 +326,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     cachingPolicy: CACHING_PRESETS.cloudStorage,
     authType: 'oauth2',
     tier: 1,
+    surfaces: ['files', 'chat'],
     oauth: {
       authUrl: 'https://www.dropbox.com/oauth2/authorize',
       tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
@@ -614,6 +634,101 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       purpose: 'Business management and accounting — invoicing, payroll, inventory, and banking',
       dataTypes: ['invoices', 'contacts', 'accounts', 'journal-entries', 'employees', 'inventory'],
       capabilities: ['read', 'write', 'search'],
+    },
+  },
+  {
+    id: 'myob-acumatica',
+    displayName: 'MYOB Acumatica',
+    icon: 'bi-building',
+    description: 'Enterprise ERP for mid-market — financials, projects, manufacturing',
+    category: 'ERP',
+    authType: 'oauth2',
+    tier: 2,
+    oauth: {
+      // Per-instance — admins configure their own endpoint via the wizard.
+      // These defaults are placeholders; auth/token URLs are instance-scoped.
+      authUrl: '',
+      tokenUrl: '',
+      scopes: 'api',
+    },
+    helpUrl: 'https://help.myob.com/wiki/display/acad/MYOB+Acumatica',
+    apiReference: {
+      purpose: 'Enterprise ERP — GL, AP/AR, projects, inventory, manufacturing, CRM',
+      dataTypes: ['accounts', 'invoices', 'vendors', 'customers', 'projects', 'inventory', 'employees'],
+      capabilities: ['read', 'write', 'search'],
+    },
+  },
+  {
+    id: 'netsuite',
+    displayName: 'NetSuite',
+    icon: 'bi-graph-up',
+    description: 'Oracle NetSuite cloud ERP — financials, CRM, e-commerce',
+    category: 'ERP',
+    authType: 'oauth2',
+    tier: 2,
+    oauth: {
+      // NetSuite uses per-account endpoints where the account id is embedded
+      // in the hostname (e.g. `{account-id}.suitetalk.api.netsuite.com`).
+      // Admins supply the account id at registration time; auth/token URLs
+      // are derived at runtime. See ext-api-doc/netsuite/03-connector-setup.md.
+      authUrl: '',
+      tokenUrl: '',
+      scopes: 'rest_webservices',
+      extraAuthParams: '{"prompt":"consent"}',
+    },
+    helpUrl: 'https://docs.oracle.com/en/cloud/saas/netsuite/',
+    apiReference: {
+      purpose: 'Cloud ERP — accounting, inventory, order management, CRM, e-commerce',
+      dataTypes: ['accounts', 'invoices', 'customers', 'vendors', 'items', 'sales-orders', 'purchase-orders'],
+      capabilities: ['read', 'write', 'search'],
+    },
+  },
+  {
+    id: 'zoho-crm',
+    displayName: 'Zoho CRM',
+    icon: 'bi-person-rolodex',
+    description: 'Zoho CRM — leads, contacts, accounts, deals, tasks',
+    category: 'CRM',
+    authType: 'oauth2',
+    tier: 2,
+    surfaces: ['chat'],
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Zoho uses its own Authorization scheme — NOT Bearer.
+    authHeaderScheme: 'Zoho-oauthtoken',
+    oauth: {
+      // Defaults to AU region. Admins serving customers in other Zoho data
+      // centres (US / EU / IN / JP / CN) edit the authUrl and tokenUrl in the
+      // wizard's Advanced section — see the setup steps below for the mapping.
+      authUrl: 'https://accounts.zoho.com.au/oauth/v2/auth',
+      tokenUrl: 'https://accounts.zoho.com.au/oauth/v2/token',
+      scopes: 'ZohoCRM.modules.ALL,ZohoCRM.users.READ,ZohoCRM.org.READ',
+      extraAuthParams: '{"access_type":"offline","prompt":"consent"}',
+    },
+    helpUrl: 'https://api-console.zoho.com.au/',
+    signupUrl: 'https://www.zoho.com/crm/',
+    oauthSetupSteps: [
+      'Log in to the Zoho API Console for your data centre — AU: https://api-console.zoho.com.au/, US: https://api-console.zoho.com/, EU: https://api-console.zoho.eu/, IN: https://api-console.zoho.in/, JP: https://api-console.zoho.jp/, CN: https://api-console.zoho.com.cn/',
+      'Choose "Server-based Applications" as the client type and click Create Now',
+      'Enter a Client Name, set Homepage URL to your Numa URL, and paste the redirect URI shown below under "Authorized Redirect URIs"',
+      'Zoho returns a Client ID and Client Secret — copy both into this wizard',
+      'Non-AU customers: open Advanced below and replace `accounts.zoho.com.au` with your region host (e.g. `accounts.zoho.eu`). The API host changes in the same way — `www.zohoapis.{region}`.',
+    ],
+    apiReference: {
+      docsUrl: 'https://www.zoho.com/crm/developer/docs/api/v8/',
+      purpose:
+        'Customer relationship management — pipeline, contacts, deals, tasks, and reporting across the Zoho ecosystem',
+      dataTypes: ['leads', 'contacts', 'accounts', 'deals', 'tasks', 'notes', 'activities', 'users'],
+      capabilities: ['read', 'write', 'search', 'bulk-read'],
+      endpointCategories: [
+        {
+          name: 'Records',
+          description: 'CRUD on Leads, Contacts, Accounts, Deals, etc.',
+          basePath: '/crm/v8/{module}',
+        },
+        { name: 'Search', description: 'COQL-style search across any module', basePath: '/crm/v8/{module}/search' },
+        { name: 'Users', description: 'CRM users and roles', basePath: '/crm/v8/users' },
+        { name: 'Org', description: 'Organisation metadata', basePath: '/crm/v8/org' },
+      ],
     },
   },
   {
@@ -1196,6 +1311,25 @@ export const getOAuthSecretId = (connectorId: string): string => {
 /** Get all connectors that share the same OAuth platform (e.g. 'google' → googledrive, gmail) */
 export const getConnectorsByPlatform = (platform: string): ConnectorTemplate[] =>
   CONNECTOR_REGISTRY.filter((c) => c.oauthPlatform === platform);
+
+/**
+ * True when a connector should surface in Files > Remote. Only file-browsing
+ * providers belong there; API-only connectors (Fergus, simPRO, …) are chat-only.
+ * Unknown ids default to false so we never accidentally leak a non-file connector
+ * into the file picker if its registry entry disappears.
+ */
+export const surfacesInFiles = (connectorId: string): boolean => {
+  const connector = getConnectorById(connectorId);
+  if (!connector) return false;
+  return (connector.surfaces ?? ['chat']).includes('files');
+};
+
+/** True when a connector is usable from chat. Defaults to true for any known connector. */
+export const surfacesInChat = (connectorId: string): boolean => {
+  const connector = getConnectorById(connectorId);
+  if (!connector) return true;
+  return (connector.surfaces ?? ['chat']).includes('chat');
+};
 
 /** Convert an oauth2 ConnectorTemplate to ProviderTemplate for backward compat with OAuthWizard */
 export const toProviderTemplate = (ct: ConnectorTemplate): ProviderTemplate | null => {

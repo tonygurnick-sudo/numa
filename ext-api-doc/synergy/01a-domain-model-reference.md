@@ -161,8 +161,8 @@ Jobs are the primary organizational unit — equivalent to "projects" in 12d Syn
 ### Job Business Rules
 
 - Jobs can be nested (parent-child hierarchy via `ParentJobID`)
-- Must fetch required attributes via `GET /api/v1/attributes/required/jobs` before creating
-- All required attributes must be included in create payload
+- Must fetch standard attributes via `GET /api/v1/jobs/getStandardAttributes` (and `getDefaultAttributes`) before creating — there is no `/attributes/required/jobs` endpoint
+- All required attributes must be included in the create payload
 - Jobs contain folders, files, 12d projects, and can have workflows attached
 
 ---
@@ -223,7 +223,7 @@ Tasks represent work items. They support hierarchical nesting (parent-child).
 
 ### Task Business Rules
 
-- **CRITICAL:** Create/update uses `POST /api/Tasks` and `PUT /api/Tasks` — no `/v1/` prefix
+- **CRITICAL:** Create/update uses `POST /api/Tasks` — no `/v1/` prefix. One endpoint handles both operations (set `id` on the body for update; omit for create). There is no `PUT /api/Tasks` variant.
 - Delete requires description in path: `DELETE /api/v1/tasks/{task_id}/{description}`
 - Tasks support parent-child hierarchy via `children` array
 - `due_date_utc` should be ISO 8601 format
@@ -280,9 +280,9 @@ Tasks represent work items. They support hierarchical nesting (parent-child).
 - Must check out before modifying a file
 - Check in increments `LatestVersion`
 - Files belong to exactly one folder (`FolderID`)
-- File search is POST-based: `POST /api/v1/files/search/{page}/{page_size}`
-- Download: `GET /api/v1/files/{id}/download`
-- Version history: `GET /api/v1/files/{id}/versions`
+- File search is POST-based, pagination in body: `POST /api/v1/files/search` with `{FileName, Contents, Page, PageSize, LimitSearchTo, LimitID, ...}`
+- Download: `POST /api/v1/files/{id}/download/{version}/{with_references}` — all three path params. Body empty. Get `LatestVersion` first from `GET /api/v1/files/{id}/{retrieve_attributes}`.
+- Version history: `GET /api/v1/files/{id}/history/{retrieve_attributes}/{page}/{page_size}`
 
 ---
 
@@ -314,7 +314,8 @@ Tasks represent work items. They support hierarchical nesting (parent-child).
 
 - Folders form a tree hierarchy
 - Folders belong to jobs
-- Get folder contents (files): `GET /api/v1/folders/{id}/files/{page}/{page_size}`
+- Get folder items (subfolders + first page of files): `GET /api/v1/folders/{id}/items` — returns `FolderItemsModel`
+- Paginated files in a folder: `GET /api/v1/folders/{id}/files/{retrieve_attributes}/{page}/{page_size}/{filter}/{show_deleted_files}` (6 path segments)
 
 ---
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { ConnectorsService } from '../../Services/ConnectorsService';
 
 interface ConnectTokenModalProps {
   show: boolean;
@@ -8,24 +9,6 @@ interface ConnectTokenModalProps {
   providerId: string;
   providerName: string;
   onConnected: () => void | Promise<void>;
-}
-
-/** Save PAT to the user's consolidated vault via the backend connect-token endpoint. */
-async function saveToken(providerId: string, token: string): Promise<void> {
-  const endpoint = sessionStorage.getItem('API_ENDPOINT') || '/api';
-  const accessToken = localStorage.getItem('accessToken') || '';
-  const response = await fetch(`${endpoint}/oauth/${providerId}/connect-token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ token }),
-  });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ error: 'Failed to connect' }));
-    throw new Error(data.error || `HTTP ${response.status}`);
-  }
 }
 
 export const ConnectTokenModal = ({ show, onHide, providerId, providerName, onConnected }: ConnectTokenModalProps) => {
@@ -39,7 +22,10 @@ export const ConnectTokenModal = ({ show, onHide, providerId, providerName, onCo
     setSaving(true);
     setError(null);
     try {
-      await saveToken(providerId, token.trim());
+      // Single-token PAT connectors: store under the conventional
+      // `access_token` key. Multi-field connectors (Fergus, Synergy with
+      // instance_url) use ConnectCredentialsModal (chat sidebar) instead.
+      await ConnectorsService.saveCredentials(providerId, { access_token: token.trim() });
       await onConnected();
       setToken('');
       setError(null);

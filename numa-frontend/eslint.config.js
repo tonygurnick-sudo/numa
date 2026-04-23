@@ -95,6 +95,30 @@ export default [
     },
   },
 
+  // Forbid any direct import of internal connector services. The only file
+  // allowed to reach into Services/internal/ is ConnectorsService.ts, which
+  // is the single public facade. Blocks future drift where a consumer could
+  // add a 15th authType-branching site and silently reintroduce the bug
+  // class that produced the Fergus/Synergy regressions.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/Services/ConnectorsService.ts', 'src/Services/internal/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/Services/internal/*', '**/Services/internal/**'],
+              message:
+                'Internal connector services are not callable directly. Use ConnectorsService (Services/ConnectorsService.ts) — it routes both OAuth and PAT streams and is the only place allowed to bypass the brand.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // TypeScript/TSX files — only lint app code (excluding tests)
   {
     files: ['src/**/*.{ts,tsx}'],

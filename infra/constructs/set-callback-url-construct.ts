@@ -32,6 +32,12 @@ export class SetCallbackUrl extends Construct {
     const callbackPath = path.resolve(import.meta.dirname, '..', '..', 'lambdas', 'node', 'callback-renamer');
     const callbackFilename = path.resolve(callbackPath, 'lambda_function.zip');
 
+    // BASELINE callback URLs are re-asserted on every write by the Lambda.
+    // This makes it structurally impossible for one integration (e.g. Q
+    // Business) to knock another (e.g. the Numa frontend for SSO login)
+    // offline by calling this construct. See callback-renamer/index.ts.
+    const baselineCallbackUrls = (props.baselineCallbackUrls ?? []).join(',');
+
     const oldFunc = new TypescriptLambdaConstruct(this, 'function', {
       lambdaProps: {
         functionName: 'cognito-callback-setter-' + props.userPoolClientId,
@@ -39,6 +45,7 @@ export class SetCallbackUrl extends Construct {
         environment: {
           variables: {
             Q_BUSINESS_REGION: props.region,
+            BASELINE_CALLBACK_URLS: baselineCallbackUrls,
           },
         },
       },
@@ -52,6 +59,7 @@ export class SetCallbackUrl extends Construct {
       environment: {
         variables: {
           Q_BUSINESS_REGION: props.region,
+          BASELINE_CALLBACK_URLS: baselineCallbackUrls,
         },
       },
       runtime: 'nodejs22.x',
@@ -71,8 +79,16 @@ export class SetCallbackUrl extends Construct {
       functionName: func.functionName,
       input,
       triggers: {
-        // This causes the lambda to trigger on config changes.
+        // Re-invoke when ANY of these change: the input payload (client id,
+        // callback address), the baseline URL list (so a new baseline is
+        // asserted into live Cognito without manual intervention), or the
+        // Lambda source itself (so behaviour fixes land on the next deploy).
+        // Without the last two, a `make deploy` that fixes merge logic or
+        // baseline URLs would ship updated code but never re-run it against
+        // the live User Pool Client — the broken state would persist.
         input,
+        baselineCallbackUrls,
+        sourceCodeHash: func.sourceCodeHash,
       },
       dependsOn: [func, ...policyAttachments],
     });
@@ -82,6 +98,11 @@ export class SetCallbackUrl extends Construct {
 export interface SetCallbackUrlProps {
   userPoolClientId: string;
   userPoolId: string;
+  /** The new URL to add to the client's CallbackURLs list (e.g. a Q Business
+   *  WebExperience callback). Appended, never replaces. */
   callbackAddress: string;
   region: string;
+  /** URLs that the Lambda re-asserts on every write, so they can never be
+   *  dropped by any caller. Pass the Numa frontend URL(s) here. */
+  baselineCallbackUrls?: string[];
 }

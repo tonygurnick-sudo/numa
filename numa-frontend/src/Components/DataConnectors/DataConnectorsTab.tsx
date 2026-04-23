@@ -4,7 +4,7 @@ import { Alert, Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Grid3X3, Plus } from 'lucide-react';
 import { DataConnectorsService } from '../../Services/DataConnectorsService';
-import { OAuthProvidersService } from '../../Services/OAuthProvidersService';
+import { ConnectorsService } from '../../Services/ConnectorsService';
 import type { DataConnectorStatus } from '../../types/dataConnectors';
 import type { OAuthProviderInfo } from '../../types/oauthProviders';
 import type { VaultSecretMetadata } from '../../Services/VaultService';
@@ -116,8 +116,20 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     async (refresh = false) => {
       if (!oauthAvailable) return;
       try {
-        const providers = await OAuthProvidersService.listProviders(refresh);
-        setOauthProviders(providers);
+        if (refresh) ConnectorsService.clearListCache();
+        // ConnectorsService.listConfigured returns classified {oauth, pat}.
+        // This admin panel's "OAuth column" only wants OAuth entries; PAT
+        // entries are sourced separately via getConnectorSecret below.
+        const { oauth } = await ConnectorsService.listConfigured();
+        setOauthProviders(
+          oauth.map((c) => ({
+            id: c.id,
+            display_name: c.displayName,
+            icon: c.icon ?? '',
+            description: '',
+            configured: true,
+          }))
+        );
       } catch {
         setOauthProviders([]);
       }
@@ -142,33 +154,32 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   }, [loadStatus, loadOAuthProviders, loadCompanySecrets]);
 
   const getConnectorSecret = (connectorId: string): VaultSecretMetadata | undefined =>
-    companySecrets.find((s) => s.name === `connector-${connectorId}`);
+    companySecrets.find((s) => s.name === `connector-config-${connectorId}` || s.name === `connector-${connectorId}`);
 
   const getConnectorStatus = (connectorId: string): DataConnectorStatus | undefined =>
     statusItems.find((s) => s.connector_id === connectorId);
 
-  // Set of all configured connector IDs (for platform picker badge)
   const configuredIds = useMemo(() => {
     const ids = new Set<string>();
-    // Non-OAuth connectors: direct vault match
     for (const s of companySecrets) {
-      if (s.name.startsWith('connector-')) ids.add(s.name.replace('connector-', ''));
+      if (s.name.startsWith('connector-config-')) {
+        ids.add(s.name.substring('connector-config-'.length));
+      } else if (s.name.startsWith('connector-')) {
+        ids.add(s.name.substring('connector-'.length));
+      }
     }
-    // OAuth connectors: backend provider list (per-connector entries)
     for (const p of oauthProviders) {
       ids.add(p.id);
     }
-    // Include recently saved connectors that may not be in backend cache yet
     for (const id of recentlySavedIds) {
       ids.add(id);
     }
     return ids;
   }, [companySecrets, oauthProviders, recentlySavedIds]);
 
-  // Filter secrets by category for each wizard
   const oauthSecrets = useMemo(() => companySecrets.filter((s) => s.category === 'OAuth Clients'), [companySecrets]);
   const connectorSecrets = useMemo(
-    () => companySecrets.filter((s) => s.category === 'Connector Credentials'),
+    () => companySecrets.filter((s) => s.category === 'Connector Config' || s.category === 'Connector Credentials'),
     [companySecrets]
   );
 
@@ -246,7 +257,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     if (connectorId) {
       setRecentlySavedIds((prev) => new Set([...prev, connectorId]));
     }
-    OAuthProvidersService.clearProvidersCache();
+    ConnectorsService.clearListCache();
     await Promise.all([loadCompanySecrets(), loadOAuthProviders(true)]);
   };
 
@@ -255,7 +266,8 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   };
 
   const handleOAuthTest = async (providerId: string) => {
-    await OAuthProvidersService.connect(providerId);
+    // Test button on OAuth rows triggers the OAuth authorize flow.
+    await ConnectorsService.connect(providerId);
   };
 
   const handleOAuthDisconnect = async (providerId: string, displayName: string) => {
@@ -266,13 +278,14 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
       const connector = getConnectorById(providerId);
       const isOAuth = connector?.authType === 'oauth2';
 
-      // Only try OAuth revoke for OAuth connectors
-      if (isOAuth) {
-        try {
-          await OAuthProvidersService.disconnect(providerId);
-        } catch {
-          // May fail if no tokens exist — continue to delete vault secret
-        }
+      // Revoke per-user credentials — ConnectorsService routes to the right
+      // endpoint (OAuth revoke or PAT delete) based on the connector's
+      // registered auth type. May fail if no per-user state exists yet;
+      // continue to delete the vault config secret regardless.
+      try {
+        await ConnectorsService.disconnect(providerId);
+      } catch {
+        /* no credentials to revoke — continue */
       }
 
       if (connector?.oauthPlatform) {
@@ -296,7 +309,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
       } else if (isOAuth) {
         await deleteCompanySecret(`oauth-client-${providerId}`).catch(() => {});
       } else {
-        // Token/API-key connector: secret is connector-{id}
+        await deleteCompanySecret(`connector-config-${providerId}`).catch(() => {});
         await deleteCompanySecret(`connector-${providerId}`).catch(() => {});
       }
     } catch (err) {
@@ -304,7 +317,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
         err instanceof Error ? err.message : t('dataConnectors.errors.disconnectFailed', { name: displayName });
       setLoadError(msg);
     } finally {
-      OAuthProvidersService.clearProvidersCache();
+      ConnectorsService.clearListCache();
       setRecentlySavedIds((prev) => {
         const next = new Set(prev);
         next.delete(providerId);
@@ -320,13 +333,14 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     if (!confirmed) return;
     setDisconnectingId(connectorId);
     try {
+      await deleteCompanySecret(`connector-config-${connectorId}`).catch(() => {});
       await deleteCompanySecret(`connector-${connectorId}`).catch(() => {});
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : t('dataConnectors.errors.disconnectFailed', { name: displayName });
       setLoadError(msg);
     } finally {
-      OAuthProvidersService.clearProvidersCache();
+      ConnectorsService.clearListCache();
       setRecentlySavedIds((prev) => {
         const next = new Set(prev);
         next.delete(connectorId);
@@ -389,9 +403,17 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
         )}
       </div>
       <div className="mt-3">
-        {/* OAuth Provider Cards — only show configured ones */}
+        {/* OAuth Provider Cards — only show configured, genuinely OAuth entries.
+            `/api/oauth/providers` returns a mixed list (OAuth + PAT) for
+            backwards compat; filter here to OAuth-only so PAT connectors like
+            Fergus aren't rendered with a hardcoded OAUTH2 badge. The second
+            loop below handles PAT connectors with the correct authType. */}
         {mergedOAuthProviders
           .filter((provider) => configuredIds.has(provider.id))
+          .filter((provider) => {
+            const reg = getConnectorById(provider.id);
+            return !reg || reg.authType === 'oauth2';
+          })
           .map((provider) => (
             <OAuthConnectorCard
               key={provider.id}
@@ -399,6 +421,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
               displayName={provider.display_name}
               icon={provider.icon}
               description={provider.description}
+              authType="oauth2"
               credentialConfigured
               onConfigure={() => openOAuthWizardExisting(provider.id)}
               onTest={() => handleOAuthTest(provider.id)}
@@ -409,11 +432,13 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
             />
           ))}
 
-        {/* Non-OAuth Connector Cards — only show configured ones, exclude those already in backend provider list */}
+        {/* Non-OAuth (PAT) Connector Cards — include every admin-registered
+            non-OAuth connector, regardless of whether the backend's mixed
+            provider list also reported it. The OAuth loop above now excludes
+            PAT connectors explicitly, so we can drop the old `oauthProviders
+            .some(...)` exclusion without duplicating any row. */}
         {nonOAuthConnectors
-          .filter(
-            (connector) => !!getConnectorSecret(connector.id) && !oauthProviders.some((p) => p.id === connector.id)
-          )
+          .filter((connector) => !!getConnectorSecret(connector.id))
           .map((connector) => (
             <OAuthConnectorCard
               key={connector.id}
@@ -421,6 +446,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
               displayName={connector.displayName}
               icon={connector.icon}
               description={connector.description}
+              authType={connector.authType}
               credentialConfigured
               onConfigure={() => {
                 setApiKeyWizardConnector(connector);

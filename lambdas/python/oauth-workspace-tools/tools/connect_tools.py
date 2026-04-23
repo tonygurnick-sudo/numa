@@ -18,6 +18,7 @@ from prm import client as prm_client
 from prm import resource as prm_resource
 
 from .oauth_tools import (
+    _get_consolidated_company_vault,
     _get_user_consolidated_vault,
     get_available_providers,
     get_oauth_token,
@@ -42,6 +43,200 @@ DATA_BUCKET_NAME = os.environ.get("DATA_BUCKET_NAME", "")
 
 # Maximum file download size (50MB)
 MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024
+
+# Connectors whose disconnected-state hint points the user at Files > Remote.
+# OAuth-only: the Files > Remote UI today only supports OAuth redirects and
+# legacy single-token modals. Multi-field connectors (Synergy needs
+# instance_url + PAT, Fergus needs PAT, etc.) are captured by the inline
+# chat credential card instead, even when they list themselves under
+# `surfaces: ['files']` in the registry for post-connect browsing.
+_FILES_CONNECTOR_IDS = frozenset({"googledrive", "gmail", "onedrive", "dropbox"})
+
+# Fallback credential-field schemas for connectors that pre-date the
+# `connector-config-*` vault entry (so the inline card still renders with
+# meaningful inputs before an admin re-saves via the wizard).
+_FALLBACK_CREDENTIAL_FIELDS: Dict[str, list[Dict[str, Any]]] = {
+    "synergy": [
+        {
+            "key": "instance_url",
+            "label": "Synergy URL",
+            "type": "url",
+            "placeholder": "https://synergy.yourcompany.co.nz",
+            "required": True,
+        },
+        {
+            "key": "access_token",
+            "label": "Personal Access Token",
+            "type": "password",
+            "placeholder": "Paste your Synergy PAT",
+            "required": True,
+        },
+    ],
+    "fergus": [
+        {
+            "key": "api_key",
+            "label": "API Key",
+            "type": "password",
+            "placeholder": "Paste your Fergus API key",
+            "required": True,
+        },
+    ],
+}
+
+
+def _surfaces_in_files(connector_id: str) -> bool:
+    return connector_id in _FILES_CONNECTOR_IDS
+
+
+def _auth_type_for(connector_id: str) -> str:
+    """Infer auth_type for the status payload from the company vault.
+
+    - oauth-client-{platform} → oauth
+    - connector-config-{id} → read `connector_type` field (token/api-key/username-password)
+    - connector-{id} (legacy) → same lookup; fall back to 'pat'
+    - Unknown → 'oauth' for backwards compat (pre-existing behaviour)
+    """
+    try:
+        secrets = _get_consolidated_company_vault() or {}
+    except Exception:
+        return "oauth"
+
+    for prefix, default in (("connector-config-", None), ("connector-", "pat")):
+        entry = secrets.get(f"{prefix}{connector_id}")
+        if entry is None:
+            continue
+        fields = entry.get("fields") or entry
+        ct = fields.get("connector_type") if isinstance(fields, dict) else None
+        if ct:
+            return ct
+        return default or "pat"
+    return "oauth"
+
+
+def _connect_hint_for(connector_id: str) -> Dict[str, str]:
+    """Return `{connect_url, pending_hint}` for a disconnected connector.
+
+    File connectors send the user to Files > Remote. Chat-only connectors have no
+    URL — they prompt inline on first tool use and the agent tells the user that.
+    """
+    if _surfaces_in_files(connector_id):
+        return {
+            "connect_url": "/files?tab=remote",
+            "pending_hint": "",
+        }
+    return {
+        "connect_url": "",
+        "pending_hint": (
+            "Available — you'll be asked for your credentials the first time "
+            "you use this connector from chat."
+        ),
+    }
+
+
+def _connector_config(connector_id: str) -> Dict[str, Any]:
+    """Return the connector-config-{id} company vault fields, or {} if absent.
+
+    Carries admin-supplied metadata (display_name, connector_type) and the
+    credential_fields JSON snapshot used to build the needs_credential prompt.
+    """
+    try:
+        secrets = _get_consolidated_company_vault() or {}
+    except Exception:
+        return {}
+    for prefix in ("connector-config-", "connector-"):
+        entry = secrets.get(f"{prefix}{connector_id}")
+        if entry:
+            fields = entry.get("fields") or entry
+            return fields if isinstance(fields, dict) else {}
+    return {}
+
+
+def _auth_header_scheme(connector_id: str) -> str | None:
+    """Return the admin-persisted Authorization header scheme, or None.
+
+    OAuth connectors that speak something other than `Bearer` (Zoho uses
+    `Zoho-oauthtoken`, for example) record the scheme on the oauth-client
+    company vault entry at wizard save time. Callers default to `Bearer`
+    when this returns None.
+    """
+    try:
+        secrets = _get_consolidated_company_vault() or {}
+    except Exception:
+        return None
+    entry = secrets.get(f"oauth-client-{connector_id}")
+    if not entry:
+        return None
+    fields = entry.get("fields") or entry
+    if not isinstance(fields, dict):
+        return None
+    scheme = fields.get("auth_header_scheme")
+    return scheme.strip() if isinstance(scheme, str) and scheme.strip() else None
+
+
+def _credential_fields_for(connector_id: str) -> list[Dict[str, Any]]:
+    """Resolve credential_fields for a connector.
+
+    Prefers the admin-persisted JSON on `connector-config-{id}`; falls back to
+    a hardcoded schema for legacy connectors (Synergy, Fergus) so the inline
+    credential card works out of the box without requiring the admin to
+    re-save via the new wizard.
+    """
+    cfg = _connector_config(connector_id)
+    raw = cfg.get("credential_fields", "")
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and parsed:
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return _FALLBACK_CREDENTIAL_FIELDS.get(connector_id, [])
+
+
+def _user_connector_token(connector: str, user_sub: str) -> Optional[str]:
+    """Find a usable per-user credential for a non-OAuth connector.
+
+    Looks at connector-{id} in the user vault (written by the PAT credentials
+    endpoint, POST /api/pat/{id}/credentials). Returns the first populated of
+    api_key / bearer_token / access_token / token.
+    """
+    try:
+        vault = _get_user_consolidated_vault(user_sub) or {}
+    except Exception:
+        return None
+    secrets = vault.get("secrets", {}) if isinstance(vault, dict) else {}
+    entry = secrets.get(f"connector-{connector}")
+    if not entry:
+        return None
+    fields = entry.get("fields") or entry
+    if not isinstance(fields, dict):
+        return None
+    for key in ("api_key", "bearer_token", "access_token", "token"):
+        val = fields.get(key)
+        if val:
+            return str(val)
+    return None
+
+
+def _needs_credential_response(connector: str) -> Dict[str, Any]:
+    """Build the structured needs_credential error payload.
+
+    The agent-side `_check_needs_credential` helper turns this into the
+    `[[NUMA_CREDENTIAL_REQUEST:...]]` marker the frontend extracts.
+    """
+    cfg = _connector_config(connector)
+    display_name = cfg.get("display_name") or connector.title()
+    auth_type = cfg.get("connector_type") or _auth_type_for(connector)
+    return {
+        "status": "error",
+        "result": None,
+        "error": f"No credential stored for {display_name}",
+        "error_code": "needs_credential",
+        "connector_id": connector,
+        "display_name": display_name,
+        "auth_type": auth_type,
+        "credential_fields": _credential_fields_for(connector),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -72,43 +267,60 @@ def handle_connect_status(params: Dict[str, Any]) -> Dict[str, Any]:
             }
             return {"status": "success", "result": result, "error": None}
 
-        if connector == "synergy":
-            configured = is_synergy_configured(user_sub)
-            result["synergy"] = {
-                "status": "connected" if configured else "disconnected",
-                "auth_type": "pat",
-                "display_name": "Synergy 12d",
-                "connect_url": "/data-connectors",
-            }
-            return {"status": "success", "result": result, "error": None}
-
         if connector:
-            # Check a specific OAuth provider
+            # Check a specific provider (OAuth or token/api-key)
             vault_data = _get_user_consolidated_vault(user_sub)
             user_secrets = vault_data.get("secrets", {}) if vault_data else {}
-            secret_key = f"oauth-{connector}"
-            entry = user_secrets.get(secret_key)
+            auth_type = _auth_type_for(connector)
+            hint = _connect_hint_for(connector)
+            is_chat_only = not _surfaces_in_files(connector)
+            cfg = _connector_config(connector)
+            display_name = cfg.get("display_name") or connector.title()
+            entry = user_secrets.get(f"oauth-{connector}") or user_secrets.get(
+                f"connector-{connector}"
+            )
+            # Synergy fallback: legacy DynamoDB record also counts as connected.
+            if not entry and connector == "synergy" and is_synergy_configured(user_sub):
+                entry = {"fields": {"access_token": "_via_legacy_store"}}
             if entry:
                 fields = entry.get("fields") or entry
-                if fields.get("access_token"):
+                has_cred = bool(
+                    fields.get("access_token")
+                    or fields.get("api_key")
+                    or fields.get("bearer_token")
+                    or fields.get("password")
+                )
+                if has_cred:
                     result[connector] = {
                         "status": "connected",
-                        "auth_type": "oauth",
+                        "auth_type": auth_type,
+                        "display_name": display_name,
                         "user_email": fields.get("user_email"),
                         "connected_at": fields.get("connected_at"),
-                        "connect_url": "/files?tab=remote",
+                        "connect_url": hint["connect_url"],
+                        "pending_hint": hint["pending_hint"],
                     }
                 else:
                     result[connector] = {
                         "status": "disconnected",
-                        "auth_type": "oauth",
-                        "connect_url": "/files?tab=remote",
+                        "auth_type": auth_type,
+                        "display_name": display_name,
+                        "connect_url": hint["connect_url"],
+                        "pending_hint": hint["pending_hint"],
+                        "credential_fields": (
+                            _credential_fields_for(connector) if is_chat_only else []
+                        ),
                     }
             else:
                 result[connector] = {
                     "status": "disconnected",
-                    "auth_type": "oauth",
-                    "connect_url": "/files?tab=remote",
+                    "auth_type": auth_type,
+                    "display_name": display_name,
+                    "connect_url": hint["connect_url"],
+                    "pending_hint": hint["pending_hint"],
+                    "credential_fields": (
+                        _credential_fields_for(connector) if is_chat_only else []
+                    ),
                 }
             return {"status": "success", "result": result, "error": None}
 
@@ -120,45 +332,66 @@ def handle_connect_status(params: Dict[str, Any]) -> Dict[str, Any]:
             "display_name": "Data Bucket",
         }
 
-        # 2. Synergy
-        configured = is_synergy_configured(user_sub)
-        result["synergy"] = {
-            "status": "connected" if configured else "disconnected",
-            "auth_type": "pat",
-            "display_name": "Synergy 12d",
-            "connect_url": "/data-connectors",
-        }
-
-        # 3. OAuth providers
-        providers = get_available_providers()
+        # 2. Synergy is handled by the generic provider loop below — same
+        # disconnected-chat-only / connected shape as Fergus et al. The
+        # provider discovery in get_available_providers() also inspects the
+        # legacy DynamoDB / connector-synergy entries via is_synergy_configured
+        # fallback inside get_synergy_credentials.
+        providers = list(get_available_providers())
+        if "synergy" not in providers and is_synergy_configured(user_sub):
+            providers.append("synergy")
         if providers:
             vault_data = _get_user_consolidated_vault(user_sub)
             user_secrets = vault_data.get("secrets", {}) if vault_data else {}
 
             for prov in providers:
-                secret_key = f"oauth-{prov}"
-                entry = user_secrets.get(secret_key)
+                auth_type = _auth_type_for(prov)
+                hint = _connect_hint_for(prov)
+                is_chat_only = not _surfaces_in_files(prov)
+                cfg = _connector_config(prov)
+                display_name = cfg.get("display_name") or prov.title()
+                entry = user_secrets.get(f"oauth-{prov}") or user_secrets.get(
+                    f"connector-{prov}"
+                )
+                has_cred = False
+                fields: Dict[str, Any] = {}
                 if entry:
                     fields = entry.get("fields") or entry
-                    if fields.get("access_token"):
-                        result[prov] = {
-                            "status": "connected",
-                            "auth_type": "oauth",
-                            "user_email": fields.get("user_email"),
-                            "connected_at": fields.get("connected_at"),
-                            "connect_url": "/files?tab=remote",
-                        }
-                    else:
-                        result[prov] = {
-                            "status": "disconnected",
-                            "auth_type": "oauth",
-                            "connect_url": "/files?tab=remote",
-                        }
+                    has_cred = bool(
+                        fields.get("access_token")
+                        or fields.get("api_key")
+                        or fields.get("bearer_token")
+                        or fields.get("password")
+                    )
+                # Synergy also accepts the legacy DynamoDB credential record
+                # as a connection signal.
+                if (
+                    not has_cred
+                    and prov == "synergy"
+                    and is_synergy_configured(user_sub)
+                ):
+                    has_cred = True
+
+                if has_cred:
+                    result[prov] = {
+                        "status": "connected",
+                        "auth_type": auth_type,
+                        "display_name": display_name,
+                        "user_email": fields.get("user_email"),
+                        "connected_at": fields.get("connected_at"),
+                        "connect_url": hint["connect_url"],
+                        "pending_hint": hint["pending_hint"],
+                    }
                 else:
                     result[prov] = {
                         "status": "disconnected",
-                        "auth_type": "oauth",
-                        "connect_url": "/files?tab=remote",
+                        "auth_type": auth_type,
+                        "display_name": display_name,
+                        "connect_url": hint["connect_url"],
+                        "pending_hint": hint["pending_hint"],
+                        "credential_fields": (
+                            _credential_fields_for(prov) if is_chat_only else []
+                        ),
                     }
 
         return {"status": "success", "result": result, "error": None}
@@ -192,11 +425,7 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
 
         creds = get_synergy_credentials(user_sub)
         if not creds:
-            return {
-                "status": "error",
-                "result": None,
-                "error": "Synergy 12d not connected. Please configure it at /data-connectors",
-            }
+            return _needs_credential_response("synergy")
 
         server, token = creds
 
@@ -318,11 +547,7 @@ def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
 
         creds = get_synergy_credentials(user_sub)
         if not creds:
-            return {
-                "status": "error",
-                "result": None,
-                "error": "Synergy 12d not connected. Please configure it at /data-connectors",
-            }
+            return _needs_credential_response("synergy")
 
         server, token = creds
         data = search_jobs(server, token, name=query, page=1, page_size=page_size)
@@ -378,11 +603,7 @@ def handle_connect_synergy_download(params: Dict[str, Any]) -> Dict[str, Any]:
 
         creds = get_synergy_credentials(user_sub)
         if not creds:
-            return {
-                "status": "error",
-                "result": None,
-                "error": "Synergy 12d not connected. Please configure it at /data-connectors",
-            }
+            return _needs_credential_response("synergy")
 
         server, token = creds
         content, filename = synergy_download_file(server, token, file_id)
@@ -732,9 +953,16 @@ def handle_connect_s3data_download(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Make an authenticated HTTP request to any OAuth-connected API.
+    """Make an authenticated HTTP request to any connected API.
 
-    Injects the user's OAuth token as a Bearer token automatically.
+    Auth: injects the user's stored token as a Bearer header automatically —
+    OAuth access tokens and PAT/API keys are handled identically.
+
+    URL resolution: a relative path (`/api/v1/projects`) is prepended with
+    the connector's admin-configured `instance_url` from the company vault.
+    The LLM doesn't have to discover the instance URL — just call
+    `connectors(request, connector: "synergy", url: "/api/v1/projects")`
+    and the backend expands it.
     """
     import asyncio
 
@@ -760,26 +988,51 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
                 "error": f"Invalid method: {method}",
             }
 
-        # Synergy and data-bucket don't support generic HTTP
-        if connector in ("synergy", "data-bucket"):
+        # data-bucket is an internal S3 abstraction, not an HTTP API.
+        if connector == "data-bucket":
             return {
                 "status": "error",
                 "result": None,
-                "error": f"connect_request is not supported for {connector}. Use the dedicated list/search/download tools.",
+                "error": "connect_request is not supported for data-bucket. Use the numa_tool files operation instead.",
             }
 
-        async def do_request():
-            access_token = await get_oauth_token(connector, user_sub)
-            if not access_token:
+        # Resolve relative URL against the connector's admin-configured base.
+        # This removes the need for the LLM to discover the instance URL —
+        # it can just ask for "/api/v1/projects" and the backend expands it.
+        if not url.startswith(("http://", "https://")):
+            base = (
+                (_connector_config(connector).get("instance_url") or "")
+                .strip()
+                .rstrip("/")
+            )
+            if not base:
                 return {
                     "status": "error",
                     "result": None,
-                    "error": f"No valid OAuth token for {connector}. Please connect your account at /files?tab=remote",
+                    "error": (
+                        f"Relative URL '{url}' given but no instance_url is configured "
+                        f"for connector '{connector}'. Either pass an absolute URL "
+                        f"(https://…) or ask an admin to set the Instance URL in "
+                        f"Settings -> Data Connectors."
+                    ),
                 }
+            url = base + (url if url.startswith("/") else "/" + url)
 
-            # Inject auth header
+        async def do_request():
+            # Try OAuth first; fall back to non-OAuth per-user credential.
+            access_token = await get_oauth_token(connector, user_sub)
+            if not access_token:
+                access_token = _user_connector_token(connector, user_sub)
+            if not access_token:
+                return _needs_credential_response(connector)
+
+            # Most providers accept "Authorization: Bearer {token}". Zoho (and a
+            # handful of others) require their own scheme — the admin wizard
+            # persists the expected prefix on the oauth-client vault entry so
+            # we don't have to hardcode a per-provider map here.
+            auth_scheme = _auth_header_scheme(connector) or "Bearer"
             request_headers = {
-                "Authorization": f"Bearer {access_token}",
+                "Authorization": f"{auth_scheme} {access_token}",
                 **headers,
             }
 

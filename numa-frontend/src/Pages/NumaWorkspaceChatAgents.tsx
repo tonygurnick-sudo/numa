@@ -18,8 +18,7 @@ import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { generateSystemPrompt, getEnabledTools } from '../utils/chatSystemPromptUtils';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
-import { DataConnectorsService } from '../Services/DataConnectorsService';
-import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+import { ConnectorsService } from '../Services/ConnectorsService';
 import { getModelId, MODEL_TYPES, isInFallbackMode } from '../utils/bedrockModelConfig';
 // Note: streamingProcessors imports moved to useWorkspaceStreaming hook
 import { loadConversation } from '../utils/conversationLoader';
@@ -139,6 +138,9 @@ const NumaWorkspaceChatAgents = () => {
   const [enabledConnections, setEnabledConnections] = useState<string[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false);
   const [connectedDataConnectors, setConnectedDataConnectors] = useState<Array<{ id: string; name: string }>>([]);
+  // IDs of data connectors the CURRENT user has personal credentials for.
+  // Populated by loadUserConnectorStatus (hits /api/oauth/{id}/status per provider).
+  const [userConnectedConnectorIds, setUserConnectedConnectorIds] = useState<string[]>([]);
   const [dataConnectorsEnabled, setDataConnectorsEnabled] = useState(true);
   const [dataConnectorsFeatureEnabled] = useState(() => getFlag('DATA_CONNECTORS_ENABLED'));
   const [autoToolsEnabled, setAutoToolsEnabled] = useState(true); // Default to auto mode
@@ -1127,28 +1129,71 @@ const NumaWorkspaceChatAgents = () => {
     if (lambdaClient && hasPipedreamFeature && relayLambdaArn) loadConnectionStatus();
   }, [lambdaClient]);
 
-  // Fetch data connector status (OAuth/token connectors, separate from Pipedream integrations)
+  // Fetch admin-configured data connectors (OAuth + token/api-key/user-pass).
+  // The agent's system prompt needs EVERY connector the admin has set up for
+  // this workspace, not just ones the current user has personally connected —
+  // otherwise it has no way to know (e.g.) Fergus is a data connector when the
+  // user asks "list my fergus jobs" before connecting, and it defaults to
+  // Pipedream integrations or refuses. Per-user connection state is checked at
+  // runtime by the agent via the connectors tool's `status` operation.
   const loadDataConnectorStatus = useCallback(async () => {
     try {
-      const items = await DataConnectorsService.listStatus(numaGet);
-      const connected = items
-        .filter((item) => item.status === 'connected')
-        .map((item) => {
-          const reg = getConnectorById(item.connector_id);
-          return { id: item.connector_id, name: reg?.displayName ?? item.connector_id };
-        });
-      setConnectedDataConnectors(connected);
+      // ConnectorsService.listConfigured returns pre-split {oauth, pat} arrays.
+      // We merge into a flat id+name list for the widget; classification is
+      // already done, so no per-entry authType checks needed here.
+      const { oauth, pat } = await ConnectorsService.listConfigured();
+      setConnectedDataConnectors([...oauth, ...pat].map((c) => ({ id: c.id, name: c.displayName })));
     } catch (e) {
       console.error('Failed to load data connector status:', e);
       setConnectedDataConnectors([]);
     }
-  }, [numaGet]);
+  }, []);
 
   useEffect(() => {
     if (sessionStorage.getItem('OAUTH_AVAILABLE') === 'true') {
       loadDataConnectorStatus();
     }
   }, [loadDataConnectorStatus]);
+
+  // Per-user connection state for the sidebar Connectors widget. Routing to
+  // the right endpoint per auth stream happens inside ConnectorsService —
+  // this loop just asks "is this id connected" and doesn't care how.
+  const loadUserConnectorStatus = useCallback(async () => {
+    if (connectedDataConnectors.length === 0) {
+      setUserConnectedConnectorIds([]);
+      return;
+    }
+    try {
+      const results = await Promise.all(
+        connectedDataConnectors.map(async (c) => {
+          const st = await ConnectorsService.getStatus(c.id);
+          return st.status === 'connected' ? c.id : null;
+        })
+      );
+      setUserConnectedConnectorIds(results.filter((x): x is string => Boolean(x)));
+    } catch (e) {
+      console.error('Failed to load per-user connector status:', e);
+      setUserConnectedConnectorIds([]);
+    }
+  }, [connectedDataConnectors]);
+
+  useEffect(() => {
+    if (sessionStorage.getItem('OAUTH_AVAILABLE') === 'true') {
+      loadUserConnectorStatus();
+    }
+  }, [loadUserConnectorStatus]);
+
+  // Re-check status when the tab regains focus — catches OAuth redirects
+  // returning in the same tab and PAT saves from the modal.
+  useEffect(() => {
+    const onFocus = () => {
+      if (sessionStorage.getItem('OAUTH_AVAILABLE') === 'true') {
+        loadUserConnectorStatus();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [loadUserConnectorStatus]);
 
   // Ref for input textarea
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -3080,6 +3125,9 @@ const NumaWorkspaceChatAgents = () => {
             availableConnections={availableConnections}
             connectionsLoading={connectionsLoading}
             hasPipedreamFeature={hasPipedreamFeature}
+            adminConfiguredConnectors={connectedDataConnectors}
+            userConnectedConnectorIds={userConnectedConnectorIds}
+            onConnectorConnected={loadUserConnectorStatus}
             isDisabled={buttonStatus === 'streaming' || isFileProcessing || hasUploadsInProgress}
             showModelSelector={workspaceModelSelectionEnabled}
             selectedModelId={selectedModelId}
