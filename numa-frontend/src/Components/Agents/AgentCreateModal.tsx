@@ -120,6 +120,13 @@ export const AgentCreateModal = ({
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [initialTeamIds, setInitialTeamIds] = useState<Set<string>>(new Set());
 
+  // UI-level visibility tile: 'personal' (only creator), 'team' (creator + assigned teams),
+  // 'public' (whole workspace). 'personal' and 'team' both map to wire-level
+  // visibility='personal' — the difference is purely how the UI nudges the user
+  // to assign teams when choosing Team.
+  type VisibilityMode = 'personal' | 'team' | 'public';
+  const [visibilityMode, setVisibilityMode] = useState<VisibilityMode>('personal');
+
   // Scheduling state
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleName, setScheduleName] = useState('');
@@ -362,7 +369,13 @@ export const AgentCreateModal = ({
         .catch(() => {
           setScheduleEnabled(false);
         });
-      // Load existing team assignments
+      // Load existing team assignments + derive visibility mode
+      if (editingAgent.visibility === 'public') {
+        setVisibilityMode('public');
+      } else {
+        // Start at 'personal' — flip to 'team' once shares arrive if any exist.
+        setVisibilityMode('personal');
+      }
       getAgentSharing(numaGet, editingAgent.agentId)
         .then((shares) => {
           const teamIds = new Set(
@@ -370,6 +383,9 @@ export const AgentCreateModal = ({
           );
           setSelectedTeamIds(teamIds);
           setInitialTeamIds(teamIds);
+          if (editingAgent.visibility !== 'public' && teamIds.size > 0) {
+            setVisibilityMode('team');
+          }
         })
         .catch(() => {
           setSelectedTeamIds(new Set());
@@ -396,6 +412,7 @@ export const AgentCreateModal = ({
       setEditingScheduleData(null);
       setSelectedTeamIds(new Set());
       setInitialTeamIds(new Set());
+      setVisibilityMode('personal');
       setActiveAccordionKey(initialAccordionKey ?? '0');
     }
   }, [editingAgent, show, authorName, initialAccordionKey]);
@@ -418,6 +435,14 @@ export const AgentCreateModal = ({
       ...prev,
       [field]: value,
     }));
+  };
+
+  const selectVisibilityMode = (mode: VisibilityMode) => {
+    if (saving || isWorkspaceVisibilityLocked) return;
+    if (mode === 'public' && agentsMode !== 'full') return;
+    setVisibilityMode(mode);
+    // Wire-level visibility: 'team' stays as personal-owned + share rows.
+    setFormState((prev) => ({ ...prev, visibility: mode === 'public' ? 'public' : 'personal' }));
   };
 
   // Legacy numeric handler removed in favor of string-based inputs
@@ -597,6 +622,9 @@ export const AgentCreateModal = ({
     if (!formState.title.trim()) missing.push(t('createModal.validation.title'));
     if (!formState.systemPrompt.trim()) missing.push(t('createModal.validation.instructions'));
     if (referenceFiles.length > 5) missing.push(t('createModal.validation.referenceFiles'));
+    if (visibilityMode === 'team' && selectedTeamIds.size === 0) {
+      missing.push(t('createModal.validation.teamRequired'));
+    }
     return { valid: missing.length === 0, missingFields: missing };
   };
 
@@ -767,7 +795,9 @@ export const AgentCreateModal = ({
             shareAgent(numaPost, saved.agentId, {
               principalId: `team:${teamId}`,
               principalType: 'team',
-              role: 'viewer',
+              // Default team assignments to 'editor' so team members can edit the
+              // shared agent. A per-team role picker is a future UX pass.
+              role: 'editor',
             }).catch((err) => console.error('Failed to share with team', teamId, err))
           ),
           ...toRemove.map((teamId) =>
@@ -1071,62 +1101,59 @@ export const AgentCreateModal = ({
                     <Form.Group controlId="agentVisibility" className="mb-3">
                       <Form.Label className="fw-semibold">{t('createModal.visibility.label')}</Form.Label>
                       <div className="d-flex gap-2 flex-column">
-                        <div
-                          className={`p-3 border rounded-3 ${formState.visibility !== 'public' ? 'border-primary border-2 bg-white' : 'bg-white'}`}
-                          role="button"
-                          onClick={() =>
-                            !saving && !isWorkspaceVisibilityLocked && handleChange('visibility', 'personal')
-                          }
-                          style={{
-                            cursor: saving || isWorkspaceVisibilityLocked ? 'not-allowed' : 'pointer',
-                            opacity: saving || isWorkspaceVisibilityLocked ? 0.6 : 1,
-                          }}
-                        >
-                          <div className="d-flex align-items-center gap-2">
-                            <i
-                              className="bi bi-person-fill fs-5"
-                              style={{ color: formState.visibility !== 'public' ? brandPrimaryColor : '#6c757d' }}
-                            ></i>
-                            <div className="flex-grow-1">
-                              <div className="fw-semibold">{t('createModal.visibility.personal')}</div>
-                              <small className="text-muted">{t('createModal.visibility.personalHelp')}</small>
+                        {(
+                          [
+                            {
+                              mode: 'personal' as const,
+                              icon: 'bi bi-person-fill',
+                              label: t('createModal.visibility.personal'),
+                              help: t('createModal.visibility.personalHelp'),
+                              disabled: saving || isWorkspaceVisibilityLocked,
+                            },
+                            {
+                              mode: 'team' as const,
+                              icon: 'bi bi-people-fill',
+                              label: t('createModal.visibility.team'),
+                              help: t('createModal.visibility.teamHelp'),
+                              disabled: saving || isWorkspaceVisibilityLocked || teams.length === 0,
+                            },
+                            {
+                              mode: 'public' as const,
+                              icon: 'bi bi-shop',
+                              label: t('createModal.visibility.public'),
+                              help: t('createModal.visibility.publicHelp'),
+                              disabled: saving || isWorkspaceVisibilityLocked || agentsMode !== 'full',
+                            },
+                          ] as const
+                        ).map((tile) => {
+                          const selected = visibilityMode === tile.mode;
+                          return (
+                            <div
+                              key={tile.mode}
+                              className={`p-3 border rounded-3 ${selected ? 'border-primary border-2 bg-white' : 'bg-white'}`}
+                              role="button"
+                              onClick={() => selectVisibilityMode(tile.mode)}
+                              style={{
+                                cursor: tile.disabled ? 'not-allowed' : 'pointer',
+                                opacity: tile.disabled ? 0.6 : 1,
+                              }}
+                            >
+                              <div className="d-flex align-items-center gap-2">
+                                <i
+                                  className={`${tile.icon} fs-5`}
+                                  style={{ color: selected ? brandPrimaryColor : '#6c757d' }}
+                                ></i>
+                                <div className="flex-grow-1">
+                                  <div className="fw-semibold">{tile.label}</div>
+                                  <small className="text-muted">{tile.help}</small>
+                                </div>
+                                {selected && (
+                                  <i className="bi bi-check-circle-fill" style={{ color: brandPrimaryColor }}></i>
+                                )}
+                              </div>
                             </div>
-                            {formState.visibility !== 'public' && (
-                              <i className="bi bi-check-circle-fill" style={{ color: brandPrimaryColor }}></i>
-                            )}
-                          </div>
-                        </div>
-                        <div
-                          className={`p-3 border rounded-3 ${formState.visibility === 'public' ? 'border-primary border-2 bg-white' : 'bg-white'}`}
-                          role="button"
-                          onClick={() =>
-                            !saving &&
-                            !isWorkspaceVisibilityLocked &&
-                            agentsMode === 'full' &&
-                            handleChange('visibility', 'public')
-                          }
-                          style={{
-                            cursor:
-                              saving || isWorkspaceVisibilityLocked || agentsMode !== 'full'
-                                ? 'not-allowed'
-                                : 'pointer',
-                            opacity: saving || isWorkspaceVisibilityLocked || agentsMode !== 'full' ? 0.6 : 1,
-                          }}
-                        >
-                          <div className="d-flex align-items-center gap-2">
-                            <i
-                              className="bi bi-shop fs-5"
-                              style={{ color: formState.visibility === 'public' ? brandPrimaryColor : '#6c757d' }}
-                            ></i>
-                            <div className="flex-grow-1">
-                              <div className="fw-semibold">{t('createModal.visibility.public')}</div>
-                              <small className="text-muted">{t('createModal.visibility.publicHelp')}</small>
-                            </div>
-                            {formState.visibility === 'public' && (
-                              <i className="bi bi-check-circle-fill" style={{ color: brandPrimaryColor }}></i>
-                            )}
-                          </div>
-                        </div>
+                          );
+                        })}
                         {agentsMode !== 'full' && (
                           <div className="mt-2 small text-muted">{t('createModal.visibility.disabledNote')}</div>
                         )}
@@ -1138,10 +1165,13 @@ export const AgentCreateModal = ({
                         </Form.Text>
                       )}
                     </Form.Group>
-                    {/* Team assignment */}
-                    {teams.length > 0 && (
+                    {/* Team assignment — shown whenever the agent is not purely workspace-public. */}
+                    {visibilityMode !== 'public' && teams.length > 0 && (
                       <Form.Group className="mb-3">
-                        <Form.Label className="fw-semibold">{t('createModal.teamAssignment.label')}</Form.Label>
+                        <Form.Label className="fw-semibold">
+                          {t('createModal.teamAssignment.label')}
+                          {visibilityMode === 'team' && <span className="text-danger ms-1">*</span>}
+                        </Form.Label>
                         <div className="d-flex gap-2 flex-wrap">
                           {teams.map((team) => {
                             const isSelected = selectedTeamIds.has(team.teamId);
@@ -1172,7 +1202,11 @@ export const AgentCreateModal = ({
                             );
                           })}
                         </div>
-                        <Form.Text className="text-muted">{t('createModal.teamAssignment.help')}</Form.Text>
+                        <Form.Text className="text-muted">
+                          {visibilityMode === 'team'
+                            ? t('createModal.teamAssignment.helpTeam')
+                            : t('createModal.teamAssignment.help')}
+                        </Form.Text>
                       </Form.Group>
                     )}
                     <Form.Group controlId="agentTimeSaved">

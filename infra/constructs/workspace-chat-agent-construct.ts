@@ -328,7 +328,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
               `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-chat-history`,
             ],
           },
-          // Agent tables - read-only access for fetching agent configurations
+          // Agent tables - read-only access for fetching agent configurations.
+          // Includes the user-agents agent-id GSI, plus the sharing + team-members
+          // tables (and their GSIs) so chat can resolve team-shared agents for
+          // callers who aren't the creator.
           {
             sid: 'DynamoDBAgentTablesRead',
             effect: 'Allow',
@@ -336,6 +339,11 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
             resources: [
               `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-agents`,
               `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-user-agents`,
+              `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-user-agents/index/agent-id-index`,
+              `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-agent-sharing`,
+              `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-agent-sharing/index/principal-agents-index`,
+              `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-agent-team-members`,
+              `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-agent-team-members/index/user-teams-index`,
             ],
           },
           // Chat settings table - read-only access for user approval mode preferences
@@ -674,6 +682,11 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Agent tables for custom agent support (personal and workspace agents)
         WORKSPACE_AGENTS_TABLE: `numa-${props.clientName}-agents`,
         USER_AGENTS_TABLE: `numa-${props.clientName}-user-agents`,
+        // Sharing + team-membership lookups let team-shared personal agents be
+        // fetched by chat on behalf of a member who isn't the creator.
+        AGENT_SHARING_TABLE: `numa-${props.clientName}-agent-sharing`,
+        AGENT_TEAM_MEMBERS_TABLE: `numa-${props.clientName}-agent-team-members`,
+        USER_AGENTS_AGENT_ID_INDEX: 'agent-id-index',
         // Integrations approval table (for writing approval decisions)
         ...(props.integrationsApprovalTableName && {
           INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName,

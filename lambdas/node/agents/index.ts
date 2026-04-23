@@ -7,6 +7,7 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
+  TransactWriteCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'crypto';
@@ -683,6 +684,16 @@ const handleGetAgent = async (agentId: string, auth: AuthContext): Promise<Retur
     return jsonResponse(200, { agent: mapWorkspaceAgent(workspace) });
   }
 
+  // Share fallback: a personal agent owned by someone else may be shared with
+  // a team the caller is in (or directly with the caller).
+  const shareRole = await getAgentShareRoleForUser(agentId, auth);
+  if (shareRole) {
+    const sharedAgent = await getUserAgentByAgentIdOnly(agentId);
+    if (sharedAgent) {
+      return jsonResponse(200, { agent: { ...mapUserAgent(sharedAgent), shareRole } });
+    }
+  }
+
   return errorResponse(404, 'Agent not found');
 };
 
@@ -1082,6 +1093,46 @@ const handleUpdateAgent = async (
     return jsonResponse(200, { agent: responseAgent });
   }
 
+  // Share fallback: the caller isn't the owner, but may have edit rights via a
+  // direct user share or through a team. Co-owners and editors can update the
+  // agent; the update is written back under the original creator's user_id and
+  // does NOT allow transferring ownership or switching to a public/workspace
+  // agent (those remain creator-only actions).
+  const shareRole = await getAgentShareRoleForUser(agentId, auth);
+  if (shareRole) {
+    const sharedAgent = await getUserAgentByAgentIdOnly(agentId);
+    if (!sharedAgent) return errorResponse(404, 'Agent not found');
+    if (!canEditViaShare(shareRole)) {
+      return errorResponse(403, 'You do not have permission to update this agent');
+    }
+
+    const ownerAuth: AuthContext = {
+      sub: sharedAgent.user_id,
+      email: undefined,
+      name: sharedAgent.created_by_name,
+      groups: [],
+    };
+    // Share-based edits cannot change ownership or promote to workspace-public.
+    const safePayload: UpdateAgentPayload = { ...payload };
+    delete safePayload.visibility;
+    const merged = buildUserItem(safePayload, ownerAuth, now, agentId, sharedAgent);
+    // Preserve creator identity explicitly (buildUserItem falls back to ownerAuth).
+    merged.created_by_user_id = sharedAgent.created_by_user_id ?? sharedAgent.user_id;
+    merged.created_by_name = sharedAgent.created_by_name ?? merged.created_by_name;
+    merged.source_agent_id = sharedAgent.source_agent_id;
+
+    await dynamo.send(
+      new PutCommand({
+        TableName: USER_TABLE,
+        Item: merged,
+      })
+    );
+
+    const responseAgent = { ...mapUserAgent(merged), shareRole };
+    await syncAgentSchedules(agentId, responseAgent, 'update');
+    return jsonResponse(200, { agent: responseAgent });
+  }
+
   return errorResponse(404, 'Agent not found');
 };
 
@@ -1152,6 +1203,27 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
         TableName: WORKSPACE_TABLE,
         Key: {
           tenant_id: CLIENT_NAME,
+          agent_id: agentId,
+        },
+      })
+    );
+    await syncAgentSchedules(agentId, null, 'delete');
+    return jsonResponse(200, { ok: true });
+  }
+
+  // Share fallback: only co-owners can delete on behalf of the creator.
+  const shareRole = await getAgentShareRoleForUser(agentId, auth);
+  if (shareRole) {
+    if (shareRole !== 'co-owner') {
+      return errorResponse(403, 'You do not have permission to delete this agent');
+    }
+    const sharedAgent = await getUserAgentByAgentIdOnly(agentId);
+    if (!sharedAgent) return errorResponse(404, 'Agent not found');
+    await dynamo.send(
+      new DeleteCommand({
+        TableName: USER_TABLE,
+        Key: {
+          user_id: sharedAgent.user_id,
           agent_id: agentId,
         },
       })
@@ -1507,37 +1579,42 @@ const handleCreateTeam = async (
   const creatorName = body.creatorName || auth.name;
   const creatorEmail = body.creatorEmail || auth.email;
 
-  // Create team metadata
+  // Write team metadata and the creator's owner membership atomically so a
+  // partial failure can't leave an orphaned team (or a team without an owner).
   await dynamo.send(
-    new PutCommand({
-      TableName: TEAMS_TABLE,
-      Item: {
-        team_id: teamId,
-        sk: 'META',
-        team_name: body.teamName,
-        description: body.description || '',
-        created_by: auth.sub,
-        created_by_name: creatorName,
-        created_at: now,
-        updated_at: now,
-        tenant_id: CLIENT_NAME,
-      },
-    })
-  );
-
-  // Add creator as owner
-  await dynamo.send(
-    new PutCommand({
-      TableName: TEAM_MEMBERS_TABLE,
-      Item: {
-        team_id: teamId,
-        user_id: auth.sub,
-        role: 'owner',
-        user_name: creatorName,
-        user_email: creatorEmail,
-        added_by: auth.sub,
-        added_at: now,
-      },
+    new TransactWriteCommand({
+      TransactItems: [
+        {
+          Put: {
+            TableName: TEAMS_TABLE,
+            Item: {
+              team_id: teamId,
+              sk: 'META',
+              team_name: body.teamName,
+              description: body.description || '',
+              created_by: auth.sub,
+              created_by_name: creatorName,
+              created_at: now,
+              updated_at: now,
+              tenant_id: CLIENT_NAME,
+            },
+          },
+        },
+        {
+          Put: {
+            TableName: TEAM_MEMBERS_TABLE,
+            Item: {
+              team_id: teamId,
+              user_id: auth.sub,
+              role: 'owner',
+              user_name: creatorName,
+              user_email: creatorEmail,
+              added_by: auth.sub,
+              added_at: now,
+            },
+          },
+        },
+      ],
     })
   );
 
@@ -1674,21 +1751,46 @@ const handleAddTeamMember = async (
     return errorResponse(403, 'Only owners can add other owners');
   }
 
-  await dynamo.send(
-    new PutCommand({
+  try {
+    await dynamo.send(
+      new PutCommand({
+        TableName: TEAM_MEMBERS_TABLE,
+        Item: {
+          team_id: teamId,
+          user_id: body.userId,
+          role: body.role as TeamMemberItem['role'],
+          user_name: body.userName,
+          user_email: body.userEmail,
+          added_by: auth.sub,
+          added_at: Date.now(),
+        },
+        // Prevent silent overwrite of an existing member row (e.g. demoting the
+        // team owner from owner → viewer by accidental re-add). Role changes
+        // must go through PUT /teams/:id/members/:userId.
+        ConditionExpression: 'attribute_not_exists(user_id)',
+      })
+    );
+  } catch (e) {
+    if ((e as { name?: string })?.name === 'ConditionalCheckFailedException') {
+      return errorResponse(409, 'User is already a member of this team');
+    }
+    throw e;
+  }
+  return jsonResponse(201, { ok: true });
+};
+
+const countTeamOwners = async (teamId: string): Promise<number> => {
+  if (!TEAM_MEMBERS_TABLE) return 0;
+  const res = await dynamo.send(
+    new QueryCommand({
       TableName: TEAM_MEMBERS_TABLE,
-      Item: {
-        team_id: teamId,
-        user_id: body.userId,
-        role: body.role as TeamMemberItem['role'],
-        user_name: body.userName,
-        user_email: body.userEmail,
-        added_by: auth.sub,
-        added_at: Date.now(),
-      },
+      KeyConditionExpression: 'team_id = :tid',
+      FilterExpression: '#role = :owner',
+      ExpressionAttributeNames: { '#role': 'role' },
+      ExpressionAttributeValues: { ':tid': teamId, ':owner': 'owner' },
     })
   );
-  return jsonResponse(201, { ok: true });
+  return res.Items?.length ?? 0;
 };
 
 const handleUpdateTeamMember = async (
@@ -1717,12 +1819,28 @@ const handleUpdateTeamMember = async (
   const member = memberRes.Item as TeamMemberItem | undefined;
   if (!member) return errorResponse(404, 'Member not found');
 
-  await dynamo.send(
-    new PutCommand({
-      TableName: TEAM_MEMBERS_TABLE,
-      Item: { ...member, role: body.role as TeamMemberItem['role'] },
-    })
-  );
+  // Refuse to demote the last owner so a team can't be left ownerless.
+  if (member.role === 'owner' && body.role !== 'owner') {
+    const ownerCount = await countTeamOwners(teamId);
+    if (ownerCount <= 1) {
+      return errorResponse(400, 'Cannot demote the last owner of a team');
+    }
+  }
+
+  try {
+    await dynamo.send(
+      new PutCommand({
+        TableName: TEAM_MEMBERS_TABLE,
+        Item: { ...member, role: body.role as TeamMemberItem['role'] },
+        ConditionExpression: 'attribute_exists(user_id)',
+      })
+    );
+  } catch (e) {
+    if ((e as { name?: string })?.name === 'ConditionalCheckFailedException') {
+      return errorResponse(404, 'Member not found');
+    }
+    throw e;
+  }
   return jsonResponse(200, { ok: true });
 };
 
@@ -1808,6 +1926,70 @@ type SharingItem = {
   shared_by: string;
   shared_at: number;
 };
+
+type ShareRole = SharingItem['role'];
+
+const SHARE_ROLE_RANK: Record<ShareRole, number> = { 'co-owner': 3, editor: 2, viewer: 1 };
+
+const higherRole = (a: ShareRole | null, b: ShareRole | null): ShareRole | null => {
+  if (!a) return b;
+  if (!b) return a;
+  return SHARE_ROLE_RANK[a] >= SHARE_ROLE_RANK[b] ? a : b;
+};
+
+/**
+ * Returns the highest sharing role (co-owner > editor > viewer) granted to `auth.sub`
+ * for the given agent, either directly (principal_type='user') or via team membership
+ * (principal_type='team'). Returns null if the caller has no share.
+ */
+const getAgentShareRoleForUser = async (agentId: string, auth: AuthContext): Promise<ShareRole | null> => {
+  if (!SHARING_TABLE) return null;
+
+  const sharingRes = await dynamo.send(
+    new QueryCommand({
+      TableName: SHARING_TABLE,
+      KeyConditionExpression: 'agent_id = :aid',
+      ExpressionAttributeValues: { ':aid': agentId },
+    })
+  );
+  const shares = (sharingRes.Items || []) as SharingItem[];
+  if (shares.length === 0) return null;
+
+  let best: ShareRole | null = null;
+
+  // Direct user shares
+  for (const share of shares) {
+    if (share.principal_type === 'user' && share.principal_id === auth.sub) {
+      best = higherRole(best, share.role);
+    }
+  }
+
+  // Team shares — require a membership lookup each
+  if (TEAM_MEMBERS_TABLE) {
+    const teamShares = shares.filter((s) => s.principal_type === 'team');
+    if (teamShares.length > 0) {
+      const memberships = await Promise.all(
+        teamShares.map(async (share) => {
+          const teamId = share.principal_id.replace(/^team:/, '');
+          const res = await dynamo.send(
+            new GetCommand({
+              TableName: TEAM_MEMBERS_TABLE,
+              Key: { team_id: teamId, user_id: auth.sub },
+            })
+          );
+          return res.Item ? share.role : null;
+        })
+      );
+      for (const role of memberships) {
+        if (role) best = higherRole(best, role);
+      }
+    }
+  }
+
+  return best;
+};
+
+const canEditViaShare = (role: ShareRole | null): boolean => role === 'co-owner' || role === 'editor';
 
 const handleGetSharing = async (agentId: string): Promise<ReturnType<typeof jsonResponse>> => {
   if (!SHARING_TABLE) return jsonResponse(200, { shares: [] });
