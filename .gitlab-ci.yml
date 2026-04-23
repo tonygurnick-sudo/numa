@@ -184,6 +184,7 @@ pre-commit:
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-chat-agent
         - lambdas/python/numa-dr-export
+        - lambdas/python/numa-kb-manager
         - lambdas/python/numa-recent-jobs
         - lambdas/python/oauth-files-api
         - lambdas/python/oauth-workspace-tools
