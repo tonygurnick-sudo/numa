@@ -93,13 +93,97 @@ def _normalize_token(token: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _get_admin_instance_url(connector_id: str) -> Optional[str]:
+    """Return the admin-configured API base URL for a connector, or None.
+
+    Synergy (and any future customer-hosted API) reads its base URL from
+    `connector-config-{id}.fields.instance_url` in the COMPANY vault, written
+    by the ApiKeyWizard at registration time. This is workspace-wide — every
+    user's requests go to the same admin-supplied URL, so it doesn't belong
+    in the per-user credential payload.
+
+    Legacy fallback: older Synergy entries may live under `connector-{id}`
+    (pre-split) with a `server` or `instance_url` field.
+    """
+    try:
+        from .oauth_tools import _get_consolidated_company_vault
+
+        secrets = _get_consolidated_company_vault() or {}
+    except Exception:
+        return None
+
+    for key in (f"connector-config-{connector_id}", f"connector-{connector_id}"):
+        entry = secrets.get(key)
+        if not entry:
+            continue
+        fields = entry.get("fields") or entry
+        if not isinstance(fields, dict):
+            continue
+        url = fields.get("instance_url") or fields.get("server")
+        if url:
+            return str(url).strip()
+    return None
+
+
+def _get_synergy_credentials_from_user_vault(
+    user_sub: str,
+) -> Optional[tuple[str, str]]:
+    """Return (server, access_token) — user PAT joined with admin-configured URL.
+
+    User vault supplies `connector-synergy.fields.access_token` (captured in
+    chat / sidebar widget). Company vault supplies `connector-config-synergy
+    .fields.instance_url` (set in ApiKeyWizard). Both are required.
+
+    Legacy fallback: if the user vault still has `instance_url` / `server`
+    from a pre-split connect, we honour it so existing users don't break
+    mid-deploy.
+    """
+    try:
+        # Import lazily to avoid circular imports — oauth_tools imports us.
+        from .oauth_tools import _get_user_consolidated_vault
+
+        vault = _get_user_consolidated_vault(user_sub) or {}
+    except Exception:
+        return None
+
+    admin_server = _get_admin_instance_url("synergy")
+
+    secrets = vault.get("secrets", {}) if isinstance(vault, dict) else {}
+    for secret_key in ("connector-synergy", "oauth-synergy"):
+        entry = secrets.get(secret_key)
+        if not entry:
+            continue
+        fields = entry.get("fields") or entry
+        if not isinstance(fields, dict):
+            continue
+        token = (
+            fields.get("access_token")
+            or fields.get("api_key")
+            or fields.get("bearer_token")
+            or fields.get("token")
+        )
+        # Admin-configured URL wins; legacy per-user URL is only used if admin
+        # hasn't set one yet (grace period for existing deployments).
+        server = admin_server or fields.get("instance_url") or fields.get("server")
+        if token and server:
+            return str(server), str(token)
+    return None
+
+
 def get_synergy_credentials(user_sub: str) -> Optional[tuple[str, str]]:
     """Return Synergy (server, access_token) for the user, or None if not configured.
 
-    Reads the data-connectors DynamoDB table and Secrets Manager.
-    If the PAT is within PAT_ROTATION_THRESHOLD_DAYS of expiry (or has no
-    expiry tracking), attempts automatic rotation before returning credentials.
+    Checks the user's consolidated vault first (new inline credential-capture
+    flow), then falls back to the legacy data-connectors DynamoDB + Secrets
+    Manager record. The DynamoDB path still handles PAT rotation for users
+    who set up Synergy via the old /data-connectors admin page.
     """
+    # Preferred: per-user vault credential.
+    vault_creds = _get_synergy_credentials_from_user_vault(user_sub)
+    if vault_creds:
+        return vault_creds
+
+    # Fallback: legacy DynamoDB record with auto-rotation.
     if not DATA_CONNECTORS_TABLE_NAME:
         return None
 
@@ -267,7 +351,14 @@ def _rotate_pat(
 
 
 def is_synergy_configured(user_sub: str) -> bool:
-    """Check if Synergy is configured for the user (without retrieving full creds)."""
+    """True if the user has a usable Synergy credential in any supported location.
+
+    Checks user vault first (new `connector-synergy` / legacy `oauth-synergy`),
+    then the legacy DynamoDB record.
+    """
+    if _get_synergy_credentials_from_user_vault(user_sub) is not None:
+        return True
+
     if not DATA_CONNECTORS_TABLE_NAME:
         return False
 
@@ -293,7 +384,7 @@ def search_jobs(
     page: int = 1,
     page_size: int = 50,
 ) -> Dict[str, Any]:
-    """Search top-level jobs in Synergy."""
+    """Search jobs in Synergy."""
     base_url = _build_base_url(server)
     url = f"{base_url}/api/v1/jobs/search"
     payload = {
@@ -308,7 +399,11 @@ def search_jobs(
                     "DisplayName": "Restrict to top level?",
                 },
                 "Type": "SynergyServerWeb.API.Models.SelectableProgrammaticAttribute",
-                "Value": True,
+                # False = return all jobs (not restricted to top-level only).
+                # The Synergy API docs' sample payload uses false here; true
+                # hides every job that lives under a parent, which on most
+                # customer instances is effectively all of them.
+                "Value": False,
                 "SearchQueryType": 4,
                 "Operation": 0,
                 "Name": "Restrict to top level?",

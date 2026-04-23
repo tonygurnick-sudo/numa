@@ -5,10 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
 import { CONNECTOR_REGISTRY, getConnectorCategories } from '../connectorRegistry';
 import type { ConnectorTemplate } from '../connectorRegistry';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { AuthTypeBadge } from '../AuthTypeBadge';
 
 interface PlatformPickerModalProps {
   show: boolean;
@@ -16,18 +13,6 @@ interface PlatformPickerModalProps {
   onSelect: (connector: ConnectorTemplate) => void;
   configuredIds: Set<string>;
 }
-
-// ---------------------------------------------------------------------------
-// Auth type badge helper
-// ---------------------------------------------------------------------------
-
-const AUTH_BADGE_LABELS: Record<string, { label: string; variant: string }> = {
-  oauth2: { label: 'OAuth 2.0', variant: 'primary' },
-  'api-key': { label: 'API Key', variant: 'info' },
-  token: { label: 'Token', variant: 'info' },
-  'username-password': { label: 'Login', variant: 'warning' },
-  'contact-required': { label: 'Contact Required', variant: 'secondary' },
-};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -115,7 +100,6 @@ export const PlatformPickerModal = ({ show, onHide, onSelect, configuredIds }: P
           )}
           {filtered.map((connector) => {
             const isConfigured = configuredIds.has(connector.id);
-            const badgeInfo = AUTH_BADGE_LABELS[connector.authType];
             return (
               <div key={connector.id} className="col-md-6 col-lg-4">
                 <div
@@ -141,11 +125,7 @@ export const PlatformPickerModal = ({ show, onHide, onSelect, configuredIds }: P
                     {connector.description}
                   </p>
                   <div className="d-flex gap-1 flex-wrap">
-                    {badgeInfo && (
-                      <Badge bg={badgeInfo.variant} className="fw-normal" style={{ fontSize: '0.65rem' }}>
-                        {badgeInfo.label}
-                      </Badge>
-                    )}
+                    <AuthTypeBadge authType={connector.authType} />
                     <Badge bg="light" text="dark" className="fw-normal" style={{ fontSize: '0.65rem' }}>
                       {connector.category}
                     </Badge>

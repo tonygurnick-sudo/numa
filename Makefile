@@ -29,14 +29,18 @@ SYSTEM_USER_FUNCTION_NAME := system-user-creator---TfToken-TOKEN-81--
 .PHONY: init get plan import deploy clean pipelinefix cli lint format \
 	lint-frontend lint-frontend-typecheck lint-infra lint-node-shared lint-node-lambdas \
 	lint-python-lambdas lint-python-libs lint-prettier lint-python-format lint-yaml \
-	lint-trailing-whitespace lint-end-of-file
+	lint-trailing-whitespace lint-end-of-file lint-connector-docs
 .DEFAULT_GOAL := deploy
 
 # ---- Lint entire repo (matches CI + pre-commit) ----
 # Run `make lint -j` for maximum parallelism
-lint: lint-prettier lint-python-format lint-yaml lint-trailing-whitespace lint-end-of-file lint-frontend lint-frontend-typecheck lint-infra lint-node-shared lint-node-lambdas lint-python-lambdas lint-python-libs
+lint: lint-prettier lint-python-format lint-yaml lint-trailing-whitespace lint-end-of-file lint-connector-docs lint-frontend lint-frontend-typecheck lint-infra lint-node-shared lint-node-lambdas lint-python-lambdas lint-python-libs
 	@echo ""
 	@echo "✅ All lint checks passed"
+
+lint-connector-docs:
+	@echo "=== Connector docs parity ==="
+	@node tools/check-connector-docs.mjs
 
 lint-prettier:
 	@echo "=== Prettier ==="
@@ -175,6 +179,7 @@ import: init get
 deploy: init get
 	lambdas/package-all.sh
 	cd services && ./package-service.sh transcription-service
+	cd services && ./package-service.sh numa-workspace-agent
 	yarn --cwd numa-frontend build
 	$(CDKTF) deploy $(STACK) --auto-approve
 	@echo "🚀 Deploy completed at: $$(date)"

@@ -2,12 +2,15 @@ import type { ReactNode } from 'react';
 import { Button, Dropdown, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Link2, MoreVertical, Settings, Trash2, Zap } from 'lucide-react';
+import { AuthTypeBadge } from './AuthTypeBadge';
+import type { ConnectorTemplate } from './connectorRegistry';
 
 type OAuthConnectorCardProps = {
   providerId: string;
   displayName: string;
   icon: string;
   description: string;
+  authType?: ConnectorTemplate['authType'];
   credentialConfigured: boolean;
   onConfigure: () => void;
   onTest: () => void;
@@ -24,6 +27,7 @@ export const OAuthConnectorCard = ({
   displayName,
   icon,
   description,
+  authType,
   credentialConfigured,
   onConfigure,
   onTest,
@@ -50,7 +54,10 @@ export const OAuthConnectorCard = ({
             <i className={icon} style={{ fontSize: '1.5rem' }} />
           </div>
           <div className="integrations-row-card__text">
-            <h6 className="integrations-row-card__name">{displayName}</h6>
+            <h6 className="integrations-row-card__name d-flex align-items-center gap-2">
+              <span>{displayName}</span>
+              {authType && <AuthTypeBadge authType={authType} />}
+            </h6>
             <p className="integrations-row-card__description">{description}</p>
           </div>
         </div>

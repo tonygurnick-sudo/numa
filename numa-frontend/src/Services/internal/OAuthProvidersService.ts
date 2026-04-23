@@ -1,30 +1,34 @@
 /**
- * OAuth Providers Service - Provider-agnostic OAuth for cloud storage
+ * INTERNAL — do not import outside `Services/ConnectorsService.ts` (or, for
+ * OAuth-only file-browsing operations, through the facade's `files` sub-API).
+ *
+ * OAuth provider auth flow + file-browsing operations. Every auth-lifecycle
+ * method requires a branded `OAuthConnectorId`. The only way to obtain one is
+ * via `classifyConnector` in `connectorIds.ts`. Runtime
+ * `assertOAuthAtRuntime` is belt-and-braces behind the type-level brand.
  *
  * Architecture:
- * 1. OAuth tokens stored securely in Vault (access_token, refresh_token, expires_at)
- * 2. Automatic token refresh using refresh_token when access_token expires
- * 3. Transparent reauthentication without user intervention
- * 4. Provider list loaded dynamically from GET /oauth/providers
+ * 1. OAuth tokens stored securely in Vault (access_token, refresh_token, expires_at).
+ * 2. Automatic token refresh using refresh_token when access_token expires.
+ * 3. Transparent reauthentication without user intervention.
+ * 4. Provider list loaded dynamically from GET /oauth/providers.
  */
 
 import type {
-  OAuthProviderType,
   OAuthProviderInfo,
   OAuthConnectionStatus,
   OAuthFile,
   OAuthFolderContents,
-} from '../types/oauthProviders';
-import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+} from '../../types/oauthProviders';
+import { getConnectorById } from '../../Components/DataConnectors/connectorRegistry';
+import type { OAuthConnectorId, FileBrowseConnectorId } from './connectorIds';
+import { assertOAuthAtRuntime, assertFileBrowseAtRuntime } from './connectorIds';
 
-// Cache for connection statuses to avoid repeated vault calls
 const statusCache: Record<string, { status: OAuthConnectionStatus; lastChecked: number }> = {};
 
-// Cache for providers list
 let providersCache: { providers: OAuthProviderInfo[]; lastChecked: number } | null = null;
-const PROVIDERS_CACHE_TTL = 60_000; // 1 minute
+const PROVIDERS_CACHE_TTL = 60_000;
 
-// API helper functions
 function getApiEndpoint(): string {
   return sessionStorage.getItem('API_ENDPOINT') || '/api';
 }
@@ -65,11 +69,11 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export class OAuthProvidersService {
   /**
-   * List all configured OAuth providers from the backend.
-   * Returns provider info (id, display_name, icon, description, configured).
+   * List all configured providers from the backend. Backend returns a mixed
+   * list (OAuth + PAT) for back-compat; the facade classifies it into clean
+   * streams before handing anything back to consumers.
    */
   static async listProviders(refresh = false): Promise<OAuthProviderInfo[]> {
-    // Check cache (skip if refresh requested)
     if (!refresh && providersCache && Date.now() - providersCache.lastChecked < PROVIDERS_CACHE_TTL) {
       return providersCache.providers;
     }
@@ -84,8 +88,6 @@ export class OAuthProvidersService {
 
       const data = await handleResponse<{ providers: OAuthProviderInfo[] }>(response);
       const providers = data.providers || [];
-
-      // Cache the result
       providersCache = { providers, lastChecked: Date.now() };
       return providers;
     } catch (error) {
@@ -94,16 +96,12 @@ export class OAuthProvidersService {
     }
   }
 
-  /** Clear the providers list cache (e.g. after saving new credentials). */
   static clearProvidersCache(): void {
     providersCache = null;
   }
 
-  /**
-   * Get connection status for an OAuth provider via backend status endpoint.
-   */
-  static async getConnectionStatus(provider: OAuthProviderType): Promise<OAuthConnectionStatus> {
-    // Check cache first (valid for 30 seconds)
+  static async getConnectionStatus(provider: OAuthConnectorId): Promise<OAuthConnectionStatus> {
+    assertOAuthAtRuntime(provider, 'getConnectionStatus');
     const cached = statusCache[provider];
     if (cached && Date.now() - cached.lastChecked < 30000) {
       return cached.status;
@@ -141,21 +139,15 @@ export class OAuthProvidersService {
     }
   }
 
-  /**
-   * Initiate OAuth connection flow for a provider.
-   * Auth URLs come from admin-configured vault secrets — no client-side domain validation.
-   */
-  static async connect(provider: OAuthProviderType): Promise<{ success: boolean; authUrl?: string; error?: string }> {
+  static async connect(provider: OAuthConnectorId): Promise<{ success: boolean; authUrl?: string; error?: string }> {
+    assertOAuthAtRuntime(provider, 'connect');
     try {
       const endpoint = getApiEndpoint();
-
-      // Platform connectors share a single OAuth client — route via platform ID
       const connector = getConnectorById(provider);
       const platform = connector?.oauthPlatform ?? provider;
       const params = new URLSearchParams();
       if (connector?.oauthPlatform) {
         params.set('connector', provider);
-        // Don't pass scopes — backend uses admin-configured vault scopes
       }
       const qs = params.toString() ? `?${params.toString()}` : '';
 
@@ -172,22 +164,12 @@ export class OAuthProvidersService {
       }>(response);
 
       if (data.success && data.auth_url) {
-        // Clear status cache to force refresh after connection
         delete statusCache[provider];
-
-        // Redirect to OAuth provider — CSRF state is validated server-side via PKCE session
         window.location.href = data.auth_url;
-
-        return {
-          success: true,
-          authUrl: data.auth_url,
-        };
+        return { success: true, authUrl: data.auth_url };
       }
 
-      return {
-        success: false,
-        error: data.error || 'Failed to initiate OAuth flow',
-      };
+      return { success: false, error: data.error || 'Failed to initiate OAuth flow' };
     } catch (error) {
       console.error(`[OAuth] Failed to connect ${provider}:`, error);
       return {
@@ -197,10 +179,8 @@ export class OAuthProvidersService {
     }
   }
 
-  /**
-   * Disconnect OAuth provider (revokes tokens and removes from vault)
-   */
-  static async disconnect(provider: OAuthProviderType): Promise<{ success: boolean; error?: string }> {
+  static async disconnect(provider: OAuthConnectorId): Promise<{ success: boolean; error?: string }> {
+    assertOAuthAtRuntime(provider, 'disconnect');
     try {
       const endpoint = getApiEndpoint();
       const response = await fetch(`${endpoint}/oauth/${provider}/revoke`, {
@@ -215,16 +195,11 @@ export class OAuthProvidersService {
       }>(response);
 
       if (data.success) {
-        // Clear status cache
         delete statusCache[provider];
-
         return { success: true };
       }
 
-      return {
-        success: false,
-        error: data.error || 'Failed to disconnect',
-      };
+      return { success: false, error: data.error || 'Failed to disconnect' };
     } catch (error) {
       console.error(`[OAuth] Failed to disconnect ${provider}:`, error);
       return {
@@ -234,15 +209,13 @@ export class OAuthProvidersService {
     }
   }
 
-  /**
-   * List files and folders for an OAuth provider using vault-stored tokens
-   */
   static async listContents(
-    provider: OAuthProviderType,
+    provider: FileBrowseConnectorId,
     folderId?: string,
     pageSize?: number,
     pageToken?: string
   ): Promise<OAuthFolderContents> {
+    assertFileBrowseAtRuntime(provider, 'listContents');
     try {
       const endpoint = getApiEndpoint();
       const params = new URLSearchParams();
@@ -285,16 +258,14 @@ export class OAuthProvidersService {
     }
   }
 
-  /**
-   * Send an email via an email provider (Gmail, Outlook, etc.)
-   */
   static async sendEmail(
-    provider: OAuthProviderType,
+    provider: FileBrowseConnectorId,
     to: string,
     subject: string,
     body: string,
     html = false
   ): Promise<{ success: boolean; message_id?: string }> {
+    assertFileBrowseAtRuntime(provider, 'sendEmail');
     const endpoint = getApiEndpoint();
     const response = await fetch(`${endpoint}/oauth-files/${provider}/send`, {
       method: 'POST',
@@ -304,11 +275,8 @@ export class OAuthProvidersService {
     return handleResponse<{ success: boolean; message_id?: string }>(response);
   }
 
-  /**
-   * Download file from OAuth provider (for transfer functionality)
-   * Uses automatic token refresh to ensure valid authentication
-   */
-  static async downloadFile(provider: OAuthProviderType, fileId: string): Promise<Blob> {
+  static async downloadFile(provider: FileBrowseConnectorId, fileId: string): Promise<Blob> {
+    assertFileBrowseAtRuntime(provider, 'downloadFile');
     try {
       const endpoint = getApiEndpoint();
       const encodedFileId = encodeURIComponent(fileId);
@@ -323,7 +291,6 @@ export class OAuthProvidersService {
         throw new Error(body.error || `Download failed with status ${response.status}`);
       }
 
-      // Return the blob from the response
       return await response.blob();
     } catch (error) {
       console.error(`[OAuth] Failed to download file from ${provider}:`, error);
@@ -331,13 +298,11 @@ export class OAuthProvidersService {
     }
   }
 
-  /**
-   * Get email/message content as safe plain text.
-   */
   static async getEmailContent(
-    provider: OAuthProviderType,
+    provider: FileBrowseConnectorId,
     fileId: string
   ): Promise<{ subject: string; from: string; date: string; body_text: string; size: number }> {
+    assertFileBrowseAtRuntime(provider, 'getEmailContent');
     const endpoint = getApiEndpoint();
     const encodedFileId = encodeURIComponent(fileId);
     const response = await fetch(`${endpoint}/oauth-files/${provider}/message/${encodedFileId}`, {
@@ -347,16 +312,14 @@ export class OAuthProvidersService {
     return handleResponse(response);
   }
 
-  /**
-   * Search files in OAuth provider
-   */
   static async searchFiles(
-    provider: OAuthProviderType,
+    provider: FileBrowseConnectorId,
     query: string,
     folderId?: string,
     pageSize?: number,
     pageToken?: string
   ): Promise<OAuthFolderContents> {
+    assertFileBrowseAtRuntime(provider, 'searchFiles');
     try {
       const endpoint = getApiEndpoint();
       const params = new URLSearchParams();

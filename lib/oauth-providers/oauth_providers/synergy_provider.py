@@ -115,7 +115,11 @@ class SynergyProvider(OAuthProvider):
                         "DisplayName": "Restrict to top level?",
                     },
                     "Type": "SynergyServerWeb.API.Models.SelectableProgrammaticAttribute",
-                    "Value": True,
+                    # False = return all jobs (not restricted to top-level only).
+                    # The Synergy API docs' sample payload uses false here; true
+                    # hides every job that lives under a parent, which on most
+                    # customer instances is effectively all of them.
+                    "Value": False,
                     "SearchQueryType": 4,
                     "Operation": 0,
                     "Name": "Restrict to top level?",

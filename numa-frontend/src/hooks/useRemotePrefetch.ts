@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { OAuthFolder } from '../types/oauthProviders';
 import type { SynergyFolder } from '../types/synergySync';
-import { OAuthProvidersService } from '../Services/OAuthProvidersService';
+import { ConnectorsService } from '../Services/ConnectorsService';
 import { SynergyDataConnectorService } from '../Services/SynergyDataConnectorService';
 import { getRemoteFolder, setRemoteFolder, oauthCacheKey, synergyCacheKey } from '../utils/remoteFolderCache';
 
@@ -129,7 +129,7 @@ export function useRemotePrefetch({ provider, enabled }: UseRemotePrefetchOpts):
     const prov = providerRef.current;
     try {
       if (prov.type === 'oauth') {
-        const contents = await OAuthProvidersService.listContents(prov.oauthProvider, task.folderId);
+        const contents = await ConnectorsService.files.list(prov.oauthProvider, task.folderId);
         if (!task.abort.signal.aborted) {
           setRemoteFolder(task.key, {
             folders: contents.folders,

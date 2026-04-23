@@ -45,7 +45,7 @@ import FileContextMenu from '../Components/Files/FileContextMenu';
 import { ComposeEmailModal } from '../Components/Files/ComposeEmailModal';
 import { ConnectTokenModal } from '../Components/Files/ConnectTokenModal';
 import { EmailViewerModal } from '../Components/Files/EmailViewerModal';
-import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+import { surfacesInFiles } from '../Components/DataConnectors/connectorRegistry';
 import type { FileContextAction, FileOrFolder, RemoteFileItem } from '../Components/Files/FileContextMenu';
 import FileSelectionToolbar from '../Components/Files/FileSelectionToolbar';
 import FileRowActions from '../Components/Files/FileRowActions';
@@ -63,14 +63,16 @@ import { listObjectsInFolder } from '../utils/s3Utils';
 import { filterIgnoredFiles, getIgnorePatterns, loadIgnoreFromS3, saveIgnoreToS3 } from '../utils/fileIgnoreList';
 import { useFilesCache } from './useFilesCache';
 import { DataConnectorsService } from '../Services/DataConnectorsService';
-import { OAuthProvidersService } from '../Services/OAuthProvidersService';
+import { ConnectorsService } from '../Services/ConnectorsService';
 import type { DataConnectorStatus } from '../types/dataConnectors';
 import type { OAuthProviderType, OAuthProviderInfo, OAuthConnectionStatus } from '../types/oauthProviders';
 // SynergyIcon removed — Synergy now uses generic provider cards
 // import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
-import { VaultSecretForm } from '../Components/Vault/VaultSecretForm';
-import type { VaultSecretMetadata, CreateSecretPayload } from '../Services/VaultService';
-import { listSecrets, getSecret, createSecret, listCategories } from '../Services/VaultService';
+// Legacy Synergy "Connect" modal removed. It was the only consumer of
+// VaultSecretForm / listSecrets / getSecret / createSecret / listCategories /
+// VaultSecretMetadata / CreateSecretPayload from VaultService; those imports
+// are gone with it. PAT capture is now handled by ConnectTokenModal /
+// ConnectCredentialsModal via ConnectorsService.
 import './Files.scss';
 
 type TabType = 'shared' | 'remote' | 'transcripts' | 'uploads';
@@ -308,7 +310,6 @@ export const FilesPage = () => {
   // Remote tab state — Synergy browsing
   // ---------------------------------------------------------------------------
   const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
-  const vaultEnabled = getFlag('SECRETS_VAULT_ENABLED');
   const oauthEnabled = getFlag('OAUTH_AVAILABLE');
 
   // Dynamic OAuth providers loaded from backend
@@ -322,26 +323,20 @@ export const FilesPage = () => {
   const [synergyStatus, setSynergyStatus] = useState<DataConnectorStatus | null>(null);
   const [_synergyStatusLoading, setSynergyStatusLoading] = useState(false);
   const synergyConnected = synergyStatus?.status === 'connected';
-  // Connect modal state for Remote tab
-  const [showConnectModal, setShowConnectModal] = useState(false);
-  const [connectServer, setConnectServer] = useState('');
+  // Legacy Synergy "Connect" modal state removed. Per-user PAT capture is now
+  // handled by ConnectTokenModal (single-token) or the chat sidebar's
+  // ConnectCredentialsModal (multi-field). Both write to the user vault via
+  // ConnectorsService.
 
   // OAuth providers status/connection state (stays local — not part of browsing)
   const [oauthProviderStatuses, setOauthProviderStatuses] = useState<Record<string, OAuthConnectionStatus>>({});
   const [oauthStatusLoading, setOauthStatusLoading] = useState<Record<string, boolean>>({});
   const [connectingOauthProvider, setConnectingOauthProvider] = useState<OAuthProviderType | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [connectError, setConnectError] = useState<string | null>(null);
-  const [vaultSecrets, setVaultSecrets] = useState<VaultSecretMetadata[]>([]);
-  const [selectedSecretId, setSelectedSecretId] = useState('');
-  const [loadingSecrets, setLoadingSecrets] = useState(false);
-  const [showVaultForm, setShowVaultForm] = useState(false);
   const [composeEmailOpen, setComposeEmailOpen] = useState(false);
   const [tokenConnectProvider, setTokenConnectProvider] = useState<{
     id: string;
     name: string;
   } | null>(null);
-  const [vaultCategories, setVaultCategories] = useState<string[]>([]);
   const [emailViewer, setEmailViewer] = useState<{
     provider: string;
     fileId: string;
@@ -712,7 +707,7 @@ export const FilesPage = () => {
         if (isFile) {
           // Download file content — all providers (OAuth + token) use the oauth-files-api
           const provider = selectedOauthProvider || 'synergy';
-          const blob = await OAuthProvidersService.downloadFile(provider, item.file_id);
+          const blob = await ConnectorsService.files.download(provider, item.file_id);
 
           // Sanitize filename — replace slashes with dashes so they don't create fake S3 folder hierarchy
           const safeName = item.name.replace(/\//g, '-');
@@ -1062,7 +1057,7 @@ export const FilesPage = () => {
     async (remoteItem: RemoteFileItem) => {
       try {
         const provider = remoteItem.oauthProvider || 'synergy';
-        const blob = await OAuthProvidersService.downloadFile(provider, remoteItem.file_id);
+        const blob = await ConnectorsService.files.download(provider, remoteItem.file_id);
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -1299,7 +1294,6 @@ export const FilesPage = () => {
       const items = await DataConnectorsService.listStatus(numaGet);
       const synergy = items.find((i) => i.connector_id === 'synergy') ?? null;
       setSynergyStatus(synergy);
-      if (synergy?.config?.server) setConnectServer(synergy.config.server);
     } catch {
       setSynergyStatus(null);
     } finally {
@@ -1307,12 +1301,25 @@ export const FilesPage = () => {
     }
   }, [dataConnectorsEnabled, numaGet]);
 
-  // Load dynamic OAuth providers list on mount (or when remote tab activates)
   const loadDynamicOAuthProviders = useCallback(async () => {
     if (!oauthEnabled) return;
     try {
-      const providers = await OAuthProvidersService.listProviders();
-      setEnabledOAuthProviders(providers);
+      // Files > Remote tab wants every admin-registered connector whose
+      // registry entry opts into `surfaces: ['files']`. Both OAuth and PAT
+      // streams can surface here (e.g. Google Drive vs Synergy), so we
+      // union both halves of the classified list and rebuild a shape
+      // compatible with the legacy OAuthProviderInfo consumers expect.
+      const { oauth, pat } = await ConnectorsService.listConfigured();
+      const all = [...oauth, ...pat].filter((p) => surfacesInFiles(p.id));
+      setEnabledOAuthProviders(
+        all.map((p) => ({
+          id: p.id,
+          display_name: p.displayName,
+          icon: p.icon ?? '',
+          description: '',
+          configured: true,
+        }))
+      );
     } catch {
       setEnabledOAuthProviders([]);
     }
@@ -1329,11 +1336,12 @@ export const FilesPage = () => {
     const providers = enabledOAuthProvidersRef.current.map((p) => p.id);
     if (providers.length === 0) return;
 
-    // Load all provider statuses in parallel - service handles caching internally
+    // ConnectorsService.getStatus routes per-connector to the correct
+    // stream internally — this loop just asks for the status and updates UI.
     const loadPromises = providers.map(async (provider) => {
       setOauthStatusLoading((prev) => ({ ...prev, [provider]: true }));
       try {
-        const status = await OAuthProvidersService.getConnectionStatus(provider);
+        const status = await ConnectorsService.getStatus(provider);
         setOauthProviderStatuses((prev) => ({ ...prev, [provider]: status }));
       } catch (error) {
         console.warn(`Failed to load ${provider} status:`, error);
@@ -1366,120 +1374,51 @@ export const FilesPage = () => {
     }
   }, [enabledOAuthProviders, loadOAuthProviderStatuses]);
 
+  // Single entry point for disconnecting a connector from the Remote tab.
+  // Routing to the right endpoint lives inside ConnectorsService — this page
+  // just asks "disconnect this id" without knowing or caring whether it's
+  // OAuth or PAT.
+  const disconnectConnector = useCallback(async (providerId: string) => {
+    await ConnectorsService.disconnect(providerId);
+  }, []);
+
   // Connection handlers — OAuth redirect or token entry modal
   const handleOAuthConnect = useCallback(
     async (provider: OAuthProviderType) => {
-      // Token connectors: show PAT entry modal instead of OAuth redirect
-      const connector = getConnectorById(provider);
-      if (connector && connector.authType !== 'oauth2') {
-        const providerInfo = enabledOAuthProviders.find((p) => p.id === provider);
-        setTokenConnectProvider({
-          id: provider,
-          name: providerInfo?.display_name || connector.displayName,
-        });
-        return;
-      }
-
       setConnectingOauthProvider(provider);
       try {
-        const result = await OAuthProvidersService.connect(provider);
-        if (result.success) {
-          // Reload provider status to show connected state
-          await loadOAuthProviderStatuses();
-          showToast({ message: `Successfully connected to ${provider}`, variant: 'success' });
-        } else {
-          showToast({ message: result.error || 'Connection failed', variant: 'error' });
+        // ConnectorsService.connect handles both streams. OAuth → browser
+        // redirects (kind: 'redirecting'); PAT → caller opens a modal with
+        // the returned fields.
+        const action = await ConnectorsService.connect(provider);
+        switch (action.kind) {
+          case 'redirecting':
+            // OAuth — nothing to do, browser is navigating.
+            return;
+          case 'needs_credentials': {
+            setTokenConnectProvider({
+              id: action.connectorId,
+              name: action.displayName,
+            });
+            return;
+          }
+          case 'unsupported':
+            showToast({ message: action.reason, variant: 'error' });
+            return;
         }
       } catch (error) {
-        console.error(`OAuth connect error for ${provider}:`, error);
+        console.error(`Connect error for ${provider}:`, error);
         showToast({ message: `Failed to connect to ${provider}`, variant: 'error' });
       } finally {
         setConnectingOauthProvider(null);
       }
     },
-    [loadOAuthProviderStatuses, showToast]
+    [showToast]
   );
 
-  // Remote tab connect modal helpers
-  const loadVaultSecretsForConnect = useCallback(async () => {
-    if (!vaultEnabled) return;
-    setLoadingSecrets(true);
-    try {
-      const [secrets, cats] = await Promise.all([listSecrets(), listCategories()]);
-      setVaultSecrets(secrets.filter((s) => s.type === 'bearer_token'));
-      setVaultCategories(cats);
-    } catch {
-      setVaultSecrets([]);
-    } finally {
-      setLoadingSecrets(false);
-    }
-  }, [vaultEnabled]);
-
-  const _openConnectModal = useCallback(() => {
-    setConnectError(null);
-    setShowConnectModal(true);
-    loadVaultSecretsForConnect();
-  }, [loadVaultSecretsForConnect]);
-
-  const handleConnectSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!selectedSecretId) {
-        setConnectError(t('remote.noCredential'));
-        return;
-      }
-      setConnecting(true);
-      setConnectError(null);
-      try {
-        const secretData = await getSecret(selectedSecretId);
-        const token = secretData.fields?.token || '';
-        if (!token) {
-          setConnectError(t('remote.noCredential'));
-          setConnecting(false);
-          return;
-        }
-        const server = connectServer.trim() || secretData.fields?.endpoint?.trim() || '';
-        if (!server) {
-          setConnectError(t('remote.noServer'));
-          setConnecting(false);
-          return;
-        }
-        await DataConnectorsService.connect(numaPost, {
-          connector_id: 'synergy',
-          config: { server, access_token: token },
-        });
-        setShowConnectModal(false);
-        setSelectedSecretId('');
-        await loadSynergyStatus();
-      } catch (err) {
-        setConnectError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setConnecting(false);
-      }
-    },
-    [selectedSecretId, connectServer, numaPost, loadSynergyStatus, t]
-  );
-
-  // Auto-populate server from credential endpoint when selection changes
-  useEffect(() => {
-    if (!selectedSecretId) return;
-    getSecret(selectedSecretId)
-      .then((secret) => {
-        if (secret.fields?.endpoint) {
-          setConnectServer(secret.fields.endpoint);
-        }
-      })
-      .catch(() => {});
-  }, [selectedSecretId]);
-
-  const handleVaultSecretCreatedForConnect = useCallback(
-    async (payload: CreateSecretPayload) => {
-      const created = await createSecret(payload);
-      await loadVaultSecretsForConnect();
-      setSelectedSecretId(created.name);
-    },
-    [loadVaultSecretsForConnect]
-  );
+  // Legacy Synergy "Connect" modal helpers removed. PAT capture is now
+  // handled by ConnectorsService via ConnectTokenModal (Files Remote tab)
+  // and ConnectCredentialsModal (chat sidebar).
 
   // --- @dnd-kit: internal file/folder move DnD ---
   const sensors = useSensors(
@@ -2383,7 +2322,7 @@ export const FilesPage = () => {
                                 className="btn btn-sm btn-outline-secondary text-nowrap"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  OAuthProvidersService.disconnect(provider.id)
+                                  disconnectConnector(provider.id)
                                     .catch(() => {})
                                     .finally(() => loadOAuthProviderStatuses());
                                 }}
@@ -2499,7 +2438,7 @@ export const FilesPage = () => {
                               className="btn btn-sm btn-outline-secondary"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                OAuthProvidersService.disconnect(provider.id)
+                                disconnectConnector(provider.id)
                                   .catch(() => {})
                                   .finally(() => loadOAuthProviderStatuses());
                               }}
@@ -3156,101 +3095,6 @@ export const FilesPage = () => {
             </div>
           )}
         </div>
-
-        {/* Synergy connect modal */}
-        {showConnectModal && (
-          <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">{t('remote.connectSynergy')}</h5>
-                  <button type="button" className="btn-close" onClick={() => setShowConnectModal(false)} />
-                </div>
-                <form onSubmit={handleConnectSubmit}>
-                  <div className="modal-body">
-                    {connectError && <div className="alert alert-danger py-2">{connectError}</div>}
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">{t('remote.serverLabel')}</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="https://synergy.myserver.com:8080"
-                        value={connectServer}
-                        onChange={(e) => setConnectServer(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label small fw-semibold">
-                        <i className="bi bi-shield-lock-fill me-1 text-primary" />
-                        {t('remote.credentialLabel')}
-                      </label>
-                      {loadingSecrets ? (
-                        <div className="text-muted small py-2">
-                          <span className="spinner-border spinner-border-sm me-2" />
-                          {t('remote.loadingCredentials')}
-                        </div>
-                      ) : (
-                        <>
-                          <div className="d-flex gap-2">
-                            <select
-                              className="form-select flex-grow-1"
-                              value={selectedSecretId}
-                              onChange={(e) => setSelectedSecretId(e.target.value)}
-                              required
-                            >
-                              <option value="">{t('remote.credentialPlaceholder')}</option>
-                              {vaultSecrets.map((secret) => (
-                                <option key={secret.name} value={secret.name}>
-                                  {secret.name}
-                                  {secret.description ? ` \u2014 ${secret.description}` : ''}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              className="btn btn-outline-primary btn-sm text-nowrap"
-                              onClick={() => setShowVaultForm(true)}
-                            >
-                              <i className="bi bi-shield-plus me-1" />
-                              {t('remote.createCredential')}
-                            </button>
-                          </div>
-                          <div className="form-text text-muted">{t('remote.credentialHint')}</div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowConnectModal(false)}>
-                      {t('remote.cancel')}
-                    </button>
-                    <button type="submit" className="btn btn-primary" disabled={connecting || !selectedSecretId}>
-                      {connecting ? (
-                        <>
-                          <span className="spinner-border spinner-border-sm me-2" /> {t('remote.connecting')}
-                        </>
-                      ) : (
-                        <>
-                          <i className="bi bi-plug me-2" />
-                          {t('remote.connectSynergy')}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <VaultSecretForm
-          show={showVaultForm}
-          onHide={() => setShowVaultForm(false)}
-          onSubmit={handleVaultSecretCreatedForConnect}
-          categories={vaultCategories}
-          defaultType="bearer_token"
-        />
 
         <FileContextMenu
           show={contextMenu.show}

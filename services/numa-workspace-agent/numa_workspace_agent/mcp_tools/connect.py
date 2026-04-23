@@ -220,6 +220,7 @@ async def _handle_status(params: dict[str, Any]) -> dict[str, Any]:
         }
 
     lines = ["Connector Status:\n"]
+    credential_markers: list[str] = []
 
     for connector_id, info in status_data.items():
         # Skip data-bucket — it's in numa_tool files now
@@ -240,14 +241,49 @@ async def _handle_status(params: dict[str, Any]) -> dict[str, Any]:
             )
         elif status == "disconnected":
             connect_url = info.get("connect_url", "")
-            url_hint = f" — connect at {connect_url}" if connect_url else ""
-            lines.append(f"  Not connected: {display_name}{auth_label}{url_hint}")
+            pending_hint = info.get("pending_hint", "")
+            credential_fields = info.get("credential_fields") or []
+
+            # Chat-only connector with known credential fields: embed the
+            # credential-request marker so the chat UI renders an inline entry
+            # card for this connector. The frontend extracts the marker and
+            # strips it from the text the user sees.
+            if not connect_url and credential_fields:
+                marker_payload = {
+                    "connector_id": connector_id,
+                    "display_name": display_name,
+                    "auth_type": auth_type,
+                    "credential_fields": credential_fields,
+                }
+                credential_markers.append(
+                    f"[[NUMA_CREDENTIAL_REQUEST:{json.dumps(marker_payload)}]]"
+                )
+                lines.append(
+                    f"  Awaiting credential: {display_name}{auth_label} — an "
+                    "inline credential form is now shown to the user in chat. "
+                    "They should fill it in there. Do NOT tell them to visit "
+                    "settings and do NOT ask them to paste the credential into "
+                    "chat."
+                )
+                continue
+
+            if connect_url:
+                hint = f" — connect at {connect_url}"
+            elif pending_hint:
+                hint = f" — {pending_hint}"
+            else:
+                hint = ""
+            lines.append(f"  Not connected: {display_name}{auth_label}{hint}")
         else:
             error_msg = info.get("error", "")
             lines.append(f"  {display_name}{auth_label}: {status} - {error_msg}")
 
+    text = "\n".join(lines)
+    if credential_markers:
+        text = "\n".join(credential_markers) + "\n" + text
+
     return {
-        "content": [{"type": "text", "text": "\n".join(lines)}],
+        "content": [{"type": "text", "text": text}],
     }
 
 
@@ -270,6 +306,49 @@ def _check_auth_error(result: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _check_needs_credential(result: dict[str, Any]) -> dict[str, Any] | None:
+    """Signal that a tool call can't proceed until the user supplies a credential.
+
+    Backend handlers for token / api-key / username-password connectors return
+      {"error_code": "needs_credential", "connector_id": "fergus",
+       "display_name": "Fergus", "auth_type": "token",
+       "credential_fields": [{"key": "api_key", "label": "API Key", "type": "password"}]}
+    when no user credential exists yet.
+
+    The chat UI picks up the `[[NUMA_CREDENTIAL_REQUEST:{...}]]` marker from the
+    content text, attaches a `credentialRequest` object to the matching
+    inline_tool segment, and renders an inline credential entry card — mirroring
+    Nathan's `tool_approval` HITL pattern (same segment-mutation approach).
+    """
+    if not isinstance(result, dict) or result.get("error_code") != "needs_credential":
+        return None
+    connector_id = result.get("connector_id", "")
+    display_name = result.get("display_name", connector_id or "this connector")
+    auth_type = result.get("auth_type", "token")
+    fields = result.get("credential_fields") or []
+    field_labels = (
+        ", ".join(f.get("label", f.get("key", "")) for f in fields) or "credential"
+    )
+
+    marker_payload = {
+        "connector_id": connector_id,
+        "display_name": display_name,
+        "auth_type": auth_type,
+        "credential_fields": fields,
+    }
+    marker = f"[[NUMA_CREDENTIAL_REQUEST:{json.dumps(marker_payload)}]]"
+    llm_text = (
+        f"The user has not connected {display_name} yet. "
+        f"Ask them to enter their {field_labels} — the chat UI will show an inline "
+        "credential prompt and store the value in their personal vault. "
+        "Do not retry this operation until they confirm they've connected."
+    )
+    return {
+        "content": [{"type": "text", "text": f"{marker}\n{llm_text}"}],
+        "isError": True,
+    }
+
+
 async def _handle_list_files(params: dict[str, Any]) -> dict[str, Any]:
     """List files and folders from a connector."""
     connector = params.get("connector", "")
@@ -279,12 +358,20 @@ async def _handle_list_files(params: dict[str, Any]) -> dict[str, Any]:
         params,
     )
 
-    if isinstance(result, dict) and result.get("error"):
+    if isinstance(result, dict) and (result.get("error") or result.get("error_code")):
+        needs_cred = _check_needs_credential(result)
+        if needs_cred:
+            return needs_cred
         auth_err = _check_auth_error(result)
         if auth_err:
             return auth_err
         return {
-            "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Error: {result.get('error', result.get('error_code'))}",
+                }
+            ],
             "isError": True,
         }
 
@@ -338,12 +425,20 @@ async def _handle_search_files(params: dict[str, Any]) -> dict[str, Any]:
         params,
     )
 
-    if isinstance(result, dict) and result.get("error"):
+    if isinstance(result, dict) and (result.get("error") or result.get("error_code")):
+        needs_cred = _check_needs_credential(result)
+        if needs_cred:
+            return needs_cred
         auth_err = _check_auth_error(result)
         if auth_err:
             return auth_err
         return {
-            "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Error: {result.get('error', result.get('error_code'))}",
+                }
+            ],
             "isError": True,
         }
 
@@ -407,12 +502,20 @@ async def _handle_download_file(params: dict[str, Any]) -> dict[str, Any]:
         params,
     )
 
-    if isinstance(result, dict) and result.get("error"):
+    if isinstance(result, dict) and (result.get("error") or result.get("error_code")):
+        needs_cred = _check_needs_credential(result)
+        if needs_cred:
+            return needs_cred
         auth_err = _check_auth_error(result)
         if auth_err:
             return auth_err
         return {
-            "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Error: {result.get('error', result.get('error_code'))}",
+                }
+            ],
             "isError": True,
         }
 
@@ -548,9 +651,20 @@ async def _handle_request(params: dict[str, Any]) -> dict[str, Any]:
     """Make an authenticated HTTP request to an OAuth API."""
     result = _invoke_connect_tool("connect_request", params)
 
-    if isinstance(result, dict) and result.get("error"):
+    if isinstance(result, dict) and (result.get("error") or result.get("error_code")):
+        needs_cred = _check_needs_credential(result)
+        if needs_cred:
+            return needs_cred
+        auth_err = _check_auth_error(result)
+        if auth_err:
+            return auth_err
         return {
-            "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Error: {result.get('error', result.get('error_code'))}",
+                }
+            ],
             "isError": True,
         }
 

@@ -31,6 +31,9 @@ import {
   getConnectionDisplayName,
   getConnectionFallbackIcon,
 } from '../../config/integrationsConfig';
+import { getConnectorById } from '../DataConnectors/connectorRegistry';
+import { ConnectorsService } from '../../Services/ConnectorsService';
+import { ConnectCredentialsModal } from './ConnectCredentialsModal';
 import { getFileIconClass, formatFileSize } from '../../utils/fileUtils';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
@@ -101,6 +104,16 @@ export interface WorkspaceChatSettingsPanelProps {
   connectionsLoading: boolean;
   hasPipedreamFeature: boolean;
 
+  // Data Connectors (OAuth + PAT/token — admin-configured per-workspace,
+  // per-user connection state captured here via OAuth redirect or PAT modal).
+  /** Every admin-configured data connector for this workspace. */
+  adminConfiguredConnectors: Array<{ id: string; name: string }>;
+  /** IDs of connectors the CURRENT user has personal credentials for. */
+  userConnectedConnectorIds: string[];
+  /** Called after a successful connect (OAuth callback or PAT save) so the
+   *  parent can re-fetch per-user status. */
+  onConnectorConnected: () => void | Promise<void>;
+
   // Control disabled state (during streaming)
   isDisabled: boolean;
 
@@ -152,6 +165,9 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   availableConnections,
   connectionsLoading,
   hasPipedreamFeature,
+  adminConfiguredConnectors,
+  userConnectedConnectorIds,
+  onConnectorConnected,
   isDisabled,
   showModelSelector = false,
   selectedModelId,
@@ -165,6 +181,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     knowledgeBases: true,
     tools: true,
     integrations: true,
+    connectors: true,
     model: true,
     developer: true,
     chatUploads: true,
@@ -194,6 +211,42 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
 
   // Connected integrations only
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
+
+  // Data connectors — per-user connection state + Connect click handling.
+  // OAuth connectors route through ConnectorsService.connect (browser redirect
+  // back via PKCE callback). PAT/token connectors open an inline modal.
+  const connectedConnectorIdSet = useMemo(() => new Set(userConnectedConnectorIds), [userConnectedConnectorIds]);
+  const [credentialModal, setCredentialModal] = useState<{ show: boolean; connectorId: string }>({
+    show: false,
+    connectorId: '',
+  });
+  const sortedConnectors = useMemo(
+    () => [...adminConfiguredConnectors].sort((a, b) => a.name.localeCompare(b.name)),
+    [adminConfiguredConnectors]
+  );
+
+  const handleConnectorConnectClick = useCallback(async (connectorId: string) => {
+    // ConnectorsService.connect returns a discriminated union — TS exhaustiveness
+    // ensures every kind is handled. Throws on OAuth authorize failure; wrap
+    // in try/catch so the error surfaces in the console rather than an
+    // unhandled promise rejection.
+    try {
+      const action = await ConnectorsService.connect(connectorId);
+      switch (action.kind) {
+        case 'redirecting':
+          // OAuth — browser is navigating to the provider. Nothing to do.
+          return;
+        case 'needs_credentials':
+          setCredentialModal({ show: true, connectorId });
+          return;
+        case 'unsupported':
+          console.warn('Connector connect unsupported:', action.reason);
+          return;
+      }
+    } catch (err) {
+      console.error(`Connect failed for "${connectorId}":`, err);
+    }
+  }, []);
 
   // Developer-only chat cost toggle. Section only renders when the
   // DEVELOPER_MODE client config flag is on.
@@ -574,6 +627,84 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
           </div>
         )}
 
+        {/* Data Connectors — admin-configured, per-user Connect action.
+            Parallel to Integrations but backed by the data-connectors stack
+            (OAuth redirect flow or PAT modal). Always rendered if ANY admin
+            connectors are configured; per-user connection state is displayed
+            per row. */}
+        {adminConfiguredConnectors.length > 0 && (
+          <div className="workspace-settings-card workspace-settings-integrations-card">
+            <button
+              type="button"
+              className="workspace-settings-card-header workspace-settings-card-header--collapsible"
+              onClick={() => toggleSection('connectors')}
+              aria-expanded={!collapsedSections.connectors}
+            >
+              <div className="workspace-settings-card-title">
+                <Link size={16} />
+                <span>{t('workspaceSettings.connectors', { defaultValue: 'Connectors' })}</span>
+              </div>
+              <div className="workspace-settings-card-header-right">
+                {collapsedSections.connectors && (
+                  <span className="workspace-settings-collapsed-summary">
+                    {userConnectedConnectorIds.length > 0
+                      ? t('workspaceSettings.connectorsConnectedCount', {
+                          count: userConnectedConnectorIds.length,
+                          total: adminConfiguredConnectors.length,
+                          defaultValue: `${userConnectedConnectorIds.length}/${adminConfiguredConnectors.length} connected`,
+                        })
+                      : t('workspaceSettings.noneConnected', { defaultValue: 'None connected' })}
+                  </span>
+                )}
+                {collapsedSections.connectors ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              </div>
+            </button>
+            {!collapsedSections.connectors && (
+              <div className="workspace-settings-card-body">
+                <div className="workspace-settings-list workspace-settings-integrations-list">
+                  {sortedConnectors.map((conn) => {
+                    const tmpl = getConnectorById(conn.id);
+                    const iconClass = tmpl?.icon ?? 'bi-plug';
+                    const isConnected = connectedConnectorIdSet.has(conn.id);
+                    return (
+                      <div key={conn.id} className="workspace-settings-integration-item">
+                        <div className="workspace-settings-integration-main">
+                          <span className="workspace-settings-integration-label">
+                            <i className={iconClass} style={{ fontSize: 16 }} />
+                            {conn.name}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className={`workspace-settings-integration-state ${isConnected ? 'is-connected' : 'is-connect'}`}
+                          onClick={() => handleConnectorConnectClick(conn.id)}
+                          disabled={isDisabled || isConnected}
+                          title={
+                            isConnected
+                              ? t('workspaceSettings.connectorAlreadyConnected', {
+                                  defaultValue: 'Already connected',
+                                })
+                              : undefined
+                          }
+                        >
+                          {isConnected ? (
+                            <>
+                              <Check size={12} />
+                              {t('workspaceSettings.connected')}
+                            </>
+                          ) : (
+                            t('workspaceSettings.connect')
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {showModelSelector && selectedModelId && setSelectedModelId && (
           <div className="workspace-settings-card workspace-settings-model-card">
             <button
@@ -804,6 +935,12 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
           </div>
         )}
       </div>
+      <ConnectCredentialsModal
+        show={credentialModal.show}
+        onHide={() => setCredentialModal({ show: false, connectorId: '' })}
+        connectorId={credentialModal.connectorId}
+        onConnected={onConnectorConnected}
+      />
     </div>
   );
 };

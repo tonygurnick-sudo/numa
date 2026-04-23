@@ -62,4 +62,5 @@ export type OAuthFolderContents = {
   folders: OAuthFolder[];
   files: OAuthFile[];
   total_count?: number;
+  next_page_token?: string;
 };

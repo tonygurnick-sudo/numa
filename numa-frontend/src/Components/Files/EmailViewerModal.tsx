@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { OAuthProvidersService } from '../../Services/OAuthProvidersService';
+import { ConnectorsService } from '../../Services/ConnectorsService';
 import type { OAuthProviderType } from '../../types/oauthProviders';
 
 interface EmailViewerModalProps {
@@ -33,7 +33,8 @@ export const EmailViewerModal = ({ show, onHide, provider, fileId, fileName }: E
     setError(null);
     setContent(null);
 
-    OAuthProvidersService.getEmailContent(provider, fileId)
+    ConnectorsService.files
+      .getEmailContent(provider, fileId)
       .then((data) => setContent(data))
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load email'))
       .finally(() => setLoading(false));

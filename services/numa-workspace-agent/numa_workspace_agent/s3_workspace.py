@@ -1262,8 +1262,12 @@ def sync_ext_api_docs_for_connectors(connector_names: list[str]) -> list[str]:
                     if len(parts) != 2:
                         continue
                     filename = parts[1]
-                    # Only 01-series files (LLM-optimized docs)
-                    if not filename.startswith("01") or not filename.endswith(".md"):
+                    # LLM-optimised docs only — the 00-*.md questionnaire is the
+                    # human investigation template and must stay out of the agent
+                    # context. Everything 01/02/03/04 is runtime reference.
+                    if not filename.endswith(".md"):
+                        continue
+                    if filename.startswith("00"):
                         continue
                     local_dir = LOCAL_ROOT / "api-docs" / name
                     local_dir.mkdir(parents=True, exist_ok=True)

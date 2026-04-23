@@ -1564,10 +1564,11 @@ async def _handle_chat(
 
     async def _load_ext_api_docs():
         connector_names = [
-            c.get("name", c.get("id", ""))
+            c.get("id") or c.get("name", "")
             for c in connected_data_connectors
             if isinstance(c, dict)
         ]
+        connector_names = [s for s in connector_names if s]
         return await asyncio.to_thread(
             sync_ext_api_docs_for_connectors, connector_names
         )
@@ -1981,7 +1982,7 @@ async def _handle_sync(
 
     # Sync ext API docs for connected data connectors (instant if already synced)
     _connector_names_sync = [
-        c.get("name", c.get("id", ""))
+        c.get("id") or c.get("name", "")
         for c in connected_data_connectors
         if isinstance(c, dict)
     ]
@@ -2282,7 +2283,7 @@ async def _handle_fire_and_forget(
 
     # Sync ext API docs for connected data connectors (instant if already synced)
     _connector_names_async = [
-        c.get("name", c.get("id", ""))
+        c.get("id") or c.get("name", "")
         for c in connected_data_connectors
         if isinstance(c, dict)
     ]
