@@ -77,12 +77,15 @@
       "title": "Agent name",
       "instructions": "Instructions",
       "referenceFiles": "Reference files (max 5 files)",
+      "teamRequired": "Team visibility requires at least one team to be assigned",
       "missing": "Please complete the following fields:\n{{fields}}"
     },
     "visibility": {
       "label": "Visibility",
       "personal": "Personal",
       "personalHelp": "Only you can access this agent.",
+      "team": "Team",
+      "teamHelp": "Visible only to the teams you assign below.",
       "public": "Company",
       "publicHelp": "Visible to everyone in your workspace.",
       "disabledNote": "Company agents are disabled for your account.",
@@ -139,7 +142,8 @@
     },
     "teamAssignment": {
       "label": "Team assignment",
-      "help": "Assign this agent to one or more teams."
+      "help": "Assign this agent to one or more teams.",
+      "helpTeam": "Select at least one team. Team members can chat with and edit this agent."
     },
     "timeSaved": {
       "label": "Estimated time saved",

@@ -27,13 +27,22 @@ Parameters:
   user_intent        (required)  What the user is trying to accomplish
   max_results        (optional)  Max results (default: 6, max: 15)
   kb_id              (optional)  KB ID: "company" (default) or user KB UUID
-  summarise_results  (optional)  Summarize results (default: true)
+  summarise_results  (optional)  Summarize results with Nova Lite (default: false).
+                                 Default returns raw retrieved chunks so you can
+                                 reason over the original content. Opt in only
+                                 when you explicitly want a paraphrased summary.
   all_kbs            (optional)  Query all enabled KBs (default: false)
   output_file        (optional)  Write results to file instead of returning inline
 
+Return shape:
+  Default (summarise_results=false):
+    { "raw_content": [chunk, ...], "references": [...], "query": "...", "results_count": N }
+  Opt-in (summarise_results=true):
+    { "summarised_content": "...", "references": [...], "query": "...", "results_count": N }
+
 Examples:
 
-  # Simple KB search
+  # Simple KB search (raw chunks — the default)
   mcp__numa__numa_tool(
     name="query_knowledge_base",
     description="Searching KB for annual leave policy",
@@ -54,16 +63,16 @@ Examples:
     params={"query": "compliance", "user_intent": "compare policies", "all_kbs": true}
   )
 
-  # Raw results for precision (no AI summarization)
+  # Opt into AI summarization when a paraphrased digest is more useful
+  # than raw chunks (e.g. surfacing a concept to a non-technical reader)
   mcp__numa__numa_tool(
     name="query_knowledge_base",
-    description="Compiling security documentation",
+    description="Summarizing IT security posture",
     params={
       "query": "IT security policies",
-      "user_intent": "compile complete security documentation",
-      "summarise_results": false,
-      "max_results": 15,
-      "output_file": "/workdir/outputs/security_policies.json"
+      "user_intent": "explain our security posture in plain English",
+      "summarise_results": true,
+      "max_results": 15
     }
   )
 
@@ -136,24 +145,78 @@ Examples:
 kb_list
 -------
 
+Lists the contents of a knowledge base one level at a time — like `ls`. By
+default you get the files at the requested level PLUS the names of any
+immediate subfolders, so you can navigate hierarchy without dumping the
+whole KB.
+
 Parameters:
-  kb_id    (optional)  KB ID to list files from (default: "company")
-  pattern  (optional)  Filename pattern filter (e.g. "*.pdf")
+  kb_id      (optional)  KB ID to list files from (default: "company")
+  folder     (optional)  Folder path within the KB, e.g. "Releases" or
+                         "Releases/v2.1". Path segments are separated by "/".
+                         Leading/trailing slashes are stripped. Default: KB root.
+                         Also accepted under the names `path` and `folder_path`
+                         (synonyms — any of the three works).
+  pattern    (optional)  Filename pattern filter (e.g. "*.pdf"). Applied to
+                         filenames at the listed level only.
+  recursive  (optional)  If true, return a flat list of every file under the
+                         requested folder (no subfolder names). Default: false.
+
+Return shape (default, recursive=false):
+  {
+    "kb_id": "...",
+    "folder": "Releases",           # empty string when listing root
+    "files":   [ {name, key, size, last_modified, s3_uri}, ... ],
+    "folders": ["v2.0/", "v2.1/"],  # immediate subfolder names, with trailing slash
+    "count": N,
+    "recursive": false,
+    "pattern": "..."
+  }
+
+Return shape (recursive=true):
+  Same as above without the `folders` field; `files` contains every object
+  under the folder at any depth.
+
+Navigation pattern:
+  1. List root              -> discover top-level folders
+  2. List folder="Releases" -> see files in Releases + any sub-subfolders
+  3. List folder="Releases/v2.1" -> go deeper (folder is a path, not a single segment)
+  4. Call kb_download on the file you want.
 
 Examples:
 
-  # List all files in company KB
+  # Discover what's at the top of the KB
   mcp__numa__numa_tool(
     name="kb_list",
-    description="Listing files in company KB",
+    description="Listing top-level contents of company KB",
     params={"kb_id": "company"}
   )
 
-  # List only PDFs
+  # Scope to a folder — returns files in Releases + immediate subfolders
   mcp__numa__numa_tool(
     name="kb_list",
-    description="Listing PDF files",
-    params={"kb_id": "company", "pattern": "*.pdf"}
+    description="Listing Releases folder",
+    params={"kb_id": "company", "folder": "Releases"}
+  )
+
+  # Nested: pass the full path to go a level deeper
+  mcp__numa__numa_tool(
+    name="kb_list",
+    description="Listing Releases/v2.1",
+    params={"kb_id": "company", "folder": "Releases/v2.1"}
+  )
+
+  # Flat recursive listing with a filename filter (escape hatch for
+  # wide searches; prefer folder-scoped navigation when possible)
+  mcp__numa__numa_tool(
+    name="kb_list",
+    description="Finding all xlsx files under Releases",
+    params={
+      "kb_id": "company",
+      "folder": "Releases",
+      "recursive": true,
+      "pattern": "*.xlsx"
+    }
   )
 
 
