@@ -9,6 +9,7 @@ import { clientService } from '@/services/clientService';
 import { FileExportService } from '@/utils/fileExport';
 import { QuotaReportService } from '@/services/quotaReportService';
 import type { Client } from '@/types';
+import { QUOTA_METRIC_SUFFIX, ALL_MODEL_FAMILIES, ALL_QUOTA_TYPES, ALL_QUOTA_METRICS } from '@numa/quota-snapshot';
 import type {
   QuotaReportParameters,
   ToolResult,
@@ -20,9 +21,9 @@ import type {
   QuotaType,
 } from '@/types/tools';
 
-const DEFAULT_TYPES: QuotaType[] = ['On-demand', 'Cross-region', 'Global cross-region'];
-const DEFAULT_FAMILIES: ModelFamily[] = ['sonnet', 'opus', 'haiku', 'nova'];
-const DEFAULT_METRICS: QuotaMetric[] = ['requests-per-minute', 'tokens-per-minute'];
+const DEFAULT_TYPES: QuotaType[] = [...ALL_QUOTA_TYPES];
+const DEFAULT_FAMILIES: ModelFamily[] = [...ALL_MODEL_FAMILIES];
+const DEFAULT_METRICS: QuotaMetric[] = [...ALL_QUOTA_METRICS];
 
 const FAMILY_LABELS: Record<ModelFamily, string> = {
   sonnet: 'Sonnet',
@@ -34,6 +35,8 @@ const FAMILY_LABELS: Record<ModelFamily, string> = {
 const METRIC_LABELS: Record<QuotaMetric, string> = {
   'requests-per-minute': 'Requests/min',
   'tokens-per-minute': 'Tokens/min',
+  'requests-per-day': 'Requests/day',
+  'tokens-per-day': 'Tokens/day',
 };
 
 export default function QuotaReportTool() {
@@ -149,8 +152,7 @@ export default function QuotaReportTool() {
   const quotaColumns = useMemo(
     () =>
       resultQuotas.map((q) => {
-        const metricSuffix = q.Metric === 'tokens-per-minute' ? ' (TPM)' : ' (RPM)';
-        return `${q.Model}-${q.Type}${metricSuffix}`;
+        return `${q.Model}-${q.Type} (${QUOTA_METRIC_SUFFIX[q.Metric]})`;
       }),
     [resultQuotas]
   );
@@ -169,8 +171,8 @@ export default function QuotaReportTool() {
             <h2 className="mb-0">Quota Report</h2>
           </div>
           <p className="text-muted mb-0">
-            Fetch Bedrock quotas (RPM & TPM) across client accounts. Dev accounts are consolidated and always check both
-            regions.
+            Fetch Bedrock quotas (RPM, TPM, RPD, TPD) across client accounts. Dev accounts are consolidated and always
+            check both regions.
           </p>
         </div>
       </div>
@@ -280,7 +282,7 @@ export default function QuotaReportTool() {
                         />
                       ))}
                     </div>
-                    <Form.Text className="text-muted">Requests per minute and/or tokens per minute</Form.Text>
+                    <Form.Text className="text-muted">Requests/tokens per minute and/or per day</Form.Text>
                   </Form.Group>
 
                   <Form.Group className="mb-3">

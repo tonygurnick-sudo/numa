@@ -583,7 +583,10 @@ export function TicketDetailModal({
     if (!ticket || !config) return null;
 
     const staff = config.staff;
-    const projects = config.projects;
+    const ticketTeamId = ticket.teamId;
+    const projects = config.projects.filter(
+      (p) => !p.boardIds?.length || p.boardIds.includes(ticketTeamId) || p.id === ticket.projectId
+    );
     const hasWorkUnits = team?.workUnitSeries?.enabled === true;
     const allZones = ticketTeamData?.zones ?? teamData?.zones ?? [];
     const allStages = ticketTeamData?.stages ?? teamData?.stages ?? [];
@@ -856,32 +859,86 @@ export function TicketDetailModal({
             {/* Project — full width */}
             <div className="ticket-sidebar-field">
               <div className="ticket-sidebar-field-label">{t('tickets.project')}</div>
-              <SidebarDropdown
-                value={ticket.projectId ?? ''}
-                onChange={(val) => void handleUpdate({ projectId: val || null })}
-                options={[
-                  { value: '', label: t('common.none') },
-                  ...projects
-                    .filter((p) => p.isActive)
-                    .map(
-                      (p): DropdownOption => ({
-                        value: p.id,
-                        label: p.name,
-                        icon: <i className="bi bi-folder" style={{ fontSize: '0.78rem', color: '#6d28d9' }} />,
-                      })
-                    ),
-                ]}
-                renderValue={(opt) =>
-                  opt?.value ? (
-                    <span className="ticket-badge ticket-badge-project" style={{ margin: 0 }}>
-                      <i className="bi bi-folder me-1" />
-                      {opt.label}
-                    </span>
-                  ) : (
-                    <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
-                  )
-                }
-              />
+              <div className="d-flex align-items-center gap-1">
+                <div style={{ flex: 1 }}>
+                  <SidebarDropdown
+                    value={ticket.projectId ?? ''}
+                    onChange={(val) => void handleUpdate({ projectId: val || null })}
+                    options={[
+                      { value: '', label: t('common.none') },
+                      ...projects
+                        .filter((p) => p.isActive)
+                        .map(
+                          (p): DropdownOption => ({
+                            value: p.id,
+                            label: p.name,
+                            icon: (
+                              <i
+                                className="bi bi-folder"
+                                style={{ fontSize: '0.78rem', color: p.color || '#6d28d9' }}
+                              />
+                            ),
+                            action: (
+                              <button
+                                type="button"
+                                title={t('projects.openProject', 'Open project')}
+                                onClick={() => window.open(`/ops?project=${p.id}`, '_blank')}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#9ca3af',
+                                  cursor: 'pointer',
+                                  padding: '2px 4px',
+                                  fontSize: '0.72rem',
+                                  lineHeight: 1,
+                                }}
+                              >
+                                <i className="bi bi-box-arrow-up-right" />
+                              </button>
+                            ),
+                          })
+                        ),
+                    ]}
+                    renderValue={(opt) => {
+                      if (!opt?.value) return <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>;
+                      const proj = projects.find((p) => p.id === opt.value);
+                      const pColor = proj?.color || '#6d28d9';
+                      return (
+                        <span
+                          className="ticket-badge ticket-badge-project"
+                          style={{
+                            margin: 0,
+                            backgroundColor: `${pColor}18`,
+                            color: pColor,
+                            borderColor: `${pColor}30`,
+                          }}
+                        >
+                          <i className="bi bi-folder me-1" />
+                          {opt.label}
+                        </span>
+                      );
+                    }}
+                  />
+                </div>
+                {ticket.projectId && (
+                  <button
+                    type="button"
+                    title={t('projects.openProject', 'Open project')}
+                    onClick={() => window.open(`/ops?project=${ticket.projectId}`, '_blank')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#9ca3af',
+                      cursor: 'pointer',
+                      padding: '2px 4px',
+                      fontSize: '0.78rem',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <i className="bi bi-box-arrow-up-right" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Customer — full width */}

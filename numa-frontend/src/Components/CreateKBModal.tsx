@@ -103,12 +103,13 @@ function toUserMessage(err: unknown): string {
 
 export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
   const { t } = useTranslation('common');
+  const { t: tKB } = useTranslation('knowledgeBase');
   const { show, onHide, onSuccess } = props;
 
   const [kbName, setKbName] = useState<string>('');
   const [viewerChips, setViewerChips] = useState<string[]>([]);
   const [editorChips, setEditorChips] = useState<string[]>([]);
-  const [isShared, setIsShared] = useState<boolean>(false);
+  const [visibility, setVisibility] = useState<'personal' | 'shared' | 'public' | 'public_editor'>('personal');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,19 +118,23 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
     setKbName('');
     setViewerChips([]);
     setEditorChips([]);
-    setIsShared(false);
+    setVisibility('personal');
     setError(null);
     onHide();
   };
 
-  const normalizedViewers = useMemo(
-    () => (isShared ? normalizeIdentifiers([...viewerChips, ...editorChips]) : ([] as ReadonlyArray<UserIdentifier>)),
-    [isShared, viewerChips, editorChips]
-  );
-  const normalizedEditors = useMemo(
-    () => (isShared ? normalizeIdentifiers(editorChips) : ([] as ReadonlyArray<UserIdentifier>)),
-    [isShared, editorChips]
-  );
+  const normalizedViewers = useMemo(() => {
+    if (visibility === 'public' || visibility === 'public_editor')
+      return ['*' as UserIdentifier] as ReadonlyArray<UserIdentifier>;
+    if (visibility === 'shared') return normalizeIdentifiers([...viewerChips, ...editorChips]);
+    return [] as ReadonlyArray<UserIdentifier>;
+  }, [visibility, viewerChips, editorChips]);
+
+  const normalizedEditors = useMemo(() => {
+    if (visibility === 'public_editor') return ['*' as UserIdentifier] as ReadonlyArray<UserIdentifier>;
+    if (visibility === 'shared' || visibility === 'public') return normalizeIdentifiers(editorChips);
+    return [] as ReadonlyArray<UserIdentifier>;
+  }, [visibility, editorChips]);
 
   const invalidViewers = useMemo(() => findInvalidEmailLikes(normalizedViewers), [normalizedViewers]);
   const invalidEditors = useMemo(() => findInvalidEmailLikes(normalizedEditors), [normalizedEditors]);
@@ -149,6 +154,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
     try {
       const viewers = normalizedViewers as PrivateViewers;
       const editors = normalizedEditors;
+      const isShared = visibility !== 'personal';
 
       const request: CreateKBRequest = {
         name: kbName.trim() as NonEmptyString,
@@ -158,7 +164,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
       };
 
       // Defensive invariant (shared only): editors ⊆ viewers
-      if (isShared) {
+      if (visibility === 'shared') {
         const viewerSet = new Set<UserIdentifier>(request.viewers as PrivateViewers);
         const allEditorsInViewers = request.editors.every((ed) => viewerSet.has(ed));
         if (!allEditorsInViewers) {
@@ -210,32 +216,51 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
             <Form.Text className="text-muted">{t('createKB.nameHelp')}</Form.Text>
           </Form.Group>
 
-          <Form.Group className="mb-3" controlId="kbType">
+          <Form.Group className="mb-3" controlId="kbVisibility">
             <Form.Label>{t('createKB.typeLabel')}</Form.Label>
-            <div className="d-flex gap-3">
+            <div className="d-flex flex-wrap gap-3">
               <Form.Check
                 type="radio"
-                id="kb-type-personal"
-                label={t('createKB.typePersonal')}
-                checked={!isShared}
-                onChange={(): void => setIsShared(false)}
+                id="kb-vis-personal"
+                label={tKB('settings.permissions.visibility.personal')}
+                checked={visibility === 'personal'}
+                onChange={() => setVisibility('personal')}
                 disabled={isSubmitting}
               />
               <Form.Check
                 type="radio"
-                id="kb-type-shared"
-                label={t('createKB.typeShared')}
-                checked={isShared}
-                onChange={(): void => setIsShared(true)}
+                id="kb-vis-shared"
+                label={tKB('settings.permissions.visibility.shared')}
+                checked={visibility === 'shared'}
+                onChange={() => setVisibility('shared')}
+                disabled={isSubmitting}
+              />
+              <Form.Check
+                type="radio"
+                id="kb-vis-public"
+                label={tKB('settings.permissions.visibility.public')}
+                checked={visibility === 'public'}
+                onChange={() => setVisibility('public')}
+                disabled={isSubmitting}
+              />
+              <Form.Check
+                type="radio"
+                id="kb-vis-public-editor"
+                label={tKB('settings.permissions.visibility.publicEditor')}
+                checked={visibility === 'public_editor'}
+                onChange={() => setVisibility('public_editor')}
                 disabled={isSubmitting}
               />
             </div>
             <Form.Text className="text-muted">
-              {isShared ? t('createKB.typeSharedHelp') : t('createKB.typePersonalHelp')}
+              {visibility === 'personal' && t('createKB.typePersonalHelp')}
+              {visibility === 'shared' && t('createKB.typeSharedHelp')}
+              {(visibility === 'public' || visibility === 'public_editor') &&
+                tKB('settings.permissions.visibility.help')}
             </Form.Text>
           </Form.Group>
 
-          {isShared && (
+          {visibility === 'shared' && (
             <ChipsInput
               id="kbViewers"
               label={t('createKB.viewersLabel')}
@@ -247,7 +272,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
             />
           )}
 
-          {isShared && (
+          {(visibility === 'shared' || visibility === 'public') && (
             <ChipsInput
               id="kbEditors"
               label={t('createKB.editorsLabel')}
@@ -259,13 +284,13 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
             />
           )}
 
-          {isShared && invalidViewers.length > 0 && (
+          {visibility === 'shared' && invalidViewers.length > 0 && (
             <div className="mt-2 small text-warning" aria-live="polite">
               <i className="bi bi-exclamation-circle me-1" />
               {t('createKB.invalidEmails', { values: invalidViewers.join(', ') })}
             </div>
           )}
-          {isShared && invalidEditors.length > 0 && (
+          {(visibility === 'shared' || visibility === 'public') && invalidEditors.length > 0 && (
             <div className="mt-2 small text-warning" aria-live="polite">
               <i className="bi bi-exclamation-circle me-1" />
               {t('createKB.invalidEmails', { values: invalidEditors.join(', ') })}

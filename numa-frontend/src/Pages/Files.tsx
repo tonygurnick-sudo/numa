@@ -351,11 +351,16 @@ export const FilesPage = () => {
   // ---------------------------------------------------------------------------
   // Remote browsing — cache-first fetching + background prefetch
   // ---------------------------------------------------------------------------
+  const setProviderStatus = useCallback((provider: string, status: OAuthConnectionStatus) => {
+    setOauthProviderStatuses((prev) => ({ ...prev, [provider]: status }));
+  }, []);
+
   const remote = useRemoteBrowse({
     numaGet,
     showToast,
     enabledOAuthProviders,
     oauthProviderStatuses,
+    setProviderStatus,
     synergyConnected,
     activeTab,
   });
@@ -2335,6 +2340,7 @@ export const FilesPage = () => {
                     const loading = oauthStatusLoading[provider.id];
                     const connecting = connectingOauthProvider === provider.id;
                     const connected = status.status === 'connected';
+                    const hasError = status.status === 'error';
 
                     return (
                       <div
@@ -2350,6 +2356,23 @@ export const FilesPage = () => {
                         <div className="file-card-meta">
                           {loading ? (
                             <span className="spinner-border spinner-border-sm text-secondary" />
+                          ) : hasError ? (
+                            <div className="d-flex flex-column align-items-center gap-1">
+                              <span className="text-danger small">
+                                <i className="bi bi-exclamation-triangle me-1" />
+                                {t('remote.tokenExpired')}
+                              </span>
+                              <button
+                                className="btn btn-sm btn-outline-danger text-nowrap"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOAuthConnect(provider.id);
+                                }}
+                              >
+                                <i className="bi bi-arrow-repeat me-1" />
+                                {t('remote.reconnect')}
+                              </button>
+                            </div>
                           ) : connected ? (
                             <div className="d-flex align-items-center gap-2">
                               <span className="text-success small">
@@ -2413,6 +2436,7 @@ export const FilesPage = () => {
                     const loading = oauthStatusLoading[provider.id];
                     const connecting = connectingOauthProvider === provider.id;
                     const connected = status.status === 'connected';
+                    const hasError = status.status === 'error';
 
                     return (
                       <div
@@ -2428,7 +2452,7 @@ export const FilesPage = () => {
                             <span className="spinner-border spinner-border-sm text-secondary ms-2" />
                           ) : !connected ? (
                             <button
-                              className="btn btn-sm btn-primary ms-2 text-nowrap"
+                              className={`btn btn-sm ms-2 text-nowrap ${hasError ? 'btn-outline-danger' : 'btn-primary'}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleOAuthConnect(provider.id);
@@ -2440,6 +2464,11 @@ export const FilesPage = () => {
                                   <span className="spinner-border spinner-border-sm me-1" />
                                   {t('remote.connecting')}
                                 </>
+                              ) : hasError ? (
+                                <>
+                                  <i className="bi bi-arrow-repeat me-1" />
+                                  {t('remote.reconnect')}
+                                </>
                               ) : (
                                 <>
                                   <i className="bi bi-plug me-1" />
@@ -2450,19 +2479,18 @@ export const FilesPage = () => {
                           ) : null}
                         </div>
                         <div className="file-status">
-                          {connected && (
+                          {hasError ? (
+                            <span className="text-danger small">
+                              <i className="bi bi-exclamation-triangle me-1" />
+                              {t('remote.tokenExpired')}
+                            </span>
+                          ) : connected ? (
                             <span className="text-success small">
                               <i className="bi bi-check-circle me-1" />
                               {t('remote.connected')}
                               {status.user_email && <div className="text-muted">{status.user_email}</div>}
                             </span>
-                          )}
-                          {status.status === 'error' && (
-                            <span className="text-danger small">
-                              <i className="bi bi-exclamation-circle me-1" />
-                              {t('remote.connectionError')}
-                            </span>
-                          )}
+                          ) : null}
                         </div>
                         <div className="file-size" />
                         <div className="file-actions">
@@ -2497,9 +2525,11 @@ export const FilesPage = () => {
               </div>
             ) : oauthFolders.length === 0 && oauthFiles.length === 0 && !oauthRevalidating ? (
               <div className="files-empty">
-                <i className="bi bi-folder2-open" />
-                <h5>{t('remote.noFilesFound')}</h5>
-                <p>{t('remote.folderEmpty')}</p>
+                <>
+                  <i className="bi bi-folder2-open" />
+                  <h5>{t('remote.noFilesFound')}</h5>
+                  <p>{t('remote.folderEmpty')}</p>
+                </>
               </div>
             ) : viewMode === 'list' ? (
               <div className="file-list">

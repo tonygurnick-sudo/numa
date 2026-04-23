@@ -159,10 +159,27 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
 
   const email = event.request.userAttributes.email;
   const userSub = event.request.userAttributes.sub;
-  const groups = groupsToOverride && groupsToOverride.length > 0 ? groupsToOverride : ['standard'];
+
+  // Cognito auto-creates a per-IdP group (e.g. "us-east-1_abc_GoogleWorkspace")
+  // for every federated sign-in. Those aren't Numa roles — ignore them when
+  // deciding the effective role so SSO users fall through to 'standard' the
+  // same way native users with no group do.
+  const numaRoleGroups = (groupsToOverride || []).filter((g) => !g.startsWith(`${event.userPoolId}_`));
+  const groups = numaRoleGroups.length > 0 ? numaRoleGroups : ['standard'];
 
   // Check for MFA reset grace period
   const graceExpiresAt = await checkMfaResetGracePeriod(userSub);
+
+  // Skip MFA enforcement for federated (SSO) users — the IdP handles MFA.
+  // Cognito sets the 'identities' attribute on users created via federation.
+  const isFederatedUser = !!event.request.userAttributes['identities'];
+
+  // Fix #10: audit trail for MFA skip on federated users
+  if (isFederatedUser) {
+    console.log(
+      JSON.stringify({ _name: 'MFA_SKIP_FEDERATED', sub: userSub, email, triggerSource: event.triggerSource })
+    );
+  }
 
   // MFA enforcement — only on initial authentication, not token refresh.
   // Checks the ACTUAL user pool MFA config via DescribeUserPool (cached per
@@ -170,9 +187,10 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
   // we enforce. If it's OFF, we don't. Self-contained.
   let mfaSetupRequired = false;
   if (
-    event.triggerSource === 'TokenGeneration_Authentication' ||
-    event.triggerSource === 'TokenGeneration_HostedAuth' ||
-    event.triggerSource === 'TokenGeneration_RefreshTokens'
+    !isFederatedUser &&
+    (event.triggerSource === 'TokenGeneration_Authentication' ||
+      event.triggerSource === 'TokenGeneration_HostedAuth' ||
+      event.triggerSource === 'TokenGeneration_RefreshTokens')
   ) {
     const poolMfaConfig = await getPoolMfaConfig(event.userPoolId);
 

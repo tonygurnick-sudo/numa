@@ -136,6 +136,28 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: [],
   },
   {
+    flag: 'SSO_ENABLED',
+    title: 'Single Sign-On (SSO)',
+    description:
+      'SAML 2.0 single sign-on integration with Azure AD, Okta, Google Workspace, and other identity providers.',
+    icon: 'bi-shield-check',
+    system_only: true,
+    dev_only: false,
+    enabled: true,
+    dependencies: [],
+  },
+  {
+    flag: 'SSO_ENTERPRISE',
+    title: 'SSO Enterprise',
+    description:
+      'Advanced SSO features: group mapping, OIDC support, SSO-only mode, SCIM provisioning, and user management.',
+    icon: 'bi-building-lock',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['SSO_ENABLED'],
+  },
+  {
     flag: 'SECRETS_VAULT_ENABLED',
     title: 'Secrets Vault',
     description: 'Secure credential storage for integrations and connections.',
@@ -256,5 +278,16 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dev_only: false,
     enabled: false,
     dependencies: [],
+  },
+  {
+    flag: 'PUBLIC_DEMO',
+    title: 'Public Demo',
+    description:
+      'Public-facing demo chat page (unlisted URL, no auth required). Uses Haiku 4.5 with daily cost limits.',
+    icon: 'bi-globe',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['NUMA_WORKSPACE_CHAT'],
   },
 ];

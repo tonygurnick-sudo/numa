@@ -43,6 +43,8 @@ const _CONFIG_OPTIONAL_PROPERTIES = [
   'OAUTH_AVAILABLE', // Feature flag for OAuth file providers
   'FILE_BROWSER_DETAIL', // Feature flag for file browser detail drill-down
   'MFA_ENABLED', // Feature flag for multi-factor authentication
+  'SSO_ENABLED', // Feature flag for SAML SSO identity provider configuration
+  'SSO_ENTERPRISE', // Feature flag for enterprise SSO features (group mapping, OIDC, SSO-only, SCIM)
   'V2_APPS', // Feature flag for V2 Apps (next-generation app framework)
 ];
 const _CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ..._CONFIG_OPTIONAL_PROPERTIES];

@@ -327,6 +327,7 @@ const SprintBar = () => {
             setSuccessWorkUnit(activeWorkUnit);
             setSuccessAction('completed');
             setShowSuccess(true);
+            selectWorkUnit(null);
             await refreshTeam();
             await Promise.all([refreshTickets(), refreshWorkUnits()]);
           }}

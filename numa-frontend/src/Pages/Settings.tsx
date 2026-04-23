@@ -42,12 +42,23 @@ import {
   DEFAULT_GLOBAL_CHAT_SETTINGS,
 } from '../Services/AdminChatSettingsService';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
-import { fetchCompanyInfo, saveCompanyInfo, getProfileText } from '../utils/companyInfoUtils';
+import {
+  fetchCompanyInfo,
+  saveCompanyInfo,
+  type CompanyProfileData,
+  LIMIT_COMPANY_NAME,
+  LIMIT_INDUSTRY,
+  LIMIT_COUNTRY,
+  LIMIT_COMPANY_INFO,
+  LIMIT_BEST_PRACTICES,
+} from '../utils/companyInfoUtils';
+import { CharCount } from '../Components/CharCount';
 import { manifestService } from '../Services/manifestService';
 import { loadCapabilities, groupByDependencies } from '../utils/capabilityRegistry';
 import { ROUTE_CONFIG } from '../utils/routeConfig';
 import type { CapabilityItem } from '../utils/capabilityRegistry';
 import { getFlagRegistry } from '../utils/featureFlags';
+import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
 import { loadAdminCapabilityGating } from '../utils/adminCapabilityGating';
 
 const useNavigationConfirm = (when: boolean, message: string) => {
@@ -89,7 +100,7 @@ const AUDIT_SUB_DEFAULTS: Record<string, string> = {
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
   const { user, getCredentials, lambdaClient } = useAuth();
-  const { numaGet, numaPut, numaPost } = useNumaRequest();
+  const { numaGet, numaPut, numaPost, numaDelete } = useNumaRequest();
   const { scope: urlScope, tab: urlTab } = useParams<{ scope?: string; tab?: string }>();
   const navigate = useNavigate();
   const [activeKey, setActiveKey] = useState<string>(urlTab || 'users');
@@ -130,6 +141,7 @@ export default function SettingsPage() {
   const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
   const mfaEnabled = getFlag('MFA_ENABLED');
   const hasOps = getFlag('NUMA_OPS');
+  const ssoEnabled = getFlag('SSO_ENABLED');
   // Hidden by default — only shown when explicitly set to true in numa-client-config
   const usageReportingEnabled = window.sessionStorage.getItem('DEPLOY_USAGE_REPORTING') === 'true';
   const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
@@ -171,8 +183,14 @@ export default function SettingsPage() {
   const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
 
   // Company profile (admin) settings
-  const [companyProfileText, setCompanyProfileText] = useState<string>('');
-  const [companyProfileLastUpdated, setCompanyProfileLastUpdated] = useState<string | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfileData>({
+    companyName: '',
+    industry: '',
+    country: '',
+    companyInformation: '',
+    bestPractices: '',
+    lastUpdated: null,
+  });
   const [companyProfileLoading, setCompanyProfileLoading] = useState<boolean>(true);
   const [companyProfileSaving, setCompanyProfileSaving] = useState<boolean>(false);
   const [companyProfileStatus, setCompanyProfileStatus] = useState<{
@@ -434,8 +452,7 @@ export default function SettingsPage() {
         setCompanyProfileLoading(true);
         const info = await fetchCompanyInfo(companyProfileBucket, companyProfileRegion, getCredentials);
         if (!cancelled) {
-          setCompanyProfileText(getProfileText(info));
-          setCompanyProfileLastUpdated(info.lastUpdated);
+          setCompanyProfile(info);
           if (!info.lastUpdated) {
             setCompanyProfileStatus({
               show: true,
@@ -465,8 +482,8 @@ export default function SettingsPage() {
     setCompanyProfileSaving(true);
     setCompanyProfileStatus({ show: false, type: '', message: '' });
     try {
-      await saveCompanyInfo(companyProfileText, companyProfileBucket, companyProfileRegion, getCredentials);
-      setCompanyProfileLastUpdated(new Date().toISOString());
+      await saveCompanyInfo(companyProfile, companyProfileBucket, companyProfileRegion, getCredentials);
+      setCompanyProfile((prev) => ({ ...prev, lastUpdated: new Date().toISOString() }));
       setCompanyProfileStatus({
         show: true,
         type: 'success',
@@ -901,6 +918,7 @@ export default function SettingsPage() {
   const adminTabs = useMemo(
     () => [
       { key: 'users', label: t('tabs.users'), iconClassName: 'bi bi-people' },
+      ...(ssoEnabled ? [{ key: 'sso', label: t('tabs.sso'), iconClassName: 'bi bi-shield-check' }] : []),
       ...(allowBrandingTab ? [{ key: 'branding', label: t('tabs.branding'), iconClassName: 'bi bi-palette' }] : []),
       { key: 'chat-defaults', label: t('tabs.chatDefaults'), iconClassName: 'bi bi-chat-dots' },
       { key: 'company-profile', label: t('tabs.companyProfile'), iconClassName: 'bi bi-building' },
@@ -922,6 +940,7 @@ export default function SettingsPage() {
     ],
     [
       allowBrandingTab,
+      ssoEnabled,
       agentsFeatureEnabled,
       mfaEnabled,
       schedulingEnabled,
@@ -1095,6 +1114,19 @@ export default function SettingsPage() {
                 <UserManagement embedded mfaEnabled={mfaEnabled} />
                 <SecuritySettingsPanel mfaEnabled={mfaEnabled} numaGet={numaGet} numaPut={numaPut} />
               </Tab>
+              {ssoEnabled && isAdmin && (
+                <Tab
+                  eventKey="sso"
+                  title={
+                    <span>
+                      <i className="bi bi-shield-check me-2"></i>
+                      {t('tabs.sso')}
+                    </span>
+                  }
+                >
+                  <SSOSettingsPanel numaGet={numaGet} numaPut={numaPut} numaPost={numaPost} numaDelete={numaDelete} />
+                </Tab>
+              )}
               {allowBrandingTab && (
                 <Tab
                   eventKey="branding"
@@ -1679,32 +1711,107 @@ export default function SettingsPage() {
                       </div>
                     ) : (
                       <Form>
-                        <Form.Group className="mb-3">
-                          <Form.Label className="settings-section-title">{t('companyInfo.form.label')}</Form.Label>
-                          <Form.Control
-                            as="textarea"
-                            rows={15}
-                            value={companyProfileText}
-                            onChange={(e) => setCompanyProfileText(e.target.value)}
-                            maxLength={10000}
-                            placeholder={t('companyInfo.form.placeholder')}
-                          />
-                          <Form.Text className="d-block mt-2 mb-1 text-muted">
-                            {t('companyInfo.form.characterCount', { count: companyProfileText.length })}
-                          </Form.Text>
-                          <Form.Text className="d-block mb-1 text-muted">{t('companyInfo.form.sharedNote')}</Form.Text>
-                          {companyProfileText.length > 3000 && (
-                            <Form.Text className="d-block mb-1 text-warning">
-                              {t('companyInfo.form.limitNote')}
-                            </Form.Text>
-                          )}
-                        </Form.Group>
+                        {/* Section: Company Details */}
+                        <div className="profile-section">
+                          <div className="profile-section__title">{t('companyInfo.sections.details')}</div>
+                          <p className="profile-section__description">{t('companyInfo.sections.detailsDescription')}</p>
 
-                        {companyProfileLastUpdated && (
+                          <Form.Group className="mb-3">
+                            <Form.Label className="profile-field-label">
+                              {t('companyInfo.fields.companyName.label')}
+                            </Form.Label>
+                            <Form.Control
+                              type="text"
+                              maxLength={LIMIT_COMPANY_NAME}
+                              value={companyProfile.companyName}
+                              disabled={companyProfileSaving}
+                              placeholder={t('companyInfo.fields.companyName.placeholder')}
+                              onChange={(e) => setCompanyProfile((prev) => ({ ...prev, companyName: e.target.value }))}
+                            />
+                          </Form.Group>
+
+                          <Form.Group className="mb-3">
+                            <Form.Label className="profile-field-label">
+                              {t('companyInfo.fields.industry.label')}
+                            </Form.Label>
+                            <Form.Control
+                              type="text"
+                              maxLength={LIMIT_INDUSTRY}
+                              value={companyProfile.industry}
+                              disabled={companyProfileSaving}
+                              placeholder={t('companyInfo.fields.industry.placeholder')}
+                              onChange={(e) => setCompanyProfile((prev) => ({ ...prev, industry: e.target.value }))}
+                            />
+                          </Form.Group>
+
+                          <Form.Group className="mb-3">
+                            <Form.Label className="profile-field-label">
+                              {t('companyInfo.fields.country.label')}
+                            </Form.Label>
+                            <Form.Control
+                              type="text"
+                              maxLength={LIMIT_COUNTRY}
+                              value={companyProfile.country}
+                              disabled={companyProfileSaving}
+                              placeholder={t('companyInfo.fields.country.placeholder')}
+                              onChange={(e) => setCompanyProfile((prev) => ({ ...prev, country: e.target.value }))}
+                            />
+                          </Form.Group>
+                        </div>
+
+                        {/* Section: Company Information */}
+                        <div className="profile-section">
+                          <div className="profile-section__title">{t('companyInfo.sections.information')}</div>
+                          <p className="profile-section__description">
+                            {t('companyInfo.sections.informationDescription')}
+                          </p>
+
+                          <Form.Group className="mb-3">
+                            <Form.Control
+                              as="textarea"
+                              rows={8}
+                              maxLength={LIMIT_COMPANY_INFO}
+                              value={companyProfile.companyInformation}
+                              disabled={companyProfileSaving}
+                              placeholder={t('companyInfo.fields.companyInformation.placeholder')}
+                              onChange={(e) =>
+                                setCompanyProfile((prev) => ({ ...prev, companyInformation: e.target.value }))
+                              }
+                            />
+                            <CharCount value={companyProfile.companyInformation} max={LIMIT_COMPANY_INFO} />
+                          </Form.Group>
+                        </div>
+
+                        {/* Section: Company-wide Best Practices */}
+                        <div className="profile-section">
+                          <div className="profile-section__title">{t('companyInfo.sections.bestPractices')}</div>
+                          <p className="profile-section__description">
+                            {t('companyInfo.sections.bestPracticesDescription')}
+                          </p>
+
+                          <Form.Group className="mb-3">
+                            <Form.Control
+                              as="textarea"
+                              rows={6}
+                              maxLength={LIMIT_BEST_PRACTICES}
+                              value={companyProfile.bestPractices}
+                              disabled={companyProfileSaving}
+                              placeholder={t('companyInfo.fields.bestPractices.placeholder')}
+                              onChange={(e) =>
+                                setCompanyProfile((prev) => ({ ...prev, bestPractices: e.target.value }))
+                              }
+                            />
+                            <CharCount value={companyProfile.bestPractices} max={LIMIT_BEST_PRACTICES} />
+                          </Form.Group>
+                        </div>
+
+                        <Form.Text className="d-block mb-3 text-muted">{t('companyInfo.form.sharedNote')}</Form.Text>
+
+                        {companyProfile.lastUpdated && (
                           <p className="text-muted small mb-3">
                             <i className="bi bi-clock me-1"></i>
                             {t('companyInfo.lastUpdated.label', {
-                              date: new Date(companyProfileLastUpdated).toLocaleString(i18n.language),
+                              date: new Date(companyProfile.lastUpdated).toLocaleString(i18n.language),
                             })}
                           </p>
                         )}

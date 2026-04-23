@@ -40,10 +40,25 @@ function getAuthHeaders(): Record<string, string> {
   };
 }
 
+export class OAuthApiError extends Error {
+  status: number;
+  errorCode?: string;
+  constructor(message: string, status: number, errorCode?: string) {
+    super(message);
+    this.name = 'OAuthApiError';
+    this.status = status;
+    this.errorCode = errorCode;
+  }
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed with status ${response.status}`);
+    throw new OAuthApiError(
+      body.error || `Request failed with status ${response.status}`,
+      response.status,
+      body.error_code
+    );
   }
   return response.json();
 }
@@ -266,7 +281,7 @@ export class OAuthProvidersService {
       };
     } catch (error) {
       console.error(`[OAuth] Failed to list contents for ${provider}:`, error);
-      throw new Error(`Failed to list contents: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
     }
   }
 

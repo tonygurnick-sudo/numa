@@ -166,6 +166,16 @@ export const AgentsManagement = () => {
         }
       });
 
+      // Sort active by next run time so upcoming schedules banner displays correctly
+      active.sort((a, b) => {
+        const nextA = calculateNextRun(a.cronExpression, a.timezone, a.status).nextRun;
+        const nextB = calculateNextRun(b.cronExpression, b.timezone, b.status).nextRun;
+        if (!nextA && !nextB) return 0;
+        if (!nextA) return 1;
+        if (!nextB) return -1;
+        return nextA.getTime() - nextB.getTime();
+      });
+
       setAgentScheduleMap(scheduleMap);
       setActiveSchedules(active);
     } catch (err) {

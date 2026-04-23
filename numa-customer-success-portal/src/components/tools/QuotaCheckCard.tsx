@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card, Button, Alert, Badge, ProgressBar, Spinner } from 'react-bootstrap';
 import { BarChart } from 'react-bootstrap-icons';
 import { QuotaReportService } from '@/services/quotaReportService';
+import { QUOTA_METRIC_SUFFIX } from '@numa/quota-snapshot';
 import type { QuotaDescriptor, ToolProgress } from '@/types/tools';
 
 interface QuotaCheckCardProps {
@@ -52,7 +53,7 @@ export function QuotaCheckCard({ accountId, region, disabled }: QuotaCheckCardPr
           {q.Model}
         </td>
         <td>{q.Type}</td>
-        <td>{q.Metric === 'requests-per-minute' ? 'RPM' : 'TPM'}</td>
+        <td>{QUOTA_METRIC_SUFFIX[q.Metric]}</td>
         <td className="text-end">{formatValue(values[q.QuotaCode])}</td>
       </tr>
     ));

@@ -1,17 +1,78 @@
 import { uploadFileToS3, fetchFileFromS3 } from './s3Utils';
 
 // Constants
-const COMPANY_INFO_KEY = 'company-data.json'; // Keep the same file name for backward compatibility
+const COMPANY_INFO_KEY = 'company-data.json';
 const COMPANY_PROFILE_CACHE_KEY = 'COMPANY_PROFILE_DATA';
+
+// Character limits
+export const LIMIT_COMPANY_NAME = 200;
+export const LIMIT_INDUSTRY = 200;
+export const LIMIT_COUNTRY = 200;
+export const LIMIT_COMPANY_INFO = 3000;
+export const LIMIT_BEST_PRACTICES = 3000;
+
+export interface CompanyProfileData {
+  companyName: string;
+  industry: string;
+  country: string;
+  companyInformation: string;
+  bestPractices: string;
+  lastUpdated: string | null;
+}
+
+const EMPTY_PROFILE: CompanyProfileData = {
+  companyName: '',
+  industry: '',
+  country: '',
+  companyInformation: '',
+  bestPractices: '',
+  lastUpdated: null,
+};
+
+/**
+ * Migrates old format ({ profile, lastUpdated }) to the new structured format.
+ * If already in new format (has companyInformation), returns as-is.
+ */
+export const migrateCompanyProfile = (raw: Record<string, unknown>): CompanyProfileData => {
+  if (!raw || typeof raw !== 'object') {
+    return { ...EMPTY_PROFILE };
+  }
+
+  // New format -- has companyInformation field
+  if ('companyInformation' in raw) {
+    return {
+      companyName: (raw.companyName as string) || '',
+      industry: (raw.industry as string) || '',
+      country: (raw.country as string) || '',
+      companyInformation: (raw.companyInformation as string) || '',
+      bestPractices: (raw.bestPractices as string) || '',
+      lastUpdated: (raw.lastUpdated as string) || null,
+    };
+  }
+
+  // Old format -- migrate profile -> companyInformation
+  if ('profile' in raw) {
+    return {
+      companyName: '',
+      industry: '',
+      country: '',
+      companyInformation: (raw.profile as string) || '',
+      bestPractices: '',
+      lastUpdated: (raw.lastUpdated as string) || null,
+    };
+  }
+
+  return { ...EMPTY_PROFILE, lastUpdated: (raw.lastUpdated as string) || null };
+};
 
 /**
  * Returns the cached company profile from sessionStorage, or null if not cached.
  */
-const getCachedCompanyProfile = () => {
+const getCachedCompanyProfile = (): CompanyProfileData | null => {
   try {
     const cached = window.sessionStorage.getItem(COMPANY_PROFILE_CACHE_KEY);
     if (cached) {
-      return JSON.parse(cached);
+      return migrateCompanyProfile(JSON.parse(cached));
     }
   } catch {
     // Ignore parse errors
@@ -22,7 +83,7 @@ const getCachedCompanyProfile = () => {
 /**
  * Writes the company profile to the sessionStorage cache.
  */
-const setCachedCompanyProfile = (companyInfo) => {
+const setCachedCompanyProfile = (companyInfo: CompanyProfileData) => {
   try {
     window.sessionStorage.setItem(COMPANY_PROFILE_CACHE_KEY, JSON.stringify(companyInfo));
   } catch {
@@ -43,125 +104,110 @@ export const clearCompanyProfileCache = () => {
 };
 
 /**
- * Saves the company information to S3
- * @param {string} profileText - The company profile text
- * @param {string} s3Bucket - The S3 bucket name
- * @param {string} region - The AWS region
- * @param {Function} getCredentials - Function to get AWS credentials
- * @returns {Promise<string>} - The S3 URI of the saved data
+ * Saves the structured company profile to S3.
  */
-export const saveCompanyInfo = async (profileText, s3Bucket, region, getCredentials) => {
-  try {
-    // Validate required parameters
-    if (!region) {
-      throw new Error('Region is missing for saveCompanyInfo');
-    }
-
-    if (!s3Bucket) {
-      throw new Error('S3 bucket name is missing for saveCompanyInfo');
-    }
-
-    // Create a structured JSON object with the profile text
-    // This allows for future expansion with additional company information
-    const companyInfo = {
-      profile: profileText,
-      lastUpdated: new Date().toISOString(),
-    };
-
-    // Convert company info to JSON string
-    const dataContent = JSON.stringify(companyInfo, null, 2);
-
-    // Create a processed file object that matches what uploadFileToS3 expects
-    const processedFile = {
-      content: dataContent,
-      contentType: 'application/json',
-      inferredType: 'json',
-    };
-
-    // Use the existing uploadFileToS3 utility function
-    const result = await uploadFileToS3(
-      processedFile.content,
-      processedFile.contentType,
-      s3Bucket,
-      COMPANY_INFO_KEY,
-      region,
-      getCredentials
-    );
-
-    // Update the sessionStorage cache so chat pages pick up changes immediately
-    setCachedCompanyProfile(companyInfo);
-
-    return result;
-  } catch (error) {
-    console.error('Error saving company information:', error);
-    throw error; // Re-throw the error for the component to handle
+export const saveCompanyInfo = async (
+  profileData: CompanyProfileData,
+  s3Bucket: string,
+  region: string,
+  getCredentials: () => Promise<unknown>
+): Promise<string> => {
+  if (!region) {
+    throw new Error('Region is missing for saveCompanyInfo');
   }
+  if (!s3Bucket) {
+    throw new Error('S3 bucket name is missing for saveCompanyInfo');
+  }
+
+  // Write new structured format only (no legacy `profile` key)
+  const companyInfo: CompanyProfileData = {
+    companyName: profileData.companyName,
+    industry: profileData.industry,
+    country: profileData.country,
+    companyInformation: profileData.companyInformation,
+    bestPractices: profileData.bestPractices,
+    lastUpdated: new Date().toISOString(),
+  };
+
+  const dataContent = JSON.stringify(companyInfo, null, 2);
+
+  const processedFile = {
+    content: dataContent,
+    contentType: 'application/json',
+    inferredType: 'json',
+  };
+
+  const result = await uploadFileToS3(
+    processedFile.content,
+    processedFile.contentType,
+    s3Bucket,
+    COMPANY_INFO_KEY,
+    region,
+    getCredentials
+  );
+
+  setCachedCompanyProfile(companyInfo);
+  return result;
 };
 
 /**
- * Fetches the company information from S3
- * @param {string} s3Bucket - The S3 bucket name
- * @param {string} region - The AWS region
- * @param {Function} getCredentials - Function to get AWS credentials
- * @returns {Promise<Object>} - The company info object with profile text and metadata
+ * Fetches the company profile from S3, auto-migrating old format if needed.
  */
-export const fetchCompanyInfo = async (s3Bucket, region, getCredentials) => {
-  // Check sessionStorage cache first to avoid unnecessary S3 calls (and 403 console errors)
+export const fetchCompanyInfo = async (
+  s3Bucket: string,
+  region: string,
+  getCredentials: () => Promise<unknown>
+): Promise<CompanyProfileData> => {
   const cached = getCachedCompanyProfile();
   if (cached) {
     return cached;
   }
 
   try {
-    // Validate required parameters
     if (!region) {
       console.error('Region is missing for fetchCompanyInfo');
-      return { profile: '', lastUpdated: null };
+      return { ...EMPTY_PROFILE };
     }
-
     if (!s3Bucket) {
       console.error('S3 bucket name is missing for fetchCompanyInfo');
-      return { profile: '', lastUpdated: null };
+      return { ...EMPTY_PROFILE };
     }
 
     try {
-      // Use the fetchFileFromS3 utility function to get the file
       const fileBlob = await fetchFileFromS3(COMPANY_INFO_KEY, s3Bucket, region, getCredentials);
-
-      // Convert blob to JSON
       const text = await fileBlob.text();
-      const companyInfo = JSON.parse(text);
+      const raw = JSON.parse(text);
+      const companyInfo = migrateCompanyProfile(raw);
       setCachedCompanyProfile(companyInfo);
       return companyInfo;
-    } catch (fetchError) {
-      // Check if this is a 404 (Not Found) or 403 (Forbidden) error, which is expected for new environments
-      // S3 often returns 403 instead of 404 when the file doesn't exist due to bucket policy
-      if (
-        fetchError.message &&
-        (fetchError.message.includes('Not Found') || fetchError.message.includes('Forbidden'))
-      ) {
+    } catch (fetchError: unknown) {
+      const msg = fetchError instanceof Error ? fetchError.message : '';
+      if (msg.includes('Not Found') || msg.includes('Forbidden')) {
         console.warn('Company information file does not exist yet. Will create on first save.');
-        const emptyProfile = { profile: '', lastUpdated: null };
-        setCachedCompanyProfile(emptyProfile);
-        return emptyProfile;
+        const empty = { ...EMPTY_PROFILE };
+        setCachedCompanyProfile(empty);
+        return empty;
       }
-      // For other errors, re-throw to be handled by the outer catch
       throw fetchError;
     }
-  } catch (error) {
-    // Handle any other errors (silently for expected missing file scenarios)
-    console.warn('Company profile not available:', error.message || error);
-    const emptyProfile = { profile: '', lastUpdated: null };
-    setCachedCompanyProfile(emptyProfile);
-    return emptyProfile;
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.warn('Company profile not available:', msg);
+    const empty = { ...EMPTY_PROFILE };
+    setCachedCompanyProfile(empty);
+    return empty;
   }
 };
 
 /**
- * Helper function to extract just the profile text from the company information
- * @param {Object} companyInfo - The company info object
- * @returns {string} - The company profile text
+ * Extracts just the main company information text for backwards-compatible callers
+ * (e.g. useCompanyProfile hook, V1 chat prompt enhancement).
  */
-export const getProfileText = (companyInfo) => {
-  return companyInfo?.profile || '';
+export const getProfileText = (companyInfo: CompanyProfileData | Record<string, unknown> | null): string => {
+  if (!companyInfo) return '';
+  return (
+    (companyInfo as CompanyProfileData).companyInformation ||
+    ((companyInfo as Record<string, unknown>).profile as string) ||
+    ''
+  );
 };

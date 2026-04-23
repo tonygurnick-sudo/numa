@@ -35,17 +35,27 @@ mcp__numa__numa_ops_tool(
 
 ### Configuration
 
-| Operation        | Description                                                      | Approval |
-| ---------------- | ---------------------------------------------------------------- | -------- |
-| `get_config`     | Load all config: ticket types, statuses, fields, staff, projects | No       |
-| `list_projects`  | List all projects                                                | No       |
-| `create_project` | Create a new project                                             | Yes      |
-| `update_project` | Update an existing project                                       | Yes      |
-| `delete_project` | Delete a project (admin-only)                                    | Yes      |
+| Operation                | Description                                                                     | Approval |
+| ------------------------ | ------------------------------------------------------------------------------- | -------- |
+| `get_config`             | Load all config: ticket types, statuses, fields, staff, projects, CRM config    | No       |
+| `list_projects`          | List projects accessible to the current user                                    | No       |
+| `create_project`         | Create a new project                                                            | Yes      |
+| `update_project`         | Update an existing project                                                      | Yes      |
+| `delete_project`         | Delete a project (admin-only)                                                   | Yes      |
+| `create_field`           | Create a custom field (ticket category or CRM-category) — admin-only            | Yes      |
+| `update_field`           | Update an existing custom field — admin-only                                    | Yes      |
+| `delete_field`           | Delete a custom field — admin-only (refused if still used in CRM layout)        | Yes      |
+| `create_ticket_type`     | Create a new ticket type — admin-only                                           | Yes      |
+| `update_ticket_type`     | Update a ticket type — admin-only (prefix is immutable)                         | Yes      |
+| `delete_ticket_type`     | Delete a ticket type — admin-only                                               | Yes      |
+| `create_status`          | Create a status — admin-only (statuses are deprecated; prefer stage management) | Yes      |
+| `update_status`          | Update a status — admin-only                                                    | Yes      |
+| `update_crm_config`      | Update CRM config (lifecycle stages, customer record layout, industries, etc.)  | Yes      |
+| `update_supplier_config` | Update supplier config (lifecycle stages, flags, document types)                | Yes      |
 
 #### get_config
 
-Returns ticket types, statuses, custom fields, staff members, projects, CRM config, and supplier config in a single call. **Always call this first** to understand the board structure before creating or updating tickets.
+Returns ticket types, statuses, custom fields, staff members, projects, CRM config, and supplier config in a single call. **Always call this first** to understand the board structure before creating or updating tickets or mutating config.
 
 ```
 mcp__numa__numa_ops_tool(
@@ -57,27 +67,35 @@ mcp__numa__numa_ops_tool(
 
 #### create_project
 
-| Parameter     | Type   | Required | Description                                |
-| ------------- | ------ | -------- | ------------------------------------------ |
-| `name`        | string | Yes      | Project name                               |
-| `description` | string | No       | Project description                        |
-| `color`       | string | No       | Hex color code                             |
-| `status`      | string | No       | Status: active, planned, on_hold, complete |
-| `owner_id`    | string | No       | Owner user sub (from get_config staff)     |
-| `owner_name`  | string | No       | Owner display name                         |
+| Parameter     | Type     | Required | Description                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------- |
+| `name`        | string   | Yes      | Project name                                            |
+| `description` | string   | No       | Brief project description                               |
+| `color`       | string   | No       | Hex color code                                          |
+| `status`      | string   | No       | Status: active, planned, on_hold, complete              |
+| `owner_id`    | string   | No       | Owner user sub (from get_config staff)                  |
+| `owner_name`  | string   | No       | Owner display name                                      |
+| `goals`       | string   | No       | Project goals/objectives (HTML rich text)               |
+| `start_date`  | string   | No       | Project start date (ISO format, e.g. 2026-04-01)        |
+| `end_date`    | string   | No       | Project end date (ISO format)                           |
+| `board_ids`   | string[] | No       | Board/team IDs this project is visible on (empty = all) |
 
 #### update_project
 
-| Parameter     | Type    | Required | Description                                |
-| ------------- | ------- | -------- | ------------------------------------------ |
-| `project_id`  | string  | Yes      | Project ID                                 |
-| `name`        | string  | No       | New project name                           |
-| `description` | string  | No       | New description                            |
-| `color`       | string  | No       | New color                                  |
-| `is_active`   | boolean | No       | Set false to deactivate, true to restore   |
-| `status`      | string  | No       | Status: active, planned, on_hold, complete |
-| `owner_id`    | string  | No       | Owner user sub                             |
-| `owner_name`  | string  | No       | Owner display name                         |
+| Parameter     | Type     | Required | Description                                             |
+| ------------- | -------- | -------- | ------------------------------------------------------- |
+| `project_id`  | string   | Yes      | Project ID                                              |
+| `name`        | string   | No       | New project name                                        |
+| `description` | string   | No       | New description                                         |
+| `color`       | string   | No       | New color                                               |
+| `is_active`   | boolean  | No       | Set false to deactivate, true to restore                |
+| `status`      | string   | No       | Status: active, planned, on_hold, complete              |
+| `owner_id`    | string   | No       | Owner user sub                                          |
+| `owner_name`  | string   | No       | Owner display name                                      |
+| `goals`       | string   | No       | Project goals/objectives (HTML rich text)               |
+| `start_date`  | string   | No       | Project start date (ISO format)                         |
+| `end_date`    | string   | No       | Project end date (ISO format)                           |
+| `board_ids`   | string[] | No       | Board/team IDs this project is visible on (empty = all) |
 
 #### delete_project
 
@@ -515,6 +533,110 @@ The user can configure their approval preference in chat settings:
 - **Approve All** — all operations auto-approved
 - **Approve Safe Only** (default) — reads auto-approve, writes need manual approval
 - **Manual Approval** — everything requires manual approval
+
+---
+
+## Configuration Management (admin-only)
+
+All operations in this section require the caller to be in the `admins` Cognito group. If the user is not an admin, the backend returns 403 — surface that cleanly and stop.
+
+### Custom fields
+
+Fields have two distinct uses depending on their `category`:
+
+- Non-`crm` categories (`common`, `development`, `support`, `operations`, ...) — appear in ticket custom fields. Stored on `ticket.fields` as `{fieldId: value}`.
+- `crm` category — available to place in the customer record layout. Stored on `customer.customFields` as `{fieldId: value}`.
+
+**`create_field`**
+
+| Parameter       | Type     | Required | Description                                                                                                                                                                                             |
+| --------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`          | string   | Yes      | Field label shown in the UI                                                                                                                                                                             |
+| `field_type`    | string   | Yes      | One of: `text`, `textarea`, `number`, `currency`, `percentage`, `date`, `select`, `multi_select`, `boolean`, `url`, `email`, `phone`, `richtext`, `user`, `customer`, `supplier`, `project`, `workunit` |
+| `category`      | string   | Yes      | `crm` for customer record fields; otherwise a ticket category like `common`, `development`, `support`, `operations`                                                                                     |
+| `required`      | boolean  | No       | Whether the field is required globally                                                                                                                                                                  |
+| `help_text`     | string   | No       | Hint shown to users when filling in                                                                                                                                                                     |
+| `default_value` | any      | No       | Default value                                                                                                                                                                                           |
+| `options`       | string[] | No       | Options for `select` / `multi_select` types                                                                                                                                                             |
+
+Returns the created field with its `id` (e.g. `field-a1b2c3d4`). Store that id — you'll need it to reference the field from tickets (`fields: {<id>: value}`), customers (`custom_fields: {<id>: value}`), or the CRM layout (`customerRecord.sections[].fieldIds`).
+
+**`update_field`** — same fields as `create_field` plus `field_id`. All non-id fields are optional; only the provided keys change.
+
+**`delete_field`** — `field_id` (required). Refused with 409 if the field is still referenced by a CRM layout section or if it is a built-in system field. Remove from layout first via `update_crm_config`.
+
+### Ticket types
+
+**`create_ticket_type`**
+
+| Parameter        | Type     | Required | Description                                                |
+| ---------------- | -------- | -------- | ---------------------------------------------------------- |
+| `name`           | string   | Yes      | Display name (e.g. `Incident`)                             |
+| `prefix`         | string   | Yes      | 2-6 uppercase alphanumeric characters used for display IDs |
+| `color`          | string   | Yes      | Hex color                                                  |
+| `icon`           | string   | No       | Bootstrap icon name (default `ticket`)                     |
+| `default_fields` | string[] | No       | Field IDs that appear on this ticket type by default       |
+
+**`update_ticket_type`** — `ticket_type_id` (required) + optional `name`, `color`, `icon`, `default_fields`. Prefix is immutable.
+
+**`delete_ticket_type`** — `ticket_type_id` only.
+
+### CRM configuration
+
+The CRM config is a single document that the backend **shallow-merges** on PUT. Only send the top-level keys you want to change. Sub-objects (like `customer_record`) are replaced whole, so if you're adding a field to one section, first `get_config`, modify the sections array, then pass the complete `customer_record` back.
+
+**`update_crm_config`**
+
+| Parameter          | Type                                                                       | Required | Description                                                                           |
+| ------------------ | -------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| `lifecycle_stages` | `[{id, name, colorPosition?}]`                                             | No       | Full replacement list of customer lifecycle stages                                    |
+| `customer_flags`   | `[{id, name, color, icon?}]`                                               | No       | Full replacement list of customer flags                                               |
+| `document_types`   | `[{id, name}]`                                                             | No       | Full replacement list of document types                                               |
+| `territories`      | `string[]`                                                                 | No       | Full replacement list of territory names                                              |
+| `industries`       | `string[]`                                                                 | No       | Full replacement list of industry names                                               |
+| `default_stage`    | string                                                                     | No       | ID of the default lifecycle stage for new customers                                   |
+| `customer_record`  | `{sections: [{id, name, fieldIds, requiredFieldIds?}]}`                    | No       | Customer record layout — controls which fields appear in what order on customer cards |
+| `layout`           | `{columnsPerSection?, density?, defaultSectionsExpanded?, labelPosition?}` | No       | Visual layout controls                                                                |
+
+**`update_supplier_config`** — parallel to the above but for suppliers. Accepts `lifecycle_stages`, `supplier_flags`, `document_types`, `default_stage`.
+
+### Workflow: add a new CRM field and place it on the customer record
+
+```
+# 1. Load config — capture current customerRecord.sections and field ids.
+get_config -> note crmConfig.customerRecord.sections + existing fields
+
+# 2. Create the new CRM field (category must be "crm").
+create_field(name="Renewal Likelihood", field_type="select", category="crm",
+             options=["High", "Medium", "Low"])
+# → returns { id: "field-7f8a9b", ... }
+
+# 3. Add the new field id to the desired section of customerRecord.
+#    Send the FULL customer_record (all sections) back — it's replaced whole.
+update_crm_config(customer_record={
+    "sections": [
+        { "id": "section-company-details", "name": "Company Details",
+          "fieldIds": [...original ids...] },
+        { "id": "section-contract", "name": "Contract",
+          "fieldIds": [...original ids..., "field-7f8a9b"],
+          "requiredFieldIds": ["field-7f8a9b"] }
+    ]
+})
+```
+
+### Custom fields on customer/supplier records
+
+`create_customer` and `update_customer` accept a `custom_fields` parameter: `{fieldId: value}` keyed by CRM field ids. Same for `create_supplier` / `update_supplier`.
+
+**Note:** Tickets use `fields` (no underscore suffix); customers and suppliers use `custom_fields` which maps to `customFields` on the persisted record. Don't confuse the two.
+
+```
+create_customer(
+    company_name="Acme Corp",
+    lifecycle_stage="stage-prospect",
+    custom_fields={"field-7f8a9b": "High", "field-deal-value": 50000}
+)
+```
 
 ---
 

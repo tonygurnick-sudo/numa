@@ -26,7 +26,9 @@ import { ActivitySection } from '../Shared/ActivitySection';
 import { DocumentSection } from '../Shared/DocumentSection';
 import { getColorForPosition } from '../Shared/colorUtils';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
+import { resolveCustomerRecord, resolveCustomerRecordLayout } from '../Shared/customerRecordFields';
 import { CreateTicketModal } from './CreateTicketModal';
+import { CustomerRecordSectionBlock } from './CustomerRecordSectionBlock';
 import { TicketDetailModal } from './TicketDetailModal';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -39,23 +41,6 @@ interface CustomerDetailModalProps {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number | null | undefined): string {
-  if (value == null) return '';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function toDateInputValue(dateStr: string | null | undefined): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '';
-  return d.toISOString().split('T')[0];
-}
 
 function formatRelativeDateLabel(
   dateStr: string | null | undefined,
@@ -77,27 +62,6 @@ function formatRelativeDateLabel(
   return t('crm.lastContactYearsAgo', { count: Math.floor(diffDays / 365) });
 }
 
-function getRenewalUrgency(
-  renewalDate: string | null | undefined,
-  t: (key: string, options?: Record<string, unknown>) => string
-): { className: string; label: string } | null {
-  if (!renewalDate) return null;
-  const timestamp = new Date(renewalDate).getTime();
-  if (Number.isNaN(timestamp)) return null;
-
-  const days = Math.ceil((timestamp - Date.now()) / (1000 * 60 * 60 * 24));
-  if (days < 0) {
-    return { className: 'text-danger fw-bold', label: t('crm.renewalOverdue', { count: Math.abs(days) }) };
-  }
-  if (days <= 30) {
-    return { className: 'text-warning fw-bold', label: t('crm.renewalInDays', { count: days }) };
-  }
-  if (days <= 90) {
-    return { className: 'text-warning', label: t('crm.renewalInDays', { count: days }) };
-  }
-  return { className: 'text-muted', label: t('crm.renewalInDays', { count: days }) };
-}
-
 type LinkedWorkSortBy = 'updatedAt' | 'createdAt' | 'priority' | 'statusType';
 type LinkedWorkStatusFilter = 'all' | StatusType;
 
@@ -114,17 +78,11 @@ const PRIORITY_RANK: Record<TicketPriority, number> = {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 /**
- * CustomerDetailModal is a large detail view for viewing and inline-editing
- * a customer record.
+ * Detail view for a customer record.
  *
- * Sections (collapsible):
- * 1. Company Details - inline-editable fields
- * 2. Contract - inline-editable contract fields
- * 3. Contacts - uses shared ContactSection
- * 4. Activities - uses shared ActivitySection
- * 5. Documents - uses shared DocumentSection
- * 6. Linked Work - ticket count display
- * 7. Notes - inline-editable textarea
+ * The configurable Customer Record (sections + fields from CrmConfig.customerRecord)
+ * renders first via CustomerRecordSectionBlock (display-first with Edit toggle).
+ * Then fixed sections: Contacts, Activities, Documents, Linked Work, Notes.
  */
 export function CustomerDetailModal({
   show,
@@ -157,13 +115,13 @@ export function CustomerDetailModal({
   const [linkedTicketDetailId, setLinkedTicketDetailId] = useState<string | null>(null);
   const [linkedTicketDetailTeamId, setLinkedTicketDetailTeamId] = useState<string | null>(null);
 
-  // ── Inline editing state ──────────────────────────────────────────────
+  // ── Inline editing state (for Notes textarea only) ────────────────────
 
   const [editingField, setEditingField] = useState<string | null>(null);
   const [fieldDraft, setFieldDraft] = useState<string>('');
 
-  // ── Collapsible section state (first 2 open by default) ──────────────
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['company', 'contract']));
+  // ── Collapsible section state ─────────────────────────────────────────
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   const toggleSection = (sectionKey: string) => {
     setExpandedSections((prev) => {
@@ -179,11 +137,29 @@ export function CustomerDetailModal({
 
   const crmConfig: CrmConfig | null = config?.crmConfig ?? null;
   const staff = config?.staff ?? [];
+  const allFields = config?.fields ?? [];
   const stages = crmConfig?.lifecycleStages ?? [];
-  const industries = crmConfig?.industries ?? [];
-  const territories = crmConfig?.territories ?? [];
   const documentTypes = crmConfig?.documentTypes ?? [];
   const customerFlags = crmConfig?.customerFlags ?? [];
+  const customerRecord = useMemo(() => resolveCustomerRecord(crmConfig), [crmConfig]);
+  const recordLayout = useMemo(() => resolveCustomerRecordLayout(crmConfig), [crmConfig]);
+
+  // Expand the first record section by default when modal opens; if the
+  // CRM layout asks for sections-expanded-by-default, expand them all.
+  useEffect(() => {
+    if (!show) return;
+    setExpandedSections((prev) => {
+      if (prev.size > 0) return prev;
+      const next = new Set<string>();
+      if (recordLayout.defaultSectionsExpanded) {
+        for (const s of customerRecord.sections) next.add(s.id);
+      } else {
+        const firstSectionId = customerRecord.sections[0]?.id;
+        if (firstSectionId) next.add(firstSectionId);
+      }
+      return next;
+    });
+  }, [show, customerRecord, recordLayout.defaultSectionsExpanded]);
 
   // ── Load customer data ────────────────────────────────────────────────
 
@@ -311,7 +287,7 @@ export function CustomerDetailModal({
     [customer, customerId, numaPut, onUpdated]
   );
 
-  // ── Inline edit helpers ───────────────────────────────────────────────
+  // ── Notes inline edit helpers ─────────────────────────────────────────
 
   const startEdit = (field: string, currentValue: string) => {
     setEditingField(field);
@@ -322,7 +298,6 @@ export function CustomerDetailModal({
     const value = (rawValue ?? fieldDraft).trim();
     setEditingField(null);
 
-    // Determine whether the value actually changed
     const currentValue = String((customer as Record<string, unknown>)?.[field] ?? '');
     if (value === currentValue) return;
 
@@ -332,20 +307,6 @@ export function CustomerDetailModal({
   const cancelEdit = () => {
     setEditingField(null);
     setFieldDraft('');
-  };
-
-  // ── Select field handler (immediate save, no inline editing state) ────
-
-  const handleSelectChange = async (field: string, value: string) => {
-    await handleUpdate({ [field]: value || null } as UpdateCustomerPayload);
-  };
-
-  // ── Number field handler ──────────────────────────────────────────────
-
-  const saveNumberField = async (field: string) => {
-    setEditingField(null);
-    const numericValue = fieldDraft ? parseFloat(fieldDraft) : null;
-    await handleUpdate({ [field]: numericValue } as UpdateCustomerPayload);
   };
 
   // ── Contacts change handler ───────────────────────────────────────────
@@ -488,7 +449,6 @@ export function CustomerDetailModal({
     () => formatRelativeDateLabel(customer?.lastContactDate, t),
     [customer?.lastContactDate, t]
   );
-  const renewalUrgency = useMemo(() => getRenewalUrgency(customer?.renewalDate, t), [customer?.renewalDate, t]);
 
   // ── Collapsible section renderer ───────────────────────────────────
 
@@ -522,144 +482,6 @@ export function CustomerDetailModal({
           )}
         </div>
         {isExpanded && <div className="crm-section-body">{body}</div>}
-      </div>
-    );
-  };
-
-  // ── Render helpers ────────────────────────────────────────────────────
-
-  /**
-   * Renders an inline-editable text field row.
-   */
-  const renderEditableRow = (
-    label: string,
-    field: string,
-    currentValue: string | null | undefined,
-    type: 'text' | 'url' | 'date' = 'text'
-  ) => {
-    const displayValue =
-      type === 'date' && currentValue ? new Date(currentValue).toLocaleDateString() : (currentValue ?? '');
-
-    const isEditing = editingField === field;
-
-    return (
-      <div className={`crm-field-row${isEditing ? ' crm-field-row--editing' : ''}`}>
-        <span className="crm-field-label">{label}</span>
-        {isEditing ? (
-          <div className="d-flex align-items-center gap-1 flex-grow-1">
-            <Form.Control
-              type={type}
-              size="sm"
-              value={type === 'date' ? toDateInputValue(fieldDraft) : fieldDraft}
-              onChange={(e) => setFieldDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void saveField(field);
-                if (e.key === 'Escape') cancelEdit();
-              }}
-              onBlur={() => void saveField(field)}
-              style={{ fontSize: '0.82rem' }}
-              autoFocus
-              disabled={saving}
-            />
-          </div>
-        ) : (
-          <span
-            className={`crm-field-value${!displayValue ? ' crm-field-value--empty' : ''}`}
-            onClick={() => startEdit(field, type === 'date' ? toDateInputValue(currentValue) : (currentValue ?? ''))}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                startEdit(field, type === 'date' ? toDateInputValue(currentValue) : (currentValue ?? ''));
-              }
-            }}
-          >
-            {type === 'url' && displayValue ? (
-              <a
-                href={displayValue.startsWith('http') ? displayValue : `https://${displayValue}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                style={{ fontSize: '0.82rem' }}
-              >
-                {displayValue} <i className="bi bi-box-arrow-up-right" style={{ fontSize: '0.65rem' }} />
-              </a>
-            ) : (
-              displayValue || t('common.none')
-            )}
-          </span>
-        )}
-      </div>
-    );
-  };
-
-  /**
-   * Renders a select field row (immediate save on change).
-   */
-  const renderSelectRow = (
-    label: string,
-    field: string,
-    currentValue: string | null | undefined,
-    options: { value: string; label: string; color?: string }[]
-  ) => (
-    <div className="crm-field-row">
-      <span className="crm-field-label">{label}</span>
-      <Form.Select
-        size="sm"
-        value={currentValue ?? ''}
-        onChange={(e) => void handleSelectChange(field, e.target.value)}
-        disabled={saving}
-      >
-        <option value="">{t('common.selectOption')}</option>
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </Form.Select>
-    </div>
-  );
-
-  /**
-   * Renders an inline-editable currency field row.
-   */
-  const renderCurrencyRow = (label: string, field: string, currentValue: number | null | undefined) => {
-    const isEditing = editingField === field;
-    return (
-      <div className={`crm-field-row${isEditing ? ' crm-field-row--editing' : ''}`}>
-        <span className="crm-field-label">{label}</span>
-        {isEditing ? (
-          <div className="d-flex align-items-center gap-1 flex-grow-1">
-            <Form.Control
-              type="number"
-              size="sm"
-              value={fieldDraft}
-              onChange={(e) => setFieldDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void saveNumberField(field);
-                if (e.key === 'Escape') cancelEdit();
-              }}
-              onBlur={() => void saveNumberField(field)}
-              style={{ fontSize: '0.82rem' }}
-              autoFocus
-              disabled={saving}
-            />
-          </div>
-        ) : (
-          <span
-            className={`crm-field-value${currentValue == null ? ' crm-field-value--empty' : ''}`}
-            onClick={() => startEdit(field, currentValue != null ? String(currentValue) : '')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                startEdit(field, currentValue != null ? String(currentValue) : '');
-              }
-            }}
-          >
-            {currentValue != null ? formatCurrency(currentValue) : t('common.none')}
-          </span>
-        )}
       </div>
     );
   };
@@ -753,229 +575,25 @@ export function CustomerDetailModal({
   const renderBody = () => {
     if (!customer || !crmConfig) return null;
 
-    // Staff options for owner select
-    const staffOptions = staff.filter((s) => s.isActive).map((s) => ({ value: s.id, label: s.name }));
-
-    // Lifecycle stage options with colors
-    const stageOptions = stages.map((s) => ({
-      value: s.id,
-      label: s.name,
-      color: getColorForPosition(s.colorPosition),
-    }));
-
-    // Industry options
-    const industryOptions = industries.map((i) => ({ value: i, label: i }));
-
-    // Territory options
-    const territoryOptions = territories.map((ter) => ({ value: ter, label: ter }));
-
     return (
       <div>
-        {/* ── Section 1: Company Details ───────────────────────────────── */}
-        {renderSection(
-          'company',
-          t('crm.companyDetails'),
-          <div className="row">
-            <div className="col-md-6">
-              {renderEditableRow(t('common.name'), 'companyName', customer.companyName)}
-              {renderSelectRow(t('crm.industry'), 'industry', customer.industry, industryOptions)}
-              {renderEditableRow(t('crm.companySize'), 'companySize', customer.companySize)}
-              {renderEditableRow(t('crm.website'), 'website', customer.website, 'url')}
-            </div>
-            <div className="col-md-6">
-              {renderSelectRow(t('crm.territory'), 'territory', customer.territory, territoryOptions)}
-              {renderEditableRow(t('crm.source'), 'source', customer.source)}
-              {renderSelectRow(t('crm.owner'), 'ownerId', customer.ownerId, staffOptions)}
-              {renderSelectRow(t('crm.lifecycleStage'), 'lifecycleStage', customer.lifecycleStage, stageOptions)}
-            </div>
-          </div>
-        )}
+        {/* ── Customer record sections (configurable) ──────────────────── */}
+        {customerRecord.sections.map((section) => (
+          <CustomerRecordSectionBlock
+            key={section.id}
+            section={section}
+            customer={customer}
+            crmConfig={crmConfig}
+            allFields={allFields}
+            staff={staff}
+            saving={saving}
+            onSave={handleUpdate}
+            expanded={expandedSections.has(section.id)}
+            onToggleExpanded={() => toggleSection(section.id)}
+          />
+        ))}
 
-        {/* ── Section 2: Contract ──────────────────────────────────────── */}
-        {renderSection(
-          'contract',
-          t('crm.contract'),
-          <>
-            <div className="row">
-              <div className="col-md-6">
-                {renderCurrencyRow(t('crm.contractValue'), 'contractValue', customer.contractValue)}
-                {renderSelectRow(t('crm.contractTerm'), 'contractTerm', customer.contractTerm, [
-                  ...(customer.contractTerm &&
-                  !['Monthly', 'Quarterly', 'Annual', '2 Year', '3 Year', 'Custom'].includes(customer.contractTerm)
-                    ? [{ value: customer.contractTerm, label: customer.contractTerm }]
-                    : []),
-                  { value: 'Monthly', label: t('crm.contractTermOptions.monthly') },
-                  { value: 'Quarterly', label: t('crm.contractTermOptions.quarterly') },
-                  { value: 'Annual', label: t('crm.contractTermOptions.annual') },
-                  { value: '2 Year', label: t('crm.contractTermOptions.twoYear') },
-                  { value: '3 Year', label: t('crm.contractTermOptions.threeYear') },
-                  { value: 'Custom', label: t('crm.contractTermOptions.custom') },
-                ])}
-              </div>
-              <div className="col-md-6">
-                {renderEditableRow(t('crm.contractStart'), 'contractStartDate', customer.contractStartDate, 'date')}
-                {renderEditableRow(t('crm.renewalDate'), 'renewalDate', customer.renewalDate, 'date')}
-              </div>
-            </div>
-            {renewalUrgency && (
-              <div className="crm-field-row">
-                <span className="crm-field-label">{t('crm.renewalStatus')}</span>
-                <span className={renewalUrgency.className}>{renewalUrgency.label}</span>
-              </div>
-            )}
-            {/* Products: comma-separated text */}
-            {editingField === 'products' ? (
-              <div
-                className="d-flex align-items-start py-2 border-bottom"
-                style={{
-                  fontSize: '0.875rem',
-                  backgroundColor: '#eff6ff',
-                  borderRadius: 4,
-                  paddingLeft: 8,
-                  paddingRight: 8,
-                }}
-              >
-                <span
-                  className="fw-medium me-2"
-                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
-                >
-                  {t('crm.products')}
-                </span>
-                <div className="flex-grow-1">
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    value={fieldDraft}
-                    onChange={(e) => setFieldDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        setEditingField(null);
-                        const products = fieldDraft
-                          .split(',')
-                          .map((p) => p.trim())
-                          .filter((p) => p.length > 0);
-                        void handleUpdate({ products: products.length > 0 ? products : null });
-                      }
-                      if (e.key === 'Escape') cancelEdit();
-                    }}
-                    onBlur={() => {
-                      setEditingField(null);
-                      const products = fieldDraft
-                        .split(',')
-                        .map((p) => p.trim())
-                        .filter((p) => p.length > 0);
-                      void handleUpdate({ products: products.length > 0 ? products : null });
-                    }}
-                    style={{ fontSize: '0.85rem' }}
-                    autoFocus
-                    disabled={saving}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div
-                className="d-flex align-items-start py-2"
-                style={{ fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6' }}
-              >
-                <span
-                  className="fw-medium me-2"
-                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
-                >
-                  {t('crm.products')}
-                </span>
-                <span
-                  className="flex-grow-1"
-                  style={{ cursor: 'pointer', minWidth: 0 }}
-                  onClick={() => startEdit('products', (customer.products ?? []).join(', '))}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      startEdit('products', (customer.products ?? []).join(', '));
-                    }
-                  }}
-                >
-                  {customer.products && customer.products.length > 0 ? (
-                    <div className="d-flex flex-wrap gap-1">
-                      {customer.products.map((p) => (
-                        <Badge key={p} bg="light" text="dark" className="border" style={{ fontSize: '0.75rem' }}>
-                          {p}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-muted">{t('common.none')}</span>
-                  )}
-                </span>
-              </div>
-            )}
-            {/* Product notes (textarea) */}
-            {editingField === 'productNotes' ? (
-              <div
-                className="d-flex align-items-start py-2 border-bottom"
-                style={{
-                  fontSize: '0.875rem',
-                  backgroundColor: '#eff6ff',
-                  borderRadius: 4,
-                  paddingLeft: 8,
-                  paddingRight: 8,
-                }}
-              >
-                <span
-                  className="fw-medium me-2"
-                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
-                >
-                  {t('crm.productNotes')}
-                </span>
-                <div className="flex-grow-1">
-                  <Form.Control
-                    as="textarea"
-                    size="sm"
-                    rows={3}
-                    value={fieldDraft}
-                    onChange={(e) => setFieldDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void saveField('productNotes');
-                      if (e.key === 'Escape') cancelEdit();
-                    }}
-                    onBlur={() => void saveField('productNotes')}
-                    style={{ fontSize: '0.85rem' }}
-                    autoFocus
-                    disabled={saving}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div
-                className="d-flex align-items-start py-2"
-                style={{ fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6' }}
-              >
-                <span
-                  className="fw-medium me-2"
-                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
-                >
-                  {t('crm.productNotes')}
-                </span>
-                <span
-                  className="flex-grow-1"
-                  style={{ cursor: 'pointer', minWidth: 0, whiteSpace: 'pre-wrap' }}
-                  onClick={() => startEdit('productNotes', customer.productNotes ?? '')}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      startEdit('productNotes', customer.productNotes ?? '');
-                    }
-                  }}
-                >
-                  {customer.productNotes || <span className="text-muted">{t('common.none')}</span>}
-                </span>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── Section 3: Contacts ──────────────────────────────────────── */}
+        {/* ── Contacts ─────────────────────────────────────────────────── */}
         {renderSection(
           'contacts',
           <>

@@ -61,7 +61,7 @@ export function VaultSecretsList({ secrets, onSelect, onEdit, onDelete }: Props)
               <td>
                 <span className="d-flex align-items-center gap-1">
                   <i className={TYPE_ICONS[secret.type] || TYPE_ICONS.custom} />
-                  {t(`vault.types.${secret.type}`)}
+                  {t(`vault.types.${secret.type ?? 'custom'}`)}
                 </span>
               </td>
               <td>

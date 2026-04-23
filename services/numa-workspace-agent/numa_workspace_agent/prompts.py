@@ -1047,43 +1047,48 @@ Rules:
 
 _logger = structlog.get_logger()
 
-# Module-level cache: {"profile": str, "loaded_at": float}
+# Module-level cache: {"data": dict, "loaded_at": float}
 _company_profile_cache: dict[str, object] = {}
 _COMPANY_PROFILE_TTL_SECONDS = 600  # 10 minutes
 
 
-def load_company_profile_from_s3() -> str:
+def load_company_profile_from_s3() -> dict:
     """Load company profile from S3 with a 10-minute TTL cache.
 
     Reads the company-data.json file from the COMPANY_BUCKET_NAME bucket
-    (set as an env var by infra). Returns the profile text, or empty string
-    on any error (missing bucket, missing file, parse error, etc.).
+    (set as an env var by infra). Returns the parsed dict (new structured
+    format or migrated old format), or empty dict on any error.
     """
-    # Check TTL cache
     cached_at = _company_profile_cache.get("loaded_at", 0)
     if (
         isinstance(cached_at, (int, float))
         and (time.time() - cached_at) < _COMPANY_PROFILE_TTL_SECONDS
     ):
-        return str(_company_profile_cache.get("profile", ""))
+        return dict(_company_profile_cache.get("data") or {})
 
     bucket = os.environ.get("COMPANY_BUCKET_NAME", "")
     if not bucket:
         _logger.debug("COMPANY_BUCKET_NAME not set, skipping company profile")
-        _company_profile_cache["profile"] = ""
+        _company_profile_cache["data"] = {}
         _company_profile_cache["loaded_at"] = time.time()
-        return ""
+        return {}
 
     try:
         s3 = boto3.client("s3")
         resp = s3.get_object(Bucket=bucket, Key="company-data.json")
         data = json.loads(resp["Body"].read().decode("utf-8"))
-        profile = data.get("profile", "")
+
+        # Migrate old format: { profile, lastUpdated } -> { companyInformation, ... }
+        if "profile" in data and "companyInformation" not in data:
+            data["companyInformation"] = data.pop("profile", "")
+
         _logger.info(
             "Company profile loaded from S3",
             _name="COMPANY_PROFILE",
             bucket=bucket,
-            profile_length=len(profile),
+            format="structured" if "companyName" in data else "migrated",
+            company_info_length=len(data.get("companyInformation", "")),
+            best_practices_length=len(data.get("bestPractices", "")),
         )
     except ClientError as exc:
         error_code = exc.response.get("Error", {}).get("Code", "")
@@ -1099,34 +1104,72 @@ def load_company_profile_from_s3() -> str:
                 bucket=bucket,
                 error=str(exc),
             )
-        profile = ""
+        data = {}
     except Exception as exc:  # pylint: disable=broad-except
         _logger.warning(
             "Failed to load company profile from S3",
             bucket=bucket,
             error=str(exc),
         )
-        profile = ""
+        data = {}
 
-    _company_profile_cache["profile"] = profile
+    _company_profile_cache["data"] = data
     _company_profile_cache["loaded_at"] = time.time()
-    return profile
+    return data
 
 
-def _truncate_company_profile(profile: str, max_length: int = 3000) -> tuple[str, bool]:
-    """Truncate company profile to max_length, breaking at a sentence boundary.
-
-    Matches the V1 frontend truncation logic in chatSystemPromptUtils.ts.
+def _truncate_text(text: str, max_length: int = 3000) -> tuple[str, bool]:
+    """Truncate text to max_length, breaking at a sentence boundary.
 
     Returns:
         Tuple of (truncated_text, was_truncated).
     """
-    if len(profile) <= max_length:
-        return profile, False
-    # Find last sentence boundary (period) before the limit
-    break_point = profile[:max_length].rfind(".")
+    if len(text) <= max_length:
+        return text, False
+    break_point = text[:max_length].rfind(".")
     actual_break = break_point + 1 if break_point > 0 else max_length
-    return profile[:actual_break].strip(), True
+    return text[:actual_break].strip(), True
+
+
+def _format_company_profile_for_prompt(
+    data: dict,
+) -> tuple[str, bool]:
+    """Build a formatted company profile string from structured data.
+
+    Handles both new structured format and legacy string-only values.
+
+    Returns:
+        Tuple of (formatted_string, was_any_field_truncated).
+    """
+    parts: list[str] = []
+    was_truncated = False
+
+    # Header line with short fields
+    header_parts: list[str] = []
+    if data.get("companyName", "").strip():
+        header_parts.append(f"Company: {data['companyName'].strip()}")
+    if data.get("industry", "").strip():
+        header_parts.append(f"Industry: {data['industry'].strip()}")
+    if data.get("country", "").strip():
+        header_parts.append(f"Country: {data['country'].strip()}")
+    if header_parts:
+        parts.append(" | ".join(header_parts))
+
+    # Company Information section
+    company_info = data.get("companyInformation", "").strip()
+    if company_info:
+        truncated, was_trunc = _truncate_text(company_info)
+        was_truncated = was_truncated or was_trunc
+        parts.append(f"Company Information:\n{truncated}")
+
+    # Best Practices section
+    best_practices = data.get("bestPractices", "").strip()
+    if best_practices:
+        truncated, was_trunc = _truncate_text(best_practices)
+        was_truncated = was_truncated or was_trunc
+        parts.append(f"Company-wide Best Practices:\n{truncated}")
+
+    return "\n\n".join(parts), was_truncated
 
 
 def build_workspace_system_prompt(
@@ -1143,7 +1186,7 @@ def build_workspace_system_prompt(
     email_signature: Optional[dict] = None,
     identity_override: Optional[str] = None,
     user_profile: Optional[dict] = None,
-    company_profile: Optional[str] = None,
+    company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     **_kwargs,
 ) -> str:
@@ -1214,17 +1257,24 @@ def build_workspace_system_prompt(
         user_context = "\n".join(user_context_parts)
         base_prompt = f"{base_prompt}\n\n{user_context}"
 
-    # Append company profile if available (truncated to 3000 chars)
-    if company_profile and company_profile.strip():
-        truncated, was_truncated = _truncate_company_profile(company_profile)
-        truncation_note = (
-            "\n\n[Note: Company profile has been truncated for chat context]"
-            if was_truncated
-            else ""
-        )
-        base_prompt = (
-            f"{base_prompt}\n\n**Company Information:**\n{truncated}{truncation_note}"
-        )
+    # Append company profile if available
+    if company_profile:
+        if isinstance(company_profile, dict):
+            formatted, was_truncated = _format_company_profile_for_prompt(
+                company_profile
+            )
+        else:
+            # Legacy string fallback
+            formatted, was_truncated = _truncate_text(str(company_profile))
+        if formatted.strip():
+            truncation_note = (
+                "\n\n[Note: Company profile has been truncated for chat context]"
+                if was_truncated
+                else ""
+            )
+            base_prompt = (
+                f"{base_prompt}\n\n**Company Profile:**\n{formatted}{truncation_note}"
+            )
 
     # Append user profile context if available
     if user_profile:

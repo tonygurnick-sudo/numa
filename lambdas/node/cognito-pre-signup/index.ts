@@ -1,0 +1,135 @@
+import type { PreSignUpTriggerHandler } from 'aws-lambda';
+import {
+  CognitoIdentityProviderClient,
+  ListUsersCommand,
+  AdminLinkProviderForUserCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
+
+// USER_POOL_ID comes from event.userPoolId — no env var needed (same pattern as token-adjuster).
+
+let cognitoClient: CognitoIdentityProviderClient | null = null;
+const getCognito = (): CognitoIdentityProviderClient => {
+  if (!cognitoClient) {
+    cognitoClient = new CognitoIdentityProviderClient({});
+  }
+  return cognitoClient;
+};
+
+export const handler: PreSignUpTriggerHandler = async (event) => {
+  // Only handle external provider sign-ups (SSO/federated)
+  if (event.triggerSource !== 'PreSignUp_ExternalProvider') {
+    return event;
+  }
+
+  // event.userName is "ProviderName_providerUserId" (e.g. "AzureAD_abc123",
+  // "GoogleWorkspace_user@example.com"). For SAML the providerUserId is the
+  // NameID — which is the user's email for every IdP config we support.
+  const parts = event.userName.split('_');
+  const providerName = parts[0];
+  const providerUserId = parts.slice(1).join('_');
+
+  // Prefer the mapped SAML `email` attribute, but fall back to NameID for
+  // IdPs whose default SAML app does not emit a dedicated email attribute
+  // (Google Workspace's default app only emits NameID). Cognito eventually
+  // derives email from NameID when the user is materialised, but that happens
+  // AFTER PreSignUp — without this fallback we'd skip linking and Cognito
+  // would create a duplicate EXTERNAL_PROVIDER account.
+  let email = event.request.userAttributes.email?.toLowerCase();
+  if (!email && providerUserId.includes('@')) {
+    email = providerUserId.toLowerCase();
+    console.log(
+      JSON.stringify({ _name: 'SSO_EMAIL_FROM_NAMEID', userName: event.userName, email, provider: providerName })
+    );
+  }
+
+  if (!email) {
+    console.warn(`SSO pre-signup: no email in user attributes or NameID for userName=${event.userName}, skipping link`);
+    return event;
+  }
+
+  console.log(`SSO pre-signup: email=${email}, provider=${providerName}, triggerSource=${event.triggerSource}`);
+
+  try {
+    // Look up existing user by email. Fetch a handful so we can reliably pick
+    // the native account even if stale EXTERNAL_PROVIDER duplicates exist.
+    const listResult = await getCognito().send(
+      new ListUsersCommand({
+        UserPoolId: event.userPoolId,
+        Filter: `email = "${email}"`,
+        Limit: 10,
+      })
+    );
+
+    const existingUsers = listResult.Users || [];
+    const nativeUser = existingUsers.find((u) => u.UserStatus !== 'EXTERNAL_PROVIDER');
+
+    if (nativeUser) {
+      const existingUser = nativeUser;
+      const existingSub = existingUser.Attributes?.find((a) => a.Name === 'sub')?.Value;
+
+      if (existingSub) {
+        console.log(JSON.stringify({ _name: 'SSO_LINK_ATTEMPT', email, existingSub, provider: providerName }));
+
+        try {
+          await getCognito().send(
+            new AdminLinkProviderForUserCommand({
+              UserPoolId: event.userPoolId,
+              DestinationUser: {
+                ProviderName: 'Cognito',
+                ProviderAttributeValue: existingSub,
+              },
+              SourceUser: {
+                ProviderName: providerName,
+                ProviderAttributeName: 'Cognito_Subject',
+                ProviderAttributeValue: providerUserId,
+              },
+            })
+          );
+
+          console.log(
+            JSON.stringify({
+              _name: 'SSO_LINK_SUCCESS',
+              email,
+              existingSub,
+              provider: providerName,
+              providerId: providerUserId,
+            })
+          );
+        } catch (linkErr) {
+          // Fix #8: FAIL the sign-up — do NOT silently create a duplicate account
+          console.error(
+            JSON.stringify({
+              _name: 'SSO_LINK_FAILURE',
+              email,
+              existingSub,
+              provider: providerName,
+              error: (linkErr as Error).message,
+            })
+          );
+          throw new Error(
+            `Unable to link SSO identity to existing account for ${email}. Please contact your administrator.`
+          );
+        }
+      } else {
+        console.log(
+          JSON.stringify({ _name: 'SSO_LINK_SKIP', email, reason: 'existing user is federated or has no sub' })
+        );
+      }
+    } else {
+      console.log(JSON.stringify({ _name: 'SSO_JIT_PROVISION', email, provider: providerName }));
+    }
+  } catch (err) {
+    // If we threw intentionally (link failure), re-throw to block sign-up
+    if ((err as Error).message?.includes('Unable to link SSO identity')) {
+      throw err;
+    }
+    // Other errors (e.g., ListUsers failed) — log and allow sign-up to proceed
+    console.error(JSON.stringify({ _name: 'SSO_PRESIGNUP_ERROR', email, error: (err as Error).message }));
+  }
+
+  // Auto-confirm and auto-verify email for all federated users
+  event.response.autoConfirmUser = true;
+  event.response.autoVerifyEmail = true;
+
+  return event;
+};

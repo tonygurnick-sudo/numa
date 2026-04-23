@@ -42,6 +42,7 @@ def upsert_connector_record(  # pylint: disable=too-many-arguments,too-many-posi
     config: Dict[str, Any],
     secret_arn: str,
     test_result: Dict[str, Any],
+    extra_fields: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Persist the connector record for a user in DynamoDB."""
     dynamodb = prm_resource("dynamodb")
@@ -64,8 +65,64 @@ def upsert_connector_record(  # pylint: disable=too-many-arguments,too-many-posi
         "updated_at": now,
         "created_at": created_at or now,
     }
+    if extra_fields:
+        item.update(extra_fields)
     table.put_item(Item=item)
     return item
+
+
+def update_connector_expiry(
+    table_name: str, user_id: str, connector_id: str, pat_expires_at: str
+) -> None:
+    """Update just the pat_expires_at field on a connector record."""
+    dynamodb = prm_resource("dynamodb")
+    table = dynamodb.Table(table_name)
+    now = datetime.now(timezone.utc).isoformat()
+    table.update_item(
+        Key={"user_id": user_id, "connector_id": connector_id},
+        UpdateExpression="SET pat_expires_at = :exp, updated_at = :now",
+        ExpressionAttributeValues={":exp": pat_expires_at, ":now": now},
+    )
+
+
+def update_connector_health(
+    table_name: str,
+    user_id: str,
+    connector_id: str,
+    status: str,
+    error_message: Optional[str] = None,
+) -> None:
+    """Update connector health status with conditional write to avoid amplification.
+
+    Only writes if the status actually changed.
+    """
+    dynamodb = prm_resource("dynamodb")
+    table = dynamodb.Table(table_name)
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        update_expr = "SET #s = :status, updated_at = :now"
+        attr_names = {"#s": "status"}
+        attr_values: Dict[str, Any] = {
+            ":status": status,
+            ":now": now,
+            ":old_status": status,
+        }
+
+        if error_message:
+            update_expr += ", error_message = :err"
+            attr_values[":err"] = error_message
+        else:
+            update_expr += " REMOVE error_message"
+
+        table.update_item(
+            Key={"user_id": user_id, "connector_id": connector_id},
+            UpdateExpression=update_expr,
+            ConditionExpression="#s <> :old_status",
+            ExpressionAttributeNames=attr_names,
+            ExpressionAttributeValues=attr_values,
+        )
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        pass  # Status unchanged — no write needed
 
 
 def list_connectors_for_user(table_name: str, user_id: str) -> list[Dict[str, Any]]:

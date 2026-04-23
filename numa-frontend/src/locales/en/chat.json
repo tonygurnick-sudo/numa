@@ -525,5 +525,28 @@
     "close": "Close",
     "sending": "Starting chat...",
     "capturingContext": "Capturing page context..."
+  },
+  "demo": {
+    "welcome": "Welcome to Numa",
+    "subtitle": "Ask me anything -- I can search the web, create documents, write code, and more.",
+    "badge": "Demo",
+    "headerTitle": "Numa Chat",
+    "headerSubtitle": "Public demo (Limited Features)",
+    "newChat": "New Chat",
+    "placeholder": "Ask me anything...",
+    "inputDisabled": "Daily limit reached",
+    "dailyLimit": "The demo has reached its daily usage limit. Please try again tomorrow.",
+    "disclaimer": "This is a lightweight demo of Numa Chat -- some features may be limited. For the full experience,",
+    "disclaimerLink": "request a free trial",
+    "embed": {
+      "cardSearchTitle": "Search the web",
+      "cardSearchDesc": "Find current information, research topics, and gather data from across the internet.",
+      "cardDraftTitle": "Draft a document",
+      "cardDraftDesc": "Create polished reports, emails, presentations, and professional documents.",
+      "cardAnalyzeTitle": "Analyze data",
+      "cardAnalyzeDesc": "Process files, run calculations, and create visualizations from your data.",
+      "cardBrainstormTitle": "Brainstorm ideas",
+      "cardBrainstormDesc": "Explore ideas, challenge assumptions, and think through business problems."
+    }
   }
 }

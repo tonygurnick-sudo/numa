@@ -2,6 +2,10 @@
 
 We are experienced developers using AI tools to move faster and build better software. You are an expert-level AI — act like it. Don't underestimate your own capabilities, don't dumb things down, and don't hedge when you have a clear recommendation. Challenge our ideas and point out flaws — we want your honest technical opinion, not agreement for the sake of it. But the final call is always ours. Match quality to context: production changes should be production-ready, experimental work can be scrappy.
 
+**Quality bar:** Always reason thoroughly and deeply. Treat every request as complex unless explicitly told otherwise. Never optimize for brevity at the expense of quality. Think step-by-step, consider tradeoffs, and provide comprehensive analysis. Do not take shortcuts, skip steps, or produce shallow work to save tokens.
+
+**Architectural decisions require human input.** Do not make significant architectural choices (new patterns, major refactors, technology selections, data model changes, infrastructure decisions) without discussing them with the user first. Present options, explain tradeoffs, and let the user decide. The code is easy to write — picking the right direction is the hard part.
+
 ---
 
 ## CLAUDE.md Structure
@@ -53,31 +57,35 @@ Skills are stored in `.claude/skills/` and contain detailed context for specific
 - **Claude Code / Anthropic models:** Activate the skill by name (e.g., `/numa-connectors`).
 - **Other AI tools:** Read the skill's `SKILL.md` file directly from `.claude/skills/<skill-name>/SKILL.md` (and any supporting `.md` files in the same folder). The content is the same — just markdown on disk.
 
-| Skill                        | When to activate                                                                                                                         |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `numa-workspace-agent-skill` | Working on the workspace agent service — code, debugging, features, streaming, tools, agent type configuration                           |
-| `workspace-agent-local-test` | Testing workspace agent Docker container locally, SDK integration testing                                                                |
-| `numa-agents`                | Agent builder, agent APIs, agent database schema, agent tools config, visibility settings                                                |
-| `numa-apps`                  | Creating/modifying apps, app constructs, Step Functions, state machines, jobs, manifests                                                 |
-| `numa-ops`                   | Numa Ops work — tickets, kanban boards, teams, projects, customers, suppliers, CRM, backlog                                              |
-| `numa-connectors`            | Creating or modifying data connectors (OAuth, token, API-key), connectorRegistry, Files Remote, connector wizards, backend providers     |
-| `numa-integrations`          | Pipedream integrations — proxy model, adding integrations, admin policies, workspace agent integration prompts                           |
-| `nolia-developer-guide`      | Any Nolia work — agent types, prompts, orchestrator, workspace setup, KB integration, rules generation                                   |
-| `numa-scheduled-agents`      | Agent scheduling, schedule runner, EventBridge, cron expressions, scheduled run config                                                   |
-| `numa-gitlab`                | Checking CI/CD pipeline status, viewing failed jobs, retrying, MR details                                                                |
-| `numa-unlock-customer`       | Unblocking stuck customer deployments — Terraform locks, resource conflicts, CNAME issues                                                |
-| `lint-and-tests`             | Running linting, type checking, or tests after code changes                                                                              |
-| `playwright-cli`             | Browser automation — web testing, form filling, screenshots, data extraction, great for doing automated tests of features in development |
-| `skill-creator`              | Creating new skills                                                                                                                      |
+| Skill                        | When to activate                                                                                                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `numa-workspace-agent-skill` | Working on the workspace agent service — code, debugging, features, streaming, tools, agent type configuration                                           |
+| `workspace-agent-local-test` | Testing workspace agent Docker container locally, SDK integration testing                                                                                |
+| `numa-agents`                | Agent builder, agent APIs, agent database schema, agent tools config, visibility settings                                                                |
+| `numa-apps`                  | Creating/modifying apps, app constructs, Step Functions, state machines, jobs, manifests                                                                 |
+| `numa-ops`                   | Numa Ops work — tickets, kanban boards, teams, projects, customers, suppliers, CRM, backlog                                                              |
+| `numa-connectors`            | Creating or modifying data connectors (OAuth, token, API-key), connectorRegistry, Files Remote, connector wizards, backend providers                     |
+| `numa-integrations`          | Pipedream integrations — proxy model, adding integrations, admin policies, workspace agent integration prompts                                           |
+| `nolia-developer-guide`      | Any Nolia work — agent types, prompts, orchestrator, workspace setup, KB integration, rules generation                                                   |
+| `numa-scheduled-agents`      | Agent scheduling, schedule runner, EventBridge, cron expressions, scheduled run config                                                                   |
+| `numa-gitlab`                | Checking CI/CD pipeline status, viewing failed jobs, retrying, MR details                                                                                |
+| `numa-unlock-customer`       | Unblocking stuck customer deployments — Terraform locks, resource conflicts, CNAME issues                                                                |
+| `debug-customer-issue`       | Investigating customer-reported bugs — log gathering, user lookup, timeline reconstruction, root cause analysis                                          |
+| `lint-and-tests`             | Running linting, type checking, or tests after code changes                                                                                              |
+| `playwright-cli`             | Browser automation — web testing, form filling, screenshots, data extraction, great for doing automated tests of features in development                 |
+| `extending-numa-chat`        | Adding new tools/capabilities to Numa chat -- MCP tool groups, skills/prompts, Lambda delegation, HITL approvals, frontend rendering, agent type configs |
+| `skill-creator`              | Creating new skills                                                                                                                                      |
 
 # Documentation
 
 The `documentation/` folder contains detailed reference docs for specific domains. These are committed to the repo and complement the skills above. Read the relevant docs when working in these areas.
 
-| Folder                      | Contents                                                                                                        |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `documentation/connectors/` | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration |
-| `documentation/nolia/`      | Nolia architecture, pipeline details, rules generation, project notes                                           |
+| Folder                               | Contents                                                                                                             |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `documentation/connectors/`          | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration      |
+| `documentation/email-sending/`       | Centralized email sender: architecture, security model, templates, code examples, infra wiring, deployment           |
+| `documentation/extending-numa-chat/` | How to extend Numa chat with new tools: MCP groups, skills, Lambda delegation, HITL, frontend rendering, agent types |
+| `documentation/nolia/`               | Nolia architecture, pipeline details, rules generation, project notes                                                |
 
 ---
 
@@ -91,8 +99,9 @@ If the Context7 MCP server is enabled, always use it automatically when doing co
 | ------------------------- | ---------- | ------------ | ------------------------------------------------------------------------------- |
 | `q-demo`                  | Q Demo     | 905418183804 | Dev/demo stacks — all dev client accounts live here                             |
 | `arcanum-q-deployer-prod` | Q Deployer | 207567759910 | Deployer account — holds `numa-client-config` table, deploys to client accounts |
+| `arcanum-prod-numa-demo`  | HQ/Demo    | —            | HQ stack (the main Arcanum internal/demo environment)                           |
 
-Use `AWS_PROFILE=q-demo` for most local dev and client account access. Use `AWS_PROFILE=arcanum-q-deployer-prod` for deployer-level operations (e.g., `cd tools/ && AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config nolia`).
+Use `AWS_PROFILE=q-demo` for most local dev and client account access. Use `AWS_PROFILE=arcanum-prod-numa-demo` for the HQ stack. Use `AWS_PROFILE=arcanum-q-deployer-prod` for deployer-level operations (e.g., `cd tools/ && AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config nolia`).
 
 **Regions:** Most stacks are `us-east-1`. Some clients use `ap-southeast-2` (Sydney). Nolia uses `ap-southeast-3` (Jakarta) with cross-region AgentCore in Sydney.
 
@@ -219,6 +228,8 @@ CloudFront routes `/api/*` to API Gateway and `/api/numa-chat-agent/*` directly 
 
 Each client deploys into its own isolated AWS account. The deployer account (Q Deployer, `arcanum-q-deployer-prod`) assumes an `ArcanumAIAccess` role into client accounts to provision infrastructure. Integrations use a separate proxy account.
 
+**Instance URLs:** All Numa instances follow the pattern `https://<client-name>.numa.arcanum.ai/`. The custom domain field in client config exists but is unreliable without manual fiddling -- don’t use it. Assume the standard subdomain pattern.
+
 **Single source of truth:** The `numa-client-config` DynamoDB table in the deployer account holds all client configuration — region, feature flags, preferred knowledge base, budget, etc. The frontend `public/config.json` is gitignored and local-only — developers edit it for localhost. In deployed environments, it’s auto-generated from the DynamoDB table.
 
 ### clientConfigProd.json — Local Dev Override
@@ -237,6 +248,16 @@ Each client deploys into its own isolated AWS account. The deployer account (Q D
 
 ---
 
+## Email Sending
+
+Numa uses a centralized `numa-email-sender` Lambda in the deployer account for all transactional email. Emails are sent from `no-reply@notifications.numa.arcanum.ai` via SES with full DKIM/SPF/DMARC. Cross-account callers authenticate via STS presigned URL proof (same pattern as Pipedream).
+
+**Do not** create per-Lambda SES setups or send email directly from client accounts. All email goes through the centralized sender for consistent branding, deliverability, and security.
+
+See `documentation/email-sending/` for the full guide: architecture, security model, invocation payload, template reference, code examples (Python + Node), infra wiring instructions, and deployment steps.
+
+---
+
 ## Development & Deployment
 
 **Frontend:** `yarn install`, `yarn dev`, `yarn build`, `yarn test`, `yarn lint --fix`
@@ -245,9 +266,36 @@ Each client deploys into its own isolated AWS account. The deployer account (Q D
 
 **Lambdas (Node):** Package one: `cd lambdas && bash package-node-lambda.sh node/<name>`. Or `yarn bundle` in the lambda directory.
 
+**Lambdas (Container):** For Lambdas that need system-level deps (e.g. Playwright/Chromium). Each has its own `Dockerfile` in the lambda directory. Build context is the repo root so shared libs (`lib/prm`) are accessible. Package: `cd lambdas && bash package-container-lambda.sh python/<name>`. Output: `infra/assets/artifacts/<name>/image.tar`. Deployed as ARM64 container images via ECR (skopeo push). Uses `NumaLambda` with `packageType: 'Image'` and `imageUri`. First example: `browser-lambda` (Playwright + Chromium for JS-rendered page fetching).
+
 **Services:** See Services section above for Docker packaging.
 
 **Infra (CDKTF):** Build frontend + package lambdas first, then `yarn cdktf deploy --auto-approve <stack>`.
+
+### Deploying to Dev Stacks (Local)
+
+To deploy a dev stack locally, run from within `infra/`:
+
+```bash
+yarn && yarn get
+export TF_ENVIRONMENT=prod
+export AWS_REGION=us-east-1
+export CLIENT_OVERRIDE=<client-name>
+yarn cdktf deploy --auto-approve numa-<client-name>
+```
+
+**Important rules:**
+
+- **Always confirm with the user before deploying.** Never trigger a deploy autonomously.
+- **Run deploys as background tasks.** They can take up to 30 minutes.
+- **NEVER deploy to customer stacks locally.** Customer deployments must go through the Customer Success Portal UI, triggered by the user. Local deploys are only for dev stacks (e.g., `nd-labs`, `arcanum-demo-greg`).
+
+**Terraform lock issues:** If a deploy fails with a state lock error, resolve it from the Terraform output directory:
+
+```bash
+cd infra/cdktf.out/prod/stacks/numa-<client-name>
+terraform force-unlock --force <lock-id>
+```
 
 ## Branching Strategy
 
@@ -263,7 +311,7 @@ Feature branches -> `dev` (default MR target) -> `main` (release). No pipeline o
 - `/lambdas/node/` — 29 Node Lambdas (authorizers, agents API, scheduling, notifications, numa-ops, branding, etc.)
 - `/infra/` — CDKTF stacks and constructs (client, deployer, NextGen, Pipedream proxy, workspace agent, KBs)
 - `/lib/` — Shared libraries (Bedrock, S3, PRM, OAuth providers, utilities)
-- `/tools/` — Operational tools (create users, retrieve config, check index progress, reports)
+- `/tools/` — Operational tools and dev scripts (create users, retrieve config, check index progress, reports). **All custom scripts and tools for dev usage belong here — not in the repo root.** If you're writing a helper script, put it in `tools/`.
 - `/documentation/` — Domain-specific docs (connectors, nolia)
 - `/deployer/` — Streamlit-based Q Apps deployer tool
 - `/numa-customer-success-portal/` — Customer Success Portal frontend (see its own `CLAUDE.md`)
@@ -275,7 +323,7 @@ Feature branches -> `dev` (default MR target) -> `main` (release). No pipeline o
 
 ## Numa Ops
 
-Lightweight work management module (tickets, kanban boards, projects, customers, suppliers) built into Numa. Designed by Ian (COO/PM) — his POC at `docs/tasks/numa-ops-feature/The actual Work Ops App/` is the gold standard for feature parity. Backend: Node Lambdas prefixed `numa-ops-*`. Frontend: `OpsPage` at `/ops`, components in `Components/Ops/`.
+Lightweight work management module (tickets, kanban boards, projects, customers, suppliers) built into Numa. Designed by Ian (COO/PM) — his POC at `documentation/numa-ops/ian-design/The actual Work Ops App/` is the gold standard for feature parity. Backend: Node Lambdas prefixed `numa-ops-*`. Frontend: `OpsPage` at `/ops`, components in `Components/Ops/`.
 
 Activate the `numa-ops` skill before doing any Ops work.
 

@@ -23,6 +23,7 @@ import { getCached, setCache } from '../../../utils/opsCache';
 import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
 import { CustomerCard } from './CustomerCard';
 import { CustomerDetailModal } from '../Modals/CustomerDetailModal';
+import { CreateCustomerModal } from '../Modals/CreateCustomerModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -342,7 +343,7 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
 
 const CrmMirrorView = (): React.JSX.Element => {
   const { t } = useTranslation('ops');
-  const { numaGet, numaPost, numaPut } = useNumaRequest();
+  const { numaGet, numaPut } = useNumaRequest();
   const { config, crmRefreshVersion } = useOps();
 
   // ── DnD: 8px movement before drag activates (so clicks work cleanly) ──────
@@ -370,7 +371,7 @@ const CrmMirrorView = (): React.JSX.Element => {
       /* quota exceeded */
     }
   }, []);
-  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
   const [activeCustomer, setActiveCustomer] = useState<Customer | null>(null);
   const [detailCustomerId, setDetailCustomerId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -435,32 +436,19 @@ const CrmMirrorView = (): React.JSX.Element => {
   );
 
   // ── Create customer ───────────────────────────────────────────────────────
-  const handleCreateCustomer = useCallback(async () => {
-    try {
-      setCreatingCustomer(true);
-      setError(null);
+  const defaultCreateStageId = stages.length > 0 ? stages[0].id : undefined;
 
-      const defaultStageId = stages.length > 0 ? stages[0].id : undefined;
+  const handleOpenCreateCustomer = useCallback(() => {
+    setError(null);
+    setShowCreate(true);
+  }, []);
 
-      const newCustomer = await OpsService.createCustomer(numaPost, {
-        companyName: t('crm.newCustomerDefaultName', 'New Customer'),
-        lifecycleStage: defaultStageId,
-      });
-
-      if (defaultStageId && !newCustomer.lifecycleStage) {
-        newCustomer.lifecycleStage = defaultStageId;
-      }
-
-      setCustomers((prev) => [newCustomer, ...prev]);
-      setDetailCustomerId(newCustomer.id);
-      setShowDetail(true);
-    } catch (err) {
-      console.error('[CrmMirrorView] Create customer failed', err);
-      setError(String(err));
-    } finally {
-      setCreatingCustomer(false);
-    }
-  }, [numaPost, t, stages]);
+  const handleCustomerCreated = useCallback((newCustomer: Customer) => {
+    setCustomers((prev) => [newCustomer, ...prev]);
+    setShowCreate(false);
+    setDetailCustomerId(newCustomer.id);
+    setShowDetail(true);
+  }, []);
 
   // ── Click handler ─────────────────────────────────────────────────────────
   const handleCustomerClick = useCallback((customer: Customer) => {
@@ -617,7 +605,10 @@ const CrmMirrorView = (): React.JSX.Element => {
     <>
       <div className="d-flex flex-column h-100">
         {/* ── Toolbar ────────────────────────────────────────────────────── */}
-        <div className="d-flex flex-wrap align-items-center gap-2 px-3 pt-3 pb-2">
+        <div
+          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white"
+          style={{ minHeight: 64 }}
+        >
           <Form.Control
             type="text"
             size="sm"
@@ -673,12 +664,8 @@ const CrmMirrorView = (): React.JSX.Element => {
 
           {/* Header controls (View toggles, Create button) */}
           <div className="d-flex align-items-center gap-2">
-            <Button variant="primary" size="sm" onClick={handleCreateCustomer} disabled={creatingCustomer}>
-              {creatingCustomer ? (
-                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
-              ) : (
-                <i className="bi bi-plus me-1" />
-              )}
+            <Button variant="primary" size="sm" onClick={handleOpenCreateCustomer}>
+              <i className="bi bi-plus me-1" />
               {t('crm.newCustomer')}
             </Button>
 
@@ -737,7 +724,7 @@ const CrmMirrorView = (): React.JSX.Element => {
             </Alert>
           </div>
         )}
-        <div className="flex-grow-1 overflow-auto px-3 pb-3 pt-1">
+        <div className="flex-grow-1 overflow-auto px-3 pb-3 pt-3">
           {viewMode === 'list' ? (
             <CustomerListView
               customers={filteredCustomers}
@@ -793,6 +780,13 @@ const CrmMirrorView = (): React.JSX.Element => {
           setDetailCustomerId(null);
         }}
         onUpdated={() => void loadCustomers()}
+      />
+
+      <CreateCustomerModal
+        show={showCreate}
+        onHide={() => setShowCreate(false)}
+        onCreated={handleCustomerCreated}
+        defaultLifecycleStage={defaultCreateStageId}
       />
     </>
   );

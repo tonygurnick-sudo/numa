@@ -31,7 +31,8 @@
     "developer": "Developer",
     "audit": "Audit",
     "usage": "Usage",
-    "disasterRecovery": "Disaster Recovery"
+    "disasterRecovery": "Disaster Recovery",
+    "sso": "Single Sign-On"
   },
   "navigation": {
     "unsavedBranding": "You have unsaved branding changes. Leaving this page will discard them. Continue?",
@@ -511,29 +512,58 @@
     "subtitle": "Manage your company information and settings",
     "editTitle": "Edit Company Information",
     "editDescription": "Enter your company information below. This will be used in chat interactions.",
-    "adminTitle": "Company-wide profile",
+    "adminTitle": "Company Profile",
     "adminDescription": "This profile is injected into every chat as context so the AI understands your organisation. Changes take effect for new chats immediately.",
     "loading": "Loading...",
+    "sections": {
+      "details": "Company Details",
+      "detailsDescription": "Basic information about your company.",
+      "information": "Company Information",
+      "informationDescription": "General description of your company that the AI can reference in every chat.",
+      "bestPractices": "Company-wide Best Practices",
+      "bestPracticesDescription": "Instructions and guidelines that apply to all Numa chats across your organisation."
+    },
+    "fields": {
+      "companyName": {
+        "label": "Company Name",
+        "placeholder": "e.g. Acme Corp"
+      },
+      "industry": {
+        "label": "Industry",
+        "placeholder": "e.g. SaaS, Construction, Accounting"
+      },
+      "country": {
+        "label": "Country",
+        "placeholder": "e.g. Australia"
+      },
+      "companyInformation": {
+        "label": "Company Information",
+        "placeholder": "Enter a detailed description of your company, including its mission, values, products, and any other information that would be helpful for the AI assistant."
+      },
+      "bestPractices": {
+        "label": "Best Practices",
+        "placeholder": "e.g. Always respond in formal English, use metric units, follow our brand voice guidelines..."
+      }
+    },
     "form": {
       "label": "Company Information",
       "placeholder": "Enter a detailed description of your company, including its mission, values, and any other information that would be helpful for users interacting with your AI assistant.",
-      "characterCount": "Character count: {{count}}/10000",
-      "sharedNote": "This information will be available to all users in chat interactions.",
-      "limitNote": "Note: Only the first ~3000 characters will be used in chat context."
+      "characterCount": "{{count}}/{{max}}",
+      "sharedNote": "This information will be available to all users in chat interactions."
     },
     "lastUpdated": {
       "never": "Never",
       "label": "Last updated: {{date}}"
     },
     "status": {
-      "empty": "No company information exists yet. Enter your company information and click Save.",
+      "empty": "No company information exists yet. Fill in your company details and click Save.",
       "loadError": "Error loading company information: {{message}}",
       "saveSuccess": "Company information saved successfully!",
       "saveError": "Error saving company information: {{message}}"
     },
     "actions": {
       "saving": "Saving...",
-      "save": "Save Information"
+      "save": "Save"
     }
   },
   "userProfile": {
@@ -1157,6 +1187,204 @@
     "prefix": "Category",
     "objectCount": "Objects",
     "size": "Size",
-    "noExports": "No recent exports found."
+    "noExports": "No recent exports found.",
+    "noBackups": "No backups found. Backups run automatically every 6 hours.",
+    "restoreSuccess": "Restore from {{date}} completed successfully.",
+    "restoreFailed": "Restore failed. Check the error details below.",
+    "table": {
+      "date": "Date",
+      "items": "Items",
+      "size": "Data Size",
+      "codeWord": "Code Word",
+      "restore": "Restore",
+      "snapshots": "snapshots",
+      "typeCode": "Type code word...",
+      "restoreButton": "Restore"
+    },
+    "confirm": {
+      "title": "Confirm Restore",
+      "warning": "You are about to restore from the backup dated {{date}}. This will overwrite current data with the backup.",
+      "description": "Cognito users, groups, and secrets will be restored immediately. DynamoDB tables will be restored to new tables (suffixed with the restore date) — you must manually swap them.",
+      "cancel": "Cancel",
+      "confirmRestore": "Restore Now",
+      "restoring": "Restoring...",
+      "stillWorking": "Restore is still in progress. This can take several minutes for large datasets. Please do not close this window.",
+      "close": "Close"
+    },
+    "result": {
+      "success": "Restore completed successfully.",
+      "partial": "Restore completed with some errors. See details below.",
+      "groups": "Groups restored",
+      "users": "Users restored",
+      "secrets": "Secrets restored",
+      "tables": "DynamoDB tables restoring",
+      "errors": "Errors"
+    },
+    "lock": {
+      "title": "Authenticate to access Disaster Recovery",
+      "description": "Restoring backups is destructive and irreversible. Please confirm your identity before continuing. Your access will be recorded.",
+      "passwordLabel": "Your password",
+      "passwordPlaceholder": "Enter your password",
+      "federatedNotice": "You signed in with SSO. Click Unlock to confirm your identity — your access will be recorded with your email and timestamp.",
+      "unlockButton": "Unlock Disaster Recovery",
+      "unlocking": "Verifying...",
+      "error": "Verification failed: {{error}}"
+    },
+    "lastRestore": {
+      "banner": "Last restore: {{email}} on {{date}} ({{codeWord}})",
+      "bannerUnknown": "Last restore recorded but attribution is missing.",
+      "none": "No restores have been recorded yet."
+    }
+  },
+  "sso": {
+    "title": "Single Sign-On (SSO)",
+    "description": "Configure SAML 2.0 single sign-on to allow users to sign in with their corporate identity provider.",
+    "notConfigured": "SSO is not configured.",
+    "configured": "SSO is configured.",
+    "enabled": "SSO is enabled and active.",
+    "disabled": "SSO is configured but not active.",
+    "setupButton": "Set Up SSO",
+    "editButton": "Edit Configuration",
+    "enableButton": "Enable SSO",
+    "disableButton": "Disable SSO",
+    "deleteButton": "Remove SSO",
+    "testButton": "Test SSO Connection",
+    "testing": "Testing...",
+    "testSuccess": "SSO test successful. Your identity provider is configured correctly.",
+    "testFailed": "SSO test failed. Please verify your identity provider configuration.",
+    "enableSuccess": "SSO has been enabled. Users can now sign in with their corporate credentials.",
+    "disableSuccess": "SSO has been disabled. Users must use username and password to sign in.",
+    "deleteSuccess": "SSO configuration has been removed.",
+    "deleteConfirm": "Are you sure you want to remove SSO? Users will no longer be able to sign in with their corporate credentials.",
+    "saveSuccess": "SSO configuration saved.",
+    "saveFailed": "Failed to save SSO configuration.",
+    "passwordFallback": "Username and password login will remain available as a fallback for all users.",
+    "wizard": {
+      "title": "Configure Single Sign-On",
+      "step1": {
+        "title": "Choose Identity Provider",
+        "description": "Select your organisation's identity provider.",
+        "azureAd": "Azure AD / Entra ID",
+        "azureAdDescription": "Microsoft Azure Active Directory or Entra ID",
+        "okta": "Okta",
+        "oktaDescription": "Okta Identity Platform",
+        "googleWorkspace": "Google Workspace",
+        "googleWorkspaceDescription": "Google Workspace (formerly G Suite)",
+        "other": "Other SAML 2.0",
+        "otherDescription": "Any SAML 2.0 compatible identity provider",
+        "protocolLabel": "Protocol",
+        "protocolHelp": "Most identity providers support SAML. Use OIDC if your IdP provides an OpenID Connect endpoint."
+      },
+      "step2": {
+        "title": "Configure Your Identity Provider",
+        "description": "Copy these values into your identity provider's SAML configuration.",
+        "entityId": "Entity ID (Audience URI)",
+        "acsUrl": "ACS URL (Reply URL)",
+        "copied": "Copied!",
+        "copyToClipboard": "Copy",
+        "metadataUrlLabel": "Federation Metadata URL",
+        "metadataUrlPlaceholder": "https://your-idp.example.com/metadata.xml",
+        "metadataUrlPlaceholderAzure": "https://login.microsoftonline.com/{tenant-id}/federationmetadata/2007-06/federationmetadata.xml",
+        "metadataUrlPlaceholderOkta": "https://your-org.okta.com/app/{app-id}/sso/saml/metadata",
+        "metadataUrlPlaceholderGoogle": "https://accounts.google.com/o/saml2?idpid={idp-id}",
+        "metadataUrlHelp": "Paste the Federation Metadata URL from your identity provider.",
+        "metadataXmlLabel": "Metadata XML",
+        "metadataXmlPlaceholder": "Paste your SAML metadata XML here...",
+        "metadataXmlHelp": "Alternatively, paste the raw SAML metadata XML.",
+        "orDivider": "OR",
+        "azureInstructions": "In Azure Portal: Enterprise Applications → New Application → Create your own → Integrate any other application → Single sign-on → SAML → paste the Entity ID and ACS URL above.",
+        "oktaInstructions": "In Okta Admin: Applications → Create App Integration → SAML 2.0 → paste the Entity ID and ACS URL above.",
+        "googleInstructions": "In Google Admin: Apps → Web and mobile apps → Add App → Add custom SAML app → paste the Entity ID and ACS URL above.",
+        "oidcIssuer": "OIDC Issuer URL",
+        "oidcIssuerHelp": "The OpenID Connect issuer URL from your identity provider.",
+        "oidcClientId": "Client ID",
+        "oidcClientSecret": "Client Secret",
+        "oidcClientSecretPlaceholder": "Enter client secret (leave blank to keep existing)",
+        "oidcScopes": "Scopes",
+        "oidcScopesHelp": "Space-separated OIDC scopes. Default: openid email profile"
+      },
+      "step3": {
+        "title": "Attribute Mapping",
+        "description": "Map your identity provider's SAML attributes to Numa user fields.",
+        "cognitoAttribute": "Numa Attribute",
+        "samlClaim": "SAML Claim",
+        "email": "Email",
+        "givenName": "First Name",
+        "familyName": "Last Name",
+        "defaultMappingNote": "Default mappings are pre-filled for your identity provider. Modify only if your IdP uses non-standard claim names.",
+        "emailSourceLabel": "Email Source",
+        "emailSourceClaim": "Use email address claim (standard)",
+        "emailSourceUpn": "Use UPN (User Principal Name) as email",
+        "emailSourceHelp": "Select UPN if your organisation's User Principal Name is the same as the user's email address. Common with Azure AD/Entra ID."
+      },
+      "step4": {
+        "title": "Test & Enable",
+        "description": "Test your SSO configuration before enabling it for all users.",
+        "testDescription": "Click the button below to open a test login window. You will be redirected to your identity provider to authenticate.",
+        "readyToEnable": "Your SSO configuration is saved. Enable it to allow users to sign in with their corporate credentials.",
+        "alreadyEnabled": "SSO is currently enabled and active."
+      },
+      "next": "Next",
+      "back": "Back",
+      "save": "Save Configuration",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "close": "Close"
+    },
+    "status": {
+      "label": "Status",
+      "active": "Active",
+      "inactive": "Inactive",
+      "notConfigured": "Not Configured"
+    },
+    "provider": {
+      "label": "Identity Provider",
+      "lastUpdated": "Last Updated"
+    },
+    "ssoOnly": {
+      "title": "SSO-Only Mode",
+      "description": "When enabled, password login is disabled. All users must sign in via SSO.",
+      "enableConfirm": "Are you sure? This will disable password login for ALL users. Only SSO login will be available.\n\nRequirements:\n• At least one admin must have a native password account (for break-glass recovery)\n• SSO must be tested and working\n\nIf SSO fails, use ?breakglass=1 on the login URL to access the password form.",
+      "enabled": "SSO-only mode enabled. Password login has been disabled.",
+      "disabled": "SSO-only mode disabled. Password login has been restored.",
+      "activeWarning": "Password login is disabled. All users must sign in via SSO. To restore password login, toggle this off."
+    },
+    "groupMapping": {
+      "title": "Group Mapping",
+      "description": "Automatically assign users to Numa groups based on their identity provider group membership.",
+      "claimName": "Group Claim Name",
+      "claimHelp": "Enter the exact SAML claim name or OIDC scope that your identity provider sends with group membership. If this value doesn't match your IdP's configuration, group mapping will have no effect.",
+      "mappings": "Group Mappings",
+      "idpGroup": "IdP Group Name",
+      "addMapping": "Add Mapping",
+      "saveButton": "Save Mappings",
+      "saved": "Group mappings saved.",
+      "groupStandard": "Standard User",
+      "groupAdmin": "Administrator"
+    },
+    "scim": {
+      "title": "User Provisioning (SCIM)",
+      "description": "Automatically sync users from your identity provider. When enabled, adding or removing users in your IdP will create or disable them in Numa.",
+      "endpoint": "SCIM Endpoint URL",
+      "generateButton": "Generate SCIM Token",
+      "tokenActive": "Token Active",
+      "tokenCreated": "Created",
+      "revokeButton": "Revoke Token",
+      "revokeConfirm": "Revoke the SCIM token? Your identity provider will no longer be able to sync users until a new token is generated.",
+      "revoked": "SCIM token revoked.",
+      "tokenWarning": "Copy this token now — it cannot be retrieved again. Paste it into your identity provider's SCIM provisioning settings."
+    },
+    "users": {
+      "title": "SSO Users",
+      "refresh": "Load Users",
+      "email": "Email",
+      "authMethod": "Auth Method",
+      "provider": "Provider",
+      "actions": "Actions",
+      "unlink": "Unlink SSO",
+      "unlinkConfirm": "Unlink SSO from {{email}}? The user will need to use password login.",
+      "unlinkSuccess": "SSO unlinked from {{email}}.",
+      "clickRefresh": "Click Load Users to view SSO-linked users."
+    }
   }
 }

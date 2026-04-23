@@ -1235,6 +1235,41 @@
   padding: 12px 20px;
 }
 
+.crm-section-body-comfortable {
+  padding: 20px 24px;
+  font-size: 0.95rem;
+}
+
+.crm-section-body-comfortable .form-label {
+  font-size: 0.85rem;
+}
+
+.crm-section-body-comfortable .form-control,
+.crm-section-body-comfortable .form-select {
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+/* Inline labels: label + input on the same row inside each grid cell. */
+.crm-section-body-inline-labels .row > [class*='col-'] > div {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.crm-section-body-inline-labels .form-label {
+  margin-bottom: 0;
+  white-space: nowrap;
+  min-width: 110px;
+}
+
+.crm-section-body-inline-labels .form-control,
+.crm-section-body-inline-labels .form-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* ── CRM field rows (label + value in a horizontal row) ──────────────────── */
 
 .crm-field-row {
@@ -1290,6 +1325,40 @@
   font-style: normal;
 }
 
+/* Compact read-mode field layout (Customer record section display) */
+.crm-compact-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.crm-compact-label {
+  font-size: 0.7rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+
+.crm-compact-value {
+  font-size: 0.85rem;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.crm-compact-value a {
+  color: #4f46e5;
+  text-decoration: none;
+}
+
+.crm-compact-value a:hover {
+  text-decoration: underline;
+}
+
 /* Selects in CRM modals — visible but subtle border to differentiate from text */
 .crm-detail-modal .form-select {
   font-size: 0.82rem;
@@ -1316,10 +1385,27 @@
 /* Text inputs in CRM modals when editing */
 .crm-detail-modal .form-control {
   font-size: 0.82rem;
-  border: 1px solid #a78bfa;
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
   padding: 4px 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.crm-detail-modal .form-control:hover {
+  border-color: #d1d5db;
+}
+
+.crm-detail-modal .form-control:focus {
+  border-color: #a78bfa;
   box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.15);
+}
+
+.crm-detail-modal .form-control.is-invalid {
+  border-color: #dc3545;
+  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.15);
 }
 
 /* ── SidebarDropdown (rich dropdown replacement for native selects) ───────── */
@@ -1472,6 +1558,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sidebar-dropdown-item-action {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.sidebar-dropdown-item:hover .sidebar-dropdown-item-action {
+  opacity: 1;
 }
 
 .sidebar-dropdown-check {

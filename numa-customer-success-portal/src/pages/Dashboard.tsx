@@ -21,6 +21,8 @@ import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { WorkflowHub } from '@/components/dashboard/WorkflowHub';
 import { WelcomeBanner } from '@/components/dashboard/WelcomeBanner';
 import { ToolsSection } from '@/components/dashboard/ToolsSection';
+import { PublicDemoStats } from '@/components/dashboard/PublicDemoStats';
+import { fetchPublicDemoStats, type PublicDemoStats as PublicDemoStatsType } from '@/services/publicDemoService';
 import { AVAILABLE_TOOLS } from '@/data/tools';
 
 export default function Dashboard() {
@@ -30,6 +32,9 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
+  const [publicDemoStats, setPublicDemoStats] = useState<PublicDemoStatsType[]>([]);
+  const [publicDemoLoading, setPublicDemoLoading] = useState(false);
+  const [publicDemoError, setPublicDemoError] = useState<string | undefined>();
   const deploymentsTable = getConfigValue('DEPLOYMENTS_TABLE');
 
   useEffect(() => {
@@ -43,6 +48,16 @@ export default function Dashboard() {
         ]);
         setClients(clientData);
         setDeployments(deploymentData);
+
+        // Fetch public demo stats asynchronously (don't block dashboard)
+        const demoClients = clientData.filter((c) => c.config.publicDemo);
+        if (demoClients.length > 0) {
+          setPublicDemoLoading(true);
+          fetchPublicDemoStats(clientData)
+            .then(setPublicDemoStats)
+            .catch((e) => setPublicDemoError(e instanceof Error ? e.message : 'Failed to load demo stats'))
+            .finally(() => setPublicDemoLoading(false));
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load data');
       } finally {
@@ -296,6 +311,15 @@ export default function Dashboard() {
           />
         </Col>
       </Row>
+
+      {/* Public Demo Stats */}
+      {(publicDemoStats.length > 0 || publicDemoLoading || publicDemoError) && (
+        <Row className="g-4 mb-5">
+          <Col lg={10}>
+            <PublicDemoStats stats={publicDemoStats} loading={publicDemoLoading} error={publicDemoError} />
+          </Col>
+        </Row>
+      )}
 
       {/* Activity Feed and Workflow Hubs */}
       <Row className="g-4 mb-5">

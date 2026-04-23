@@ -60,6 +60,7 @@ import { DisasterRecoveryConstruct } from '../constructs/disaster-recovery-const
 import { V2AppsConstruct } from '../constructs/v2-apps-construct';
 import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
 import { WorkspaceChatAgentProxy } from '../constructs/workspace-chat-agent-proxy-construct';
+import { PublicDemoProxy } from '../constructs/public-demo-proxy-construct';
 import { WorkspaceChatToolsConstruct } from '../constructs/workspace-chat-tools-construct';
 import { NullProvider } from '@cdktf/provider-null/lib/provider';
 import { awsNameWithHashedPrefix } from '../constructs/aws-name-utils';
@@ -246,6 +247,7 @@ export class NumaClientStack extends TerraformStack {
         region: clientConfig.region,
         sourceBuckets,
         userPoolId: core.userPoolId,
+        qBusinessApplicationId: core.qBusinessApplicationId,
       });
     }
 
@@ -514,6 +516,25 @@ export class NumaClientStack extends TerraformStack {
       });
     }
 
+    // Public demo proxy — lightweight, unauthenticated chat proxy for demos.
+    // Requires workspace chat to be enabled (reuses the same AgentCore runtime).
+    let publicDemoProxy: PublicDemoProxy | undefined;
+    if (clientConfig.publicDemo && clientConfig.numaWorkspaceChat && workspaceChatAgent) {
+      publicDemoProxy = new PublicDemoProxy(this, 'public-demo-proxy', {
+        clientName: props.clientName,
+        region: clientConfig.region,
+        agentRuntimeArn: workspaceChatAgent.agentRuntimeArn,
+        outputsBucketName: core.outputsBucket.bucket.bucket,
+        outputsBucketArn: core.outputsBucket.bucket.arn,
+        dailyLimitUsd: clientConfig.publicDemoDailyLimitUsd,
+        countersTableName: core.usageAnalyticsCountersTable.name,
+        countersTableArn: core.usageAnalyticsCountersTable.arn,
+        workspaceToolsLambdaArn: workspaceChatTools?.lambdaArn,
+        workspaceToolsLambdaName: workspaceChatTools?.lambdaName,
+        agentCoreRegion,
+      });
+    }
+
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
       ...clientConfig,
       environmentName: props.environmentName,
@@ -533,6 +554,8 @@ export class NumaClientStack extends TerraformStack {
       workspaceChatAgentProxyUrl: workspaceChatAgentProxy?.functionUrl,
       // Shared document Q&A Lambda Function URL for public sharing feature
       sharedChatFunctionUrl: sharedChat.functionUrl,
+      // Public demo proxy Lambda Function URL (unlisted, no auth, Haiku 4.5 only)
+      publicDemoProxyUrl: publicDemoProxy?.functionUrl,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
@@ -854,6 +877,10 @@ export class NumaClientStack extends TerraformStack {
         TRANSCRIPTION_SERVICE: (clientConfig.numaFiles ?? false) ? (clientConfig.transcriptionService ?? false) : false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
+        PUBLIC_DEMO: clientConfig.publicDemo ?? false,
+        PUBLIC_DEMO_PROXY_URL: publicDemoProxy?.functionUrl ?? '',
+        SSO_ENABLED: clientConfig.ssoEnabled ?? true,
+        SSO_ENTERPRISE: clientConfig.ssoEnterprise ?? false,
         NUMA_VERSION: siteVersion,
       }),
       contentType: 'application/json',
@@ -1351,6 +1378,39 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * Used when a whitelabel frontend shares the same User Pool but has its own app client.
          */
         additionalCognitoClientIds: z.string().optional(),
+
+        /**
+         * Whether to enable the public demo chat page (unlisted, no auth, Haiku 4.5 only).
+         * When enabled, creates a public proxy Lambda + CloudFront route at /demo.
+         * Requires numaWorkspaceChat to be enabled.
+         *
+         * @default false
+         */
+        publicDemo: z.boolean().optional().default(false),
+
+        /**
+         * Daily cost limit (USD) for the public demo chat.
+         * Requests are blocked with HTTP 429 once the daily accumulated cost exceeds this.
+         *
+         * @default 10
+         */
+        publicDemoDailyLimitUsd: z.number().optional().default(10),
+
+        /**
+         * Whether to enable SSO (SAML 2.0) self-service configuration.
+         * When true, the SSO admin tab is visible and admins can configure identity providers.
+         *
+         * @default true
+         */
+        ssoEnabled: z.boolean().optional().default(true),
+
+        /**
+         * Whether to enable enterprise SSO features (group mapping, OIDC, SSO-only, SCIM, user management).
+         * Requires ssoEnabled to be true.
+         *
+         * @default false
+         */
+        ssoEnterprise: z.boolean().optional().default(false),
       })
       .strict()
   );

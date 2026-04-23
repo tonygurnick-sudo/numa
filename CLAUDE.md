@@ -2,6 +2,10 @@
 
 We are experienced developers using AI tools to move faster and build better software. You are an expert-level AI — act like it. Don't underestimate your own capabilities, don't dumb things down, and don't hedge when you have a clear recommendation. Challenge our ideas and point out flaws — we want your honest technical opinion, not agreement for the sake of it. But the final call is always ours. Match quality to context: production changes should be production-ready, experimental work can be scrappy.
 
+**Quality bar:** Always reason thoroughly and deeply. Treat every request as complex unless explicitly told otherwise. Never optimize for brevity at the expense of quality. Think step-by-step, consider tradeoffs, and provide comprehensive analysis. Do not take shortcuts, skip steps, or produce shallow work to save tokens.
+
+**Architectural decisions require human input.** Do not make significant architectural choices (new patterns, major refactors, technology selections, data model changes, infrastructure decisions) without discussing them with the user first. Present options, explain tradeoffs, and let the user decide. The code is easy to write — picking the right direction is the hard part.
+
 ---
 
 ## CLAUDE.md Structure
@@ -95,8 +99,9 @@ If the Context7 MCP server is enabled, always use it automatically when doing co
 | ------------------------- | ---------- | ------------ | ------------------------------------------------------------------------------- |
 | `q-demo`                  | Q Demo     | 905418183804 | Dev/demo stacks — all dev client accounts live here                             |
 | `arcanum-q-deployer-prod` | Q Deployer | 207567759910 | Deployer account — holds `numa-client-config` table, deploys to client accounts |
+| `arcanum-prod-numa-demo`  | HQ/Demo    | —            | HQ stack (the main Arcanum internal/demo environment)                           |
 
-Use `AWS_PROFILE=q-demo` for most local dev and client account access. Use `AWS_PROFILE=arcanum-q-deployer-prod` for deployer-level operations (e.g., `cd tools/ && AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config nolia`).
+Use `AWS_PROFILE=q-demo` for most local dev and client account access. Use `AWS_PROFILE=arcanum-prod-numa-demo` for the HQ stack. Use `AWS_PROFILE=arcanum-q-deployer-prod` for deployer-level operations (e.g., `cd tools/ && AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config nolia`).
 
 **Regions:** Most stacks are `us-east-1`. Some clients use `ap-southeast-2` (Sydney). Nolia uses `ap-southeast-3` (Jakarta) with cross-region AgentCore in Sydney.
 
@@ -224,6 +229,8 @@ CloudFront routes `/api/*` to API Gateway and `/api/numa-chat-agent/*` directly 
 
 Each client deploys into its own isolated AWS account. The deployer account (Q Deployer, `arcanum-q-deployer-prod`) assumes an `ArcanumAIAccess` role into client accounts to provision infrastructure. Integrations use a separate proxy account.
 
+**Instance URLs:** All Numa instances follow the pattern `https://<client-name>.numa.arcanum.ai/`. The custom domain field in client config exists but is unreliable without manual fiddling -- don't use it. Assume the standard subdomain pattern.
+
 **Single source of truth:** The `numa-client-config` DynamoDB table in the deployer account holds all client configuration — region, feature flags, preferred knowledge base, budget, etc. The frontend `public/config.json` is gitignored and local-only — developers edit it for localhost. In deployed environments, it’s auto-generated from the DynamoDB table.
 
 ### clientConfigProd.json — Local Dev Override
@@ -266,6 +273,31 @@ See `documentation/email-sending/` for the full guide: architecture, security mo
 
 **Infra (CDKTF):** Build frontend + package lambdas first, then `yarn cdktf deploy --auto-approve <stack>`.
 
+### Deploying to Dev Stacks (Local)
+
+To deploy a dev stack locally, run from within `infra/`:
+
+```bash
+yarn && yarn get
+export TF_ENVIRONMENT=prod
+export AWS_REGION=us-east-1
+export CLIENT_OVERRIDE=<client-name>
+yarn cdktf deploy --auto-approve numa-<client-name>
+```
+
+**Important rules:**
+
+- **Always confirm with the user before deploying.** Never trigger a deploy autonomously.
+- **Run deploys as background tasks.** They can take up to 30 minutes.
+- **NEVER deploy to customer stacks locally.** Customer deployments must go through the Customer Success Portal UI, triggered by the user. Local deploys are only for dev stacks (e.g., `nd-labs`, `arcanum-demo-greg`).
+
+**Terraform lock issues:** If a deploy fails with a state lock error, resolve it from the Terraform output directory:
+
+```bash
+cd infra/cdktf.out/prod/stacks/numa-<client-name>
+terraform force-unlock --force <lock-id>
+```
+
 ## Branching Strategy
 
 Feature branches -> `dev` (default MR target) -> `main` (release). No pipeline on `dev` push. Full pipeline on `main` push. Hotfixes can target `main` directly — merge back into `dev` afterwards.
@@ -280,7 +312,7 @@ Feature branches -> `dev` (default MR target) -> `main` (release). No pipeline o
 - `/lambdas/node/` — 29 Node Lambdas (authorizers, agents API, scheduling, notifications, numa-ops, branding, etc.)
 - `/infra/` — CDKTF stacks and constructs (client, deployer, NextGen, Pipedream proxy, workspace agent, KBs)
 - `/lib/` — Shared libraries (Bedrock, S3, PRM, OAuth providers, utilities)
-- `/tools/` — Operational tools (create users, retrieve config, check index progress, reports)
+- `/tools/` — Operational tools and dev scripts (create users, retrieve config, check index progress, reports). **All custom scripts and tools for dev usage belong here — not in the repo root.** If you're writing a helper script, put it in `tools/`.
 - `/documentation/` — Domain-specific docs (connectors, nolia)
 - `/deployer/` — Streamlit-based Q Apps deployer tool
 - `/numa-customer-success-portal/` — Customer Success Portal frontend (see its own `CLAUDE.md`)

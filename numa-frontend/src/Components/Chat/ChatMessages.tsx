@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { MarkdownContent } from '../Renderers/MarkdownContent';
 import { WorkspaceChatMarkdown, type FileReference, type FolderReference } from '../Renderers/WorkspaceChatMarkdown';
 import { ChatReferencesDropdown } from './ChatReferencesDropdown';
-import { useAuth } from '../../Providers/AuthProvider';
+import { useAuthOptional } from '../../Providers/AuthProvider';
 // Tool rendering is handled via unified tool cards; direct TOOL_CONFIG use removed
 import { ClipboardList } from 'lucide-react';
 import { UnifiedToolCard } from '../UnifiedToolCard';
@@ -315,6 +315,7 @@ const ChatMessages = ({
   onOpenFilePreview,
   onOpenFolderPreview,
   onSendPrompt,
+  getCredentials: getCredentialsProp,
 }: {
   messages: ChatMessage[];
   messageEndRef: RefObject<HTMLDivElement>;
@@ -342,9 +343,12 @@ const ChatMessages = ({
   onOpenFilePreview?: (ref: FileReference) => void;
   onOpenFolderPreview?: (ref: FolderReference) => void;
   onSendPrompt?: (text: string) => void;
+  /** Optional credentials override -- when provided, skips useAuth() (e.g. public demo page) */
+  getCredentials?: () => Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken?: string }>;
 }) => {
   const { t } = useTranslation('chat');
-  const { getCredentials } = useAuth();
+  const auth = useAuthOptional();
+  const getCredentials = getCredentialsProp || auth?.getCredentials;
   const { branding } = useBranding();
   const rawLogoSrc = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || numaIcon;
   const logoSrc = useBrandingAsset(rawLogoSrc, numaIcon);

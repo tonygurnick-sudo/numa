@@ -5,9 +5,11 @@ import AppProviders from './Providers/AppProviders';
 import { ProtectedRoute } from './Components/RequiredFeaturesWrapper';
 import { ROUTE_CONFIG } from './utils/routeConfig';
 import AppLayout from './Layouts/AppLayout';
+import DemoLayout from './Layouts/DemoLayout';
 import { useTranslation } from 'react-i18next';
 import { getFlag } from './utils/featureFlags';
 import { useBrowserNotificationRouteTracker } from './hooks/useBrowserNotification';
+import SSOCallbackHandler from './Components/Auth/SSOCallbackHandler';
 
 // Lazy load non-critical pages
 const ResetPassword = lazy(() => import('./Pages/ResetPassword').then((m) => ({ default: m.ResetPassword })));
@@ -20,6 +22,10 @@ const SharedAnalytics = lazy(() => import('./Pages/SharedAnalytics').then((m) =>
 const DropZonePage = lazy(() => import('./Pages/DropZonePage').then((m) => ({ default: m.DropZonePage })));
 const FilePreviewFullScreen = lazy(() =>
   import('./Pages/FilePreviewFullScreen').then((m) => ({ default: m.FilePreviewFullScreen }))
+);
+const PublicDemoChat = lazy(() => import('./Pages/PublicDemoChat').then((m) => ({ default: m.PublicDemoChat })));
+const PublicDemoFilePreview = lazy(() =>
+  import('./Pages/PublicDemoFilePreview').then((m) => ({ default: m.PublicDemoFilePreview }))
 );
 
 // Component to wrap authenticated routes with AppLayout
@@ -69,7 +75,11 @@ const AppRoutes = () => {
       <Routes>
         <Route
           path="/"
-          element={<Navigate to={user ? (user?.features?.includes('chat') ? '/chat' : '/dash') : '/login'} replace />}
+          element={
+            <SSOCallbackHandler>
+              <Navigate to={user ? (user?.features?.includes('chat') ? '/chat' : '/dash') : '/login'} replace />
+            </SSOCallbackHandler>
+          }
         />
         <Route
           path="/login"
@@ -86,6 +96,19 @@ const AppRoutes = () => {
         <Route path="/shared/:uuid" element={<SharedDocumentChat />} />
         {/* Public drop zone upload page - no authentication required */}
         <Route path="/dropzone/:uuid" element={<DropZonePage />} />
+        {/* Public demo chat page - no authentication required, unlisted URL */}
+        {getFlag('PUBLIC_DEMO') && (
+          <Route
+            path="/demo"
+            element={
+              <DemoLayout>
+                <PublicDemoChat />
+              </DemoLayout>
+            }
+          />
+        )}
+        {/* Public demo file preview - no authentication required */}
+        {getFlag('PUBLIC_DEMO') && <Route path="/demo/file-preview" element={<PublicDemoFilePreview />} />}
         {/* Protected share analytics page - only accessible to share creator */}
         <Route
           path="/analyze/shared/:uuid"

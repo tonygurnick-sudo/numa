@@ -183,6 +183,9 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Alchemer
   alchemer: [],
+
+  // Microsoft To-Do
+  microsofttodo: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {

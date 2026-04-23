@@ -63,6 +63,8 @@
     "connect": "Connect",
     "connecting": "Connecting...",
     "connectionError": "Error",
+    "tokenExpired": "Token expired — reconnect required",
+    "reconnect": "Reconnect",
     "loadingProviderFiles": "Loading {{provider}} files...",
     "noFilesFound": "No files found",
     "folderEmpty": "This folder is empty.",
@@ -72,7 +74,8 @@
       "loadFolderContents": "Failed to load folder contents",
       "navigateFailed": "Failed to navigate",
       "loadNextPage": "Failed to load next page",
-      "loadPreviousPage": "Failed to load previous page"
+      "loadPreviousPage": "Failed to load previous page",
+      "authExpired": "{{provider}} access token has expired or been revoked. Please reconnect with new credentials."
     }
   },
   "toolbar": {

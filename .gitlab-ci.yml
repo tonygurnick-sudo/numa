@@ -96,6 +96,7 @@ pre-commit:
         - lambdas/node/admin-mfa-settings
         - lambdas/node/admin-integration-settings
         - lambdas/node/admin-scheduling-settings
+        - lambdas/node/admin-sso-settings
         - lambdas/node/agent-schedule-runner
         - lambdas/node/audit-logs-admin
         - lambdas/node/audit-user-management-writer
@@ -106,6 +107,7 @@ pre-commit:
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder
         - lambdas/node/branding-config
+        - lambdas/node/cognito-pre-signup
         - lambdas/node/callback-renamer
         - lambdas/node/chat-settings
         - lambdas/node/cloudfront-invalidator
@@ -118,6 +120,7 @@ pre-commit:
         - lambdas/node/google-cloud-setup
         - lambdas/node/notifications-api
         - lambdas/node/notifications-stream
+        - lambdas/node/numa-quota-report-daily
         - lambdas/node/oauth-auth-handler
         - lambdas/node/numa-ops-api
         - lambdas/node/numa-ops-config-api
@@ -132,6 +135,10 @@ pre-commit:
         - lambdas/node/seed-api-key
         - lambdas/node/seed-ops-config
         - lambdas/node/srp-hasher
+        - lambdas/node/scim-endpoint
+        - lambdas/node/sso-group-mapper
+        - lambdas/node/sso-token-exchange
+        - lambdas/node/sso-token-refresh
         - lambdas/node/step-function-shim
         - lambdas/node/system-user-creator
         - lambdas/node/token-adjuster

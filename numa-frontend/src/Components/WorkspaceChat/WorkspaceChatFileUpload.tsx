@@ -23,6 +23,14 @@ export interface WorkspaceChatFileUploadProps {
   onUploadComplete?: (responses: WorkspaceChatUploadResponse[]) => void;
   /** Function to get AWS credentials for direct S3 uploads */
   getCredentials: () => Promise<AwsCredentialIdentity>;
+  /** Optional upload function override (e.g. public demo uses a different notify endpoint) */
+  uploadFn?: (
+    file: File,
+    conversationId: string,
+    relativePath: string | undefined,
+    onProgress: (progress: number) => void,
+    getCredentials: () => Promise<AwsCredentialIdentity>
+  ) => Promise<WorkspaceChatUploadResponse>;
 }
 
 interface FileUploadItem {
@@ -96,6 +104,7 @@ export function WorkspaceChatFileUpload({
   conversationId,
   onUploadComplete,
   getCredentials,
+  uploadFn,
 }: WorkspaceChatFileUploadProps) {
   const { t } = useTranslation('chat');
   const [files, setFiles] = useState<FileUploadItem[]>([]);
@@ -212,13 +221,8 @@ export function WorkspaceChatFileUpload({
         };
 
         // Use direct S3 upload with real progress tracking
-        const response = await uploadWorkspaceChatFileDirect(
-          item.file,
-          conversationId,
-          item.relativePath,
-          onProgress,
-          getCredentials
-        );
+        const doUpload = uploadFn || uploadWorkspaceChatFileDirect;
+        const response = await doUpload(item.file, conversationId, item.relativePath, onProgress, getCredentials);
 
         setFiles((prev) =>
           prev.map((f, idx) => (idx === i ? { ...f, status: 'success' as const, progress: 100, response } : f))

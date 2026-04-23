@@ -58,6 +58,7 @@ import zohoCrmIcon from '../assets/icons/zoho_crm.svg';
 import microsoftSqlServerIcon from '../assets/icons/microsoft_sql_server.svg';
 import microsoftDynamics365SalesIcon from '../assets/icons/microsoft_dynamics_365_sales.svg';
 import dynamics365BusinessCentralApiIcon from '../assets/icons/dynamics_365_business_central_api.svg';
+import microsoftTodoIcon from '../assets/icons/microsofttodo.svg';
 import i18n from '../i18n';
 
 export type BootstrapColor =
@@ -608,6 +609,16 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     fallback_icon: 'bi bi-briefcase',
     fallback_color: 'primary',
     example_query: connectionText('dynamics_365_business_central_api', 'example_query'),
+  },
+  microsofttodo: {
+    id: 'microsofttodo',
+    name: connectionText('microsofttodo', 'name'),
+    description: connectionText('microsofttodo', 'description'),
+    auth_type: 'oauth',
+    img_src: microsoftTodoIcon,
+    fallback_icon: 'bi bi-check2-square',
+    fallback_color: 'primary',
+    example_query: connectionText('microsofttodo', 'example_query'),
   },
 });
 

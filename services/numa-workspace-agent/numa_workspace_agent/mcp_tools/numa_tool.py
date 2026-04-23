@@ -563,6 +563,35 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
     if not file_path.exists():
         return _err(f"File not found: {file_param}")
 
+    # ===== NEW LOGIC START =====
+    # Auto-convert PPT/PPTX to PDF before upload
+    upload_filename = file_path.name
+    if file_path.suffix.lower() in [".ppt", ".pptx"]:
+        original_stem = file_path.stem
+        convert_params = {
+            "file_path": str(file_path),
+            "format": "pdf",
+            "mode": "file",
+            "__user_sub": params.get("__user_sub", ""),
+            "__conversation_id": params.get("__conversation_id", ""),
+        }
+        convert_result = await _handle_convert_document(convert_params)
+
+        if convert_result.get("isError"):
+            error_text = convert_result.get("content", [{}])[0].get(
+                "text", "unknown error"
+            )
+            return _err(f"Failed to convert {file_path.suffix} to PDF: {error_text}")
+
+        try:
+            parsed = json.loads(convert_result["content"][0]["text"])
+            file_param = parsed["output_path"]
+            file_path = Path(file_param)
+            upload_filename = f"{original_stem}.pdf"
+        except (KeyError, json.JSONDecodeError, IndexError) as e:
+            return _err(f"Failed to parse converted PDF path: {str(e)}")
+    # ===== NEW LOGIC END =====
+
     file_size = file_path.stat().st_size
     is_large_file = file_size >= PRESIGNED_URL_THRESHOLD
 
@@ -589,7 +618,7 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
             )
 
     lambda_params: dict[str, Any] = {
-        "filename": file_path.name,
+        "filename": upload_filename,
         "kb_id": params.get("kb_id", "company"),
         "kb_path": kb_path,
         "size_bytes": file_size,
@@ -1016,6 +1045,17 @@ _KB_OPERATIONS = {
 }
 
 
+def _get_allowed_kb_operations() -> list[str] | None:
+    """Return the allowed KB sub-operations, or None if unrestricted."""
+    raw = os.environ.get("NUMA_ALLOWED_KB_OPERATIONS")
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return []  # Malformed → fail-closed
+
+
 async def _handle_knowledge_base(params: dict[str, Any]) -> dict[str, Any]:
     """Knowledge base operations — query, upload, download, list, download_folder, delete.
 
@@ -1028,6 +1068,14 @@ async def _handle_knowledge_base(params: dict[str, Any]) -> dict[str, Any]:
     if not handler:
         valid = ", ".join(_KB_OPERATIONS)
         return _err(f"Invalid knowledge_base operation: '{operation}'. Valid: {valid}")
+
+    # Check agent-type-level KB operation restriction (e.g. read-only access)
+    allowed_kb_ops = _get_allowed_kb_operations()
+    if allowed_kb_ops is not None and operation not in allowed_kb_ops:
+        return _err(
+            f"The '{operation}' knowledge base operation is not available for this agent type. "
+            f"Available operations: {', '.join(allowed_kb_ops) if allowed_kb_ops else 'none'}."
+        )
 
     # Pass through all params except 'operation' to the sub-handler
     sub_params = {k: v for k, v in params.items() if k != "operation"}

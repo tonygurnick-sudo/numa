@@ -1594,7 +1594,7 @@ async def _handle_chat(
         _name="PARALLEL_LOADS",
         phase="request",
         elapsed_ms=round(load_elapsed_ms, 1),
-        has_company_profile=bool(company_profile and company_profile.strip()),
+        has_company_profile=bool(company_profile),
         has_agent_config=agent_config is not None,
         integration_added=len(integration_sync_result.get("added", [])),
         integration_cached=len(integration_sync_result.get("cached", [])),
@@ -1651,8 +1651,12 @@ async def _handle_chat(
         request_id=request_id,
         migrate_from_v1=migrate_from_v1,
         agent_id=agent_id,
-        has_company_profile=bool(company_profile and company_profile.strip()),
-        company_profile_length=len(company_profile) if company_profile else 0,
+        has_company_profile=bool(company_profile),
+        company_profile_length=(
+            len(company_profile.get("companyInformation", ""))
+            if isinstance(company_profile, dict)
+            else 0
+        ),
     )
 
     # Warm session sync guard: if uploads are expected but missing locally, fetch from S3

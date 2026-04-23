@@ -14,6 +14,7 @@ import type {
   SDKContentBlock,
   SDKToolUseBlock,
   SDKToolResultBlock,
+  SDKStreamEvent,
   SDKEventContext,
   WorkspaceChatMessage,
   WorkspaceChatSegment,
@@ -1542,11 +1543,540 @@ function handleErrorEvent(event: SDKErrorEvent, _context: SDKEventContext, helpe
 }
 
 // ============================================================
+// Shared Stream Event Handler Factory
+// ============================================================
+
+/** Configuration for the shared stream event handler factory. */
+export interface StreamEventHandlerConfig {
+  /** State setter for messages. Accepts a broader type for compatibility with hooks that use loose Message types. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  setMessages: (updater: (prev: any[]) => any[]) => void;
+  /** State setter for button status. */
+  setButtonStatus: (status: string) => void;
+  /** Ref holding the SDK event context (toolUseMap, docStripState, etc.). */
+  eventContextRef: { current: SDKEventContext };
+  /** Ref holding the map of streaming tool blocks (blockIndex -> tool info). */
+  streamingToolsRef: {
+    current: Map<number, { id: string; name: string; inputBuffer: string; parentToolUseId?: string | null }>;
+  };
+  /** Ref accumulating the raw text for document extraction. */
+  rawTextRef: { current: string };
+  /** Optional ref for suppressing rendering when user clicked stop. */
+  isStoppingRef?: { current: boolean };
+  /** Optional ref tracking active Task (subagent) tool IDs. */
+  activeStreamingTasksRef?: { current: Set<string> };
+}
+
+/**
+ * Create a reusable stream event handler callback.
+ *
+ * This factory extracts the event processing logic shared between the workspace
+ * chat streaming hook and the public demo chat. It handles:
+ * - StreamEvent processing (text deltas, thinking blocks, tool use streaming)
+ * - Tool result handling from user events (populates tool_card result data)
+ * - Non-streaming SDK events via processSDKEvent()
+ * - Optional subagent/Task routing (when activeStreamingTasksRef is provided)
+ */
+export function createStreamEventHandler(config: StreamEventHandlerConfig): (event: SDKEvent) => void {
+  const {
+    setMessages,
+    setButtonStatus,
+    eventContextRef,
+    streamingToolsRef,
+    rawTextRef,
+    isStoppingRef,
+    activeStreamingTasksRef,
+  } = config;
+
+  const helpers = createWorkspaceChatMessageHelpers(setMessages, setButtonStatus);
+
+  return (event: SDKEvent) => {
+    // Stop clicked -- suppress all further rendering while backend winds down
+    if (isStoppingRef?.current) return;
+
+    // === Handle StreamEvent for real-time streaming ===
+    if (event.type === 'StreamEvent') {
+      eventContextRef.current.skipTextFromAssistant = true;
+
+      const streamEvent = (event as SDKStreamEvent).event;
+      const blockIndex = streamEvent?.index ?? -1;
+
+      // --- TEXT DELTAS ---
+      if (
+        streamEvent?.type === 'content_block_delta' &&
+        streamEvent.delta?.type === 'text_delta' &&
+        streamEvent.delta?.text
+      ) {
+        const rawTextDelta = streamEvent.delta.text;
+        rawTextRef.current += rawTextDelta;
+
+        const textDelta = parseChunkWithoutDocComments(rawTextDelta, eventContextRef.current.docStripState);
+        if (!textDelta) return;
+
+        setButtonStatus('streaming');
+
+        setMessages((prev) => {
+          const updated = [...prev];
+          let lastMsg = updated[updated.length - 1];
+
+          if (!lastMsg || lastMsg.role !== 'assistant') {
+            lastMsg = { role: 'assistant', content: '', segments: [], status: null };
+            updated.push(lastMsg);
+          } else {
+            lastMsg = { ...lastMsg };
+            updated[updated.length - 1] = lastMsg;
+          }
+
+          // Clear processing/thinking/transcribing status when text starts arriving
+          if (
+            lastMsg.status === 'thinking' ||
+            lastMsg.status === 'processing' ||
+            lastMsg.status === 'transcribing' ||
+            lastMsg.status === 'initializing'
+          ) {
+            lastMsg.status = 'streaming';
+          }
+
+          const segments = [...(lastMsg.segments || [])];
+
+          // Remove inline_thinking spinner when text starts (thinking is done)
+          const inlineThinkingIdx = segments.findIndex((s) => s.kind === 'inline_thinking');
+          if (inlineThinkingIdx >= 0) {
+            segments.splice(inlineThinkingIdx, 1);
+          }
+
+          // Mark any pending tool_cards as complete when text starts streaming.
+          for (let i = 0; i < segments.length; i++) {
+            const seg = segments[i];
+            if (seg.kind === 'tool_card' && seg.isLoading) {
+              segments[i] = { ...seg, isLoading: false };
+            }
+          }
+
+          const lastSeg = segments[segments.length - 1];
+
+          if (lastSeg?.kind === 'text' && !lastSeg.finalized) {
+            segments[segments.length - 1] = { ...lastSeg, text: (lastSeg.text || '') + textDelta };
+          } else {
+            segments.push({ kind: 'text', text: textDelta, finalized: false });
+          }
+
+          lastMsg.segments = segments;
+          lastMsg.content = segments
+            .filter((s): s is { kind: 'text'; text: string } => s.kind === 'text')
+            .map((s) => s.text)
+            .join('');
+
+          return updated;
+        });
+      }
+
+      // --- THINKING BLOCK START ---
+      if (streamEvent?.type === 'content_block_start' && streamEvent.content_block?.type === 'thinking') {
+        setMessages((prev) => {
+          const updated = [...prev];
+          let lastMsg = updated[updated.length - 1];
+
+          if (!lastMsg || lastMsg.role !== 'assistant') {
+            lastMsg = { role: 'assistant', content: '', segments: [] };
+            updated.push(lastMsg);
+          } else {
+            lastMsg = { ...lastMsg };
+            updated[updated.length - 1] = lastMsg;
+          }
+
+          if (lastMsg.status === 'processing' || lastMsg.status === 'transcribing') {
+            lastMsg.status = 'thinking';
+          }
+
+          const segments = [...(lastMsg.segments || [])];
+          const hasInlineThinking = segments.some((s) => s.kind === 'inline_thinking');
+          if (!hasInlineThinking) {
+            segments.push({ kind: 'inline_thinking', isStreaming: true });
+          }
+
+          lastMsg.segments = segments;
+          return updated;
+        });
+      }
+
+      // --- TOOL BLOCK START ---
+      if (
+        streamEvent?.type === 'content_block_start' &&
+        streamEvent.content_block?.type === 'tool_use' &&
+        streamEvent.content_block.id &&
+        streamEvent.content_block.name
+      ) {
+        const { id, name } = streamEvent.content_block;
+        const parentToolUseId = (event as SDKStreamEvent).parent_tool_use_id;
+
+        // Determine effective parent ID for subagent routing
+        let effectiveParentId = parentToolUseId || null;
+        if (activeStreamingTasksRef) {
+          const activeTaskId =
+            activeStreamingTasksRef.current.size > 0
+              ? Array.from(activeStreamingTasksRef.current)[activeStreamingTasksRef.current.size - 1]
+              : null;
+          effectiveParentId = parentToolUseId || (name !== 'Task' ? activeTaskId : null);
+        }
+
+        streamingToolsRef.current.set(blockIndex, {
+          id,
+          name,
+          inputBuffer: '',
+          parentToolUseId: effectiveParentId,
+        });
+
+        eventContextRef.current.toolUseMap.set(id, {
+          name,
+          input: {},
+          parentToolUseId: effectiveParentId || '',
+        });
+
+        if (activeStreamingTasksRef && name === 'Task') {
+          activeStreamingTasksRef.current.add(id);
+        }
+
+        if (effectiveParentId && activeStreamingTasksRef) {
+          // Subagent tool -- append to parent subagent segment
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx < 0) return prev;
+
+            const lastMsg = { ...updated[lastIdx] };
+            const segments = [...(lastMsg.segments || [])];
+
+            const parentIdx = segments.findIndex(
+              (s) => s.kind === 'subagent' && s.parentToolUseId === effectiveParentId
+            );
+
+            if (parentIdx >= 0) {
+              const parentSeg = segments[parentIdx] as { kind: 'subagent'; events: unknown[] };
+              segments[parentIdx] = {
+                ...parentSeg,
+                events: [
+                  ...parentSeg.events,
+                  {
+                    type: 'assistant',
+                    message: { content: [{ type: 'tool_use', id, name, input: {} }] },
+                  },
+                ],
+              };
+              lastMsg.segments = segments;
+              updated[lastIdx] = lastMsg;
+            }
+
+            return updated;
+          });
+        } else {
+          // Top-level tool -- create initial segment
+          const initialSegment = createInitialToolSegment(name, id);
+
+          if (initialSegment) {
+            setMessages((prev) => {
+              const updated = [...prev];
+              let lastMsg = updated[updated.length - 1];
+
+              if (!lastMsg || lastMsg.role !== 'assistant') {
+                lastMsg = { role: 'assistant', content: '', segments: [] };
+                updated.push(lastMsg);
+              } else {
+                lastMsg = { ...lastMsg };
+                updated[updated.length - 1] = lastMsg;
+              }
+
+              // Clear processing/thinking/transcribing status when tool starts
+              if (
+                lastMsg.status === 'processing' ||
+                lastMsg.status === 'thinking' ||
+                lastMsg.status === 'transcribing'
+              ) {
+                lastMsg.status = 'streaming';
+              }
+
+              const segments = [...(lastMsg.segments || [])];
+
+              // Remove inline_thinking spinner when tool starts
+              const inlineThinkingIdx = segments.findIndex((s) => s.kind === 'inline_thinking');
+              if (inlineThinkingIdx >= 0) {
+                segments.splice(inlineThinkingIdx, 1);
+              }
+
+              segments.push(initialSegment);
+
+              lastMsg.segments = segments;
+              updated[updated.length - 1] = lastMsg;
+              return updated;
+            });
+          }
+        }
+      }
+
+      // --- TOOL INPUT DELTA ---
+      if (
+        streamEvent?.type === 'content_block_delta' &&
+        streamEvent.delta?.type === 'input_json_delta' &&
+        blockIndex >= 0
+      ) {
+        const toolInfo = streamingToolsRef.current.get(blockIndex);
+        if (toolInfo) {
+          toolInfo.inputBuffer += streamEvent.delta.partial_json || '';
+        }
+      }
+
+      // --- CONTENT BLOCK STOP ---
+      if (streamEvent?.type === 'content_block_stop' && blockIndex >= 0) {
+        const toolInfo = streamingToolsRef.current.get(blockIndex);
+        if (toolInfo) {
+          let input: Record<string, unknown> = {};
+          try {
+            input = JSON.parse(toolInfo.inputBuffer);
+          } catch {
+            /* ignore parse errors */
+          }
+
+          if (toolInfo.parentToolUseId && activeStreamingTasksRef) {
+            // Subagent tool input -- update parent segment
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx < 0) return prev;
+
+              const lastMsg = { ...updated[lastIdx] };
+              const segments = [...(lastMsg.segments || [])];
+
+              const parentIdx = segments.findIndex(
+                (s) => s.kind === 'subagent' && s.parentToolUseId === toolInfo.parentToolUseId
+              );
+
+              if (parentIdx >= 0) {
+                const parentSeg = segments[parentIdx] as {
+                  kind: 'subagent';
+                  events: Array<{
+                    type: string;
+                    message?: { content?: Array<{ type: string; id?: string; input?: unknown }> };
+                  }>;
+                };
+                const updatedEvents = parentSeg.events.map((evt) => {
+                  if (evt.type === 'assistant' && evt.message?.content) {
+                    const updatedContent = evt.message.content.map((block) => {
+                      if (block.type === 'tool_use' && block.id === toolInfo.id) {
+                        return { ...block, input };
+                      }
+                      return block;
+                    });
+                    return { ...evt, message: { ...evt.message, content: updatedContent } };
+                  }
+                  return evt;
+                });
+                segments[parentIdx] = { ...parentSeg, events: updatedEvents };
+                lastMsg.segments = segments;
+                updated[lastIdx] = lastMsg;
+              }
+
+              return updated;
+            });
+          } else {
+            // Top-level tool input -- update segment description
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx < 0) return prev;
+
+              const lastMsg = { ...updated[lastIdx] };
+              const segments = [...(lastMsg.segments || [])];
+
+              const segIdx = segments.findIndex((s) => {
+                return s.toolUseId === toolInfo.id || s.parentToolUseId === toolInfo.id;
+              });
+
+              if (segIdx >= 0) {
+                segments[segIdx] = updateSegmentWithInput(segments[segIdx], toolInfo.name, input);
+                lastMsg.segments = segments;
+                updated[lastIdx] = lastMsg;
+              }
+
+              return updated;
+            });
+          }
+
+          streamingToolsRef.current.delete(blockIndex);
+        }
+      }
+
+      return;
+    }
+
+    // === Handle Task tool_use in assistant events (subagent tracking) ===
+    if (activeStreamingTasksRef && event.type === 'assistant') {
+      const assistantEvent = event as { message?: { content?: unknown[] } };
+      const content = assistantEvent.message?.content ?? [];
+      for (const block of content) {
+        if (typeof block === 'object' && block !== null) {
+          const toolBlock = block as { type?: string; name?: string; id?: string };
+          if (toolBlock.type === 'tool_use' && toolBlock.name === 'Task' && toolBlock.id) {
+            activeStreamingTasksRef.current.add(toolBlock.id);
+          }
+        }
+      }
+    }
+
+    // === Handle tool results from user events ===
+    if (event.type === 'user') {
+      const userEvent = event as { message?: { content?: unknown[] }; content?: unknown[] };
+      const content = userEvent.message?.content ?? userEvent.content ?? [];
+      let hasToolResults = false;
+
+      for (const block of content) {
+        if (typeof block === 'object' && block !== null && (block as { type?: string }).type === 'tool_result') {
+          hasToolResults = true;
+          const resultBlock = block as { tool_use_id?: string; is_error?: boolean };
+          const toolUseId = resultBlock.tool_use_id;
+          const isError = resultBlock.is_error ?? false;
+
+          // Mark Task tool results
+          if (activeStreamingTasksRef && toolUseId && activeStreamingTasksRef.current.has(toolUseId)) {
+            activeStreamingTasksRef.current.delete(toolUseId);
+          }
+
+          // Mark tool as complete (inline_tool or tool_card)
+          if (toolUseId) {
+            const resultContent = (block as { content?: unknown }).content;
+
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx < 0) return prev;
+
+              const lastMsg = { ...updated[lastIdx] };
+              let segments = [...(lastMsg.segments || [])];
+
+              // Find tool_card with matching toolUseId first.
+              // tool_card is checked before inline_tool because during streaming,
+              // the assistant SDK event can arrive before its StreamEvents, causing
+              // handleToolUseBlock to create a duplicate inline_tool segment with
+              // the same toolUseId.
+              const cardIdx = segments.findIndex((seg) => seg.kind === 'tool_card' && seg.toolUseId === toolUseId);
+
+              if (cardIdx >= 0) {
+                segments[cardIdx] = {
+                  ...segments[cardIdx],
+                  result: resultContent,
+                  isLoading: false,
+                  isError,
+                };
+                lastMsg.segments = segments;
+                updated[lastIdx] = lastMsg;
+                return updated;
+              }
+
+              // Find inline_tool with matching toolUseId
+              const toolIdx = segments.findIndex(
+                (seg) => seg.kind === 'inline_tool' && seg.toolUseId === toolUseId && !seg.isComplete
+              );
+
+              if (toolIdx >= 0) {
+                const tool = segments[toolIdx];
+
+                // If transient tool, remove it entirely; otherwise mark complete
+                if (tool.category === 'transient') {
+                  if (toolIdx > 0) {
+                    const prevSeg = segments[toolIdx - 1];
+                    if (prevSeg.kind === 'text') {
+                      segments[toolIdx - 1] = { ...prevSeg, finalized: true };
+                    }
+                  }
+                  segments = segments.filter((_, idx) => idx !== toolIdx);
+                } else {
+                  segments[toolIdx] = { ...tool, isComplete: true, isError };
+                }
+
+                lastMsg.segments = segments;
+                updated[lastIdx] = lastMsg;
+                return updated;
+              }
+
+              return prev;
+            });
+          }
+        }
+      }
+
+      // If the user event contained tool results, we've handled it -- don't pass to processSDKEvent
+      if (hasToolResults) return;
+    }
+
+    // === Route subagent events ===
+    if (activeStreamingTasksRef) {
+      const activeTaskId =
+        activeStreamingTasksRef.current.size > 0
+          ? Array.from(activeStreamingTasksRef.current)[activeStreamingTasksRef.current.size - 1]
+          : null;
+
+      if (activeTaskId && event.type === 'assistant') {
+        const assistantEvent = event as { message?: { content?: unknown[] } };
+        const content = assistantEvent.message?.content ?? [];
+        const hasTaskTool = content.some(
+          (b) =>
+            typeof b === 'object' &&
+            b !== null &&
+            (b as { type?: string; name?: string }).type === 'tool_use' &&
+            (b as { name?: string }).name === 'Task'
+        );
+
+        if (!hasTaskTool) {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx < 0) return prev;
+
+            const lastMsg = { ...updated[lastIdx] };
+            const segments = [...(lastMsg.segments || [])];
+
+            const parentIdx = segments.findIndex((s) => s.kind === 'subagent' && s.parentToolUseId === activeTaskId);
+
+            if (parentIdx >= 0) {
+              const parentSeg = segments[parentIdx] as { kind: 'subagent'; events: unknown[] };
+              segments[parentIdx] = {
+                ...parentSeg,
+                events: [...parentSeg.events, event],
+              };
+              lastMsg.segments = segments;
+              updated[lastIdx] = lastMsg;
+            }
+
+            return updated;
+          });
+          return;
+        }
+      }
+    }
+
+    // === Handle transcribing events (voice input pre-processing) ===
+    if (event.type === 'transcribing') {
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+          updated[lastIdx] = { ...updated[lastIdx], status: 'transcribing' };
+        }
+        return updated;
+      });
+      return;
+    }
+
+    // === Process remaining non-streaming SDK events ===
+    processSDKEvent(event, eventContextRef.current, helpers);
+  };
+}
+
+// ============================================================
 // Main Event Processor
 // ============================================================
 
 /**
- * Handle a tool_approval event — attaches approval data to the matching inline_tool segment
+ * Handle a tool_approval event -- attaches approval data to the matching inline_tool segment
  * so the approval panel renders inline below the tool indicator.
  *
  * For tool_card segments (e.g., Numa Ops), inserts an approvalOnly inline_tool segment

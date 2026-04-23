@@ -31,6 +31,7 @@ const HEADERS = {
 } as const;
 
 const OPS_CONFIG_TABLE = process.env.OPS_CONFIG_TABLE!;
+const OPS_TABLE = process.env.OPS_TABLE ?? '';
 const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
 const CHAT_SETTINGS_TABLE = process.env.CHAT_SETTINGS_TABLE ?? '';
 const REGION = process.env.AWS_REGION ?? 'us-east-1';
@@ -78,6 +79,44 @@ const addAvatarPresignedUrls = async (staffRecords: Record<string, unknown>[]): 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
 type AuthContext = { sub: string; email?: string; name?: string; groups: string[] };
+
+/**
+ * Get the set of team IDs the user has access to. Used to filter projects
+ * by boardIds so users only see projects linked to their accessible boards.
+ */
+const getAccessibleTeamIds = async (auth: AuthContext): Promise<Set<string>> => {
+  if (!OPS_TABLE) return new Set(); // No ops table configured — no filtering
+  const result = await dynamo.send(
+    new QueryCommand({
+      TableName: OPS_TABLE,
+      IndexName: 'GSI1',
+      KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)',
+      ExpressionAttributeValues: { ':pk': 'TENANT', ':sk': 'TEAM#' },
+    })
+  );
+  const teams = result.Items ?? [];
+  return new Set(
+    teams
+      .filter((team) => {
+        const ac = team.accessControl as { mode?: string; users?: string[] } | undefined;
+        if (!ac || ac.mode === 'all') return true;
+        if (team.createdBy === auth.sub) return true;
+        return Array.isArray(ac.users) && ac.users.includes(auth.sub);
+      })
+      .map((team) => String(team.id ?? team.SK ?? '').replace('TEAM#', ''))
+  );
+};
+
+/** Filter a projects array to only those accessible to the user. */
+const filterProjectsByAccess = (
+  projects: Record<string, unknown>[],
+  accessibleTeamIds: Set<string>
+): Record<string, unknown>[] =>
+  projects.filter((p) => {
+    const boardIds = p.boardIds as string[] | undefined;
+    if (!boardIds?.length) return true; // No boards = visible to all
+    return boardIds.some((id) => accessibleTeamIds.has(id));
+  });
 
 const jsonResponse = (
   statusCode: number,
@@ -425,6 +464,30 @@ const handleFields = async (
     return jsonResponse(200, updated);
   }
 
+  // DELETE /config/fields/{id} — refuse if system field or referenced by the CRM layout
+  if (method === 'DELETE' && segments.length === 1) {
+    const id = segments[0];
+    const existing = await getConfigItem(`FIELD#${id}`);
+    if (!existing) return errorResponse(404, 'Field not found');
+    if (existing.isSystem === true) {
+      return errorResponse(409, 'Cannot delete a built-in system field');
+    }
+    const crmConfig = await getConfigItem('CRM_CONFIG');
+    const customerRecord = crmConfig?.customerRecord as
+      | { sections?: { name?: string; fieldIds?: string[] }[] }
+      | undefined;
+    const sections = customerRecord?.sections ?? [];
+    const usedInSections = sections.filter((s) => s.fieldIds?.includes(id)).map((s) => s.name ?? '(unnamed)');
+    if (usedInSections.length > 0) {
+      return errorResponse(
+        409,
+        `Cannot delete field: still used in CRM layout sections [${usedInSections.join(', ')}]. Remove it from the layout first via update_crm_config.`
+      );
+    }
+    await deleteConfigItem(`FIELD#${id}`);
+    return jsonResponse(200, { deleted: true });
+  }
+
   return errorResponse(404, 'Route not found');
 };
 
@@ -696,7 +759,9 @@ const handleProjects = async (
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (method === 'GET' && segments.length === 0) {
     const items = await listConfigByPrefix('PROJECT#');
-    return jsonResponse(200, { projects: items });
+    const accessibleTeamIds = await getAccessibleTeamIds(auth);
+    const filtered = filterProjectsByAccess(items, accessibleTeamIds);
+    return jsonResponse(200, { projects: filtered });
   }
 
   if (method === 'POST' && segments.length === 0) {
@@ -711,8 +776,12 @@ const handleProjects = async (
       description: body.description ? String(body.description) : undefined,
       color: body.color ? String(body.color) : undefined,
       status: body.status ? String(body.status) : 'active',
-      ownerId: body.ownerId ? String(body.ownerId) : undefined,
-      ownerName: body.ownerName ? String(body.ownerName) : undefined,
+      ownerId: body.ownerId ? String(body.ownerId) : auth.sub,
+      ownerName: body.ownerName ? String(body.ownerName) : (auth.name ?? auth.email ?? undefined),
+      goals: body.goals ? String(body.goals) : undefined,
+      startDate: body.startDate ? String(body.startDate) : undefined,
+      endDate: body.endDate ? String(body.endDate) : undefined,
+      boardIds: Array.isArray(body.boardIds) ? body.boardIds.map(String) : undefined,
       isActive: true,
       createdAt: now(),
       updatedAt: now(),
@@ -725,12 +794,23 @@ const handleProjects = async (
     const id = segments[0];
     const existing = await getConfigItem(`PROJECT#${id}`);
     if (!existing) return errorResponse(404, 'Project not found');
+    // Sanitize boardIds if provided
+    if (body.boardIds !== undefined) {
+      body.boardIds = Array.isArray(body.boardIds) ? body.boardIds.map(String) : [];
+    }
     const updated = { ...existing, ...body, id, updatedAt: now() };
     await putConfigItem(updated);
     return jsonResponse(200, updated);
   }
 
-  if (method === 'DELETE' && segments.length === 1 && isAdmin(auth)) {
+  if (method === 'DELETE' && segments.length === 1) {
+    const existing = await getConfigItem(`PROJECT#${segments[0]}`);
+    if (!existing) return errorResponse(404, 'Project not found');
+    // Owner, unowned, or admin can delete
+    const projectOwnerId = existing.ownerId as string | undefined;
+    if (projectOwnerId && projectOwnerId !== auth.sub && !isAdmin(auth)) {
+      return errorResponse(403, 'Only the project owner can delete this project');
+    }
     await deleteConfigItem(`PROJECT#${segments[0]}`);
     return jsonResponse(200, { deleted: true });
   }
@@ -808,12 +888,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // GET /ops/config — bulk load all config
     if (method === 'GET' && rest.length === 0) {
       const config = await loadAllConfig();
+      const accessibleTeamIds = await getAccessibleTeamIds(auth);
 
       // Auto-trigger staff sync on first access if staff has never been synced
       if (config.staff.length === 0 && !config.lastStaffSyncedAt) {
         try {
           await handleStaffSync(event, auth);
           const refreshed = await loadAllConfig();
+          refreshed.projects = filterProjectsByAccess(refreshed.projects, accessibleTeamIds);
           return jsonResponse(200, refreshed);
         } catch (e) {
           // Don't break get_config if auto-sync fails — return what we have
@@ -821,6 +903,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }
       }
 
+      config.projects = filterProjectsByAccess(config.projects, accessibleTeamIds);
       return jsonResponse(200, config);
     }
 

@@ -161,6 +161,30 @@ export const documentTypeSchema = z.object({
   name: z.string().min(1),
 });
 
+/**
+ * A section of the customer record (e.g. "Company Details", "Contract"),
+ * with an ordered list of field ids. Field ids may reference built-in
+ * Customer properties (e.g. "companyName") or FieldDefinition ids for
+ * custom fields stored on Customer.customFields.
+ */
+export const customerRecordSectionSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1),
+  fieldIds: z.array(z.string()).default([]),
+  requiredFieldIds: z.array(z.string()).optional(),
+});
+
+export const customerRecordConfigSchema = z.object({
+  sections: z.array(customerRecordSectionSchema).default([]),
+});
+
+export const customerRecordLayoutSchema = z.object({
+  columnsPerSection: z.union([z.literal(2), z.literal(3), z.literal(4)]).optional(),
+  density: z.enum(['compact', 'comfortable']).optional(),
+  defaultSectionsExpanded: z.boolean().optional(),
+  labelPosition: z.enum(['above', 'inline']).optional(),
+});
+
 export const crmConfigSchema = z.object({
   entityType: z.literal('CRM_CONFIG'),
   lifecycleStages: z.array(lifecycleStageSchema),
@@ -169,6 +193,8 @@ export const crmConfigSchema = z.object({
   territories: z.array(z.string()).optional(),
   industries: z.array(z.string()).optional(),
   defaultStageId: z.string().optional(),
+  customerRecord: customerRecordConfigSchema.optional(),
+  layout: customerRecordLayoutSchema.optional(),
   updatedAt: z.string(),
 });
 
@@ -424,6 +450,7 @@ export const customerSchema = z.object({
   productNotes: z.string().nullable().optional(),
   notes: z.string().optional().default(''),
   contacts: z.array(contactSchema).optional().default([]),
+  customFields: z.record(z.string(), z.unknown()).optional().default({}),
   openTicketCount: z.number().optional().default(0),
   lastContactDate: z.string().nullable().optional(),
   createdBy: z.string(),
@@ -706,6 +733,7 @@ export const createCustomerRequestSchema = z.object({
   productNotes: z.string().nullable().optional(),
   notes: z.string().optional(),
   contacts: z.array(contactSchema).optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const updateCustomerRequestSchema = z.object({
@@ -727,6 +755,7 @@ export const updateCustomerRequestSchema = z.object({
   productNotes: z.string().nullable().optional(),
   notes: z.string().optional(),
   contacts: z.array(contactSchema).optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const createSupplierRequestSchema = z.object({
@@ -849,6 +878,9 @@ export type Project = z.infer<typeof projectSchema>;
 export type LifecycleStage = z.infer<typeof lifecycleStageSchema>;
 export type Flag = z.infer<typeof flagSchema>;
 export type DocumentType = z.infer<typeof documentTypeSchema>;
+export type CustomerRecordSection = z.infer<typeof customerRecordSectionSchema>;
+export type CustomerRecordConfig = z.infer<typeof customerRecordConfigSchema>;
+export type CustomerRecordLayout = z.infer<typeof customerRecordLayoutSchema>;
 export type CrmConfig = z.infer<typeof crmConfigSchema>;
 export type SupplierConfig = z.infer<typeof supplierConfigSchema>;
 export type LinkTypeConfig = z.infer<typeof linkTypeConfigSchema>;

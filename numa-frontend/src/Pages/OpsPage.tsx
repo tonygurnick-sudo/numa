@@ -14,6 +14,7 @@ import { AllTicketsView } from '../Components/Ops/AllTicketsView/AllTicketsView'
 import CrmMirrorView from '../Components/Ops/CrmView/CrmMirrorView';
 import { SupplierMirrorView } from '../Components/Ops/CrmView/SupplierMirrorView';
 import { RoadmapPlaceholder } from '../Components/Ops/RoadmapView/RoadmapPlaceholder';
+import { ProjectsView } from '../Components/Ops/ProjectsView/ProjectsView';
 import { OpsHomeView } from '../Components/Ops/HomeView/OpsHomeView';
 import { CreateBoardWizard } from '../Components/Ops/Modals/CreateBoardWizard';
 import { GlobalSettingsModal } from '../Components/Ops/Modals/GlobalSettingsModal';
@@ -54,6 +55,20 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
   } = useOps();
 
   const canManage = Boolean(user?.features?.includes('manageUsers'));
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // ── Project deep link (?project=<id>) ──────────────────────────────────
+  const [deepLinkProjectId, setDeepLinkProjectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const projectParam = searchParams.get('project');
+    if (projectParam) {
+      setDeepLinkProjectId(projectParam);
+      setTopView('projects');
+      searchParams.delete('project');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, setTopView]);
 
   // ── Modal state ─────────────────────────────────────────────────────────
   const [showCreateBoard, setShowCreateBoard] = useState(false);
@@ -157,6 +172,17 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
         <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
         <div className="flex-grow-1 overflow-auto">
           <SupplierMirrorView />
+        </div>
+      </>
+    );
+  }
+
+  if (topView === 'projects') {
+    return (
+      <>
+        <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
+        <div className="flex-grow-1 overflow-auto">
+          <ProjectsView initialProjectId={deepLinkProjectId} key={deepLinkProjectId ?? 'projects'} />
         </div>
       </>
     );

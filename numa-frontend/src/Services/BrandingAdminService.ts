@@ -13,7 +13,6 @@ export type BrandingVersionSummary = {
 export type BrandingConfigResponse = {
   enabled?: boolean;
   branding?: BrandingTheme & {
-    componentGroups?: Record<string, boolean>;
     assets?: {
       logoNav?: string | null;
       logoLoginRight?: string | null;
@@ -33,7 +32,6 @@ export type BrandingHistoryResponse = {
 export type BrandingSavePayload = {
   enabled: boolean;
   branding: BrandingTheme & {
-    componentGroups?: Record<string, boolean>;
     assets?: {
       logoNav?: string | null;
       logoLoginRight?: string | null;

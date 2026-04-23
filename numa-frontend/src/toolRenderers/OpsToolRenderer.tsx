@@ -439,6 +439,13 @@ const CommentList = ({ comments }: { comments: OpsComment[] }) => {
 
 const ConfigView = ({ config }: { config: OpsConfig }) => {
   const { t } = useTranslation('common');
+
+  const ticketFields = (config.fields ?? []).filter((f) => f.category !== 'crm');
+  const crmFields = (config.fields ?? []).filter((f) => f.category === 'crm');
+
+  const crm = config.crmConfig;
+  const supplier = config.supplierConfig;
+
   return (
     <div className="ops-renderer-config">
       {config.ticketTypes && config.ticketTypes.length > 0 && (
@@ -461,6 +468,14 @@ const ConfigView = ({ config }: { config: OpsConfig }) => {
           </div>
         </div>
       )}
+      {ticketFields.length > 0 && (
+        <div className="ops-renderer-config-section">
+          <span className="ops-renderer-config-label">{t('toolRenderers.numaOps.config.ticketFields')}</span>
+          <span className="ops-renderer-meta-chip">
+            <i className="bi bi-list-columns-reverse" /> {ticketFields.length}
+          </span>
+        </div>
+      )}
       {config.staff && (
         <div className="ops-renderer-config-section">
           <span className="ops-renderer-config-label">{t('toolRenderers.numaOps.config.staff')}</span>
@@ -475,6 +490,63 @@ const ConfigView = ({ config }: { config: OpsConfig }) => {
           <span className="ops-renderer-meta-chip">
             <i className="bi bi-folder2" /> {config.projects.length}
           </span>
+        </div>
+      )}
+
+      {/* CRM config */}
+      {crm && (crm.lifecycleStages?.length || crmFields.length || crm.customerRecord?.sections?.length) ? (
+        <>
+          {crm.lifecycleStages && crm.lifecycleStages.length > 0 && (
+            <div className="ops-renderer-config-section">
+              <span className="ops-renderer-config-label">{t('toolRenderers.numaOps.config.crmLifecycleStages')}</span>
+              <div className="ops-renderer-config-items">
+                {crm.lifecycleStages.map((s, idx) => (
+                  <span key={s.id || idx} className="ops-renderer-status-pill">
+                    {s.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {crmFields.length > 0 && (
+            <div className="ops-renderer-config-section">
+              <span className="ops-renderer-config-label">{t('toolRenderers.numaOps.config.crmCustomFields')}</span>
+              <div className="ops-renderer-config-items">
+                {crmFields.map((f, idx) => (
+                  <span key={f.id || idx} className="ops-renderer-meta-chip">
+                    {f.name}
+                    {f.fieldType ? ` · ${f.fieldType}` : ''}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {crm.customerRecord?.sections && crm.customerRecord.sections.length > 0 && (
+            <div className="ops-renderer-config-section">
+              <span className="ops-renderer-config-label">{t('toolRenderers.numaOps.config.crmRecordLayout')}</span>
+              <div className="ops-renderer-config-items">
+                {crm.customerRecord.sections.map((s, idx) => (
+                  <span key={s.id || idx} className="ops-renderer-meta-chip">
+                    {s.name} · {s.fieldIds?.length ?? 0}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : null}
+
+      {/* Supplier config */}
+      {supplier?.lifecycleStages && supplier.lifecycleStages.length > 0 && (
+        <div className="ops-renderer-config-section">
+          <span className="ops-renderer-config-label">{t('toolRenderers.numaOps.config.supplierLifecycleStages')}</span>
+          <div className="ops-renderer-config-items">
+            {supplier.lifecycleStages.map((s, idx) => (
+              <span key={s.id || idx} className="ops-renderer-status-pill">
+                {s.name}
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>

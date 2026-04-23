@@ -75,6 +75,7 @@ __metadata:
     "@aws-sdk/credential-providers": "npm:^3.692.0"
     "@aws-sdk/lib-dynamodb": "npm:^3.799.0"
     "@eslint/js": "npm:^9.13.0"
+    "@numa/quota-snapshot": "workspace:*"
     "@types/react": "npm:^19.0.0"
     "@types/react-datepicker": "npm:^7.0.0"
     "@types/react-dom": "npm:^19.0.0"
@@ -1063,6 +1064,53 @@ __metadata:
     "@smithy/util-utf8": "npm:^4.2.0"
     tslib: "npm:^2.6.2"
   checksum: 10c0/03c3685b8d0db77e416954cd5c8cdf486ce867a38216cb625dbe38f784f1a182817559dbd2396cec6a090ddd995b4d8af6df21ae31caca5e7e5d3cd587671601
+  languageName: node
+  linkType: hard
+
+"@aws-sdk/client-cognito-identity@npm:3.1030.0":
+  version: 3.1030.0
+  resolution: "@aws-sdk/client-cognito-identity@npm:3.1030.0"
+  dependencies:
+    "@aws-crypto/sha256-browser": "npm:5.2.0"
+    "@aws-crypto/sha256-js": "npm:5.2.0"
+    "@aws-sdk/core": "npm:^3.973.27"
+    "@aws-sdk/credential-provider-node": "npm:^3.972.30"
+    "@aws-sdk/middleware-host-header": "npm:^3.972.9"
+    "@aws-sdk/middleware-logger": "npm:^3.972.9"
+    "@aws-sdk/middleware-recursion-detection": "npm:^3.972.10"
+    "@aws-sdk/middleware-user-agent": "npm:^3.972.29"
+    "@aws-sdk/region-config-resolver": "npm:^3.972.11"
+    "@aws-sdk/types": "npm:^3.973.7"
+    "@aws-sdk/util-endpoints": "npm:^3.996.6"
+    "@aws-sdk/util-user-agent-browser": "npm:^3.972.9"
+    "@aws-sdk/util-user-agent-node": "npm:^3.973.15"
+    "@smithy/config-resolver": "npm:^4.4.14"
+    "@smithy/core": "npm:^3.23.14"
+    "@smithy/fetch-http-handler": "npm:^5.3.16"
+    "@smithy/hash-node": "npm:^4.2.13"
+    "@smithy/invalid-dependency": "npm:^4.2.13"
+    "@smithy/middleware-content-length": "npm:^4.2.13"
+    "@smithy/middleware-endpoint": "npm:^4.4.29"
+    "@smithy/middleware-retry": "npm:^4.5.0"
+    "@smithy/middleware-serde": "npm:^4.2.17"
+    "@smithy/middleware-stack": "npm:^4.2.13"
+    "@smithy/node-config-provider": "npm:^4.3.13"
+    "@smithy/node-http-handler": "npm:^4.5.2"
+    "@smithy/protocol-http": "npm:^5.3.13"
+    "@smithy/smithy-client": "npm:^4.12.9"
+    "@smithy/types": "npm:^4.14.0"
+    "@smithy/url-parser": "npm:^4.2.13"
+    "@smithy/util-base64": "npm:^4.3.2"
+    "@smithy/util-body-length-browser": "npm:^4.2.2"
+    "@smithy/util-body-length-node": "npm:^4.2.3"
+    "@smithy/util-defaults-mode-browser": "npm:^4.3.45"
+    "@smithy/util-defaults-mode-node": "npm:^4.2.49"
+    "@smithy/util-endpoints": "npm:^3.3.4"
+    "@smithy/util-middleware": "npm:^4.2.13"
+    "@smithy/util-retry": "npm:^4.3.0"
+    "@smithy/util-utf8": "npm:^4.2.2"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/d089665f4023aa0b3944c2723ef7601f4e4d85f2dc127fccab40a393540030779bddefd961ade25fad26fae17895946d02a3d9274901d9843068ff6cdaa6fe6d
   languageName: node
   linkType: hard
 
@@ -3659,6 +3707,53 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@aws-sdk/client-sts@npm:^3.799.0":
+  version: 3.1030.0
+  resolution: "@aws-sdk/client-sts@npm:3.1030.0"
+  dependencies:
+    "@aws-crypto/sha256-browser": "npm:5.2.0"
+    "@aws-crypto/sha256-js": "npm:5.2.0"
+    "@aws-sdk/core": "npm:^3.973.27"
+    "@aws-sdk/credential-provider-node": "npm:^3.972.30"
+    "@aws-sdk/middleware-host-header": "npm:^3.972.9"
+    "@aws-sdk/middleware-logger": "npm:^3.972.9"
+    "@aws-sdk/middleware-recursion-detection": "npm:^3.972.10"
+    "@aws-sdk/middleware-user-agent": "npm:^3.972.29"
+    "@aws-sdk/region-config-resolver": "npm:^3.972.11"
+    "@aws-sdk/types": "npm:^3.973.7"
+    "@aws-sdk/util-endpoints": "npm:^3.996.6"
+    "@aws-sdk/util-user-agent-browser": "npm:^3.972.9"
+    "@aws-sdk/util-user-agent-node": "npm:^3.973.15"
+    "@smithy/config-resolver": "npm:^4.4.14"
+    "@smithy/core": "npm:^3.23.14"
+    "@smithy/fetch-http-handler": "npm:^5.3.16"
+    "@smithy/hash-node": "npm:^4.2.13"
+    "@smithy/invalid-dependency": "npm:^4.2.13"
+    "@smithy/middleware-content-length": "npm:^4.2.13"
+    "@smithy/middleware-endpoint": "npm:^4.4.29"
+    "@smithy/middleware-retry": "npm:^4.5.0"
+    "@smithy/middleware-serde": "npm:^4.2.17"
+    "@smithy/middleware-stack": "npm:^4.2.13"
+    "@smithy/node-config-provider": "npm:^4.3.13"
+    "@smithy/node-http-handler": "npm:^4.5.2"
+    "@smithy/protocol-http": "npm:^5.3.13"
+    "@smithy/smithy-client": "npm:^4.12.9"
+    "@smithy/types": "npm:^4.14.0"
+    "@smithy/url-parser": "npm:^4.2.13"
+    "@smithy/util-base64": "npm:^4.3.2"
+    "@smithy/util-body-length-browser": "npm:^4.2.2"
+    "@smithy/util-body-length-node": "npm:^4.2.3"
+    "@smithy/util-defaults-mode-browser": "npm:^4.3.45"
+    "@smithy/util-defaults-mode-node": "npm:^4.2.49"
+    "@smithy/util-endpoints": "npm:^3.3.4"
+    "@smithy/util-middleware": "npm:^4.2.13"
+    "@smithy/util-retry": "npm:^4.3.0"
+    "@smithy/util-utf8": "npm:^4.2.2"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/45cef4b59d255adade78726f8ade8676d00354105caa67a946dffb0b766e7b80c1893e7bc2c6379ea32654127a724841f9fb1400be8232ebb0d6fb579d38156d
+  languageName: node
+  linkType: hard
+
 "@aws-sdk/client-sts@npm:^3.880.0":
   version: 3.978.0
   resolution: "@aws-sdk/client-sts@npm:3.978.0"
@@ -4096,6 +4191,19 @@ __metadata:
     "@smithy/types": "npm:^4.12.0"
     tslib: "npm:^2.6.2"
   checksum: 10c0/2d3683123a96b55cacf61e00d51bf627abae263a8099977643a49670f84db771d1d97c18cf9db6a9f31818a92b66717bb2e126b107a48ebc6d61425b83d992e0
+  languageName: node
+  linkType: hard
+
+"@aws-sdk/credential-provider-cognito-identity@npm:^3.972.22":
+  version: 3.972.22
+  resolution: "@aws-sdk/credential-provider-cognito-identity@npm:3.972.22"
+  dependencies:
+    "@aws-sdk/nested-clients": "npm:^3.996.19"
+    "@aws-sdk/types": "npm:^3.973.7"
+    "@smithy/property-provider": "npm:^4.2.13"
+    "@smithy/types": "npm:^4.14.0"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/6d76d8cc8b3647d3c8daa4f97d1ca4b52f87676cfe813704a12d426257547f4f9bab0c0754f9e26374b82288121da53c6ffe444e66aff76ccad547a3848376ca
   languageName: node
   linkType: hard
 
@@ -5924,6 +6032,34 @@ __metadata:
     "@smithy/types": "npm:^4.3.2"
     tslib: "npm:^2.6.2"
   checksum: 10c0/561920731dc9eb2cde051d10f1ec90eaa6526f74afdb69a74bc80a2a281346e207e4951598f1c79bae0a674ba03699eff21f2e179399912ce6def66b014a4c06
+  languageName: node
+  linkType: hard
+
+"@aws-sdk/credential-providers@npm:^3.799.0":
+  version: 3.1030.0
+  resolution: "@aws-sdk/credential-providers@npm:3.1030.0"
+  dependencies:
+    "@aws-sdk/client-cognito-identity": "npm:3.1030.0"
+    "@aws-sdk/core": "npm:^3.973.27"
+    "@aws-sdk/credential-provider-cognito-identity": "npm:^3.972.22"
+    "@aws-sdk/credential-provider-env": "npm:^3.972.25"
+    "@aws-sdk/credential-provider-http": "npm:^3.972.27"
+    "@aws-sdk/credential-provider-ini": "npm:^3.972.29"
+    "@aws-sdk/credential-provider-login": "npm:^3.972.29"
+    "@aws-sdk/credential-provider-node": "npm:^3.972.30"
+    "@aws-sdk/credential-provider-process": "npm:^3.972.25"
+    "@aws-sdk/credential-provider-sso": "npm:^3.972.29"
+    "@aws-sdk/credential-provider-web-identity": "npm:^3.972.29"
+    "@aws-sdk/nested-clients": "npm:^3.996.19"
+    "@aws-sdk/types": "npm:^3.973.7"
+    "@smithy/config-resolver": "npm:^4.4.14"
+    "@smithy/core": "npm:^3.23.14"
+    "@smithy/credential-provider-imds": "npm:^4.2.13"
+    "@smithy/node-config-provider": "npm:^4.3.13"
+    "@smithy/property-provider": "npm:^4.2.13"
+    "@smithy/types": "npm:^4.14.0"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/642faf88378bdec861e6d22907178db0100d629398e4b2543b960cadcebba73921a0210639e07810cf08311531f7adf0f74d993d65b23781da05a8c407a1699f
   languageName: node
   linkType: hard
 
@@ -12828,6 +12964,20 @@ __metadata:
     zod: "npm:^3.24.0"
   bin:
     numa: ./dist/index.js
+  languageName: unknown
+  linkType: soft
+
+"@numa/quota-snapshot@workspace:*, @numa/quota-snapshot@workspace:lib/quota-snapshot":
+  version: 0.0.0-use.local
+  resolution: "@numa/quota-snapshot@workspace:lib/quota-snapshot"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-service-quotas": "npm:^3.799.0"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    eslint: "npm:^9.16.0"
+    typescript: "npm:^5.7.2"
   languageName: unknown
   linkType: soft
 
@@ -21299,8 +21449,10 @@ __metadata:
   resolution: "admin-dr-stats@workspace:lambdas/node/admin-dr-stats"
   dependencies:
     "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
     "@aws-sdk/client-dynamodb": "npm:^3.699.0"
     "@aws-sdk/client-s3": "npm:^3.699.0"
+    "@aws-sdk/client-secrets-manager": "npm:^3.699.0"
     "@types/aws-lambda": "npm:^8.10.146"
     "@types/node": "npm:^22.10.1"
     "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
@@ -21364,6 +21516,26 @@ __metadata:
   resolution: "admin-scheduling-settings@workspace:lambdas/node/admin-scheduling-settings"
   dependencies:
     "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
+"admin-sso-settings@workspace:lambdas/node/admin-sso-settings":
+  version: 0.0.0-use.local
+  resolution: "admin-sso-settings@workspace:lambdas/node/admin-sso-settings"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
     "@aws-sdk/client-dynamodb": "npm:^3.699.0"
     "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
     "@types/aws-lambda": "npm:^8.10.146"
@@ -22881,6 +23053,24 @@ __metadata:
   checksum: 10c0/2455b482302cb784b46dea60a8ee83f0c23e794bdd979556bdb107abe681bba722af62a37f5c955ff4efd68fdb9688c3986e719b4fd536c0e06bb25bc82abea3
   languageName: node
   linkType: hard
+
+"cognito-pre-signup@workspace:lambdas/node/cognito-pre-signup":
+  version: 0.0.0-use.local
+  resolution: "cognito-pre-signup@workspace:lambdas/node/cognito-pre-signup"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
 
 "cognito-srp-helper@npm:^2.2.3":
   version: 2.3.4
@@ -29073,6 +29263,32 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"numa-quota-report-daily@workspace:lambdas/node/numa-quota-report-daily":
+  version: 0.0.0-use.local
+  resolution: "numa-quota-report-daily@workspace:lambdas/node/numa-quota-report-daily"
+  dependencies:
+    "@arcanumai/client-config": "workspace:*"
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-s3": "npm:^3.799.0"
+    "@aws-sdk/client-service-quotas": "npm:^3.799.0"
+    "@aws-sdk/client-sts": "npm:^3.799.0"
+    "@aws-sdk/credential-providers": "npm:^3.799.0"
+    "@numa/quota-snapshot": "workspace:*"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    eslint-config-prettier: "npm:^10.0.0"
+    eslint-plugin-prettier: "npm:^5.2.1"
+    prettier: "npm:^3.4.2"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
 "numa-users-api@workspace:lambdas/node/numa-users-api":
   version: 0.0.0-use.local
   resolution: "numa-users-api@workspace:lambdas/node/numa-users-api"
@@ -31353,6 +31569,26 @@ __metadata:
   languageName: node
   linkType: hard
 
+"scim-endpoint@workspace:lambdas/node/scim-endpoint":
+  version: 0.0.0-use.local
+  resolution: "scim-endpoint@workspace:lambdas/node/scim-endpoint"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
 "seed-api-key@workspace:lambdas/node/seed-api-key":
   version: 0.0.0-use.local
   resolution: "seed-api-key@workspace:lambdas/node/seed-api-key"
@@ -31755,6 +31991,60 @@ __metadata:
   checksum: 10c0/c3fd24a90dc37a9dc5c4154cb4121e27507c33ebfeee3532aaf03625756b2c006cf79c0a23db0ba16c4a6e88e1349455327867e03453fc9d54b32c546bc18ca6
   languageName: node
   linkType: hard
+
+"sso-group-mapper@workspace:lambdas/node/sso-group-mapper":
+  version: 0.0.0-use.local
+  resolution: "sso-group-mapper@workspace:lambdas/node/sso-group-mapper"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
+"sso-token-exchange@workspace:lambdas/node/sso-token-exchange":
+  version: 0.0.0-use.local
+  resolution: "sso-token-exchange@workspace:lambdas/node/sso-token-exchange"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
+"sso-token-refresh@workspace:lambdas/node/sso-token-refresh":
+  version: 0.0.0-use.local
+  resolution: "sso-token-refresh@workspace:lambdas/node/sso-token-refresh"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
 
 "ssri@npm:^12.0.0":
   version: 12.0.0
