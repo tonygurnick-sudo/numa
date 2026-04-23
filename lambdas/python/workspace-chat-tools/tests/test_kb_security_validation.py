@@ -52,6 +52,21 @@ class TestKbSecurityValidation(unittest.TestCase):
 
         self.assertIn("path traversal", str(ctx.exception))
 
+    def test_list_rejects_folder_traversal(self):
+        with patch("tools.knowledge_base.DATA_BUCKET_NAME", "test-data-bucket"):
+            with self.assertRaises(ValueError) as ctx:
+                handle_retrieve_kb_file(
+                    {
+                        "mode": "list",
+                        "kb_id": "company",
+                        "folder": "../secrets",
+                        "__allowed_kbs": ["company"],
+                        "__user_sub": "user-123",
+                    }
+                )
+
+        self.assertIn("path traversal", str(ctx.exception))
+
     def test_retrieve_rejects_traversal_in_uri(self):
         with patch("tools.knowledge_base.DATA_BUCKET_NAME", "test-data-bucket"):
             with patch("tools.knowledge_base.verify_kb_access", return_value=True):

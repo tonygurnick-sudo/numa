@@ -110,18 +110,27 @@ export const AgentManageTeamModal = ({ show, onHide, team, onTeamCreated, onTeam
     return map;
   }, [workspaceUsers, currentUserSub, currentUserEmail, currentUserName]);
 
-  const memberEmails = useMemo(() => {
-    if (!detail?.members) return new Set<string>();
-    const set = new Set<string>();
-    for (const m of detail.members) {
-      if (m.userEmail) set.add(m.userEmail);
-      if (m.userId) set.add(m.userId);
-      // Also resolve via lookup so sub-based members exclude by email
-      const looked = userLookup.get(m.userId) || userLookup.get(m.userEmail || '');
-      if (looked?.email) set.add(looked.email);
+  // Track both emails and subs of existing members so we never accidentally re-add
+  // one via the "Add member" search. A creator row with no user_email (older
+  // data) would previously slip through an email-only check and get overwritten
+  // as a viewer via PutCommand.
+  const memberKeys = useMemo(() => {
+    const emails = new Set<string>();
+    const subs = new Set<string>();
+    if (detail?.members) {
+      for (const m of detail.members) {
+        if (m.userEmail) emails.add(m.userEmail);
+        if (m.userId) subs.add(m.userId);
+        const looked = userLookup.get(m.userId) || userLookup.get(m.userEmail || '');
+        if (looked?.email) emails.add(looked.email);
+        if (looked?.sub) subs.add(looked.sub);
+      }
     }
-    return set;
-  }, [detail, userLookup]);
+    // Always exclude the current user from their own add-member search.
+    if (currentUserEmail) emails.add(currentUserEmail);
+    if (currentUserSub) subs.add(currentUserSub);
+    return { emails, subs };
+  }, [detail, userLookup, currentUserEmail, currentUserSub]);
 
   const filteredUsers = useMemo(() => {
     const q = userSearch.toLowerCase().trim();
@@ -129,7 +138,8 @@ export const AgentManageTeamModal = ({ show, onHide, team, onTeamCreated, onTeam
       .filter(
         (u) =>
           u.enabled &&
-          !memberEmails.has(u.email) &&
+          !memberKeys.emails.has(u.email) &&
+          !(u.sub && memberKeys.subs.has(u.sub)) &&
           !u.email.startsWith('numa-system') &&
           (!q ||
             u.displayName?.toLowerCase().includes(q) ||
@@ -137,7 +147,7 @@ export const AgentManageTeamModal = ({ show, onHide, team, onTeamCreated, onTeam
             u.email.toLowerCase().includes(q))
       )
       .slice(0, 10);
-  }, [userSearch, workspaceUsers, memberEmails]);
+  }, [userSearch, workspaceUsers, memberKeys]);
 
   const handleSave = async () => {
     if (!teamName.trim()) return;

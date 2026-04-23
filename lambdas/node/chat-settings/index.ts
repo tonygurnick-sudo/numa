@@ -194,7 +194,7 @@ function validateUserProfile(raw: unknown): UserProfile {
 const VALID_APPROVAL_MODES: ApprovalMode[] = ['always', 'non_destructive', 'never'];
 
 const DEFAULT_SETTINGS: ChatSettings = {
-  defaultKBIds: ['company'],
+  defaultKBIds: ['company', 'numa-support'],
   autoToolsEnabled: true,
   webSearchEnabled: true,
   createAgentEnabled: false,
