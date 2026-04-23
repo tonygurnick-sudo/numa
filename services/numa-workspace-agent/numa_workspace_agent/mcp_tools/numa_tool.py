@@ -118,7 +118,7 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
         "user_intent": user_intent,
         "max_results": max_results,
         "kb_id": params.get("kb_id", "company"),
-        "summarise_results": params.get("summarise_results", True),
+        "summarise_results": params.get("summarise_results", False),
         "all_kbs": params.get("all_kbs", False),
     }
 
@@ -763,6 +763,24 @@ async def _handle_kb_list(params: dict[str, Any]) -> dict[str, Any]:
         "kb_id": params.get("kb_id", "company"),
         "pattern": params.get("pattern"),
     }
+
+    # Optional folder scoping. `folder` is the preferred name; `folder_path`
+    # (matching download_folder) and `path` (matching kb_upload) are accepted
+    # as synonyms — our own KB operations spell this param three different
+    # ways historically and the model often reaches for the wrong one.
+    # Only forward when supplied so the Lambda sees a missing key, not null.
+    folder = params.get("folder")
+    if folder is None:
+        folder = params.get("folder_path")
+    if folder is None:
+        folder = params.get("path")
+    if folder is not None:
+        lambda_params["folder"] = folder
+
+    # Optional flag to return a flat recursive listing instead of a
+    # one-level (files + immediate subfolders) view.
+    if "recursive" in params:
+        lambda_params["recursive"] = bool(params.get("recursive"))
 
     # Inject approval fields if approval was requested for this operation
     approval_key = "numa_knowledgeBases_list"
