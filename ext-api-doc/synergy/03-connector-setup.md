@@ -83,7 +83,7 @@ If this fails:
 ### Step 2: Authenticated Endpoint
 
 ```
-GET https://{instanceUrl}/api/v1/attributes/1/1
+GET https://{instanceUrl}/api/v1/auth/getPersonalAccessTokens
 Authorization: Bearer {accessToken}
 ```
 
@@ -141,7 +141,7 @@ Returns the current authenticated user. Good for confirming identity.
     // Step 1: health check (no auth)
     healthEndpoint: '/health',
     // Step 2: auth check
-    authEndpoint: '/api/v1/attributes/1/1',
+    authEndpoint: '/api/v1/auth/getPersonalAccessTokens',
   },
 }
 ```
@@ -191,7 +191,7 @@ class TwelveDSynergyProvider:
         # Step 2: Authenticated endpoint
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'{self.base_url}/api/v1/attributes/1/1',
+                f'{self.base_url}/api/v1/auth/getPersonalAccessTokens',
                 headers=self.headers,
                 timeout=10.0,
             )
@@ -215,21 +215,35 @@ class TwelveDSynergyProvider:
                 }
 
     async def list_jobs(self, page: int = 1, page_size: int = 50) -> dict:
-        """List jobs (projects)."""
+        """List jobs (projects) — pagination goes in the body."""
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/jobs/{page}/{page_size}',
+            response = await client.post(
+                f'{self.base_url}/api/v1/jobs/search',
                 headers=self.headers,
+                json={
+                    'Page': page,
+                    'PageSize': page_size,
+                    'QuickSearchTerm': '',
+                    'Name': '',
+                    'Attributes': [{
+                        'Attribute': {'Name': 'TopLevel', 'DisplayName': 'Restrict to top level?'},
+                        'Type': 'SynergyServerWeb.API.Models.SelectableProgrammaticAttribute',
+                        'Value': False,   # False = return all jobs, True = top-level only
+                        'SearchQueryType': 4, 'Operation': 0,
+                        'Name': 'Restrict to top level?', 'OperationName': '=',
+                    }],
+                },
                 timeout=30.0,
             )
             response.raise_for_status()
             return response.json()
 
     async def search_jobs(self, criteria: dict, page: int = 1, page_size: int = 50) -> dict:
-        """Search jobs (POST body, not GET query)."""
+        """Search jobs — POST with body pagination."""
+        criteria = {**criteria, 'Page': page, 'PageSize': page_size}
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f'{self.base_url}/api/v1/jobs/search/{page}/{page_size}',
+                f'{self.base_url}/api/v1/jobs/search',
                 headers=self.headers,
                 json=criteria,
                 timeout=30.0,
@@ -237,66 +251,94 @@ class TwelveDSynergyProvider:
             response.raise_for_status()
             return response.json()
 
-    async def get_job(self, job_id: str) -> dict:
-        """Get job by IDString."""
+    async def get_job_attributes(self, job_id: str, retrieve_attributes: bool = True) -> dict:
+        """Get a job's attributes. retrieve_attributes is a required path param."""
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'{self.base_url}/api/v1/jobs/{job_id}',
+                f'{self.base_url}/api/v1/jobs/{job_id}/{str(retrieve_attributes).lower()}',
                 headers=self.headers,
                 timeout=30.0,
             )
             response.raise_for_status()
             return response.json()
 
-    async def list_files(self, page: int = 1, page_size: int = 50) -> dict:
-        """List files."""
+    async def get_job_items(self, job_id: str) -> dict:
+        """Get folders + child jobs inside a job. Returns JobItemsModel."""
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'{self.base_url}/api/v1/files/{page}/{page_size}',
+                f'{self.base_url}/api/v1/jobs/{job_id}/items',
                 headers=self.headers,
                 timeout=30.0,
             )
             response.raise_for_status()
             return response.json()
 
-    async def download_file(self, file_id: str) -> bytes:
-        """Download file content."""
+    async def search_files(self, criteria: dict, page: int = 1, page_size: int = 50) -> dict:
+        """Search files — supports content search via the 'Contents' field."""
+        criteria = {**criteria, 'Page': page, 'PageSize': page_size}
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f'{self.base_url}/api/v1/files/search',
+                headers=self.headers,
+                json=criteria,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_file_metadata(self, file_id: str, retrieve_attributes: bool = True) -> dict:
+        """Get file metadata. retrieve_attributes is a required path param."""
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'{self.base_url}/api/v1/files/{file_id}/download',
+                f'{self.base_url}/api/v1/files/{file_id}/{str(retrieve_attributes).lower()}',
                 headers=self.headers,
-                timeout=60.0,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def download_file(self, file_id: str, version: int, with_references: bool = False) -> bytes:
+        """Download file content. version and with_references are path params."""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f'{self.base_url}/api/v1/files/{file_id}/download/{version}/{str(with_references).lower()}',
+                headers={**self.headers, 'Content-Type': 'application/octet-stream'},
+                content=b'',
+                timeout=120.0,
             )
             response.raise_for_status()
             return response.content
 
-    async def list_folders(self, page: int = 1, page_size: int = 50) -> dict:
-        """List folders."""
+    async def get_folder_items(self, folder_id: str) -> dict:
+        """Get a folder's subfolders + first page of files. Returns FolderItemsModel."""
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'{self.base_url}/api/v1/folders/{page}/{page_size}',
+                f'{self.base_url}/api/v1/folders/{folder_id}/items',
                 headers=self.headers,
                 timeout=30.0,
             )
             response.raise_for_status()
             return response.json()
 
-    async def get_folder_files(self, folder_id: str, page: int = 1, page_size: int = 50) -> dict:
-        """Get files in a folder."""
+    async def get_folder_files(self, folder_id: str, page: int = 1, page_size: int = 50,
+                               retrieve_attributes: bool = True, filter: str = '*',
+                               show_deleted: bool = False) -> dict:
+        """Get paginated files in a folder. 6 path params."""
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'{self.base_url}/api/v1/folders/{folder_id}/files/{page}/{page_size}',
+                f'{self.base_url}/api/v1/folders/{folder_id}/files/'
+                f'{str(retrieve_attributes).lower()}/{page}/{page_size}/{filter}/{str(show_deleted).lower()}',
                 headers=self.headers,
                 timeout=30.0,
             )
             response.raise_for_status()
             return response.json()
 
-    async def list_tasks(self, page: int = 1, page_size: int = 50) -> dict:
-        """List tasks."""
+    async def list_tasks_for_job(self, job_id: str) -> dict:
+        """List tasks for a specific job. No cross-job list endpoint exists."""
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'{self.base_url}/api/v1/tasks/{page}/{page_size}',
+                f'{self.base_url}/api/v1/tasks/getTaskList/{job_id}',
                 headers=self.headers,
                 timeout=30.0,
             )
@@ -315,11 +357,26 @@ class TwelveDSynergyProvider:
             response.raise_for_status()
             return response.json()
 
-    async def get_required_attributes(self, entity_type: str) -> list:
-        """Get required attributes for entity type (e.g., 'jobs', 'files')."""
+    async def get_standard_job_attributes(self) -> list:
+        """Get standard (required + default) attributes for job creation.
+
+        There is no generic /api/v1/attributes/required/{entity_type} endpoint.
+        Use the resource-specific helpers instead.
+        """
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'{self.base_url}/api/v1/attributes/required/{entity_type}',
+                f'{self.base_url}/api/v1/jobs/getStandardAttributes',
+                headers=self.headers,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_default_job_attributes(self) -> list:
+        """Get tenant-specific default attribute values for job creation."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f'{self.base_url}/api/v1/jobs/getDefaultAttributes',
                 headers=self.headers,
                 timeout=30.0,
             )
@@ -392,26 +449,29 @@ You have access to a 12d Synergy instance. Key rules:
 
 ### Scenario 1: Browse Project Files
 
-1. `GET /api/v1/jobs/1/50` — List all projects
+1. `POST /api/v1/jobs/search` with `{Page:1, PageSize:50, TopLevel=false}` — list all projects
 2. User selects a project
 3. `GET /api/v1/jobs/{id}/folders/1/50` — Get project folder tree
-4. User navigates folders
-5. `GET /api/v1/folders/{id}/files/1/50` — List files in folder
-6. `GET /api/v1/files/{id}/download` — Download selected file
+4. User navigates folders — `GET /api/v1/folders/{id}/items` returns subfolders + page 1 of files
+5. More file pages: `GET /api/v1/folders/{id}/files/true/{page}/{page_size}/*/false` (6 path params)
+6. `GET /api/v1/files/{id}/true` — file metadata to discover LatestVersion
+7. `POST /api/v1/files/{id}/download/{version}/false` — download selected version
 
 ### Scenario 2: Sync Tasks
 
-1. `GET /api/v1/tasks/1/100` — Paginate through all tasks
-2. Track `due_date_utc` and `is_closed` for status
-3. Poll periodically (e.g., every 15 minutes)
-4. Detect new/changed/closed tasks by comparing with previous poll
+1. For each job the user cares about: `GET /api/v1/tasks/getTaskList/{job_id}` — list tasks in that job. There is no cross-job task list endpoint.
+2. Alternatively: `POST /api/v1/tasks/search` with `{JobId, AssigneeId, IncludeClosedTasks}` body.
+3. Track `due_date_utc` and `is_closed` for status.
+4. Poll periodically (e.g., every 15 minutes).
+5. Detect new/changed/closed tasks by comparing against previous poll.
 
 ### Scenario 3: Job Search and Report
 
-1. `POST /api/v1/jobs/search/1/50` with criteria — Find matching jobs
-2. For each job: `GET /api/v1/jobs/{id}/attributes` — Get details
-3. `GET /api/v1/jobs/{id}/files/1/50` — Get associated files
-4. Compile results for user
+1. `POST /api/v1/jobs/search` with `{Page:1, PageSize:50, Name, ...}` body — find matching jobs
+2. For each job: `GET /api/v1/jobs/{id}/true` — get JobModel with attributes (`true` = retrieve_attributes)
+3. `GET /api/v1/jobs/{id}/items` — get subfolders + child jobs
+4. For each folder: `GET /api/v1/folders/{folder_id}/items` — files at page 1, subfolders
+5. Compile results for user
 
 ---
 

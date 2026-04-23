@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Alert, Button, Modal, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { AuthTypeBadge } from '../AuthTypeBadge';
+import type { ConnectorTemplate } from '../connectorRegistry';
 
 export interface WizardStep {
   id: string;
@@ -11,6 +13,7 @@ interface ConnectorWizardModalProps {
   show: boolean;
   onHide: () => void;
   title: string;
+  authType?: ConnectorTemplate['authType'];
   steps: WizardStep[];
   currentStep: number;
   onNext: () => void;
@@ -28,6 +31,7 @@ export const ConnectorWizardModal = ({
   show,
   onHide,
   title,
+  authType,
   steps,
   currentStep,
   onNext,
@@ -46,7 +50,10 @@ export const ConnectorWizardModal = ({
   return (
     <Modal show={show} onHide={onHide} size="lg" centered>
       <Modal.Header closeButton>
-        <Modal.Title>{title}</Modal.Title>
+        <Modal.Title className="d-flex align-items-center gap-2">
+          <span>{title}</span>
+          {authType && <AuthTypeBadge authType={authType} size="md" />}
+        </Modal.Title>
       </Modal.Header>
 
       <Modal.Body style={{ minHeight: 300 }}>

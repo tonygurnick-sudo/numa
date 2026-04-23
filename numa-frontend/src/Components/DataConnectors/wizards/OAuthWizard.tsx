@@ -8,7 +8,7 @@ import { ConnectorWizardModal } from './ConnectorWizardModal';
 import type { WizardStep } from './ConnectorWizardModal';
 import { PROVIDER_SCOPES, buildScopeString, parseScopeString, getDefaultScopeIds } from './oauthScopeDefinitions';
 import { createCompanySecret, updateCompanySecret, getCompanySecret } from '../../../Services/VaultService';
-import { OAuthProvidersService } from '../../../Services/OAuthProvidersService';
+import { ConnectorsService } from '../../../Services/ConnectorsService';
 import type { VaultSecretMetadata, VaultSecretWithFields } from '../../../Services/VaultService';
 import type { OAuthProviderInfo } from '../../../types/oauthProviders';
 import { getConnectorById, getConnectorsByPlatform, getOAuthSecretId, CACHING_PRESETS } from '../connectorRegistry';
@@ -524,6 +524,13 @@ export const OAuthWizard = ({
 
       if (form.extraAuthParams.trim()) fields.extra_auth_params = form.extraAuthParams.trim();
 
+      // Non-standard auth header scheme (e.g. Zoho uses "Zoho-oauthtoken"
+      // instead of "Bearer"). Persist when the registry defines it; the
+      // backend connect_request reads this field and falls back to Bearer.
+      if (registryEntry?.authHeaderScheme) {
+        fields.auth_header_scheme = registryEntry.authHeaderScheme;
+      }
+
       // Caching policy
       fields.cache_ttl = form.cacheTtl;
       fields.cache_stale_while_revalidate = form.cacheStaleWhileRevalidate ? 'true' : 'false';
@@ -614,7 +621,7 @@ export const OAuthWizard = ({
         setSecretExists(true);
       }
 
-      OAuthProvidersService.clearProvidersCache();
+      ConnectorsService.clearListCache();
       setSuccess(t('dataConnectors.oauthWizard.saveSuccess'));
       setStep(totalSteps); // Go to last step (test)
     } catch (err) {
@@ -633,12 +640,15 @@ export const OAuthWizard = ({
     setTestResult('running');
     setTestError(null);
     try {
-      const result = await OAuthProvidersService.connect(effectiveProviderId);
-      if (result.success) {
+      // Wizard is OAuth-only by nature; facade routes to the OAuth authorize
+      // endpoint which navigates the browser on success, so we never actually
+      // see 'success' here unless classification fails.
+      const action = await ConnectorsService.connect(effectiveProviderId);
+      if (action.kind === 'redirecting') {
         setTestResult('success');
       } else {
         setTestResult('failed');
-        setTestError(result.error || 'Unknown error');
+        setTestError(action.kind === 'unsupported' ? action.reason : 'Wizard expected an OAuth connector');
       }
     } catch (err) {
       setTestResult('failed');
@@ -923,6 +933,11 @@ export const OAuthWizard = ({
             value={form.scopes}
             onChange={(e) => updateForm({ scopes: e.target.value })}
           />
+          <Form.Text className="text-muted">
+            {detectScopeSeparator(form.scopes) === ','
+              ? t('dataConnectors.oauthWizard.scopesRawHintCommas')
+              : t('dataConnectors.oauthWizard.scopesRawHintSpaces')}
+          </Form.Text>
         </Form.Group>
       )}
     </Col>
@@ -1085,6 +1100,7 @@ export const OAuthWizard = ({
       show={show}
       onHide={handleHide}
       title={wizardTitle}
+      authType="oauth2"
       steps={steps}
       currentStep={step}
       onNext={handleNext}
@@ -1718,4 +1734,22 @@ function parseCustomHeaders(raw?: string): CustomHeader[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Infer the scope separator from a pre-filled scope string so the field hint
+ * reflects what the provider actually expects. Zoho + Xero use commas;
+ * Google, Microsoft, and most others use spaces. Falls back to space when
+ * the string is empty or ambiguous.
+ */
+function detectScopeSeparator(scopes: string): ',' | ' ' {
+  const trimmed = (scopes || '').trim();
+  if (!trimmed) return ' ';
+  if (trimmed.includes(',') && !/\s/.test(trimmed)) return ',';
+  if (trimmed.includes(',') && /\s/.test(trimmed)) {
+    // Mixed — comma wins if there's no whitespace between tokens that
+    // look like scope identifiers.
+    return trimmed.split(',').every((part) => !/\s/.test(part.trim())) ? ',' : ' ';
+  }
+  return ' ';
 }

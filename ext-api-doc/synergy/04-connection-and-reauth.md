@@ -173,8 +173,8 @@ on API error:
    Expected: 200
    Failure: wrong URL or server down
 
-2. GET {instanceUrl}/api/v1/attributes/1/1 (with Bearer token) — verify PAT valid
-   Expected: 200 with PagedResultModel response
+2. GET {instanceUrl}/api/v1/auth/getPersonalAccessTokens (with Bearer token) — verify PAT valid
+   Expected: 200 with a list of PAT entries
    401: PAT invalid or expired
    403: PAT user lacks API permissions
 ```

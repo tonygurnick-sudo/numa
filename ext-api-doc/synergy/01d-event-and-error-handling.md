@@ -24,10 +24,14 @@ For entities with date fields (`LastModified`, `CreatedDate`), poll and filter c
 # Track last successful poll time
 last_poll = "2026-03-28T00:00:00Z"
 
-# Fetch all files (paginate through all pages)
+# Fetch all files via the search endpoint (body pagination)
 page = 1
 while True:
-    response = GET(f"/api/v1/files/{page}/100")
+    response = POST("/api/v1/files/search", json={
+        "FileName": "", "Contents": "",
+        "Page": page, "PageSize": 100,
+        "ShowDeletedFiles": False, "RetrieveAttributes": True,
+    })
     data = response.json()
 
     for file in data["Result"]:
@@ -48,15 +52,23 @@ last_poll = now_utc()
 
 ### Strategy 2: Search-Based Polling
 
-If search endpoints support date range criteria:
+If search endpoints support date range criteria via the `Attributes`
+array, you can filter server-side:
 
 ```
-POST /api/v1/files/search/1/100
+POST /api/v1/files/search
 Authorization: Bearer {PAT}
 Content-Type: application/json
 
 {
-  "ModifiedAfter": "2026-03-28T00:00:00Z"
+  "FileName": "",
+  "Page": 1,
+  "PageSize": 100,
+  "Attributes": [
+    { "Attribute": { "Name": "ModifiedDate" },
+      "Value": "2026-03-28T00:00:00Z",
+      "SearchQueryType": 4, "Operation": 2, "OperationName": ">" }
+  ]
 }
 ```
 
@@ -67,11 +79,14 @@ Content-Type: application/json
 For entities without date fields, maintain a local ID set and compare:
 
 ```python
-# Fetch current IDs
+# Fetch current IDs via the search endpoint (body pagination, capital C)
 current_ids = set()
 page = 1
 while True:
-    response = GET(f"/api/v1/contacts/{page}/100")
+    response = POST("/api/v1/Contacts/search", json={
+        "FirstName": "", "LastName": "", "Email": "",
+        "UsersOnly": False, "Page": page, "PageSize": 100,
+    })
     data = response.json()
     for contact in data["Result"]:
         current_ids.add(contact["ID"]["IDString"])
@@ -83,9 +98,10 @@ while True:
 added = current_ids - known_ids
 removed = known_ids - current_ids
 
-# For added items, fetch full details
+# For added items, fetch full details — note path params retrieve_attributes
+# and retrieve_companies are required
 for id in added:
-    detail = GET(f"/api/v1/contacts/{id}")
+    detail = GET(f"/api/v1/Contacts/{id}/true/true")
     process_new_contact(detail.json())
 
 known_ids = current_ids
@@ -186,15 +202,15 @@ Handle by:
 
 Things that look like errors but are correct API behavior:
 
-| Situation                               | Looks Like             | Actually                                                                               |
-| --------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------- |
-| `POST /api/Tasks` returns 200           | Should be 201?         | May return 200 on create — the API is inconsistent. Check if body contains new entity. |
-| Empty page beyond TotalPages            | Error?                 | Valid — returns `TotalRows: 0, Result: []`. Not an error.                              |
-| EntityID has underscore-prefixed fields | Malformed JSON?        | Correct — `_id`, `_server_id`, `_server_guid` all start with underscore by design.     |
-| Mixed casing between models             | API bug?               | Intentional — TaskItemModel is snake_case, JobModel is PascalCase. Both are correct.   |
-| Delete task needs description in path   | Bad API design?        | Correct — `DELETE /api/v1/tasks/{task_id}/{description}` requires both.                |
-| Task endpoints have no `/v1/`           | Wrong base URL?        | Correct — `POST /api/Tasks` and `PUT /api/Tasks` genuinely skip the version prefix.    |
-| Pagination in URL path                  | Misconfigured routing? | Correct — `/{page}/{page_size}` is in the path, not query params.                      |
+| Situation                               | Looks Like             | Actually                                                                                                      |
+| --------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `POST /api/Tasks` returns 200           | Should be 201?         | May return 200 on create — the API is inconsistent. Check if body contains new entity.                        |
+| Empty page beyond TotalPages            | Error?                 | Valid — returns `TotalRows: 0, Result: []`. Not an error.                                                     |
+| EntityID has underscore-prefixed fields | Malformed JSON?        | Correct — `_id`, `_server_id`, `_server_guid` all start with underscore by design.                            |
+| Mixed casing between models             | API bug?               | Intentional — TaskItemModel is snake_case, JobModel is PascalCase. Both are correct.                          |
+| Delete task needs description in path   | Bad API design?        | Correct — `DELETE /api/v1/tasks/{task_id}/{description}` requires both.                                       |
+| Task endpoints have no `/v1/`           | Wrong base URL?        | Correct — `POST /api/Tasks` genuinely skips the version prefix. (Same POST handles update; no `PUT` variant.) |
+| Pagination style is inconsistent        | Misconfigured routing? | Correct — search endpoints use body, content-listing endpoints use path. Never query string.                  |
 
 ---
 
@@ -275,7 +291,7 @@ Use this:
 2. Before re-authenticating — verify server is up (separate from auth issues)
 3. As a lightweight keepalive check
 
-**Do NOT use health check as an auth verification.** It doesn't require auth. Use an authenticated endpoint like `GET /api/v1/attributes/1/1` to verify the PAT is valid.
+**Do NOT use health check as an auth verification.** It doesn't require auth. Use an authenticated endpoint like `GET /api/v1/auth/getPersonalAccessTokens` to verify the PAT is valid.
 
 ---
 
@@ -286,8 +302,8 @@ For Numa integration, log the following at each API call boundary:
 ```python
 {
     "_name": "12D_SYNERGY_API",
-    "method": "GET",
-    "path": "/api/v1/jobs/1/50",
+    "method": "POST",
+    "path": "/api/v1/jobs/search",
     "status_code": 200,
     "duration_ms": 342,
     "page": 1,

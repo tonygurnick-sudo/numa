@@ -510,7 +510,20 @@
     "noneSelected": "None",
     "allToolsEnabledSummary": "All enabled",
     "toolsPartialSummary": "{{count}} enabled",
-    "noneEnabled": "None enabled"
+    "noneEnabled": "None enabled",
+    "connectors": "Connectors",
+    "noneConnected": "None connected",
+    "connectorsConnectedCount": "{{count}}/{{total}} connected",
+    "connectorAlreadyConnected": "Already connected"
+  },
+  "connectorsPanel": {
+    "connectTo": "Connect to {{name}}",
+    "credentialsHelp": "Enter your personal {{name}} credentials. They are stored in your personal vault and never shared.",
+    "noFieldsConfigured": "No credential fields are configured for this connector. Ask your workspace admin to check the data-connector setup.",
+    "connect": "Connect",
+    "connecting": "Connecting...",
+    "cancel": "Cancel",
+    "connectFailed": "Failed to connect"
   },
   "agents": {
     "chooseExperience": "Choose Chat Experience"

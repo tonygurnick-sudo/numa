@@ -857,7 +857,9 @@ The user has integrations connected via Pipedream Connect.
 **Integration Status:**
 {integrations_status}
 
-Only integrations marked as **Enabled** can be used with tools in this conversation. Integrations marked as Available are connected by the user but not toggled on for this session. When creating agents, you may offer any connected integration (enabled or available) as an option."""
+Only integrations marked as **Enabled** can be used with tools in this conversation. Integrations marked as Available are connected by the user but not toggled on for this session. When creating agents, you may offer any connected integration (enabled or available) as an option.
+
+**Precedence rule:** If a service with the same (or similar) name appears in both the Data Connectors list and this Integrations list, **always prefer the Data Connectors path** — check `connectors` status first and use the `connectors` tool for that service. Do not say "you need to connect via Integrations settings" when a Data Connector exists for the service the user asked about. Only fall back to Pipedream integrations when no matching data connector exists."""
 
     # Only include tool usage instructions when integrations are actually enabled
     if not enabled_integrations:
@@ -967,19 +969,24 @@ def _build_connectors_context(
     for conn in connected_data_connectors:
         cid = conn.get("id", "")
         name = conn.get("name", cid)
-        connector_lines.append(f"- {name} (`{cid}`): **Connected**")
-        # Check if API reference docs were synced for this connector
-        docs_dir = Path(f"/workdir/api-docs/{name}")
+        connector_lines.append(
+            f'- {name} (`{cid}`): configured by the workspace admin (per-user connection state unknown — call `connectors(name="status")` to check before telling the user anything about it)'
+        )
+        # Check if API reference docs were synced for this connector. The S3
+        # sync writes to /workdir/api-docs/{slug}/, not /{display_name}/.
+        docs_dir = Path(f"/workdir/api-docs/{cid}")
         if docs_dir.is_dir() and any(docs_dir.iterdir()):
-            connectors_with_docs.append(name)
+            connectors_with_docs.append(cid)
 
     connectors_list = "\n".join(connector_lines)
 
-    context = f"""## Connected Data Connectors
-The user has data connectors configured via the Data Connectors page. These are separate from Pipedream integrations.
+    context = f"""## Available Data Connectors
+The workspace admin has configured these data connectors. They are **always your first port of call** for the services listed below — do not fall back to Pipedream integrations when one of these is named. The current user may or may not have connected each one yet; check with the `connectors` status operation to find out.
 
-**Connector Status:**
+**Connectors:**
 {connectors_list}
+
+**Precedence:** If the user asks about a service that appears in the list above, use the `connectors` tool immediately. Do NOT say "you need to connect via Integrations settings" and do NOT suggest Pipedream. Only consider Pipedream integrations when the named service does NOT appear in the list above.
 
 Access these via the `connectors` tool (NOT the integrations tool). Operations:
 - `connectors(name="status", params={{}}, description="...")` — check detailed status
@@ -990,7 +997,19 @@ Access these via the `connectors` tool (NOT the integrations tool). Operations:
 
 The `request` operation makes authenticated HTTP calls to ANY API the connector's OAuth token covers. For example, a Google Drive connector token also works with Google Docs API, Sheets API, etc.
 
-**Do NOT waste tool calls on disconnected connectors.** Only the connectors listed above are connected."""
+**Handling disconnected connectors — READ CAREFULLY:**
+
+When the `status` tool returns `Awaiting credential: <Name>` for a connector, the chat UI has **already shown the user an inline credential form for that connector** — the credential-request prompt is live on their screen right now.
+
+In this case you MUST:
+1. Acknowledge briefly (one sentence): "I've opened a credential prompt for <Name> above — fill it in and I'll retry your request."
+2. **STOP.** Do NOT call any further tools. Do NOT ask the user to paste their credential into chat. Do NOT tell them to go to Integrations, Settings, or Data Connectors. Do NOT suggest any manual route — the inline prompt is the ONLY correct path.
+
+When the status tool returns `Not connected: <Name> — connect at /files?tab=remote`, the connector is an OAuth file provider that needs a browser redirect. Tell the user: "Please connect <Name> under Files > Remote, then ask me again."
+
+When the connector is truly absent (not in the status output at all), tell the user the connector isn't configured and to contact their admin.
+
+Never: paste-the-token-in-chat. Never: go-to-settings for a chat-only connector showing *Awaiting credential*. The inline form stores the credential securely in the user's personal vault; any other path bypasses that."""
 
     if connectors_with_docs:
         docs_list = ", ".join(connectors_with_docs)
@@ -1001,11 +1020,14 @@ API reference documentation is available at `/workdir/api-docs/{{name}}/` for th
 
 You **MUST** read `01-llm-api-rules.md` before making any authenticated API request via the `request` operation for these connectors. It contains auth requirements, rate limits, required headers, and common pitfalls that will cause failures if ignored.
 
-Companion files provide detailed reference:
+Companion files provide detailed reference — read the one matching your task:
 - `01a-domain-model-reference.md` — Entity definitions, field types, relationships.
 - `01b-query-patterns.md` — Read operations: list, search, filter, pagination.
 - `01c-mutation-patterns.md` — Write operations: create, update, delete, batch.
-- `01d-event-and-error-handling.md` — Error codes, retry logic, webhooks."""
+- `01d-event-and-error-handling.md` — Error codes, retry logic, webhooks.
+- `02-api-spec-investigation.md` — Full API spec details, edge cases, field-level behaviour observed from live testing.
+- `03-connector-setup.md` — How the connector is configured (admin side) and what the vault holds.
+- `04-connection-and-reauth.md` — Connect / reconnect / revoke flow, token lifetime, reauth triggers."""
 
     return context
 

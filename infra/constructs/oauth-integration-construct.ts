@@ -137,7 +137,14 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
         DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName ?? '',
       },
       additionalPolicyStatements: oauthAuthPolicy,
-      route: [{ verb: 'ANY', path: 'oauth/{proxy+}' }],
+      route: [
+        { verb: 'ANY', path: 'oauth/{proxy+}' },
+        // PAT connector routes live in the same Lambda but use a distinct
+        // route prefix and a separate handler block. See handlePatRequest
+        // in oauth-auth-handler/index.ts. Kept here (rather than a new
+        // Lambda) deliberately — shared vault helpers, no infra churn.
+        { verb: 'ANY', path: 'pat/{proxy+}' },
+      ],
     });
 
     // OAuth Files API Handler (Python)

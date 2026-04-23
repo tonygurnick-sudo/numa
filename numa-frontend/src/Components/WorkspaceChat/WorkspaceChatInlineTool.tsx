@@ -15,6 +15,7 @@ import { Spinner, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { WorkspaceChatInlineToolSegment } from '@/types/workspaceChatTypes';
 import { approveToolAction } from '../../Services/workspaceChatAgentService';
+import { ConnectorsService } from '../../Services/ConnectorsService';
 
 const APPROVAL_TIMEOUT_SECONDS = 90;
 
@@ -111,7 +112,43 @@ function formatOperationName(actionKey: string): string {
  */
 function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
   const { t } = useTranslation('integrations');
-  const { displayText, isComplete, isError, iconName, iconImage, approval, approvalOnly } = segment;
+  const { displayText, isComplete, isError, iconName, iconImage, approval, approvalOnly, credentialRequest } = segment;
+  const [credValues, setCredValues] = useState<Record<string, string>>(() => credentialRequest?.values ?? {});
+  const [credSubmitting, setCredSubmitting] = useState(false);
+  const [credSubmitted, setCredSubmitted] = useState<boolean>(credentialRequest?.status === 'submitted');
+  const [credError, setCredError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (credentialRequest) {
+      setCredValues(credentialRequest.values ?? Object.fromEntries(credentialRequest.fields.map((f) => [f.key, ''])));
+      setCredSubmitted(credentialRequest.status === 'submitted');
+      setCredError(credentialRequest.error ?? null);
+    }
+  }, [credentialRequest]);
+
+  const credCanSubmit = credentialRequest
+    ? credentialRequest.fields.every((f) => !f.required || (credValues[f.key] ?? '').trim().length > 0)
+    : false;
+
+  const handleCredSubmit = useCallback(async () => {
+    if (!credentialRequest) return;
+    const payload: Record<string, string> = {};
+    for (const f of credentialRequest.fields) {
+      const v = (credValues[f.key] ?? '').trim();
+      if (v) payload[f.key] = v;
+    }
+    if (Object.keys(payload).length === 0) return;
+    setCredSubmitting(true);
+    setCredError(null);
+    try {
+      await ConnectorsService.saveCredentials(credentialRequest.connectorId, payload);
+      setCredSubmitted(true);
+    } catch (err) {
+      setCredError(err instanceof Error ? err.message : 'Failed to save credential');
+    } finally {
+      setCredSubmitting(false);
+    }
+  }, [credentialRequest, credValues]);
   const [submitting, setSubmitting] = useState(false);
   const [localDecision, setLocalDecision] = useState<string | undefined>(undefined);
   const [denyReason, setDenyReason] = useState('');
@@ -173,6 +210,7 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
   // For approvalOnly segments (sub-agent approvals), hide entirely once decided
   // since the tool call info is already visible inside the subagent card.
   if (approvalOnly && decision) return null;
+  const showCredentialPanel = Boolean(credentialRequest) && !credSubmitted;
 
   return (
     <div className="workspace-chat-inline-tool-wrapper">
@@ -210,6 +248,87 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
                         : t('approval.timeout')}
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {showCredentialPanel && credentialRequest && (
+        <div className="inline-tool-approval-panel">
+          <div className="approval-panel-header">
+            <i className="bi bi-key" />
+            <span>
+              {t('credential.title', {
+                defaultValue: `Connect ${credentialRequest.displayName}`,
+                name: credentialRequest.displayName,
+              })}
+            </span>
+          </div>
+          <div className="approval-panel-details">
+            <div className="approval-detail-row">
+              <span className="approval-detail-value">
+                {t('credential.description', {
+                  defaultValue: `Enter your personal ${credentialRequest.displayName} credential. It will be stored in your personal vault, not shared with anyone else.`,
+                  name: credentialRequest.displayName,
+                })}
+              </span>
+            </div>
+            {credentialRequest.fields.map((f) => (
+              <div
+                key={f.key}
+                className="approval-detail-row"
+                style={{ flexDirection: 'column', alignItems: 'stretch' }}
+              >
+                <label className="approval-detail-label" htmlFor={`cred-${credentialRequest.connectorId}-${f.key}`}>
+                  {f.label}
+                  {f.required && <span className="text-danger ms-1">*</span>}
+                </label>
+                <Form.Control
+                  id={`cred-${credentialRequest.connectorId}-${f.key}`}
+                  type={f.type || 'text'}
+                  size="sm"
+                  placeholder={f.placeholder || ''}
+                  value={credValues[f.key] ?? ''}
+                  onChange={(e) => setCredValues((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  disabled={credSubmitting}
+                  autoComplete="off"
+                />
+              </div>
+            ))}
+            {credError && (
+              <div className="approval-detail-row">
+                <span className="approval-detail-value text-danger">{credError}</span>
+              </div>
+            )}
+          </div>
+          <div className="approval-panel-actions">
+            <button
+              className="approval-btn approve"
+              onClick={handleCredSubmit}
+              disabled={credSubmitting || !credCanSubmit}
+            >
+              {credSubmitting ? (
+                <Spinner animation="border" size="sm" className="me-1" />
+              ) : (
+                <i className="bi bi-check-lg me-1" />
+              )}
+              {t('credential.submit', { defaultValue: 'Connect' })}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {credentialRequest && credSubmitted && (
+        <div className="inline-tool-approval-panel">
+          <div className="approval-panel-details">
+            <div className="approval-detail-row">
+              <span className="approval-detail-value">
+                <i className="bi bi-check-circle text-success me-2" />
+                {t('credential.submitted', {
+                  defaultValue: `Connected. Ask me again to use ${credentialRequest.displayName}.`,
+                  name: credentialRequest.displayName,
+                })}
+              </span>
+            </div>
           </div>
         </div>
       )}

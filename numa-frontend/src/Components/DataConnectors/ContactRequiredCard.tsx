@@ -1,7 +1,8 @@
-import { Badge, Button } from 'react-bootstrap';
+import { Button } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { ExternalLink, Mail } from 'lucide-react';
 import type { ConnectorTemplate } from './connectorRegistry';
+import { AuthTypeBadge } from './AuthTypeBadge';
 
 interface ContactRequiredCardProps {
   connector: ConnectorTemplate;
@@ -18,11 +19,9 @@ export const ContactRequiredCard = ({ connector }: ContactRequiredCardProps) => 
             <i className={connector.icon} style={{ fontSize: '1.5rem' }} />
           </div>
           <div className="integrations-row-card__text">
-            <h6 className="integrations-row-card__name">
-              {connector.displayName}
-              <Badge bg="secondary" className="ms-2 fw-normal" style={{ fontSize: '0.65rem' }}>
-                {t('dataConnectors.contact.badge')}
-              </Badge>
+            <h6 className="integrations-row-card__name d-flex align-items-center gap-2">
+              <span>{connector.displayName}</span>
+              <AuthTypeBadge authType={connector.authType} />
             </h6>
             <p className="integrations-row-card__description">{connector.description}</p>
             {connector.contactInfo?.notes && (

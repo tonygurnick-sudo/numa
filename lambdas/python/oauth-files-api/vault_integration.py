@@ -246,32 +246,40 @@ def get_company_provider_config(provider: str) -> Optional[dict]:
         if not secrets:
             return None
 
-        # Try oauth-client-{platform} first, then connector-{provider}
+        # Lookup order (same across every Lambda that reads company vault):
+        #   1. oauth-client-{platform}     — OAuth client credentials (shared
+        #                                     across Google suite, Microsoft, …)
+        #   2. connector-config-{provider} — new admin-registered PAT format
+        #                                     (writes by ApiKeyWizard)
+        #   3. connector-{provider}        — legacy admin PAT format (Synergy
+        #                                     pre-split)
         platform = _OAUTH_PLATFORM_MAP.get(provider, provider)
-        secret_name = f"oauth-client-{platform}"
-        secret_entry = secrets.get(secret_name)
-        if not secret_entry:
-            secret_name = f"connector-{provider}"
-            secret_entry = secrets.get(secret_name)
+        lookup_names = [
+            f"oauth-client-{platform}",
+            f"connector-config-{provider}",
+            f"connector-{provider}",
+        ]
+        secret_entry = None
+        for name in lookup_names:
+            if name in secrets:
+                secret_entry = secrets[name]
+                break
 
         # Cache miss — bust and retry (secret may have just been created)
         global _company_vault_cache
         if not secret_entry and _company_vault_cache[0] is not None:
             _company_vault_cache = (None, 0.0)
             secrets = _get_consolidated_company_vault()
-            secret_entry = (
-                (
-                    secrets.get(f"oauth-client-{platform}")
-                    or secrets.get(f"connector-{provider}")
-                )
-                if secrets
-                else None
-            )
+            if secrets:
+                for name in lookup_names:
+                    if name in secrets:
+                        secret_entry = secrets[name]
+                        break
 
         if not secret_entry:
             logger.warning(
                 f"No COMPANY vault secret found for {provider} "
-                f'(looked for "oauth-client-{platform}" and "connector-{provider}")'
+                f"(looked for {lookup_names})"
             )
             return None
 
@@ -377,14 +385,21 @@ async def refresh_access_token(provider: str, refresh_token: str) -> Optional[di
 
 
 async def get_oauth_token(provider: str, user_id: str) -> Optional[str]:
-    """Get valid OAuth access token for user and provider.
+    """Get valid access token for user and provider.
 
-    Reads from consolidated user vault at {CLIENT_NAME}/vault/users/{user_id},
-    looking up secrets["oauth-{provider}"].fields for token data.
-    Automatically refreshes token if expired.
+    Resolution order — new location wins:
+      1. `connector-{provider}` — per-user PAT/API key for non-OAuth connectors
+         (Fergus, Synergy, simPRO). Truth for PAT; returned as-is; no refresh.
+      2. `oauth-{provider}`     — OAuth tokens (access_token + refresh_token)
+         OR legacy single-token PAT entries written by the pre-split Files >
+         Remote Connect modal. Refreshed if expired.
+
+    Reading `connector-{provider}` first means a user transitioning from the
+    legacy flow (both entries present) always gets the fresh PAT instead of
+    the stale oauth-{provider} leftover. Mirrors
+    `oauth-workspace-tools/tools/oauth_tools.py` so both Lambdas resolve to
+    the same credential.
     """
-    secret_key = f"oauth-{provider}"
-
     # Read from consolidated user vault
     vault_data = _get_user_consolidated_vault(user_id)
     if not vault_data:
@@ -392,11 +407,28 @@ async def get_oauth_token(provider: str, user_id: str) -> Optional[str]:
         return None
 
     secrets = vault_data.get("secrets", {})
+
+    # Preferred: non-OAuth connector stored under connector-{provider}.
+    connector_entry = secrets.get(f"connector-{provider}")
+    if connector_entry:
+        fields = connector_entry.get("fields") or connector_entry
+        if isinstance(fields, dict):
+            token = (
+                fields.get("access_token")
+                or fields.get("api_key")
+                or fields.get("bearer_token")
+                or fields.get("token")
+            )
+            if token:
+                return str(token)
+
+    # Fallback: oauth-{provider} (OAuth tokens or legacy single-token PAT).
+    secret_key = f"oauth-{provider}"
     entry = secrets.get(secret_key)
     if not entry:
         logger.info(
-            f"No OAuth secret found for {provider} user {user_id} "
-            f'(looked for "{secret_key}" in consolidated vault)'
+            f"No credential found for {provider} user {user_id} "
+            f'(looked for "connector-{provider}" / "{secret_key}" in consolidated vault)'
         )
         return None
 

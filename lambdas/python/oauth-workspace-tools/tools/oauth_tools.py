@@ -168,25 +168,29 @@ def get_available_providers() -> list[str]:
         if not secrets:
             return []
 
-        provider_ids = []
+        provider_ids: list[str] = []
+        seen: set[str] = set()
+
+        def _add(connector_id: str) -> None:
+            if connector_id and connector_id not in seen:
+                seen.add(connector_id)
+                provider_ids.append(connector_id)
+
         for secret_name, entry in secrets.items():
             if secret_name.startswith("oauth-client-"):
-                # Check for enabled_connectors to expand platform secrets
-                # e.g. oauth-client-google has enabled_connectors="googledrive,gmail"
                 fields = (
                     (entry.get("fields") or entry) if isinstance(entry, dict) else {}
                 )
                 enabled = fields.get("enabled_connectors", "")
                 if enabled:
                     for connector_id in enabled.split(","):
-                        connector_id = connector_id.strip()
-                        if connector_id:
-                            provider_ids.append(connector_id)
+                        _add(connector_id.strip())
                 else:
-                    # No enabled_connectors — use the secret name directly
-                    provider_ids.append(secret_name.replace("oauth-client-", ""))
+                    _add(secret_name.replace("oauth-client-", ""))
+            elif secret_name.startswith("connector-config-"):
+                _add(secret_name.replace("connector-config-", ""))
             elif secret_name.startswith("connector-"):
-                provider_ids.append(secret_name.replace("connector-", ""))
+                _add(secret_name.replace("connector-", ""))
 
         _available_providers_cache = (provider_ids, time.time())
         return provider_ids
@@ -215,11 +219,14 @@ def _get_provider_credentials(provider: str) -> Optional[Dict[str, str]]:
     try:
         secrets = _get_consolidated_company_vault()
         if secrets:
-            # Try direct match first, then platform mapping
+            # Try direct match first, then platform mapping.
+            # Prefer connector-config-{id} (new metadata-only) over connector-{id}
+            # (legacy may hold credentials that were wrongly admin-entered).
             platform = _platform_map.get(provider, provider)
             for candidate in [
                 f"oauth-client-{provider}",
                 f"oauth-client-{platform}",
+                f"connector-config-{provider}",
                 f"connector-{provider}",
             ]:
                 entry = secrets.get(candidate)
@@ -344,11 +351,20 @@ async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
     Reads from {CLIENT_NAME}/vault/users/{user_sub},
     looking up secrets["oauth-{provider}"].fields for token data.
     Automatically refreshes expired tokens using the refresh token.
+
+    Resolution order — new location wins:
+      1. connector-{provider}  — PAT/API key (new flow). Truth for PAT
+         connectors. Returned as-is; no refresh.
+      2. oauth-{provider}      — OAuth tokens OR legacy single-token PAT
+         entries written by the pre-split Files > Remote Connect modal.
+         Refreshed if expired.
+
+    Reading connector-{provider} first means a user with both entries
+    (transitioning from the legacy flow) always gets the fresh PAT, not
+    the stale oauth-{provider} leftover.
     """
     from datetime import datetime
     from datetime import timezone as tz
-
-    secret_key = f"oauth-{provider}"
 
     try:
         vault_data = _get_user_consolidated_vault(user_sub)
@@ -357,11 +373,24 @@ async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
             return None
 
         secrets = vault_data.get("secrets", {})
+
+        # Preferred location: connector-{provider} (new PAT flow).
+        connector_entry = secrets.get(f"connector-{provider}")
+        if connector_entry:
+            cfields = connector_entry.get("fields") or connector_entry
+            if isinstance(cfields, dict):
+                for k in ("api_key", "bearer_token", "access_token", "token"):
+                    v = cfields.get(k)
+                    if v:
+                        return str(v)
+
+        # Fallback: oauth-{provider} (OAuth tokens, or legacy single-token PAT).
+        secret_key = f"oauth-{provider}"
         entry = secrets.get(secret_key)
         if not entry:
             logger.info(
-                f"No OAuth secret found for {provider} user {user_sub} "
-                f'(looked for "{secret_key}" in consolidated vault)'
+                f"No credential found for {provider} user {user_sub} "
+                f'(looked for "connector-{provider}" / "{secret_key}" in consolidated vault)'
             )
             return None
 

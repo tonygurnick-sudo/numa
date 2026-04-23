@@ -18,7 +18,7 @@ import type {
   OAuthBreadcrumb,
 } from '../types/oauthProviders';
 import type { SynergyJob, SynergyFolder, SynergyFile } from '../types/synergySync';
-import { OAuthProvidersService, OAuthApiError } from '../Services/OAuthProvidersService';
+import { ConnectorsService, OAuthApiError } from '../Services/ConnectorsService';
 import { SynergyDataConnectorService } from '../Services/SynergyDataConnectorService';
 import {
   getRemoteFolder,
@@ -200,7 +200,8 @@ export function useRemoteBrowse({
       if (oauthProviderStatuses[provider.id]?.status !== 'connected') continue;
       const key = oauthCacheKey(provider.id);
       if (!getRemoteFolder(key)) {
-        OAuthProvidersService.listContents(provider.id)
+        ConnectorsService.files
+          .list(provider.id)
           .then((contents) => {
             setRemoteFolder(key, { folders: contents.folders ?? [], files: contents.files ?? [] });
           })
@@ -260,7 +261,7 @@ export function useRemoteBrowse({
           // Background revalidation
           setOauthRevalidating(true);
           try {
-            const contents = await OAuthProvidersService.listContents(provider);
+            const contents = await ConnectorsService.files.list(provider);
             if (generationRef.current === gen) {
               setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
               if (dataChanged(oauthFolders, contents.folders ?? [])) setOauthFolders(contents.folders ?? []);
@@ -281,7 +282,7 @@ export function useRemoteBrowse({
         // Cache miss — show spinner
         setOauthContentLoading(true);
         try {
-          const contents = await OAuthProvidersService.listContents(provider);
+          const contents = await ConnectorsService.files.list(provider);
           if (generationRef.current === gen) {
             setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
             setOauthFolders(contents.folders ?? []);
@@ -346,7 +347,7 @@ export function useRemoteBrowse({
         if (cached.stale) {
           setOauthRevalidating(true);
           try {
-            const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folder.folder_id);
+            const contents = await ConnectorsService.files.list(selectedOauthProvider, folder.folder_id);
             if (generationRef.current === gen) {
               setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
               if (dataChanged(oauthFolders, contents.folders ?? [])) setOauthFolders(contents.folders ?? []);
@@ -366,7 +367,7 @@ export function useRemoteBrowse({
       } else {
         setOauthContentLoading(true);
         try {
-          const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folder.folder_id);
+          const contents = await ConnectorsService.files.list(selectedOauthProvider, folder.folder_id);
           if (generationRef.current === gen) {
             setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
             setOauthFolders(contents.folders ?? []);
@@ -419,7 +420,7 @@ export function useRemoteBrowse({
         if (cached.stale) {
           setOauthRevalidating(true);
           try {
-            const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folderId);
+            const contents = await ConnectorsService.files.list(selectedOauthProvider, folderId);
             if (generationRef.current === gen) {
               setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
               if (dataChanged(oauthFolders, contents.folders ?? [])) setOauthFolders(contents.folders ?? []);
@@ -434,7 +435,7 @@ export function useRemoteBrowse({
       } else {
         setOauthContentLoading(true);
         try {
-          const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folderId);
+          const contents = await ConnectorsService.files.list(selectedOauthProvider, folderId);
           if (generationRef.current === gen) {
             setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
             setOauthFolders(contents.folders ?? []);
@@ -770,7 +771,7 @@ export function useRemoteBrowse({
     setOauthPageHistory((prev) => [...prev, oauthPageToken]);
 
     try {
-      const contents = await OAuthProvidersService.listContents(
+      const contents = await ConnectorsService.files.list(
         selectedOauthProvider,
         oauthCurrentFolderRef.current,
         undefined,
@@ -807,7 +808,7 @@ export function useRemoteBrowse({
     setOauthPageHistory(newHistory);
 
     try {
-      const contents = await OAuthProvidersService.listContents(
+      const contents = await ConnectorsService.files.list(
         selectedOauthProvider,
         oauthCurrentFolderRef.current,
         undefined,

@@ -9,12 +9,10 @@ export const DataConnectorsService = {
     return response?.items || [];
   },
 
-  async connect(
-    numaPost: NumaPost,
-    payload: { connector_id: string; config: Record<string, unknown> }
-  ): Promise<unknown> {
-    return numaPost('/api/data-connectors/connect', payload);
-  },
+  // `.connect` removed — the legacy Synergy "Connect" modal in Files.tsx that
+  // posted { connector_id, config } to /api/data-connectors/connect has been
+  // deleted. Per-user credentials are now captured in the chat sidebar or the
+  // ConnectTokenModal and routed through PATConnectorService.
 
   async getSynergyPatStatus(numaGet: NumaGet): Promise<PatStatus> {
     return (await numaGet('/api/data-connectors/synergy/pat-status')) as PatStatus;
@@ -24,3 +22,6 @@ export const DataConnectorsService = {
     return numaPost('/api/data-connectors/synergy/rotate-pat');
   },
 };
+
+// saveUserConnectorCredential removed — PAT credential writes now go through
+// PATConnectorService.saveCredentials (POST /api/pat/{id}/credentials).

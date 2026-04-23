@@ -113,17 +113,42 @@ Downloaded files land in `/workdir/uploads/connect-{connector}/`. Max file size:
 
 ### Authenticated HTTP (request operation)
 
-Make ad-hoc API calls to any OAuth-connected service:
+Make ad-hoc API calls to any connected service — works for **both** OAuth
+providers (Google Drive, Gmail, …) **and** PAT connectors (Synergy, Fergus,
+simPRO, …). The backend injects `Authorization: Bearer {access_token}` using
+whichever credential the user has stored; you don't handle auth yourself.
+
+**Pass a path, not a full URL, for connectors with an admin-configured
+instance URL.** The backend expands `/api/v1/...` to `{instance_url}/api/v1/...`
+automatically for Synergy, Workbench, NetSuite, MYOB Acumatica, and any other
+customer-hosted API. You never have to discover or store the instance URL.
 
 ```
+# Fully-qualified URL (OAuth providers — their API hosts are fixed):
 connectors(name="request", params={
     connector: "googledrive",
     url: "https://www.googleapis.com/drive/v3/about?fields=user",
     description: "Get Google Drive user info"
 })
+
+# Relative path (PAT connectors with customer-hosted APIs):
+connectors(name="request", params={
+    connector: "synergy",
+    url: "/api/v1/projects",
+    description: "List Synergy projects"
+})
+
+# Absolute URL for a PAT connector also works if you need it:
+connectors(name="request", params={
+    connector: "fergus",
+    url: "https://api.fergus.com/api/v2/customers",
+    description: "List Fergus customers"
+})
 ```
 
-Not supported for `synergy`.
+If you pass a relative path for a connector whose admin hasn't configured
+an `instance_url`, you'll get a clear error naming the missing config. Only
+the `data-bucket` (internal S3) rejects the request operation outright.
 
 ### What to tell users when not connected
 

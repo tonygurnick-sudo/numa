@@ -53,7 +53,10 @@ export const SynergyPatBadge = ({ connectorConfigured }: SynergyPatBadgeProps) =
     }
   };
 
-  if (!patStatus || patStatus.status === 'unknown') return null;
+  // Bail early on missing/unknown status. Without this, a backend response
+  // that lacks a `status` field renders the raw i18n key
+  // `dataConnectors.synergy.pat.undefined` to the admin — confusing and ugly.
+  if (!patStatus || !patStatus.status || patStatus.status === 'unknown') return null;
 
   const { color, icon: Icon } = STATUS_VARIANT[patStatus.status] ?? STATUS_VARIANT.unknown;
   const days = patStatus.days_remaining ?? 0;

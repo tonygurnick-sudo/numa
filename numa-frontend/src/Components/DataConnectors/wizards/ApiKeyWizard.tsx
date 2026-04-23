@@ -1,25 +1,28 @@
-// MERGE: kept dev version — adds Collapse/Chevron imports, collapsible API
-//   reference section, setup step rendering, and enriched wizard steps.
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Col, Collapse, Form, Row } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { ConnectorWizardModal } from './ConnectorWizardModal';
 import type { WizardStep } from './ConnectorWizardModal';
-import { createCompanySecret, updateCompanySecret, getCompanySecret } from '../../../Services/VaultService';
+import {
+  createCompanySecret,
+  updateCompanySecret,
+  getCompanySecret,
+  deleteCompanySecret,
+} from '../../../Services/VaultService';
 import type { VaultSecretMetadata, VaultSecretWithFields } from '../../../Services/VaultService';
 import type { ConnectorTemplate } from '../connectorRegistry';
+import { AuthTypeBadge } from '../AuthTypeBadge';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Admin flow for non-OAuth connectors: register + optional metadata only.
+// The per-user credential (PAT / API key / username+password) is captured in
+// chat on first use and stored in the user's personal vault, not here.
 
 interface ApiKeyFormState {
   connectorId: string;
   displayName: string;
   icon: string;
   description: string;
-  credentials: Record<string, string>;
   apiDocsUrl: string;
   openApiUrl: string;
   postmanUrl: string;
@@ -31,6 +34,11 @@ interface ApiKeyFormState {
   cacheStaleWhileRevalidate: boolean;
   cachePrefetch: boolean;
   cacheBackgroundRefresh: string;
+  /** Optional admin-configured base URL for connectors whose API lives at a
+   *  customer-hosted / per-instance location (e.g. Synergy 12d). If empty,
+   *  runtime falls back to whatever the connector registry / backend has
+   *  hardcoded for this connector. */
+  instanceUrl: string;
 }
 
 interface ApiKeyWizardProps {
@@ -41,10 +49,6 @@ interface ApiKeyWizardProps {
   existingSecrets: VaultSecretMetadata[];
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets }: ApiKeyWizardProps) => {
   const { t } = useTranslation('integrations');
 
@@ -53,10 +57,12 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [secretExists, setSecretExists] = useState(false);
+  const [existingSecretName, setExistingSecretName] = useState<string | null>(null);
+  const [legacySecretName, setLegacySecretName] = useState<string | null>(null);
   const [customizeExpanded, setCustomizeExpanded] = useState(false);
 
-  const secretName = `connector-${connector.id}`;
+  const configSecretName = `connector-config-${connector.id}`;
+  const legacyCredentialSecretName = `connector-${connector.id}`;
 
   const emptyForm = useCallback(
     (): ApiKeyFormState => ({
@@ -64,7 +70,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       displayName: connector.displayName,
       icon: connector.icon,
       description: connector.description,
-      credentials: Object.fromEntries((connector.credentialFields || []).map((f) => [f.key, ''])),
       apiDocsUrl: connector.apiReference?.docsUrl || '',
       openApiUrl: connector.apiReference?.openApiUrl || '',
       postmanUrl: connector.apiReference?.postmanUrl || '',
@@ -76,6 +81,9 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       cacheStaleWhileRevalidate: (connector.cachingPolicy?.staleWhileRevalidate ?? 600) > 0,
       cachePrefetch: connector.cachingPolicy?.prefetch ?? true,
       cacheBackgroundRefresh: String(connector.cachingPolicy?.backgroundRefresh ?? 0),
+      // No default — always optional. If the registry has a baseUrl it's used at
+      // runtime when this is blank; we don't pre-fill to avoid forking the value.
+      instanceUrl: '',
     }),
     [connector]
   );
@@ -84,18 +92,57 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
 
   const updateForm = (partial: Partial<ApiKeyFormState>) => setForm((prev) => ({ ...prev, ...partial }));
 
-  const updateCredential = (key: string, value: string) =>
-    setForm((prev) => ({ ...prev, credentials: { ...prev.credentials, [key]: value } }));
+  /** Structural URL validation. Empty is valid (field is optional). Accepts
+   *  only http(s) schemes to stop obvious misconfigurations (e.g. ftp://). */
+  const instanceUrlError = ((): string | null => {
+    const v = form.instanceUrl.trim();
+    if (!v) return null;
+    try {
+      const u = new URL(v);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return t('dataConnectors.apiKeyWizard.instanceUrlInvalidProtocol', {
+          defaultValue: 'Must start with http:// or https://',
+        });
+      }
+      if (!u.host) {
+        return t('dataConnectors.apiKeyWizard.instanceUrlInvalid', { defaultValue: 'Invalid URL' });
+      }
+      return null;
+    } catch {
+      return t('dataConnectors.apiKeyWizard.instanceUrlInvalid', { defaultValue: 'Invalid URL' });
+    }
+  })();
 
-  // Helper: find matching company secret
-  const getConnectorSecret = useCallback(
-    (): VaultSecretMetadata | undefined => existingSecrets.find((s) => s.name === secretName),
-    [existingSecrets, secretName]
+  const applyFieldsToForm = useCallback(
+    (fields: Record<string, string>) => {
+      updateForm({
+        ...emptyForm(),
+        displayName: fields.display_name || connector.displayName,
+        icon: fields.icon || connector.icon,
+        description: fields.description || connector.description,
+        apiDocsUrl: fields.api_docs_url || connector.apiReference?.docsUrl || '',
+        openApiUrl: fields.open_api_url || connector.apiReference?.openApiUrl || '',
+        postmanUrl: fields.postman_url || connector.apiReference?.postmanUrl || '',
+        mcpServerRef: fields.mcp_server_ref || connector.apiReference?.mcpServerRef || '',
+        rateLimitRpm: fields.rate_limit_rpm || connector.rateLimitRpm?.toString() || '',
+        rateLimitDaily: fields.rate_limit_daily || connector.rateLimitDaily?.toString() || '',
+        purposeHint: fields.purpose_hint || connector.apiReference?.purpose || '',
+        cacheTtl: fields.cache_ttl || String(connector.cachingPolicy?.ttl ?? 300),
+        cacheStaleWhileRevalidate:
+          fields.cache_stale_while_revalidate != null
+            ? fields.cache_stale_while_revalidate === 'true'
+            : (connector.cachingPolicy?.staleWhileRevalidate ?? 600) > 0,
+        cachePrefetch:
+          fields.cache_prefetch != null
+            ? fields.cache_prefetch === 'true'
+            : (connector.cachingPolicy?.prefetch ?? true),
+        cacheBackgroundRefresh:
+          fields.cache_background_refresh || String(connector.cachingPolicy?.backgroundRefresh ?? 0),
+        instanceUrl: fields.instance_url || '',
+      });
+    },
+    [connector, emptyForm]
   );
-
-  // ---------------------------------------------------------------------------
-  // Load existing data
-  // ---------------------------------------------------------------------------
 
   useEffect(() => {
     if (!show) return;
@@ -104,82 +151,46 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     setError(null);
     setSuccess(null);
     setCustomizeExpanded(false);
+    setExistingSecretName(null);
+    setLegacySecretName(null);
 
-    const existing = getConnectorSecret();
-    if (existing) {
-      setSecretExists(true);
+    const configHit = existingSecrets.find((s) => s.name === configSecretName);
+    const legacyHit = existingSecrets.find((s) => s.name === legacyCredentialSecretName);
+    const hit = configHit ?? legacyHit;
+    if (legacyHit) setLegacySecretName(legacyHit.name);
+
+    if (hit) {
+      setExistingSecretName(hit.name);
       setLoading(true);
-      getCompanySecret(existing.name)
+      getCompanySecret(hit.name)
         .then((full: VaultSecretWithFields) => {
-          const creds: Record<string, string> = {};
-          for (const field of connector.credentialFields || []) {
-            creds[field.key] = full.fields?.[field.key] || '';
-          }
-          updateForm({
-            ...emptyForm(),
-            credentials: creds,
-            displayName: full.fields?.display_name || connector.displayName,
-            icon: full.fields?.icon || connector.icon,
-            description: full.fields?.description || connector.description,
-            apiDocsUrl: full.fields?.api_docs_url || connector.apiReference?.docsUrl || '',
-            openApiUrl: full.fields?.open_api_url || connector.apiReference?.openApiUrl || '',
-            postmanUrl: full.fields?.postman_url || connector.apiReference?.postmanUrl || '',
-            mcpServerRef: full.fields?.mcp_server_ref || connector.apiReference?.mcpServerRef || '',
-            rateLimitRpm: full.fields?.rate_limit_rpm || connector.rateLimitRpm?.toString() || '',
-            rateLimitDaily: full.fields?.rate_limit_daily || connector.rateLimitDaily?.toString() || '',
-            purposeHint: full.fields?.purpose_hint || connector.apiReference?.purpose || '',
-          });
+          applyFieldsToForm(full.fields ?? {});
         })
         .catch(() => {
           setForm(emptyForm());
         })
         .finally(() => setLoading(false));
     } else {
-      setSecretExists(false);
       setForm(emptyForm());
     }
-  }, [show, connector.id]);
-
-  // ---------------------------------------------------------------------------
-  // Steps — compressed to 3: Setup, Review & Save, Done
-  // ---------------------------------------------------------------------------
+  }, [show, connector.id, existingSecrets, configSecretName, legacyCredentialSecretName, applyFieldsToForm, emptyForm]);
 
   const steps: WizardStep[] = [
     { id: 'overview', label: t('dataConnectors.oauthWizard.stepOverview') },
-    { id: 'credentials', label: t('dataConnectors.oauthWizard.stepCredentialsOnly') },
     { id: 'review', label: t('dataConnectors.apiKeyWizard.stepReviewSave') },
     { id: 'done', label: t('dataConnectors.apiKeyWizard.stepDone') },
   ];
 
-  const canProceed = (() => {
-    switch (step) {
-      case 1:
-        return true;
-      case 2: {
-        if (secretExists) return true;
-        const requiredFields = (connector.credentialFields || []).filter((f) => f.required);
-        return requiredFields.every((f) => form.credentials[f.key]?.trim());
-      }
-      case 3:
-        return true;
-      case 4:
-        return true;
-      default:
-        return false;
-    }
-  })();
-
-  // ---------------------------------------------------------------------------
-  // Save
-  // ---------------------------------------------------------------------------
+  // Step 2 shows form inputs; disable Next/Save if any field has a validation
+  // error. Right now only instance URL has structural validation — extend this
+  // predicate as more fields are validated.
+  const canProceed = step === 1 || step === 3 || (step === 2 && instanceUrlError === null);
 
   const handleSave = async () => {
     setSaving(true);
     setError(null);
 
     try {
-      const existing = getConnectorSecret();
-
       const fields: Record<string, string> = {
         display_name: form.displayName.trim(),
         icon: form.icon.trim(),
@@ -194,14 +205,28 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
       if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
       if (form.purposeHint.trim()) fields.purpose_hint = form.purposeHint.trim();
+      if (form.instanceUrl.trim()) fields.instance_url = form.instanceUrl.trim();
 
-      // Caching policy
       fields.cache_ttl = form.cacheTtl;
       fields.cache_stale_while_revalidate = form.cacheStaleWhileRevalidate ? 'true' : 'false';
       fields.cache_prefetch = form.cachePrefetch ? 'true' : 'false';
       fields.cache_background_refresh = form.cacheBackgroundRefresh;
 
-      // Build API reference JSON blob
+      // Persist the credential-field schema so the backend can emit the right
+      // `needs_credential` error shape when a user has no stored credential
+      // yet. The frontend registry is the source of truth; this is a snapshot.
+      if (connector.credentialFields && connector.credentialFields.length > 0) {
+        fields.credential_fields = JSON.stringify(
+          connector.credentialFields.map((f) => ({
+            key: f.key,
+            label: f.label,
+            type: f.type,
+            placeholder: f.placeholder,
+            required: f.required,
+          }))
+        );
+      }
+
       const apiRef = connector.apiReference;
       if (apiRef) {
         const refBlob = {
@@ -215,30 +240,28 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         fields.api_reference = JSON.stringify(refBlob);
       }
 
-      if (existing) {
-        // Update — include credential fields that have values
-        for (const [key, val] of Object.entries(form.credentials)) {
-          if (val.trim()) fields[key] = val.trim();
-        }
-        await updateCompanySecret(existing.name, { fields });
+      const targetAlreadyNamedConfig = existingSecretName === configSecretName;
+      if (targetAlreadyNamedConfig) {
+        await updateCompanySecret(configSecretName, { fields });
       } else {
-        // Create — include all credential fields
-        for (const [key, val] of Object.entries(form.credentials)) {
-          fields[key] = val.trim();
-        }
         await createCompanySecret({
-          name: secretName,
-          description: `Connector credentials for ${form.displayName.trim() || connector.id}`,
-          category: 'Connector Credentials',
+          name: configSecretName,
+          description: `Connector config for ${form.displayName.trim() || connector.id}`,
+          category: 'Connector Config',
           type: 'custom',
           fields,
           help_url: connector.helpUrl || undefined,
         });
-        setSecretExists(true);
       }
 
+      if (legacySecretName && legacySecretName !== configSecretName) {
+        await deleteCompanySecret(legacySecretName).catch(() => {});
+        setLegacySecretName(null);
+      }
+
+      setExistingSecretName(configSecretName);
       setSuccess(t('dataConnectors.apiKeyWizard.saveSuccess'));
-      setStep(4);
+      setStep(3);
     } catch (err) {
       const message = err instanceof Error ? err.message : t('dataConnectors.apiKeyWizard.saveError');
       setError(message);
@@ -247,16 +270,12 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Navigation
-  // ---------------------------------------------------------------------------
-
   const handleNext = async () => {
-    if (step === 3) {
+    if (step === 2) {
       await handleSave();
       return;
     }
-    if (step === 4) {
+    if (step === 3) {
       onSaved();
       onHide();
       return;
@@ -266,7 +285,7 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
   };
 
   const handleBack = () => {
-    if (step > 1 && step < 4) {
+    if (step > 1 && step < 3) {
       setError(null);
       setStep(step - 1);
     }
@@ -277,7 +296,8 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     setForm(emptyForm());
     setError(null);
     setSuccess(null);
-    setSecretExists(false);
+    setExistingSecretName(null);
+    setLegacySecretName(null);
     setCustomizeExpanded(false);
   };
 
@@ -285,10 +305,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     resetState();
     onHide();
   };
-
-  // ---------------------------------------------------------------------------
-  // Render helpers
-  // ---------------------------------------------------------------------------
 
   const signupLink = connector.signupUrl || connector.helpUrl;
   const apiRef = connector.apiReference;
@@ -376,10 +392,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     );
   };
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
-
   const wizardTitle = t('dataConnectors.apiKeyWizard.title', { connector: connector.displayName });
 
   return (
@@ -387,6 +399,7 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       show={show}
       onHide={handleHide}
       title={wizardTitle}
+      authType={connector.authType}
       steps={steps}
       currentStep={step}
       onNext={handleNext}
@@ -397,20 +410,30 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       error={error}
       success={success}
       nextLabel={
-        step === 4 ? t('dataConnectors.wizard.done') : step === 3 ? t('dataConnectors.wizard.save') : undefined
+        step === 3 ? t('dataConnectors.wizard.done') : step === 2 ? t('dataConnectors.wizard.save') : undefined
       }
     >
-      {/* ── Step 1: Overview (identity, metadata, signup, help) ── */}
       {step === 1 && (
         <div>
-          {/* Connector identity header */}
           <div className="d-flex align-items-center gap-3 mb-3 p-3 border rounded">
             <i className={connector.icon} style={{ fontSize: '2rem' }} />
             <div>
-              <h5 className="mb-1">{connector.displayName}</h5>
+              <h5 className="mb-1 d-flex align-items-center gap-2">
+                <span>{connector.displayName}</span>
+                <AuthTypeBadge authType={connector.authType} />
+              </h5>
               <p className="text-muted mb-0 small">{connector.description}</p>
             </div>
           </div>
+
+          <Alert variant="info" className="py-2 small">
+            <i className="bi bi-info-circle me-2"></i>
+            {t(
+              'dataConnectors.apiKeyWizard.perUserNotice',
+              'No credential needed here. Each user will be asked for their own credential the first time they use this connector from chat.'
+            )}
+          </Alert>
+
           <Row className="g-2 mb-3">
             <Col md={6}>
               <div className="small text-muted">{t('dataConnectors.apiKeyWizard.category')}</div>
@@ -424,8 +447,7 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
             </Col>
           </Row>
 
-          {/* Signup prompt when credentials don't exist */}
-          {!secretExists && signupLink && (
+          {signupLink && (
             <Alert variant="light" className="py-2 small border d-flex align-items-center gap-2">
               <i className="bi bi-info-circle"></i>
               <span>{t('dataConnectors.signup.noAccount')}</span>
@@ -455,87 +477,8 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         </div>
       )}
 
-      {/* ── Step 2: Credentials ── */}
       {step === 2 && (
         <div>
-          <Row className="g-3">
-            {secretExists ? (
-              <Col md={12}>
-                <div className="border rounded p-3 mb-2">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <span className="text-muted small">{t('dataConnectors.apiKeyWizard.secretLabel')}</span>
-                      <div>
-                        <code>{secretName}</code>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-center gap-2">
-                      <span className="badge bg-success-subtle text-success">
-                        <i className="bi bi-check-circle me-1"></i>
-                        {t('dataConnectors.oauthWizard.secretConfigured')}
-                      </span>
-                      <a
-                        href="/vault-secrets"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
-                      >
-                        <ExternalLink size={14} />
-                        {t('dataConnectors.oauthWizard.editInVault')}
-                      </a>
-                    </div>
-                  </div>
-                </div>
-                <Alert variant="info" className="py-2 small mt-2">
-                  <i className="bi bi-info-circle me-2"></i>
-                  {t('dataConnectors.apiKeyWizard.credentialsExistHint')}
-                </Alert>
-                {/* Show editable fields for re-entry if desired */}
-                {(connector.credentialFields || []).map((field) => (
-                  <Form.Group key={field.key} className="mt-3">
-                    <Form.Label className="small fw-semibold">{t(field.label)}</Form.Label>
-                    <Form.Control
-                      type={field.type}
-                      placeholder={field.placeholder || ''}
-                      value={form.credentials[field.key] || ''}
-                      onChange={(e) => updateCredential(field.key, e.target.value)}
-                    />
-                    {field.helpText && <Form.Text className="text-muted">{t(field.helpText)}</Form.Text>}
-                  </Form.Group>
-                ))}
-              </Col>
-            ) : (
-              <Col md={12}>
-                <Alert variant="info" className="py-2 small">
-                  <i className="bi bi-info-circle me-2"></i>
-                  {t('dataConnectors.apiKeyWizard.enterCredentials')}
-                </Alert>
-                {(connector.credentialFields || []).map((field) => (
-                  <Form.Group key={field.key} className="mb-3">
-                    <Form.Label className="small fw-semibold">
-                      {t(field.label)}
-                      {field.required && <span className="text-danger ms-1">*</span>}
-                    </Form.Label>
-                    <Form.Control
-                      type={field.type}
-                      placeholder={field.placeholder || ''}
-                      value={form.credentials[field.key] || ''}
-                      onChange={(e) => updateCredential(field.key, e.target.value)}
-                      required={field.required}
-                    />
-                    {field.helpText && <Form.Text className="text-muted">{t(field.helpText)}</Form.Text>}
-                  </Form.Group>
-                ))}
-              </Col>
-            )}
-          </Row>
-        </div>
-      )}
-
-      {/* ── Step 3: Review & Save (summary + read-only API reference with optional expand) ── */}
-      {step === 3 && (
-        <div>
-          {/* Review summary */}
           <div className="border rounded p-3 mb-3">
             <h6 className="fw-semibold small text-muted mb-2">{t('dataConnectors.oauthWizard.reviewBasicInfo')}</h6>
             <div className="mb-1">
@@ -554,43 +497,51 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
             )}
             <hr className="my-2" />
 
-            <h6 className="fw-semibold small text-muted mb-2">{t('dataConnectors.oauthWizard.reviewCredentials')}</h6>
             <div className="d-flex align-items-center gap-2 mb-1">
               <span className="text-muted small">{t('dataConnectors.apiKeyWizard.secretLabel')}:</span>
-              <code>{secretName}</code>
-              {secretExists ? (
-                <span className="badge bg-success-subtle text-success small">
-                  <i className="bi bi-check-circle me-1"></i>
-                  {t('dataConnectors.oauthWizard.secretConfigured')}
-                </span>
-              ) : (
-                <span className="badge bg-warning-subtle text-warning small">
-                  {t('dataConnectors.oauthWizard.secretNotConfigured')}
-                </span>
+              <code>{configSecretName}</code>
+              <span className="badge bg-light text-dark small">
+                {t('dataConnectors.apiKeyWizard.metadataOnly', 'metadata only, no credential')}
+              </span>
+            </div>
+            <div className="small text-muted">
+              {t(
+                'dataConnectors.apiKeyWizard.credentialCapturedInChatHint',
+                'Per-user credentials are captured in chat, not here.'
               )}
             </div>
-            {(connector.credentialFields || []).map((field) => (
-              <div key={field.key} className="mb-1 small">
-                <span className="text-muted">{t(field.label)}:</span>{' '}
-                {form.credentials[field.key] ? (
-                  field.type === 'password' ? (
-                    <span>{t('dataConnectors.oauthWizard.reviewMasked')}</span>
-                  ) : (
-                    <span>{form.credentials[field.key]}</span>
-                  )
-                ) : secretExists ? (
-                  <span className="text-muted fst-italic">{t('dataConnectors.apiKeyWizard.storedInVault')}</span>
-                ) : (
-                  <span className="text-muted">{t('dataConnectors.oauthWizard.reviewNotProvided')}</span>
-                )}
-              </div>
-            ))}
           </div>
 
-          {/* Read-only API reference summary */}
+          <div className="border rounded p-3 mb-3">
+            <Form.Group>
+              <Form.Label className="small fw-semibold mb-1">
+                {t('dataConnectors.apiKeyWizard.instanceUrlLabel', { defaultValue: 'Instance URL' })}
+                <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
+                  ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
+                </span>
+              </Form.Label>
+              <Form.Control
+                type="url"
+                placeholder={t('dataConnectors.apiKeyWizard.instanceUrlPlaceholder', {
+                  defaultValue: 'https://your-instance.example.com',
+                })}
+                value={form.instanceUrl}
+                onChange={(e) => updateForm({ instanceUrl: e.target.value })}
+                isInvalid={instanceUrlError !== null}
+                autoComplete="off"
+              />
+              {instanceUrlError && <Form.Control.Feedback type="invalid">{instanceUrlError}</Form.Control.Feedback>}
+              <Form.Text className="text-muted small">
+                {t('dataConnectors.apiKeyWizard.instanceUrlHelp', {
+                  defaultValue:
+                    "Set this only if your connector's API is hosted at a customer-specific address (e.g. a private Synergy 12d server). Leave empty to use the connector's built-in default.",
+                })}
+              </Form.Text>
+            </Form.Group>
+          </div>
+
           {renderApiReferenceSummary()}
 
-          {/* Customize toggle to show full edit form */}
           <div
             className="d-flex align-items-center gap-2 cursor-pointer mb-2"
             onClick={() => setCustomizeExpanded(!customizeExpanded)}
@@ -699,7 +650,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
                   </Form.Group>
                 </Col>
 
-                {/* Caching Settings */}
                 <Col md={12} className="mt-3">
                   <h6 className="fw-semibold small text-muted mb-2">
                     {t('dataConnectors.oauth.cachingSettings', 'Caching Settings')}
@@ -758,8 +708,7 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         </div>
       )}
 
-      {/* ── Step 4: Done ── */}
-      {step === 4 && (
+      {step === 3 && (
         <div className="text-center py-3">
           <Alert variant="success" className="py-2">
             <i className="bi bi-check-circle me-2"></i>

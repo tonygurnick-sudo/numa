@@ -255,7 +255,9 @@ const getProviderConfig = async (provider: OAuthProvider): Promise<FullProviderC
     const clientSecret = fields.client_secret || '';
     const instanceUrl = fields.instance_url || '';
 
-    // OAuth connectors need client_id; token connectors need instance_url
+    // OAuth connectors need client_id; legacy token connectors need instance_url.
+    // PAT connectors (connector-config-*) are handled by the separate PAT route
+    // block (handlePatRequest) and never hit this code path.
     if (!clientId && !instanceUrl) {
       console.warn(`COMPANY vault secret for ${provider} missing both client_id and instance_url`);
       return null;
@@ -549,6 +551,58 @@ const putUserOAuthSecret = async (userSub: string, provider: string, secret: Vau
 };
 
 /**
+ * Store a per-user connector credential (PAT, API key, username/password) in
+ * the user's consolidated vault under `connector-{provider}`. Accepts arbitrary
+ * fields — shape is driven by the connector's `credentialFields` in the frontend
+ * registry, not this Lambda.
+ */
+const putUserConnectorSecret = async (
+  userSub: string,
+  provider: string,
+  fields: Record<string, string>,
+  userEmail?: string
+): Promise<boolean> => {
+  const friendlyName = getUserFriendlySecretName(provider);
+  const secretKey = `connector-${provider}`;
+
+  try {
+    const vault = await getUserConsolidatedVault(userSub);
+    const secrets = (vault.secrets || {}) as VaultSecrets;
+    const now = new Date().toISOString();
+    const existing = secrets[secretKey];
+
+    secrets[secretKey] = {
+      id: existing?.id || randomBytes(16).toString('hex'),
+      name: friendlyName,
+      fields: {
+        ...fields,
+        user_email: fields.user_email || userEmail || '',
+        connected_at: now,
+      },
+      metadata: {
+        category: 'Connector Credentials',
+        type: 'connector_credentials',
+        description: `Personal credential for ${friendlyName}`,
+        created_at: existing?.metadata?.created_at || now,
+        updated_at: now,
+      },
+    };
+
+    vault.secrets = secrets;
+    vault.metadata = {
+      ...vault.metadata,
+      updated_at: now,
+      secret_count: Object.keys(secrets).length,
+    };
+
+    return await putUserConsolidatedVault(userSub, vault);
+  } catch (error) {
+    console.error(`Failed to store connector credential for ${userSub}/${provider}:`, error);
+    return false;
+  }
+};
+
+/**
  * Get OAuth secret from user's consolidated vault.
  */
 const getUserOAuthSecret = async (userSub: string, provider: string): Promise<VaultOAuthSecret | null> => {
@@ -576,6 +630,157 @@ const getUserOAuthSecret = async (userSub: string, provider: string): Promise<Va
   } catch (error) {
     console.error(`Failed to get OAuth secret for user ${userSub}, provider ${provider}:`, error);
     return null;
+  }
+};
+
+/**
+ * Look up the per-user PAT/API-key/username-password credential for a non-OAuth
+ * connector (e.g. fergus, synergy, simpro). These live under `connector-{provider}`
+ * in the consolidated user vault, written by putUserConnectorSecret.
+ * Returns the stored fields object, or null if none exists / no non-empty value.
+ */
+const getUserConnectorSecret = async (userSub: string, provider: string): Promise<Record<string, string> | null> => {
+  const secretKey = `connector-${provider}`;
+  try {
+    const vault = await getUserConsolidatedVault(userSub);
+    const secrets = (vault.secrets || {}) as VaultSecrets;
+    const entry = secrets[secretKey];
+    const fields = entry?.fields;
+    if (!fields || typeof fields !== 'object') return null;
+    // Ignore bookkeeping fields — require at least one real credential value.
+    const meta = new Set(['user_email', 'connected_at']);
+    const hasRealValue = Object.entries(fields).some(
+      ([k, v]) => !meta.has(k) && typeof v === 'string' && v.trim().length > 0
+    );
+    if (!hasRealValue) return null;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (typeof v === 'string') out[k] = v;
+    }
+    return out;
+  } catch (error) {
+    console.error(`Failed to get connector secret for user ${userSub}, provider ${provider}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Delete a per-user PAT connector credential from the consolidated vault.
+ * No-op (returns true) if no such entry exists — idempotent.
+ */
+const deleteUserConnectorSecret = async (userSub: string, provider: string): Promise<boolean> => {
+  const secretKey = `connector-${provider}`;
+  try {
+    const vault = await getUserConsolidatedVault(userSub);
+    const secrets = (vault.secrets || {}) as VaultSecrets;
+    if (!secrets[secretKey]) return true;
+    delete secrets[secretKey];
+    vault.secrets = secrets;
+    vault.metadata = {
+      ...vault.metadata,
+      updated_at: new Date().toISOString(),
+      secret_count: Object.keys(secrets).length,
+    };
+    return await putUserConsolidatedVault(userSub, vault);
+  } catch (error) {
+    console.error(`Failed to delete connector credential for ${userSub}/${provider}:`, error);
+    return false;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// PAT connector metadata (company vault) — admin-registered non-OAuth
+// connectors live under `connector-config-{id}`.
+// ---------------------------------------------------------------------------
+
+interface PatConnectorSummary {
+  id: string;
+  display_name: string;
+  icon?: string;
+  credential_fields: unknown;
+}
+
+/**
+ * Read the admin-registered PAT connector metadata from the company vault.
+ * Accepts both the new `connector-config-{id}` shape and legacy `connector-{id}`
+ * admin entries (Synergy etc.), provided the legacy entry doesn't look like
+ * an OAuth client (no `client_id`). Returns null if neither exists.
+ */
+const getPatConnectorConfig = async (connectorId: string): Promise<VaultEntry | null> => {
+  try {
+    const secrets = await getConsolidatedVault();
+    if (!secrets) return null;
+    const configEntry = secrets[`connector-config-${connectorId}`];
+    if (configEntry) return configEntry;
+    const legacyEntry = secrets[`connector-${connectorId}`];
+    if (legacyEntry) {
+      const fields = (legacyEntry.fields || legacyEntry) as Record<string, unknown>;
+      if (!fields.client_id) return legacyEntry;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Failed to read PAT connector config for ${connectorId}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Enumerate all admin-registered PAT connectors.
+ *
+ * Reads both the current-format `connector-config-{id}` entries (written by
+ * the ApiKeyWizard) and legacy `connector-{id}` entries (pre-split admin
+ * setups for Synergy etc.). Legacy entries without an explicit
+ * `connector_type` field are only included when their shape matches a PAT
+ * connector (has `instance_url` or similar admin metadata — not OAuth
+ * client_id/client_secret).
+ */
+const listPatConnectors = async (): Promise<PatConnectorSummary[]> => {
+  try {
+    const secrets = await getConsolidatedVault();
+    if (!secrets) return [];
+    const seen = new Map<string, PatConnectorSummary>();
+
+    const addEntry = (id: string, entry: VaultEntry) => {
+      if (seen.has(id)) return;
+      const fields = (entry.fields || entry) as Record<string, unknown>;
+      let credentialFields: unknown = fields.credential_fields;
+      if (typeof credentialFields === 'string') {
+        try {
+          credentialFields = JSON.parse(credentialFields);
+        } catch {
+          credentialFields = [];
+        }
+      }
+      seen.set(id, {
+        id,
+        display_name: String(fields.display_name || fields.name || id),
+        icon: fields.icon ? String(fields.icon) : undefined,
+        credential_fields: credentialFields ?? [],
+      });
+    };
+
+    // Preferred: connector-config-* (new PAT admin format).
+    for (const [name, entry] of Object.entries(secrets)) {
+      if (!name.startsWith('connector-config-')) continue;
+      addEntry(name.replace('connector-config-', ''), entry);
+    }
+
+    // Legacy: connector-{id} admin entries. Skip platform-OAuth shapes so we
+    // don't accidentally list a half-configured oauth secret as a PAT.
+    for (const [name, entry] of Object.entries(secrets)) {
+      if (!name.startsWith('connector-') || name.startsWith('connector-config-')) continue;
+      const id = name.replace('connector-', '');
+      if (seen.has(id)) continue;
+      const fields = (entry.fields || entry) as Record<string, unknown>;
+      // OAuth-looking entries have client_id; PAT-style entries don't.
+      if (fields.client_id) continue;
+      addEntry(id, entry);
+    }
+
+    return Array.from(seen.values());
+  } catch (error) {
+    console.error('Failed to list PAT connectors:', error);
+    return [];
   }
 };
 
@@ -847,16 +1052,25 @@ const handleListProviders = async (bustCache = false) => {
     }> = [];
 
     for (const [secretName, secretEntry] of Object.entries(secrets)) {
-      if (!secretName.startsWith('oauth-client-') && !secretName.startsWith('connector-')) continue;
-
       const isOAuth = secretName.startsWith('oauth-client-');
-      const providerId = isOAuth ? secretName.replace('oauth-client-', '') : secretName.replace('connector-', '');
+      const isConfigOnly = secretName.startsWith('connector-config-');
+      const isLegacyConnector = !isConfigOnly && secretName.startsWith('connector-');
+      if (!isOAuth && !isConfigOnly && !isLegacyConnector) continue;
+
+      let providerId: string;
+      if (isOAuth) providerId = secretName.replace('oauth-client-', '');
+      else if (isConfigOnly) providerId = secretName.replace('connector-config-', '');
+      else providerId = secretName.replace('connector-', '');
+
       const fields = secretEntry.fields || secretEntry;
       const fallback = FALLBACK_OAUTH_CONFIGS[providerId];
 
-      // OAuth connectors need client_id + client_secret; token connectors need instance_url
+      // OAuth connectors still need client_id + client_secret to be usable.
+      // Non-OAuth: metadata-only `connector-config-*` is valid with no creds
+      // (per-user PAT/api-key captured in chat). Legacy `connector-{id}` that
+      // predates the split still requires `instance_url` (Synergy, Workbench).
       if (isOAuth && (!fields.client_id || !fields.client_secret)) continue;
-      if (!isOAuth && !fields.instance_url) continue;
+      if (isLegacyConnector && !fields.instance_url) continue;
 
       if (fields.enabled_connectors) {
         // Platform secret with per-connector tracking — expand into individual providers
@@ -1179,6 +1393,110 @@ const handleRevoke = async (provider: OAuthProvider, auth: AuthContext) => {
 };
 
 // ---------------------------------------------------------------------------
+// PAT Connector Handler
+//
+// Routes:
+//   GET    /api/pat/connectors            — list admin-registered PAT connectors
+//   GET    /api/pat/{id}/status           — per-user connection status
+//   POST   /api/pat/{id}/credentials      — save per-user PAT credentials
+//   DELETE /api/pat/{id}/credentials      — revoke (delete) per-user credentials
+//
+// No overlap with OAuth. Validator only checks for `connector-config-{id}` in
+// the company vault (admin-registered PAT connector). Per-user credentials
+// live under `connector-{id}` in the user vault — same key the workspace
+// agent (`oauth-workspace-tools/tools/connect_tools.py:_user_connector_token`)
+// already reads, so no downstream contract changes.
+// ---------------------------------------------------------------------------
+
+const handlePatRequest = async (event: APIGatewayProxyEventV2, pathParts: string[]) => {
+  if (pathParts.length < 2) {
+    return errorResponse(404, 'Invalid PAT path');
+  }
+
+  // GET /api/pat/connectors — list
+  if (pathParts[1] === 'connectors' && pathParts.length === 2) {
+    if (event.requestContext.http.method !== 'GET') {
+      return errorResponse(405, 'Method not allowed');
+    }
+    const auth = resolveAuthContext(event);
+    if (!auth) return errorResponse(401, 'Authentication required');
+    const connectors = await listPatConnectors();
+    return jsonResponse(200, { connectors });
+  }
+
+  if (pathParts.length < 3) {
+    return errorResponse(404, 'Invalid PAT path');
+  }
+
+  const connectorId = pathParts[1];
+  const action = pathParts[2];
+
+  const auth = resolveAuthContext(event);
+  if (!auth) return errorResponse(401, 'Authentication required');
+
+  // Validate connector exists (admin-registered) — PAT-only check, no OAuth lookup.
+  const config = await getPatConnectorConfig(connectorId);
+  if (!config) {
+    return errorResponse(400, `PAT connector "${connectorId}" is not configured`);
+  }
+
+  const safeSub = auth.sub.replace(/[^a-zA-Z0-9_-]/g, '');
+
+  switch (action) {
+    case 'status': {
+      if (event.requestContext.http.method !== 'GET') {
+        return errorResponse(405, 'Method not allowed');
+      }
+      const fields = await getUserConnectorSecret(safeSub, connectorId);
+      if (fields) {
+        return jsonResponse(200, {
+          status: 'connected',
+          connected_at: fields.connected_at || '',
+          user_email: fields.user_email || '',
+        });
+      }
+      return jsonResponse(200, { status: 'disconnected' });
+    }
+
+    case 'credentials': {
+      if (event.requestContext.http.method === 'POST') {
+        const raw = event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString() : event.body || '{}';
+        let body: Record<string, unknown>;
+        try {
+          body = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          return errorResponse(400, 'Invalid JSON body');
+        }
+        const fieldsIn = body.fields;
+        if (!fieldsIn || typeof fieldsIn !== 'object' || Array.isArray(fieldsIn)) {
+          return errorResponse(400, 'Body must include `fields` object');
+        }
+        const fields: Record<string, string> = {};
+        for (const [k, v] of Object.entries(fieldsIn as Record<string, unknown>)) {
+          if (typeof v === 'string') fields[k] = v;
+        }
+        const hasValue = Object.values(fields).some((v) => v.trim().length > 0);
+        if (!hasValue) {
+          return errorResponse(400, 'At least one credential field is required');
+        }
+        const stored = await putUserConnectorSecret(safeSub, connectorId, fields, auth.email);
+        if (!stored) return errorResponse(500, 'Failed to store credential');
+        return jsonResponse(200, { success: true });
+      }
+      if (event.requestContext.http.method === 'DELETE') {
+        const deleted = await deleteUserConnectorSecret(safeSub, connectorId);
+        if (!deleted) return errorResponse(500, 'Failed to delete credential');
+        return jsonResponse(200, { success: true });
+      }
+      return errorResponse(405, 'Method not allowed');
+    }
+
+    default:
+      return errorResponse(404, `Unknown PAT action "${action}"`);
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Main Handler
 // ---------------------------------------------------------------------------
 
@@ -1201,6 +1519,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // Extract provider and action from path
     // rawPath includes /api prefix from API Gateway route key (e.g. /api/oauth/providers)
     const allParts = event.rawPath.split('/').filter(Boolean);
+
+    // PAT connector routes: /api/pat/*. Completely separate from OAuth —
+    // no shared validator, different vault keys, different actions. See the
+    // dedicated handler below.
+    const patIndex = allParts.indexOf('pat');
+    if (patIndex !== -1) {
+      return await handlePatRequest(event, allParts.slice(patIndex));
+    }
+
     const oauthIndex = allParts.indexOf('oauth');
     if (oauthIndex === -1) {
       return errorResponse(404, 'Invalid OAuth path');
@@ -1298,31 +1625,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }
         return await handleRevoke(provider, auth);
 
-      case 'connect-token': {
-        if (event.requestContext.http.method !== 'POST') {
-          return errorResponse(405, 'Method not allowed');
-        }
-        // Store a PAT/token directly in the user's consolidated vault
-        const raw = event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString() : event.body || '{}';
-        const body = JSON.parse(raw) as Record<string, string>;
-        const token = body.token || body.access_token || '';
-        if (!token) {
-          return errorResponse(400, 'Token is required');
-        }
-        const safeSub = auth.sub.replace(/[^a-zA-Z0-9_-]/g, '');
-        const vaultSecret: VaultOAuthSecret = {
-          provider,
-          access_token: token,
-          expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // PATs don't expire via OAuth
-          scope: '',
-          connected_at: new Date().toISOString(),
-        };
-        const stored = await putUserOAuthSecret(safeSub, provider, vaultSecret);
-        if (!stored) {
-          return errorResponse(500, 'Failed to store token');
-        }
-        return jsonResponse(200, { success: true, message: `Connected to ${provider}` });
-      }
+      // connect-token removed — PAT flows moved to /api/pat/{id}/credentials
+      // (see handlePatRequest). OAuth uses authorize+callback, never this path.
 
       default:
         return errorResponse(404, 'OAuth action not found');
