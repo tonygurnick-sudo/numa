@@ -151,12 +151,16 @@ export class WorkspaceChatToolsConstruct extends Construct {
       });
     }
 
-    // S3 permission for KB file downloads and uploads (if data bucket configured)
+    // S3 permission for KB file downloads, uploads, and deletes (if data
+    // bucket configured). s3:DeleteObject authorises both single-object
+    // DeleteObject calls and the batch DeleteObjects API; the tool's own
+    // verify_kb_access() + kb_id prefix validation provide the server-side
+    // access check. Scope matches the existing Get/Put statement.
     if (props.dataBucketArn) {
       policyStatements.push({
         sid: 'S3KBFileAccess',
         effect: 'Allow',
-        actions: ['s3:GetObject', 's3:ListBucket', 's3:PutObject'],
+        actions: ['s3:GetObject', 's3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
         resources: [props.dataBucketArn, `${props.dataBucketArn}/*`],
       });
     }

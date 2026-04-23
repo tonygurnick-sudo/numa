@@ -235,6 +235,89 @@ def _get_user_agent(
         return None
 
 
+def _user_has_share_access(
+    dynamo,
+    agent_id: str,
+    user_sub: str,
+    sharing_table: str,
+    team_members_table: str,
+) -> bool:
+    """Return True if user_sub has any share (direct or team-mediated) on agent_id."""
+    try:
+        response = dynamo.query(
+            TableName=sharing_table,
+            KeyConditionExpression="agent_id = :aid",
+            ExpressionAttributeValues={":aid": {"S": agent_id}},
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to query agent sharing table",
+            agent_id=agent_id,
+            error=str(e),
+        )
+        return False
+
+    items = response.get("Items", [])
+    if not items:
+        return False
+
+    for raw in items:
+        item = _dynamodb_item_to_dict(raw)
+        principal_type = item.get("principal_type")
+        principal_id = item.get("principal_id") or ""
+        if principal_type == "user" and principal_id == user_sub:
+            return True
+        if principal_type == "team":
+            team_id = principal_id.replace("team:", "", 1)
+            try:
+                mem = dynamo.get_item(
+                    TableName=team_members_table,
+                    Key={
+                        "team_id": {"S": team_id},
+                        "user_id": {"S": user_sub},
+                    },
+                )
+                if "Item" in mem:
+                    return True
+            except Exception as e:
+                logger.warning(
+                    "Failed to check team membership",
+                    agent_id=agent_id,
+                    team_id=team_id,
+                    user_sub=user_sub,
+                    error=str(e),
+                )
+                continue
+
+    return False
+
+
+def _get_user_agent_by_agent_id(
+    dynamo, agent_id: str, user_table: str, index_name: str
+) -> Optional[AgentConfig]:
+    """Fetch a user agent by agent_id alone via the agent-id-index GSI."""
+    try:
+        response = dynamo.query(
+            TableName=user_table,
+            IndexName=index_name,
+            KeyConditionExpression="agent_id = :aid",
+            ExpressionAttributeValues={":aid": {"S": agent_id}},
+            Limit=1,
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to query user agents by agent_id",
+            agent_id=agent_id,
+            error=str(e),
+        )
+        return None
+
+    items = response.get("Items", [])
+    if not items:
+        return None
+    return _parse_user_agent(_dynamodb_item_to_dict(items[0]))
+
+
 def _dynamodb_item_to_dict(item: dict) -> dict:
     """Convert DynamoDB item format to Python dict."""
     result = {}
@@ -326,6 +409,28 @@ def fetch_agent_config(
             version=config.version,
         )
         return config
+
+    # Share fallback: the agent may be a personal agent owned by someone else
+    # that has been shared with a team the caller belongs to.
+    sharing_table = os.environ.get("AGENT_SHARING_TABLE")
+    team_members_table = os.environ.get("AGENT_TEAM_MEMBERS_TABLE")
+    agent_id_index = os.environ.get("USER_AGENTS_AGENT_ID_INDEX", "agent-id-index")
+    if sharing_table and team_members_table:
+        if _user_has_share_access(
+            dynamo, agent_id, user_sub, sharing_table, team_members_table
+        ):
+            config = _get_user_agent_by_agent_id(
+                dynamo, agent_id, u_table, agent_id_index
+            )
+            if config:
+                logger.info(
+                    "Fetched shared user agent config",
+                    agent_id=agent_id,
+                    user_sub=user_sub,
+                    title=config.title,
+                    version=config.version,
+                )
+                return config
 
     logger.warning(
         "Agent not found in either table",

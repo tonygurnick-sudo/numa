@@ -738,6 +738,34 @@ class TestHandleQueryKb:
         sent_params = mock_invoke.call_args[0][1]
         assert sent_params["kb_id"] == "custom-kb"
 
+    async def test_summarise_results_defaults_to_false(self):
+        """Default behaviour is raw chunks; Lambda must see summarise_results=False."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"results": []},
+        ) as mock_invoke:
+            await _handle_query_kb({"query": "test", "user_intent": "test"})
+
+        sent_params = mock_invoke.call_args[0][1]
+        assert sent_params["summarise_results"] is False
+
+    async def test_summarise_results_opt_in(self):
+        """Callers can opt into summarisation by passing summarise_results=True."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"results": []},
+        ) as mock_invoke:
+            await _handle_query_kb(
+                {
+                    "query": "test",
+                    "user_intent": "test",
+                    "summarise_results": True,
+                }
+            )
+
+        sent_params = mock_invoke.call_args[0][1]
+        assert sent_params["summarise_results"] is True
+
 
 # ---------------------------------------------------------------------------
 # _handle_web_search
@@ -1482,6 +1510,85 @@ class TestHandleKbList:
 
         extra = mock_invoke.call_args[1].get("extra_event_fields", {})
         assert extra["allowed_kbs"] == ["kb-1"]
+
+    async def test_folder_forwarded(self):
+        """A folder param is forwarded to the Lambda."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"files": []},
+        ) as mock_invoke:
+            await _handle_kb_list({"folder": "Releases/v2.1"})
+
+        sent_params = mock_invoke.call_args[0][1]
+        assert sent_params["folder"] == "Releases/v2.1"
+
+    async def test_folder_path_alias_forwarded_as_folder(self):
+        """folder_path is accepted as an alias and sent as `folder` to the Lambda."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"files": []},
+        ) as mock_invoke:
+            await _handle_kb_list({"folder_path": "Releases"})
+
+        sent_params = mock_invoke.call_args[0][1]
+        assert sent_params["folder"] == "Releases"
+
+    async def test_path_alias_forwarded_as_folder(self):
+        """path is accepted as an alias (kb_upload-style) and normalised to `folder`."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"files": []},
+        ) as mock_invoke:
+            await _handle_kb_list({"path": "Releases/v2.1"})
+
+        sent_params = mock_invoke.call_args[0][1]
+        assert sent_params["folder"] == "Releases/v2.1"
+
+    async def test_folder_wins_over_aliases(self):
+        """When both folder and path are supplied, folder takes precedence."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"files": []},
+        ) as mock_invoke:
+            await _handle_kb_list(
+                {"folder": "Releases", "folder_path": "Other", "path": "Misc"}
+            )
+
+        sent_params = mock_invoke.call_args[0][1]
+        assert sent_params["folder"] == "Releases"
+
+    async def test_folder_absent_not_sent_as_null(self):
+        """When folder is not provided, the key must be absent (not null)."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"files": []},
+        ) as mock_invoke:
+            await _handle_kb_list({"kb_id": "company"})
+
+        sent_params = mock_invoke.call_args[0][1]
+        assert "folder" not in sent_params
+
+    async def test_recursive_forwarded(self):
+        """recursive=true is forwarded as a boolean."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"files": []},
+        ) as mock_invoke:
+            await _handle_kb_list({"folder": "Releases", "recursive": True})
+
+        sent_params = mock_invoke.call_args[0][1]
+        assert sent_params["recursive"] is True
+
+    async def test_recursive_absent_not_sent(self):
+        """When recursive is omitted, the key must not appear in the payload."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"files": []},
+        ) as mock_invoke:
+            await _handle_kb_list({"folder": "Releases"})
+
+        sent_params = mock_invoke.call_args[0][1]
+        assert "recursive" not in sent_params
 
 
 # ---------------------------------------------------------------------------

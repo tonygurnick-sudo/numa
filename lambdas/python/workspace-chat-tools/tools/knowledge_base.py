@@ -74,7 +74,9 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
         user_intent (str, required): What the user is trying to accomplish
         max_results (int, default=6, max=15): Number of results
         kb_id (str, default="company"): KB to query - "company" or user KB UUID
-        summarise_results (bool, default=True): When true, summarize using Nova Lite
+        summarise_results (bool, default=False): When true, summarize retrieved chunks
+            using Nova Lite. Default is off — raw chunks are returned so the calling
+            agent can reason over the original retrieved content.
         all_kbs (bool, default=False): Query all enabled KBs and synthesize results
         __allowed_kbs (list, internal): Allowed KB IDs passed from handler for defense in depth
         __allowed_kbs_with_names (list, internal): Full KB objects with id and name for attribution
@@ -109,7 +111,7 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
 
     max_results = min(max(1, params.get("max_results", 6)), 15)
     kb_id = (params.get("kb_id") or "company").strip() or "company"
-    summarise_results = params.get("summarise_results", True)
+    summarise_results = params.get("summarise_results", False)
     all_kbs = params.get("all_kbs", False)
 
     # Get allowed KB lists for validation and attribution
@@ -1424,28 +1426,46 @@ def _download_file(bucket: str, key: str) -> Dict[str, Any]:
 
 
 def _list_files(
-    bucket: str, prefix: str, pattern: Optional[str] = None
+    bucket: str,
+    prefix: str,
+    pattern: Optional[str] = None,
+    *,
+    recursive: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     List files in S3 prefix, optionally filtering by pattern.
+
+    When ``recursive`` is False, only files directly under ``prefix`` are returned
+    (uses S3 Delimiter="/" so deeper objects are skipped). When True (legacy
+    default), all objects at any depth under ``prefix`` are returned.
 
     Args:
         bucket: S3 bucket name
         prefix: S3 prefix to list
         pattern: Optional filename pattern (e.g., "*.pdf")
+        recursive: If False, list only one level deep. Default True.
 
     Returns:
         List of file info dicts with name, size, last_modified
     """
-    logger.info("Listing files", bucket=bucket, prefix=prefix, pattern=pattern)
+    logger.info(
+        "Listing files",
+        bucket=bucket,
+        prefix=prefix,
+        pattern=pattern,
+        recursive=recursive,
+    )
 
     s3_client = prm_client("s3", region=REGION)
 
     files = []
     paginator = s3_client.get_paginator("list_objects_v2")
+    paginate_kwargs: Dict[str, Any] = {"Bucket": bucket, "Prefix": prefix}
+    if not recursive:
+        paginate_kwargs["Delimiter"] = "/"
 
     try:
-        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for page in paginator.paginate(**paginate_kwargs):
             for obj in page.get("Contents", []):
                 key = obj["Key"]
                 filename = key.split("/")[-1]
@@ -1478,6 +1498,36 @@ def _list_files(
     except Exception as e:
         logger.error("Failed to list files", bucket=bucket, prefix=prefix, error=str(e))
         raise ValueError(f"Failed to list files: {str(e)}") from e
+
+
+def _list_subfolders(bucket: str, prefix: str) -> List[str]:
+    """
+    List immediate subfolder names (S3 CommonPrefixes) under ``prefix``.
+
+    Returned names are relative to ``prefix`` and include a trailing slash,
+    e.g. ``["Releases/", "Archive/"]``. Pagination is followed so the full
+    set of subfolders at this level is returned.
+    """
+    s3_client = prm_client("s3", region=REGION)
+    paginator = s3_client.get_paginator("list_objects_v2")
+
+    folders: List[str] = []
+    try:
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix, Delimiter="/"):
+            for cp in page.get("CommonPrefixes", []) or []:
+                full = cp.get("Prefix", "")
+                if not full.startswith(prefix):
+                    continue
+                relative = full[len(prefix) :]
+                if relative and relative != "/":
+                    folders.append(relative)
+    except Exception as e:
+        logger.error(
+            "Failed to list subfolders", bucket=bucket, prefix=prefix, error=str(e)
+        )
+        raise ValueError(f"Failed to list subfolders: {str(e)}") from e
+
+    return folders
 
 
 def _download_folder(
@@ -1743,6 +1793,20 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
         if pattern is not None and not isinstance(pattern, str):
             raise ValueError("pattern must be a string")
 
+        # Accept `folder` (preferred), `folder_path` (alias matching
+        # download_folder mode), or `path` (alias matching kb_upload).
+        # Historically these three names were used inconsistently across
+        # KB operations — treat them as synonyms to stop silently dropping
+        # what the caller meant.
+        folder_input = params.get("folder")
+        if folder_input is None:
+            folder_input = params.get("folder_path")
+        if folder_input is None:
+            folder_input = params.get("path", "")
+        folder = _validate_relative_path(folder_input, "folder")
+
+        recursive = bool(params.get("recursive", False))
+
         # Validate kb_id
         if kb_id not in allowed_kbs:
             logger.warning(
@@ -1762,16 +1826,34 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
             )
             raise ValueError(f"Access denied to knowledge base '{kb_id}'")
 
-        # Get prefix and list files
-        prefix = _get_s3_prefix(kb_id)
-        files = _list_files(bucket, prefix, pattern)
+        # Build the S3 prefix: KB prefix + optional folder subpath
+        base_prefix = _get_s3_prefix(kb_id)
+        prefix = f"{base_prefix}{folder}/" if folder else base_prefix
+        logger.debug(
+            "KB list prefix resolved",
+            kb_id=kb_id,
+            folder=folder,
+            prefix=prefix,
+            recursive=recursive,
+        )
 
-        return {
+        files = _list_files(bucket, prefix, pattern, recursive=recursive)
+
+        response: Dict[str, Any] = {
             "files": files,
             "kb_id": kb_id,
+            "folder": folder,
             "count": len(files),
             "pattern": pattern,
+            "recursive": recursive,
         }
+
+        # One-level listing also returns immediate subfolder names so the
+        # agent can navigate hierarchy without dumping the whole KB.
+        if not recursive:
+            response["folders"] = _list_subfolders(bucket, prefix)
+
+        return response
 
     elif mode == "download_folder":
         # Download folder as zip
