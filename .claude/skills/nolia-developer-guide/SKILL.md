@@ -7,9 +7,14 @@ description: Full context for developing the Nolia backend (compliance pipeline,
 
 ## What Is Nolia
 
-Nolia is an AI-powered procurement compliance platform built on Numa's V2 Apps architecture. It validates World Bank procurement documents (TER/CER) against compliance rules. The backend runs on AgentCore MicroVMs using the `numa-workspace-agent` service with a custom pipeline orchestrator.
+Nolia is an AI-powered document compliance and assessment platform delivered as **two product lines** with separate frontend repos under `arcanum/nolia/`, both powered by the same Numa backend:
 
-For full documentation, see `documentation/nolia/` (overview, v2-app-architecture, ter-cer-assessment, automatic-rules-generation, project-notes, NOLIA.md).
+- **`nolia-app/`** — Bank / MDB procurement compliance (validates TER/CER/ToR/RFP against World Bank, ADB, etc.). Anchor client: Indonesia Ministry of Health.
+- **`nolia-funding-app/`** — Funding application assessment (Funds / Grants / Scholarships). Anchor client: Te Rūnanga o Ngāi Tahu (NZ). Variant-aware codebase.
+
+The backend runs on AgentCore MicroVMs using the `numa-workspace-agent` service with a custom pipeline orchestrator. The current `nolia/` agent type is procurement-shaped; funding-specific prompts and orchestration are open work.
+
+For full backend documentation, see `documentation/nolia/` (overview, v2-app-architecture, ter-cer-assessment, automatic-rules-generation, project-notes, NOLIA.md). For product-level context per repo, see the `CLAUDE.md` in each frontend repo plus `arcanum/nolia/CLAUDE.md` (umbrella).
 
 ---
 
@@ -82,16 +87,19 @@ S3 (_result.json) → frontend polls
 | `infra/constructs/workspace-chat-agent-proxy-construct.ts` | Proxy Lambda                                 |
 | `lambdas/node/v2-apps-api/index.ts`                        | V2 Apps API — run CRUD, metadata passthrough |
 
-### Nolia Frontend (numa-whitelabel-investigation/, separate repo)
+### Nolia Frontends (separate repos under `arcanum/nolia/`)
 
-| File                                                 | Purpose                 |
-| ---------------------------------------------------- | ----------------------- |
-| `frontend/src/app/assess/*/page.tsx`                 | Assessment upload pages |
-| `frontend/src/services/v2-apps-service.ts`           | V2 Apps API client      |
-| `frontend/src/services/knowledge-base-service.ts`    | KB management           |
-| `backend/src/controllers/NoliaController.ts`         | Nolia proxy endpoints   |
-| `backend/src/controllers/V2AppsController.ts`        | V2 Apps proxy           |
-| `backend/src/controllers/KnowledgeBaseController.ts` | KB CRUD                 |
+Two product-specific frontend repos. File layout is similar in both. For the per-repo file map, see each repo's `NOLIA.md`.
+
+| File                                                                                                             | Purpose                                     |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `frontend/src/app/assess/*/page.tsx` (procurement) / `frontend/src/app/assess-applications/*/page.tsx` (funding) | Assessment upload + display pages           |
+| `frontend/src/services/v2-apps-service.ts`                                                                       | V2 Apps API client                          |
+| `frontend/src/services/knowledge-base-service.ts`                                                                | KB management                               |
+| `backend/src/controllers/NoliaController.ts`                                                                     | Nolia proxy endpoints                       |
+| `backend/src/controllers/V2AppsController.ts`                                                                    | V2 Apps proxy                               |
+| `backend/src/controllers/KnowledgeBaseController.ts`                                                             | KB CRUD                                     |
+| `frontend/src/config/instance-config.ts` + `variants/` (funding repo only)                                       | Variant config (`procurement` \| `funding`) |
 
 ---
 

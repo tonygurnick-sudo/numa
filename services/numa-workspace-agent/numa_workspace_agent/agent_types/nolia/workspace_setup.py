@@ -6,6 +6,26 @@ phase runs.
 
 Called by the orchestrator with Nolia-specific metadata (assessment_type,
 KB names, etc.) extracted from ``request_metadata``.
+
+.. note::
+
+    **Cross-package consumers.** Several helpers here are imported by the
+    sibling ``nolia_funding`` package (see
+    ``agent_types/nolia_funding/workspace_setup.py``). The names carry a
+    leading ``_`` by convention but are treated as reusable infrastructure
+    across Nolia products. If you rename or change the signature of any
+    of these, update ``nolia_funding`` in the same change:
+
+    - ``_get_s3_client``
+    - ``_download_s3_prefix``
+    - ``_convert_to_pdf``
+    - ``_extract_pdf``
+    - ``CONVERTIBLE_EXTENSIONS``
+
+    MoH procurement is the production user of this module; funding is a
+    secondary consumer. When duplication pressure grows past a handful of
+    helpers, lift them into ``agent_types/nolia_shared/`` instead of
+    accreting more cross-package imports.
 """
 
 import asyncio

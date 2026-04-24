@@ -1,46 +1,65 @@
 # Nolia — Project Context Document
 
-> **Last Updated:** 2026-03-06 | **Maintainer:** Nathan Douglas (nathan@arcanum.ai)
-> **Purpose:** Single source of truth for AI agents and developers working on Nolia. Read this before starting any Nolia task.
+> **Last Updated:** 2026-04-18 | **Maintainer:** Nathan Douglas (nathan@arcanum.ai)
+> **Purpose:** Backend-centric context for Nolia work in the Numa repo. For the product-level view of each frontend app, see `arcanum/nolia/CLAUDE.md` (umbrella) and the per-repo `CLAUDE.md` files under `arcanum/nolia/nolia-app/` and `arcanum/nolia/nolia-funding-app/`.
 
 ---
 
 ## 1. What Is Nolia?
 
-Nolia is an AI-powered procurement compliance platform built for **Implementing Agencies** (typically government departments) working with **Multilateral Development Banks** (MDBs) — World Bank, Asian Development Bank, Islamic Development Bank, AIIB, and others.
+Nolia is an AI-powered document compliance and assessment platform. It is delivered as **two product lines** with separate frontend repos, both powered by this Numa backend:
 
-These agencies manage massive infrastructure/health/development projects funded by MDBs. As part of their obligations, they must create, validate, and compare procurement documents that comply with MDB policies. This process currently takes months of manual review. Nolia automates it.
+| Product Line            | Frontend Repo                      | Use Case                                                | Anchor Client                             |
+| ----------------------- | ---------------------------------- | ------------------------------------------------------- | ----------------------------------------- |
+| **Nolia (Procurement)** | `arcanum/nolia/nolia-app/`         | Bank / MDB procurement compliance (TER/CER/ToR/RFP)     | Indonesia Ministry of Health (World Bank) |
+| **Nolia Funding**       | `arcanum/nolia/nolia-funding-app/` | Funding application assessment (Fund/Grant/Scholarship) | Te Rūnanga o Ngāi Tahu (NZ)               |
 
-**Business relationship:** Nolia is a partner company in which Arcanum AI holds a shareholding. Arcanum builds and operates the platform; Nolia sells it to implementing agencies.
+**The procurement product** serves Implementing Agencies (typically government departments) working with Multilateral Development Banks — World Bank, ADB, IsDB, AIIB. These agencies manage infrastructure/health/development projects funded by MDBs and must validate procurement documents against MDB policy. This process historically takes weeks of manual review; Nolia reduces it to ~30 minutes.
 
-**First client:** Indonesia Ministry of Health — managing the $4 billion Indonesia Health System Strengthening Project (the largest World Bank health project ever).
+**The funding product** serves organisations that distribute money to applicants — iwi trusts, philanthropics, scholarship programs. Assessors upload applications and receive a criteria-based assessment plus (optionally) a neutral side-by-side comparison of 2–3 applications.
 
-### Core Capabilities
+**Business relationship:** Nolia is a partner company in which Arcanum AI holds a shareholding. Arcanum builds and operates the platform; Nolia sells it to client organisations.
 
-| Capability                     | What It Does                                                                   | Status              |
-| ------------------------------ | ------------------------------------------------------------------------------ | ------------------- |
-| **Document Validation**        | Upload a TER/CER/ToR/RFP, validate against MDB policies, get compliance report | Phase 1 (launching) |
-| **Knowledge Base Management**  | Organize Global, Project, and Procurement Activity KBs                         | Phase 1 (launching) |
-| **Vendor Response Assessment** | Assess and compare vendor bid responses (Technical + Combined phases)          | Phase 2             |
-| **Document Creation**          | AI-generate compliant ToRs, RFPs, TERs, CERs                                   | Phase 2             |
-| **Analytics & Insights**       | Dashboards + natural language queries over procurement data                    | Future              |
+### Core Capabilities by Product
 
-### Key Document Types
+| Capability                     | Procurement (`nolia-app`)                                      | Funding (`nolia-funding-app`)                         |
+| ------------------------------ | -------------------------------------------------------------- | ----------------------------------------------------- |
+| **Document Validation**        | TER/CER/ToR/RFP against MDB policy — Phase 1 launching         | —                                                     |
+| **Application Assessment**     | —                                                              | Single-phase upload → criteria-based report (current) |
+| **Application Comparison**     | —                                                              | 2–3 side-by-side (neutral, fact-based) — current      |
+| **Knowledge Base Management**  | Global + Project + Procurement Activity (auto-generated rules) | Global + Funding (auto-generated rules)               |
+| **Vendor Response Assessment** | Phase 2                                                        | —                                                     |
+| **Document Creation**          | Phase 2 (AI-generate ToRs, RFPs, TERs, CERs)                   | —                                                     |
+| **Analytics & Insights**       | Future                                                         | Future                                                |
+
+### Key Document Types (Procurement)
 
 - **TER** (Technical Evaluation Report) — assesses vendor technical proposals
 - **CER** (Combined Evaluation Report) — assesses technical + financial proposals
 - **ToR** (Terms of Reference) — defines scope of work for procurement
 - **RFP/RFB** (Request for Proposal/Bid) — issued to market for vendor responses
 
+### Key Document Types (Funding)
+
+- **Application Form** (Funding KB) — the blank template applicants fill in
+- **Selection Criteria** (Funding KB) — the rubric assessments score against
+- **Good Examples** (Funding KB) — calibration anchors
+- **Output Template** (Funding KB) — defines the shape of the generated assessment report
+- **Assessment** — the generated, template-driven report for one application
+- **Comparison** — the generated side-by-side document for 2–3 applications
+
 ---
 
 ## 2. Architecture Overview
 
-Nolia has two major components:
+Nolia has two major components per product: a frontend (separate repo per product) and this Numa backend.
 
-### 2a. Nolia Frontend (This Repo — `numa-whitelabel-investigation`)
+### 2a. Nolia Frontends (separate repos under `arcanum/nolia/`)
 
-A custom whitelabel frontend that replaces Numa's standard frontend with Nolia-branded UI.
+Custom whitelabel frontends that replace Numa's standard frontend with Nolia-branded UI.
+
+- `arcanum/nolia/nolia-app/` — bank / MDB procurement (MoH Indonesia in production).
+- `arcanum/nolia/nolia-funding-app/` — funding applications (Ngāi Tahu). Variant-aware codebase (`NEXT_PUBLIC_NOLIA_VARIANT = funding | procurement`); only the `funding` variant is deployed today.
 
 ```
 User Browser (worldbank.getnolia.io)
@@ -66,23 +85,36 @@ Numa Backend (CloudFront)
 
 **The Express backend is a proxy layer** — it forwards requests to Numa's APIs with proper auth headers. It does NOT contain AI/ML logic.
 
-### 2b. Numa Backend (Separate Repo — `arcanum/numa`)
+### 2b. Numa Backend (This Repo — `arcanum/numa`)
 
-The AI engine that powers Nolia's document analysis. Key components:
+The AI engine that powers both Nolia products. Key components:
 
 - **Nolia V2 App** — Runs on Numa's V2 Apps architecture (AgentCore MicroVMs with Claude Agent SDK)
-- **5-Phase Pipeline:** EDA → Global Rules → Domain Rules (sequential) → Report Generation → Translation
-- **Knowledge Bases** — S3-backed document stores (NOT Bedrock KBs — these are folder-based)
+- **Procurement pipeline (5-phase):** EDA → Global Rules → Domain Rules (sequential) → Report Generation → Translation
+- **Funding pipeline:** single-phase upload → assess → report (plus a comparison orchestrator). Funding-specific prompts and orchestration are planned; the current `nolia/` agent type is procurement-shaped.
+- **Knowledge Bases** — S3-backed document stores (NOT Bedrock KBs — these are folder-based). Rules auto-generated per KB on creation.
 - **Document Extraction** — PDF → JSON via parallel Lambda chunk extraction (handles 1500+ page scanned PDFs)
 
 **Backend source:** `services/numa-workspace-agent/numa_workspace_agent/agent_types/nolia/`
 **Backend docs:** `documentation/nolia/`
 
+**Client awareness:** Each Nolia client has its own AWS account and its own workspace agent deployment, with `CLIENT_NAME` in the environment. Client-specific prompt sets will be layered on top of the shared orchestrator (planned work).
+
 ---
 
-## 3. Deployment Region — Jakarta (ap-southeast-3)
+## 3. Deployment Regions
 
-Nolia deploys to **ap-southeast-3 (Jakarta)** for data sovereignty (Indonesian government requirement). This introduces several constraints:
+Each Nolia client picks the AWS region appropriate for their data residency / latency needs. Today:
+
+| Client                 | Product     | Region           | AgentCore Region | Notes                                              |
+| ---------------------- | ----------- | ---------------- | ---------------- | -------------------------------------------------- |
+| MoH Indonesia (prod)   | Procurement | `ap-southeast-3` | `ap-southeast-2` | Jakarta — see constraints below                    |
+| Nolia staging          | Procurement | `us-east-1`      | `us-east-1`      | Native Bedrock + AgentCore                         |
+| Te Rūnanga o Ngāi Tahu | Funding     | `ap-southeast-2` | `ap-southeast-2` | Sydney — closest to NZ, native Bedrock + AgentCore |
+
+### Jakarta (`ap-southeast-3`) constraints — applies to MoH only
+
+Jakarta deployment is needed for Indonesian data sovereignty. This introduces several constraints:
 
 | Issue                                  | Workaround                                                                         |
 | -------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -117,7 +149,11 @@ Nolia deploys to **ap-southeast-3 (Jakarta)** for data sovereignty (Indonesian g
 
 ## 5. Knowledge Base System
 
-Three types of KBs, often paired for different operations:
+KB shape depends on the product. Same S3 storage convention; different categories and wizard structures.
+
+### Procurement (`nolia-app`)
+
+Three KB types, paired by operation:
 
 | KB Type                  | Contents                                                 | Steps to Create                              | Used For                                            |
 | ------------------------ | -------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------- |
@@ -134,13 +170,30 @@ Three types of KBs, often paired for different operations:
 
 **Priority rule:** When conflicts exist, the more specific KB (Procurement Activity or Project) takes priority over Global.
 
-**Storage:** KBs are stored as S3 folders under `documents/kb-{uuid}/` in the data bucket. Each KB folder contains a knowledge-base subfolder (documents) and a rules file (`global-rules.md`, `procurement-rules.md`, etc.). The frontend sends raw KB UUIDs; the backend prepends `kb-` to construct S3 paths.
+### Funding (`nolia-funding-app`)
+
+Two KB types, always paired:
+
+| KB Type     | Contents                                                                                                  | Steps to Create                                                                  | Used For                |
+| ----------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------- |
+| **Global**  | Org-wide policies, values, disqualification rules, applicant guidance                                     | 1 step: documents                                                                | Paired with Funding     |
+| **Funding** | Per Fund/Grant/Scholarship: application form template, selection criteria, good examples, output template | 4 steps: Application Form → Selection Criteria → Good Examples → Output Template | Assessment + Comparison |
+
+Funding KBs carry a `fundingType` field (Fund / Grant / Scholarship) used as filter tabs.
+
+**Priority rule:** Funding KB takes priority over Global on conflicts.
+
+### Storage (both products)
+
+KBs are stored as S3 folders under `documents/kb-{uuid}/` in the data bucket. Each KB folder contains the uploaded documents and a generated rules file (`global-rules.md`, `procurement-rules.md`, `project-rules.md`, or — once funding-specific generation lands — `funding-rules.md`). The frontend sends raw KB UUIDs; the backend prepends `kb-` to construct S3 paths.
 
 **States:** Processing → Complete → Active (auto-activates on completion). Only Active KBs appear in dropdowns outside the KB management section.
 
 ---
 
-## 6. Document Validation Flow (Phase 1 Feature)
+## 6. Document Validation Flow (Procurement, Phase 1 Feature)
+
+This is the procurement product flow. The funding product has a much simpler single-phase flow (upload → assess → report); see `arcanum/nolia/nolia-funding-app/CLAUDE.md`.
 
 1. User navigates to Validate Documents
 2. Selects Global KB (determines document type: TER or CER)
@@ -201,76 +254,27 @@ Frontend form → v2-apps-api Lambda → workspace-chat-agent-proxy Lambda → A
 
 ---
 
-## 8. March Release TODO
+## 8. Open Backend Work
 
-### Infrastructure & Backend
+### Funding-specific prompts and orchestration
 
-- [x] Add ap-southeast-3 support to Numa (model mapping, region configs)
-- [x] Add `"none"` KB deployment type (Bedrock KBs unavailable in Jakarta)
-- [x] Cross-region AgentCore (Sydney runs MicroVMs, Jakarta stores data)
-- [x] Implement Nolia V2 app on workspace agent architecture
-- [ ] Deploy updated Numa to Nolia's Jakarta environment
-- [ ] Test existing app functionality still works
+The current `nolia/` agent type is procurement-shaped. The funding product (Ngāi Tahu) needs its own:
 
-### Frontend (This Repo)
+- **Rules generation prompts** — the funding KB structure (Application Form + Selection Criteria + Good Examples + Output Template) is fundamentally different from procurement docs. Existing `phase_rules_extract.py` / `phase_rules_review.py` need a funding variant.
+- **Assessment orchestration** — single-phase upload → assess → template-driven report (vs the procurement 5-phase pipeline).
+- **Comparison orchestrator** — neutral, fact-based, structured-JSON output for 2–3 applications under the same Funding KB. Frontend renders the comparison; backend produces it.
 
-- [ ] Tony to finish FE designs per discussion with Matt
-- [ ] Tony to create new KB management system (different from current Numa KB UI)
-- [ ] Wire up Nolia V2 app endpoints (replace old Step Function-based calls)
-- [ ] Get user management working via Numa
-- [ ] Setup app components: run history, viewing generated docs, running different doc types
-- [ ] Add new functionality for second document type
+### Client awareness
 
-### AI/ML
+Each client has its own AWS account and `CLIENT_NAME` in the environment. The plan is to layer client-specific prompt sets on top of the shared orchestrator (folder layout TBD by Nathan). No need to pass `client_id` in request metadata — the env var is the natural lookup key.
 
-- [ ] Add new functionality for second document type (beyond TER/CER)
-- [ ] R&D for automatic rules generation from KB documents
-- [ ] Implement rules generation as an action in V2 Nolia app
-- [ ] Wire rules generation into KB creation flow (block runs for KBs without rules)
-- [ ] Fine-tune model IDs, cost optimizations, prompts, output templates
+### Frontend repos
 
-### Operations
+For frontend dev (local setup, routes, deployment), see the per-repo NOLIA.md:
 
-- [ ] Install into Jakarta (deploy to MoH infrastructure)
-- [ ] Liaise with Matt to iron out remaining details
-
----
-
-## 9. Frontend Development (This Repo)
-
-### Local Development
-
-```bash
-make clean clobber up    # Clean everything and rebuild containers from scratch
-docker compose logs      # View container logs
-make validate            # Type checking and linting
-```
-
-### Key Frontend Paths
-
-| Path                   | Purpose                       |
-| ---------------------- | ----------------------------- |
-| `/login`               | Cognito SRP authentication    |
-| `/dashboard`           | Main landing page             |
-| `/assess/*`            | Document validation workflows |
-| `/admin/global/*`      | Global KB management          |
-| `/admin/procurement/*` | Procurement KB management     |
-| `/admin/project/*`     | Project KB management         |
-
-### Backend Proxy Endpoints
-
-| Endpoint                              | Proxies To                  |
-| ------------------------------------- | --------------------------- |
-| `POST /api/nolia/main`                | Start Nolia analysis job    |
-| `GET /api/nolia/main/:jobId`          | Get job status              |
-| `GET /api/nolia/jobs`                 | List all jobs               |
-| `GET /api/kb`                         | List knowledge bases        |
-| `POST /api/kb`                        | Create knowledge base       |
-| `POST /api/files/generate-upload-url` | Get S3 presigned upload URL |
-
-### Deployment
-
-Commits to `main` trigger automatic deployment. No manual steps needed — CI/CD builds Docker images, pushes to ECR, and updates the ECS service.
+- `arcanum/nolia/nolia-app/CLAUDE.md` — bank / MDB procurement (MoH)
+- `arcanum/nolia/nolia-funding-app/CLAUDE.md` — funding (Ngāi Tahu)
+- `arcanum/nolia/CLAUDE.md` — umbrella context across both
 
 ---
 
@@ -287,30 +291,51 @@ Commits to `main` trigger automatic deployment. No manual steps needed — CI/CD
 
 ## 11. Terminology Quick Reference
 
-| Term                | Meaning                                                                      |
-| ------------------- | ---------------------------------------------------------------------------- |
-| MDB                 | Multilateral Development Bank (World Bank, ADB, IsDB, AIIB, AIF)             |
-| Implementing Agency | Government department responsible for delivering MDB-funded projects         |
-| Borrower            | Country receiving MDB financing                                              |
-| IPF                 | Investment Project Financing (World Bank lending instrument)                 |
-| TER                 | Technical Evaluation Report                                                  |
-| CER                 | Combined Evaluation Report (technical + financial)                           |
-| ToR                 | Terms of Reference                                                           |
-| RFP/RFB             | Request for Proposal / Request for Bid                                       |
-| KB                  | Knowledge Base                                                               |
-| AgentCore           | AWS Bedrock AgentCore — MicroVM service for running AI agents                |
-| V2 Apps             | Numa's new app architecture using workspace agents instead of Step Functions |
+### Procurement-product terms
+
+| Term                | Meaning                                                              |
+| ------------------- | -------------------------------------------------------------------- |
+| MDB                 | Multilateral Development Bank (World Bank, ADB, IsDB, AIIB, AIF)     |
+| Implementing Agency | Government department responsible for delivering MDB-funded projects |
+| Borrower            | Country receiving MDB financing                                      |
+| IPF                 | Investment Project Financing (World Bank lending instrument)         |
+| TER                 | Technical Evaluation Report                                          |
+| CER                 | Combined Evaluation Report (technical + financial)                   |
+| ToR                 | Terms of Reference                                                   |
+| RFP/RFB             | Request for Proposal / Request for Bid                               |
+
+### Funding-product terms
+
+| Term                       | Meaning                                                         |
+| -------------------------- | --------------------------------------------------------------- |
+| Fund / Grant / Scholarship | The three sub-types of a Funding KB (filter tabs)               |
+| Application                | Documents submitted by an applicant to a Fund/Grant/Scholarship |
+| Applicant                  | Individual or organisation applying for funding                 |
+| Selection Criteria         | Rubric the application is assessed against                      |
+| Good Examples              | Reference applications used to calibrate judgement              |
+| Assessment                 | Generated, template-driven report for one application           |
+| Comparison                 | Generated side-by-side document for 2–3 applications            |
+
+### Shared / platform terms
+
+| Term          | Meaning                                                                            |
+| ------------- | ---------------------------------------------------------------------------------- |
+| KB            | Knowledge Base                                                                     |
+| AgentCore     | AWS Bedrock AgentCore — MicroVM service for running AI agents                      |
+| V2 Apps       | Numa's new app architecture using workspace agents instead of Step Functions       |
+| `CLIENT_NAME` | Per-client identifier in workspace agent env (e.g. `nolia-id-gov-moh`, `ngaitahu`) |
 
 ---
 
 ## 12. For AI Agents — Mental Model
 
-1. **This repo is the frontend only.** All AI logic lives in the Numa backend (`arcanum/numa`).
-2. **The Express backend is a proxy.** It forwards requests to Numa's CloudFront with auth headers. Don't add AI logic here.
-3. **KBs are S3 folders, not Bedrock KBs.** They live under `documents/kb-{uuid}/` in the data bucket.
-4. **Jakarta region has constraints.** Always use `global.*` model prefixes. No Bedrock KBs. AgentCore runs in Sydney.
+1. **There are two Nolia products with separate frontend repos** under `arcanum/nolia/`. Always check whether the task is procurement (`nolia-app`) or funding (`nolia-funding-app`).
+2. **Both frontends are thin Express proxies.** All AI logic lives here in `services/numa-workspace-agent/numa_workspace_agent/agent_types/nolia/`. Don't add AI logic to the Express backends.
+3. **KBs are S3 folders, not Bedrock KBs.** They live under `documents/kb-{uuid}/` in the data bucket. Same convention for both products.
+4. **Region constraints depend on the client.** MoH (Jakarta `ap-southeast-3`): no Bedrock KBs, no AgentCore — cross-region to Sydney, `global.*` model prefixes. Ngāi Tahu (Sydney `ap-southeast-2`): native everything.
 5. **The Nolia V2 pipeline runs on AgentCore MicroVMs** via the workspace agent, not Step Functions. The orchestrator is Python, not a state machine.
-6. **Phase 1 launch = document validation + KB management.** Vendor assessment and document creation are Phase 2.
-7. **Procurement Activity KB takes priority** over Global KB when conflicts arise.
-8. **Two assessment types exist:** `evaluation-report` (TER/CER, uses Procurement KB) and `terms-of-reference` (ToR, uses Project KB).
-9. **Commits to main auto-deploy.** Be careful — push to main = live in production.
+6. **Procurement Phase 1 = document validation + KB management.** Funding Phase 1 = application assessment + comparison + KB management.
+7. **Procurement Activity KB takes priority** over Global KB when conflicts arise (procurement). Funding KB takes priority over Global (funding).
+8. **Procurement assessment types:** `evaluation-report` (TER/CER, uses Procurement KB) and `terms-of-reference` (ToR, uses Project KB). Funding has its own assessment type — funding-specific orchestration is open work.
+9. **The funding pipeline is open work.** Today the `nolia/` agent type is procurement-shaped. Funding-specific prompts and orchestration are planned.
+10. **Commits to `main` auto-deploy** in both frontend repos. Be careful — push to main = live in production.

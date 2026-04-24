@@ -2,32 +2,36 @@
 
 ## What Is Nolia?
 
-Nolia is an AI-powered procurement compliance platform for Implementing Agencies (government departments) working with Multilateral Development Banks (World Bank, ADB, IsDB, AIIB). It automates the review of procurement documents — Technical Evaluation Reports (TERs), Combined Evaluation Reports (CERs), Terms of Reference (ToRs) — against MDB policy rules, reducing multi-day manual reviews to ~30 minutes.
+Nolia is an AI-powered document compliance and assessment platform, delivered as **two product lines** from separate frontend repos:
 
-**Business relationship:** Nolia is a partner company (Arcanum holds a shareholding). Arcanum builds and operates the platform; Nolia sells to implementing agencies.
+- **Nolia (MDB Procurement)** — `arcanum/nolia/nolia-app/`. For Implementing Agencies working with Multilateral Development Banks (World Bank, ADB, IsDB, AIIB). Validates procurement documents (TER, CER, ToR, RFP) against MDB policy. **Anchor client:** Indonesia Ministry of Health, managing the $4B Indonesia Health System Strengthening Project (largest World Bank health project ever).
+- **Nolia Funding** — `arcanum/nolia/nolia-funding-app/`. For funding bodies distributing Funds/Grants/Scholarships. Upload an application, get a criteria-based assessment plus (optionally) a side-by-side comparison of 2–3 applications. **Anchor client:** Te Rūnanga o Ngāi Tahu (NZ).
 
-**First client:** Indonesia Ministry of Health — managing the $4B Indonesia Health System Strengthening Project (largest World Bank health project ever).
+Both product lines reduce multi-day/multi-week manual reviews to ~30 minutes or less.
+
+**Business relationship:** Nolia is a partner company (Arcanum holds a shareholding). Arcanum builds and operates the platform; Nolia sells to client organisations.
 
 ## How Nolia Connects to Numa
 
-Nolia is built on top of the Numa platform. It has its own frontend but uses Numa's backend infrastructure for all AI processing.
+Both Nolia products are built on top of the Numa platform. They each have their own frontend but use Numa's backend infrastructure for all AI processing.
 
 ```
-                  Nolia Frontend                          Numa Backend
-              (numa-whitelabel-investigation)              (arcanum/numa)
+          Nolia Frontend (one of:)                       Numa Backend
+         - arcanum/nolia/nolia-app                      (arcanum/numa)
+         - arcanum/nolia/nolia-funding-app
             ┌──────────────────────────┐          ┌──────────────────────────┐
             │  Next.js 15 + Express    │          │                          │
             │  (ECS Fargate, Docker)   │          │  Cognito (auth)          │
             │                          │          │  API Gateway             │
             │  Express backend is a    │──────────│  V2 Apps API Lambda      │
-            │  proxy — forwards to     │  HTTP    │  Workspace Agent Proxy   │
+            │  proxy — forwards to     │  HTTPS   │  Workspace Agent Proxy   │
             │  Numa APIs with auth     │          │  AgentCore MicroVMs      │
             │                          │          │  S3 (data, outputs)      │
-            │  worldbank.getnolia.io   │          │  DynamoDB                │
+            │  *.getnolia.io           │          │  DynamoDB                │
             └──────────────────────────┘          └──────────────────────────┘
 ```
 
-**Key principle:** The Nolia frontend is a thin proxy layer. All AI logic, document analysis, and compliance checking runs in the Numa backend.
+**Key principle:** The Nolia frontends are thin proxy layers. All AI logic, document analysis, compliance checking, and assessment runs in the Numa backend.
 
 ## Two Main Actions
 
