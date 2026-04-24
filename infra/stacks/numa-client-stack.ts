@@ -41,6 +41,7 @@ import { CoreNumaInfra, coreNumaInfraPropsSchema } from '../constructs/core-numa
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { NumaChatAgent } from '../constructs/numa-chat-agent-construct';
+import { NumaKbManager } from '../constructs/numa-kb-manager-construct';
 import { SharedChatConstruct } from '../constructs/shared-chat-construct';
 import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
@@ -300,9 +301,27 @@ export class NumaClientStack extends TerraformStack {
       cloudfrontSharedSecret: cfSecretParam.value,
       // Cross-account Bedrock quota sharing
       bedrockAccount: clientConfig.bedrockAccount,
-      // Web crawler stats for KB state endpoint
-      crawlUrlsTableName: core.webCrawler.crawlUrlsTable.name,
       scheduleRunnerSecret: agentScheduleSecretParam.value,
+    });
+
+    // KB management API — handles /api/kb* requests via its own Function URL.
+    // Split out of the chat agent so KB CRUD doesn't pay the chat lambda's
+    // heavy cold-start cost. Same Cognito + CloudFront auth model.
+    const kbManager = new NumaKbManager(this, 'kb-manager', {
+      clientName: props.clientName,
+      region: clientConfig.region,
+      knowledgeBaseConfiguration: {
+        preferredKnowledgeBase: clientConfig.preferredKnowledgeBase as 'q' | 'bedrock' | 'none',
+        qApplicationId: core.qBusinessApplicationId,
+        qIndexId: core.qBusinessIndexId,
+        bedrockKnowledgeBaseId: knowledgeBase?.knowledgeBaseId,
+      },
+      userPoolId: core.userPoolId,
+      userPoolClientId: core.userPoolClient.id,
+      knowledgeBasesTableName: core.knowledgeBasesTable.name,
+      dataBucketArn: core.dataBucket.bucket.arn,
+      cloudfrontSharedSecret: cfSecretParam.value,
+      crawlUrlsTableName: core.webCrawler.crawlUrlsTable.name,
     });
 
     // Shared Document Q&A - public API for sharing documents with Nova 2 Lite
@@ -548,6 +567,7 @@ export class NumaClientStack extends TerraformStack {
       accountId: clientConfig.clientAccountId,
       knowledgeBase,
       chatAgentFunctionUrl: chatAgent.functionUrl,
+      kbManagerFunctionUrl: kbManager.functionUrl,
       cloudfrontSecretParam: cfSecretParam,
       // Workspace chat agent proxy Lambda Function URL is routed through main CloudFront
       // (AgentCore has no public HTTP endpoint, so we use a proxy Lambda)

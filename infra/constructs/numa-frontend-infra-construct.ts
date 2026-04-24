@@ -330,6 +330,25 @@ export class NumaFrontendInfra extends Construct {
       originId: 'chat-agent-fnurl',
     });
 
+    // KB management Lambda Function URL — serves /api/kb and /api/kb/*
+    const kbManagerOriginDomain = Fn.replace(
+      Fn.replace(props.kbManagerFunctionUrl, '/^https?:\/{2}/', ''),
+      '/\/$/',
+      ''
+    );
+    origins.push({
+      customHeader: [{ name: 'x-arcanum-cloudfront-secret', value: cloudfrontSecretParameter.value }],
+      customOriginConfig: {
+        httpPort: 80,
+        httpsPort: 443,
+        originProtocolPolicy: 'https-only',
+        originSslProtocols: ['TLSv1.2'],
+        originReadTimeout: 60,
+      },
+      domainName: kbManagerOriginDomain,
+      originId: 'kb-manager-fnurl',
+    });
+
     // Add OpenAPI docs origin if enabled
     if (this.openApiDocs) {
       const docsOriginDomain = Fn.replace(
@@ -490,7 +509,7 @@ export class NumaFrontendInfra extends Construct {
         originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac',
       },
       {
-        targetOriginId: 'chat-agent-fnurl',
+        targetOriginId: 'kb-manager-fnurl',
         allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
         cachedMethods: ['GET', 'HEAD'],
         pathPattern: '/api/kb',
@@ -501,7 +520,7 @@ export class NumaFrontendInfra extends Construct {
         originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac',
       },
       {
-        targetOriginId: 'chat-agent-fnurl',
+        targetOriginId: 'kb-manager-fnurl',
         allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
         cachedMethods: ['GET', 'HEAD'],
         pathPattern: '/api/kb/*',
@@ -681,6 +700,8 @@ export interface NumaFrontendInfraProps {
   accountId: string;
   knowledgeBase?: KnowledgeBase;
   chatAgentFunctionUrl: string;
+  /** KB management Lambda Function URL — serves /api/kb and /api/kb/* */
+  kbManagerFunctionUrl: string;
   cloudfrontSecretParam?: SsmParameter;
   devInstance?: boolean;
   enableOpenApiDocs?: boolean;

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
+[tool.poetry]
+name = "kb-core"
+version = "0.1.0"
+description = "Shared knowledge-base management primitives (DynamoDB-backed KB + membership model) used by numa-chat-agent and numa-kb-manager"
+authors = ["Arcanum AI"]
+readme = "README.md"
+include = ["kb_core/py.typed"]
+packages = [
+    { include = "kb_core" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+prm = {path = "../prm", develop = true}
+structlog = "^25.2.0"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = { version = "^1.37.0", extras = ["dynamodb"] }
+pyright = "1.1.402"
