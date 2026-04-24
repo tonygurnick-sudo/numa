@@ -5,8 +5,8 @@ Provides a single dispatcher tool for accessing external connectors: OAuth cloud
 storage (Google Drive, OneDrive, Dropbox), Synergy 12d (PAT-based), and generic
 authenticated HTTP for any OAuth-connected API.
 
-Note: S3 data-bucket (My Files / Company Files) has been moved to the `files`
-operation in numa_tool — it's a core Numa capability, not an external connector.
+Note: My Files / Company Files are knowledge bases — query them via the
+`knowledge_base` operation in numa_tool.
 
 Architecture:
     Claude → connectors MCP (name="status|list_files|...") → _invoke_connect_tool() → Lambda
@@ -174,7 +174,7 @@ def _route_tool(
     if connector == "data-bucket":
         raise ValueError(
             "data-bucket is not available via connectors. "
-            "Use numa_tool with name='files' to browse My Files / Company Files."
+            "Use numa_tool with name='knowledge_base' to browse My Files / Company Files."
         )
     if connector in SYNERGY_CONNECTORS:
         return _invoke_connect_tool(f"connect_synergy_{tool_suffix}", params)

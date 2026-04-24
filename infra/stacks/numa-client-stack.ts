@@ -632,8 +632,6 @@ export class NumaClientStack extends TerraformStack {
       agentScheduleRunnerSecret: agentScheduleSecretParam.value,
       bedrockKbId: knowledgeBase?.knowledgeBaseId,
       bedrockDataSourceId: knowledgeBase?.dataSourceId,
-      filesTableName: core.filesTable?.name,
-      filesTableArn: core.filesTable?.arn,
       usageAnalyticsEventsTableName: core.usageAnalyticsEventsTable.name,
       usageAnalyticsEventsTableArn: core.usageAnalyticsEventsTable.arn,
       usageAnalyticsKeysTableName: core.usageAnalyticsKeysTable.name,
@@ -862,16 +860,14 @@ export class NumaClientStack extends TerraformStack {
         SCHEDULING: clientConfig.scheduling ?? false,
         SCHEDULING_MIN_INTERVAL_MINUTES: clientConfig.schedulingMinIntervalMinutes ?? null,
         GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: props.globalSchedulingMinIntervalMinutes ?? null,
-        NUMA_FILES: clientConfig.numaFiles ?? false,
         KNOWLEDGE_BASES: true,
         DEVELOPER_MODE: clientConfig.developerMode ?? false,
         NUMA_OPS: clientConfig.numaOps ?? false,
         SITE_WIDE_SEARCH: clientConfig.siteWideSearch ?? false,
         MFA_ENABLED: clientConfig.mfa ?? false,
         SECRETS_VAULT_ENABLED: clientConfig.secretsVaultEnabled ?? false,
-        // Dependency cascade — children forced off when parent is off
-        NUMA_DROP_ZONES: (clientConfig.numaFiles ?? false) ? (clientConfig.numaDropZones ?? false) : false,
-        NUMA_SHARING: (clientConfig.numaFiles ?? false) ? (clientConfig.numaSharing ?? false) : false,
+        NUMA_DROP_ZONES: clientConfig.numaDropZones ?? false,
+        NUMA_SHARING: clientConfig.numaSharing ?? false,
         WORKSPACE_CHAT_MODEL_SELECTION:
           (clientConfig.numaWorkspaceChat ?? false) ? (clientConfig.workspaceChatModelSelection ?? false) : false,
         OAUTH_AVAILABLE: true, // Always available - infrastructure always deployed, admin flags control UI access only
@@ -1289,13 +1285,6 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @minimum 5
          */
         schedulingMinIntervalMinutes: z.number().int().min(5).optional(),
-
-        /**
-         * Whether to enable the Numa Files feature (file management page and backend).
-         *
-         * @default false
-         */
-        numaFiles: z.boolean().optional().default(false),
 
         /**
          * Whether to enable Drop Zone creation in the Files shared tab.

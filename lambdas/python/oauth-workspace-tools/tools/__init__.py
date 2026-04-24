@@ -2,9 +2,6 @@
 
 from .connect_tools import (
     handle_connect_request,
-    handle_connect_s3data_download,
-    handle_connect_s3data_list,
-    handle_connect_s3data_search,
     handle_connect_status,
     handle_connect_synergy_download,
     handle_connect_synergy_list,
@@ -30,8 +27,5 @@ __all__ = [
     "handle_connect_synergy_list",
     "handle_connect_synergy_search",
     "handle_connect_synergy_download",
-    "handle_connect_s3data_list",
-    "handle_connect_s3data_search",
-    "handle_connect_s3data_download",
     "handle_connect_request",
 ]

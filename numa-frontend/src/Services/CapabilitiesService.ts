@@ -9,7 +9,7 @@ export type CapabilitySettingsMap = Record<string, { status: CapabilityStatus }>
 
 /**
  * Convert camelCase to UPPER_SNAKE_CASE.
- * e.g. "numaFiles" → "NUMA_FILES", "dataConnectorsEnabled" → "DATA_CONNECTORS_ENABLED"
+ * e.g. "dataConnectorsEnabled" → "DATA_CONNECTORS_ENABLED"
  */
 function camelToUpperSnake(s: string): string {
   return s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
@@ -17,7 +17,7 @@ function camelToUpperSnake(s: string): string {
 
 /**
  * Convert UPPER_SNAKE_CASE to camelCase.
- * e.g. "NUMA_FILES" → "numaFiles", "DATA_CONNECTORS_ENABLED" → "dataConnectorsEnabled"
+ * e.g. "DATA_CONNECTORS_ENABLED" → "dataConnectorsEnabled"
  */
 function upperSnakeToCamel(s: string): string {
   return s.toLowerCase().replace(/_([a-z])/g, (_, c) => c.toUpperCase());

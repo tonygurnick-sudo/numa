@@ -115,7 +115,6 @@ pre-commit:
         - lambdas/node/connector-event-receiver
         - lambdas/node/data-sync-scheduler
         - lambdas/node/document-converter
-        - lambdas/node/files-index-sync
         - lambdas/node/gmail-watch-manager
         - lambdas/node/google-cloud-setup
         - lambdas/node/notifications-api
@@ -145,7 +144,6 @@ pre-commit:
         - lambdas/node/usage-analytics-admin
         - lambdas/node/usage-analytics-contract
         - lambdas/node/usage-analytics-ingest
-        - lambdas/node/user-files
         - lambdas/node/v2-apps-api
         - lambdas/node/vector-db-init
         - lib/client-config-node

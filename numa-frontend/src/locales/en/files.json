@@ -103,54 +103,6 @@
     "addToKB": "Add to Knowledge Base",
     "remoteNotAvailable": "Not available for remote files"
   },
-  "selectionToolbar": {
-    "selected": "{{count}} selected",
-    "clearSelection": "Clear selection"
-  },
-  "summarizePanel": {
-    "title": "Summary",
-    "generating": "Generating summary...",
-    "generatingDetail": "This may take a moment for larger documents.",
-    "error": "Failed to generate summary",
-    "retry": "Try again",
-    "close": "Close"
-  },
-  "fileInfoPanel": {
-    "title": "File information",
-    "name": "Name",
-    "size": "Size",
-    "modified": "Last modified",
-    "path": "Location",
-    "type": "Type",
-    "source": "Source",
-    "close": "Close"
-  },
-  "addToKBModal": {
-    "title": "Add to Knowledge Base",
-    "subtitle": "Select a knowledge base and destination folder",
-    "companyKB": "Company Knowledge Base",
-    "sharedBadge": "Shared",
-    "rootFolder": "Root (top level)",
-    "loadingKBs": "Loading knowledge bases...",
-    "loadingFolders": "Loading folders...",
-    "noKBs": "No knowledge bases available. You need Editor or Owner access to add files.",
-    "addButton": "Add to KB",
-    "adding": "Adding...",
-    "progress": "{{completed}} of {{total}} files copied",
-    "success": "Added to knowledge base successfully",
-    "error": "Failed to add to knowledge base",
-    "multipleItems": "{{count}} items"
-  },
-  "moveModal": {
-    "title": "Move to",
-    "destination": "Select destination folder",
-    "move": "Move here",
-    "cancel": "Cancel",
-    "loading": "Loading folders...",
-    "root": "Root",
-    "success": "Moved successfully",
-    "error": "Failed to move: {{error}}"
-  },
   "projects": {
     "create": "New Project",
     "nameLabel": "Project Name",

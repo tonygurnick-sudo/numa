@@ -76,7 +76,6 @@
     "oauthIntegrationsEnabled": true,
     "numaSharing": true,
     "numaDropZones": true,
-    "numaFiles": true,
     "secretsVaultEnabled": true
   },
   "nolia-id-gov-moh": {
@@ -98,7 +97,6 @@
     "developerMode": false,
     "knowledgeBases": true,
     "numaDropZones": false,
-    "numaFiles": false,
     "numaOps": false,
     "numaSharing": false,
     "numaWorkspaceChat": true,

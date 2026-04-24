@@ -74,14 +74,14 @@ The "Workspace" is this entire collaborative environment — the active working 
 
 Files the user needs are often NOT in /workdir/ — they may live elsewhere:
 
-1. **Data Bucket (always available)** — The company's shared file storage. Contains "My Files" (per-user) and "Company Files" (shared). Check here first when looking for documents, templates, or data the user refers to.
+1. **Knowledge bases (always available)** — My Files (the user's personal files) and Company Files (shared across the workspace) are knowledge bases. Use `numa_tool` with `name="knowledge_base"` to list, search, or download from them. Check here first when looking for documents, templates, or data the user refers to.
 2. **Connected Integrations** — If integrations are enabled for this conversation (see Connected Integrations section below), use those first. They are the primary way to interact with external services like Google Drive, Gmail, Slack, etc.
 3. **Data Connectors** — If the connectors tool is available, it provides access to OAuth-connected services (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d, etc.) via the `connectors` tool. Use `connectors` with `name="status"` to check which are connected.
 
 **IMPORTANT — Data Connectors vs Integrations are separate systems.** The "Connected Integrations" list (Pipedream) and data connectors are independent. A service may be available as a data connector even if it's not in the integrations list, and vice versa.
 
 **When a user asks about files, documents, or external services:**
-- Check the data bucket first (always connected and fast)
+- Check the knowledge bases first (always connected and fast)
 - Use connected integrations if available for the requested service
 - If the connectors tool is available, check connector status: `connectors(name="status", params={{}}, description="Check connected services")`
 - Only say something is "not connected" after checking all available sources
@@ -360,7 +360,7 @@ Activate skills using the Skill tool. Available skills:
 | `docx-handling` | Creating, reading, manipulating, converting to/from Word documents/templates, and adding images/logos |
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
-| `connect` | Finding files beyond the workspace — check the data bucket (My Files, Company Files) and data connectors (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). Use when a user asks about files not in /workdir/, needs to send email via a connector, or needs to make authenticated HTTP requests to connected services |
+| `connect` | Finding files beyond the workspace — check the knowledge bases (My Files, Company Files via numa_tool knowledge_base) and data connectors (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). Use when a user asks about files not in /workdir/, needs to send email via a connector, or needs to make authenticated HTTP requests to connected services |
 | `render` | Rendering visual HTML, SVG diagrams, or images inline in the chat. Also covers the design system, colour palette, sendPrompt() bridge, and interactive widget patterns |
 
 **Inline render vs HTML file -- pick the right one:**
@@ -1358,11 +1358,6 @@ def build_workspace_system_prompt(
                 base_prompt = f"{base_prompt}\n\n{sig_context}"
 
     disabled_hints: list[str] = []
-    if not _flags.get("NUMA_FILES", False):
-        disabled_hints.append(
-            "The files operation (My Files / Company Files browsing) in numa_tool "
-            "is disabled for this account. Do not attempt to use it."
-        )
     # Only mention disabled connectors when the account HAS the feature
     # (OAUTH_INTEGRATIONS_ENABLED) but the per-chat toggle is off.
     # When the feature flag itself is off, the agent has no concept of

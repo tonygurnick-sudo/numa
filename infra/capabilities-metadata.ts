@@ -46,16 +46,6 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: [],
   },
   {
-    flag: 'NUMA_FILES',
-    title: 'Numa Files',
-    description: 'Virtual file system with folder workflows, file extraction, and database ingestion.',
-    icon: 'bi-folder-fill',
-    system_only: false,
-    dev_only: false,
-    enabled: true,
-    dependencies: [],
-  },
-  {
     flag: 'AGENTS',
     title: 'Agents',
     description: 'Custom AI agent creation, management, and marketplace.',
@@ -227,7 +217,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     system_only: false,
     dev_only: false,
     enabled: true,
-    dependencies: ['NUMA_FILES'],
+    dependencies: [],
   },
   {
     flag: 'NUMA_SHARING',
@@ -237,7 +227,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     system_only: false,
     dev_only: false,
     enabled: true,
-    dependencies: ['NUMA_FILES'],
+    dependencies: [],
   },
   {
     flag: 'WORKSPACE_CHAT_MODEL_SELECTION',

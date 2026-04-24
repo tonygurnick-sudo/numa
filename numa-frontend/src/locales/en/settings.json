@@ -202,8 +202,6 @@
   "dataConnectors": {
     "companySettingsTitle": "Company-wide settings",
     "companySettingsDescription": "These settings apply to everyone in your Numa environment. Use the toggle to enable or disable each data connector for your company.",
-    "numaFilesName": "Numa Files",
-    "numaFilesDescription": "Enable the Numa Files virtual file system with folder workflows, file extraction, and database ingestion.",
     "synergyName": "Synergy 12d",
     "synergyDescription": "Connect jobs and folders from Synergy 12d for automated knowledge base sync.",
     "oauthName": "OAuth Connector",
@@ -215,10 +213,6 @@
     "tabTitle": "Capabilities",
     "companySettingsTitle": "Feature Capabilities",
     "companySettingsDescription": "Control which features are available to users. System managed features cannot be toggled.",
-    "numaFiles": {
-      "name": "Numa Files",
-      "description": "Virtual file system with folder workflows, file extraction, and database ingestion."
-    },
     "workspaceChat": {
       "name": "Workspace Chat (V2)",
       "description": "Next-gen AI chat with sandboxed code execution and persistent workspaces."

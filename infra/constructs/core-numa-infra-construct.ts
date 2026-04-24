@@ -13,7 +13,6 @@ import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { S3BucketCorsConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-cors-configuration';
-import { S3BucketNotification } from '@cdktf/provider-aws/lib/s3-bucket-notification';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
 import { password } from '@cdktf/provider-random';
@@ -90,7 +89,6 @@ export class CoreNumaInfra extends Construct {
   readonly sharedTable: DynamodbTable;
   readonly sharedChatHistoryTable: DynamodbTable;
   readonly mfaSettingsTable: DynamodbTable;
-  readonly filesTable?: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
@@ -1019,80 +1017,6 @@ export class CoreNumaInfra extends Construct {
         Purpose: 'shared-document-chat-history',
       },
     });
-
-    // Files table for per-user virtual file system (My Files, Company, Projects)
-    if (props.numaFiles) {
-      this.filesTable = new DynamodbTable(this, 'numa-files-table', {
-        name: `${numaClient}-files`,
-        billingMode: 'PAY_PER_REQUEST',
-        hashKey: 'scope_key',
-        rangeKey: 'sk',
-        attribute: [
-          { name: 'scope_key', type: 'S' },
-          { name: 'sk', type: 'S' },
-        ],
-        pointInTimeRecovery: { enabled: true },
-        tags: {
-          Name: `${numaClient}-files`,
-          Environment: props.environmentName,
-          Purpose: 'user-file-system',
-        },
-      });
-
-      // S3 → DynamoDB index sync Lambda (keeps DynamoDB cache in sync with S3 source of truth)
-      const filesIndexSyncLambda = new NumaLambda(this, 'files-index-sync', {
-        clientName: props.clientName,
-        lambdaDirectory: 'node/files-index-sync/',
-        logGroup: this.logGroup,
-        resourceNameSuffix: '_files-index-sync',
-        environment: {
-          FILES_TABLE_NAME: this.filesTable.name,
-          DATA_BUCKET_NAME: this.dataBucket.bucket.bucket,
-        },
-        additionalPolicyStatements: [
-          {
-            effect: 'Allow',
-            actions: ['dynamodb:Query', 'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:DeleteItem'],
-            resources: [this.filesTable.arn],
-          },
-          {
-            effect: 'Allow',
-            actions: ['s3:GetObject'],
-            resources: [`${this.dataBucket.bucket.arn}/files/*`],
-          },
-        ],
-      });
-
-      // Permission for S3 to invoke the sync Lambda
-      const filesIndexSyncS3Permission = new LambdaPermission(this, 'files-index-sync-s3-permission', {
-        statementId: 'AllowS3InvokeFilesIndexSync',
-        functionName: filesIndexSyncLambda.lambda.functionName,
-        action: 'lambda:InvokeFunction',
-        principal: 's3.amazonaws.com',
-        sourceArn: this.dataBucket.bucket.arn,
-      });
-
-      // S3 bucket notification: trigger sync Lambda on metadata.json and _folder.json changes
-      // dependsOn ensures the Lambda permission exists before S3 tries to validate the destination
-      new S3BucketNotification(this, 'files-data-bucket-notification', {
-        bucket: this.dataBucket.bucket.id,
-        dependsOn: [filesIndexSyncS3Permission],
-        lambdaFunction: [
-          {
-            events: ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
-            filterPrefix: 'files/',
-            filterSuffix: 'metadata.json',
-            lambdaFunctionArn: filesIndexSyncLambda.lambda.arn,
-          },
-          {
-            events: ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
-            filterPrefix: 'files/',
-            filterSuffix: '_folder.json',
-            lambdaFunctionArn: filesIndexSyncLambda.lambda.arn,
-          },
-        ],
-      });
-    }
 
     // Create config bucket
     this.configBucket = new ConfigBucket(this, 'config-bucket', {
@@ -2046,12 +1970,6 @@ const _coreNumaInfraPropsSchema = z
      * @default false
      */
     numaOps: z.boolean().optional().default(false),
-    /**
-     * Whether to enable the Numa Files feature (file management page and backend).
-     *
-     * @default false
-     */
-    numaFiles: z.boolean().optional().default(false),
     /**
      * Whether to enable Drop Zone creation (shared upload folders for external users).
      *

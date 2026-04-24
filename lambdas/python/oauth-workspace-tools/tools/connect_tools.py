@@ -15,7 +15,6 @@ import httpx
 import structlog
 
 from prm import client as prm_client
-from prm import resource as prm_resource
 
 from .oauth_tools import (
     _get_consolidated_company_vault,
@@ -39,7 +38,6 @@ logger = structlog.get_logger()
 
 # Environment configuration
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "demo")
-DATA_BUCKET_NAME = os.environ.get("DATA_BUCKET_NAME", "")
 
 # Maximum file download size (50MB)
 MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024
@@ -652,302 +650,6 @@ def handle_connect_synergy_download(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# S3 data bucket handlers
-# ---------------------------------------------------------------------------
-
-
-def _get_s3_client():
-    """Get PRM-wrapped S3 client."""
-    return prm_client("s3")
-
-
-def handle_connect_s3data_list(params: Dict[str, Any]) -> Dict[str, Any]:
-    """List files and folders in the S3 data bucket.
-
-    folder_id mapping:
-      - None/empty → return top-level areas (files:my, files:company)
-      - "files:my" → files/user/{user_sub}/
-      - "files:my/path" → files/user/{user_sub}/path/
-      - "files:company" → files/company/
-      - "files:company/path" → files/company/path/
-    """
-    try:
-        user_sub = params.get("user_sub", "")
-        folder_id = params.get("folder_id", "")
-        page_size = int(params.get("page_size", 50))
-
-        if not user_sub:
-            return {"status": "error", "result": None, "error": "Missing user_sub"}
-
-        if not DATA_BUCKET_NAME:
-            return {
-                "status": "error",
-                "result": None,
-                "error": "Data bucket not configured",
-            }
-
-        if not folder_id:
-            # Root level — return top-level areas (user files + company files only)
-            folders = [
-                {
-                    "folder_id": "files:my",
-                    "name": "My Files",
-                    "has_subfolders": True,
-                },
-                {
-                    "folder_id": "files:company",
-                    "name": "Company Files",
-                    "has_subfolders": True,
-                },
-            ]
-            return {
-                "status": "success",
-                "result": {
-                    "folders": folders,
-                    "files": [],
-                    "total_count": len(folders),
-                    "connector": "data-bucket",
-                },
-                "error": None,
-            }
-
-        # Resolve folder_id to S3 prefix
-        s3_prefix = _resolve_s3_prefix(folder_id, user_sub)
-        if s3_prefix is None:
-            return {
-                "status": "error",
-                "result": None,
-                "error": f"Invalid folder_id format: {folder_id}",
-            }
-
-        s3 = _get_s3_client()
-        paginator = s3.get_paginator("list_objects_v2")
-        page_iterator = paginator.paginate(
-            Bucket=DATA_BUCKET_NAME,
-            Prefix=s3_prefix,
-            Delimiter="/",
-            PaginationConfig={"MaxItems": page_size},
-        )
-
-        folders = []
-        files = []
-
-        for page in page_iterator:
-            # Collect folders (common prefixes)
-            for prefix_obj in page.get("CommonPrefixes", []):
-                prefix = prefix_obj["Prefix"]
-                folder_name = prefix[len(s3_prefix) :].rstrip("/")
-                if not folder_name:
-                    continue
-                child_folder_id = _build_child_folder_id(folder_id, folder_name)
-                folders.append(
-                    {
-                        "folder_id": child_folder_id,
-                        "name": folder_name,
-                        "has_subfolders": True,
-                    }
-                )
-
-            # Collect files (objects at this level)
-            for obj in page.get("Contents", []):
-                key = obj["Key"]
-                name = key[len(s3_prefix) :]
-                if not name or name.endswith("/"):
-                    continue
-                # Skip metadata sidecar files
-                if name.endswith(".metadata.json"):
-                    continue
-                files.append(
-                    {
-                        "file_id": key,
-                        "name": name,
-                        "size": obj.get("Size", 0),
-                        "modified_at": (
-                            obj["LastModified"].isoformat()
-                            if obj.get("LastModified")
-                            else None
-                        ),
-                    }
-                )
-
-        return {
-            "status": "success",
-            "result": {
-                "folders": folders,
-                "files": files,
-                "total_count": len(folders) + len(files),
-                "connector": "data-bucket",
-            },
-            "error": None,
-        }
-
-    except Exception as e:
-        logger.error("Error in connect_s3data_list", error=str(e), exc_info=True)
-        return {"status": "error", "result": None, "error": str(e)}
-
-
-def handle_connect_s3data_search(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Search files in the S3 data bucket by key prefix/name pattern."""
-    try:
-        user_sub = params.get("user_sub", "")
-        query = params.get("query", "").strip()
-        folder_id = params.get("folder_id", "")
-        page_size = int(params.get("page_size", 20))
-
-        if not user_sub:
-            return {"status": "error", "result": None, "error": "Missing user_sub"}
-        if not query:
-            return {"status": "error", "result": None, "error": "Missing query"}
-        if not DATA_BUCKET_NAME:
-            return {
-                "status": "error",
-                "result": None,
-                "error": "Data bucket not configured",
-            }
-
-        # Determine search scope
-        if folder_id:
-            s3_prefix = _resolve_s3_prefix(folder_id, user_sub)
-            if s3_prefix is None:
-                return {
-                    "status": "error",
-                    "result": None,
-                    "error": f"Invalid folder_id: {folder_id}",
-                }
-        else:
-            # Search everywhere the user has access
-            s3_prefix = None
-
-        s3 = _get_s3_client()
-        query_lower = query.lower()
-        files = []
-
-        # Search across user-accessible prefixes
-        search_prefixes = (
-            [s3_prefix]
-            if s3_prefix
-            else [
-                f"files/user/{user_sub}/",
-                "files/company/",
-            ]
-        )
-
-        for prefix in search_prefixes:
-            paginator = s3.get_paginator("list_objects_v2")
-            page_iterator = paginator.paginate(
-                Bucket=DATA_BUCKET_NAME,
-                Prefix=prefix,
-            )
-
-            for page in page_iterator:
-                for obj in page.get("Contents", []):
-                    key = obj["Key"]
-                    name = key.split("/")[-1]
-                    if name.endswith(".metadata.json"):
-                        continue
-                    if query_lower in name.lower():
-                        files.append(
-                            {
-                                "file_id": key,
-                                "name": name,
-                                "path": key,
-                                "size": obj.get("Size", 0),
-                                "modified_at": (
-                                    obj["LastModified"].isoformat()
-                                    if obj.get("LastModified")
-                                    else None
-                                ),
-                            }
-                        )
-                        if len(files) >= page_size:
-                            break
-                if len(files) >= page_size:
-                    break
-            if len(files) >= page_size:
-                break
-
-        return {
-            "status": "success",
-            "result": {
-                "folders": [],
-                "files": files,
-                "total_count": len(files),
-                "query": query,
-                "connector": "data-bucket",
-            },
-            "error": None,
-        }
-
-    except Exception as e:
-        logger.error("Error in connect_s3data_search", error=str(e), exc_info=True)
-        return {"status": "error", "result": None, "error": str(e)}
-
-
-def handle_connect_s3data_download(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Download a file from the S3 data bucket."""
-    try:
-        user_sub = params.get("user_sub", "")
-        file_id = params.get("file_id", "").strip()  # file_id is the S3 key
-
-        if not user_sub:
-            return {"status": "error", "result": None, "error": "Missing user_sub"}
-        if not file_id:
-            return {"status": "error", "result": None, "error": "Missing file_id"}
-        if not DATA_BUCKET_NAME:
-            return {
-                "status": "error",
-                "result": None,
-                "error": "Data bucket not configured",
-            }
-
-        # Security: validate the user has access to this key
-        allowed_prefixes = [
-            f"files/user/{user_sub}/",
-            "files/company/",
-        ]
-        if not any(file_id.startswith(prefix) for prefix in allowed_prefixes):
-            return {
-                "status": "error",
-                "result": None,
-                "error": "Access denied: you can only download from your own files or company files.",
-            }
-
-        s3 = _get_s3_client()
-        response = s3.get_object(Bucket=DATA_BUCKET_NAME, Key=file_id)
-        content = response["Body"].read()
-
-        if len(content) > MAX_DOWNLOAD_SIZE:
-            return {
-                "status": "error",
-                "result": None,
-                "error": f"File too large ({len(content) // (1024 * 1024)}MB). Max is {MAX_DOWNLOAD_SIZE // (1024 * 1024)}MB.",
-            }
-
-        filename = file_id.split("/")[-1]
-        safe_filename = os.path.basename(filename)
-        safe_filename = re.sub(r"[^\w\s.-]", "_", safe_filename)
-        safe_filename = safe_filename.strip(". ") or f"data_{file_id[:8]}"
-
-        return {
-            "status": "success",
-            "result": {
-                "file_content": content.hex(),
-                "filename": safe_filename,
-                "workspace_path": f"/workdir/uploads/connect-data-bucket/{safe_filename}",
-                "connector": "data-bucket",
-                "original_file_id": file_id,
-                "size": len(content),
-                "content_type": response.get("ContentType", ""),
-            },
-            "error": None,
-        }
-
-    except Exception as e:
-        logger.error("Error in connect_s3data_download", error=str(e), exc_info=True)
-        return {"status": "error", "result": None, "error": str(e)}
-
-
-# ---------------------------------------------------------------------------
 # Generic HTTP handler (for ad-hoc OAuth APIs)
 # ---------------------------------------------------------------------------
 
@@ -994,6 +696,14 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
                 "status": "error",
                 "result": None,
                 "error": "connect_request is not supported for data-bucket. Use the numa_tool files operation instead.",
+            }
+
+        # Synergy doesn't support generic HTTP
+        if connector == "synergy":
+            return {
+                "status": "error",
+                "result": None,
+                "error": "connect_request is not supported for synergy. Use the dedicated list/search/download tools.",
             }
 
         # Resolve relative URL against the connector's admin-configured base.
@@ -1070,48 +780,3 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         logger.error("Error in connect_request", error=str(e), exc_info=True)
         return {"status": "error", "result": None, "error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# S3 prefix resolution helpers
-# ---------------------------------------------------------------------------
-
-
-def _resolve_s3_prefix(folder_id: str, user_sub: str) -> Optional[str]:
-    """Convert a folder_id to an S3 prefix.
-
-    Returns None if the folder_id format is invalid.
-    """
-    if folder_id.startswith("kb:"):
-        kb_path = folder_id[3:]
-        if "/" in kb_path:
-            kb_id, rest = kb_path.split("/", 1)
-            if kb_id == "company":
-                return f"documents/company/{rest}/"
-            return f"documents/kb-{kb_id}/{rest}/"
-        if kb_path == "company":
-            return "documents/company/"
-        return f"documents/kb-{kb_path}/"
-
-    if folder_id.startswith("files:my"):
-        rest = folder_id[8:].lstrip("/")
-        if rest:
-            return f"files/user/{user_sub}/{rest}/"
-        return f"files/user/{user_sub}/"
-
-    if folder_id.startswith("files:company"):
-        rest = folder_id[13:].lstrip("/")
-        if rest:
-            return f"files/company/{rest}/"
-        return "files/company/"
-
-    return None
-
-
-def _build_child_folder_id(parent_folder_id: str, child_name: str) -> str:
-    """Build a child folder_id from a parent folder_id and child name."""
-    if parent_folder_id.startswith("kb:"):
-        return f"{parent_folder_id}/{child_name}"
-    if parent_folder_id.startswith("files:"):
-        return f"{parent_folder_id}/{child_name}"
-    return f"{parent_folder_id}/{child_name}"

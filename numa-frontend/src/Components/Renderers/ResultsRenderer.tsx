@@ -19,7 +19,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { withPRM } from '../../utils/prmUtils';
 import { getFlag } from '../../utils/featureFlags';
-import { buildS3Key, type FileScope } from '../../Services/filesService';
+import { sanitizeS3Filename } from '../../utils/sanitizeFilename';
 
 // Shared tab navigation component for both JSON and CSV renderers
 const TabNavigation = ({ items, activeIndex, setActiveIndex, getLabel, alwaysShow = false }) => {
@@ -641,9 +641,9 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
         throw new Error('User not authenticated');
       }
 
-      // Build the S3 key for the user's files
-      const scope: FileScope = { type: 'my' };
-      const s3Key = buildS3Key(scope, filename, selectedFolder, userSub);
+      const safeName = sanitizeS3Filename(filename);
+      const pathSegment = (selectedFolder || '/').replace(/^\//, '');
+      const s3Key = `documents/kb-${userSub}/${pathSegment}${safeName}`;
 
       // Create S3 client and upload
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -815,11 +815,7 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
           show={showShareModal}
           onHide={() => setShowShareModal(false)}
           onCreated={() => setShowShareModal(false)}
-          preSelectedFile={{
-            path: `/${filename}`,
-            name: filename,
-            scope: { type: 'my' },
-          }}
+          preSelectedFile={{ name: filename, size_bytes: 0 }}
         />
       )}
     </>

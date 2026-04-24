@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { FileItem, FolderItem } from '../../Services/filesService';
 
 export interface RemoteFileItem {
   name: string;
@@ -13,10 +12,7 @@ export interface RemoteFileItem {
   oauthProvider?: string;
 }
 
-type FileOrFolder =
-  | { kind: 'file'; item: FileItem }
-  | { kind: 'folder'; item: FolderItem }
-  | { kind: 'remoteFile'; item: RemoteFileItem };
+type FileOrFolder = { kind: 'remoteFile'; item: RemoteFileItem };
 
 interface FileContextMenuProps {
   show: boolean;
@@ -87,8 +83,8 @@ const FileContextMenu = ({
 
   if (!show || !target) return null;
 
-  const isFile = target.kind === 'file' || target.kind === 'remoteFile';
-  const isEmail = target.kind === 'remoteFile' && target.item.content_type === 'message/rfc822';
+  const isFile = true;
+  const isEmail = target.item.content_type === 'message/rfc822';
 
   // Adjust position to stay within viewport
   let x = position.x;

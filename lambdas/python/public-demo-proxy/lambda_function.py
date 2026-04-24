@@ -321,7 +321,6 @@ def _sanitize_request_body(body: dict) -> dict:
         "type": "numa-chat-demo",
         # Disable enterprise features
         "featureFlags": {
-            "NUMA_FILES": False,
             "OAUTH_INTEGRATIONS_ENABLED": False,
             "DATA_CONNECTORS_CHAT_ENABLED": False,
         },

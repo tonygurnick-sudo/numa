@@ -1476,54 +1476,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
-    // User Files API — per-user virtual file system with scoped access (behind NUMA_FILES flag)
-    if (props.filesTableName && props.filesTableArn) {
-      this.addLambdaFunction(this, 'user-files', {
-        addAuthorizer: true,
-        lambdaDirectory: 'node/user-files',
-        runtime: 'nodejs22.x',
-        handler: 'index.handler',
-        environment: {
-          CLIENT_NAME: props.clientName,
-          REGION: props.region,
-          FILES_TABLE_NAME: props.filesTableName,
-          DATA_BUCKET_NAME: props.dataBucketName,
-        },
-        additionalPolicyStatements: [
-          {
-            effect: 'Allow',
-            actions: [
-              'dynamodb:Query',
-              'dynamodb:GetItem',
-              'dynamodb:PutItem',
-              'dynamodb:UpdateItem',
-              'dynamodb:DeleteItem',
-            ],
-            resources: [props.filesTableArn],
-          },
-          {
-            effect: 'Allow',
-            actions: ['s3:PutObject', 's3:DeleteObject'],
-            resources: [`${props.dataBucketArn}/files/*`],
-          },
-          {
-            effect: 'Allow',
-            actions: ['s3:GetObject'],
-            resources: [`${props.dataBucketArn}/*`],
-          },
-          {
-            effect: 'Allow',
-            actions: ['s3:ListBucket'],
-            resources: [props.dataBucketArn],
-          },
-        ],
-        route: [
-          { verb: 'ANY', path: 'files' },
-          { verb: 'ANY', path: 'files/{proxy+}' },
-        ],
-      });
-    }
-
     // Runner Lambda handles EventBridge + manual executions
     this.agentScheduleRunnerLambda = this.addLambdaFunction(this, 'agent-schedule-runner', {
       addAuthorizer: true,
@@ -2407,10 +2359,6 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   bedrockKbId?: string;
   /** Bedrock Knowledge Base data source ID for data sync scheduling (optional). */
   bedrockDataSourceId?: string;
-  /** Files table name for per-user virtual file system. */
-  filesTableName?: string;
-  /** Files table ARN for IAM policy. */
-  filesTableArn?: string;
   /** Usage analytics events table name. */
   usageAnalyticsEventsTableName: string;
   /** Usage analytics events table ARN for IAM. */
