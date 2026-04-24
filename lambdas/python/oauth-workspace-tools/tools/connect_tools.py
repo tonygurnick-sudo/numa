@@ -679,21 +679,23 @@ def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
                     "error": "No valid NetSuite OAuth token. Please connect your account first.",
                 }
 
-            vault_data = _get_user_consolidated_vault(user_sub)
-            user_secrets = vault_data.get("secrets", {}) if vault_data else {}
-            entry = user_secrets.get("oauth-netsuite")
+            from .oauth_tools import _get_consolidated_company_vault
+
+            company_vault = _get_consolidated_company_vault()
+            company_secrets = company_vault if company_vault else {}
+            entry = company_secrets.get("oauth-client-netsuite")
             if not entry:
                 return {
                     "status": "error",
                     "result": None,
-                    "error": "Missing NetSuite provider credentials in vault.",
+                    "error": "Missing NetSuite provider company configuration in vault.",
                 }
 
             fields = entry.get("fields") or entry
             provider = create_provider(
                 "netsuite",
                 fields.get("client_id", ""),
-                client_secret=None,
+                client_secret=fields.get("client_secret", ""),
                 credentials=fields,
             )
 
