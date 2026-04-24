@@ -330,8 +330,9 @@ const ChatHistoryPage = () => {
                                 'isWorkspaceConversation-v2',
                                 convo.isWorkspaceConversation === false ? 'false' : 'true'
                               );
-                              // We use the same navigation to the regular chat page
-                              // but relying on sessionStorage ensures the hook will pick it up
+                              // Flag this as an explicit selection so useConversationManager
+                              // honors it unconditionally (bypassing inactivity + top-100-meta gates).
+                              sessionStorage.setItem('pendingConversationSelect-v2', '1');
                               navigate('/chat');
                             }}
                           >
