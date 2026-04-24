@@ -27,6 +27,17 @@ from numa_workspace_agent.mcp_tools import (
     configure_props,
     connectors,
     execute_script,
+    ns_createRecord,
+    ns_getRecord,
+    ns_getRecordTypeMetadata,
+    ns_getSubsidiaries,
+    ns_getSuiteQLMetadata,
+    ns_listAllReports,
+    ns_listSavedSearches,
+    ns_runCustomSuiteQL,
+    ns_runReport,
+    ns_runSavedSearch,
+    ns_updateRecord,
     numa_tool,
     proxy_request,
     run_action,
@@ -333,6 +344,7 @@ ALLOWED_TOOLS = [
     "mcp__numa__numa_tool",
     # External connectors (OAuth cloud storage, Synergy, generic HTTP)
     "mcp__connectors__connectors",
+    "mcp__connectors__ns_*",  # NetSuite Native Tools
     # Secrets vault (user credentials with approval flow)
     "mcp__vault__vault",
     # Bash with allowed commands
@@ -757,7 +769,20 @@ def create_agent_options(
         mcp_servers["connectors"] = create_sdk_mcp_server(
             name="connectors",
             version="1.0.0",
-            tools=[connectors],
+            tools=[
+                connectors,
+                ns_createRecord,
+                ns_getRecord,
+                ns_getRecordTypeMetadata,
+                ns_getSubsidiaries,
+                ns_getSuiteQLMetadata,
+                ns_listAllReports,
+                ns_listSavedSearches,
+                ns_runCustomSuiteQL,
+                ns_runReport,
+                ns_runSavedSearch,
+                ns_updateRecord,
+            ],
         )
 
     # Vault: only register if secrets vault feature is enabled
