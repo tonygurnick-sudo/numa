@@ -3,7 +3,7 @@
  * Handles API calls for split user knowledge base management
  */
 import i18n from '../i18n';
-import { getSwrCache, setSwrCache } from '../utils/swrCache';
+import { getSwrCache, setSwrCache, clearSwrCache } from '../utils/swrCache';
 
 export interface KnowledgeBase {
   kb_id: string;
@@ -57,6 +57,12 @@ export interface ListKBFilesResponse {
   files: S3FileInfo[];
   folders?: string[];
   document_count: number;
+}
+
+export interface ListKBFilesRecursiveResponse {
+  files: S3FileInfo[];
+  count: number;
+  truncated: boolean;
 }
 
 // KB State types (for sync status, documents, ingestion jobs)
@@ -312,6 +318,38 @@ class KnowledgeBaseService {
     return getSwrCache<ListKBFilesResponse>(`kbFiles_${kbId}`);
   }
 
+  /** Read cached recursive (flat) KB file listing from localStorage. */
+  getCachedKBFilesRecursive(kbId: string): ListKBFilesRecursiveResponse | null {
+    return getSwrCache<ListKBFilesRecursiveResponse>(`kbFilesDeep_${kbId}`);
+  }
+
+  /**
+   * List every file under a KB's prefix as a flat list. Skips per-file
+   * metadata sidecar reads — use this for search, not per-row display.
+   * Backend caps the response at 50,000 files and sets ``truncated: true``
+   * when the cap is hit; drilling into a folder still shows everything
+   * under that folder via the normal ``listKBFiles`` call.
+   */
+  async listKBFilesRecursive(kbId: string): Promise<ListKBFilesRecursiveResponse> {
+    try {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/files?recursive=true`), {
+        method: 'GET',
+        headers: this.getHeaders(),
+      });
+      const result = await this.parseJsonResponse<ListKBFilesRecursiveResponse>(
+        response,
+        i18n.t('errors:knowledgeBase.listFilesFailed')
+      );
+      // 2MB cap — recursive entries are ~80-100 bytes serialized so this holds
+      // ~20-25k files per KB before the cache write silently drops.
+      setSwrCache(`kbFilesDeep_${kbId}`, result, 2_000_000);
+      return result;
+    } catch (error) {
+      console.error('Error listing KB files recursively:', error);
+      throw error;
+    }
+  }
+
   /**
    * List files and folders at one level of a KB's S3 prefix.
    * Pass `path` to drill into a subfolder (e.g. "reports/" or "reports/2024/").
@@ -357,12 +395,60 @@ class KnowledgeBaseService {
         body: JSON.stringify({ keys }),
       });
 
-      return this.parseJsonResponse<{ successful: string[]; failed: { key: string; error: string }[] }>(
-        response,
-        i18n.t('errors:knowledgeBase.deleteFilesFailed', { defaultValue: 'Failed to delete files' })
-      );
+      const result = await this.parseJsonResponse<{
+        successful: string[];
+        failed: { key: string; error: string }[];
+      }>(response, i18n.t('errors:knowledgeBase.deleteFilesFailed', { defaultValue: 'Failed to delete files' }));
+
+      // Invalidate both shallow and deep caches — keys have gone, stale
+      // search hits would show nonexistent files.
+      clearSwrCache(`kbFiles_${kbId}`);
+      clearSwrCache(`kbFilesDeep_${kbId}`);
+
+      return result;
     } catch (error) {
       console.error('Error deleting KB files:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Move files between a source KB and a destination KB + subpath.
+   * The backend performs collision checks up front; on 409 the response
+   * payload surfaces the colliding destination keys.
+   */
+  async moveKBFiles(
+    sourceKbId: string,
+    keys: string[],
+    destKbId: string,
+    destPath: string = ''
+  ): Promise<{
+    successful: { sourceKey: string; destKey: string }[];
+    failed: { key: string; error: string }[];
+  }> {
+    try {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${sourceKbId}/files/move`), {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ keys, destKbId, destPath }),
+      });
+
+      const result = await this.parseJsonResponse<{
+        successful: { sourceKey: string; destKey: string }[];
+        failed: { key: string; error: string }[];
+      }>(response, i18n.t('errors:knowledgeBase.moveFilesFailed', { defaultValue: 'Failed to move files' }));
+
+      // Invalidate local list caches for both sides so the next render refetches.
+      clearSwrCache(`kbFiles_${sourceKbId}`);
+      clearSwrCache(`kbFilesDeep_${sourceKbId}`);
+      if (destKbId !== sourceKbId) {
+        clearSwrCache(`kbFiles_${destKbId}`);
+        clearSwrCache(`kbFilesDeep_${destKbId}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error moving KB files:', error);
       throw error;
     }
   }

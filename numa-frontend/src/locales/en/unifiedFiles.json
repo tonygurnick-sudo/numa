@@ -128,7 +128,6 @@
     "noteLabel": "Note:",
     "note": "Maximum file size is 50MB per file.",
     "folderLabel": "Upload to subfolder",
-    "validationTitle": "File Validation Error:",
     "success": "Files uploaded successfully!"
   },
   "largeFile": {
@@ -141,11 +140,48 @@
     "confirmButton": "Proceed Anyway",
     "cancelButton": "Cancel Upload"
   },
-  "validation": {
-    "unsupportedFiles": "The following files are not supported: {{files}}. Please upload supported file types."
-  },
   "nav": {
     "files": "Files",
     "expandTooltip": "Show file categories"
+  },
+  "search": {
+    "truncatedTooltip": "Search covers the first 50,000 files — open a subfolder for the rest"
+  },
+  "move": {
+    "success_one": "Moved {{count}} file",
+    "success_other": "Moved {{count}} files",
+    "partial": "Moved {{succeeded}} file(s); {{failed}} failed",
+    "error": "Move failed: {{error}}",
+    "collision": "One or more files already exist at the destination. Rename or delete them first.",
+    "cannotEditDest": "You don't have permission to move files here.",
+    "inProgress": "Moving files..."
+  },
+  "filters": {
+    "all": "All",
+    "type": "Type",
+    "status": "Status",
+    "uploadedBy": "Uploaded by",
+    "date": "Modified",
+    "dateOptions": {
+      "today": "Today",
+      "last7": "Last 7 days",
+      "last30": "Last 30 days"
+    },
+    "types": {
+      "pdf": "PDF",
+      "document": "Documents",
+      "spreadsheet": "Spreadsheets",
+      "presentation": "Presentations",
+      "text": "Text",
+      "image": "Images",
+      "other": "Other"
+    },
+    "statuses": {
+      "pending": "Pending",
+      "indexed": "Indexed",
+      "failed": "Failed",
+      "warning": "Warning"
+    },
+    "clear": "Clear filters"
   }
 }

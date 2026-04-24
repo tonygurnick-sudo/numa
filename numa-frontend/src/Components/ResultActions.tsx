@@ -14,7 +14,7 @@ import { createDocxBlob } from '../Services/fileConverter';
 import { downloadDocx, downloadPdf } from '../Services/documentConverterService';
 import { getExportOptionsForApp } from '../config/exportConfig';
 import { uploadFileToS3, listFoldersInKB } from '../utils/s3Utils';
-import FolderSelector from './KnowledgeBase/FolderSelector';
+import FolderSelector from './UnifiedFiles/FolderSelector';
 
 // Helper function to convert markdown to formatted plain text
 const convertMarkdownToPlainText = (markdown: string): string => {

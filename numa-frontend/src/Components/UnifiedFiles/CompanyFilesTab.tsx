@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Spinner, Alert, Modal } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import {
@@ -9,14 +9,19 @@ import {
   sortTree,
   formatDateSafe,
   formatSizeSafe,
-} from '../KnowledgeBase/KBFileExplorer';
-import type { S3Object, TableRow, SortColumn, SortDirection } from '../KnowledgeBase/KBFileExplorer';
+  filterTree,
+  filterTreeByPredicate,
+  collectFoldersToExpand,
+} from './KBFileExplorer';
+import type { S3Object, TableRow, SortColumn, SortDirection } from './KBFileExplorer';
 import { FileUploader } from '../FileUploader';
 import { NotificationModal } from '../NotificationModal';
-import FolderSelector from '../KnowledgeBase/FolderSelector';
-import { isFileTypeValidForBedrockKB, shouldShowLargeDataFileWarning, formatFileSize } from '../../utils/fileUtils';
+import FolderSelector from './FolderSelector';
+import { shouldShowLargeDataFileWarning, formatFileSize, getFileTypeCategory } from '../../utils/fileUtils';
+import type { FileTypeCategory } from '../../utils/fileUtils';
 import { listFoldersInKB, downloadFileFromS3 } from '../../utils/s3Utils';
 import { useAuth } from '../../Providers/AuthProvider';
+import { useToast } from '../../Providers/ToastContext';
 import { useFilePreviewProcessor } from '../../hooks/useFilePreviewProcessor';
 import type { FileReference } from '../../hooks/useFilePreviewProcessor';
 import ResizableSplitView from '../ResizableSplitView';
@@ -34,6 +39,10 @@ interface FileState {
   expandedFolders: Set<string>;
   loadedFolders: Set<string>;
   loadingFolders: Set<string>;
+  /** True once a recursive listing has been merged in for this KB. */
+  deepLoaded: boolean;
+  /** True if the last recursive fetch hit the backend's 50k cap. */
+  truncated: boolean;
 }
 
 function apiToS3Objects(fileInfos: S3FileInfo[], folderNames: string[], parentPrefix: string): S3Object[] {
@@ -55,25 +64,34 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const { t } = useTranslation('unifiedFiles');
   const { t: tKb } = useTranslation('knowledgeBase');
   const { user, getCredentials, region: authRegion } = useAuth();
+  const { showToast } = useToast();
 
   const [fileState, setFileState] = useState<FileState>(() => {
-    const cached = knowledgeBaseService.getCachedKBFiles('company');
-    if (cached?.files?.length) {
-      const s3Files = apiToS3Objects(cached.files, cached.folders ?? [], 'documents/company/');
-      return {
-        files: s3Files,
-        isLoading: true,
-        expandedFolders: new Set(),
-        loadedFolders: new Set(),
-        loadingFolders: new Set(),
-      };
+    // Hydrate from both deep and shallow caches. Shallow entries overwrite
+    // matching deep entries so enrichment wins when both are cached.
+    let files: S3Object[] = [];
+    let deepLoaded = false;
+    let truncated = false;
+    const deepCache = knowledgeBaseService.getCachedKBFilesRecursive('company');
+    if (deepCache?.files?.length) {
+      files = apiToS3Objects(deepCache.files, [], 'documents/company/');
+      deepLoaded = true;
+      truncated = deepCache.truncated;
+    }
+    const shallowCache = knowledgeBaseService.getCachedKBFiles('company');
+    if (shallowCache?.files?.length) {
+      const shallowFiles = apiToS3Objects(shallowCache.files, shallowCache.folders ?? [], 'documents/company/');
+      const shallowKeys = new Set(shallowFiles.map((f) => f.Key));
+      files = [...shallowFiles, ...files.filter((f) => !shallowKeys.has(f.Key))];
     }
     return {
-      files: [],
+      files,
       isLoading: true,
       expandedFolders: new Set(),
       loadedFolders: new Set(),
       loadingFolders: new Set(),
+      deepLoaded,
+      truncated,
     };
   });
 
@@ -85,9 +103,18 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
+  // Drag-and-drop + multi-select for file moves within the company KB
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+  const [isMoving, setIsMoving] = useState(false);
+
+  // Filters
+  const [typeFilter, setTypeFilter] = useState<FileTypeCategory | 'all'>('all');
+  const [uploaderFilter, setUploaderFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | '7d' | '30d'>('all');
+
   // Upload
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [fileValidationError, setFileValidationError] = useState<string | null>(null);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [pendingLargeFiles, setPendingLargeFiles] = useState<File[]>([]);
   const [clearFileUploader, setClearFileUploader] = useState(false);
@@ -138,26 +165,69 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     try {
       const { files: fileInfos, folders: folderNames = [] } = await knowledgeBaseService.listKBFiles('company');
       const s3Files = apiToS3Objects(fileInfos, folderNames, 'documents/company/');
-      setFileState((prev) => ({
-        ...prev,
-        files: s3Files,
-        isLoading: false,
-        loadedFolders: new Set(),
-        loadingFolders: new Set(),
-      }));
+      setFileState((prev) => {
+        // Preserve deep-only entries (keys not in the shallow refresh).
+        const shallowKeys = new Set(s3Files.map((f) => f.Key));
+        const preserved = prev.files.filter((f) => !shallowKeys.has(f.Key));
+        return {
+          ...prev,
+          files: [...s3Files, ...preserved],
+          isLoading: false,
+          loadedFolders: new Set(),
+          loadingFolders: new Set(),
+        };
+      });
     } catch (err) {
       console.error('Failed to fetch company files:', err);
       setFileState((prev) => ({
         ...prev,
-        files: [],
         isLoading: false,
       }));
+    }
+  }, []);
+
+  const fetchDeepFiles = useCallback(async (force = false) => {
+    setFileState((prev) => {
+      if (!force && prev.deepLoaded) return prev;
+      return prev;
+    });
+    try {
+      const result = await knowledgeBaseService.listKBFilesRecursive('company');
+      setFileState((prev) => {
+        const existingKeys = new Set(prev.files.map((f) => f.Key));
+        const additions: S3Object[] = [];
+        for (const f of result.files) {
+          if (existingKeys.has(f.key)) continue;
+          additions.push({
+            Key: f.key,
+            LastModified: f.lastModified ? new Date(f.lastModified) : new Date(),
+            Size: f.size,
+          });
+        }
+        return {
+          ...prev,
+          files: [...prev.files, ...additions],
+          deepLoaded: true,
+          truncated: result.truncated,
+        };
+      });
+    } catch (err) {
+      console.error('Failed to deep-fetch company KB', err);
     }
   }, []);
 
   useEffect(() => {
     if (canView) fetchFiles();
   }, [canView, fetchFiles]);
+
+  // Fire the recursive listing the first time the user starts searching or
+  // filtering. Guarded by fileState.deepLoaded so it only runs once per session.
+  const isFilterOrSearchActive =
+    searchValue.trim().length > 0 || typeFilter !== 'all' || uploaderFilter !== 'all' || dateFilter !== 'all';
+  useEffect(() => {
+    if (!canView || !isFilterOrSearchActive || fileState.deepLoaded) return;
+    fetchDeepFiles();
+  }, [canView, isFilterOrSearchActive, fileState.deepLoaded, fetchDeepFiles]);
 
   // ── Subfolder expansion ───────────────────────────────────
 
@@ -189,8 +259,10 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
           const s3Files = apiToS3Objects(fileInfos, folderNames, folderPrefix);
 
           setFileState((prev) => {
-            const existingKeys = new Set(prev.files.map((f) => f.Key));
-            const merged = [...prev.files, ...s3Files.filter((f) => !existingKeys.has(f.Key))];
+            // Shallow entries carry uploader + urlTag enrichment; overwrite
+            // any thin deep-only entries for the same keys so enrichment wins.
+            const shallowKeys = new Set(s3Files.map((f) => f.Key));
+            const merged = [...s3Files, ...prev.files.filter((f) => !shallowKeys.has(f.Key))];
             const newLoading = new Set(prev.loadingFolders);
             newLoading.delete(folderId);
             return {
@@ -239,22 +311,187 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     setCurrentFolderId(null);
     setCurrentFolderName('');
     setSearchValue('');
+    setSelectedKeys(new Set());
     closeFilePreview();
   }, [closeFilePreview]);
 
+  // ── Drag-and-drop move ─────────────────────────────────────
+
+  const parseDragPayload = (e: React.DragEvent): { keys: string[] } | null => {
+    try {
+      const raw = e.dataTransfer.getData('application/json');
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (Array.isArray(p.keys) && p.keys.length > 0) return p;
+    } catch {
+      /* noop */
+    }
+    return null;
+  };
+
+  const handleFileClick = useCallback((originalKey: string, e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey) {
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        if (next.has(originalKey)) next.delete(originalKey);
+        else next.add(originalKey);
+        return next;
+      });
+    } else {
+      setSelectedKeys((prev) => (prev.size === 1 && prev.has(originalKey) ? new Set() : new Set([originalKey])));
+    }
+  }, []);
+
+  const onFileDragStart = useCallback(
+    (e: React.DragEvent, originalKey: string) => {
+      if (!canAdd) {
+        // Editors are required to move files.
+        e.preventDefault();
+        return;
+      }
+      const keys = selectedKeys.has(originalKey) && selectedKeys.size > 1 ? Array.from(selectedKeys) : [originalKey];
+      e.dataTransfer.setData('application/json', JSON.stringify({ sourceKbId: 'company', keys }));
+      e.dataTransfer.effectAllowed = 'move';
+    },
+    [canAdd, selectedKeys]
+  );
+
+  const executeMove = useCallback(
+    async (keys: string[], destPath: string) => {
+      const destFolderPrefix = destPath
+        ? `documents/company/${destPath}/`.replace(/\/{2,}/g, '/')
+        : 'documents/company/';
+      const toMove = keys.filter((k) => {
+        const parent = k.substring(0, k.lastIndexOf('/') + 1);
+        return parent !== destFolderPrefix;
+      });
+      if (toMove.length === 0) return;
+
+      setIsMoving(true);
+      try {
+        const result = await knowledgeBaseService.moveKBFiles('company', toMove, 'company', destPath);
+        if (result.failed.length > 0) {
+          showToast({
+            message: t('move.partial', { succeeded: result.successful.length, failed: result.failed.length }),
+            variant: 'warning',
+          });
+        } else {
+          showToast({
+            message: t('move.success', { count: result.successful.length }),
+            variant: 'success',
+          });
+        }
+        setSelectedKeys(new Set());
+        fetchFiles();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/collision|409/i.test(msg)) {
+          showToast({ message: t('move.collision'), variant: 'error' });
+        } else {
+          showToast({ message: t('move.error', { error: msg }), variant: 'error' });
+        }
+      } finally {
+        setIsMoving(false);
+      }
+    },
+    [showToast, t, fetchFiles]
+  );
+
+  const onDropOnSubfolder = useCallback(
+    (e: React.DragEvent, folderId: string) => {
+      e.preventDefault();
+      setDragOverTarget(null);
+      const payload = parseDragPayload(e);
+      if (!payload) return;
+      const basePrefix = 'documents/company/';
+      const destPath = folderId.startsWith(basePrefix) ? folderId.slice(basePrefix.length) : folderId;
+      executeMove(payload.keys, destPath);
+    },
+    [executeMove]
+  );
+
+  const onDropOnBack = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOverTarget(null);
+      const payload = parseDragPayload(e);
+      if (!payload) return;
+      // Back from a subfolder: move files to company KB root.
+      executeMove(payload.keys, '');
+    },
+    [executeMove]
+  );
+
+  const onTargetDragOver = useCallback((e: React.DragEvent, targetId: string, enabled: boolean) => {
+    if (!enabled) return;
+    const types = e.dataTransfer.types;
+    if (!types || !Array.from(types).includes('application/json')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverTarget(targetId);
+  }, []);
+
+  const onTargetDragLeave = useCallback((targetId: string) => {
+    setDragOverTarget((prev) => (prev === targetId ? null : prev));
+  }, []);
+
   // ── Build rows ─────────────────────────────────────────────
+
+  const filterPredicate = useMemo(() => {
+    const dateCutoff = (() => {
+      const now = Date.now();
+      if (dateFilter === 'today') return now - 24 * 60 * 60 * 1000;
+      if (dateFilter === '7d') return now - 7 * 24 * 60 * 60 * 1000;
+      if (dateFilter === '30d') return now - 30 * 24 * 60 * 60 * 1000;
+      return 0;
+    })();
+    const isActive = typeFilter !== 'all' || uploaderFilter !== 'all' || dateFilter !== 'all';
+    return {
+      isActive,
+      predicate: (f: S3Object): boolean => {
+        if (typeFilter !== 'all') {
+          const filename = f.Key.split('/').pop() ?? '';
+          if (getFileTypeCategory(filename) !== typeFilter) return false;
+        }
+        if (uploaderFilter !== 'all' && (f.uploadedBy ?? '') !== uploaderFilter) return false;
+        if (dateCutoff > 0) {
+          const ts = f.LastModified ? f.LastModified.getTime() : 0;
+          if (ts < dateCutoff) return false;
+        }
+        return true;
+      },
+    };
+  }, [typeFilter, uploaderFilter, dateFilter]);
+
+  const uploaderOptions = useMemo(() => {
+    const set = new Set<string>();
+    fileState.files.forEach((f) => f.uploadedBy && set.add(f.uploadedBy));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [fileState.files]);
 
   const buildRows = useCallback((): TableRow[] => {
     if (fileState.files.length === 0) return [];
-    const tree = buildFileTree(fileState.files);
+    const trimmedSearch = searchValue.trim();
+    let tree = buildFileTree(fileState.files);
+    if (filterPredicate.isActive) {
+      tree = filterTreeByPredicate(tree, filterPredicate.predicate);
+    }
+    if (trimmedSearch) {
+      tree = filterTree(tree, trimmedSearch);
+    }
     sortTree(tree, sortColumn, sortDirection);
     const allRows = unwrapSingleRootFolders(buildRowsForTree(tree, 0, '', formatDate, formatSize));
+    const effectiveExpanded =
+      trimmedSearch || filterPredicate.isActive
+        ? new Set([...fileState.expandedFolders, ...collectFoldersToExpand(tree)])
+        : fileState.expandedFolders;
 
     if (currentFolderId) {
       // Find the target folder's children and present them at depth 0
-      const flatAll = flattenRows(allRows, fileState.expandedFolders);
+      const flatAll = flattenRows(allRows, effectiveExpanded);
       const folderIdx = flatAll.findIndex((r) => r.id === currentFolderId);
-      if (folderIdx === -1) return flattenRows(allRows, fileState.expandedFolders);
+      if (folderIdx === -1) return flattenRows(allRows, effectiveExpanded);
       const folderDepth = flatAll[folderIdx].depth;
       const children: TableRow[] = [];
       for (let i = folderIdx + 1; i < flatAll.length; i++) {
@@ -264,8 +501,18 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
       return children;
     }
 
-    return flattenRows(allRows, fileState.expandedFolders);
-  }, [fileState.files, fileState.expandedFolders, sortColumn, sortDirection, formatDate, formatSize, currentFolderId]);
+    return flattenRows(allRows, effectiveExpanded);
+  }, [
+    fileState.files,
+    fileState.expandedFolders,
+    sortColumn,
+    sortDirection,
+    formatDate,
+    formatSize,
+    currentFolderId,
+    searchValue,
+    filterPredicate,
+  ]);
 
   // ── File preview / download ────────────────────────────────
 
@@ -315,18 +562,7 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     }
   }, [clearFileUploader]);
 
-  function validateFiles(files: File[]): boolean {
-    const invalidFiles = files.filter((file) => !isFileTypeValidForBedrockKB(file));
-    if (invalidFiles.length > 0) {
-      setFileValidationError(t('validation.unsupportedFiles', { files: invalidFiles.map((f) => f.name).join(', ') }));
-      return false;
-    }
-    setFileValidationError(null);
-    return true;
-  }
-
   function handleFileSelect(selectedFiles: File[]): void {
-    if (!validateFiles(selectedFiles)) return;
     const largeDataFiles = selectedFiles.filter((file) => shouldShowLargeDataFileWarning(file));
     if (largeDataFiles.length > 0) {
       setPendingLargeFiles(largeDataFiles);
@@ -335,7 +571,6 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   }
 
   function handleUploadSuccess(): void {
-    setFileValidationError(null);
     setShowNotificationModal(false);
     setPendingLargeFiles([]);
     setShowUploadModal(false);
@@ -386,22 +621,48 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
         <div className="finder-toolbar__location">
           {currentFolderId ? (
             <>
-              <button className="finder-toolbar__back" onClick={navigateBack}>
+              <button
+                className={`finder-toolbar__back ${dragOverTarget === 'back' ? 'finder-toolbar__back--drop-over' : ''}`}
+                onClick={navigateBack}
+                onDragOver={(e) => onTargetDragOver(e, 'back', canAdd)}
+                onDragLeave={() => onTargetDragLeave('back')}
+                onDrop={onDropOnBack}
+              >
                 <i className="bi bi-chevron-left" />
                 {t('tabs.companyFiles')}
               </button>
-              <span className="finder-toolbar__title">{currentFolderName}</span>
+              <span className="finder-toolbar__title">
+                {currentFolderName}
+                {isMoving && (
+                  <Spinner
+                    animation="border"
+                    size="sm"
+                    variant="secondary"
+                    className="ms-2"
+                    title={t('move.inProgress')}
+                    style={{ width: '0.75rem', height: '0.75rem', verticalAlign: 'middle' }}
+                  />
+                )}
+              </span>
             </>
           ) : (
             <span className="finder-toolbar__title">
               {t('tabs.companyFiles')}
-              {fileState.isLoading && (
+              {(fileState.isLoading || isMoving) && (
                 <Spinner
                   animation="border"
                   size="sm"
                   variant="secondary"
                   className="ms-2"
+                  title={isMoving ? t('move.inProgress') : undefined}
                   style={{ width: '0.75rem', height: '0.75rem', verticalAlign: 'middle' }}
+                />
+              )}
+              {fileState.truncated && (
+                <i
+                  className="bi bi-exclamation-triangle-fill ms-2"
+                  style={{ fontSize: '0.75rem', color: '#eab308' }}
+                  title={t('search.truncatedTooltip')}
                 />
               )}
             </span>
@@ -417,19 +678,71 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
               onChange={(e) => setSearchValue(e.target.value)}
             />
           </div>
+          <select
+            className="finder-filter-select"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as FileTypeCategory | 'all')}
+            title={t('filters.type')}
+          >
+            <option value="all">
+              {t('filters.type')}: {t('filters.all')}
+            </option>
+            <option value="pdf">{t('filters.types.pdf')}</option>
+            <option value="document">{t('filters.types.document')}</option>
+            <option value="spreadsheet">{t('filters.types.spreadsheet')}</option>
+            <option value="presentation">{t('filters.types.presentation')}</option>
+            <option value="text">{t('filters.types.text')}</option>
+            <option value="image">{t('filters.types.image')}</option>
+            <option value="other">{t('filters.types.other')}</option>
+          </select>
+          {uploaderOptions.length > 0 && (
+            <select
+              className="finder-filter-select"
+              value={uploaderFilter}
+              onChange={(e) => setUploaderFilter(e.target.value)}
+              title={t('filters.uploadedBy')}
+            >
+              <option value="all">
+                {t('filters.uploadedBy')}: {t('filters.all')}
+              </option>
+              {uploaderOptions.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          )}
+          <select
+            className="finder-filter-select"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | '7d' | '30d')}
+          >
+            <option value="all">
+              {t('filters.date')}: {t('filters.all')}
+            </option>
+            <option value="today">{t('filters.dateOptions.today')}</option>
+            <option value="7d">{t('filters.dateOptions.last7')}</option>
+            <option value="30d">{t('filters.dateOptions.last30')}</option>
+          </select>
           {canAdd && (
             <button className="finder-btn" onClick={() => setShowUploadModal(true)}>
               <i className="bi bi-upload" />
             </button>
           )}
-          <button className="finder-btn" onClick={fetchFiles}>
+          <button
+            className="finder-btn"
+            onClick={() => {
+              fetchFiles();
+              fetchDeepFiles(true);
+            }}
+          >
             <i className="bi bi-arrow-clockwise" />
           </button>
         </div>
       </div>
 
       {/* Column headers */}
-      <div className="finder-columns finder-grid-5">
+      <div className="finder-columns finder-grid-6">
         <div
           className={`finder-col ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
           onClick={() => handleSortToggle('name')}
@@ -437,12 +750,19 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
           {tKb('fileExplorer.table.name')}
           {sortColumn === 'name' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
         </div>
+        <div
+          className={`finder-col ${sortColumn === 'type' ? 'finder-col--active' : ''}`}
+          onClick={() => handleSortToggle('type')}
+        >
+          {tKb('fileExplorer.table.type')}
+          {sortColumn === 'type' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+        </div>
         <div className="finder-col d-none d-lg-flex">{tKb('fileExplorer.table.addedBy')}</div>
         <div
           className={`finder-col d-none d-md-flex ${sortColumn === 'date' ? 'finder-col--active' : ''}`}
           onClick={() => handleSortToggle('date')}
         >
-          {tKb('fileExplorer.table.uploadDate')}
+          {tKb('fileExplorer.table.modified')}
           {sortColumn === 'date' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
         </div>
         <div
@@ -457,7 +777,12 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
 
       {/* File list */}
       <div className="finder-list">
-        {rows.length === 0 ? (
+        {rows.length === 0 && currentFolderId && fileState.loadingFolders.has(currentFolderId) ? (
+          <div className="finder-loading">
+            <Spinner animation="border" size="sm" variant="secondary" />
+            <span>{tKb('fileExplorer.loadingFiles')}</span>
+          </div>
+        ) : rows.length === 0 ? (
           <div className="finder-empty">
             <i className="bi bi-folder" />
             <span>{tKb('fileExplorer.empty')}</span>
@@ -467,11 +792,40 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
             const isFolder = row.type === 'folder';
             const isExpanded = isFolder && fileState.expandedFolders.has(row.id);
             const isLoading = isFolder && fileState.loadingFolders.has(row.id);
+            const isFileSelected = !isFolder && !!row.originalKey && selectedKeys.has(row.originalKey);
+            const isRowDropTarget = isFolder && dragOverTarget === row.id;
 
             return (
               <div
                 key={row.id}
-                className={`finder-row finder-grid-5 ${isFolder ? 'finder-row--folder' : ''} ${isExpanded ? 'finder-row--expanded' : ''} finder-row--depth-${row.depth}`}
+                className={[
+                  'finder-row',
+                  'finder-grid-6',
+                  isFolder ? 'finder-row--folder' : '',
+                  isExpanded ? 'finder-row--expanded' : '',
+                  `finder-row--depth-${row.depth}`,
+                  isFileSelected ? 'finder-row--selected' : '',
+                  isRowDropTarget ? 'finder-row--drop-over' : '',
+                  !isFolder ? 'finder-row--file-selectable' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                draggable={!isFolder && !!row.originalKey && canAdd}
+                onDragStart={(e) => {
+                  if (!isFolder && row.originalKey) onFileDragStart(e, row.originalKey);
+                }}
+                onDragOver={(e) => {
+                  if (isFolder) onTargetDragOver(e, row.id, canAdd);
+                }}
+                onDragLeave={() => {
+                  if (isFolder) onTargetDragLeave(row.id);
+                }}
+                onDrop={(e) => {
+                  if (isFolder && canAdd) onDropOnSubfolder(e, row.id);
+                }}
+                onClick={(e) => {
+                  if (!isFolder && row.originalKey) handleFileClick(row.originalKey, e);
+                }}
                 onDoubleClick={() => {
                   if (isFolder) {
                     navigateIntoFolder(row.id, row.displayName || row.name);
@@ -512,9 +866,26 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                   />
                   <span className="finder-name">{row.displayName || row.name}</span>
                 </div>
+                <div className="finder-row__meta finder-row__meta--type">
+                  {isFolder
+                    ? tKb('fileExplorer.table.typeFolder')
+                    : row.name.includes('.')
+                      ? (row.name.split('.').pop()?.toUpperCase() ?? '')
+                      : ''}
+                </div>
                 <div className="finder-row__meta d-none d-lg-block">{!isFolder ? row.uploadedBy || '' : ''}</div>
                 <div className="finder-row__meta d-none d-md-block">{!isFolder ? row.uploadDate : ''}</div>
-                <div className="finder-row__meta d-none d-sm-block">{!isFolder ? row.size : ''}</div>
+                <div className="finder-row__meta d-none d-sm-block">
+                  {isFolder
+                    ? (() => {
+                        const prefix = row.id.endsWith('/') ? row.id : `${row.id}/`;
+                        const count = fileState.files.filter(
+                          (f) => f.Key.startsWith(prefix) && !f.Key.endsWith('/')
+                        ).length;
+                        return count > 0 ? tKb('fileExplorer.table.items', { count }) : '';
+                      })()
+                    : row.size}
+                </div>
                 <div className="finder-row__actions">
                   {!isFolder && row.originalKey && (
                     <>
@@ -583,16 +954,9 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                   disabled={loadingFolders}
                   label={t('upload.folderLabel')}
                 />
-                {fileValidationError && (
-                  <Alert variant="danger" className="mb-3">
-                    <strong>{t('upload.validationTitle')}</strong>
-                    <p className="mb-0 mt-1">{fileValidationError}</p>
-                  </Alert>
-                )}
                 <FileUploader
                   onUploadSuccess={handleUploadSuccess}
                   onFileSelect={handleFileSelect}
-                  validateFile={isFileTypeValidForBedrockKB}
                   clearFiles={clearFileUploader}
                   kb_id="company"
                   selectedFolder={selectedFolder}

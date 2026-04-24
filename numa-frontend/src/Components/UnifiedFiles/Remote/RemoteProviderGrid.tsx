@@ -2,7 +2,7 @@ import React from 'react';
 import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { OAuthProviderType, OAuthProviderInfo, OAuthConnectionStatus } from '../../../types/oauthProviders';
-import { OAuthProvidersService } from '../../../Services/OAuthProvidersService';
+import { OAuthProvidersService } from '../../../Services/internal/OAuthProvidersService';
 
 interface RemoteProviderGridProps {
   providers: OAuthProviderInfo[];

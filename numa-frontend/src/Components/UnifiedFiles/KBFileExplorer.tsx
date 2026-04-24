@@ -53,7 +53,7 @@ interface BulkDeleteProgress {
   failed: number;
 }
 
-export type SortColumn = 'name' | 'date' | 'size' | 'status';
+export type SortColumn = 'name' | 'date' | 'size' | 'status' | 'type';
 export type SortDirection = 'asc' | 'desc';
 type StatusFilter = 'all' | 'pending' | 'indexed' | 'failed' | 'warning';
 type Status = 'pending' | 'indexed' | 'failed' | 'warning';
@@ -194,7 +194,7 @@ export function buildFileTree(s3Objects: S3Object[]): TreeNode {
 /**
  * Filter the tree by a search term
  */
-function filterTree(node: TreeNode, searchTerm: string): TreeNode {
+export function filterTree(node: TreeNode, searchTerm: string): TreeNode {
   if (!searchTerm) return node;
 
   const lower = searchTerm.toLowerCase();
@@ -222,9 +222,32 @@ function filterTree(node: TreeNode, searchTerm: string): TreeNode {
 }
 
 /**
+ * Filter the tree with an arbitrary predicate on files. Folders are kept only
+ * if they have at least one matching file or a descendant folder with matches.
+ * Folder marker entries (keys ending in '/') always pass so empty-but-present
+ * folders stay visible when the predicate has nothing to act on.
+ */
+export function filterTreeByPredicate(node: TreeNode, predicate: (file: S3Object) => boolean): TreeNode {
+  const filtered: TreeNode = {
+    name: node.name,
+    children: {},
+    files: node.files.filter((f) => f.Key.endsWith('/') || predicate(f)),
+  };
+  for (const [folderName, folderNode] of Object.entries(node.children)) {
+    const childFiltered = filterTreeByPredicate(folderNode, predicate);
+    const childHasContents =
+      childFiltered.files.some((f) => !f.Key.endsWith('/')) || Object.keys(childFiltered.children).length > 0;
+    if (childHasContents) {
+      filtered.children[folderName] = childFiltered;
+    }
+  }
+  return filtered;
+}
+
+/**
  * Collect folders to expand for search results
  */
-function collectFoldersToExpand(
+export function collectFoldersToExpand(
   node: TreeNode,
   currentPath: string = '',
   foldersToExpand: Set<string> = new Set()
@@ -259,10 +282,16 @@ export function sortTree(node: TreeNode, sortColumn: SortColumn = 'name', sortDi
         comparison = (typeof a.Size === 'number' ? a.Size : 0) - (typeof b.Size === 'number' ? b.Size : 0);
         break;
       case 'status': {
-        const priority: Record<Status, number> = { failed: 0, pending: 1, indexed: 2 };
+        const priority: Record<Status, number> = { failed: 0, pending: 1, indexed: 2, warning: 3 };
         const aStatus = resolveStatus(a);
         const bStatus = resolveStatus(b);
         comparison = priority[aStatus] - priority[bStatus];
+        break;
+      }
+      case 'type': {
+        const aExt = (a.Key.split('/').pop() || '').split('.').pop()?.toLowerCase() ?? '';
+        const bExt = (b.Key.split('/').pop() || '').split('.').pop()?.toLowerCase() ?? '';
+        comparison = aExt.localeCompare(bExt);
         break;
       }
       case 'name':

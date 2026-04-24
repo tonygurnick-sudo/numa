@@ -11,7 +11,6 @@ const SettingsPage = lazy(() => import('../Pages/Settings'));
 const NumaWorkspaceChatAgents = lazy(() =>
   import('../Pages/NumaWorkspaceChatAgents').then((m) => ({ default: m.NumaWorkspaceChatAgents }))
 );
-const UserKBDetailPage = lazy(() => import('../Pages/UserKBDetailPage').then((m) => ({ default: m.UserKBDetailPage })));
 const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
 const OpsPage = lazy(() => import('../Pages/OpsPage').then((m) => ({ default: m.OpsPage })));
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
@@ -278,10 +277,10 @@ export const ROUTE_CONFIG = [
   },
 
   // Hidden routes (no nav)
-  // Legacy KB detail route -- still renders directly for now (deep links)
+  // Legacy KB deep-link -- redirect to unified files
   {
     path: '/user-knowledge-bases/:kbId',
-    element: () => <UserKBDetailPage />,
+    element: () => <Navigate to="/numa-files?tab=user" replace />,
     requiredFeature: 'useCompanyData',
     featureFlag: 'KNOWLEDGE_BASES',
   },

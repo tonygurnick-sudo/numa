@@ -6,7 +6,7 @@ import { useToast } from '../../../Providers/ToastContext';
 import { useFileSelection } from '../../../hooks/useFileSelection';
 import { useRemoteBrowse } from '../../../hooks/useRemoteBrowse';
 import { DataConnectorsService } from '../../../Services/DataConnectorsService';
-import { OAuthProvidersService } from '../../../Services/OAuthProvidersService';
+import { OAuthProvidersService } from '../../../Services/internal/OAuthProvidersService';
 import { getConnectorById } from '../../DataConnectors/connectorRegistry';
 import { ComposeEmailModal } from '../../Files/ComposeEmailModal';
 import { ConnectTokenModal } from '../../Files/ConnectTokenModal';

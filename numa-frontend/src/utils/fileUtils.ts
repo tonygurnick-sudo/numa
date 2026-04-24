@@ -109,28 +109,9 @@ export const getContentType = (fileName) => {
 };
 
 /**
- * Validates if a file is supported by Bedrock Knowledge Base
- * @param {File} file - The file to validate
- * @returns {boolean} - Whether the file is supported
- */
-export const isFileTypeValidForBedrockKB = (file) => {
-  if (!file) return false;
-
-  // Check MIME type first
-  if (BEDROCK_KB_MIME_TYPES.includes(file.type)) {
-    return true;
-  }
-
-  // If MIME type check fails, try checking by extension
-  const extension = file.name.split('.').pop()?.toLowerCase();
-  if (!extension) return false;
-
-  const mimeType = EXTENSION_TO_MIME[extension];
-  return mimeType ? BEDROCK_KB_MIME_TYPES.includes(mimeType) : false;
-};
-
-/**
- * Gets a list of supported file extensions for Bedrock Knowledge Base
+ * Gets a list of supported file extensions for Bedrock Knowledge Base.
+ * Retained as reference so the UI can surface "indexable" vs "stored-only"
+ * state later — we no longer gate uploads on this.
  * @returns {string} - Comma-separated list of supported file extensions
  */
 export const getBedrockKBSupportedExtensions = () => {
@@ -249,14 +230,58 @@ export const getFileIconClass = (filename: string): string => {
   return iconMap[extension || ''] || 'bi bi-file-earmark';
 };
 
+export type FileTypeCategory = 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'text' | 'image' | 'other';
+
+/** Group a file into a coarse category used by the files-page type filter. */
+export const getFileTypeCategory = (filename: string | undefined): FileTypeCategory => {
+  if (!filename) return 'other';
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'pdf') return 'pdf';
+  if (['doc', 'docx', 'rtf', 'odt'].includes(ext)) return 'document';
+  if (['xls', 'xlsx', 'csv', 'ods', 'tsv'].includes(ext)) return 'spreadsheet';
+  if (['ppt', 'pptx', 'odp', 'key'].includes(ext)) return 'presentation';
+  if (
+    [
+      'txt',
+      'md',
+      'markdown',
+      'html',
+      'htm',
+      'json',
+      'jsonl',
+      'xml',
+      'yaml',
+      'yml',
+      'py',
+      'sh',
+      'js',
+      'jsx',
+      'ts',
+      'tsx',
+      'java',
+      'cpp',
+      'c',
+      'h',
+      'hpp',
+      'go',
+      'rb',
+      'php',
+      'log',
+    ].includes(ext)
+  )
+    return 'text';
+  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp', 'tiff', 'tif', 'ico', 'heic'].includes(ext)) return 'image';
+  return 'other';
+};
+
 // For backward compatibility
 export default {
   getContentType,
-  isFileTypeValidForBedrockKB,
   getBedrockKBSupportedExtensions,
   isRawDataFile,
   isLargeFile,
   shouldShowLargeDataFileWarning,
   formatFileSize,
   getFileIconClass,
+  getFileTypeCategory,
 };

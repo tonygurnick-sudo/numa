@@ -63,24 +63,6 @@ export function SharedFoldersTab({ onActionChange }: SharedFoldersTabProps): Rea
   const [analyticsExporting, setAnalyticsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Dismissible helper banners
-  const [showSharingHelper, setShowSharingHelper] = useState(
-    () => localStorage.getItem('numa:dismiss-sharing-helper') !== 'true'
-  );
-  const [showDropZoneHelper, setShowDropZoneHelper] = useState(
-    () => localStorage.getItem('numa:dismiss-dropzone-helper') !== 'true'
-  );
-
-  const dismissSharingHelper = useCallback(() => {
-    setShowSharingHelper(false);
-    localStorage.setItem('numa:dismiss-sharing-helper', 'true');
-  }, []);
-
-  const dismissDropZoneHelper = useCallback(() => {
-    setShowDropZoneHelper(false);
-    localStorage.setItem('numa:dismiss-dropzone-helper', 'true');
-  }, []);
-
   // Propagate action buttons to the page header
   React.useEffect(() => {
     onActionChange?.(
@@ -144,29 +126,29 @@ export function SharedFoldersTab({ onActionChange }: SharedFoldersTabProps): Rea
     refreshShares();
   }, [refreshShares]);
 
-  // ── Helper banners ─────────────────────────────────────
+  // ── Tab intro (permanent) ──────────────────────────────
+  // Two-column descriptions of what the External Share tab offers.
+  // Treated as part of the page header rather than a dismissible banner.
 
-  const helperBanners =
-    showSharingHelper || showDropZoneHelper ? (
-      <div className="d-flex flex-column gap-2 mx-3 mt-3">
-        {showSharingHelper && sharingEnabled && (
-          <div className="alert alert-light border d-flex align-items-start mb-0" role="alert">
-            <i className="bi bi-link-45deg text-primary me-2 mt-1" style={{ fontSize: '1.1rem' }} />
-            <div className="flex-grow-1">
-              <strong className="small">{tUnified('shared.helpers.sharing.title')}</strong>
-              <p className="mb-0 text-muted small">{tUnified('shared.helpers.sharing.description')}</p>
+  const tabIntro =
+    sharingEnabled || dropZonesEnabled ? (
+      <div className="shared-intro mx-3 mt-3">
+        {sharingEnabled && (
+          <div className="shared-intro__item">
+            <i className="bi bi-link-45deg shared-intro__icon shared-intro__icon--share" />
+            <div className="shared-intro__body">
+              <strong className="shared-intro__title">{tUnified('shared.helpers.sharing.title')}</strong>
+              <p className="shared-intro__description">{tUnified('shared.helpers.sharing.description')}</p>
             </div>
-            <button type="button" className="btn-close btn-close-sm ms-2" onClick={dismissSharingHelper} />
           </div>
         )}
-        {showDropZoneHelper && dropZonesEnabled && (
-          <div className="alert alert-light border d-flex align-items-start mb-0" role="alert">
-            <i className="bi bi-cloud-upload text-success me-2 mt-1" style={{ fontSize: '1.1rem' }} />
-            <div className="flex-grow-1">
-              <strong className="small">{tUnified('shared.helpers.dropZone.title')}</strong>
-              <p className="mb-0 text-muted small">{tUnified('shared.helpers.dropZone.description')}</p>
+        {dropZonesEnabled && (
+          <div className="shared-intro__item">
+            <i className="bi bi-cloud-upload shared-intro__icon shared-intro__icon--dropzone" />
+            <div className="shared-intro__body">
+              <strong className="shared-intro__title">{tUnified('shared.helpers.dropZone.title')}</strong>
+              <p className="shared-intro__description">{tUnified('shared.helpers.dropZone.description')}</p>
             </div>
-            <button type="button" className="btn-close btn-close-sm ms-2" onClick={dismissDropZoneHelper} />
           </div>
         )}
       </div>
@@ -177,7 +159,7 @@ export function SharedFoldersTab({ onActionChange }: SharedFoldersTabProps): Rea
   if (analyticsLoading && shares.length === 0) {
     return (
       <div className="finder-files">
-        {helperBanners}
+        {tabIntro}
         <div className="finder-loading">
           <Spinner animation="border" size="sm" variant="secondary" />
           <span>{tShared('analytics.loading')}</span>
@@ -191,7 +173,7 @@ export function SharedFoldersTab({ onActionChange }: SharedFoldersTabProps): Rea
   if (shares.length === 0) {
     return (
       <div className="finder-files">
-        {helperBanners}
+        {tabIntro}
         <div className="finder-empty" style={{ padding: '3rem' }}>
           <i className="bi bi-share" style={{ fontSize: '2rem', color: '#86868b' }} />
           <h6 className="mt-2">{t('shared.empty')}</h6>
@@ -255,7 +237,7 @@ export function SharedFoldersTab({ onActionChange }: SharedFoldersTabProps): Rea
 
   return (
     <div className="finder-files">
-      {helperBanners}
+      {tabIntro}
       {/* Toolbar */}
       <div className="finder-toolbar">
         <div className="finder-toolbar__location">

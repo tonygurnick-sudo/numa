@@ -218,6 +218,12 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           ],
         },
         {
+          // Read access to KB documents so shares pointing at KB files can be extracted.
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`${props.dataBucketArn}/documents/*`],
+        },
+        {
           effect: 'Allow',
           actions: ['s3:ListBucket'],
           resources: [props.dataBucketArn],

@@ -1,12 +1,14 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, Form, Button, Spinner, Alert, InputGroup } from 'react-bootstrap';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../../Providers/AuthProvider';
+import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { withPRM } from '../../utils/prmUtils';
 import { getFileIcon, formatFileSize } from '../../Services/filesService';
 import { sanitizeS3Filename } from '../../utils/sanitizeFilename';
+import { SYSTEM_KB_IDS } from '../../constants/knowledgeBase';
 import { createShare, createDropZone, getShareInfo as _getShareInfo } from '../../Services/sharedChatService';
 import type { CreateShareResponse, CreateDropZoneResponse } from '../../Services/sharedChatService';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
@@ -23,12 +25,18 @@ import { getEffectiveLanguage } from '../../utils/languagePreference';
  */
 
 /**
- * File reference for share creation. Files always live in the user's root
- * "My Files" knowledge base, at S3 key `documents/kb-{userSub}/{name}`.
+ * File reference for share creation. Files live in one of the user's
+ * personal KBs at S3 key `documents/kb-{kb_id}/{path}{name}`.
  */
 interface FileItem {
   name: string;
   size_bytes: number;
+  /** KB the file lives in. Defaults to the user's root KB (kb_id === userSub). */
+  kb_id?: string;
+  /** Display name of the KB, for the picker label. */
+  kb_name?: string;
+  /** Path within the KB. '/' for root, '/folder/' for a subfolder. */
+  path?: string;
   last_modified?: string;
 }
 
@@ -207,6 +215,7 @@ export const CreateShareModal = ({
 }: CreateShareModalProps) => {
   const { t } = useTranslation('files');
   const { getCredentials, user } = useAuth();
+  const { availableKBs, isLoadingKBs } = useKnowledgeBase();
 
   const isDropzone = mode === 'dropzone';
 
@@ -217,11 +226,19 @@ export const CreateShareModal = ({
   const [dropzoneWizardStep, setDropzoneWizardStep] = useState(1);
 
   // ─── File selection state ──────────────────────────────────────────
-  const [files, setFiles] = useState<FileItem[]>([]);
-  const [loadingFiles, setLoadingFiles] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ─── Hierarchical browser state ────────────────────────────────────
+  // browseKbId === null means we're at the root showing the user's KBs.
+  // Otherwise we're inside a KB at the given path (e.g. '', 'folder/').
+  const [browseKbId, setBrowseKbId] = useState<string | null>(null);
+  const [browseKbName, setBrowseKbName] = useState<string>('');
+  const [browsePath, setBrowsePath] = useState<string>('');
+  const [browseFolders, setBrowseFolders] = useState<string[]>([]);
+  const [browseFiles, setBrowseFiles] = useState<FileItem[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
 
   // ─── Drag and drop ─────────────────────────────────────────────────
   const [isDragging, setIsDragging] = useState(false);
@@ -297,6 +314,11 @@ export const CreateShareModal = ({
       setDzBrowsePath('/');
       setDzShowNewFolder(false);
       setDzNewFolderName('');
+      setBrowseKbId(null);
+      setBrowseKbName('');
+      setBrowsePath('');
+      setBrowseFolders([]);
+      setBrowseFiles([]);
       setSelectedFile(preSelectedFile ?? null);
       setDescription('');
       setExpiryHours(null);
@@ -325,13 +347,6 @@ export const CreateShareModal = ({
       cleanupDescGen();
     }
   }, [show, preSelectedFile, isDropzone]);
-
-  // ─── Load files for browse step ────────────────────────────────────
-  useEffect(() => {
-    if (show && !isDropzone && wizardStep === 1) {
-      loadMyFiles();
-    }
-  }, [show, wizardStep, isDropzone]);
 
   // ---------------------------------------------------------------------------
   // Description Generation (workspace agent with extracted text)
@@ -480,15 +495,17 @@ export const CreateShareModal = ({
   // File handlers
   // ---------------------------------------------------------------------------
 
-  // S3 key for a file in the user's root "My Files" KB.
-  // Convention: the user's root KB id equals their Cognito sub.
-  const buildMyFilesKey = useCallback((userSub: string, fileName: string) => {
-    return `documents/kb-${userSub}/${sanitizeS3Filename(fileName)}`;
+  // S3 key for a file inside one of the user's KBs.
+  const buildKbFileKey = useCallback((file: FileItem, userSubFallback: string) => {
+    const kbId = file.kb_id ?? userSubFallback;
+    const path = (file.path ?? '/').replace(/^\//, '');
+    return `documents/kb-${kbId}/${path}${sanitizeS3Filename(file.name)}`;
   }, []);
 
-  // Pre-signed GET URL for a file in the user's root "My Files" KB.
+  // Pre-signed GET URL for the selected file. Resolves the kb_id from the file
+  // when set, otherwise falls back to the user's root KB.
   const buildSignedDownloadUrl = useCallback(
-    async (fileName: string): Promise<string> => {
+    async (file: FileItem): Promise<string> => {
       const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
       const bucket = sessionStorage.getItem('DATA_BUCKET');
       const region = sessionStorage.getItem('REGION') || 'us-east-1';
@@ -497,37 +514,98 @@ export const CreateShareModal = ({
       if (!credentials) throw new Error('No credentials');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const s3Client = withPRM(S3Client as any, { region, credentials });
-      const command = new GetObjectCommand({ Bucket: bucket, Key: buildMyFilesKey(userSub, fileName) });
+      const command = new GetObjectCommand({ Bucket: bucket, Key: buildKbFileKey(file, userSub) });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return getSignedUrl(s3Client as any, command, { expiresIn: 3600 });
     },
-    [user, getCredentials, buildMyFilesKey]
+    [user, getCredentials, buildKbFileKey]
   );
 
-  const loadMyFiles = useCallback(async () => {
-    const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
-    if (!userSub) {
-      setFiles([]);
+  // "My Files" = root KB + all non-system KBs the user has access to. Sorted
+  // root-first, then by name. Derived from KnowledgeBaseProvider's cached list
+  // so it appears instantly without an extra fetch when the modal opens.
+  const userSubStr = (user?.decoded_tokens?.idToken?.sub as string | undefined) ?? '';
+  const browseKbs = useMemo(() => {
+    const myKbs = availableKBs.filter((kb) => !SYSTEM_KB_IDS.has(kb.kb_id));
+    myKbs.sort((a, b) => {
+      const aRoot = a.kb_id === userSubStr || a.is_root;
+      const bRoot = b.kb_id === userSubStr || b.is_root;
+      if (aRoot && !bRoot) return -1;
+      if (!aRoot && bRoot) return 1;
+      return (a.kb_name ?? '').localeCompare(b.kb_name ?? '');
+    });
+    return myKbs;
+  }, [availableKBs, userSubStr]);
+
+  // Load files + folders inside a KB at a given path.
+  const loadBrowseInside = useCallback(
+    async (kbId: string, path: string) => {
+      setLoadingFiles(true);
+      try {
+        const { files: kbFiles, folders = [] } = await knowledgeBaseService.listKBFiles(kbId, path || undefined);
+        const prefix = `documents/kb-${kbId}/${path}`;
+        const items: FileItem[] = kbFiles
+          .map<FileItem | null>((f) => {
+            const relative = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key;
+            // Drop nested files (under a deeper folder) — those will surface when the
+            // user drills into the folder.
+            if (relative.includes('/')) return null;
+            const kb = browseKbs.find((k) => k.kb_id === kbId);
+            return {
+              name: relative,
+              size_bytes: f.size,
+              kb_id: kbId,
+              kb_name: kb?.kb_name,
+              path: `/${path}`,
+              last_modified: f.lastModified ?? undefined,
+            };
+          })
+          .filter((x): x is FileItem => x !== null);
+        setBrowseFolders(folders);
+        setBrowseFiles(items);
+      } catch {
+        setBrowseFolders([]);
+        setBrowseFiles([]);
+      } finally {
+        setLoadingFiles(false);
+      }
+    },
+    [browseKbs]
+  );
+
+  // Browse navigation
+  const handleEnterKb = useCallback((kb: UserKB) => {
+    setBrowseKbId(kb.kb_id);
+    setBrowseKbName(kb.kb_name);
+    setBrowsePath('');
+  }, []);
+  const handleEnterFolder = useCallback((folderName: string) => {
+    setBrowsePath((prev) => `${prev}${folderName}/`);
+  }, []);
+  const handleBrowseUp = useCallback(() => {
+    if (browsePath) {
+      // Pop the last segment.
+      const parts = browsePath.split('/').filter(Boolean);
+      parts.pop();
+      setBrowsePath(parts.length ? `${parts.join('/')}/` : '');
+    } else {
+      // At KB root; go back to the KB list.
+      setBrowseKbId(null);
+      setBrowseKbName('');
+    }
+  }, [browsePath]);
+
+  // Load files/folders whenever the browse position changes.
+  // Root view shows the cached KB list synchronously — no fetch needed.
+  useEffect(() => {
+    if (!show || isDropzone || wizardStep !== 1) return;
+    if (browseKbId === null) {
+      setBrowseFolders([]);
+      setBrowseFiles([]);
       return;
     }
-    setLoadingFiles(true);
-    try {
-      const { files: kbFiles } = await knowledgeBaseService.listKBFiles(userSub);
-      const prefix = `documents/kb-${userSub}/`;
-      const items: FileItem[] = [];
-      for (const f of kbFiles) {
-        const name = f.key.startsWith(prefix) ? f.key.slice(prefix.length) : f.key.split('/').pop() || f.key;
-        // Skip nested files — only show root-level files in the picker
-        if (name.includes('/')) continue;
-        items.push({ name, size_bytes: f.size, last_modified: f.lastModified ?? undefined });
-      }
-      setFiles(items);
-    } catch {
-      setFiles([]);
-    } finally {
-      setLoadingFiles(false);
-    }
-  }, [user]);
+    loadBrowseInside(browseKbId, browsePath);
+  }, [show, wizardStep, isDropzone, browseKbId, browsePath, loadBrowseInside]);
 
   const handleFileUpload = useCallback(
     async (fileList: FileList | null) => {
@@ -549,9 +627,18 @@ export const CreateShareModal = ({
         const credentials = await getCredentials();
         if (!credentials) throw new Error('No credentials');
 
+        // Uploads always land in the user's root KB at root level.
+        const newFile: FileItem = {
+          name: file.name,
+          size_bytes: file.size,
+          kb_id: userSub,
+          path: '/',
+          last_modified: new Date().toISOString(),
+        };
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const s3Client = withPRM(S3Client as any, { region, credentials });
-        const s3Key = buildMyFilesKey(userSub, file.name);
+        const s3Key = buildKbFileKey(newFile, userSub);
 
         const command = new PutObjectCommand({
           Bucket: bucket,
@@ -574,11 +661,7 @@ export const CreateShareModal = ({
           xhr.send(file);
         });
 
-        setSelectedFile({
-          name: file.name,
-          size_bytes: file.size,
-          last_modified: new Date().toISOString(),
-        });
+        setSelectedFile(newFile);
 
         if (needsExtraction(file.name) && !isFileTypeSupported(file.name)) {
           setEnableChat(false);
@@ -591,7 +674,7 @@ export const CreateShareModal = ({
         setUploadingFile(false);
       }
     },
-    [user, getCredentials, t, buildMyFilesKey]
+    [user, getCredentials, t, buildKbFileKey]
   );
 
   const handleSelectFile = useCallback((file: FileItem) => {
@@ -613,7 +696,7 @@ export const CreateShareModal = ({
     setError(null);
 
     try {
-      const url = await buildSignedDownloadUrl(selectedFile.name);
+      const url = await buildSignedDownloadUrl(selectedFile);
 
       const result = await createShare({
         s3_signed_url: url,
@@ -664,7 +747,7 @@ export const CreateShareModal = ({
     setError(null);
 
     try {
-      const url = await buildSignedDownloadUrl(selectedFile.name);
+      const url = await buildSignedDownloadUrl(selectedFile);
 
       const result = await createShare({
         s3_signed_url: url,
@@ -1001,31 +1084,28 @@ export const CreateShareModal = ({
               </nav>
 
               {/* KB Folder list */}
-              <div className="finder-files" style={{ height: 280, overflowY: 'auto' }}>
+              <div className="modal-picker">
                 {dzLoadingFolders ? (
-                  <div className="finder-loading">
-                    <Spinner size="sm" /> {t('dropzoneWizard.folderBrowser.loading')}
+                  <div className="modal-picker__state">
+                    <Spinner size="sm" /> <span className="ms-2">{t('dropzoneWizard.folderBrowser.loading')}</span>
                   </div>
                 ) : dzKbFolders.length === 0 && !dzShowNewFolder ? (
-                  <div className="finder-empty">
+                  <div className="modal-picker__state modal-picker__state--empty">
                     <i className="bi bi-folder2-open" />
                     <p className="mb-0">{t('dropzoneWizard.folderBrowser.empty')}</p>
                   </div>
                 ) : (
-                  <div className="finder-list">
-                    {/* Root files option (user's root KB) */}
+                  <div className="modal-picker__list">
                     <button
                       type="button"
-                      className={`finder-row finder-row--folder${dzSelectedKbId === null ? ' finder-row--selected' : ''}`}
+                      className={`modal-picker__row${dzSelectedKbId === null ? ' modal-picker__row--selected' : ''}`}
                       onClick={() => {
                         setDzSelectedKbId(null);
                         setSelectedFolder('/');
                       }}
                     >
-                      <div className="finder-row__name-content">
-                        <i className="bi bi-person-fill finder-icon finder-icon--folder" />
-                        <span className="finder-name">{t('tabs.myFiles')}</span>
-                      </div>
+                      <i className="bi bi-person-fill modal-picker__icon" />
+                      <span className="modal-picker__name">{t('createShare.myFilesRoot')}</span>
                     </button>
                     {dzKbFolders.map((kb) => {
                       const isSelected = dzSelectedKbId === kb.kb_id;
@@ -1033,19 +1113,15 @@ export const CreateShareModal = ({
                         <button
                           key={kb.kb_id}
                           type="button"
-                          className={`finder-row finder-row--folder${isSelected ? ' finder-row--selected' : ''}`}
+                          className={`modal-picker__row${isSelected ? ' modal-picker__row--selected' : ''}`}
                           onClick={() => {
                             setDzSelectedKbId(kb.kb_id);
                             setSelectedFolder(kb.kb_name);
                           }}
                         >
-                          <div className="finder-row__name-content">
-                            <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
-                            <span className="finder-name">{kb.kb_name}</span>
-                            {kb.is_shared && (
-                              <i className="bi bi-people-fill" style={{ fontSize: '0.7rem', opacity: 0.6 }} />
-                            )}
-                          </div>
+                          <i className="bi bi-folder-fill modal-picker__icon modal-picker__icon--folder" />
+                          <span className="modal-picker__name">{kb.kb_name}</span>
+                          {kb.is_shared && <i className="bi bi-people-fill modal-picker__badge-icon" />}
                         </button>
                       );
                     })}
@@ -1091,10 +1167,10 @@ export const CreateShareModal = ({
                     </Button>
                   </div>
                 ) : (
-                  <Button size="sm" variant="outline-primary" onClick={() => setDzShowNewFolder(true)}>
-                    <i className="bi bi-folder-plus me-1" />
+                  <button type="button" className="modal-picker-action-btn" onClick={() => setDzShowNewFolder(true)}>
+                    <i className="bi bi-folder-plus" />
                     {t('dropzoneWizard.folderBrowser.createFolder')}
-                  </Button>
+                  </button>
                 )}
               </div>
 
@@ -1105,7 +1181,7 @@ export const CreateShareModal = ({
                 <strong>
                   {dzSelectedKbId
                     ? dzKbFolders.find((kb) => kb.kb_id === dzSelectedKbId)?.kb_name || dzSelectedKbId
-                    : 'My Files'}
+                    : t('createShare.myFilesRoot')}
                 </strong>
               </div>
             </div>
@@ -1741,17 +1817,22 @@ export const CreateShareModal = ({
               <p className="mb-2 text-muted">
                 <strong>{t('createShare.dragAndDropFile')}</strong>
               </p>
-              <Button variant="outline-primary" onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}>
+              <button
+                type="button"
+                className="modal-picker-action-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingFile}
+              >
                 {uploadingFile ? (
                   <>
-                    <Spinner size="sm" className="me-1" /> {t('upload.uploading')}
+                    <Spinner size="sm" /> {t('upload.uploading')}
                   </>
                 ) : (
                   <>
-                    <i className="bi bi-folder2-open me-1" /> {t('createShare.orBrowseFiles')}
+                    <i className="bi bi-folder2-open" /> {t('createShare.orBrowseFiles')}
                   </>
                 )}
-              </Button>
+              </button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1763,26 +1844,111 @@ export const CreateShareModal = ({
             <hr />
 
             <p className="fw-semibold mb-2">{t('createShare.browseFiles')}</p>
-            <div className="finder-files">
-              {loadingFiles ? (
-                <div className="finder-loading">
-                  <Spinner size="sm" /> {t('common.loading')}
+
+            {/* Breadcrumb (only shown when inside a KB) */}
+            {browseKbId !== null && (
+              <div className="modal-picker-breadcrumb">
+                <button type="button" className="modal-picker-breadcrumb__btn" onClick={handleBrowseUp}>
+                  <i className="bi bi-arrow-left" /> {t('createShare.browseUp')}
+                </button>
+                <span className="modal-picker-breadcrumb__crumb">
+                  <i className="bi bi-folder-fill" />
+                  {browseKbId === (user?.decoded_tokens?.idToken?.sub as string | undefined)
+                    ? t('createShare.myFilesRoot')
+                    : browseKbName}
+                </span>
+                {browsePath
+                  .split('/')
+                  .filter(Boolean)
+                  .map((part) => (
+                    <span key={part} className="modal-picker-breadcrumb__crumb">
+                      <i className="bi bi-chevron-right" />
+                      {part}
+                    </span>
+                  ))}
+              </div>
+            )}
+
+            <div className="modal-picker">
+              {browseKbId === null ? (
+                // Root view: list of KBs (already cached by KnowledgeBaseProvider).
+                // Only show a spinner if the provider is still doing its initial fetch.
+                isLoadingKBs && browseKbs.length === 0 ? (
+                  <div className="modal-picker__state">
+                    <Spinner size="sm" /> <span className="ms-2">{t('createShare.loadingFiles')}</span>
+                  </div>
+                ) : browseKbs.length === 0 ? (
+                  <div className="modal-picker__state modal-picker__state--empty">
+                    <i className="bi bi-folder2-open" />
+                    <p className="mb-1">{t('createShare.noFiles')}</p>
+                    <p className="small mb-0">{t('createShare.uploadFirst')}</p>
+                  </div>
+                ) : (
+                  <div className="modal-picker__list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {browseKbs.map((kb) => {
+                      const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
+                      const isRoot = kb.kb_id === userSub || kb.is_root;
+                      const label = isRoot ? t('createShare.myFilesRoot') : kb.kb_name;
+                      return (
+                        <button
+                          key={kb.kb_id}
+                          type="button"
+                          className="modal-picker__row"
+                          onDoubleClick={() => handleEnterKb(kb)}
+                          onClick={() => handleEnterKb(kb)}
+                        >
+                          <i
+                            className={`bi ${isRoot ? 'bi-person-fill' : 'bi-folder-fill'} modal-picker__icon modal-picker__icon--folder`}
+                          />
+                          <div className="modal-picker__name">
+                            <div>{label}</div>
+                            {kb.is_shared && !isRoot && (
+                              <div className="modal-picker__sublabel">
+                                <i className="bi bi-people-fill me-1" />
+                                {kb.role.toLowerCase()}
+                              </div>
+                            )}
+                          </div>
+                          <i className="bi bi-chevron-right modal-picker__meta" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              ) : loadingFiles ? (
+                <div className="modal-picker__state">
+                  <Spinner size="sm" /> <span className="ms-2">{t('createShare.loadingFiles')}</span>
                 </div>
-              ) : files.length === 0 ? (
-                <div className="finder-empty">
+              ) : browseFolders.length === 0 && browseFiles.length === 0 ? (
+                <div className="modal-picker__state modal-picker__state--empty">
                   <i className="bi bi-folder2-open" />
-                  <p className="mb-1">{t('createShare.noFiles')}</p>
-                  <p className="small mb-0">{t('createShare.uploadFirst')}</p>
+                  <p className="mb-0">{t('createShare.noFolderContents')}</p>
                 </div>
               ) : (
-                <div className="finder-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                  {files.map((file) => (
-                    <button key={file.name} type="button" className="finder-row" onClick={() => handleSelectFile(file)}>
-                      <div className="finder-row__name-content">
-                        <i className={`${getFileIcon(file.name)} finder-icon finder-icon--file`} />
-                        <span className="finder-name">{file.name}</span>
-                      </div>
-                      <div className="finder-row__meta">{formatFileSize(file.size_bytes)}</div>
+                <div className="modal-picker__list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {browseFolders.map((folderName) => (
+                    <button
+                      key={`folder:${folderName}`}
+                      type="button"
+                      className="modal-picker__row"
+                      onDoubleClick={() => handleEnterFolder(folderName)}
+                      onClick={() => handleEnterFolder(folderName)}
+                    >
+                      <i className="bi bi-folder-fill modal-picker__icon modal-picker__icon--folder" />
+                      <div className="modal-picker__name">{folderName}</div>
+                      <i className="bi bi-chevron-right modal-picker__meta" />
+                    </button>
+                  ))}
+                  {browseFiles.map((file) => (
+                    <button
+                      key={`file:${file.path ?? '/'}${file.name}`}
+                      type="button"
+                      className="modal-picker__row"
+                      onClick={() => handleSelectFile(file)}
+                    >
+                      <i className={`${getFileIcon(file.name)} modal-picker__icon`} />
+                      <div className="modal-picker__name">{file.name}</div>
+                      <span className="modal-picker__meta">{formatFileSize(file.size_bytes)}</span>
                     </button>
                   ))}
                 </div>
@@ -2447,7 +2613,7 @@ const ImagePreviewInline = ({
   buildSignedUrl,
 }: {
   file: FileItem;
-  buildSignedUrl: (fileName: string) => Promise<string>;
+  buildSignedUrl: (file: FileItem) => Promise<string>;
 }) => {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -2455,7 +2621,7 @@ const ImagePreviewInline = ({
     let cancelled = false;
     const load = async () => {
       try {
-        const downloadUrl = await buildSignedUrl(file.name);
+        const downloadUrl = await buildSignedUrl(file);
         if (!cancelled) setUrl(downloadUrl);
       } catch {
         // Silently fail — preview is optional

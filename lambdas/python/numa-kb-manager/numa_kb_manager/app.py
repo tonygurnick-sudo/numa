@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 import structlog
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
@@ -45,9 +46,9 @@ logger = structlog.get_logger()
 app = FastAPI()
 
 
-# File types Bedrock Knowledge Base can index. Used to filter what we surface
-# in /api/kb/{id}/files — the bucket may contain other artefacts (web crawler
-# output, sidecars) that the KB UI shouldn't show.
+# File types Bedrock Knowledge Base can index. Retained as reference so a
+# future UX can surface "indexable" vs "stored only" state — we no longer
+# gate listing on this, everything in the bucket is shown.
 BEDROCK_SUPPORTED_EXTENSIONS = {
     ".pdf",
     ".txt",
@@ -358,6 +359,76 @@ def _enrich_file_info_with_metadata(
         file_info["uploadedAt"] = uploaded_at
 
 
+RECURSIVE_LIST_MAX_FILES = 50_000
+
+
+def _list_kb_files_recursive(
+    bucket_name: str, prefix: str
+) -> Tuple[List[Dict[str, Any]], int, bool]:
+    """List every file under a KB prefix as a flat list, up to a hard cap.
+
+    Skips sidecar enrichment (`.metadata.json`, head_object for urlTag) — this
+    endpoint exists to feed client-side search, not the per-row display. Rich
+    metadata arrives via the per-level `_list_kb_files` call when the user
+    drills into a folder. Capped at ``RECURSIVE_LIST_MAX_FILES`` so a runaway
+    KB (millions of files) can't time out the lambda or bloat the payload.
+    Returns (files, count, truncated).
+    """
+    try:
+        s3_client = prm_client("s3", region=REGION)
+        paginator = s3_client.get_paginator("list_objects_v2")
+
+        files: List[Dict[str, Any]] = []
+        truncated = False
+
+        for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                key_val = obj.get("Key") if isinstance(obj, dict) else None
+                if not isinstance(key_val, str):
+                    continue
+                if key_val.endswith(".metadata.json"):
+                    continue
+                if key_val.endswith("/"):
+                    # Folder marker — skip. Folders are implied by keys.
+                    continue
+
+                last_modified = obj.get("LastModified")
+                files.append(
+                    {
+                        "key": key_val,
+                        "lastModified": (
+                            last_modified.isoformat() if last_modified else None
+                        ),
+                        "size": obj.get("Size", 0),
+                    }
+                )
+
+                if len(files) >= RECURSIVE_LIST_MAX_FILES:
+                    truncated = True
+                    break
+
+            if truncated:
+                break
+
+        if truncated:
+            logger.warning(
+                "Recursive KB listing truncated",
+                bucket=bucket_name,
+                prefix=prefix,
+                cap=RECURSIVE_LIST_MAX_FILES,
+            )
+
+        return files, len(files), truncated
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error(
+            "Error listing S3 files recursively",
+            bucket=bucket_name,
+            prefix=prefix,
+            error=str(e),
+        )
+        return [], 0, False
+
+
 def _list_kb_files(
     bucket_name: str, prefix: str, subpath: str = ""
 ) -> Tuple[List[Dict[str, Any]], List[str], int]:
@@ -395,16 +466,10 @@ def _list_kb_files(
                 if key_val.endswith(".metadata.json"):
                     continue
 
-                # Web crawler files use URL-encoded keys with no extension —
-                # always markdown content, so don't filter them by extension.
                 is_folder = key_val.endswith("/")
                 is_web_crawler = (
                     "web-crawler/" in key_val or "scraped-content/" in key_val
                 )
-                if not is_folder and not is_web_crawler:
-                    ext = os.path.splitext(key_val)[1].lower()
-                    if ext not in BEDROCK_SUPPORTED_EXTENSIONS:
-                        continue
 
                 last_modified = obj.get("LastModified")
                 file_info: Dict[str, Any] = {
@@ -476,6 +541,30 @@ async def list_kb_files(request: Request, kb_id: str) -> Response:
             )
 
         s3_prefix = kb["s3_prefix"]
+
+        recursive_flag = request.query_params.get("recursive", "").lower() == "true"
+        if recursive_flag:
+            files, count, truncated = _list_kb_files_recursive(DATA_BUCKET, s3_prefix)
+            # Skip the cached-count refresh for recursive responses — a cold
+            # call or a truncated call would both overwrite the real document
+            # count with an unreliable number.
+            logger.info(
+                "Listed KB files (recursive)",
+                kb_id=kb_id,
+                user_id=user_id,
+                file_count=count,
+                truncated=truncated,
+            )
+            return JSONResponse(
+                {
+                    "files": files,
+                    "folders": [],
+                    "document_count": count,
+                    "count": count,
+                    "truncated": truncated,
+                },
+                status_code=200,
+            )
 
         subpath = request.query_params.get("path", "")
         if subpath:
@@ -614,6 +703,224 @@ async def delete_kb_files(request: Request, kb_id: str) -> Response:
 
     except Exception as exc:  # pylint: disable=broad-except
         logger.error("KB file deletion failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+# ── KB files (move) ───────────────────────────────────────────────────────
+
+
+@app.post("/api/kb/{kb_id}/files/move")
+async def move_kb_files(request: Request, kb_id: str) -> Response:
+    """Move files from the source KB (path param) to a destination KB + path.
+
+    Body:
+        {
+            "keys": ["documents/kb-<src>/a.pdf", ...],  // full S3 keys under source prefix
+            "destKbId": "<kb id>",                       // may equal kb_id for same-KB moves
+            "destPath": "reports/q3"                     // optional subpath within dest KB
+        }
+
+    Performs a collision check up front and rejects with 409 if any destination
+    key already exists. On success copies each file + its `.metadata.json`
+    sidecar to the new key then deletes the originals.
+    """
+    guard, user = _guard_request(request)
+    if guard is not None:
+        return guard
+
+    try:
+        user_id = user["sub"]
+        kb_manager = KnowledgeBaseManager()
+
+        body = await request.json()
+        keys = body.get("keys", [])
+        dest_kb_id = body.get("destKbId") or kb_id
+        dest_path = (body.get("destPath") or "").strip("/")
+
+        if not keys or not isinstance(keys, list):
+            return JSONResponse(
+                {"error": "Request body must contain a non-empty 'keys' array"},
+                status_code=400,
+            )
+        if ".." in dest_path:
+            return JSONResponse({"error": "Invalid destPath"}, status_code=400)
+
+        # Permissions: EDITOR on source (required to delete) and EDITOR on dest
+        # (required to write). Company KB allows admin group members to bypass
+        # the explicit editor list, matching the delete endpoint.
+        user_groups = user.get("cognito:groups", []) or []
+
+        def _can_edit(target_kb_id: str) -> bool:
+            if target_kb_id == "company" and "admin" in user_groups:
+                return True
+            return kb_manager.check_permission(target_kb_id, user_id, "EDITOR")
+
+        if not _can_edit(kb_id):
+            logger.warning(
+                "Access denied - user lacks EDITOR permission on source KB",
+                kb_id=kb_id,
+                user_id=user_id,
+            )
+            return JSONResponse(
+                {"error": "Access denied on source KB"}, status_code=403
+            )
+        if dest_kb_id != kb_id and not _can_edit(dest_kb_id):
+            logger.warning(
+                "Access denied - user lacks EDITOR permission on destination KB",
+                dest_kb_id=dest_kb_id,
+                user_id=user_id,
+            )
+            return JSONResponse(
+                {"error": "Access denied on destination KB"}, status_code=403
+            )
+
+        source_kb = kb_manager.get_kb(kb_id)
+        dest_kb = source_kb if dest_kb_id == kb_id else kb_manager.get_kb(dest_kb_id)
+        if not source_kb or not dest_kb:
+            return JSONResponse({"error": "KB not found"}, status_code=404)
+
+        source_prefix = source_kb.get("s3_prefix", "")
+        dest_prefix = dest_kb.get("s3_prefix", "")
+        if not source_prefix or not dest_prefix:
+            return JSONResponse(
+                {"error": "KB configuration incomplete"}, status_code=500
+            )
+
+        for k in keys:
+            if not isinstance(k, str) or not k.startswith(source_prefix):
+                logger.warning(
+                    "Rejected cross-KB move attempt",
+                    kb_id=kb_id,
+                    user_id=user_id,
+                    invalid_key=k,
+                    expected_prefix=source_prefix,
+                )
+                return JSONResponse(
+                    {"error": f"Key '{k}' is outside source KB prefix"},
+                    status_code=400,
+                )
+            if k.endswith("/"):
+                return JSONResponse(
+                    {"error": "Folder moves are not supported yet"}, status_code=400
+                )
+
+        dest_folder_prefix = (
+            f"{dest_prefix}{dest_path}/".replace("//", "/")
+            if dest_path
+            else dest_prefix
+        )
+
+        s3 = prm_client("s3", region=REGION)
+
+        # Build (source -> destination) pairs, filtering out no-op self-moves.
+        pairs: List[Tuple[str, str]] = []
+        for key in keys:
+            filename = key.split("/")[-1]
+            new_key = f"{dest_folder_prefix}{filename}"
+            if new_key == key:
+                continue
+            pairs.append((key, new_key))
+
+        if not pairs:
+            return JSONResponse(
+                {"successful": [], "failed": [], "message": "No-op move"},
+                status_code=200,
+            )
+
+        # Collision check — fail fast, don't partially clobber.
+        collisions: List[str] = []
+        precheck_failed: List[Dict[str, str]] = []
+        for _source, dest in pairs:
+            try:
+                s3.head_object(Bucket=DATA_BUCKET, Key=dest)
+                collisions.append(dest)
+            except ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "")
+                if code in ("404", "NoSuchKey", "NotFound"):
+                    continue
+                precheck_failed.append({"key": dest, "error": str(e)})
+
+        if collisions:
+            return JSONResponse(
+                {"error": "Destination collision", "collisions": collisions},
+                status_code=409,
+            )
+        if precheck_failed:
+            return JSONResponse(
+                {"error": "Pre-check failed", "failed": precheck_failed},
+                status_code=500,
+            )
+
+        successful: List[Dict[str, str]] = []
+        failed: List[Dict[str, str]] = []
+        for source_key, dest_key in pairs:
+            metadata_source = f"{source_key}.metadata.json"
+            metadata_dest = f"{dest_key}.metadata.json"
+            try:
+                s3.copy_object(
+                    Bucket=DATA_BUCKET,
+                    CopySource={"Bucket": DATA_BUCKET, "Key": source_key},
+                    Key=dest_key,
+                    MetadataDirective="COPY",
+                )
+                had_metadata = False
+                try:
+                    s3.copy_object(
+                        Bucket=DATA_BUCKET,
+                        CopySource={"Bucket": DATA_BUCKET, "Key": metadata_source},
+                        Key=metadata_dest,
+                        MetadataDirective="COPY",
+                    )
+                    had_metadata = True
+                except ClientError as meta_err:
+                    code = meta_err.response.get("Error", {}).get("Code", "")
+                    if code not in ("404", "NoSuchKey", "NotFound"):
+                        logger.warning(
+                            "Metadata sidecar copy failed",
+                            key=metadata_source,
+                            error=str(meta_err),
+                        )
+
+                delete_objects = [{"Key": source_key}]
+                if had_metadata:
+                    delete_objects.append({"Key": metadata_source})
+                s3.delete_objects(
+                    Bucket=DATA_BUCKET,
+                    Delete={"Objects": delete_objects, "Quiet": True},
+                )
+                successful.append({"sourceKey": source_key, "destKey": dest_key})
+            except Exception as move_err:  # pylint: disable=broad-except
+                logger.error(
+                    "File move failed",
+                    source_key=source_key,
+                    dest_key=dest_key,
+                    error=str(move_err),
+                )
+                failed.append({"key": source_key, "error": str(move_err)})
+
+        # Refresh cached document counts for affected KBs.
+        _, _, src_count = _list_kb_files(DATA_BUCKET, source_prefix, "")
+        kb_manager.update_document_count(kb_id, src_count)
+        if dest_kb_id != kb_id:
+            _, _, dest_count = _list_kb_files(DATA_BUCKET, dest_prefix, "")
+            kb_manager.update_document_count(dest_kb_id, dest_count)
+
+        logger.info(
+            "KB files moved",
+            kb_id=kb_id,
+            dest_kb_id=dest_kb_id,
+            user_id=user_id,
+            successful_count=len(successful),
+            failed_count=len(failed),
+        )
+
+        return JSONResponse(
+            {"successful": successful, "failed": failed},
+            status_code=200,
+        )
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB file move failed", error=str(exc), exc_info=True)
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 

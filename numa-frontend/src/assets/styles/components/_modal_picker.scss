@@ -1,0 +1,199 @@
+// Modal-friendly file/folder picker.
+// Plain bordered list with hover + selected states. Distinct from the
+// `finder-*` system in _finder_files.scss, which depends on a CSS Grid
+// parent and is not designed for use inside Bootstrap modals.
+
+.modal-picker {
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 0;
+    border-bottom: 1px solid #f0f0f3;
+    background: transparent;
+    color: #3f3f46;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color 0.1s,
+      color 0.1s;
+
+    &:last-child {
+      border-bottom: 0;
+    }
+
+    &:hover {
+      background: #f4f4f5;
+      color: #18181b;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--brand-primary, var(--color-primary));
+      outline-offset: -2px;
+    }
+
+    &--selected,
+    &--selected:hover {
+      background: var(--brand-primary, var(--color-primary));
+      color: #fff;
+
+      .modal-picker__icon,
+      .modal-picker__meta,
+      .modal-picker__badge-icon {
+        color: rgba(255, 255, 255, 0.85);
+      }
+    }
+  }
+
+  &__icon {
+    font-size: 1rem;
+    color: #a1a1aa;
+    flex-shrink: 0;
+
+    &--folder {
+      color: var(--brand-primary, var(--color-primary));
+    }
+  }
+
+  &__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__sublabel {
+    font-size: 0.75rem;
+    color: #a1a1aa;
+    line-height: 1.2;
+    margin-top: 0.125rem;
+  }
+
+  &__meta {
+    flex: 0 0 auto;
+    color: #71717a;
+    font-size: 0.8125rem;
+    margin-left: 0.5rem;
+  }
+
+  &__badge-icon {
+    font-size: 0.7rem;
+    color: #86868b;
+    flex-shrink: 0;
+    margin-left: 0.25rem;
+  }
+
+  &__state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    color: #71717a;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.875rem;
+
+    &--empty {
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 2.5rem 1rem;
+      color: #a1a1aa;
+
+      i {
+        font-size: 2rem;
+        opacity: 0.5;
+      }
+    }
+  }
+}
+
+// Breadcrumb shown above the modal-picker when drilled into a folder.
+.modal-picker-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+  font-family: 'Metropolis Regular', sans-serif;
+  font-size: 0.8125rem;
+  color: #71717a;
+
+  &__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid #e4e4e7;
+    border-radius: 6px;
+    background: #fff;
+    color: #3f3f46;
+    cursor: pointer;
+    transition:
+      background-color 0.1s,
+      color 0.1s;
+
+    &:hover {
+      background: #f4f4f5;
+      color: #18181b;
+    }
+  }
+
+  &__crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+
+    > i {
+      color: var(--brand-primary, var(--color-primary));
+    }
+
+    > i.bi-chevron-right {
+      color: #a1a1aa;
+    }
+  }
+}
+
+// Brand-primary outlined button used inline within modal pickers
+// (e.g. "New Folder" action). Mirrors Numa's modal CTA styling so
+// the look is consistent with Cancel/Next at the modal footer.
+.modal-picker-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--brand-primary, var(--color-primary));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--brand-primary, var(--color-primary));
+  font-family: 'Metropolis Regular', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.1s,
+    color 0.1s;
+
+  &:hover {
+    background: var(--brand-primary, var(--color-primary));
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}

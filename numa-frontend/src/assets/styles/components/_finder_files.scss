@@ -135,6 +135,29 @@
         }
       }
 
+      .finder-filter-select {
+        height: 28px;
+        padding: 0 1.5rem 0 0.5rem;
+        border: 1px solid #e4e4e7;
+        border-radius: 6px;
+        background: #fafafa
+          url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 16 16"><path fill="%23a1a1aa" d="M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z"/></svg>')
+          no-repeat right 0.4rem center / 10px;
+        font-family: 'Metropolis Regular', sans-serif;
+        font-size: 0.8125rem;
+        color: #18181b;
+        appearance: none;
+        cursor: pointer;
+        max-width: 160px;
+        text-overflow: ellipsis;
+
+        &:focus {
+          outline: none;
+          border-color: var(--brand-primary, var(--color-primary));
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-primary, var(--color-primary)) 12%, transparent);
+        }
+      }
+
       .finder-btn {
         display: flex;
         align-items: center;
@@ -291,6 +314,31 @@
     &.finder-row--depth-5 .finder-row__name-content {
       padding-left: 100px;
     }
+
+    &.finder-row--dragging {
+      opacity: 0.5;
+    }
+
+    &.finder-row--drop-over {
+      background: color-mix(in srgb, var(--brand-primary, #8e50a7) 15%, white 85%);
+      outline: 2px solid var(--brand-primary, #8e50a7);
+      outline-offset: -2px;
+    }
+
+    &.finder-row--viewer-disabled {
+      opacity: 0.55;
+    }
+
+    &.finder-row--file-selectable:hover {
+      cursor: pointer;
+    }
+  }
+
+  .finder-toolbar__back--drop-over {
+    background: color-mix(in srgb, var(--brand-primary, #8e50a7) 15%, white 85%);
+    outline: 2px solid var(--brand-primary, #8e50a7);
+    outline-offset: -2px;
+    border-radius: 6px;
   }
 
   .finder-row__name-content {
@@ -360,6 +408,14 @@
     white-space: nowrap;
   }
 
+  .finder-row__meta--type {
+    font-family: 'Metropolis Medium', 'Metropolis Regular', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #71717a;
+  }
+
   .finder-row__actions {
     display: flex;
     align-items: center;
@@ -420,19 +476,92 @@
   }
 
   // ── Grid template for columns ────────────────────────────────
-  .finder-grid-5 {
-    grid-template-columns: 1fr 150px 140px 80px 60px;
+  // 6 columns: Name | Type | Added by | Modified | Size | Actions
+  // Breakpoints mirror the Bootstrap d-*-flex visibility classes on the headers:
+  //  ≥ lg (992px):  all 6 cols
+  //  ≥ md (768px):  hide Added by — 5 cols
+  //  ≥ sm (576px):  hide Modified too — 4 cols
+  //  < sm:          hide Size too — 3 cols
+  .finder-grid-6 {
+    grid-template-columns: 1fr 70px 150px 140px 80px 60px;
   }
 
-  @media (max-width: 992px) {
-    .finder-grid-5 {
-      grid-template-columns: 1fr 120px 60px;
+  @media (max-width: 991.98px) {
+    .finder-grid-6 {
+      grid-template-columns: 1fr 70px 140px 80px 60px;
     }
+  }
+
+  @media (max-width: 767.98px) {
+    .finder-grid-6 {
+      grid-template-columns: 1fr 70px 80px 60px;
+    }
+  }
+
+  @media (max-width: 575.98px) {
+    .finder-grid-6 {
+      grid-template-columns: 1fr 70px 60px;
+    }
+  }
+}
+
+// Permanent two-column intro shown at the top of the External Share tab
+// describing Document Sharing and Drop Zones. Designed as part of the page
+// header — no card framing, just colored icon + text in two columns,
+// separated from the content below by a hairline divider.
+.shared-intro {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f0f0f3;
+
+  &__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  &__icon {
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+    font-size: 1.25rem;
+    line-height: 1;
+
+    &--share {
+      color: var(--brand-primary, var(--color-primary));
+    }
+
+    &--dropzone {
+      color: #16a34a;
+    }
+  }
+
+  &__body {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__title {
+    display: block;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #18181b;
+    margin-bottom: 0.125rem;
+  }
+
+  &__description {
+    margin: 0;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.8125rem;
+    color: #71717a;
+    line-height: 1.45;
   }
 
   @media (max-width: 768px) {
-    .finder-grid-5 {
-      grid-template-columns: 1fr 60px;
-    }
+    grid-template-columns: 1fr;
+    gap: 1rem;
   }
 }

@@ -94,7 +94,9 @@ export class NumaKbManager extends Construct {
         },
         {
           effect: 'Allow',
-          actions: ['s3:GetObject', 's3:DeleteObject'],
+          // PutObject is required by /api/kb/{id}/files/move which does
+          // CopyObject (destination write) + DeleteObject (source removal).
+          actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
           resources: [`${props.dataBucketArn}/*`],
         },
         // Cognito — resolve emails ↔ subs and validate JWT
