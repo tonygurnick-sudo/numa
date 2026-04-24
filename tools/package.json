@@ -63,7 +63,8 @@
     "update-vector-kb-s3-prefix": "node --import tsx update-vector-kb-s3-prefix.ts",
     "backfill-kb-metadata": "node --import tsx backfill-metadata-sidecars.ts",
     "nolia-assessments": "node --import tsx nolia-assessments.ts",
-    "nolia-rules-gen": "node --import tsx nolia-rules-gen.ts"
+    "nolia-rules-gen": "node --import tsx nolia-rules-gen.ts",
+    "assign-bedrock-quota-sharing": "node --import tsx assign-bedrock-quota-sharing.ts"
   },
   "packageManager": "yarn@4.9.2",
   "devDependencies": {

@@ -158,6 +158,15 @@ export interface V2AppConfig {
   promptPlaceholderKey?: string;
   /** @deprecated — Use resultConfig on each V2AppAgent instead. */
   resultConfig?: V2AppResultConfig;
+  /**
+   * When true, this app opts in to cross-user run visibility via the V2 apps API's
+   * `sharedScope` mechanism. Runs from this app may set a `sharedScope` value
+   * (e.g. a KB ID) and be listed together across users who have access to that
+   * scope. Documentary on the frontend — enforcement lives in the backend
+   * `SCOPE_SHARED_APPS` whitelist (`lambdas/node/v2-apps-api/index.ts`). Apps
+   * without this flag behave user-privately.
+   */
+  scopeShared?: boolean;
 }
 
 // ../types/apps.ts

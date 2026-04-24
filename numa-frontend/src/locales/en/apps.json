@@ -878,6 +878,22 @@
       "rulesGenerator": {
         "name": "Rules Generator",
         "description": "Reads knowledge base documents and generates a comprehensive compliance rules file with citations"
+      },
+      "fundingGenerateGlobalRules": {
+        "name": "Funding — Generate Global Rules",
+        "description": "Reads a Global KB's policies/values/disqualification docs and produces global-rules.md (org-wide baseline used by every funding assessment)"
+      },
+      "fundingGenerateFundRules": {
+        "name": "Funding — Generate Fund Rules",
+        "description": "Reads a Funding KB's application form + policy/criteria + output template (and optional good examples) and produces funding-rules.md for a specific Fund/Grant/Scholarship"
+      },
+      "fundingAssessApplication": {
+        "name": "Funding — Assess Application",
+        "description": "Evaluates an uploaded funding application against Global + Funding rules, querying supporting data, and renders a filled assessment report"
+      },
+      "fundingCompareApplications": {
+        "name": "Funding — Compare Applications",
+        "description": "Produces a neutral side-by-side comparison of 2–3 prior assessments for the same Fund/Grant/Scholarship"
       }
     },
     "fields": {
@@ -905,6 +921,25 @@
         "global": "Global",
         "procurement": "Procurement",
         "project": "Project"
+      }
+    },
+    "funding": {
+      "promptPlaceholder": "Provide any additional context for this funding pipeline run (optional)...",
+      "fields": {
+        "globalKbId": "Global Knowledge Base",
+        "fundingKbId": "Funding Knowledge Base",
+        "kbName": "KB Display Name",
+        "kbCategory": "KB Category (locked)",
+        "clientName": "Client Name",
+        "clientNameHelp": "Logical funding client (e.g. 'ngaitahu'). Flows through metadata + logs; does not alter prompts today.",
+        "applicantId": "Applicant ID (optional)",
+        "applicantIdHelp": "Optional display handle (e.g. 'APP-A1B2C3'). Leave blank to let the pipeline extract the applicant name from the uploaded documents.",
+        "runIdsToCompare": "Prior Runs to Compare (JSON)",
+        "runIdsToCompareHelp": "JSON array of 2–3 entries, each {\"run_id\": \"...\", \"user_sub\": \"...\"}. The user_sub is the creator of the original assessment — same as your sub if you ran the assessment yourself."
+      },
+      "categories": {
+        "global": "Global (org-wide baseline)",
+        "funding": "Funding (Fund/Grant/Scholarship)"
       }
     }
   }

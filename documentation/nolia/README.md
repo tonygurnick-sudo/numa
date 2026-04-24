@@ -18,4 +18,4 @@ Technical documentation for the Nolia AI-powered procurement compliance platform
 - **Developer skill:** `.claude/skills/nolia-developer-guide/` (activate for full dev context)
 - **Local testing skill:** `.claude/skills/workspace-agent-local-test/`
 - **Nolia backend code:** `services/numa-workspace-agent/numa_workspace_agent/agent_types/nolia/`
-- **Nolia frontend (separate repo):** `numa-whitelabel-investigation/`
+- **Nolia frontends (separate repos):** `arcanum/nolia/nolia-app/` (bank / MDB procurement — MoH Indonesia) and `arcanum/nolia/nolia-funding-app/` (funding application assessment — Ngāi Tahu). See each repo's `CLAUDE.md` for the full product doc, plus `arcanum/nolia/CLAUDE.md` for the umbrella context across both.

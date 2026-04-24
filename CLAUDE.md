@@ -332,6 +332,11 @@ Activate the `numa-ops` skill before doing any Ops work.
 
 ## Nolia
 
-AI-powered procurement compliance platform for government agencies (World Bank, ADB). Validates procurement documents against MDB policy rules via a multi-phase AI pipeline on AgentCore. Custom frontend (`numa-whitelabel-investigation/`), Numa backend. Production: `nolia-id-gov-moh` in `ap-southeast-3` (Jakarta).
+AI-powered document compliance and assessment platform, delivered as two products from separate frontend repos in `arcanum/nolia/`:
+
+- **`nolia-app/`** — Bank / MDB procurement compliance (World Bank, ADB, IsDB). Validates TER/CER/ToR/RFP against MDB policy via a multi-phase AI pipeline on AgentCore. Production: `nolia-id-gov-moh` in `ap-southeast-3` (Jakarta).
+- **`nolia-funding-app/`** — Funding application assessment (Funds / Grants / Scholarships). Anchor client: Te Rūnanga o Ngāi Tahu (NZ). Variant-aware codebase (`NEXT_PUBLIC_NOLIA_VARIANT = funding | procurement`). Production: `ngaitahu` in `ap-southeast-2` (Sydney).
+
+Both frontends are thin Express proxies; all AI lives in this repo under `services/numa-workspace-agent/numa_workspace_agent/agent_types/nolia/`.
 
 Activate the `nolia-developer-guide` skill before doing any Nolia work. See also `documentation/nolia/`.

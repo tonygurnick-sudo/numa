@@ -48,6 +48,21 @@ const SETTINGS_TABLE = process.env.V2_APP_SETTINGS_TABLE as string;
 const OUTPUTS_BUCKET = process.env.OUTPUTS_BUCKET_NAME as string;
 const WORKSPACE_PROXY_FUNCTION = process.env.WORKSPACE_PROXY_FUNCTION_NAME as string;
 
+/**
+ * V2 apps that are allowed to populate and be queried by `sharedScope` — the
+ * optional cross-user grouping key on RunRecord. Cross-user visibility is opt-in
+ * per app; default behaviour is user-private.
+ *
+ * SECURITY TODO: the API does not verify the caller has access to a given scope.
+ * Callers (typically a backend proxy like Nolia's Express layer) are responsible
+ * for access control today — e.g. Nolia's `assertFundAccess` gates fund reads
+ * before forwarding here. Numa-owned scope ACLs (a scope-members table, or
+ * service-to-service auth on the scope endpoints) need to be designed before a
+ * second consumer with a stronger threat model opts in. Each new app added here
+ * MUST be reviewed against that gap.
+ */
+const SCOPE_SHARED_APPS = new Set<string>(['nolia-funding']);
+
 const dynamo = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}), {
   marshallOptions: { removeUndefinedValues: true },
 });
@@ -162,6 +177,18 @@ interface RunRecord {
   conversationId?: string;
   /** If this is a follow-up run, the runId of the parent run. */
   parentRunId?: string;
+  /**
+   * Optional grouping key for cross-user run visibility. When set, runs with the
+   * same `sharedScope` are discoverable together via
+   * `GET /v2-apps/runs?sharedScope=X`, bypassing the per-user ownership filter.
+   * Only apps listed in `SCOPE_SHARED_APPS` may populate this field; other apps'
+   * sharedScope values are silently dropped on create.
+   *
+   * SECURITY TODO: see the SCOPE_SHARED_APPS comment — the API does not enforce
+   * scope ACLs, so callers must verify access before querying or fetching by
+   * sharedScope.
+   */
+  sharedScope?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +263,46 @@ const checkS3Progress = async (
   }
 };
 
+/**
+ * Check S3 for a mid-run applicant preview (_applicant.json).
+ *
+ * Written by the Nolia Funding assess orchestrator immediately after
+ * Phase 1 (extract) succeeds, so the frontend can show the extracted
+ * applicant name on the activity row while Phase 2 + Phase 3 are still
+ * running. Returns null if the file doesn't exist yet.
+ *
+ * Generic across V2 apps — any orchestrator that writes an
+ * ``{s3_prefix}/_applicant.json`` (or broader ``_preview.json`` in
+ * future) will surface here.
+ */
+const checkS3Preview = async (
+  s3Prefix: string,
+  userId: string,
+  conversationId: string
+): Promise<Record<string, unknown> | null> => {
+  if (!OUTPUTS_BUCKET || !s3Prefix) return null;
+
+  const formattedPrefix = s3Prefix.replace('{user_sub}', userId).replace('{conversation_id}', conversationId);
+  const previewKey = `${formattedPrefix}/_applicant.json`;
+
+  try {
+    const response = await s3.send(
+      new GetObjectCommand({
+        Bucket: OUTPUTS_BUCKET,
+        Key: previewKey,
+      })
+    );
+    const bodyStr = await response.Body?.transformToString('utf-8');
+    if (!bodyStr) return null;
+    return JSON.parse(bodyStr) as Record<string, unknown>;
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'name' in err && err.name === 'NoSuchKey') {
+      return null;
+    }
+    return null;
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Authorization helpers
 // ---------------------------------------------------------------------------
@@ -250,6 +317,29 @@ const getOwnedRun = async (
   const run = result.Item as RunRecord;
   if (run.userId !== auth.sub) {
     console.warn('v2-apps-api authorization denied', runId, auth.sub, run.userId);
+    return errorResponse(403, 'Forbidden');
+  }
+  return run;
+};
+
+/**
+ * Fetch run and verify it's in the given shared scope. Used for cross-user
+ * read access (e.g. Nolia assessor opens another assessor's run under the same
+ * fund). Mutations (PUT/DELETE/follow-up) still go through getOwnedRun.
+ *
+ * SECURITY TODO: the caller must have already verified the requester has access
+ * to `sharedScope` before invoking this — we do not check here. See
+ * SCOPE_SHARED_APPS comment at the top of this file.
+ */
+const getRunInScope = async (
+  runId: string,
+  sharedScope: string
+): Promise<RunRecord | { statusCode: number; headers: typeof HEADERS; body: string }> => {
+  const result = await dynamo.send(new GetCommand({ TableName: RUNS_TABLE, Key: { runId } }));
+  if (!result.Item) return errorResponse(404, 'Run not found');
+  const run = result.Item as RunRecord;
+  if (run.sharedScope !== sharedScope) {
+    console.warn('v2-apps-api sharedScope mismatch', runId, sharedScope, run.sharedScope);
     return errorResponse(403, 'Forbidden');
   }
   return run;
@@ -314,6 +404,17 @@ const handleCreateRun = async (body: Record<string, unknown>, auth: AuthContext)
     conversationId: runId,
   };
 
+  // Opt-in cross-user visibility. Only apps registered in SCOPE_SHARED_APPS may
+  // set sharedScope; values from other apps are dropped with a warning so a
+  // misconfigured caller can't silently pollute the sparse GSI.
+  if (typeof body.sharedScope === 'string' && body.sharedScope.length > 0) {
+    if (SCOPE_SHARED_APPS.has(appId)) {
+      record.sharedScope = body.sharedScope;
+    } else {
+      console.warn('v2-apps-api createRun dropped sharedScope — app not in SCOPE_SHARED_APPS', { appId, runId });
+    }
+  }
+
   await dynamo.send(
     new PutCommand({
       TableName: RUNS_TABLE,
@@ -329,12 +430,48 @@ const handleListRuns = async (event: APIGatewayProxyEventV2, auth: AuthContext) 
   const params = event.queryStringParameters || {};
   const appId = params.appId;
   const conversationIdFilter = params.conversationId;
+  const sharedScope = params.sharedScope;
+  const agentTypeFilter = params.agentType;
   const limit = Math.min(parseInt(params.limit || '20', 10), 100);
   const nextToken = params.nextToken;
 
-  // Query by userId (default) or appId, optionally filtered by conversationId
+  // Query paths:
+  //   1. sharedScope — cross-user, scope-keyed. Opt-in per app, requires appId.
+  //   2. appId       — user + app scoped (default when appId present).
+  //   3. default     — all runs for this user.
   let queryParams;
-  if (appId) {
+  if (sharedScope) {
+    // SECURITY TODO: this branch intentionally does NOT filter by userId. Access
+    // control is caller-delegated — see SCOPE_SHARED_APPS comment at the top of
+    // this file. A caller bypassing the backend proxy could read runs they don't
+    // own if they know the scope value. Scope ACLs are a follow-up.
+    if (!appId || !SCOPE_SHARED_APPS.has(appId)) {
+      return errorResponse(400, 'sharedScope query requires appId to be a scope-shared app (see SCOPE_SHARED_APPS)');
+    }
+    const filterParts: string[] = ['appId = :appId'];
+    const exprValues: Record<string, unknown> = {
+      ':sharedScope': sharedScope,
+      ':appId': appId,
+    };
+    if (agentTypeFilter) {
+      filterParts.push('agentType = :agentType');
+      exprValues[':agentType'] = agentTypeFilter;
+    }
+    if (conversationIdFilter) {
+      filterParts.push('conversationId = :convId');
+      exprValues[':convId'] = conversationIdFilter;
+    }
+    queryParams = {
+      TableName: RUNS_TABLE,
+      IndexName: 'sharedScope-createdAt-index',
+      KeyConditionExpression: 'sharedScope = :sharedScope',
+      FilterExpression: filterParts.join(' AND '),
+      ExpressionAttributeValues: exprValues,
+      ScanIndexForward: false,
+      Limit: limit,
+      ...(nextToken ? { ExclusiveStartKey: JSON.parse(Buffer.from(nextToken, 'base64').toString()) } : {}),
+    };
+  } else if (appId) {
     const filterParts = ['userId = :userId'];
     const exprValues: Record<string, unknown> = { ':appId': appId, ':userId': auth.sub };
     if (conversationIdFilter) {
@@ -383,11 +520,16 @@ const handleListRuns = async (event: APIGatewayProxyEventV2, auth: AuthContext) 
   return jsonResponse(200, response);
 };
 
-const handleGetRun = async (runId: string, auth: AuthContext) => {
-  const owned = await getOwnedRun(runId, auth);
-  if ('statusCode' in owned) return owned;
+const handleGetRun = async (runId: string, auth: AuthContext, event: APIGatewayProxyEventV2) => {
+  // Two auth paths:
+  //   - sharedScope in query → scope-keyed read (cross-user). Caller must have
+  //     already verified scope access; see getRunInScope SECURITY TODO.
+  //   - otherwise → owner-only (default, back-compat for all existing callers).
+  const sharedScope = event.queryStringParameters?.sharedScope;
+  const fetched = sharedScope ? await getRunInScope(runId, sharedScope) : await getOwnedRun(runId, auth);
+  if ('statusCode' in fetched) return fetched;
 
-  const run = owned;
+  const run = fetched;
 
   // If run is PROCESSING, check S3 for completion or timeout
   if (run.status === 'PROCESSING') {
@@ -447,10 +589,20 @@ const handleGetRun = async (runId: string, auth: AuthContext) => {
         run.updatedAt = now;
         run.completedAt = now;
       } else {
-        // No result yet — check for progress events
-        const progressEvents = await checkS3Progress(run.s3Prefix, run.userId, run.conversationId || run.runId);
-        if (progressEvents) {
-          return jsonResponse(200, { ...run, progressEvents });
+        // No result yet — check for progress events + a mid-run preview
+        // (e.g. applicant-identity extracted by Phase 1 of the Nolia
+        // Funding assess pipeline, available long before the full
+        // pipeline finishes).
+        const [progressEvents, preview] = await Promise.all([
+          checkS3Progress(run.s3Prefix, run.userId, run.conversationId || run.runId),
+          checkS3Preview(run.s3Prefix, run.userId, run.conversationId || run.runId),
+        ]);
+        if (progressEvents || preview) {
+          return jsonResponse(200, {
+            ...run,
+            ...(progressEvents ? { progressEvents } : {}),
+            ...(preview ? { preview } : {}),
+          });
         }
       }
     }
@@ -1087,7 +1239,7 @@ const handleRuns = async (
 
   // GET /v2-apps/runs/{runId} — get a single run
   if (method === 'GET' && segments.length === 1) {
-    return handleGetRun(segments[0], auth);
+    return handleGetRun(segments[0], auth, event);
   }
 
   // PUT /v2-apps/runs/{runId} — update a run

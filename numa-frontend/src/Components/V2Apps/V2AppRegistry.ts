@@ -72,6 +72,11 @@ export const V2_APPS: Record<string, V2AppConfig> = {
     color: '#059669',
     status: 'active',
     category: 'compliance',
+    // Opt in to cross-user run visibility. Nolia funding assessments/comparisons
+    // carry `sharedScope = funding_kb_id` so assessors with access to a Fund see
+    // every run under it, not just their own. Backend enforcement: SCOPE_SHARED_APPS
+    // in `lambdas/node/v2-apps-api/index.ts`.
+    scopeShared: true,
     tabs: [
       { id: 'agents', labelKey: 'v2Apps.tabs.agents', icon: 'bi bi-robot' },
       { id: 'runs', labelKey: 'v2Apps.tabs.runs', icon: 'bi bi-clock-history' },
@@ -165,6 +170,185 @@ export const V2_APPS: Record<string, V2AppConfig> = {
               { value: 'project', labelKey: 'v2Nolia.rulesGenerator.categories.project' },
             ],
             defaultValue: 'global',
+          },
+        ],
+      },
+      // ── Ngāi Tahu funding pipelines ──────────────────────────────────────
+      // Four actions that target the nolia_funding package's agent types.
+      // Separate from the MoH/procurement actions above so the distinction
+      // is visible in the UI during nd-labs testing.
+      {
+        id: 'funding-generate-global-rules',
+        nameKey: 'v2Nolia.agents.fundingGenerateGlobalRules.name',
+        descriptionKey: 'v2Nolia.agents.fundingGenerateGlobalRules.description',
+        icon: 'bi bi-globe2',
+        color: '#0ea5e9',
+        status: 'active',
+        capabilities: ['rules-extraction', 'global-policy', 'citations'],
+        resultConfig: { type: 'first-artifact' },
+        agentType: 'nolia-funding-rules-generator',
+        promptPlaceholderKey: 'v2Nolia.funding.promptPlaceholder',
+        customFields: [
+          {
+            id: 'kb_id',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.funding.fields.globalKbId',
+            required: true,
+            dynamicKBSource: 'all',
+          },
+          {
+            id: 'kb_name',
+            type: 'text',
+            labelKey: 'v2Nolia.funding.fields.kbName',
+            required: true,
+            defaultValue: 'Global KB',
+          },
+          {
+            // Locked to "global" for this action — dropdown with a single
+            // option so the value reaches metadata while the UI makes it
+            // obvious which variant is running.
+            id: 'kb_category',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.funding.fields.kbCategory',
+            required: true,
+            options: [{ value: 'global', labelKey: 'v2Nolia.funding.categories.global' }],
+            defaultValue: 'global',
+          },
+          {
+            id: 'client_name',
+            type: 'text',
+            labelKey: 'v2Nolia.funding.fields.clientName',
+            required: true,
+            defaultValue: 'ngaitahu',
+            helpTextKey: 'v2Nolia.funding.fields.clientNameHelp',
+          },
+        ],
+      },
+      {
+        id: 'funding-generate-fund-rules',
+        nameKey: 'v2Nolia.agents.fundingGenerateFundRules.name',
+        descriptionKey: 'v2Nolia.agents.fundingGenerateFundRules.description',
+        icon: 'bi bi-journal-bookmark',
+        color: '#0891b2',
+        status: 'active',
+        capabilities: ['rules-extraction', 'funding-policy', 'citations'],
+        resultConfig: { type: 'first-artifact' },
+        agentType: 'nolia-funding-rules-generator',
+        promptPlaceholderKey: 'v2Nolia.funding.promptPlaceholder',
+        customFields: [
+          {
+            id: 'kb_id',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.funding.fields.fundingKbId',
+            required: true,
+            dynamicKBSource: 'all',
+          },
+          {
+            id: 'kb_name',
+            type: 'text',
+            labelKey: 'v2Nolia.funding.fields.kbName',
+            required: true,
+            defaultValue: 'Learner Support Fund',
+          },
+          {
+            id: 'kb_category',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.funding.fields.kbCategory',
+            required: true,
+            options: [{ value: 'funding', labelKey: 'v2Nolia.funding.categories.funding' }],
+            defaultValue: 'funding',
+          },
+          {
+            id: 'client_name',
+            type: 'text',
+            labelKey: 'v2Nolia.funding.fields.clientName',
+            required: true,
+            defaultValue: 'ngaitahu',
+            helpTextKey: 'v2Nolia.funding.fields.clientNameHelp',
+          },
+        ],
+      },
+      {
+        id: 'funding-assess-application',
+        nameKey: 'v2Nolia.agents.fundingAssessApplication.name',
+        descriptionKey: 'v2Nolia.agents.fundingAssessApplication.description',
+        icon: 'bi bi-file-earmark-person',
+        color: '#059669',
+        status: 'active',
+        capabilities: ['application-assessment', 'document-analysis', 'scoring'],
+        resultConfig: { type: 'first-artifact' },
+        agentType: 'nolia-funding-assess',
+        promptPlaceholderKey: 'v2Nolia.funding.promptPlaceholder',
+        customFields: [
+          {
+            id: 'global_kb_id',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.funding.fields.globalKbId',
+            required: true,
+            dynamicKBSource: 'all',
+          },
+          {
+            id: 'funding_kb_id',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.funding.fields.fundingKbId',
+            required: true,
+            dynamicKBSource: 'all',
+          },
+          {
+            id: 'applicant_id',
+            type: 'text',
+            labelKey: 'v2Nolia.funding.fields.applicantId',
+            required: false,
+            helpTextKey: 'v2Nolia.funding.fields.applicantIdHelp',
+          },
+          {
+            id: 'client_name',
+            type: 'text',
+            labelKey: 'v2Nolia.funding.fields.clientName',
+            required: true,
+            defaultValue: 'ngaitahu',
+            helpTextKey: 'v2Nolia.funding.fields.clientNameHelp',
+          },
+        ],
+      },
+      {
+        id: 'funding-compare-applications',
+        nameKey: 'v2Nolia.agents.fundingCompareApplications.name',
+        descriptionKey: 'v2Nolia.agents.fundingCompareApplications.description',
+        icon: 'bi bi-columns-gap',
+        color: '#7c3aed',
+        status: 'active',
+        capabilities: ['comparison', 'side-by-side'],
+        resultConfig: { type: 'first-artifact' },
+        agentType: 'nolia-funding-compare',
+        promptPlaceholderKey: 'v2Nolia.funding.promptPlaceholder',
+        customFields: [
+          {
+            id: 'funding_kb_id',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.funding.fields.fundingKbId',
+            required: true,
+            dynamicKBSource: 'all',
+          },
+          {
+            // JSON string — parsed in the backend. Cross-user compare
+            // requires run_id + user_sub per entry. See
+            // `nolia_funding/compare_orchestrator.py` for the parsing
+            // contract.
+            id: 'run_ids_to_compare',
+            type: 'text',
+            labelKey: 'v2Nolia.funding.fields.runIdsToCompare',
+            required: true,
+            defaultValue: '[{"run_id": "", "user_sub": ""}, {"run_id": "", "user_sub": ""}]',
+            helpTextKey: 'v2Nolia.funding.fields.runIdsToCompareHelp',
+          },
+          {
+            id: 'client_name',
+            type: 'text',
+            labelKey: 'v2Nolia.funding.fields.clientName',
+            required: true,
+            defaultValue: 'ngaitahu',
+            helpTextKey: 'v2Nolia.funding.fields.clientNameHelp',
           },
         ],
       },
