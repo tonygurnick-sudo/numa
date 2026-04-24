@@ -315,9 +315,13 @@ export function GlobalSettingsModal({
   // Only sync on show=false->true transition. config is an object from context
   // whose reference changes frequently — without the guard, every context update
   // would reset all local edits while the modal is open.
-  const prevShowRef = useRef(false);
+  const initializedRef = useRef(false);
   useEffect(() => {
-    if (show && !prevShowRef.current && config) {
+    if (!show) {
+      initializedRef.current = false;
+      return;
+    }
+    if (show && !initializedRef.current && config) {
       setStaff(config.staff ? structuredClone(config.staff) : []);
       setTicketTypes(config.ticketTypes ? structuredClone(config.ticketTypes) : []);
       // statuses no longer editable — status categories are fixed
@@ -355,8 +359,9 @@ export function GlobalSettingsModal({
       setError(null);
       setFieldSearch('');
       setShowingNewField(false);
+
+      initializedRef.current = true;
     }
-    prevShowRef.current = show;
   }, [show, config]);
 
   // ── Sync staff from Cognito when the modal opens ──────────────────────────
