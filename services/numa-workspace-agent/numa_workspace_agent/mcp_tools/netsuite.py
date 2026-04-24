@@ -5,6 +5,7 @@ Provides native tool bindings for the 11 MCP standard tools exposed by NetSuite'
 These are dispatched dynamically through the `oauth-workspace-tools` Lambda.
 """
 
+import json
 from typing import Any
 
 import structlog
@@ -18,10 +19,32 @@ def _dispatch_netsuite_mcp(
     method: str, params: dict[str, Any], description: str
 ) -> dict[str, Any]:
     """Helper to dispatch NetSuite MCP JSON-RPC calls via OAuth lambda."""
-    return _invoke_connect_tool(
+    result = _invoke_connect_tool(
         "connect_netsuite_mcp",
         {"method": method, "arguments": params, "description": description},
     )
+
+    if isinstance(result, dict) and result.get("status") == "error":
+        return {
+            "content": [
+                {"type": "text", "text": f"NetSuite MCP Error: {result.get('error')}"}
+            ],
+            "isError": True,
+        }
+
+    data = result.get("result", {}) if isinstance(result, dict) else result
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": (
+                    json.dumps(data, indent=2)
+                    if isinstance(data, (dict, list))
+                    else str(data)
+                ),
+            }
+        ],
+    }
 
 
 # READ OPERATIONS (Auto-approved)
