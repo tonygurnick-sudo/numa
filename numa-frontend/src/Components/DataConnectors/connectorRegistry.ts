@@ -585,7 +585,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     tier: 2,
     oauth: {
-      authUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/authorize',
+      authUrl: 'https://<ACCOUNT_ID>.app.netsuite.com/app/login/oauth2/authorize.nl',
       tokenUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token',
       scopes: 'mcp restlets',
       hideClientSecret: true,
