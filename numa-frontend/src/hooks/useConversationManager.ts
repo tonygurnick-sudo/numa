@@ -39,6 +39,12 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
   const { storageKeySuffix = '', isWorkspaceMode = false } = options;
   const storageKey = `currentConversationId${storageKeySuffix}`;
   const workspaceStorageKey = `isWorkspaceConversation${storageKeySuffix}`;
+  // Flag set by ChatHistoryPage (or any other explicit-selection source) to signal
+  // that the sessionStorage conversation ID was deliberately chosen by the user and
+  // must be honored unconditionally — bypassing the inactivity/metaItems gates that
+  // would otherwise drop it when opening old chats or resuming after >20 min of
+  // browsing without chatting.
+  const pendingSelectKey = `pendingConversationSelect${storageKeySuffix}`;
 
   const [conversationId, setConversationId] = useState(null);
   const [isConversationLoading, setIsConversationLoading] = useState(true);
@@ -208,6 +214,22 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
       }
 
       try {
+        // Explicit selection (e.g. ChatHistoryPage clicked "Open"): honor the saved
+        // conversation ID unconditionally and skip the passive-restore gates below.
+        const pendingSelect = sessionStorage.getItem(pendingSelectKey);
+        const pendingConvoId = sessionStorage.getItem(storageKey);
+        if (pendingSelect === '1' && pendingConvoId) {
+          sessionStorage.removeItem(pendingSelectKey);
+          setConversationId(pendingConvoId);
+          // Bump inactivity timer so the auto-load path doesn't race against stale inactivity.
+          try {
+            localStorage.setItem(`numa_chat_lastInteraction${storageKeySuffix}`, Date.now().toString());
+          } catch {
+            // best-effort
+          }
+          return;
+        }
+
         const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(sub);
         if (cancelled || hasUserStartedNewChatRef.current) {
           return;
@@ -255,7 +277,7 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
     return () => {
       cancelled = true;
     };
-  }, [numaChatDynamoUtils, sub, handleNewChat, storageKey, workspaceStorageKey]);
+  }, [numaChatDynamoUtils, sub, handleNewChat, storageKey, workspaceStorageKey, pendingSelectKey, storageKeySuffix]);
 
   return {
     conversationId,
