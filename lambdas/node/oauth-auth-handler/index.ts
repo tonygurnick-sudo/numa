@@ -1071,10 +1071,15 @@ const handleListProviders = async (bustCache = false) => {
       const fields = secretEntry.fields || secretEntry;
       const fallback = FALLBACK_OAUTH_CONFIGS[providerId];
 
-      // OAuth connectors still need client_id + client_secret to be usable.
-      // Legacy `connector-{id}` that predates the split still requires
-      // `instance_url` (Synergy, Workbench).
-      if (isOAuth && (!fields.client_id || !fields.client_secret)) continue;
+      // OAuth connectors need client_id + client_secret, except NetSuite which
+      // uses PKCE (public client — no client_secret ever issued).
+      // Non-OAuth: metadata-only `connector-config-*` is valid with no creds
+      // (per-user PAT/api-key captured in chat). Legacy `connector-{id}` that
+      // predates the split still requires `instance_url` (Synergy, Workbench).
+      if (isOAuth) {
+        if (!fields.client_id) continue;
+        if (!fields.client_secret && providerId !== 'netsuite') continue;
+      }
       if (isLegacyConnector && !fields.instance_url) continue;
 
       if (fields.enabled_connectors) {
