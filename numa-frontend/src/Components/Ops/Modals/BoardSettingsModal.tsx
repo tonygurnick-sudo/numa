@@ -78,9 +78,16 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
   // Only sync on the show=false->true transition. Previously this depended on
   // existingZones/existingStages which are new array refs every render, causing
   // the effect to re-fire and reset all local edits (breaking stage reorder, etc.)
-  const prevShowRef = useRef(false);
+  const initializedRef = useRef(false);
+  const initialZoneIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
-    if (show && !prevShowRef.current && team) {
+    if (!show) {
+      initializedRef.current = false;
+      initialZoneIdsRef.current = new Set();
+      return;
+    }
+    if (show && !initializedRef.current && team && existingZones.length > 0) {
       setName(team.name);
       setColor(team.color);
       setWorkUnitSeries(team.workUnitSeries ?? null);
@@ -99,8 +106,10 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
       setIsDirty(false);
       setActiveTab('general');
       setPendingTabKey(null);
+
+      initialZoneIdsRef.current = new Set(existingZones.filter((z) => z.id).map((z) => z.id!));
+      initializedRef.current = true;
     }
-    prevShowRef.current = show;
   }, [show, team, existingZones, existingStages, config.ticketTypes]);
 
   // ── Sync staff from Cognito when the modal opens ──────────────────────
@@ -339,9 +348,8 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
       });
 
       // Delete removed zones
-      const existingZoneIds = new Set(existingZones.map((z) => z.id));
       const currentZoneIds = new Set(zones.filter((z) => z.id).map((z) => z.id!));
-      const deletedZoneIds = [...existingZoneIds].filter((id) => !currentZoneIds.has(id));
+      const deletedZoneIds = [...initialZoneIdsRef.current].filter((id) => !currentZoneIds.has(id));
       for (const zoneId of deletedZoneIds) {
         await OpsService.deleteZone(numaDelete, team.id, zoneId);
       }
