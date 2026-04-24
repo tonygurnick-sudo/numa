@@ -514,9 +514,13 @@ export const OAuthWizard = ({
       let finalAuthUrl = form.authUrl.trim();
       let finalTokenUrl = form.tokenUrl.trim();
       Object.entries(form.customCredentials).forEach(([key, value]) => {
+        let safeValue = value.trim();
+        if (key === 'account_id') {
+          safeValue = safeValue.toLowerCase().replace(/_/g, '-');
+        }
         const placeholder = `<${key.toUpperCase()}>`;
-        finalAuthUrl = finalAuthUrl.replace(new RegExp(placeholder, 'g'), value.trim());
-        finalTokenUrl = finalTokenUrl.replace(new RegExp(placeholder, 'g'), value.trim());
+        finalAuthUrl = finalAuthUrl.replace(new RegExp(placeholder, 'g'), safeValue);
+        finalTokenUrl = finalTokenUrl.replace(new RegExp(placeholder, 'g'), safeValue);
       });
 
       // Shared config fields (auth endpoints, extra params)
