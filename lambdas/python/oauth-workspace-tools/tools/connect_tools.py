@@ -704,6 +704,8 @@ def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
                 return {"status": "success", "result": result, "error": None}
             except Exception as e:
                 return {"status": "error", "result": None, "error": str(e)}
+            finally:
+                await provider.close()
 
         return asyncio.run(do_call())
 
