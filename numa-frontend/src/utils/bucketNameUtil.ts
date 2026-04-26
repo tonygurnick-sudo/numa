@@ -52,8 +52,11 @@ export const getPolicyBuilderBucketInfo = async (
   // Try to extract the key from the job results if available
   let key;
 
-  // Check if we have job details with results
-  if (jobDetails && jobDetails.results) {
+  // Only honour final_policy_pdf_key when the caller actually wants the PDF.
+  // For .md / .html exports we fall through to the constructed key below,
+  // otherwise the DOCX builder ends up wrapping PDF binary in <w:t> runs and
+  // produces a corrupt Word file.
+  if (jobDetails && jobDetails.results && fileExtension === '.pdf') {
     try {
       // Parse the results JSON string
       const resultsObj = typeof jobDetails.results === 'string' ? JSON.parse(jobDetails.results) : jobDetails.results;
