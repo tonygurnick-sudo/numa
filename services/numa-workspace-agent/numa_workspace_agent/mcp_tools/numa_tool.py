@@ -712,7 +712,7 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
 
 async def _handle_kb_download(params: dict[str, Any]) -> dict[str, Any]:
     """Download file from KB — ports knowledge_base.py cmd_download."""
-    uri = params.get("uri")
+    uri = params.get("uri") or params.get("s3_uri")
     file_name = params.get("file")
 
     if not uri and not file_name:

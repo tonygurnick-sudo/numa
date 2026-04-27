@@ -1716,7 +1716,7 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
 
     if mode == "download":
         # Download mode - supports either URI or file+kb_id
-        uri = params.get("uri")
+        uri = params.get("uri") or params.get("s3_uri")
         filename = params.get("file")
         kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
 
