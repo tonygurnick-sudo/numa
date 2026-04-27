@@ -1057,42 +1057,6 @@ const CrmMirrorView = (): React.JSX.Element => {
 
           {/* Controls */}
           <div className="d-flex align-items-center gap-2">
-            <LoadViewDropdown
-              savedViews={savedViews}
-              currentViewName={currentViewName}
-              isModified={isViewModified}
-              onLoad={handleLoadView}
-              onDelete={handleDeleteView}
-              onClear={handleClearView}
-            />
-
-            {viewMode === 'list' && (
-              <button
-                type="button"
-                className="btn btn-sm d-inline-flex align-items-center gap-1"
-                style={{
-                  backgroundColor: '#f8f9fa',
-                  border: '1px solid #dee2e6',
-                  borderRadius: 8,
-                  color: '#495057',
-                }}
-                onClick={() => setShowColumnPicker(true)}
-              >
-                <i className="bi bi-layout-three-columns" />
-                {t('columns.manage')}
-              </button>
-            )}
-
-            <Button
-              variant="outline-secondary"
-              size="sm"
-              onClick={() => setShowSaveViewModal(true)}
-              className="d-inline-flex align-items-center gap-1"
-            >
-              <i className="bi bi-bookmark" />
-              {t('filters.saveView')}
-            </Button>
-
             <span className="text-muted" style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
               {filteredCustomers.length} {filteredCustomers.length === 1 ? 'customer' : 'customers'}
             </span>
@@ -1150,14 +1114,11 @@ const CrmMirrorView = (): React.JSX.Element => {
         </div>
 
         {/* ── Filter bar (shared across board + list) ─────────────────── */}
-        {(stageOptions.length > 0 ||
-          territoryOptions.length > 0 ||
-          ownerOptions.length > 0 ||
-          industryOptions.length > 0) && (
-          <div
-            className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom"
-            style={{ backgroundColor: '#fafbfc' }}
-          >
+        <div
+          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom"
+          style={{ backgroundColor: '#fafbfc' }}
+        >
+          <div className="d-flex flex-wrap align-items-center gap-2">
             <QuickFilterDropdown
               label={t('crm.allStages')}
               options={stageOptions}
@@ -1200,7 +1161,47 @@ const CrmMirrorView = (): React.JSX.Element => {
               </button>
             )}
           </div>
-        )}
+
+          <div className="flex-grow-1" />
+
+          <div className="d-flex flex-wrap align-items-center justify-content-end gap-2 ms-auto">
+            <LoadViewDropdown
+              savedViews={savedViews}
+              currentViewName={currentViewName}
+              isModified={isViewModified}
+              onLoad={handleLoadView}
+              onDelete={handleDeleteView}
+              onClear={handleClearView}
+            />
+
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => setShowSaveViewModal(true)}
+              className="d-inline-flex align-items-center gap-1"
+            >
+              <i className="bi bi-bookmark" />
+              {t('filters.saveView')}
+            </Button>
+
+            {viewMode === 'list' && (
+              <button
+                type="button"
+                className="btn btn-sm d-inline-flex align-items-center gap-1"
+                style={{
+                  backgroundColor: '#f8f9fa',
+                  border: '1px solid #dee2e6',
+                  borderRadius: 8,
+                  color: '#495057',
+                }}
+                onClick={() => setShowColumnPicker(true)}
+              >
+                <i className="bi bi-layout-three-columns" />
+                {t('columns.manage')}
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* ── Board or List content ────────────────────────────────────── */}
         {error && (
