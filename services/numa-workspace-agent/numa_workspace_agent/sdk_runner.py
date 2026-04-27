@@ -1826,7 +1826,6 @@ async def run_claude_sdk(
                                 auto_approved=auto_approved,
                                 approval_mode=approval_mode,
                                 request_id=approval_id,
-                                schema_found=schema_found,
                             )
 
                 # Serialize and write to trace
