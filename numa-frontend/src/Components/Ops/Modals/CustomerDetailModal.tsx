@@ -7,6 +7,7 @@ import Spinner from 'react-bootstrap/Spinner';
 import Table from 'react-bootstrap/Table';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useToast } from '../../../Providers/ToastContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import type {
@@ -92,6 +93,7 @@ export function CustomerDetailModal({
 }: CustomerDetailModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPut } = useNumaRequest();
+  const { showToast } = useToast();
   const { config, selectedTeamId, teams, teamData } = useOps();
 
   // ── Core state ──────────────────────────────────────────────────────────
@@ -273,6 +275,7 @@ export function CustomerDetailModal({
   const handleUpdate = useCallback(
     async (payload: UpdateCustomerPayload) => {
       if (!customer || !customerId) return;
+      const prev = customer;
       setSaving(true);
       try {
         const updated = await OpsService.updateCustomer(numaPut, customerId, payload);
@@ -280,11 +283,13 @@ export function CustomerDetailModal({
         onUpdated?.();
       } catch (err) {
         console.error('[CustomerDetailModal] Update failed', err);
+        setCustomer(prev);
+        showToast({ message: t('crm.updateFailed'), variant: 'error' });
       } finally {
         setSaving(false);
       }
     },
-    [customer, customerId, numaPut, onUpdated]
+    [customer, customerId, numaPut, onUpdated, showToast, t]
   );
 
   // ── Notes inline edit helpers ─────────────────────────────────────────

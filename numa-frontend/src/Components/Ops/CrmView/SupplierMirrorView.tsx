@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { Supplier, SupplierConfig } from '../../../types/ops';
+import type { Supplier, SupplierConfig, StaffProfile } from '../../../types/ops';
 import { getCached, setCache } from '../../../utils/opsCache';
 import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
 import { SupplierCard } from './SupplierCard';
@@ -265,6 +265,7 @@ interface DroppableSupplierColumnProps {
   stage: { id: string; name: string; colorPosition?: number };
   suppliers: Supplier[];
   supplierConfig: SupplierConfig;
+  staff?: StaffProfile[];
   onSupplierClick: (s: Supplier) => void;
 }
 
@@ -272,55 +273,52 @@ function DroppableSupplierColumn({
   stage,
   suppliers,
   supplierConfig,
+  staff,
   onSupplierClick,
 }: DroppableSupplierColumnProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
   const supplierIds = suppliers.map((s) => s.id);
 
+  const stageColor = stage.colorPosition ? getColorForPosition(stage.colorPosition) : '#0d9488';
+  const textColor = getContrastTextColor(stageColor);
+
   return (
-    <div
-      ref={setNodeRef}
-      className={`kanban-column rounded-3 p-2 h-100 ${isOver ? 'bg-light bg-opacity-75' : 'bg-transparent'}`}
-      style={{
-        backgroundColor: '#f9fafb',
-        border: '1px solid #e5e7eb',
-        transition: 'background-color 0.2s ease',
-      }}
-    >
-      <div className="d-flex align-items-center justify-content-between mb-2 px-1">
+    <div className="kanban-column" style={{ background: isOver ? '#f0fdfa' : undefined }}>
+      {/* Colored column header */}
+      <div
+        style={{
+          backgroundColor: stageColor,
+          color: textColor,
+          borderRadius: 8,
+          padding: '7px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+        }}
+      >
+        <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>{stage.name}</span>
         <span
           style={{
-            fontWeight: 700,
-            fontSize: '0.75rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: '#374151',
-          }}
-        >
-          {stage.name}
-        </span>
-        <span
-          style={{
-            backgroundColor: '#f3f4f6',
-            color: '#6b7280',
-            fontSize: '0.7rem',
-            fontWeight: 600,
+            backgroundColor: 'rgba(255,255,255,0.25)',
             borderRadius: 10,
-            padding: '1px 8px',
-            minWidth: 22,
-            textAlign: 'center',
+            padding: '1px 7px',
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            color: textColor,
           }}
         >
           {suppliers.length}
         </span>
       </div>
 
-      <div className="flex-grow-1 overflow-auto" style={{ borderRadius: 10, minHeight: 100 }}>
+      {/* Cards */}
+      <div ref={setNodeRef}>
         {suppliers.length === 0 && (
           <div className="text-center py-4">
-            <i className="bi bi-truck" style={{ fontSize: '1.5rem', color: '#d1d5db' }} />
-            <div style={{ fontSize: '0.78rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noSuppliers')}</div>
+            <i className="bi bi-truck" style={{ fontSize: '1.2rem', color: '#d1d5db' }} />
+            <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noSuppliers')}</div>
           </div>
         )}
         <SortableContext items={supplierIds} strategy={verticalListSortingStrategy}>
@@ -329,6 +327,7 @@ function DroppableSupplierColumn({
               key={supplier.id}
               supplier={supplier}
               supplierConfig={supplierConfig}
+              staff={staff}
               onClick={onSupplierClick}
             />
           ))}
@@ -744,6 +743,7 @@ export function SupplierMirrorView(): React.JSX.Element {
                     stage={stage}
                     suppliers={stageSuppliers}
                     supplierConfig={supplierConfig!}
+                    staff={config?.staff}
                     onSupplierClick={openDetail}
                   />
                 );
@@ -752,7 +752,12 @@ export function SupplierMirrorView(): React.JSX.Element {
             <DragOverlay>
               {activeSupplier ? (
                 <div style={{ transform: 'scale(1.02)', opacity: 0.9 }}>
-                  <SupplierCard supplier={activeSupplier} supplierConfig={supplierConfig!} onClick={() => {}} />
+                  <SupplierCard
+                    supplier={activeSupplier}
+                    supplierConfig={supplierConfig!}
+                    staff={config?.staff}
+                    onClick={() => {}}
+                  />
                 </div>
               ) : null}
             </DragOverlay>

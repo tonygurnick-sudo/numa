@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { Customer, CrmConfig, CrmLifecycleStage } from '../../../types/ops';
+import type { Customer, CrmConfig, CrmLifecycleStage, StaffProfile } from '../../../types/ops';
 import { getCached, setCache } from '../../../utils/opsCache';
 import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
 import { CustomerCard } from './CustomerCard';
@@ -88,10 +88,17 @@ interface DroppableColumnProps {
   stage: CrmLifecycleStage;
   customers: Customer[];
   crmConfig: CrmConfig;
+  staff?: StaffProfile[];
   onCustomerClick: (customer: Customer) => void;
 }
 
-function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: DroppableColumnProps): React.JSX.Element {
+function DroppableColumn({
+  stage,
+  customers,
+  crmConfig,
+  staff,
+  onCustomerClick,
+}: DroppableColumnProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
 
@@ -99,32 +106,27 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
   const textColor = getContrastTextColor(stageColor);
 
   return (
-    <div className="kanban-column d-flex flex-column" style={{ height: '100%' }}>
+    <div className="kanban-column" style={{ background: isOver ? '#faf5ff' : undefined }}>
       {/* Colored column header */}
       <div
-        className="shadow-sm"
         style={{
           backgroundColor: stageColor,
           color: textColor,
-          borderRadius: '10px 10px 0 0',
-          padding: '10px 14px',
+          borderRadius: 8,
+          padding: '7px 12px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          border: `1px solid ${stageColor}`,
-          borderBottom: 'none',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.025)',
-          zIndex: 10,
-          position: 'relative',
+          marginBottom: 12,
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>{stage.name}</span>
+        <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>{stage.name}</span>
         <span
           style={{
             backgroundColor: 'rgba(255,255,255,0.25)',
             borderRadius: 10,
-            padding: '1px 8px',
-            fontSize: '0.7rem',
+            padding: '1px 7px',
+            fontSize: '0.68rem',
             fontWeight: 700,
             color: textColor,
           }}
@@ -133,31 +135,23 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
         </span>
       </div>
 
-      {/* Column body */}
-      <div
-        ref={setNodeRef}
-        style={{
-          flex: 1,
-          borderRadius: '0 0 10px 10px',
-          padding: '12px 8px',
-          backgroundColor: isOver ? '#f5f3ff' : '#f8fafc',
-          borderLeft: '1px solid #e2e8f0',
-          borderRight: '1px solid #e2e8f0',
-          borderBottom: isOver ? `2px dashed ${stageColor}` : '1px solid #e2e8f0',
-          transition: 'background-color 0.2s ease, border-color 0.2s',
-          overflowY: 'auto',
-          minHeight: 100,
-        }}
-      >
+      {/* Cards */}
+      <div ref={setNodeRef}>
         <SortableContext items={customers.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {customers.length === 0 && (
             <div className="text-center py-4">
-              <i className="bi bi-people" style={{ fontSize: '1.4rem', color: '#d1d5db' }} />
-              <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noCustomers')}</div>
+              <i className="bi bi-people" style={{ fontSize: '1.2rem', color: '#d1d5db' }} />
+              <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noCustomers')}</div>
             </div>
           )}
           {customers.map((customer) => (
-            <CustomerCard key={customer.id} customer={customer} crmConfig={crmConfig} onClick={onCustomerClick} />
+            <CustomerCard
+              key={customer.id}
+              customer={customer}
+              crmConfig={crmConfig}
+              staff={staff}
+              onClick={onCustomerClick}
+            />
           ))}
         </SortableContext>
       </div>
@@ -751,6 +745,7 @@ const CrmMirrorView = (): React.JSX.Element => {
                     stage={stage}
                     customers={customersByStage.get(stage.id) ?? []}
                     crmConfig={crmConfig}
+                    staff={config?.staff}
                     onCustomerClick={handleCustomerClick}
                   />
                 ))}
@@ -762,6 +757,7 @@ const CrmMirrorView = (): React.JSX.Element => {
                     <CustomerCard
                       customer={activeCustomer}
                       crmConfig={crmConfig}
+                      staff={config?.staff}
                       onClick={() => {}} // No-op during drag
                     />
                   </div>
