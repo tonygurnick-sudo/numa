@@ -244,7 +244,8 @@ def _save_ops_result(result: Any, operation: str) -> str:
             "params": {
                 "type": "string",
                 "description": (
-                    "JSON string of operation-specific parameters. "
+                    "JSON string of operation-specific parameters using camelCase keys "
+                    "(e.g. teamId, stageId, ticketTypeId, assigneeId, displayId). "
                     "See the ops skill documentation for required/optional params per operation."
                 ),
             },
@@ -323,7 +324,9 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
             and isinstance(result, dict)
             and "uploadUrl" in result
         ):
-            workspace_file_path = params.get("workspace_file_path")
+            workspace_file_path = params.get("workspaceFilePath") or params.get(
+                "workspace_file_path"
+            )
             if workspace_file_path:
                 try:
                     import urllib.request
@@ -335,8 +338,10 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                         )
 
                     upload_url = result["uploadUrl"]
-                    content_type = params.get(
-                        "content_type", "application/octet-stream"
+                    content_type = (
+                        params.get("contentType")
+                        or params.get("content_type")
+                        or "application/octet-stream"
                     )
                     file_size = local_path.stat().st_size
 
@@ -349,14 +354,14 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                         req.add_header("Content-Length", str(file_size))
                         urllib.request.urlopen(req, timeout=60.0)
 
-                    ticket_id = params.get("ticket_id")
+                    ticket_id = params.get("ticketId") or params.get("ticket_id")
                     if ticket_id and "s3Key" in result:
                         invoke_workspace_tool(
                             "ops_add_comment",
                             {
                                 "operation": "add_comment",
                                 "params": {
-                                    "ticket_id": ticket_id,
+                                    "ticketId": ticket_id,
                                     "content": f"📎 Attached: {local_path.name}",
                                     "attachments": [
                                         {

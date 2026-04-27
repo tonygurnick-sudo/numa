@@ -7,7 +7,9 @@ description: Manage Numa Ops boards — create and search tickets, manage teams 
 
 Manage work items on the Numa Ops kanban boards. Create tickets, search and filter, manage teams, track customers and suppliers, and more.
 
-> **Naming note:** The UI calls them "Boards" but the API uses "teams" / `team_id`. When talking to users, say "board". When calling the API, use `team_id`.
+> **Parameter convention:** All parameters use camelCase (matching the JSON API convention), e.g. `teamId`, `stageId`, `ticketTypeId`. snake_case is accepted as a fallback but camelCase is preferred.
+
+> **Naming note:** The UI calls them "Boards" but the API uses "teams" / `teamId`. When talking to users, say "board". When calling the API, use `teamId`.
 
 ## Available MCP Tool
 
@@ -24,7 +26,7 @@ The `numa_ops_tool` accepts an `operation` string and a `params` JSON string. Th
 ```
 mcp__numa__numa_ops_tool(
     operation="list_tickets",
-    params='{"team_id": "team-abc123"}',
+    params='{"teamId": "team-abc123"}',
     description="List all tickets for the Engineering board"
 )
 ```
@@ -73,37 +75,37 @@ mcp__numa__numa_ops_tool(
 | `description` | string   | No       | Brief project description                               |
 | `color`       | string   | No       | Hex color code                                          |
 | `status`      | string   | No       | Status: active, planned, on_hold, complete              |
-| `owner_id`    | string   | No       | Owner user sub (from get_config staff)                  |
-| `owner_name`  | string   | No       | Owner display name                                      |
+| `ownerId`     | string   | No       | Owner user sub (from get_config staff)                  |
+| `ownerName`   | string   | No       | Owner display name                                      |
 | `goals`       | string   | No       | Project goals/objectives (HTML rich text)               |
-| `start_date`  | string   | No       | Project start date (ISO format, e.g. 2026-04-01)        |
-| `end_date`    | string   | No       | Project end date (ISO format)                           |
-| `board_ids`   | string[] | No       | Board/team IDs this project is visible on (empty = all) |
+| `startDate`   | string   | No       | Project start date (ISO format, e.g. 2026-04-01)        |
+| `endDate`     | string   | No       | Project end date (ISO format)                           |
+| `boardIds`    | string[] | No       | Board/team IDs this project is visible on (empty = all) |
 
 #### update_project
 
 | Parameter     | Type     | Required | Description                                             |
 | ------------- | -------- | -------- | ------------------------------------------------------- |
-| `project_id`  | string   | Yes      | Project ID                                              |
+| `projectId`   | string   | Yes      | Project ID                                              |
 | `name`        | string   | No       | New project name                                        |
 | `description` | string   | No       | New description                                         |
 | `color`       | string   | No       | New color                                               |
-| `is_active`   | boolean  | No       | Set false to deactivate, true to restore                |
+| `isActive`    | boolean  | No       | Set false to deactivate, true to restore                |
 | `status`      | string   | No       | Status: active, planned, on_hold, complete              |
-| `owner_id`    | string   | No       | Owner user sub                                          |
-| `owner_name`  | string   | No       | Owner display name                                      |
+| `ownerId`     | string   | No       | Owner user sub                                          |
+| `ownerName`   | string   | No       | Owner display name                                      |
 | `goals`       | string   | No       | Project goals/objectives (HTML rich text)               |
-| `start_date`  | string   | No       | Project start date (ISO format)                         |
-| `end_date`    | string   | No       | Project end date (ISO format)                           |
-| `board_ids`   | string[] | No       | Board/team IDs this project is visible on (empty = all) |
+| `startDate`   | string   | No       | Project start date (ISO format)                         |
+| `endDate`     | string   | No       | Project end date (ISO format)                           |
+| `boardIds`    | string[] | No       | Board/team IDs this project is visible on (empty = all) |
 
 #### delete_project
 
 Admin-only operation. Permanently deletes a project.
 
-| Parameter    | Type   | Required | Description |
-| ------------ | ------ | -------- | ----------- |
-| `project_id` | string | Yes      | Project ID  |
+| Parameter   | Type   | Required | Description |
+| ----------- | ------ | -------- | ----------- |
+| `projectId` | string | Yes      | Project ID  |
 
 ---
 
@@ -124,44 +126,44 @@ No parameters required. Returns all boards accessible to the current user.
 
 #### get_team
 
-Returns the board with its zones and stages. Use this to get valid `stage_id` values for ticket creation.
+Returns the board with its zones and stages. Use this to get valid `stageId` values for ticket creation.
 
 | Parameter | Type   | Required | Description |
 | --------- | ------ | -------- | ----------- |
-| `team_id` | string | Yes      | Board ID    |
+| `teamId`  | string | Yes      | Board ID    |
 
 #### create_team
 
-| Parameter              | Type   | Required | Description                                                                                          |
-| ---------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------- |
-| `name`                 | string | Yes      | Board name                                                                                           |
-| `description`          | string | No       | Board description                                                                                    |
-| `color`                | string | No       | Hex color code                                                                                       |
-| `preset`               | string | No       | Board preset (e.g., "standard")                                                                      |
-| `ticket_type_id`       | string | No       | Default ticket type ID                                                                               |
-| `allowed_ticket_types` | array  | No       | List of allowed ticket type IDs                                                                      |
-| `field_overrides`      | object | No       | Custom field overrides per board `{fieldId: {required: true, hidden: false}}`                        |
-| `added_fields`         | object | No       | Additional fields per ticket type `{ticketTypeId: [fieldId, ...]}`                                   |
-| `access_control`       | object | No       | `{"mode": "all"\|"specific", "users": ["sub1", "sub2"], "owners": ["sub3"]}` -- owners are co-owners |
-| `announcement`         | string | No       | Board announcement text (shown at top of board)                                                      |
-| `zones`                | array  | No       | Custom zone definitions                                                                              |
+| Parameter            | Type   | Required | Description                                                                                          |
+| -------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------- |
+| `name`               | string | Yes      | Board name                                                                                           |
+| `description`        | string | No       | Board description                                                                                    |
+| `color`              | string | No       | Hex color code                                                                                       |
+| `preset`             | string | No       | Board preset (e.g., "standard")                                                                      |
+| `ticketTypeId`       | string | No       | Default ticket type ID                                                                               |
+| `allowedTicketTypes` | array  | No       | List of allowed ticket type IDs                                                                      |
+| `fieldOverrides`     | object | No       | Custom field overrides per board `{fieldId: {required: true, hidden: false}}`                        |
+| `addedFields`        | object | No       | Additional fields per ticket type `{ticketTypeId: [fieldId, ...]}`                                   |
+| `accessControl`      | object | No       | `{"mode": "all"\|"specific", "users": ["sub1", "sub2"], "owners": ["sub3"]}` -- owners are co-owners |
+| `announcement`       | string | No       | Board announcement text (shown at top of board)                                                      |
+| `zones`              | array  | No       | Custom zone definitions                                                                              |
 
 #### update_team
 
 Only board owners (creator or co-owners) and admins can update team settings.
 
-| Parameter              | Type   | Required | Description                                                                        |
-| ---------------------- | ------ | -------- | ---------------------------------------------------------------------------------- |
-| `team_id`              | string | Yes      | Board ID                                                                           |
-| `name`                 | string | No       | New board name                                                                     |
-| `description`          | string | No       | New description                                                                    |
-| `color`                | string | No       | New color                                                                          |
-| `allowed_ticket_types` | array  | No       | List of allowed ticket type IDs                                                    |
-| `field_overrides`      | object | No       | Custom field overrides `{fieldId: {required, hidden}}`                             |
-| `added_fields`         | object | No       | Additional fields per ticket type `{ticketTypeId: [fieldId, ...]}`                 |
-| `access_control`       | object | No       | `{"mode": "all"\|"specific", "users": [...], "owners": [...]}` -- manage ownership |
-| `work_unit_series`     | object | No       | Work unit (sprint) configuration                                                   |
-| `announcement`         | string | No       | Board announcement text                                                            |
+| Parameter            | Type   | Required | Description                                                                        |
+| -------------------- | ------ | -------- | ---------------------------------------------------------------------------------- |
+| `teamId`             | string | Yes      | Board ID                                                                           |
+| `name`               | string | No       | New board name                                                                     |
+| `description`        | string | No       | New description                                                                    |
+| `color`              | string | No       | New color                                                                          |
+| `allowedTicketTypes` | array  | No       | List of allowed ticket type IDs                                                    |
+| `fieldOverrides`     | object | No       | Custom field overrides `{fieldId: {required, hidden}}`                             |
+| `addedFields`        | object | No       | Additional fields per ticket type `{ticketTypeId: [fieldId, ...]}`                 |
+| `accessControl`      | object | No       | `{"mode": "all"\|"specific", "users": [...], "owners": [...]}` -- manage ownership |
+| `workUnitSeries`     | object | No       | Work unit (sprint) configuration                                                   |
+| `announcement`       | string | No       | Board announcement text                                                            |
 
 #### update_zones
 
@@ -169,7 +171,7 @@ Update zones on a board. Only board owners and admins can modify zones.
 
 | Parameter | Type   | Required | Description                                                                             |
 | --------- | ------ | -------- | --------------------------------------------------------------------------------------- |
-| `team_id` | string | Yes      | Board ID                                                                                |
+| `teamId`  | string | Yes      | Board ID                                                                                |
 | `zones`   | array  | Yes      | Array of zone objects: `[{"id": "...", "name": "...", "zoneType": "board"\|"backlog"}]` |
 
 #### update_stages
@@ -178,7 +180,7 @@ Update stages (kanban columns) on a board. Only board owners and admins can modi
 
 | Parameter | Type   | Required | Description                                                                                       |
 | --------- | ------ | -------- | ------------------------------------------------------------------------------------------------- |
-| `team_id` | string | Yes      | Board ID                                                                                          |
+| `teamId`  | string | Yes      | Board ID                                                                                          |
 | `stages`  | array  | Yes      | Array of stage objects: `[{"id": "...", "zoneId": "...", "name": "...", "statusType": "active"}]` |
 
 Valid `statusType` values per zone type:
@@ -205,143 +207,143 @@ Valid `statusType` values per zone type:
 
 #### list_tickets
 
-| Parameter          | Type   | Required | Description                                                      |
-| ------------------ | ------ | -------- | ---------------------------------------------------------------- |
-| `team_id`          | string | Yes      | Board ID to list tickets for                                     |
-| `stage_id`         | string | No       | Filter by stage ID                                               |
-| `status_type`      | string | No       | Filter by status type (backlog, queued, active, completed, etc.) |
-| `assignee_id`      | string | No       | Filter by assignee (user sub)                                    |
-| `customer_id`      | string | No       | Filter by linked customer                                        |
-| `work_unit_id`     | string | No       | Filter by sprint/work unit                                       |
-| `project_id`       | string | No       | Filter by project                                                |
-| `priority`         | string | No       | Filter by priority (lowest, low, medium, high, highest)          |
-| `include_archived` | string | No       | Set to "true" to include archived tickets                        |
-| `limit`            | string | No       | Pagination limit                                                 |
-| `cursor`           | string | No       | Pagination cursor from previous response                         |
+| Parameter         | Type   | Required | Description                                                      |
+| ----------------- | ------ | -------- | ---------------------------------------------------------------- |
+| `teamId`          | string | Yes      | Board ID to list tickets for                                     |
+| `stageId`         | string | No       | Filter by stage ID                                               |
+| `statusType`      | string | No       | Filter by status type (backlog, queued, active, completed, etc.) |
+| `assigneeId`      | string | No       | Filter by assignee (user sub)                                    |
+| `customerId`      | string | No       | Filter by linked customer                                        |
+| `workUnitId`      | string | No       | Filter by sprint/work unit                                       |
+| `projectId`       | string | No       | Filter by project                                                |
+| `priority`        | string | No       | Filter by priority (lowest, low, medium, high, highest)          |
+| `includeArchived` | string | No       | Set to "true" to include archived tickets                        |
+| `limit`           | string | No       | Pagination limit                                                 |
+| `cursor`          | string | No       | Pagination cursor from previous response                         |
 
 #### get_ticket
 
-| Parameter    | Type   | Required    | Description                                               |
-| ------------ | ------ | ----------- | --------------------------------------------------------- |
-| `ticket_id`  | string | Conditional | Internal ticket ID (use one of ticket_id or display_id)   |
-| `team_id`    | string | Conditional | Required when using ticket_id (not needed for display_id) |
-| `display_id` | string | Conditional | Human-readable display ID like "ENG-42"                   |
+| Parameter   | Type   | Required    | Description                                             |
+| ----------- | ------ | ----------- | ------------------------------------------------------- |
+| `ticketId`  | string | Conditional | Internal ticket ID (use one of ticketId or displayId)   |
+| `teamId`    | string | Conditional | Required when using ticketId (not needed for displayId) |
+| `displayId` | string | Conditional | Human-readable display ID like "ENG-42"                 |
 
 #### search_tickets
 
 | Parameter | Type   | Required | Description                              |
 | --------- | ------ | -------- | ---------------------------------------- |
 | `query`   | string | Yes      | Search text (matches title, description) |
-| `team_id` | string | No       | Limit search to a specific board         |
+| `teamId`  | string | No       | Limit search to a specific board         |
 
 #### create_ticket
 
 **IMPORTANT:** Call `get_config` first to get valid ticket types and staff. Call `get_team` to get valid stage IDs for the board.
 
-> **WARNING:** `stage_id` MUST be a valid UUID from the `get_team` response (`zones[].stages[].id`). Do NOT use status names like "backlog", "completed", or "active" -- they will be rejected. Invalid stage IDs will return a 400 error.
+> **WARNING:** `stageId` MUST be a valid UUID from the `get_team` response (`zones[].stages[].id`). Do NOT use status names like "backlog", "completed", or "active" -- they will be rejected. Invalid stage IDs will return a 400 error.
 
-| Parameter         | Type   | Required | Description                                                                     |
-| ----------------- | ------ | -------- | ------------------------------------------------------------------------------- |
-| `team_id`         | string | Yes      | Board to create the ticket in                                                   |
-| `stage_id`        | string | Yes      | Stage ID (from get_team response zones/stages)                                  |
-| `title`           | string | Yes      | Ticket title                                                                    |
-| `ticket_type_id`  | string | No       | Ticket type ID (from get_config ticketTypes)                                    |
-| `description`     | string | No       | Ticket description (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
-| `priority`        | string | No       | Priority: lowest, low, medium, high, highest                                    |
-| `assignee_id`     | string | No       | Assignee user sub (from get_config staff)                                       |
-| `assignee_name`   | string | No       | Assignee display name                                                           |
-| `reporter_id`     | string | No       | Reporter user sub (defaults to current user)                                    |
-| `reporter_name`   | string | No       | Reporter display name                                                           |
-| `due_date`        | string | No       | Due date in ISO 8601 format                                                     |
-| `customer_id`     | string | No       | Link to a customer                                                              |
-| `customer_name`   | string | No       | Customer display name                                                           |
-| `supplier_id`     | string | No       | Link to a supplier                                                              |
-| `supplier_name`   | string | No       | Supplier display name                                                           |
-| `work_unit_id`    | string | No       | Link to a sprint/work unit                                                      |
-| `project_id`      | string | No       | Link to a project                                                               |
-| `tags`            | array  | No       | List of tag strings                                                             |
-| `fields`          | object | No       | Custom field values (field_id → value)                                          |
-| `effort_points`   | number | No       | Effort/story points                                                             |
-| `source_type`     | string | No       | Origin of ticket: app, chat, agent, manual                                      |
-| `source_id`       | string | No       | Source record ID (e.g., conversation ID, app run ID)                            |
-| `source_app_type` | string | No       | Source application type identifier                                              |
+| Parameter       | Type   | Required | Description                                                                     |
+| --------------- | ------ | -------- | ------------------------------------------------------------------------------- |
+| `teamId`        | string | Yes      | Board to create the ticket in                                                   |
+| `stageId`       | string | Yes      | Stage ID (from get_team response zones/stages)                                  |
+| `title`         | string | Yes      | Ticket title                                                                    |
+| `ticketTypeId`  | string | No       | Ticket type ID (from get_config ticketTypes)                                    |
+| `description`   | string | No       | Ticket description (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
+| `priority`      | string | No       | Priority: lowest, low, medium, high, highest                                    |
+| `assigneeId`    | string | No       | Assignee user sub (from get_config staff)                                       |
+| `assigneeName`  | string | No       | Assignee display name                                                           |
+| `reporterId`    | string | No       | Reporter user sub (defaults to current user)                                    |
+| `reporterName`  | string | No       | Reporter display name                                                           |
+| `dueDate`       | string | No       | Due date in ISO 8601 format                                                     |
+| `customerId`    | string | No       | Link to a customer                                                              |
+| `customerName`  | string | No       | Customer display name                                                           |
+| `supplierId`    | string | No       | Link to a supplier                                                              |
+| `supplierName`  | string | No       | Supplier display name                                                           |
+| `workUnitId`    | string | No       | Link to a sprint/work unit                                                      |
+| `projectId`     | string | No       | Link to a project                                                               |
+| `tags`          | array  | No       | List of tag strings                                                             |
+| `fields`        | object | No       | Custom field values (fieldId -> value)                                          |
+| `effortPoints`  | number | No       | Effort/story points                                                             |
+| `sourceType`    | string | No       | Origin of ticket: app, chat, agent, manual                                      |
+| `sourceId`      | string | No       | Source record ID (e.g., conversation ID, app run ID)                            |
+| `sourceAppType` | string | No       | Source application type identifier                                              |
 
 #### update_ticket
 
-You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002"). If `display_id` is provided, the system will automatically resolve it to the internal UUID and team ID.
+You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002"). If `displayId` is provided, the system will automatically resolve it to the internal UUID and team ID.
 
-| Parameter         | Type    | Required | Description                                                    |
-| ----------------- | ------- | -------- | -------------------------------------------------------------- |
-| `ticket_id`       | string  | Yes\*    | Ticket UUID (\* or provide `display_id` instead)               |
-| `display_id`      | string  | No       | Display ID (e.g. "BUG-002") -- resolves automatically          |
-| `team_id`         | string  | Yes\*    | Board the ticket belongs to (\* auto-resolved from display_id) |
-| `current_team_id` | string  | No       | Current board (for cross-board moves)                          |
-| `title`           | string  | No       | New title                                                      |
-| `description`     | string  | No       | New description                                                |
-| `stage_id`        | string  | No       | Move to different stage (auto-updates status type)             |
-| `zone_id`         | string  | No       | Move to different zone                                         |
-| `priority`        | string  | No       | New priority                                                   |
-| `assignee_id`     | string  | No       | New assignee                                                   |
-| `assignee_name`   | string  | No       | Assignee display name                                          |
-| `due_date`        | string  | No       | New due date                                                   |
-| `customer_id`     | string  | No       | Link to customer                                               |
-| `supplier_id`     | string  | No       | Link to supplier                                               |
-| `work_unit_id`    | string  | No       | Link to sprint/work unit                                       |
-| `project_id`      | string  | No       | Link to project                                                |
-| `tags`            | array   | No       | Updated tags                                                   |
-| `fields`          | object  | No       | Updated custom field values                                    |
-| `effort_points`   | number  | No       | Updated effort points                                          |
-| `order`           | number  | No       | Position order within stage                                    |
-| `version`         | number  | No       | Optimistic locking (prevents concurrent edits)                 |
-| `archived`        | boolean | No       | Set true to archive, false to unarchive                        |
+| Parameter       | Type    | Required | Description                                                   |
+| --------------- | ------- | -------- | ------------------------------------------------------------- |
+| `ticketId`      | string  | Yes\*    | Ticket UUID (\* or provide `displayId` instead)               |
+| `displayId`     | string  | No       | Display ID (e.g. "BUG-002") -- resolves automatically         |
+| `teamId`        | string  | Yes\*    | Board the ticket belongs to (\* auto-resolved from displayId) |
+| `currentTeamId` | string  | No       | Current board (for cross-board moves)                         |
+| `title`         | string  | No       | New title                                                     |
+| `description`   | string  | No       | New description                                               |
+| `stageId`       | string  | No       | Move to different stage (auto-updates status type)            |
+| `zoneId`        | string  | No       | Move to different zone                                        |
+| `priority`      | string  | No       | New priority                                                  |
+| `assigneeId`    | string  | No       | New assignee                                                  |
+| `assigneeName`  | string  | No       | Assignee display name                                         |
+| `dueDate`       | string  | No       | New due date                                                  |
+| `customerId`    | string  | No       | Link to customer                                              |
+| `supplierId`    | string  | No       | Link to supplier                                              |
+| `workUnitId`    | string  | No       | Link to sprint/work unit                                      |
+| `projectId`     | string  | No       | Link to project                                               |
+| `tags`          | array   | No       | Updated tags                                                  |
+| `fields`        | object  | No       | Updated custom field values                                   |
+| `effortPoints`  | number  | No       | Updated effort points                                         |
+| `order`         | number  | No       | Position order within stage                                   |
+| `version`       | number  | No       | Optimistic locking (prevents concurrent edits)                |
+| `archived`      | boolean | No       | Set true to archive, false to unarchive                       |
 
 #### delete_ticket
 
-You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002"). If `display_id` is provided, the system will automatically resolve it to the internal UUID and team ID.
+You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002"). If `displayId` is provided, the system will automatically resolve it to the internal UUID and team ID.
 
-| Parameter    | Type   | Required | Description                                                    |
-| ------------ | ------ | -------- | -------------------------------------------------------------- |
-| `ticket_id`  | string | Yes\*    | Ticket UUID (\* or provide `display_id` instead)               |
-| `display_id` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically          |
-| `team_id`    | string | Yes\*    | Board the ticket belongs to (\* auto-resolved from display_id) |
+| Parameter   | Type   | Required | Description                                                   |
+| ----------- | ------ | -------- | ------------------------------------------------------------- |
+| `ticketId`  | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)               |
+| `displayId` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically         |
+| `teamId`    | string | Yes\*    | Board the ticket belongs to (\* auto-resolved from displayId) |
 
 #### bulk_update_tickets
 
 Update multiple tickets at once (e.g., move all to a new stage, reassign).
 
-| Parameter    | Type   | Required | Description                                                                                                           |
-| ------------ | ------ | -------- | --------------------------------------------------------------------------------------------------------------------- |
-| `ticket_ids` | array  | Yes      | Array of ticket IDs to update                                                                                         |
-| `changes`    | object | Yes      | Fields to apply to all tickets. Must include `team_id`. Supports: `stage_id`, `assignee_id`, `priority`, `tags`, etc. |
+| Parameter   | Type   | Required | Description                                                                                                        |
+| ----------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `ticketIds` | array  | Yes      | Array of ticket IDs to update                                                                                      |
+| `changes`   | object | Yes      | Fields to apply to all tickets. Must include `teamId`. Supports: `stageId`, `assigneeId`, `priority`, `tags`, etc. |
 
 #### add_comment
 
-You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002").
+You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002").
 
-| Parameter    | Type   | Required | Description                                                               |
-| ------------ | ------ | -------- | ------------------------------------------------------------------------- |
-| `ticket_id`  | string | Yes\*    | Ticket UUID (\* or provide `display_id` instead)                          |
-| `display_id` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically                     |
-| `content`    | string | Yes      | Comment text (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
-| `team_id`    | string | No       | Board ID (helps with comment count update)                                |
+| Parameter   | Type   | Required | Description                                                               |
+| ----------- | ------ | -------- | ------------------------------------------------------------------------- |
+| `ticketId`  | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)                           |
+| `displayId` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically                     |
+| `content`   | string | Yes      | Comment text (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
+| `teamId`    | string | No       | Board ID (helps with comment count update)                                |
 
 #### list_comments
 
-You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002").
+You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002").
 
-| Parameter    | Type   | Required | Description                                           |
-| ------------ | ------ | -------- | ----------------------------------------------------- |
-| `ticket_id`  | string | Yes\*    | Ticket UUID (\* or provide `display_id` instead)      |
-| `display_id` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically |
+| Parameter   | Type   | Required | Description                                           |
+| ----------- | ------ | -------- | ----------------------------------------------------- |
+| `ticketId`  | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)       |
+| `displayId` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically |
 
 #### get_audit
 
-Get the audit trail (change history) for a ticket. You can identify the ticket by either `ticket_id` (UUID) or `display_id` (e.g. "BUG-002").
+Get the audit trail (change history) for a ticket. You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002").
 
-| Parameter    | Type   | Required | Description                                           |
-| ------------ | ------ | -------- | ----------------------------------------------------- |
-| `ticket_id`  | string | Yes\*    | Ticket UUID (\* or provide `display_id` instead)      |
-| `display_id` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically |
+| Parameter   | Type   | Required | Description                                           |
+| ----------- | ------ | -------- | ----------------------------------------------------- |
+| `ticketId`  | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)       |
+| `displayId` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically |
 
 ---
 
@@ -358,39 +360,39 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 
 | Parameter | Type   | Required | Description |
 | --------- | ------ | -------- | ----------- |
-| `team_id` | string | Yes      | Board ID    |
+| `teamId`  | string | Yes      | Board ID    |
 
 #### create_work_unit
 
-| Parameter    | Type   | Required | Description                         |
-| ------------ | ------ | -------- | ----------------------------------- |
-| `team_id`    | string | Yes      | Board ID                            |
-| `name`       | string | Yes      | Sprint name                         |
-| `goal`       | string | No       | Sprint goal/objective               |
-| `start_date` | string | No       | Start date (ISO 8601)               |
-| `end_date`   | string | No       | End date (ISO 8601)                 |
-| `status`     | string | No       | Status: planning, active, completed |
-| `capacity`   | number | No       | Sprint capacity (story points)      |
+| Parameter   | Type   | Required | Description                         |
+| ----------- | ------ | -------- | ----------------------------------- |
+| `teamId`    | string | Yes      | Board ID                            |
+| `name`      | string | Yes      | Sprint name                         |
+| `goal`      | string | No       | Sprint goal/objective               |
+| `startDate` | string | No       | Start date (ISO 8601)               |
+| `endDate`   | string | No       | End date (ISO 8601)                 |
+| `status`    | string | No       | Status: planning, active, completed |
+| `capacity`  | number | No       | Sprint capacity (story points)      |
 
 #### update_work_unit
 
-| Parameter      | Type   | Required | Description    |
-| -------------- | ------ | -------- | -------------- |
-| `team_id`      | string | Yes      | Board ID       |
-| `work_unit_id` | string | Yes      | Work unit ID   |
-| `name`         | string | No       | New name       |
-| `goal`         | string | No       | New goal       |
-| `start_date`   | string | No       | New start date |
-| `end_date`     | string | No       | New end date   |
-| `status`       | string | No       | New status     |
-| `capacity`     | number | No       | New capacity   |
+| Parameter    | Type   | Required | Description    |
+| ------------ | ------ | -------- | -------------- |
+| `teamId`     | string | Yes      | Board ID       |
+| `workUnitId` | string | Yes      | Work unit ID   |
+| `name`       | string | No       | New name       |
+| `goal`       | string | No       | New goal       |
+| `startDate`  | string | No       | New start date |
+| `endDate`    | string | No       | New end date   |
+| `status`     | string | No       | New status     |
+| `capacity`   | number | No       | New capacity   |
 
 #### delete_work_unit
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `team_id`      | string | Yes      | Board ID     |
-| `work_unit_id` | string | Yes      | Work unit ID |
+| Parameter    | Type   | Required | Description  |
+| ------------ | ------ | -------- | ------------ |
+| `teamId`     | string | Yes      | Board ID     |
+| `workUnitId` | string | Yes      | Work unit ID |
 
 ---
 
@@ -403,23 +405,23 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 
 #### create_link
 
-| Parameter                  | Type   | Required | Description                                      |
-| -------------------------- | ------ | -------- | ------------------------------------------------ |
-| `ticket_id`                | string | Yes      | Source ticket ID                                 |
-| `linked_ticket_id`         | string | Yes      | Target ticket ID                                 |
-| `linked_ticket_display_id` | string | Yes      | Target ticket display ID (e.g., "ENG-42")        |
-| `linked_ticket_title`      | string | No       | Target ticket title                              |
-| `link_type`                | string | Yes      | Link type: depends_on, blocks, related_to        |
-| `team_id`                  | string | No       | Source ticket's board ID                         |
-| `linked_team_id`           | string | No       | Target ticket's board ID (for cross-board links) |
+| Parameter               | Type   | Required | Description                                      |
+| ----------------------- | ------ | -------- | ------------------------------------------------ |
+| `ticketId`              | string | Yes      | Source ticket ID                                 |
+| `linkedTicketId`        | string | Yes      | Target ticket ID                                 |
+| `linkedTicketDisplayId` | string | Yes      | Target ticket display ID (e.g., "ENG-42")        |
+| `linkedTicketTitle`     | string | No       | Target ticket title                              |
+| `linkType`              | string | Yes      | Link type: depends_on, blocks, related_to        |
+| `teamId`                | string | No       | Source ticket's board ID                         |
+| `linkedTeamId`          | string | No       | Target ticket's board ID (for cross-board links) |
 
 #### delete_link
 
-| Parameter          | Type   | Required | Description      |
-| ------------------ | ------ | -------- | ---------------- |
-| `ticket_id`        | string | Yes      | Source ticket ID |
-| `link_type`        | string | Yes      | Link type        |
-| `linked_ticket_id` | string | Yes      | Target ticket ID |
+| Parameter        | Type   | Required | Description      |
+| ---------------- | ------ | -------- | ---------------- |
+| `ticketId`       | string | Yes      | Source ticket ID |
+| `linkType`       | string | Yes      | Link type        |
+| `linkedTicketId` | string | Yes      | Target ticket ID |
 
 ---
 
@@ -439,7 +441,7 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 | ----------- | ------ | -------- | ---------------------------------------- |
 | `search`    | string | No       | Search by company name or notes          |
 | `stage`     | string | No       | Filter by lifecycle stage                |
-| `owner_id`  | string | No       | Filter by owner (user sub)               |
+| `ownerId`   | string | No       | Filter by owner (user sub)               |
 | `territory` | string | No       | Filter by territory                      |
 | `industry`  | string | No       | Filter by industry                       |
 | `flags`     | string | No       | Filter by flags (comma-separated)        |
@@ -448,32 +450,32 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 
 #### create_customer
 
-| Parameter             | Type   | Required | Description                                                 |
-| --------------------- | ------ | -------- | ----------------------------------------------------------- |
-| `company_name`        | string | Yes      | Company name                                                |
-| `industry`            | string | No       | Industry sector                                             |
-| `lifecycle_stage`     | string | No       | Lifecycle stage ID (e.g., "stage-prospect") from CRM config |
-| `owner_id`            | string | No       | Owner user sub                                              |
-| `owner_name`          | string | No       | Owner display name                                          |
-| `company_size`        | string | No       | Company size                                                |
-| `website`             | string | No       | Company website                                             |
-| `territory`           | string | No       | Territory                                                   |
-| `flags`               | array  | No       | Flag IDs                                                    |
-| `source`              | string | No       | Lead source                                                 |
-| `contract_start_date` | string | No       | Contract start (ISO 8601)                                   |
-| `contract_term`       | string | No       | Contract term                                               |
-| `renewal_date`        | string | No       | Renewal date (ISO 8601)                                     |
-| `contract_value`      | number | No       | Contract value                                              |
-| `products`            | array  | No       | Product list                                                |
-| `product_notes`       | string | No       | Product notes                                               |
-| `notes`               | string | No       | General notes                                               |
-| `contacts`            | array  | No       | Contact objects                                             |
+| Parameter           | Type   | Required | Description                                                 |
+| ------------------- | ------ | -------- | ----------------------------------------------------------- |
+| `companyName`       | string | Yes      | Company name                                                |
+| `industry`          | string | No       | Industry sector                                             |
+| `lifecycleStage`    | string | No       | Lifecycle stage ID (e.g., "stage-prospect") from CRM config |
+| `ownerId`           | string | No       | Owner user sub                                              |
+| `ownerName`         | string | No       | Owner display name                                          |
+| `companySize`       | string | No       | Company size                                                |
+| `website`           | string | No       | Company website                                             |
+| `territory`         | string | No       | Territory                                                   |
+| `flags`             | array  | No       | Flag IDs                                                    |
+| `source`            | string | No       | Lead source                                                 |
+| `contractStartDate` | string | No       | Contract start (ISO 8601)                                   |
+| `contractTerm`      | string | No       | Contract term                                               |
+| `renewalDate`       | string | No       | Renewal date (ISO 8601)                                     |
+| `contractValue`     | number | No       | Contract value                                              |
+| `products`          | array  | No       | Product list                                                |
+| `productNotes`      | string | No       | Product notes                                               |
+| `notes`             | string | No       | General notes                                               |
+| `contacts`          | array  | No       | Contact objects                                             |
 
 #### update_customer
 
 | Parameter                        | Type   | Required | Description      |
 | -------------------------------- | ------ | -------- | ---------------- |
-| `customer_id`                    | string | Yes      | Customer ID      |
+| `customerId`                     | string | Yes      | Customer ID      |
 | (same fields as create_customer) |        | No       | Fields to update |
 
 ---
@@ -490,8 +492,8 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 
 Supplier fields are similar to customer fields, with these differences:
 
-- **Supplier-specific:** `annual_spend` (number), `payment_terms` (string)
-- **Customer-only (not on suppliers):** `contract_start_date`, `contract_term`, `renewal_date`, `contract_value`, `products`, `product_notes`
+- **Supplier-specific:** `annualSpend` (number), `paymentTerms` (string)
+- **Customer-only (not on suppliers):** `contractStartDate`, `contractTerm`, `renewalDate`, `contractValue`, `products`, `productNotes`
 
 ---
 
@@ -501,12 +503,12 @@ Supplier fields are similar to customer fields, with these differences:
 | ------------------- | ----------------------------------------------------------- | -------- |
 | `upload_attachment` | Get a presigned URL to upload a file attachment to a ticket | Yes      |
 
-| Parameter             | Type   | Required | Description                                                         |
-| --------------------- | ------ | -------- | ------------------------------------------------------------------- |
-| `file_name`           | string | Yes      | Name of the file to upload                                          |
-| `content_type`        | string | Yes      | MIME type (e.g., "application/pdf")                                 |
-| `ticket_id`           | string | No       | Associate with a specific ticket                                    |
-| `workspace_file_path` | string | No       | Pass absolute workspace path (e.g., `/workdir/foo`) to auto-upload. |
+| Parameter           | Type   | Required | Description                                                         |
+| ------------------- | ------ | -------- | ------------------------------------------------------------------- |
+| `fileName`          | string | Yes      | Name of the file to upload                                          |
+| `contentType`       | string | Yes      | MIME type (e.g., "application/pdf")                                 |
+| `ticketId`          | string | No       | Associate with a specific ticket                                    |
+| `workspaceFilePath` | string | No       | Pass absolute workspace path (e.g., `/workdir/foo`) to auto-upload. |
 
 ---
 
@@ -516,10 +518,10 @@ Supplier fields are similar to customer fields, with these differences:
 | ------------- | ---------------------------------------- | -------- |
 | `get_metrics` | Get ticket counts by status for board(s) | No       |
 
-| Parameter  | Type   | Required | Description                                 |
-| ---------- | ------ | -------- | ------------------------------------------- |
-| `team_ids` | string | Yes      | Comma-separated board IDs                   |
-| `team_id`  | string | Yes      | Single board ID (alternative to `team_ids`) |
+| Parameter | Type   | Required | Description                                |
+| --------- | ------ | -------- | ------------------------------------------ |
+| `teamIds` | string | Yes      | Comma-separated board IDs                  |
+| `teamId`  | string | Yes      | Single board ID (alternative to `teamIds`) |
 
 ---
 
@@ -549,56 +551,56 @@ Fields have two distinct uses depending on their `category`:
 
 **`create_field`**
 
-| Parameter       | Type     | Required | Description                                                                                                                                                                                             |
-| --------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`          | string   | Yes      | Field label shown in the UI                                                                                                                                                                             |
-| `field_type`    | string   | Yes      | One of: `text`, `textarea`, `number`, `currency`, `percentage`, `date`, `select`, `multi_select`, `boolean`, `url`, `email`, `phone`, `richtext`, `user`, `customer`, `supplier`, `project`, `workunit` |
-| `category`      | string   | Yes      | `crm` for customer record fields; otherwise a ticket category like `common`, `development`, `support`, `operations`                                                                                     |
-| `required`      | boolean  | No       | Whether the field is required globally                                                                                                                                                                  |
-| `help_text`     | string   | No       | Hint shown to users when filling in                                                                                                                                                                     |
-| `default_value` | any      | No       | Default value                                                                                                                                                                                           |
-| `options`       | string[] | No       | Options for `select` / `multi_select` types                                                                                                                                                             |
+| Parameter      | Type     | Required | Description                                                                                                                                                                                             |
+| -------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | string   | Yes      | Field label shown in the UI                                                                                                                                                                             |
+| `fieldType`    | string   | Yes      | One of: `text`, `textarea`, `number`, `currency`, `percentage`, `date`, `select`, `multi_select`, `boolean`, `url`, `email`, `phone`, `richtext`, `user`, `customer`, `supplier`, `project`, `workunit` |
+| `category`     | string   | Yes      | `crm` for customer record fields; otherwise a ticket category like `common`, `development`, `support`, `operations`                                                                                     |
+| `required`     | boolean  | No       | Whether the field is required globally                                                                                                                                                                  |
+| `helpText`     | string   | No       | Hint shown to users when filling in                                                                                                                                                                     |
+| `defaultValue` | any      | No       | Default value                                                                                                                                                                                           |
+| `options`      | string[] | No       | Options for `select` / `multi_select` types                                                                                                                                                             |
 
-Returns the created field with its `id` (e.g. `field-a1b2c3d4`). Store that id — you'll need it to reference the field from tickets (`fields: {<id>: value}`), customers (`custom_fields: {<id>: value}`), or the CRM layout (`customerRecord.sections[].fieldIds`).
+Returns the created field with its `id` (e.g. `field-a1b2c3d4`). Store that id — you'll need it to reference the field from tickets (`fields: {<id>: value}`), customers (`customFields: {<id>: value}`), or the CRM layout (`customerRecord.sections[].fieldIds`).
 
-**`update_field`** — same fields as `create_field` plus `field_id`. All non-id fields are optional; only the provided keys change.
+**`update_field`** — same fields as `create_field` plus `fieldId`. All non-id fields are optional; only the provided keys change.
 
-**`delete_field`** — `field_id` (required). Refused with 409 if the field is still referenced by a CRM layout section or if it is a built-in system field. Remove from layout first via `update_crm_config`.
+**`delete_field`** — `fieldId` (required). Refused with 409 if the field is still referenced by a CRM layout section or if it is a built-in system field. Remove from layout first via `update_crm_config`.
 
 ### Ticket types
 
 **`create_ticket_type`**
 
-| Parameter        | Type     | Required | Description                                                |
-| ---------------- | -------- | -------- | ---------------------------------------------------------- |
-| `name`           | string   | Yes      | Display name (e.g. `Incident`)                             |
-| `prefix`         | string   | Yes      | 2-6 uppercase alphanumeric characters used for display IDs |
-| `color`          | string   | Yes      | Hex color                                                  |
-| `icon`           | string   | No       | Bootstrap icon name (default `ticket`)                     |
-| `default_fields` | string[] | No       | Field IDs that appear on this ticket type by default       |
+| Parameter       | Type     | Required | Description                                                |
+| --------------- | -------- | -------- | ---------------------------------------------------------- |
+| `name`          | string   | Yes      | Display name (e.g. `Incident`)                             |
+| `prefix`        | string   | Yes      | 2-6 uppercase alphanumeric characters used for display IDs |
+| `color`         | string   | Yes      | Hex color                                                  |
+| `icon`          | string   | No       | Bootstrap icon name (default `ticket`)                     |
+| `defaultFields` | string[] | No       | Field IDs that appear on this ticket type by default       |
 
-**`update_ticket_type`** — `ticket_type_id` (required) + optional `name`, `color`, `icon`, `default_fields`. Prefix is immutable.
+**`update_ticket_type`** — `ticketTypeId` (required) + optional `name`, `color`, `icon`, `defaultFields`. Prefix is immutable.
 
-**`delete_ticket_type`** — `ticket_type_id` only.
+**`delete_ticket_type`** — `ticketTypeId` only.
 
 ### CRM configuration
 
-The CRM config is a single document that the backend **shallow-merges** on PUT. Only send the top-level keys you want to change. Sub-objects (like `customer_record`) are replaced whole, so if you're adding a field to one section, first `get_config`, modify the sections array, then pass the complete `customer_record` back.
+The CRM config is a single document that the backend **shallow-merges** on PUT. Only send the top-level keys you want to change. Sub-objects (like `customerRecord`) are replaced whole, so if you're adding a field to one section, first `get_config`, modify the sections array, then pass the complete `customerRecord` back.
 
 **`update_crm_config`**
 
-| Parameter          | Type                                                                       | Required | Description                                                                           |
-| ------------------ | -------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
-| `lifecycle_stages` | `[{id, name, colorPosition?}]`                                             | No       | Full replacement list of customer lifecycle stages                                    |
-| `customer_flags`   | `[{id, name, color, icon?}]`                                               | No       | Full replacement list of customer flags                                               |
-| `document_types`   | `[{id, name}]`                                                             | No       | Full replacement list of document types                                               |
-| `territories`      | `string[]`                                                                 | No       | Full replacement list of territory names                                              |
-| `industries`       | `string[]`                                                                 | No       | Full replacement list of industry names                                               |
-| `default_stage`    | string                                                                     | No       | ID of the default lifecycle stage for new customers                                   |
-| `customer_record`  | `{sections: [{id, name, fieldIds, requiredFieldIds?}]}`                    | No       | Customer record layout — controls which fields appear in what order on customer cards |
-| `layout`           | `{columnsPerSection?, density?, defaultSectionsExpanded?, labelPosition?}` | No       | Visual layout controls                                                                |
+| Parameter         | Type                                                                       | Required | Description                                                                           |
+| ----------------- | -------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| `lifecycleStages` | `[{id, name, colorPosition?}]`                                             | No       | Full replacement list of customer lifecycle stages                                    |
+| `customerFlags`   | `[{id, name, color, icon?}]`                                               | No       | Full replacement list of customer flags                                               |
+| `documentTypes`   | `[{id, name}]`                                                             | No       | Full replacement list of document types                                               |
+| `territories`     | `string[]`                                                                 | No       | Full replacement list of territory names                                              |
+| `industries`      | `string[]`                                                                 | No       | Full replacement list of industry names                                               |
+| `defaultStage`    | string                                                                     | No       | ID of the default lifecycle stage for new customers                                   |
+| `customerRecord`  | `{sections: [{id, name, fieldIds, requiredFieldIds?}]}`                    | No       | Customer record layout — controls which fields appear in what order on customer cards |
+| `layout`          | `{columnsPerSection?, density?, defaultSectionsExpanded?, labelPosition?}` | No       | Visual layout controls                                                                |
 
-**`update_supplier_config`** — parallel to the above but for suppliers. Accepts `lifecycle_stages`, `supplier_flags`, `document_types`, `default_stage`.
+**`update_supplier_config`** — parallel to the above but for suppliers. Accepts `lifecycleStages`, `supplierFlags`, `documentTypes`, `defaultStage`.
 
 ### Workflow: add a new CRM field and place it on the customer record
 
@@ -607,13 +609,13 @@ The CRM config is a single document that the backend **shallow-merges** on PUT. 
 get_config -> note crmConfig.customerRecord.sections + existing fields
 
 # 2. Create the new CRM field (category must be "crm").
-create_field(name="Renewal Likelihood", field_type="select", category="crm",
+create_field(name="Renewal Likelihood", fieldType="select", category="crm",
              options=["High", "Medium", "Low"])
 # → returns { id: "field-7f8a9b", ... }
 
 # 3. Add the new field id to the desired section of customerRecord.
-#    Send the FULL customer_record (all sections) back — it's replaced whole.
-update_crm_config(customer_record={
+#    Send the FULL customerRecord (all sections) back — it's replaced whole.
+update_crm_config(customerRecord={
     "sections": [
         { "id": "section-company-details", "name": "Company Details",
           "fieldIds": [...original ids...] },
@@ -626,15 +628,15 @@ update_crm_config(customer_record={
 
 ### Custom fields on customer/supplier records
 
-`create_customer` and `update_customer` accept a `custom_fields` parameter: `{fieldId: value}` keyed by CRM field ids. Same for `create_supplier` / `update_supplier`.
+`create_customer` and `update_customer` accept a `customFields` parameter: `{fieldId: value}` keyed by CRM field ids. Same for `create_supplier` / `update_supplier`.
 
-**Note:** Tickets use `fields` (no underscore suffix); customers and suppliers use `custom_fields` which maps to `customFields` on the persisted record. Don't confuse the two.
+**Note:** Tickets use `fields` (no underscore suffix); customers and suppliers use `customFields` which maps to `customFields` on the persisted record. Don't confuse the two.
 
 ```
 create_customer(
-    company_name="Acme Corp",
-    lifecycle_stage="stage-prospect",
-    custom_fields={"field-7f8a9b": "High", "field-deal-value": 50000}
+    companyName="Acme Corp",
+    lifecycleStage="stage-prospect",
+    customFields={"field-7f8a9b": "High", "field-deal-value": 50000}
 )
 ```
 
@@ -652,12 +654,12 @@ mcp__numa__numa_ops_tool(operation="get_config", params='{}', description="Load 
 mcp__numa__numa_ops_tool(operation="list_teams", params='{}', description="List all boards")
 
 # 3. Get the board to find valid stage IDs
-mcp__numa__numa_ops_tool(operation="get_team", params='{"team_id":"team-abc"}', description="Get board details with stages")
+mcp__numa__numa_ops_tool(operation="get_team", params='{"teamId":"team-abc"}', description="Get board details with stages")
 
-# 4. Create the ticket with a valid stage_id
+# 4. Create the ticket with a valid stageId
 mcp__numa__numa_ops_tool(
     operation="create_ticket",
-    params='{"team_id":"team-abc","stage_id":"stage-xyz","title":"Fix login bug","ticket_type_id":"tt-bug123","priority":"high","description":"<p>Users report <strong>500 errors</strong> on the login page.</p><ul><li>Affects all browsers</li><li>Started after last deploy</li></ul>"}',
+    params='{"teamId":"team-abc","stageId":"stage-xyz","title":"Fix login bug","ticketTypeId":"tt-bug123","priority":"high","description":"<p>Users report <strong>500 errors</strong> on the login page.</p><ul><li>Affects all browsers</li><li>Started after last deploy</li></ul>"}',
     description="Create ticket: Fix login bug (high priority) in Engineering board"
 )
 ```
@@ -668,14 +670,14 @@ mcp__numa__numa_ops_tool(
 # Search for tickets
 mcp__numa__numa_ops_tool(
     operation="search_tickets",
-    params='{"query":"login bug","team_id":"team-abc"}',
+    params='{"query":"login bug","teamId":"team-abc"}',
     description="Search for login bug tickets"
 )
 
 # Move ticket to a different stage
 mcp__numa__numa_ops_tool(
     operation="update_ticket",
-    params='{"ticket_id":"ticket-xyz","team_id":"team-abc","stage_id":"stage-inprogress"}',
+    params='{"ticketId":"ticket-xyz","teamId":"team-abc","stageId":"stage-inprogress"}',
     description="Move ticket to In Progress stage"
 )
 ```
@@ -685,7 +687,7 @@ mcp__numa__numa_ops_tool(
 ## Best Practices
 
 1. **Always call `get_config` first** — you need ticket types, statuses, and staff IDs before creating tickets
-2. **Call `get_team` to get stage IDs** — `stage_id` must be a valid UUID from `get_team` stages. The API will reject invalid stage IDs with a 400 error. Do not use status names like "backlog" or "completed" as stage IDs
+2. **Call `get_team` to get stage IDs** — `stageId` must be a valid UUID from `get_team` stages. The API will reject invalid stage IDs with a 400 error. Do not use status names like "backlog" or "completed" as stage IDs
 3. **Link tickets using ticketUrl** — ticket responses include a `ticketUrl` field (e.g., `https://acme.numa.arcanum.ai/ops?ticket=ENG-42`). Always include this link when referencing tickets so users can click through directly
 4. **Include full content in approval descriptions** — for write operations, describe exactly what will be created/changed
 5. **Respect team scoping** — users can only see boards they have access to
