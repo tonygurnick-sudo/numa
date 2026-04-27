@@ -19,7 +19,7 @@ Addendum structure (concatenated in order):
     _FILLING_FIELDS    — fallbacks for behaviours the template can't express
     _DECISION_OUTPUT   — emit structured decision back to applicant.json
     _OUTPUT_FORMAT     — filename convention + final file layout
-    _OPERATING_MODE    — terminal behaviour + "rule IDs are internal"
+    _OPERATING_MODE    — terminal behaviour + "pipeline artifacts are internal"
 """
 
 # ROLE: Tell the agent what inputs it has from the earlier phases and the KB.
@@ -439,11 +439,13 @@ name, status decision, key rationale) and STOP.
 """
 
 
-# ROLE: Terminal behaviour + the "rule IDs are internal" guardrail. The
-# rule-ID guardrail is the single most important user-facing rule in the
-# whole assess pipeline — internal tracking IDs (`F-042`, `G-007`) must
-# never leak into the rendered assessment. Cite the original policy
-# source via evidence_sources instead.
+# ROLE: Terminal behaviour + the "pipeline artifacts are internal"
+# guardrail. This is the single most important user-facing rule in the
+# whole assess pipeline — none of our intermediate artifacts (rule IDs,
+# generated rules files, applicant.json, findings.md, workdir paths) may
+# leak into the rendered assessment. The assessor only has two kinds of
+# document they know about: files they uploaded, and files that live in
+# the KB they selected. Cite via evidence_sources, not via pipeline state.
 _OPERATING_MODE = """\
 ## Operating Mode
 
@@ -455,32 +457,70 @@ template asks for.
 - No conversational output beyond the final summary. Write the file, \
 produce the summary, stop.
 
-### Rule IDs are INTERNAL — never show them in the rendered output
+### Pipeline artifacts are INTERNAL — never show them in the rendered output
 
-The rule IDs you see in `findings.md` (`F-001`, `F-042`, `G-003`, etc.) \
-and in the underlying rulebook files (`funding-rules.md`, \
-`global-rules.md`) are **pipeline-internal tracking identifiers**. The \
-assessor reading this report has no concept of them — from their \
-perspective, rules come from the organisation's original policy documents.
+The rendered assessment is the only thing the assessor sees. From their \
+perspective there are exactly two kinds of document they know about:
 
-- **Never** write "per rule F-042", "as per F-###", "rule G-001 states", \
-or any similar phrasing in the rendered assessment output.
-- **When you need to cite evidence for a finding,** cite the original \
-source document — use the ``evidence_sources`` array on the finding, \
-not the ``rule_id`` field. Preferred shape: *"Applicant Form Q1; LSF \
+1. Documents the applicant uploaded for this application.
+2. Documents that live in the knowledge base the assessor selected \
+(original policy, criteria, supporting-data, good-example files).
+
+Everything else — every file under `/workdir/tmp/` or \
+`/workdir/knowledge-bases/*.md`, every `extracted_*.json` under \
+`/workdir/uploads/`, every rule ID in `findings.md` and the rulebook — \
+is pipeline-internal plumbing. The assessor has no concept of any of it \
+and it must never appear in the rendered output.
+
+**Allowed references in the rendered report:**
+
+- **Applicant-uploaded documents** — cite by role/title, e.g. *"the \
+applicant's pre-tuition report for Term 3 2025"*, *"the applicant's \
+academic transcript"*. Take the title from `applicant.json`'s \
+`documents[].description` or the rendered finding's prose, never from \
+the `extracted_*.json` filename or a `/workdir/` path.
+- **KB-resident documents** — original policy / criteria / \
+supporting-data / good-example files, cited by title + section, e.g. \
+*"LSF Policy V2 Section 5.1.1"*, *"Directory.csv"*. Again, no \
+`/workdir/knowledge-bases/` paths.
+- **Applicant form fields** — e.g. *"Applicant Form Q1"*, \
+*"Application Form Question 5"*.
+
+**Forbidden references — must never appear in the rendered output:**
+
+- **Pipeline artifact filenames:** `applicant.json`, `_applicant.json`, \
+`findings.md`, `funding-rules.md`, `global-rules.md`, \
+`supporting-data-manifest.json`, or any other generated intermediate.
+- **Workdir paths:** anything under `/workdir/tmp/`, \
+`/workdir/knowledge-bases/`, `/workdir/uploads/`, or any other \
+`/workdir/...` path.
+- **Rule IDs:** `F-001`, `F-042`, `G-003`, or any `F-###` / `G-###` \
+pattern from `findings.md` and the rulebook files.
+- **Pipeline terminology:** "rules file", "rulebook", "manifest", \
+"extracted JSON", "Phase 1 / 2 / 3", or similar words that expose how \
+the pipeline works.
+
+**When you need to cite evidence for a finding,** use the finding's \
+``evidence_sources`` array (which points to applicant uploads and KB \
+files by their real titles). Preferred shape: *"Applicant Form Q1; LSF \
 Policy V2 Section 5.1.1"*. Never *"rule F-042 (LSF Policy V2 Section \
-5.1.1)"*.
-- **If the template has a field literally asking for a rule or criterion \
+5.1.1)"*, never *"per findings.md"*, never *"see applicant.json"*.
+
+**If the template has a field literally asking for a rule or criterion \
 label**, use the human-readable rule title (from ``rule_title`` in the \
 finding) — never the ID. For example: *"Educational enrollment"*, not \
 *"F-004 Educational enrollment"*.
-- **If the bracketed template instruction asks for a policy reference**, \
-produce the source doc citation from ``evidence_sources``, not the \
-internal ID.
 
-The rendered assessment must read as if generated from a policy-document \
-review, not from a derived rules file. The derived rules file exists only \
-so the pipeline can evaluate consistently; it is invisible to the user.
+**If the bracketed template instruction asks for a policy reference**, \
+produce the source doc citation from ``evidence_sources``, not the \
+internal ID or the rulebook filename.
+
+The rendered assessment must read as if written by an assessor reviewing \
+the applicant's uploads against the organisation's published policy — \
+not as a derivation over pipeline intermediates. The rules files, \
+findings file, and applicant JSON exist only so the pipeline can \
+evaluate consistently; they are invisible to the user and must stay \
+that way.
 """
 
 

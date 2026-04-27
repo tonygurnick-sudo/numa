@@ -1,6 +1,6 @@
 """Nolia Funding workspace setup — pre-pipeline data preparation.
 
-Three entry points, one per pipeline:
+Entry points:
 
 - ``setup_funding_rules_workspace()`` — for ``nolia-funding-rules-generator``.
   Downloads the Funding KB's selection-criteria, application-form,
@@ -11,19 +11,33 @@ Three entry points, one per pipeline:
   manifest entries, which the rules agent uses to emit per-file rules
   describing how each lookup file is consulted during assessment.
 
+- ``pre_extract_kb_documents()`` — also called from the rules-generation
+  pipeline (after ``setup_funding_rules_workspace``). Walks every PDF/DOCX
+  in the KB's S3 prefix, runs the extract-content Lambda once per file,
+  and writes ``{filename}.extracted.json`` sidecars next to the originals
+  in S3. Sidecars for rules-relevant subfolders are also downloaded
+  locally so the rules agent can read pre-parsed JSON instead of raw
+  binaries. Cached sidecars are picked up by every future assessment run
+  via ``setup_funding_assess_workspace`` — no per-assessment extraction
+  cost for KB content.
+
 - ``setup_funding_assess_workspace()`` — for ``nolia-funding-assess``.
   Downloads the paired Global KB rules, the Funding KB's full contents
-  (including supporting-data + manifest), the output template, and pre-extracts
-  any PDFs in supporting-data. Also extracts the applicant's uploaded docs.
+  (including supporting-data + manifest + cached ``.extracted.json``
+  sidecars), and the output template.
+
+- ``extract_funding_application()`` — applicant uploads. Pre-extracts each
+  PDF/DOCX upload to ``extracted_{stem}.json`` for the assessment agent.
 
 - ``setup_funding_compare_workspace()`` — for ``nolia-funding-compare``.
   Downloads prior assessment artefacts for each run being compared, plus the
   Funding KB's output template (for structural context).
 
 Imports a handful of helpers from ``..nolia.workspace_setup`` — S3 client,
-prefix download, PDF extraction, DOCX→PDF conversion. These are genuinely
-shared infrastructure, not product-specific logic. If the cross-package
-import ever becomes inconvenient, lift them to a ``..nolia_shared`` module.
+prefix download, PDF extraction (simple + chunked), DOCX→PDF conversion.
+These are genuinely shared infrastructure, not product-specific logic. If
+the cross-package import ever becomes inconvenient, lift them to a
+``..nolia_shared`` module.
 """
 
 import asyncio
@@ -39,10 +53,10 @@ import structlog
 # considered package-internal but are clearly reusable across Nolia products.
 # If duplication pressure arises, promote them to a shared module.
 from ..nolia.workspace_setup import (  # noqa: E501
-    CONVERTIBLE_EXTENSIONS,
     _convert_to_pdf,
     _download_s3_prefix,
     _extract_pdf,
+    _extract_simple,
     _get_s3_client,
 )
 
@@ -64,6 +78,24 @@ OUTPUTS_BUCKET = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 EXTRACT_LAMBDA_ARN = os.environ.get("EXTRACT_CONTENT_LAMBDA_ARN", "")
 DOCUMENT_CONVERTER_LAMBDA = os.environ.get("DOCUMENT_CONVERTER_LAMBDA_NAME", "")
+
+# Per-run cap on simultaneous _extract_pdf invocations. ``_extract_pdf``
+# itself page-chunk-parallelises up to 10 chunks per PDF, so the total
+# Lambda concurrency footprint is bounded by this × 10.
+MAX_PER_RUN_PDF_CONCURRENCY = 5
+
+# File extensions we pre-extract for the agent. Everything else stays in
+# /workdir/uploads/ untouched and the agent reads it directly with the
+# appropriate tool (openpyxl for xlsx, native Read for txt/md/csv, etc.).
+EXTRACTABLE_EXTENSIONS = {".pdf", ".docx"}
+
+# Above this size we use the chunked extraction path (prepare → extract ×
+# N → merge) which was built to dodge the 15-minute Lambda timeout on the
+# large reference PDFs in supporting-data. Below it we use the single-call
+# default-mode path, which is one Lambda invocation and skips the per-page
+# image-staging round trip — a meaningful speed-up for the typical
+# applicant upload (CV, transcript, quote — usually a handful of pages).
+SIMPLE_EXTRACT_SIZE_THRESHOLD_BYTES = 500 * 1024  # 500 KB
 
 # ─── S3 layout (matches funding-kb-structure.md) ─────────────────────────────
 
@@ -329,10 +361,10 @@ async def setup_funding_assess_workspace(
         target = KB_DIR / filename
         _download_file(s3, DATA_BUCKET, key, target, optional=optional)
 
-    # ── Pre-extract supporting-data PDFs ────────────────────────────────────
-    # Large PDFs (curriculum docs, etc.) can't be read inline. Extract them
-    # once up-front so the assessment agent can query the extracted JSON.
-    await _pre_extract_supporting_data(user_sub, conversation_id)
+    # KB PDF/DOCX sidecars (`{name}.extracted.json`) are produced once at
+    # rules-generation time by ``pre_extract_kb_documents`` and stored in the
+    # data bucket alongside the originals. The ``_download_s3_prefix`` calls
+    # above pick them up automatically — no per-assessment extraction needed.
 
     logger.info(
         "Funding assess workspace ready",
@@ -340,204 +372,343 @@ async def setup_funding_assess_workspace(
     )
 
 
-async def _pre_extract_supporting_data(user_sub: str, conversation_id: str) -> None:
-    """Extract all PDFs in /workdir/knowledge-bases/supporting-data/ to JSON.
+async def pre_extract_kb_documents(
+    kb_id: str,
+    kb_category: str = "funding",
+) -> dict:
+    """Pre-extract every PDF/DOCX in the KB's S3 prefix and write
+    ``{filename}.extracted.json`` sidecars next to the originals.
 
-    Writes alongside each PDF: ``{name}.extracted.json``. The assessment
-    agent reads the extracted JSON rather than loading the raw PDF into
-    context. For non-PDF supporting files (CSVs, XLSX) we do nothing —
-    the agent queries them directly with scripts.
+    Called from the rules-generation orchestrator after the KB has been
+    downloaded for the rules agent. Walks the data bucket directly (no
+    reliance on local copies — supporting-data isn't downloaded at rules-gen
+    time but we still want its sidecars cached for assessment).
+
+    Per file, branches on size:
+      - PDF ≤ ``SIMPLE_EXTRACT_SIZE_THRESHOLD_BYTES`` → single-call Lambda.
+      - PDF >  threshold → chunked path (``_extract_pdf``) + S3 copy to
+        the final sidecar key (chunked merge writes to its own temp key).
+      - DOCX → always single-call (Lambda handles convert internally).
+        KB DOCX files are forms/templates and tend to be small; if a giant
+        DOCX hits the 15-min timeout, the per-file failure is logged and
+        the rest of the KB still extracts.
+
+    For "rules-relevant" subfolders (everything except ``supporting-data/``),
+    the resulting sidecar is also downloaded to
+    ``/workdir/knowledge-bases/{subfolder}/`` so the rules agent can read
+    the JSON directly during its run. ``supporting-data/`` sidecars are
+    S3-only — the rules agent doesn't read those files anyway (the manifest
+    is its contract).
+
+    Always re-extracts on every rules-gen run. KB edits are rare and
+    correctness beats Lambda cost here. Sidecar files matching the
+    ``*.extracted.json`` suffix are skipped during enumeration so we don't
+    extract our own output.
+
+    Returns a summary dict ``{extracted, failed, files}``.
     """
-    supporting_dir = KB_DIR / "supporting-data"
-    if not supporting_dir.exists():
-        return
+    summary: dict = {"extracted": 0, "failed": 0, "files": []}
 
-    pdfs = [p for p in supporting_dir.glob("**/*.pdf") if p.is_file()]
-    if not pdfs:
-        logger.info(
-            "No supporting-data PDFs to pre-extract",
-            _name="NOLIA_FUNDING_SUPPORTING_NO_PDFS",
+    if not kb_id or not DATA_BUCKET:
+        logger.warning(
+            "Cannot pre-extract KB — missing kb_id or DATA_BUCKET",
+            _name="NOLIA_FUNDING_KB_EXTRACT_NOCONFIG",
+            kb_id=kb_id,
+            has_data_bucket=bool(DATA_BUCKET),
         )
-        return
+        return summary
 
     if not EXTRACT_LAMBDA_ARN:
         logger.warning(
-            "EXTRACT_CONTENT_LAMBDA_ARN not set — skipping supporting PDF extraction",
-            _name="NOLIA_FUNDING_SUPPORTING_NO_LAMBDA",
+            "EXTRACT_CONTENT_LAMBDA_ARN not set — skipping KB pre-extraction",
+            _name="NOLIA_FUNDING_KB_EXTRACT_NOLAMBDA",
         )
-        return
+        return summary
+
+    if kb_category == "global":
+        subfolders = list(GLOBAL_KB_SUBFOLDERS_FOR_RULES)
+        rules_relevant = set(GLOBAL_KB_SUBFOLDERS_FOR_RULES)
+    else:
+        subfolders = list(FUNDING_KB_SUBFOLDERS)
+        rules_relevant = set(FUNDING_KB_SUBFOLDERS) - {"supporting-data"}
 
     s3 = _get_s3_client()
-    # We need PDFs in S3 for _extract_pdf to work. The supporting-data PDFs
-    # are already in s3://{DATA_BUCKET}/documents/kb-{kb}/supporting-data/ —
-    # the call below needs those S3 keys, not the local paths. Resolve from
-    # the KB's S3 prefix captured earlier? Simpler: re-upload each local PDF
-    # to a temporary location under the run's outputs bucket, extract, then
-    # clean up. Keeps ownership clear.
+    kb_prefix = f"documents/kb-{kb_id}/"
 
-    run_prefix = f"v2-apps/nolia-funding/{user_sub}/{conversation_id}"
+    targets: list[dict] = []
+    for subfolder in subfolders:
+        prefix = f"{kb_prefix}{subfolder}/"
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=DATA_BUCKET, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if key == prefix or key.endswith("/"):
+                    continue
+                filename = key.rsplit("/", 1)[-1]
+                if filename.endswith(".extracted.json"):
+                    continue
+                ext = (
+                    "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+                )
+                if ext not in EXTRACTABLE_EXTENSIONS:
+                    continue
+                targets.append(
+                    {
+                        "key": key,
+                        "size": obj.get("Size", 0),
+                        "filename": filename,
+                        "subfolder": subfolder,
+                        "ext": ext,
+                    }
+                )
 
-    for pdf in pdfs:
-        temp_key = f"{run_prefix}/tmp-supporting-data/{pdf.name}"
-        try:
-            s3.upload_file(str(pdf), OUTPUTS_BUCKET, temp_key)
-            output_key = await _extract_pdf(
-                s3_bucket=OUTPUTS_BUCKET,
-                s3_key=temp_key,
-                output_prefix=f"{run_prefix}/tmp-supporting-data",
-            )
-            # Download extracted JSON next to the PDF
-            extracted_local = pdf.with_suffix(".extracted.json")
-            s3.download_file(OUTPUTS_BUCKET, output_key, str(extracted_local))
-            logger.info(
-                "Extracted supporting-data PDF",
-                _name="NOLIA_FUNDING_SUPPORTING_EXTRACTED",
-                pdf=pdf.name,
-                extracted=extracted_local.name,
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to pre-extract supporting PDF — agent will need to handle it",
-                _name="NOLIA_FUNDING_SUPPORTING_EXTRACT_FAIL",
-                pdf=pdf.name,
-                error=str(e),
-            )
-        finally:
-            # Clean up the temp S3 upload
+    if not targets:
+        logger.info(
+            "No KB PDF/DOCX files to pre-extract",
+            _name="NOLIA_FUNDING_KB_EXTRACT_NONE",
+            kb_id=kb_id,
+            kb_category=kb_category,
+        )
+        return summary
+
+    semaphore = asyncio.Semaphore(MAX_PER_RUN_PDF_CONCURRENCY)
+    # Live under temp-pdf/ so we reuse the extract-content Lambda's existing
+    # data-bucket IAM allowance for that prefix (the Lambda's prepare_chunks
+    # also writes its page images under temp-pdf/{batch_id}/, so this stays
+    # consistent).
+    temp_prefix = f"temp-pdf/kb-extract/{kb_id}"
+
+    async def extract_one(target: dict) -> dict:
+        key = target["key"]
+        size_bytes = target["size"]
+        filename = target["filename"]
+        subfolder = target["subfolder"]
+        ext = target["ext"]
+        sidecar_key = f"{key}.extracted.json"
+        # DOCX always uses simple path (Lambda handles convert internally).
+        # PDFs branch on size.
+        use_simple_path = (
+            ext == ".docx" or size_bytes <= SIMPLE_EXTRACT_SIZE_THRESHOLD_BYTES
+        )
+
+        async with semaphore:
             try:
-                s3.delete_object(Bucket=OUTPUTS_BUCKET, Key=temp_key)
-            except Exception:
-                pass
+                if use_simple_path:
+                    await asyncio.to_thread(
+                        _extract_simple,
+                        s3_bucket=DATA_BUCKET,
+                        s3_key=key,
+                        output_key=sidecar_key,
+                        file_name=filename,
+                    )
+                else:
+                    # Chunked PDF path — writes to a temp key, then copy to sidecar.
+                    chunked_output_key = await _extract_pdf(
+                        s3_bucket=DATA_BUCKET,
+                        s3_key=key,
+                        output_prefix=f"{temp_prefix}/{subfolder}",
+                    )
+                    await asyncio.to_thread(
+                        s3.copy_object,
+                        Bucket=DATA_BUCKET,
+                        CopySource={"Bucket": DATA_BUCKET, "Key": chunked_output_key},
+                        Key=sidecar_key,
+                    )
+                    try:
+                        await asyncio.to_thread(
+                            s3.delete_object, Bucket=DATA_BUCKET, Key=chunked_output_key
+                        )
+                    except Exception:
+                        pass
+
+                if subfolder in rules_relevant:
+                    local_target = KB_DIR / subfolder / f"{filename}.extracted.json"
+                    local_target.parent.mkdir(parents=True, exist_ok=True)
+                    await asyncio.to_thread(
+                        s3.download_file,
+                        DATA_BUCKET,
+                        sidecar_key,
+                        str(local_target),
+                    )
+
+                logger.info(
+                    "Pre-extracted KB document",
+                    _name="NOLIA_FUNDING_KB_EXTRACT_OK",
+                    file=filename,
+                    subfolder=subfolder,
+                    size_bytes=size_bytes,
+                    path="simple" if use_simple_path else "chunked",
+                    sidecar_key=sidecar_key,
+                    locally_available=subfolder in rules_relevant,
+                )
+                return {"status": "extracted", "key": key, "sidecar_key": sidecar_key}
+            except Exception as e:
+                logger.warning(
+                    "Failed to pre-extract KB document",
+                    _name="NOLIA_FUNDING_KB_EXTRACT_FAIL",
+                    file=filename,
+                    subfolder=subfolder,
+                    size_bytes=size_bytes,
+                    path="simple" if use_simple_path else "chunked",
+                    error=str(e),
+                )
+                return {"status": "failed", "key": key, "reason": str(e)}
+
+    results = await asyncio.gather(*(extract_one(t) for t in targets))
+    summary["extracted"] = sum(1 for r in results if r["status"] == "extracted")
+    summary["failed"] = sum(1 for r in results if r["status"] == "failed")
+    summary["files"] = [r["key"] for r in results]
+
+    logger.info(
+        "KB pre-extraction summary",
+        _name="NOLIA_FUNDING_KB_EXTRACT_SUMMARY",
+        kb_id=kb_id,
+        kb_category=kb_category,
+        target_count=len(targets),
+        extracted=summary["extracted"],
+        failed=summary["failed"],
+    )
+
+    return summary
 
 
 # ─── Entry point: extract applicant uploaded documents ───────────────────────
 
 
 async def extract_funding_application(s3_prefix: str) -> list[str]:
-    """Extract every applicant-uploaded document in /workdir/uploads/.
+    """Pre-extract PDF and DOCX applicant uploads to JSON sidecars.
 
-    Unlike the procurement flow (which has one primary document), funding
-    applications often have multiple files (application form + supporting
-    docs). We extract each and write ``extracted_{stem}.json`` alongside it.
+    For every ``.pdf`` and ``.docx`` in ``/workdir/uploads/``:
+
+    - **Small (≤ SIMPLE_EXTRACT_SIZE_THRESHOLD_BYTES):** single-call
+      Lambda invocation in default mode. The Lambda dispatches by suffix
+      and handles DOCX→PDF conversion internally — one round trip total.
+    - **Large:** existing chunked path (PDFs go straight in; DOCX is
+      converted to PDF first via ``_convert_to_pdf`` because the chunked
+      Lambda only accepts PDFs).
+
+    Every other file type — xlsx, csv, txt, images, json, .doc, .pages,
+    etc. — is left in place untouched. The agent reads those directly
+    with the appropriate tool (openpyxl for xlsx, native Read for text,
+    etc.). Originals are never deleted; we only ADD ``extracted_{stem}.json``
+    sidecars next to PDF/DOCX inputs.
 
     Args:
         s3_prefix: S3 prefix for this run (e.g.,
             ``v2-apps/nolia-funding/{user}/{conv}``).
 
     Returns:
-        List of local paths to extracted JSON files.
+        List of local paths to the extracted JSON sidecars produced this
+        run (empty list when no PDF/DOCX uploads were present).
     """
     if not UPLOADS_DIR.exists():
         return []
 
-    uploads = sorted(UPLOADS_DIR.iterdir())
+    uploads = sorted(p for p in UPLOADS_DIR.iterdir() if p.is_file())
     if not uploads:
         logger.info(
-            "No uploads to extract",
+            "No uploads to process",
             _name="NOLIA_FUNDING_EXTRACT_NO_UPLOADS",
         )
         return []
 
-    pdfs: list[Path] = []
-    conversions: list[tuple[Path, Path]] = []  # (original, converted_pdf)
-    jsons_already: list[Path] = []
+    extractables = [f for f in uploads if f.suffix.lower() in EXTRACTABLE_EXTENSIONS]
+    passthrough = [f for f in uploads if f.suffix.lower() not in EXTRACTABLE_EXTENSIONS]
 
-    for f in uploads:
-        if not f.is_file():
-            continue
-        suffix = f.suffix.lower()
-        if suffix == ".pdf":
-            pdfs.append(f)
-        elif suffix == ".json":
-            jsons_already.append(f)
-        elif suffix in CONVERTIBLE_EXTENSIONS:
-            # Queue for conversion
-            if not DOCUMENT_CONVERTER_LAMBDA:
-                logger.warning(
-                    "Cannot convert — DOCUMENT_CONVERTER_LAMBDA_NAME not set",
-                    _name="NOLIA_FUNDING_CONVERT_NO_LAMBDA",
-                    file=f.name,
-                )
-                continue
-            conversions.append((f, f.with_suffix(".pdf")))
+    if passthrough:
+        logger.info(
+            "Passing through non-PDF/DOCX uploads — agent will read directly",
+            _name="NOLIA_FUNDING_EXTRACT_PASSTHROUGH",
+            files=[f.name for f in passthrough],
+            count=len(passthrough),
+        )
 
-    # Perform conversions
-    if conversions:
-        convert_tasks = []
-        for original, _target in conversions:
-            s3_source_key = f"{s3_prefix}/uploads/{original.name}"
-            convert_tasks.append(
-                _convert_to_pdf(
-                    original_file=original,
-                    s3_bucket=OUTPUTS_BUCKET,
-                    s3_key=s3_source_key,
-                    s3_prefix=s3_prefix,
-                )
-            )
-        convert_results = await asyncio.gather(*convert_tasks, return_exceptions=True)
-        for (original, _target), result in zip(conversions, convert_results):
-            if isinstance(result, Exception):
-                logger.warning(
-                    "Conversion failed",
-                    _name="NOLIA_FUNDING_CONVERT_FAIL",
-                    original=original.name,
-                    error=str(result),
-                )
-                continue
-            pdf_path, _s3_key = result
-            pdfs.append(pdf_path)
+    if not extractables:
+        return []
 
-    # Extract each PDF
-    extracted_paths: list[str] = []
-
-    if not pdfs and not jsons_already:
+    if not EXTRACT_LAMBDA_ARN:
         logger.warning(
-            "No PDF/convertible/JSON applicant files after processing",
-            _name="NOLIA_FUNDING_EXTRACT_NOTHING",
+            "EXTRACT_CONTENT_LAMBDA_ARN not set — can't pre-extract applicant uploads",
+            _name="NOLIA_FUNDING_EXTRACT_NO_LAMBDA",
         )
         return []
 
-    if not EXTRACT_LAMBDA_ARN and pdfs:
-        logger.warning(
-            "EXTRACT_CONTENT_LAMBDA_ARN not set — can't extract applicant PDFs",
-            _name="NOLIA_FUNDING_EXTRACT_NO_LAMBDA",
-        )
-        # Still return any pre-existing JSONs
-        return [str(j) for j in jsons_already]
+    s3 = _get_s3_client()
+    semaphore = asyncio.Semaphore(MAX_PER_RUN_PDF_CONCURRENCY)
 
-    for pdf in pdfs:
-        s3_key = f"{s3_prefix}/uploads/{pdf.name}"
-        try:
-            output_key = await _extract_pdf(
-                s3_bucket=OUTPUTS_BUCKET,
-                s3_key=s3_key,
-                output_prefix=f"{s3_prefix}/tmp-extracted",
-            )
-            local_json = UPLOADS_DIR / f"extracted_{pdf.stem}.json"
-            s3 = _get_s3_client()
-            s3.download_file(OUTPUTS_BUCKET, output_key, str(local_json))
-            extracted_paths.append(str(local_json))
-            logger.info(
-                "Extracted applicant document",
-                _name="NOLIA_FUNDING_EXTRACT_OK",
-                source=pdf.name,
-                extracted=local_json.name,
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to extract applicant document",
-                _name="NOLIA_FUNDING_EXTRACT_FAIL",
-                source=pdf.name,
-                error=str(e),
-            )
+    async def extract_one(src: Path) -> Optional[str]:
+        size_bytes = src.stat().st_size
+        suffix = src.suffix.lower()
+        s3_key = f"{s3_prefix}/uploads/{src.name}"
+        local_json = UPLOADS_DIR / f"extracted_{src.stem}.json"
+        use_simple_path = size_bytes <= SIMPLE_EXTRACT_SIZE_THRESHOLD_BYTES
 
-    # Pre-existing JSONs — include as-is
-    extracted_paths.extend(str(j) for j in jsons_already)
+        async with semaphore:
+            try:
+                if use_simple_path:
+                    output_key = f"{s3_prefix}/tmp-extracted/{src.stem}.json"
+                    await asyncio.to_thread(
+                        _extract_simple,
+                        s3_bucket=OUTPUTS_BUCKET,
+                        s3_key=s3_key,
+                        output_key=output_key,
+                        file_name=src.name,
+                    )
+                else:
+                    pdf_s3_key = s3_key
+                    if suffix == ".docx":
+                        if not DOCUMENT_CONVERTER_LAMBDA:
+                            logger.warning(
+                                "Cannot convert large DOCX — DOCUMENT_CONVERTER_LAMBDA_NAME not set",
+                                _name="NOLIA_FUNDING_CONVERT_NO_LAMBDA",
+                                file=src.name,
+                            )
+                            return None
+                        _, pdf_s3_key = await _convert_to_pdf(
+                            original_file=src,
+                            s3_bucket=OUTPUTS_BUCKET,
+                            s3_key=s3_key,
+                            s3_prefix=s3_prefix,
+                        )
+                    output_key = await _extract_pdf(
+                        s3_bucket=OUTPUTS_BUCKET,
+                        s3_key=pdf_s3_key,
+                        output_prefix=f"{s3_prefix}/tmp-extracted",
+                    )
+
+                await asyncio.to_thread(
+                    s3.download_file, OUTPUTS_BUCKET, output_key, str(local_json)
+                )
+                logger.info(
+                    "Extracted applicant document",
+                    _name="NOLIA_FUNDING_EXTRACT_OK",
+                    source=src.name,
+                    suffix=suffix,
+                    size_bytes=size_bytes,
+                    path="simple" if use_simple_path else "chunked",
+                    extracted=local_json.name,
+                )
+                return str(local_json)
+            except Exception as e:
+                logger.warning(
+                    "Failed to extract applicant document",
+                    _name="NOLIA_FUNDING_EXTRACT_FAIL",
+                    source=src.name,
+                    suffix=suffix,
+                    size_bytes=size_bytes,
+                    path="simple" if use_simple_path else "chunked",
+                    error=str(e),
+                )
+                return None
+
+    extract_results = await asyncio.gather(*(extract_one(f) for f in extractables))
+    extracted_paths = [p for p in extract_results if p is not None]
 
     logger.info(
         "Applicant extraction complete",
         _name="NOLIA_FUNDING_EXTRACT_COMPLETE",
         extracted_count=len(extracted_paths),
+        passthrough_count=len(passthrough),
         source_files=len(uploads),
     )
 
@@ -569,12 +740,17 @@ async def setup_funding_compare_workspace(
             {"run_id": "run-2", "user_sub": "def-..."},
         ]
 
-    Downloads, for each entry:
-      - ``_result.json``
-      - all files under ``outputs/`` (the assessment MD/PDF/DOCX)
-      - ``tmp/findings.md`` if it exists
+    Downloads everything under each run's S3 prefix into
+    ``/workdir/prior-assessments/run-{i}/``. The artefacts the compare
+    prompt actually consumes are:
+      - ``_result.json`` — applicant + decision envelope
+      - ``_summary_and_reasoning.md`` — narrative summary of the assessment
+      - ``outputs/Assessment_<applicant>.md`` — rendered per-criterion report
+      - ``outputs/_applicant.json`` — richer applicant identity (optional)
 
-    Into ``/workdir/prior-assessments/run-{i}/``.
+    Older runs may also carry ``tmp/findings.md`` from the legacy three-step
+    assess pipeline; the current single-step assess does not produce it and
+    the compare prompt no longer reads it.
 
     Also downloads the Funding KB's output template to provide structural
     context to the compare agent (so it knows which criteria to compare).

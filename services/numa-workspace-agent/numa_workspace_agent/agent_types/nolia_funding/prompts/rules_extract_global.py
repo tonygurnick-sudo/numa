@@ -118,6 +118,16 @@ Good: **Source**: Ngāi Tahu Grants Administration Policy V3, Section 2.4 \
 
 If a rule draws from multiple documents, cite all of them.
 
+### Pre-extracted JSON sidecars
+
+Each PDF and DOCX in `/workdir/knowledge-bases/documents/` has a sibling \
+`{name}.extracted.json` file produced by the pre-pipeline. **Read those \
+for fast text access** — they contain the document's text in a \
+page-structured JSON shape and are far cheaper to scan than re-reading \
+the raw binary. Open the raw PDF/DOCX directly only when you need to \
+verify formatting that the extraction might have missed. Citations should \
+still reference the original document name, not the sidecar.
+
 ### Verbatim for Defined Terms
 
 Defined organisational terms, values, and precise policy wording should \

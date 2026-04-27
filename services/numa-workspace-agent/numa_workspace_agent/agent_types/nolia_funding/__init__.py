@@ -22,6 +22,7 @@ from . import nolia_funding_rules as _nolia_funding_rules  # noqa: F401
 from . import phase_assess_evaluate as _phase_assess_evaluate  # noqa: F401
 from . import phase_assess_extract as _phase_assess_extract  # noqa: F401
 from . import phase_assess_render as _phase_assess_render  # noqa: F401
+from . import phase_assess_single as _phase_assess_single  # noqa: F401
 from . import phase_compare as _phase_compare  # noqa: F401
 from . import phase_rules_extract as _phase_rules_extract  # noqa: F401
 from . import phase_rules_extract_global as _phase_rules_extract_global  # noqa: F401

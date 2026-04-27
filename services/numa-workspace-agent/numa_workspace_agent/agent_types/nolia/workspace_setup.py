@@ -20,6 +20,7 @@ KB names, etc.) extracted from ``request_metadata``.
     - ``_download_s3_prefix``
     - ``_convert_to_pdf``
     - ``_extract_pdf``
+    - ``_extract_simple``
     - ``CONVERTIBLE_EXTENSIONS``
 
     MoH procurement is the production user of this module; funding is a
@@ -696,6 +697,10 @@ async def _extract_pdf(s3_bucket: str, s3_key: str, output_prefix: str) -> str:
             "output_bucket": s3_bucket,
             "output_key": output_key,
             "temp_prefix": temp_prefix,
+            # Required for the Lambda's post-merge cleanup branch — without
+            # this it short-circuits silently and leaves the per-page JPEGs
+            # at temp-pdf/{batch_id}/page_*.jpg orphaned in S3.
+            "input_bucket": s3_bucket,
         },
     )
 
@@ -717,6 +722,48 @@ async def _extract_pdf(s3_bucket: str, s3_key: str, output_prefix: str) -> str:
     )
 
     return merge_result.get("output_key", output_key)
+
+
+def _extract_simple(
+    s3_bucket: str,
+    s3_key: str,
+    output_key: str,
+    file_name: Optional[str] = None,
+) -> str:
+    """Single-Lambda-call extraction for files small enough to fit the
+    15-minute timeout. Synchronous — wrap with ``asyncio.to_thread`` to run
+    in parallel.
+
+    Calls extract-content-from-file in default mode (no ``action`` field).
+    The Lambda dispatches by file suffix and handles PDF, DOCX, XLSX, PPT,
+    images, etc. end-to-end in one invocation — including DOCX→PDF and
+    other LibreOffice conversions internally (provided the Lambda's own
+    ``DOCUMENT_CONVERTER_LAMBDA_NAME`` env is set). Output JSON shape is
+    identical to the chunked-path output produced by ``_extract_pdf``.
+
+    Use this for typical applicant-sized uploads. For very large PDFs
+    (hundreds-to-thousands of pages) use ``_extract_pdf`` (chunked) — the
+    simple path will hit the Lambda timeout.
+    """
+    from botocore.config import Config
+
+    lambda_client = boto3.client(
+        "lambda",
+        region_name=AWS_REGION,
+        config=Config(read_timeout=900, connect_timeout=10),
+    )
+
+    payload: dict = {
+        "input_bucket": s3_bucket,
+        "input_key": s3_key,
+        "output_bucket": s3_bucket,
+        "output_key": output_key,
+    }
+    if file_name:
+        payload["file_name"] = file_name
+
+    result = _invoke_extract_lambda(lambda_client, payload)
+    return result.get("output_key", output_key)
 
 
 def _invoke_extract_lambda(lambda_client, payload: dict) -> dict:

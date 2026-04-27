@@ -109,7 +109,7 @@ NOLIA_FUNDING_RULES_SECOND_REVIEW_GLOBAL = AgentTypeConfig(
     max_turns=30,
     max_thinking_tokens=8_000,
     effort="medium",
-    default_model="anthropic.claude-sonnet-4-6",
+    default_model="anthropic.claude-opus-4-6-v1",
 )
 
 register_agent_type(NOLIA_FUNDING_RULES_SECOND_REVIEW_GLOBAL)

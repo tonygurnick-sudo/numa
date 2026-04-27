@@ -215,6 +215,18 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
             `${props.dataBucketArn}/temp-pdf/*`,
             `${props.dataBucketArn}/shared/*`,
             `${props.dataBucketArn}/transcriptions/*`,
+            // Nolia KB pre-extraction: read source PDFs/DOCX and write
+            // {filename}.extracted.json sidecars (called from
+            // services/numa-workspace-agent .../nolia_funding/workspace_setup.py
+            // pre_extract_kb_documents). Scoped to documents/kb-* to match the
+            // workspace-agent's existing PutObject scope on the same bucket.
+            `${props.dataBucketArn}/documents/kb-*/*`,
+            // DOCX simple-path conversion intermediate. The Lambda's
+            // _extract_docx_via_pdf writes the converted PDF to
+            // temp-docx-conversion/{input_key}.pdf in the SAME bucket as the
+            // input, so when the input lives in the data bucket (KB
+            // pre-extraction), the temp PDF lands here too.
+            `${props.dataBucketArn}/temp-docx-conversion/*`,
           ],
         },
         {

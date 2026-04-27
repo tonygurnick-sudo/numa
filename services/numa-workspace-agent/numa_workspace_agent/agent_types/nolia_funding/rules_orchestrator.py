@@ -49,7 +49,12 @@ import structlog
 
 from ..base import AgentTypeConfig
 from ..registry import get_agent_type_config
-from .workspace_setup import OUTPUTS_DIR, TMP_DIR, setup_funding_rules_workspace
+from .workspace_setup import (
+    OUTPUTS_DIR,
+    TMP_DIR,
+    pre_extract_kb_documents,
+    setup_funding_rules_workspace,
+)
 
 logger = structlog.get_logger()
 
@@ -193,6 +198,32 @@ async def run_nolia_funding_rules_pipeline(
         kb_name=kb_name,
         kb_category=kb_category,
     )
+
+    # ── Pre-pipeline: extract every PDF/DOCX in the KB to JSON sidecars ─────
+    # Sidecars land next to originals in S3 (cached for every future
+    # assessment) and locally next to the rules-relevant originals (so the
+    # rules agent below can read JSON instead of raw PDFs). Non-fatal —
+    # rules.md still gets written if extraction trips, and assessments will
+    # fall back to per-run extraction (slower but functional).
+    emit("kb-cache", "Pre-extracting KB documents for fast assessment...")
+    try:
+        kb_extract_summary = await pre_extract_kb_documents(kb_id, kb_category)
+        logger.info(
+            "KB pre-extraction complete",
+            _name="NOLIA_FUNDING_RULES_KB_EXTRACT_COMPLETE",
+            phase="pipeline",
+            kb_id=kb_id,
+            kb_category=kb_category,
+            extracted=kb_extract_summary.get("extracted", 0),
+            failed=kb_extract_summary.get("failed", 0),
+        )
+    except Exception as e:
+        logger.warning(
+            "KB pre-extraction failed — assessments will fall back to per-run extraction",
+            _name="NOLIA_FUNDING_RULES_KB_EXTRACT_FAIL",
+            phase="pipeline",
+            error=str(e),
+        )
 
     # ── Step-specific user prompts (per-category) ──────────────────────────
     if kb_category == "global":
