@@ -762,6 +762,39 @@ async def connectors(args: dict[str, Any]) -> dict[str, Any]:
     params = args.get("params", {})
     description = args.get("description", "")
 
+    # Recover from a known model malformation: when the params payload is large,
+    # Claude sometimes inlines it as a JSON-encoded string instead of an object.
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except json.JSONDecodeError as e:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Invalid params for '{name}': expected an object, got a "
+                            f"string that could not be parsed as JSON ({e}). Pass params "
+                            f"as a JSON object, not a stringified blob."
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+    if not isinstance(params, dict):
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        f"Invalid params for '{name}': expected object, "
+                        f"got {type(params).__name__}."
+                    ),
+                }
+            ],
+            "isError": True,
+        }
+
     handler = CONNECTOR_HANDLERS.get(name)
     if not handler:
         return {

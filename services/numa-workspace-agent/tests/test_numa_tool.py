@@ -176,6 +176,58 @@ class TestNumaToolDispatcher:
         assert result["isError"] is True
         assert "boom" in result["content"][0]["text"]
 
+    async def test_stringified_params_recovered(self):
+        """If Claude inlines params as a JSON string, the dispatcher recovers it."""
+        from unittest.mock import AsyncMock
+
+        mock_result = _ok("ok")
+        mock_handler = AsyncMock(return_value=mock_result)
+
+        with patch.dict(
+            "numa_workspace_agent.mcp_tools.numa_tool.TOOL_HANDLERS",
+            {"knowledge_base": mock_handler},
+        ):
+            result = await numa_tool.handler(
+                {
+                    "name": "knowledge_base",
+                    "params": '{"operation": "query", "query": "test", "user_intent": "test"}',
+                    "description": "Stringified params",
+                }
+            )
+
+        assert result == mock_result
+        mock_handler.assert_called_once_with(
+            {"operation": "query", "query": "test", "user_intent": "test"}
+        )
+
+    async def test_unparseable_string_params_returns_error(self):
+        """A non-JSON string in params returns a clear error, not a crash."""
+        result = await numa_tool.handler(
+            {
+                "name": "knowledge_base",
+                "params": "this is not json",
+                "description": "Bad params",
+            }
+        )
+
+        assert result["isError"] is True
+        text = result["content"][0]["text"]
+        assert "Invalid params" in text
+        assert "knowledge_base" in text
+
+    async def test_non_dict_non_str_params_returns_error(self):
+        """Params that are neither dict nor str return a clear error."""
+        result = await numa_tool.handler(
+            {
+                "name": "knowledge_base",
+                "params": 42,
+                "description": "Bad params type",
+            }
+        )
+
+        assert result["isError"] is True
+        assert "expected object" in result["content"][0]["text"]
+
     def test_tool_names_match_handler_keys(self):
         """TOOL_NAMES should exactly match the keys in TOOL_HANDLERS."""
         assert set(TOOL_NAMES) == set(TOOL_HANDLERS.keys())
