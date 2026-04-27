@@ -1244,6 +1244,10 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
             )
         if has_display_id and not has_ticket_id:
             display_id_val = op_params.get("displayId") or op_params.get("display_id")
+            if not isinstance(display_id_val, str) or not display_id_val:
+                raise ValueError(
+                    f"Invalid displayId for {operation}: expected a non-empty string"
+                )
             resolved_id, resolved_team_id = _resolve_ticket_by_display_id(
                 display_id_val,
                 user_sub=user_sub,
