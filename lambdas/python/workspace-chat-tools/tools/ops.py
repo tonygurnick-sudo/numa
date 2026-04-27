@@ -247,11 +247,17 @@ OPS_CRM_OPERATIONS = {
     "create_customer",
     "update_customer",
     "delete_customer",
+    "create_customer_activity",
+    "update_customer_activity",
+    "delete_customer_activity",
     "list_suppliers",
     "get_supplier",
     "create_supplier",
     "update_supplier",
     "delete_supplier",
+    "create_supplier_activity",
+    "update_supplier_activity",
+    "delete_supplier_activity",
 }
 
 
@@ -625,6 +631,51 @@ def _resolve_lambda_and_request(
             None,
         )
 
+    _ACTIVITY_FIELDS = [
+        ("type", "type"),
+        ("summary", "summary"),
+        ("date", "date"),
+        ("direction", "direction"),
+        ("duration", "duration"),
+        ("outcome", "outcome"),
+        ("nextActionDate", "nextActionDate", "next_action_date"),
+        ("nextActionType", "nextActionType", "next_action_type"),
+    ]
+
+    if operation == "create_customer_activity":
+        customer_id = _p(params, "customerId", "customer_id") or ""
+        body = _build_body(params, _ACTIVITY_FIELDS)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "POST",
+            f"ops/customers/{customer_id}/activities",
+            body,
+            None,
+        )
+
+    if operation == "update_customer_activity":
+        customer_id = _p(params, "customerId", "customer_id") or ""
+        activity_id = _p(params, "activityId", "activity_id") or ""
+        body = _build_body(params, _ACTIVITY_FIELDS)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "PUT",
+            f"ops/customers/{customer_id}/activities/{activity_id}",
+            body,
+            None,
+        )
+
+    if operation == "delete_customer_activity":
+        customer_id = _p(params, "customerId", "customer_id") or ""
+        activity_id = _p(params, "activityId", "activity_id") or ""
+        return (
+            OPS_CRM_API_LAMBDA,
+            "DELETE",
+            f"ops/customers/{customer_id}/activities/{activity_id}",
+            None,
+            None,
+        )
+
     if operation == "list_suppliers":
         qp = _build_qp(
             params,
@@ -678,6 +729,40 @@ def _resolve_lambda_and_request(
             OPS_CRM_API_LAMBDA,
             "DELETE",
             f"ops/suppliers/{supplier_id}",
+            None,
+            None,
+        )
+
+    if operation == "create_supplier_activity":
+        supplier_id = _p(params, "supplierId", "supplier_id") or ""
+        body = _build_body(params, _ACTIVITY_FIELDS)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "POST",
+            f"ops/suppliers/{supplier_id}/activities",
+            body,
+            None,
+        )
+
+    if operation == "update_supplier_activity":
+        supplier_id = _p(params, "supplierId", "supplier_id") or ""
+        activity_id = _p(params, "activityId", "activity_id") or ""
+        body = _build_body(params, _ACTIVITY_FIELDS)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "PUT",
+            f"ops/suppliers/{supplier_id}/activities/{activity_id}",
+            body,
+            None,
+        )
+
+    if operation == "delete_supplier_activity":
+        supplier_id = _p(params, "supplierId", "supplier_id") or ""
+        activity_id = _p(params, "activityId", "activity_id") or ""
+        return (
+            OPS_CRM_API_LAMBDA,
+            "DELETE",
+            f"ops/suppliers/{supplier_id}/activities/{activity_id}",
             None,
             None,
         )

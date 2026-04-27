@@ -106,8 +106,22 @@ export const CustomerCard = React.memo(function CustomerCard({
         }}
       >
         {/* Title row */}
-        <div className="d-flex align-items-start justify-content-between gap-1" style={{ marginBottom: 6 }}>
-          <div className="ticket-title" style={{ margin: 0 }} title={customer.companyName}>
+        <div className="d-flex align-items-start gap-2" style={{ marginBottom: 6 }}>
+          {customer.logoPresignedUrl && (
+            <img
+              src={customer.logoPresignedUrl}
+              alt=""
+              className="flex-shrink-0"
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 6,
+                objectFit: 'cover',
+                border: '1px solid #e5e7eb',
+              }}
+            />
+          )}
+          <div className="ticket-title flex-grow-1" style={{ margin: 0, minWidth: 0 }} title={customer.companyName}>
             {customer.companyName}
           </div>
           {customer.openTicketCount > 0 && (

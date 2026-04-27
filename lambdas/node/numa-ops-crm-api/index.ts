@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
@@ -28,6 +28,27 @@ const CLIENT_NAME = process.env.CLIENT_NAME!;
 
 type AuthContext = { sub: string; email?: string; name?: string; groups: string[] };
 type Item = Record<string, unknown>;
+
+/**
+ * Presign logoS3Key on customer/supplier records so the frontend can display logos
+ * without needing its own S3 credentials for cross-user objects.
+ */
+const presignLogos = async (items: Item[]): Promise<void> => {
+  const s3 = withPRM(S3Client, {});
+  await Promise.all(
+    items.map(async (item) => {
+      const logoKey = item.logoS3Key;
+      if (!logoKey || typeof logoKey !== 'string') return;
+      try {
+        const command = new GetObjectCommand({ Bucket: OUTPUTS_BUCKET_NAME, Key: logoKey });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        item.logoPresignedUrl = await getSignedUrl(s3 as any, command, { expiresIn: 3600 });
+      } catch {
+        // If signing fails, leave it unset — frontend shows fallback icon
+      }
+    })
+  );
+};
 
 const jsonResponse = (
   statusCode: number,
@@ -245,6 +266,7 @@ const handleCustomers = async (
     if (qp.stage) {
       const { items, lastKey } = await queryGSI1('ENTITY#CUSTOMER', `STAGE#${qp.stage}#`, limit, cursor);
       const filtered = applyFilters(items, qp);
+      await presignLogos(filtered);
       return jsonResponse(200, {
         customers: filtered,
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
@@ -255,6 +277,7 @@ const handleCustomers = async (
     if (qp.ownerId) {
       const { items, lastKey } = await queryGSI2(`CRM_OWNER#${qp.ownerId}`, 'CUSTOMER#', limit, cursor);
       const filtered = applyFilters(items, qp);
+      await presignLogos(filtered);
       return jsonResponse(200, {
         customers: filtered,
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
@@ -264,6 +287,7 @@ const handleCustomers = async (
     // Default: query all customers via GSI1
     const items = await queryGSI1All('ENTITY#CUSTOMER');
     const filtered = applyFilters(items, qp);
+    await presignLogos(filtered);
     return jsonResponse(200, { customers: filtered });
   }
 
@@ -278,6 +302,7 @@ const handleCustomers = async (
     if (!meta) return errorResponse(404, 'Customer not found');
 
     const ticketCount = await getLinkedTicketCount('CUSTOMER', customerId);
+    await presignLogos([meta]);
 
     return jsonResponse(200, {
       customer: meta,

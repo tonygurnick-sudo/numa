@@ -72,6 +72,12 @@ VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
         "create_supplier",
         "update_supplier",
         "delete_supplier",
+        "create_customer_activity",
+        "update_customer_activity",
+        "delete_customer_activity",
+        "create_supplier_activity",
+        "update_supplier_activity",
+        "delete_supplier_activity",
         "create_work_unit",
         "update_work_unit",
         "delete_work_unit",
@@ -210,7 +216,7 @@ def _save_ops_result(result: Any, operation: str) -> str:
     name="numa_ops_tool",
     description=(
         "Manage Numa Ops boards — create/search tickets, manage teams, "
-        "customers, suppliers, and projects. Also supports admin config "
+        "customers, suppliers, activities, and projects. Also supports admin config "
         "management: custom fields (ticket and CRM), ticket types, statuses, "
         "and CRM/supplier configuration (lifecycle stages, record layout, "
         "industries, territories, flags). Call get_config first to load "
@@ -231,7 +237,10 @@ def _save_ops_result(result: Any, operation: str) -> str:
                     "add_comment, create_work_unit, update_work_unit, delete_work_unit, "
                     "create_link, delete_link, "
                     "create_customer, update_customer, delete_customer, "
-                    "create_supplier, update_supplier, delete_supplier, create_project, "
+                    "create_customer_activity, update_customer_activity, delete_customer_activity, "
+                    "create_supplier, update_supplier, delete_supplier, "
+                    "create_supplier_activity, update_supplier_activity, delete_supplier_activity, "
+                    "create_project, "
                     "update_project, delete_project, upload_attachment. "
                     "Config management (admin-only): create_field, update_field, delete_field, "
                     "create_ticket_type, update_ticket_type, delete_ticket_type, "

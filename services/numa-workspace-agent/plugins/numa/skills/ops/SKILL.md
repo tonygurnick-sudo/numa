@@ -478,6 +478,47 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 | `customerId`                     | string | Yes      | Customer ID      |
 | (same fields as create_customer) |        | No       | Fields to update |
 
+#### Customer Activities
+
+Activities are structured interaction logs (calls, emails, meetings, notes) on a customer record. Activities are returned inline when calling `get_customer` -- no separate list operation needed.
+
+| Operation                  | Description                          | Approval |
+| -------------------------- | ------------------------------------ | -------- |
+| `create_customer_activity` | Log an activity on a customer record | Yes      |
+| `update_customer_activity` | Update an existing activity          | Yes      |
+| `delete_customer_activity` | Delete an activity                   | Yes      |
+
+##### create_customer_activity
+
+| Parameter        | Type   | Required | Description                                               |
+| ---------------- | ------ | -------- | --------------------------------------------------------- |
+| `customerId`     | string | Yes      | Customer ID                                               |
+| `type`           | string | Yes      | Activity type: `call`, `email`, `meeting`, `note`, `task` |
+| `summary`        | string | Yes      | Description of the activity                               |
+| `date`           | string | No       | ISO 8601 date (defaults to now)                           |
+| `direction`      | string | No       | `inbound` or `outbound` (for calls/emails)                |
+| `duration`       | number | No       | Duration in minutes                                       |
+| `outcome`        | string | No       | Outcome or result of the activity                         |
+| `nextActionDate` | string | No       | ISO 8601 date for follow-up                               |
+| `nextActionType` | string | No       | Type of follow-up action                                  |
+
+Creating an activity also updates `lastContactDate` on the customer record.
+
+##### update_customer_activity
+
+| Parameter                                 | Type   | Required | Description      |
+| ----------------------------------------- | ------ | -------- | ---------------- |
+| `customerId`                              | string | Yes      | Customer ID      |
+| `activityId`                              | string | Yes      | Activity ID      |
+| (same fields as create_customer_activity) |        | No       | Fields to update |
+
+##### delete_customer_activity
+
+| Parameter    | Type   | Required | Description |
+| ------------ | ------ | -------- | ----------- |
+| `customerId` | string | Yes      | Customer ID |
+| `activityId` | string | Yes      | Activity ID |
+
 ---
 
 ### Suppliers
@@ -494,6 +535,18 @@ Supplier fields are similar to customer fields, with these differences:
 
 - **Supplier-specific:** `annualSpend` (number), `paymentTerms` (string)
 - **Customer-only (not on suppliers):** `contractStartDate`, `contractTerm`, `renewalDate`, `contractValue`, `products`, `productNotes`
+
+#### Supplier Activities
+
+Same as customer activities but scoped to suppliers. Activities are returned inline with `get_supplier`.
+
+| Operation                  | Description                          | Approval |
+| -------------------------- | ------------------------------------ | -------- |
+| `create_supplier_activity` | Log an activity on a supplier record | Yes      |
+| `update_supplier_activity` | Update an existing activity          | Yes      |
+| `delete_supplier_activity` | Delete an activity                   | Yes      |
+
+Parameters are identical to customer activity operations, but use `supplierId` instead of `customerId`.
 
 ---
 
@@ -528,7 +581,7 @@ Supplier fields are similar to customer fields, with these differences:
 ## Approval Model
 
 - **Safe operations** (auto-approved): All `list_*`, `get_*`, `search_*`, `get_config`, `list_projects`, `get_metrics`
-- **Unsafe operations** (require user approval): All `create_*`, `update_*`, `delete_*`, `add_comment`, `upload_attachment`
+- **Unsafe operations** (require user approval): All `create_*`, `update_*`, `delete_*`, `add_comment`, `upload_attachment`, activity operations
 
 The user can configure their approval preference in chat settings:
 
