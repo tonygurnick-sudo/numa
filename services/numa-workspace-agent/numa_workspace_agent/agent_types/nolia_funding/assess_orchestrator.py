@@ -156,10 +156,31 @@ async def run_nolia_funding_assess_pipeline(
     )
 
     # ── Step-specific user prompts ──────────────────────────────────────────
+    if applicant_id:
+        applicant_id_instruction = (
+            f"The assessor has supplied this Application Number: `{applicant_id}`. "
+            "This is the canonical application reference set by the assessor in the "
+            "frontend. Use it verbatim in BOTH places:\n"
+            f"  1. As the top-level `applicant_id` field in `applicant.json` (value: `{applicant_id}`).\n"
+            "  2. In Phase 3, as the value for any Application Number / Applicant ID / "
+            "Reference / Application Reference / `[APP-XXXXXX]` placeholder in the "
+            f"rendered assessment template (substitute the literal text `{applicant_id}`).\n"
+            "Do NOT write 'Not available' or 'Not provided' for the Application Number — "
+            "you have it. Still extract the applicant's full name from the documents "
+            "for `applicant.name`."
+        )
+    else:
+        applicant_id_instruction = (
+            "The assessor did not supply an Application Number. Extract the "
+            "applicant's full name from the documents and use that for both "
+            "`applicant.name` and the top-level `applicant_id` field in "
+            "`applicant.json`. For Application Number / Reference fields in the "
+            "rendered template, write `Not available`."
+        )
+
     user_context = (
-        f"Assess this funding application. Applicant ID: {applicant_id or 'Not available'}. "
-        f"Funding KB: {funding_kb_id or 'unknown'}. "
-        f"All inputs are in the workspace already."
+        "Assess this funding application. All inputs are in the workspace already.\n\n"
+        f"{applicant_id_instruction}"
     )
 
     extract_prompt = (

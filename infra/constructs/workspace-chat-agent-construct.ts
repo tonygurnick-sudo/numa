@@ -429,6 +429,18 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                   actions: ['s3:PutObject'],
                   resources: [`${props.dataBucketArn}/documents/kb-*`],
                 },
+                {
+                  // Nolia KB pre-extraction (rules pipeline) routes the
+                  // chunked extract-content Lambda's merge output through
+                  // temp-pdf/kb-extract/* on the data bucket, then copies
+                  // it to the final sidecar location and deletes the
+                  // intermediate. Cleanup is non-fatal but worth doing
+                  // properly to avoid intermediate-output leakage.
+                  sid: 'S3DataBucketTempPdfDelete',
+                  effect: 'Allow' as const,
+                  actions: ['s3:DeleteObject'],
+                  resources: [`${props.dataBucketArn}/temp-pdf/*`],
+                },
               ]
             : []),
           // Ext API doc bucket read access (for syncing API reference docs to workspace)

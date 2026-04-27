@@ -96,6 +96,7 @@ Write **`/workdir/tmp/applicant.json`** with exactly this shape:
 ```json
 {
   "version": "1.0",
+  "applicant_id": "APP-A1B2C3",
   "applicant": {
     "name": "Ella Jackson",
     "name_variants": [],
@@ -149,6 +150,10 @@ Write **`/workdir/tmp/applicant.json`** with exactly this shape:
 Rules:
 
 - Every field is optional — write `null` if missing, don't omit keys.
+- **`applicant_id`** (top-level) — the canonical handle for this applicant. \
+If the assessor's user message supplied an applicant ID, use it verbatim. \
+Otherwise set `applicant_id` equal to `applicant.name` (i.e. the full \
+name you extracted from the documents). Never invent a synthetic ID.
 - `missing_fields` lists any field name where the data wasn't found.
 - `name_variants` is empty `[]` unless the name genuinely differed across \
 documents.

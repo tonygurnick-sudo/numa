@@ -108,10 +108,9 @@ NOLIA_FUNDING_RULES_EXTRACT = AgentTypeConfig(
     max_turns=75,
     max_thinking_tokens=10_000,
     effort="medium",
-    # Funding policy docs are much smaller than MoH's MDB documents.
-    # Sonnet gives us the quality we need at a fraction of Opus's cost.
-    # Revisit if rules quality is insufficient.
-    default_model="anthropic.claude-sonnet-4-6",
+    # Rules generation is the foundation of every assessment that follows —
+    # bad rules => bad assessments at scale. Worth Opus pricing for quality.
+    default_model="anthropic.claude-opus-4-6-v1",
 )
 
 register_agent_type(NOLIA_FUNDING_RULES_EXTRACT)

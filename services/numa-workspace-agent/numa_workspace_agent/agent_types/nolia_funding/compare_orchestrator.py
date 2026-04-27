@@ -4,16 +4,19 @@ Single-phase pipeline:
     Phase: Compare (nolia-funding-compare-step)
 
 Pre-pipeline: ``setup_funding_compare_workspace()`` downloads each prior
-run's artefacts (`_result.json`, `outputs/`, `tmp/findings.md`) into
-``/workdir/prior-assessments/run-{i}/``, plus the Funding KB's output
-template for structural context.
+run's outputs (`_result.json`, `_summary_and_reasoning.md`, full
+`outputs/` folder) into ``/workdir/prior-assessments/run-{i}/``, plus the
+Funding KB's output template for criteria-grouping context.
 
-Post-pipeline: convert the rendered Markdown comparison to PDF + DOCX,
-write `_result.json`.
+The compare phase produces THREE primary artefacts:
+- ``Comparison_<stamp>.json`` — structured payload the frontend renders
+- ``Comparison_<stamp>.md`` — human-readable Markdown for download/archive
+- ``_summary_and_reasoning.md`` — comparator narrative (mirrors assess)
 
-The compare phase produces TWO primary artefacts (`Comparison_*.json` for
-nice frontend rendering, `Comparison_*.md` for download / archive); the
-orchestrator additionally produces `.pdf` and `.docx` from the MD.
+PDF/DOCX export is handled by the frontend at download time, so the
+orchestrator no longer pre-converts. ``_summary_and_reasoning.md`` lives
+at the workspace root (not under ``outputs/``) so the standard S3 sync
+publishes it alongside the run-level ``_result.json``.
 """
 
 import os
@@ -27,7 +30,6 @@ import structlog
 
 from ..base import AgentTypeConfig
 from ..registry import get_agent_type_config
-from .output_conversion import convert_md_to_pdf_and_docx
 from .workspace_setup import OUTPUTS_DIR, setup_funding_compare_workspace
 
 logger = structlog.get_logger()
@@ -276,20 +278,19 @@ async def run_nolia_funding_compare_pipeline(
             f"Compare phase failed: {compare_result.get('error', 'unknown')}",
         )
 
-    # ── Post-pipeline: convert MD to PDF + DOCX ────────────────────────────
-    emit("convert", "Preparing downloadable versions (PDF and Word)...")
+    # ── Post-pipeline: register output artefacts ───────────────────────────
+    # PDF/DOCX export is handled by the frontend at download time — the
+    # backend just registers the MD and JSON the agent produced. The
+    # ``_summary_and_reasoning.md`` at the workspace root is published by
+    # the standard S3 sync below; no need to register it explicitly.
     md_path = _find_comparison_md()
     json_path = _find_comparison_json()
 
     if md_path is not None:
         all_artifacts.append({"type": "file", "path": f"outputs/{md_path.name}"})
-        converted = await convert_md_to_pdf_and_docx(md_path, s3_prefix_fmt)
-        for fmt, path in converted.items():
-            if path is not None:
-                all_artifacts.append({"type": "file", "path": f"outputs/{path.name}"})
     else:
         logger.warning(
-            "No Comparison_*.md found in /workdir/outputs/ — skipping conversion",
+            "No Comparison_*.md found in /workdir/outputs/",
             _name="NOLIA_FUNDING_COMPARE_NO_MD",
             phase="pipeline",
         )

@@ -80,7 +80,7 @@ export class NumaClientStack extends TerraformStack {
       domainSuffix: props.domainSuffix,
       embeddingModel: 'amazon.titan-embed-text-v2:0',
       bedrockParserModel: 'amazon.nova-lite-v1:0',
-      visionModelType: 'haiku',
+      visionModelType: 'nova-pro',
       provisionQResources: false,
     };
     const domainName = props.clientConfig.customDomain ?? `${props.clientName}.${defaults.domainSuffix}`;
@@ -491,6 +491,9 @@ export class NumaClientStack extends TerraformStack {
         extApiDocBucketName: core.extApiDocBucket.bucket.bucket,
         extApiDocBucketArn: core.extApiDocBucket.bucket.arn,
         extractContentLambdaArn: extractContentLambdaArn,
+        // Document converter Lambda for DOCX/Office → PDF conversion
+        // (used by Nolia funding pre-extraction and MD→PDF/DOCX output rendering)
+        documentConverterLambdaArn: documentConverterLambdaArn,
         // Numa Ops feature flag
         numaOpsEnabled: clientConfig.numaOps,
         // Frontend URL for constructing links (e.g. ticket URLs in chat)

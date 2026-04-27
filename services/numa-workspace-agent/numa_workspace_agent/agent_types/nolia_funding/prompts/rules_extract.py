@@ -157,6 +157,18 @@ downstream assessor will consult during each assessment. Each entry has a \
 `file_key`, `display_name`, and a `description` written by the KB curator. \
 The raw lookup files themselves are NOT in your workspace — only the \
 manifest. See the "Supporting Data Rules" section below for how to use it.
+
+### Pre-extracted JSON sidecars
+
+Each PDF and DOCX in your `knowledge-bases/` folders has a sibling \
+`{name}.extracted.json` file produced by the pre-pipeline (e.g. \
+`criteria.pdf` → `criteria.pdf.extracted.json`). **Read those for fast \
+text access** — they contain the document's text in a page-structured JSON \
+shape and are far cheaper to scan than re-reading the raw binary. Open the \
+raw PDF/DOCX directly only when you need to verify formatting that the \
+extraction might have missed (e.g. a complex table you suspect was \
+flattened). Citations should still reference the original document name, \
+not the sidecar.
 """
 
 

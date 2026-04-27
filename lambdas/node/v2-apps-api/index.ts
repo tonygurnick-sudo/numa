@@ -164,10 +164,21 @@ interface RunRecord {
     files: string[];
     options: Record<string, unknown>;
   };
+  /**
+   * The agent's `_result.json` payload. The first three fields are guaranteed
+   * by the V1 V2 Apps contract (data-analysis chat-style result). Per-app
+   * orchestrators may extend the result with additional structured top-level
+   * fields — Nolia Funding, for example, writes `applicant`, `decision`,
+   * `score`, `pipeline`, `inputs_unreliable`, `unreliable_reason`. Those
+   * fields are passed through verbatim from S3 to DynamoDB to the frontend so
+   * each app can declare its own typed shape on the consuming side without
+   * the Lambda needing to know about it.
+   */
   result?: {
     text: string;
     artifacts: unknown[];
     usage: Record<string, unknown>;
+    [key: string]: unknown;
   };
   error?: string;
   s3Prefix: string;
@@ -217,11 +228,20 @@ const checkS3Result = async (
     );
     const bodyStr = await response.Body?.transformToString('utf-8');
     if (!bodyStr) return null;
-    const parsed = JSON.parse(bodyStr);
+    const parsed = JSON.parse(bodyStr) as Record<string, unknown>;
+    // Pass `_result.json` through wholesale. The V1 V2 Apps contract guarantees
+    // text/artifacts/usage; per-app orchestrators (Nolia Funding etc.) extend
+    // the payload with structured top-level blocks like `applicant` /
+    // `decision` / `score` / `pipeline`. Stripping to a fixed allow-list here
+    // would silently drop those fields between S3 and the frontend — exactly
+    // the regression that hid the Pipeline-recommendation card on Funding
+    // assessments. Defaults below preserve the V1 invariants for callers that
+    // still expect them.
     return {
-      text: parsed.text || '',
-      artifacts: parsed.artifacts || [],
-      usage: parsed.usage || {},
+      ...parsed,
+      text: typeof parsed.text === 'string' ? parsed.text : '',
+      artifacts: Array.isArray(parsed.artifacts) ? parsed.artifacts : [],
+      usage: (parsed.usage && typeof parsed.usage === 'object' ? parsed.usage : {}) as Record<string, unknown>,
     };
   } catch (err: unknown) {
     // NoSuchKey means the run is still in progress

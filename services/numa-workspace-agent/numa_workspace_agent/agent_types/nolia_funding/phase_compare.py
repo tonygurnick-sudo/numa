@@ -76,11 +76,12 @@ NOLIA_FUNDING_COMPARE_STEP = AgentTypeConfig(
     tools_source_dirs=["numa"],
     restrict_kbs=True,
     restrict_integrations=True,
-    # Comparison reads ~3 prior assessments + writes 2 files; 50 turns ample.
+    # Comparison reads ~3 prior assessments + writes 3 files (JSON, MD,
+    # _summary_and_reasoning.md). 50 turns is ample.
     max_turns=50,
     max_thinking_tokens=10_000,
-    effort="medium",
-    default_model="anthropic.claude-sonnet-4-6",
+    effort="high",
+    default_model="anthropic.claude-opus-4-6-v1",
 )
 
 register_agent_type(NOLIA_FUNDING_COMPARE_STEP)

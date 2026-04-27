@@ -63,9 +63,27 @@ _CROSS_REGION_PREFIX = (
     else "global" if AWS_REGION == "ap-southeast-3" else "us"
 )
 
+# Newer Anthropic models (Claude 4.5+) use a different cross-region inference
+# profile prefix in ap-southeast-2 (``au.*``) than the older ``apac.*`` used
+# by Claude 3.x and Nova v1. Keep them in sync with sdk_config.REGIONAL_MODEL_MAP.
+_HAIKU_4_5_PREFIX = (
+    "au"
+    if AWS_REGION == "ap-southeast-2"
+    else "global" if AWS_REGION == "ap-southeast-3" else "us"
+)
+
 VISION_MODEL_MAP = {
-    "haiku": f"{_CROSS_REGION_PREFIX}.anthropic.claude-3-haiku-20240307-v1:0",
-    "nova-pro": f"{_CROSS_REGION_PREFIX}.amazon.nova-2-lite-v1:0",
+    # The "haiku" slot previously pointed at Claude 3 Haiku (March 2024),
+    # which Bedrock has since marked Legacy and starts returning
+    # ResourceNotFoundException for accounts that haven't called it in 30+
+    # days. Use Claude 4.5 Haiku — current, vision-capable, different
+    # inference-profile prefix in ap-southeast-2.
+    "haiku": f"{_HAIKU_4_5_PREFIX}.anthropic.claude-haiku-4-5-20251001-v1:0",
+    # Nova 2 Lite is published as a global cross-region inference profile —
+    # there's no ``apac.amazon.nova-2-lite-v1:0`` (returns ValidationException),
+    # only ``global.amazon.nova-2-lite-v1:0``. The global profile works from
+    # any AWS region.
+    "nova-pro": "global.amazon.nova-2-lite-v1:0",
 }
 
 # Get vision model type from config (environment variable set by infrastructure)
@@ -517,6 +535,33 @@ def process_pages_concurrent(
             or "unavailable" in error_str
         )
 
+    def _is_model_unavailable_error(error: Exception) -> bool:
+        """Determine if an error indicates the requested model itself is
+        unavailable for this account/region — i.e. retrying against the
+        same model will keep failing, but switching to a fallback model
+        may succeed.
+
+        Covers AWS-side model lifecycle and access errors:
+          - ``ResourceNotFoundException`` — model retired (e.g. Bedrock's
+            "marked by provider as Legacy and you have not been actively
+            using the model in the last 30 days") or not present in the
+            current region/inference profile.
+          - ``AccessDeniedException`` — IAM/cross-account access to this
+            specific model has been revoked or never granted.
+          - ``ValidationException`` — usually fires when the model ID
+            doesn't exist in the region or the cross-region inference
+            profile. Worth a fallback attempt; if both models hit this,
+            the retry loop will exhaust and raise.
+        """
+        if isinstance(error, ClientError):
+            error_code = error.response.get("Error", {}).get("Code", "")
+            return error_code in {
+                "ResourceNotFoundException",
+                "AccessDeniedException",
+                "ValidationException",
+            }
+        return False
+
     def _retry_with_backoff(
         func, *args, max_retries=MAX_RETRIES, use_fallback_models=False, **kwargs
     ):
@@ -536,17 +581,39 @@ def process_pages_concurrent(
             except Exception as e:
                 last_error = e
 
-                if attempt == max_retries or not _is_retryable_error(e):
+                model_unavailable = _is_model_unavailable_error(e)
+                # Model-unavailable errors are a 4xx that _is_retryable_error
+                # would otherwise abort on — but with fallback enabled the
+                # right move is to swap models and try again, not bail. Without
+                # this carve-out, a deprecated/retired primary model corrupts
+                # every page silently (the per-page handler embeds the error
+                # string as text). See INC discussion for ngaitahu staging
+                # 2026-04-24, where Claude 3 Haiku hit the 30-day-inactive
+                # legacy-model retirement.
+                retryable = _is_retryable_error(e) or (
+                    use_fallback_models and model_unavailable
+                )
+
+                if attempt == max_retries or not retryable:
                     raise e
 
-                # Only switch models if fallback is enabled and it's a throttling error
-                if use_fallback_models and _is_throttling_error(e):
+                # Switch models on either throttling (load-shed to a
+                # different model) or model-unavailable (the current model
+                # is dead for this account — fallback is the only way out).
+                if use_fallback_models and (
+                    _is_throttling_error(e) or model_unavailable
+                ):
                     current_model_index += 1
                     next_model = FALLBACK_MODELS[
                         current_model_index % len(FALLBACK_MODELS)
                     ]
+                    reason = (
+                        "Model unavailable"
+                        if model_unavailable
+                        else "Throttling detected"
+                    )
                     logger.warning(
-                        f"Throttling detected on attempt {attempt + 1}. Switching to model: {next_model}"
+                        f"{reason} on attempt {attempt + 1}. Switching to model: {next_model}"
                     )
 
                 wait_time = (2**attempt) + random.uniform(0.1, 0.5)
