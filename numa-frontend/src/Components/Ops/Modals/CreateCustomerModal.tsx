@@ -42,7 +42,7 @@ export function CreateCustomerModal({
   defaultLifecycleStage,
 }: CreateCustomerModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-  const { numaPost } = useNumaRequest();
+  const { numaGet, numaPost, numaPut } = useNumaRequest();
   const { config } = useOps();
 
   const crmConfig: CrmConfig | null = config?.crmConfig ?? null;
@@ -69,6 +69,9 @@ export function CreateCustomerModal({
   const [missingRequired, setMissingRequired] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const logoInputRef = React.useRef<HTMLInputElement>(null);
 
   // Reset state when the modal opens.
   useEffect(() => {
@@ -80,6 +83,8 @@ export function CreateCustomerModal({
     setNotes('');
     setMissingRequired(new Set());
     setError(null);
+    setLogoFile(null);
+    setLogoPreview(null);
   }, [show, defaultLifecycleStage]);
 
   const setDraftField = useCallback((fieldId: string, value: unknown) => {
@@ -91,6 +96,15 @@ export function CreateCustomerModal({
       next.delete(fieldId);
       return next;
     });
+  }, []);
+
+  const handleLogoPick = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setLogoFile(file);
+    const url = URL.createObjectURL(file);
+    setLogoPreview(url);
   }, []);
 
   const placeholderCustomer = useMemo(buildPlaceholderCustomer, []);
@@ -143,7 +157,33 @@ export function CreateCustomerModal({
     setSaving(true);
     setError(null);
     try {
-      const customer = await OpsService.createCustomer(numaPost, payload as CreateCustomerPayload);
+      let customer = await OpsService.createCustomer(numaPost, payload as CreateCustomerPayload);
+
+      // Upload logo if one was picked (two-step: create customer, then upload logo)
+      if (logoFile && customer.id) {
+        try {
+          const { uploadUrl, s3Key } = await OpsService.getPresignedUrl(numaPost, {
+            context: 'customer',
+            contextId: customer.id,
+            fileName: logoFile.name,
+            contentType: logoFile.type,
+          });
+          await fetch(uploadUrl, {
+            method: 'PUT',
+            body: logoFile,
+            headers: { 'Content-Type': logoFile.type },
+          });
+          await OpsService.updateCustomer(numaPut, customer.id, { logoS3Key: s3Key });
+
+          // Re-fetch the customer so downstream views receive the persisted logo
+          // metadata plus the backend-resolved presigned URL.
+          const refreshed = await OpsService.getCustomer(numaGet, customer.id);
+          customer = refreshed.customer;
+        } catch (logoErr) {
+          console.error('[CreateCustomerModal] Logo upload failed (customer created)', logoErr);
+        }
+      }
+
       onCreated(customer);
     } catch (err) {
       console.error('[CreateCustomerModal] Create failed', err);
@@ -151,7 +191,19 @@ export function CreateCustomerModal({
     } finally {
       setSaving(false);
     }
-  }, [crmConfig, customerRecord, draft, contacts, notes, numaPost, onCreated, alwaysRequiredFieldIds]);
+  }, [
+    crmConfig,
+    customerRecord,
+    draft,
+    contacts,
+    notes,
+    numaGet,
+    numaPost,
+    numaPut,
+    onCreated,
+    alwaysRequiredFieldIds,
+    logoFile,
+  ]);
 
   if (!show) return <></>;
 
@@ -180,9 +232,55 @@ export function CreateCustomerModal({
       contentClassName="d-flex flex-column"
     >
       <Modal.Header closeButton={!saving}>
-        <Modal.Title as="h5" className="fw-bold">
-          {t('crm.createCustomerTitle', 'New customer')}
-        </Modal.Title>
+        <div className="d-flex align-items-center gap-3">
+          {/* Hidden file input */}
+          <input ref={logoInputRef} type="file" accept="image/*" className="d-none" onChange={handleLogoPick} />
+          {/* Logo picker */}
+          <div
+            className="flex-shrink-0 d-flex align-items-center justify-content-center"
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 10,
+              border: logoPreview ? '1px solid #e5e7eb' : '2px dashed #d1d5db',
+              backgroundColor: logoPreview ? '#fff' : '#f9fafb',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              transition: 'border-color 0.15s, background-color 0.15s',
+            }}
+            role="button"
+            tabIndex={0}
+            title={t('crm.uploadLogo')}
+            onClick={() => logoInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') logoInputRef.current?.click();
+            }}
+            onMouseEnter={(e) => {
+              if (!logoPreview) {
+                (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf6';
+                (e.currentTarget as HTMLElement).style.backgroundColor = '#faf5ff';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!logoPreview) {
+                (e.currentTarget as HTMLElement).style.borderColor = '#d1d5db';
+                (e.currentTarget as HTMLElement).style.backgroundColor = '#f9fafb';
+              }
+            }}
+          >
+            {logoPreview ? (
+              <img src={logoPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <div className="d-flex flex-column align-items-center">
+                <i className="bi bi-image" style={{ fontSize: '1rem', color: '#9ca3af' }} />
+                <span style={{ fontSize: '0.55rem', color: '#9ca3af', marginTop: 1 }}>{t('crm.logo')}</span>
+              </div>
+            )}
+          </div>
+          <Modal.Title as="h5" className="fw-bold">
+            {t('crm.createCustomerTitle', 'New customer')}
+          </Modal.Title>
+        </div>
       </Modal.Header>
 
       <Modal.Body style={{ overflowY: 'auto' }}>

@@ -72,6 +72,12 @@ VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
         "create_supplier",
         "update_supplier",
         "delete_supplier",
+        "create_customer_activity",
+        "update_customer_activity",
+        "delete_customer_activity",
+        "create_supplier_activity",
+        "update_supplier_activity",
+        "delete_supplier_activity",
         "create_work_unit",
         "update_work_unit",
         "delete_work_unit",
@@ -210,7 +216,7 @@ def _save_ops_result(result: Any, operation: str) -> str:
     name="numa_ops_tool",
     description=(
         "Manage Numa Ops boards — create/search tickets, manage teams, "
-        "customers, suppliers, and projects. Also supports admin config "
+        "customers, suppliers, activities, and projects. Also supports admin config "
         "management: custom fields (ticket and CRM), ticket types, statuses, "
         "and CRM/supplier configuration (lifecycle stages, record layout, "
         "industries, territories, flags). Call get_config first to load "
@@ -231,7 +237,10 @@ def _save_ops_result(result: Any, operation: str) -> str:
                     "add_comment, create_work_unit, update_work_unit, delete_work_unit, "
                     "create_link, delete_link, "
                     "create_customer, update_customer, delete_customer, "
-                    "create_supplier, update_supplier, delete_supplier, create_project, "
+                    "create_customer_activity, update_customer_activity, delete_customer_activity, "
+                    "create_supplier, update_supplier, delete_supplier, "
+                    "create_supplier_activity, update_supplier_activity, delete_supplier_activity, "
+                    "create_project, "
                     "update_project, delete_project, upload_attachment. "
                     "Config management (admin-only): create_field, update_field, delete_field, "
                     "create_ticket_type, update_ticket_type, delete_ticket_type, "
@@ -244,7 +253,8 @@ def _save_ops_result(result: Any, operation: str) -> str:
             "params": {
                 "type": "string",
                 "description": (
-                    "JSON string of operation-specific parameters. "
+                    "JSON string of operation-specific parameters using camelCase keys "
+                    "(e.g. teamId, stageId, ticketTypeId, assigneeId, displayId). "
                     "See the ops skill documentation for required/optional params per operation."
                 ),
             },
@@ -323,7 +333,9 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
             and isinstance(result, dict)
             and "uploadUrl" in result
         ):
-            workspace_file_path = params.get("workspace_file_path")
+            workspace_file_path = params.get("workspaceFilePath") or params.get(
+                "workspace_file_path"
+            )
             if workspace_file_path:
                 try:
                     import urllib.request
@@ -335,8 +347,10 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                         )
 
                     upload_url = result["uploadUrl"]
-                    content_type = params.get(
-                        "content_type", "application/octet-stream"
+                    content_type = (
+                        params.get("contentType")
+                        or params.get("content_type")
+                        or "application/octet-stream"
                     )
                     file_size = local_path.stat().st_size
 
@@ -349,14 +363,14 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                         req.add_header("Content-Length", str(file_size))
                         urllib.request.urlopen(req, timeout=60.0)
 
-                    ticket_id = params.get("ticket_id")
+                    ticket_id = params.get("ticketId") or params.get("ticket_id")
                     if ticket_id and "s3Key" in result:
                         invoke_workspace_tool(
                             "ops_add_comment",
                             {
                                 "operation": "add_comment",
                                 "params": {
-                                    "ticket_id": ticket_id,
+                                    "ticketId": ticket_id,
                                     "content": f"📎 Attached: {local_path.name}",
                                     "attachments": [
                                         {

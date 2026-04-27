@@ -215,7 +215,25 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
             `${props.dataBucketArn}/temp-pdf/*`,
             `${props.dataBucketArn}/shared/*`,
             `${props.dataBucketArn}/transcriptions/*`,
+            // Nolia KB pre-extraction: read source PDFs/DOCX and write
+            // {filename}.extracted.json sidecars (called from
+            // services/numa-workspace-agent .../nolia_funding/workspace_setup.py
+            // pre_extract_kb_documents). Scoped to documents/kb-* to match the
+            // workspace-agent's existing PutObject scope on the same bucket.
+            `${props.dataBucketArn}/documents/kb-*/*`,
+            // DOCX simple-path conversion intermediate. The Lambda's
+            // _extract_docx_via_pdf writes the converted PDF to
+            // temp-docx-conversion/{input_key}.pdf in the SAME bucket as the
+            // input, so when the input lives in the data bucket (KB
+            // pre-extraction), the temp PDF lands here too.
+            `${props.dataBucketArn}/temp-docx-conversion/*`,
           ],
+        },
+        {
+          // Read access to KB documents so shares pointing at KB files can be extracted.
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`${props.dataBucketArn}/documents/*`],
         },
         {
           effect: 'Allow',
@@ -1476,54 +1494,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
-    // User Files API — per-user virtual file system with scoped access (behind NUMA_FILES flag)
-    if (props.filesTableName && props.filesTableArn) {
-      this.addLambdaFunction(this, 'user-files', {
-        addAuthorizer: true,
-        lambdaDirectory: 'node/user-files',
-        runtime: 'nodejs22.x',
-        handler: 'index.handler',
-        environment: {
-          CLIENT_NAME: props.clientName,
-          REGION: props.region,
-          FILES_TABLE_NAME: props.filesTableName,
-          DATA_BUCKET_NAME: props.dataBucketName,
-        },
-        additionalPolicyStatements: [
-          {
-            effect: 'Allow',
-            actions: [
-              'dynamodb:Query',
-              'dynamodb:GetItem',
-              'dynamodb:PutItem',
-              'dynamodb:UpdateItem',
-              'dynamodb:DeleteItem',
-            ],
-            resources: [props.filesTableArn],
-          },
-          {
-            effect: 'Allow',
-            actions: ['s3:PutObject', 's3:DeleteObject'],
-            resources: [`${props.dataBucketArn}/files/*`],
-          },
-          {
-            effect: 'Allow',
-            actions: ['s3:GetObject'],
-            resources: [`${props.dataBucketArn}/*`],
-          },
-          {
-            effect: 'Allow',
-            actions: ['s3:ListBucket'],
-            resources: [props.dataBucketArn],
-          },
-        ],
-        route: [
-          { verb: 'ANY', path: 'files' },
-          { verb: 'ANY', path: 'files/{proxy+}' },
-        ],
-      });
-    }
-
     // Runner Lambda handles EventBridge + manual executions
     this.agentScheduleRunnerLambda = this.addLambdaFunction(this, 'agent-schedule-runner', {
       addAuthorizer: true,
@@ -2407,10 +2377,6 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   bedrockKbId?: string;
   /** Bedrock Knowledge Base data source ID for data sync scheduling (optional). */
   bedrockDataSourceId?: string;
-  /** Files table name for per-user virtual file system. */
-  filesTableName?: string;
-  /** Files table ARN for IAM policy. */
-  filesTableArn?: string;
   /** Usage analytics events table name. */
   usageAnalyticsEventsTableName: string;
   /** Usage analytics events table ARN for IAM. */

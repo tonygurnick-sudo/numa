@@ -6,6 +6,7 @@ import Form from 'react-bootstrap/Form';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useToast } from '../../../Providers/ToastContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import type { Supplier, Activity, Document as OpsDocument, UpdateSupplierPayload, Ticket } from '../../../types/ops';
@@ -74,6 +75,7 @@ export function SupplierDetailModal({
 }: SupplierDetailModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPut } = useNumaRequest();
+  const { showToast } = useToast();
   const { config } = useOps();
 
   const supplierConfig = config?.supplierConfig ?? null;
@@ -163,6 +165,7 @@ export function SupplierDetailModal({
   const saveField = useCallback(
     async (field: string, value: unknown) => {
       if (!supplierId || !supplier) return;
+      const prev = supplier;
       setSaving(true);
       try {
         const payload: UpdateSupplierPayload = { [field]: value };
@@ -171,13 +174,15 @@ export function SupplierDetailModal({
         onUpdated?.();
       } catch (err) {
         console.error(`[SupplierDetailModal] Failed to save ${field}`, err);
+        setSupplier(prev);
+        showToast({ message: t('crm.updateFailed'), variant: 'error' });
       } finally {
         setSaving(false);
         setEditingField(null);
         setFieldDraft('');
       }
     },
-    [supplierId, supplier, numaPut, onUpdated]
+    [supplierId, supplier, numaPut, onUpdated, showToast, t]
   );
 
   const startEdit = (field: string, currentValue: string) => {
@@ -207,7 +212,8 @@ export function SupplierDetailModal({
 
   const handleContactsChange = useCallback(
     async (contacts: typeof supplier extends null ? never : NonNullable<typeof supplier>['contacts']) => {
-      if (!supplierId) return;
+      if (!supplierId || !supplier) return;
+      const prev = supplier;
       setSaving(true);
       try {
         const updated = await OpsService.updateSupplier(numaPut, supplierId, { contacts });
@@ -215,11 +221,13 @@ export function SupplierDetailModal({
         onUpdated?.();
       } catch (err) {
         console.error('[SupplierDetailModal] Failed to update contacts', err);
+        setSupplier(prev);
+        showToast({ message: t('crm.updateFailed'), variant: 'error' });
       } finally {
         setSaving(false);
       }
     },
-    [supplierId, numaPut, onUpdated]
+    [supplierId, supplier, numaPut, onUpdated, showToast, t]
   );
 
   // ── Notes Save ──────────────────────────────────────────────────────────
@@ -457,7 +465,7 @@ export function SupplierDetailModal({
                         <option value="">{t('common.none')}</option>
                         {staff.map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.name}
+                            {s.name || s.email}
                           </option>
                         ))}
                       </Form.Select>

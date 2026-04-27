@@ -65,7 +65,8 @@
       "files": "Files",
       "marketplace": "Marketplace",
       "vault": "Secrets Vault",
-      "dataAnalysis": "Data Analysis"
+      "dataAnalysis": "Data Analysis",
+      "unifiedFiles": "Numa Files"
     },
     "sections": {
       "build": "Build",

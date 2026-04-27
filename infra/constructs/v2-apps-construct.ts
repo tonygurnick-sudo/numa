@@ -45,6 +45,7 @@ export class V2AppsConstruct extends ApiGatewayLambdaCollection {
         { name: 'userId', type: 'S' },
         { name: 'appId', type: 'S' },
         { name: 'createdAt', type: 'S' },
+        { name: 'sharedScope', type: 'S' },
       ],
       globalSecondaryIndex: [
         {
@@ -56,6 +57,16 @@ export class V2AppsConstruct extends ApiGatewayLambdaCollection {
         {
           name: 'appId-createdAt-index',
           hashKey: 'appId',
+          rangeKey: 'createdAt',
+          projectionType: 'ALL',
+        },
+        // Sparse index — only runs that set `sharedScope` are present here. Backs the
+        // cross-user list endpoint (GET /v2-apps/runs?sharedScope=X). Opt-in per app
+        // via SCOPE_SHARED_APPS in v2-apps-api; non-opted-in apps don't write the
+        // attribute and so don't appear in this index.
+        {
+          name: 'sharedScope-createdAt-index',
+          hashKey: 'sharedScope',
           rangeKey: 'createdAt',
           projectionType: 'ALL',
         },

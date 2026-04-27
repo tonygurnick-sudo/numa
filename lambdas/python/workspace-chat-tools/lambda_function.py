@@ -177,6 +177,13 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     conversation_id = event.get("conversation_id", "")  # For workspace file S3 paths
     params = event.get("params", {})
 
+    # Auto-inject root KB (user_sub) into allowed_kbs so users can always
+    # access their own root files. Server-side permission checks in the tool
+    # handlers verify actual ownership (kb_id == user_sub).
+    if user_sub and allowed_kbs and isinstance(allowed_kbs, list):
+        if user_sub not in allowed_kbs:
+            allowed_kbs = [*allowed_kbs, user_sub]
+
     # Log full request details for debugging
     logger.info(
         "Received tool request",

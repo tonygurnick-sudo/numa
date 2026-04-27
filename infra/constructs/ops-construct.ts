@@ -253,7 +253,7 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
         },
         {
           effect: 'Allow',
-          actions: ['s3:PutObject'],
+          actions: ['s3:PutObject', 's3:GetObject'],
           resources: [`${props.outputsBucketArn}/ops/*`],
         },
       ],
@@ -295,7 +295,7 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
         },
         {
           effect: 'Allow',
-          actions: ['s3:PutObject'],
+          actions: ['s3:PutObject', 's3:GetObject'],
           resources: [`${props.outputsBucketArn}/ops/*`],
         },
         ...(props.emailSenderLambdaArn

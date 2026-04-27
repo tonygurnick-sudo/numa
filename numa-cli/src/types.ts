@@ -93,7 +93,6 @@ export const clientConfigSchema = z.object({
   agentCoreRegion: z.string().optional(),
   dataConnectorsEnabled: z.boolean().optional(),
   scheduling: z.boolean().optional(),
-  numaFiles: z.boolean().optional(),
   numaDropZones: z.boolean().optional(),
   numaSharing: z.boolean().optional(),
   developerMode: z.boolean().optional(),

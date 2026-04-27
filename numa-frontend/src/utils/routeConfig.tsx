@@ -1,4 +1,5 @@
 import { lazy } from 'react';
+import { Navigate } from 'react-router-dom';
 import { reloadFavourites } from './navigation';
 import { NotificationLabel } from '../Components/Notifications/NotificationLabel';
 
@@ -10,19 +11,12 @@ const SettingsPage = lazy(() => import('../Pages/Settings'));
 const NumaWorkspaceChatAgents = lazy(() =>
   import('../Pages/NumaWorkspaceChatAgents').then((m) => ({ default: m.NumaWorkspaceChatAgents }))
 );
-const CompanyKnowledgeBase = lazy(() =>
-  import('../Pages/CompanyKnowledgeBase').then((m) => ({ default: m.CompanyKnowledgeBase }))
-);
-const UserKnowledgeBases = lazy(() =>
-  import('../Pages/UserKnowledgeBases').then((m) => ({ default: m.UserKnowledgeBases }))
-);
-const UserKBDetailPage = lazy(() => import('../Pages/UserKBDetailPage').then((m) => ({ default: m.UserKBDetailPage })));
 const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
 const OpsPage = lazy(() => import('../Pages/OpsPage').then((m) => ({ default: m.OpsPage })));
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const NumaIntegrations = lazy(() => import('../Pages/NumaIntegrations').then((m) => ({ default: m.NumaIntegrations })));
 const JobHistoryManager = lazy(() => import('../Pages/JobHistoryManager'));
-const FilesPage = lazy(() => import('../Pages/Files').then((m) => ({ default: m.FilesPage })));
+// FilesPage removed -- replaced by UnifiedFilesPage
 const SchedulingPage = lazy(() => import('../Pages/SchedulingPage').then((m) => ({ default: m.SchedulingPage })));
 const DataConnectorsPage = lazy(() =>
   import('../Pages/DataConnectorsPage').then((m) => ({ default: m.DataConnectorsPage }))
@@ -47,6 +41,7 @@ const V2AppDetail = lazy(() => import('../Pages/V2AppDetail').then((m) => ({ def
 const ApiContractPage = lazy(() => import('../Pages/ApiContractPage'));
 
 const ChatHistoryPage = lazy(() => import('../Pages/ChatHistoryPage'));
+const UnifiedFilesPage = lazy(() => import('../Pages/UnifiedFilesPage').then((m) => ({ default: m.UnifiedFilesPage })));
 
 export const ROUTE_CONFIG = [
   // Chat
@@ -125,20 +120,7 @@ export const ROUTE_CONFIG = [
     },
   },
 
-  {
-    path: '/files/*',
-    element: () => <FilesPage />,
-    featureFlag: 'NUMA_FILES',
-    nav: {
-      label: 'Files',
-      labelKey: 'nav.items.files',
-      icon: 'bi bi-folder-fill',
-      section: 'workflows',
-      sectionKey: 'nav.sections.workflows',
-      featureFlag: 'NUMA_FILES',
-      order: 5.7,
-    },
-  },
+  // Old /files page removed -- replaced by /numa-files (UnifiedFilesPage)
 
   // Ops
   {
@@ -189,36 +171,34 @@ export const ROUTE_CONFIG = [
     },
   },
 
-  // Knowledge Bases section items
+  // Files (unified KB + files page)
   {
-    path: '/company-knowledge-base',
-    element: () => <CompanyKnowledgeBase />,
-    requiredFeature: 'useCompanyData',
+    path: '/numa-files',
+    element: () => <UnifiedFilesPage />,
     featureFlag: 'KNOWLEDGE_BASES',
     nav: {
-      label: 'Company KB',
-      labelKey: 'nav.items.companyKnowledgeBase',
-      icon: 'bi bi-file-earmark-text',
-      section: 'knowledgeBases',
-      sectionKey: 'nav.sections.knowledgeBases',
+      label: 'Files',
+      labelKey: 'nav.items.files',
+      icon: 'bi bi-folder-fill',
+      section: 'workflows',
+      sectionKey: 'nav.sections.workflows',
       featureFlag: 'KNOWLEDGE_BASES',
-      order: 9,
+      order: 5.7,
     },
+  },
+
+  // Legacy KB routes -- redirect to unified files, no nav entries
+  {
+    path: '/company-knowledge-base',
+    element: () => <Navigate to="/numa-files?tab=company" replace />,
+    requiredFeature: 'useCompanyData',
+    featureFlag: 'KNOWLEDGE_BASES',
   },
   {
     path: '/user-knowledge-bases',
-    element: () => <UserKnowledgeBases />,
+    element: () => <Navigate to="/numa-files?tab=user" replace />,
     requiredFeature: 'useCompanyData',
     featureFlag: 'KNOWLEDGE_BASES',
-    nav: {
-      label: 'User KBs',
-      labelKey: 'nav.items.userKnowledgeBase',
-      icon: 'bi bi-person-lines-fill',
-      section: 'knowledgeBases',
-      sectionKey: 'nav.sections.knowledgeBases',
-      featureFlag: 'KNOWLEDGE_BASES',
-      order: 10,
-    },
   },
 
   // Integrations
@@ -297,9 +277,10 @@ export const ROUTE_CONFIG = [
   },
 
   // Hidden routes (no nav)
+  // Legacy KB deep-link -- redirect to unified files
   {
     path: '/user-knowledge-bases/:kbId',
-    element: () => <UserKBDetailPage />,
+    element: () => <Navigate to="/numa-files?tab=user" replace />,
     requiredFeature: 'useCompanyData',
     featureFlag: 'KNOWLEDGE_BASES',
   },

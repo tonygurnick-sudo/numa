@@ -47,6 +47,7 @@ from numa_workspace_agent.sdk_config import (
     DEFAULT_MODEL,
     FALLBACK_MODEL,
     LOCAL_ROOT,
+    _regionalize,
     _strip_prefix,
     create_agent_options,
     validate_model_id,
@@ -59,13 +60,6 @@ from numa_workspace_agent.workspace import (
 )
 
 logger = structlog.get_logger()
-
-# Data bucket configuration (for downloading attached files from My Files / Company Files)
-DATA_BUCKET_NAME = os.environ.get("DATA_BUCKET_NAME", "")
-# Allowed S3 prefixes for attached file downloads (security boundary)
-_ALLOWED_ATTACHMENT_PREFIXES = ("files/user/", "files/company/")
-# Maximum file size for attached file downloads (50MB)
-_MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024
 
 RunKey = tuple[str, str, str]
 
@@ -296,91 +290,6 @@ def serialize_message(message: Any) -> dict[str, Any]:
         }
 
 
-def _download_attached_data_bucket_files(
-    attached_files: list[dict],
-    uploads_dir: Path,
-) -> int:
-    """Download data-bucket files referenced in attachments to /workdir/uploads/.
-
-    When the frontend sends file metadata from "My Files" or "Company Files"
-    (e.g., for summarization or share description), the files live in the S3
-    data bucket — not in the conversation workspace. This function downloads
-    them so Claude can read them like normal uploads.
-
-    Only processes files whose path starts with an allowed prefix (files/user/
-    or files/company/). Returns the number of files downloaded.
-    """
-    logger.info(
-        "Attempting to download attached data-bucket files",
-        data_bucket=DATA_BUCKET_NAME or "(not set)",
-        file_count=len(attached_files),
-    )
-
-    if not DATA_BUCKET_NAME:
-        logger.warning("DATA_BUCKET_NAME not set — skipping data-bucket file downloads")
-        return 0
-
-    downloads = 0
-    uploads_dir.mkdir(parents=True, exist_ok=True)
-    s3 = boto3.client("s3")
-
-    for file_info in attached_files:
-        s3_key = file_info.get("path", "")
-        filename = file_info.get("filename", "") or s3_key.rsplit("/", 1)[-1]
-
-        if not s3_key:
-            continue
-
-        # Security: only allow known data-bucket prefixes
-        if not any(s3_key.startswith(p) for p in _ALLOWED_ATTACHMENT_PREFIXES):
-            logger.debug(
-                "Skipping attachment — not a data-bucket file path",
-                s3_key=s3_key,
-            )
-            continue
-
-        dest = uploads_dir / filename
-        if dest.exists():
-            logger.debug("Attachment already in uploads", filename=filename)
-            downloads += 1
-            continue
-
-        try:
-            logger.info(
-                "Downloading attachment",
-                s3_key=s3_key,
-                dest=str(dest),
-                bucket=DATA_BUCKET_NAME,
-            )
-            # Check size before downloading
-            head = s3.head_object(Bucket=DATA_BUCKET_NAME, Key=s3_key)
-            size = head.get("ContentLength", 0)
-            if size > _MAX_ATTACHMENT_SIZE:
-                logger.warning(
-                    "Attachment too large, skipping",
-                    s3_key=s3_key,
-                    size_mb=size // (1024 * 1024),
-                )
-                continue
-
-            s3.download_file(DATA_BUCKET_NAME, s3_key, str(dest))
-            downloads += 1
-            logger.info(
-                "Downloaded attached data-bucket file",
-                s3_key=s3_key,
-                dest=str(dest),
-                size=size,
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to download attached file from data bucket",
-                s3_key=s3_key,
-                error=str(e),
-            )
-
-    return downloads
-
-
 def _transcribe_audio_file(file_path: str) -> dict[str, Any]:
     """Invoke the workspace-chat-tools Lambda to transcribe an audio file.
 
@@ -531,17 +440,7 @@ async def stream_claude_sdk(
         async def _restore_trace():
             await asyncio.to_thread(restore_trace_from_s3, user_sub, conversation_id)
 
-        async def _download_files():
-            if attached_files:
-                await asyncio.to_thread(
-                    _download_attached_data_bucket_files,
-                    attached_files,
-                    paths["uploads"],
-                )
-
-        restore_result, _, _ = await asyncio.gather(
-            _restore_session(), _restore_trace(), _download_files()
-        )
+        restore_result, _ = await asyncio.gather(_restore_session(), _restore_trace())
 
         if restore_result and restore_result.get("session_id"):
             session_id = restore_result["session_id"]
@@ -574,10 +473,6 @@ async def stream_claude_sdk(
                 session_id = restore_result["session_id"]
 
             restore_trace_from_s3(user_sub, conversation_id)
-
-        # Download attached files on warm start (sequential -- typically fast)
-        if attached_files:
-            _download_attached_data_bucket_files(attached_files, paths["uploads"])
 
     # 2. Transcribe voice recordings (voice input pre-processing)
     # Only transcribes files explicitly marked as voice recordings by the frontend.
@@ -657,7 +552,16 @@ async def stream_claude_sdk(
     )
 
     # 4. Create SDK options with validated model (with quota fallback pre-check)
+    # Precedence: request override > agent_type_config.default_model > DEFAULT_MODEL.
+    # The type-config consultation is also done inside create_agent_options, but
+    # we need a concrete model here to feed resolve_model_with_fallback.
     validated_model = validate_model_id(model_id)
+    if (
+        validated_model is None
+        and agent_type_config
+        and agent_type_config.default_model
+    ):
+        validated_model = _regionalize(_strip_prefix(agent_type_config.default_model))
     effective_model = validated_model or DEFAULT_MODEL
     effective_model, _is_fallback = resolve_model_with_fallback(effective_model)
     validated_model = effective_model
@@ -1623,7 +1527,16 @@ async def run_claude_sdk(
     os.environ["NUMA_APPROVAL_MODE"] = "manual"
 
     # 4. Create SDK options (with quota fallback pre-check)
+    # Precedence: request override > agent_type_config.default_model > DEFAULT_MODEL.
+    # The type-config consultation is also done inside create_agent_options, but
+    # we need a concrete model here to feed resolve_model_with_fallback.
     validated_model = validate_model_id(model_id)
+    if (
+        validated_model is None
+        and agent_type_config
+        and agent_type_config.default_model
+    ):
+        validated_model = _regionalize(_strip_prefix(agent_type_config.default_model))
     effective_model = validated_model or DEFAULT_MODEL
     effective_model, _is_fallback = resolve_model_with_fallback(effective_model)
     validated_model = effective_model
@@ -1932,7 +1845,6 @@ async def run_claude_sdk(
                                 auto_approved=auto_approved,
                                 approval_mode=approval_mode,
                                 request_id=approval_id,
-                                schema_found=schema_found,
                             )
 
                 # Serialize and write to trace

@@ -189,7 +189,6 @@ Feature flags are accessed via `getFlag(flagName)` from `src/utils/featureFlags.
 | `NUMA_WORKSPACE_CHAT`     | Workspace chat agent                           |
 | `SCHEDULING`              | Agent scheduling + notifications               |
 | `DATA_CONNECTORS_ENABLED` | Data connectors (SharePoint, Teams, Box, etc.) |
-| `NUMA_FILES`              | Files section with virtual file system         |
 | `NUMA_OPS`                | Numa Ops (tickets/projects)                    |
 | `V2_APPS`                 | V2 Apps (experimental)                         |
 | `AGENTS`                  | Agent builder                                  |

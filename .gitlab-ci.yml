@@ -115,7 +115,6 @@ pre-commit:
         - lambdas/node/connector-event-receiver
         - lambdas/node/data-sync-scheduler
         - lambdas/node/document-converter
-        - lambdas/node/files-index-sync
         - lambdas/node/gmail-watch-manager
         - lambdas/node/google-cloud-setup
         - lambdas/node/notifications-api
@@ -142,13 +141,9 @@ pre-commit:
         - lambdas/node/step-function-shim
         - lambdas/node/system-user-creator
         - lambdas/node/token-adjuster
-        - lambdas/node/transcription-api
-        - lambdas/node/transcription-dispatcher
-        - lambdas/node/transcription-stream-handler
         - lambdas/node/usage-analytics-admin
         - lambdas/node/usage-analytics-contract
         - lambdas/node/usage-analytics-ingest
-        - lambdas/node/user-files
         - lambdas/node/v2-apps-api
         - lambdas/node/vector-db-init
         - lib/client-config-node
@@ -184,6 +179,7 @@ pre-commit:
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-chat-agent
         - lambdas/python/numa-dr-export
+        - lambdas/python/numa-kb-manager
         - lambdas/python/numa-recent-jobs
         - lambdas/python/oauth-files-api
         - lambdas/python/oauth-workspace-tools
@@ -559,36 +555,6 @@ browser-lambda-package:
   artifacts:
     paths:
       - infra/assets/artifacts/browser-lambda/image.tar
-    expire_in: 7 days
-
-# Build transcription-service Docker image as tar for Fargate deployment
-transcription-service-package:
-  stage: package
-  timeout: 30 minutes
-  image: docker:24
-  services:
-    - docker:24-dind
-  tags:
-    - aws
-  rules:
-    - !reference [.rules, if-deployable]
-  variables:
-    DOCKER_TLS_CERTDIR: '/certs'
-    DOCKER_BUILD_OPTS: '--cache-from type=local,src=$CI_PROJECT_DIR/.docker-cache-transcription --cache-to type=local,dest=$CI_PROJECT_DIR/.docker-cache-transcription,mode=max'
-  cache:
-    - key: transcription-service-docker-${CI_DEFAULT_BRANCH}
-      paths:
-        - .docker-cache-transcription/
-  before_script:
-    - apk add --no-cache bash git
-    - docker run --privileged --rm tonistiigi/binfmt --install arm64
-  script:
-    - cd services
-    - chmod +x package-service.sh
-    - ./package-service.sh transcription-service
-  artifacts:
-    paths:
-      - infra/assets/artifacts/transcription-service/image.tar
     expire_in: 7 days
 
 # Publish the artifact ZIP to deployer S3 (main only)

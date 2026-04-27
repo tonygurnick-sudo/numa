@@ -150,6 +150,24 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                 "content": [{"type": "text", "text": msg}],
             }
         if status == "timeout":
+            if os.environ.get("NUMA_APPROVAL_MODE") == "auto":
+                logger.warning(
+                    "Unexpected approval timeout while auto-approve is enabled",
+                    action_key=action_key,
+                )
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                f"Execution timed out for: {action_key}. "
+                                "The call did not complete. Check the target system "
+                                "before retrying."
+                            ),
+                        }
+                    ],
+                    "isError": True,
+                }
             return {
                 "content": [
                     {
@@ -404,6 +422,25 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                 ],
             }
         if status == "timeout":
+            if os.environ.get("NUMA_APPROVAL_MODE") == "auto":
+                logger.warning(
+                    "Unexpected approval timeout while auto-approve is enabled",
+                    method=method,
+                    upstream_url=upstream_url,
+                )
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                f"Execution timed out for proxy request: {method} {upstream_url}. "
+                                "The request did not complete. Check the target system "
+                                "before retrying."
+                            ),
+                        }
+                    ],
+                    "isError": True,
+                }
             return {
                 "content": [
                     {

@@ -15,3 +15,16 @@ export function isSystemKnowledgeBase(kbId: string | null | undefined): boolean 
   const normalized = kbId.trim();
   return normalized.length > 0 && SYSTEM_KB_IDS.has(normalized);
 }
+
+/**
+ * Check if a KB represents the user's root files.
+ * Root KBs use the user's Cognito sub as the kb_id.
+ */
+export function isRootKB(kbId: string, userSub: string): boolean {
+  return Boolean(kbId && userSub && kbId === userSub);
+}
+
+/** Get the root KB ID for a user (same as their Cognito sub). */
+export function getRootKBId(userSub: string): string {
+  return userSub;
+}

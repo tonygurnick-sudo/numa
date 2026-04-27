@@ -451,6 +451,8 @@ export type Customer = {
   notes: string;
   contacts: Contact[];
   customFields?: Record<string, unknown>;
+  logoS3Key?: string | null;
+  logoPresignedUrl?: string | null;
   openTicketCount: number;
   lastContactDate?: string | null;
   createdBy: string;
@@ -633,6 +635,7 @@ export type CreateCustomerPayload = {
   notes?: string;
   contacts?: Contact[];
   customFields?: Record<string, unknown>;
+  logoS3Key?: string | null;
   order?: number;
 };
 

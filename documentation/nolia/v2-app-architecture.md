@@ -226,12 +226,12 @@ In Jakarta, all models use `global.*` prefixed inference profiles (e.g., `global
 
 ## Key Frontend Files (Nolia Whitelabel)
 
-| File (in numa-whitelabel-investigation/)      | Purpose                       |
-| --------------------------------------------- | ----------------------------- |
-| `frontend/src/app/assess/*/page.tsx`          | Assessment upload pages       |
-| `frontend/src/services/v2-apps-service.ts`    | V2 Apps API client            |
-| `backend/src/controllers/NoliaController.ts`  | Proxy to Numa nolia endpoints |
-| `backend/src/controllers/V2AppsController.ts` | V2 Apps proxy controller      |
+| File (in `arcanum/nolia/nolia-app/` or `arcanum/nolia/nolia-funding-app/`) | Purpose                       |
+| -------------------------------------------------------------------------- | ----------------------------- |
+| `frontend/src/app/assess/*/page.tsx`                                       | Assessment upload pages       |
+| `frontend/src/services/v2-apps-service.ts`                                 | V2 Apps API client            |
+| `backend/src/controllers/NoliaController.ts`                               | Proxy to Numa nolia endpoints |
+| `backend/src/controllers/V2AppsController.ts`                              | V2 Apps proxy controller      |
 
 ## Performance Benchmarks
 

@@ -1459,6 +1459,24 @@ files = [
 referencing = ">=0.31.0"
 
 [[package]]
+name = "kb-core"
+version = "0.1.0"
+description = "Shared knowledge-base management primitives (DynamoDB-backed KB + membership model) used by numa-chat-agent and numa-kb-manager"
+optional = false
+python-versions = "^3.13"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+prm = {path = "../prm", develop = true}
+structlog = "^25.2.0"
+
+[package.source]
+type = "directory"
+url = "../../../lib/kb-core"
+
+[[package]]
 name = "lxml"
 version = "6.0.1"
 description = "Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API."
@@ -3336,4 +3354,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.13.0"
-content-hash = "8e02f4205529fc27fdddc7ec9b9fb7537c39e769a6741d9d4f2c71d5732df287"
+content-hash = "d94ab4527d72f6eec17d5e19c32dd458d4c583678348a4df4bf420f69781afdd"

@@ -8,14 +8,14 @@
 
 /**
  * Convert camelCase to UPPER_SNAKE_CASE.
- * e.g. "numaFiles" → "NUMA_FILES", "dataConnectorsEnabled" → "DATA_CONNECTORS_ENABLED"
+ * e.g. "dataConnectorsEnabled" → "DATA_CONNECTORS_ENABLED"
  */
 function camelToUpperSnake(s: string): string {
   return s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
 }
 
 export interface CapabilityItem {
-  /** Feature flag name in UPPER_SNAKE_CASE e.g. "NUMA_FILES" */
+  /** Feature flag name in UPPER_SNAKE_CASE e.g. "NUMA_OPS" */
   flag: string;
   /** Human-readable display name (English fallback) */
   name: string;
@@ -23,9 +23,9 @@ export interface CapabilityItem {
   description: string;
   /** Bootstrap Icons class e.g. "bi-folder-fill" */
   icon?: string;
-  /** i18n key for the display name e.g. "capabilities.numaFiles.name" */
+  /** i18n key for the display name e.g. "capabilities.numaOps.name" */
   labelKey?: string;
-  /** i18n key for the description e.g. "capabilities.numaFiles.description" */
+  /** i18n key for the description e.g. "capabilities.numaOps.description" */
   descriptionKey?: string;
   /** Whether enabling this flag requires a code deployment */
   deployRequired: boolean;

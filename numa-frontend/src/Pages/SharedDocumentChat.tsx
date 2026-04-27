@@ -108,9 +108,13 @@ export const SharedDocumentChat = () => {
     loadShareInfo();
   }, [uuid, t]);
 
-  // Poll for chat readiness when chat_status is "pending"
+  // Poll while either chat_status is "pending" (new flow) or status is
+  // "processing" (legacy extraction flow). Without this the document overlay
+  // shown for "processing" status would stay until the user manually refreshes.
+  const needsPolling = chatStatus === 'pending' || shareInfo?.status === 'processing';
+
   useEffect(() => {
-    if (!uuid || chatStatus !== 'pending') return;
+    if (!uuid || !needsPolling) return;
 
     let attempts = 0;
     let cancelled = false;
@@ -122,13 +126,17 @@ export const SharedDocumentChat = () => {
         const info = await getShareInfo(uuid);
         if (cancelled) return;
         const newChatStatus = info.chat_status ?? 'ready';
-        if (newChatStatus === 'ready') {
-          setChatStatus('ready');
-          setShareInfo(info);
+        // Always refresh shareInfo so a status transition (processing -> ready
+        // or chat_status pending -> ready) propagates to the overlay condition.
+        setShareInfo(info);
+        setChatStatus(newChatStatus);
+        if (newChatStatus === 'ready' && info.status !== 'processing') {
           return;
         }
-        if (newChatStatus === 'error') {
-          setChatStatus('error');
+        if (newChatStatus === 'error' || info.status === 'error') {
+          if (info.status === 'error') {
+            setError(t('errors.extractionFailed'));
+          }
           return;
         }
       } catch {
@@ -144,7 +152,7 @@ export const SharedDocumentChat = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [uuid, chatStatus]);
+  }, [uuid, needsPolling, t]);
 
   if (isLoading) {
     return (

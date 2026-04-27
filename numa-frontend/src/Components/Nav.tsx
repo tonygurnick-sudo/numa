@@ -77,16 +77,10 @@ const SIMPLE_LIBRARY_SECTION_ITEM = {
 };
 const SIMPLE_LIBRARY_NAV_ITEM_DEFINITIONS = [
   {
-    fallbackTo: '__library_company_kb__',
-    labelKey: 'nav.items.companyKnowledgeBase',
-    staticIcon: 'companyKnowledgeBase',
-    routePaths: ['/company-knowledge-base', '/knowledgebase-management'],
-  },
-  {
-    fallbackTo: '__library_user_kb__',
-    labelKey: 'nav.items.userKnowledgeBase',
-    staticIcon: 'userKnowledgeBase',
-    routePaths: ['/user-knowledge-bases'],
+    fallbackTo: '__library_files__',
+    labelKey: 'nav.items.unifiedFiles',
+    staticIcon: 'unifiedFiles',
+    routePaths: ['/numa-files'],
   },
 ];
 const ADVANCED_BUILD_NAV_ITEMS = [
@@ -714,6 +708,8 @@ function getStaticNavIcon(iconKey) {
       return Building2;
     case 'userKnowledgeBase':
       return UserRound;
+    case 'unifiedFiles':
+      return FolderClosed;
     case 'dataConnectors':
       return Database;
     case 'ops':

@@ -247,11 +247,17 @@ OPS_CRM_OPERATIONS = {
     "create_customer",
     "update_customer",
     "delete_customer",
+    "create_customer_activity",
+    "update_customer_activity",
+    "delete_customer_activity",
     "list_suppliers",
     "get_supplier",
     "create_supplier",
     "update_supplier",
     "delete_supplier",
+    "create_supplier_activity",
+    "update_supplier_activity",
+    "delete_supplier_activity",
 }
 
 
@@ -287,6 +293,52 @@ def _resolve_ticket_by_display_id(
     return ticket_id, team_id
 
 
+def _p(params: dict, *keys: str) -> Any:
+    """Resolve a parameter by checking multiple key variants.
+
+    Checks keys in order: first match wins. Use to accept both camelCase
+    (primary, matches the API) and snake_case (legacy fallback).
+    Returns None if no key is found.
+    """
+    for k in keys:
+        v = params.get(k)
+        if v is not None:
+            return v
+    return None
+
+
+def _build_body(params: dict, mapping: list[tuple[str, ...]]) -> dict:
+    """Build a request body from params using a key-mapping list.
+
+    Each entry is a tuple of (output_key, primary_key, *fallback_keys).
+    The output_key is the camelCase key expected by the API.
+    Primary key is checked first (camelCase), then fallbacks (snake_case).
+    """
+    body: dict = {}
+    for entry in mapping:
+        out_key = entry[0]
+        lookup_keys = entry[1:]
+        val = _p(params, *lookup_keys)
+        if val is not None:
+            body[out_key] = val
+    return body
+
+
+def _build_qp(params: dict, mapping: list[tuple[str, ...]]) -> dict | None:
+    """Build query params dict from params using a key-mapping list.
+
+    Same format as _build_body. Returns None if empty.
+    """
+    qp: dict = {}
+    for entry in mapping:
+        out_key = entry[0]
+        lookup_keys = entry[1:]
+        val = _p(params, *lookup_keys)
+        if val:
+            qp[out_key] = val
+    return qp or None
+
+
 def _resolve_lambda_and_request(
     operation: str,
     params: dict,
@@ -303,47 +355,41 @@ def _resolve_lambda_and_request(
         return (OPS_CONFIG_API_LAMBDA, "GET", "ops/config/projects", None, None)
 
     if operation == "create_project":
-        body = {}
-        mapping = {
-            "name": "name",
-            "description": "description",
-            "color": "color",
-            "status": "status",
-            "owner_id": "ownerId",
-            "owner_name": "ownerName",
-            "goals": "goals",
-            "start_date": "startDate",
-            "end_date": "endDate",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
-        # board_ids is a list, pass through directly
-        if params.get("board_ids") is not None:
-            body["boardIds"] = params["board_ids"]
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("description", "description"),
+                ("color", "color"),
+                ("status", "status"),
+                ("ownerId", "ownerId", "owner_id"),
+                ("ownerName", "ownerName", "owner_name"),
+                ("goals", "goals"),
+                ("startDate", "startDate", "start_date"),
+                ("endDate", "endDate", "end_date"),
+                ("boardIds", "boardIds", "board_ids"),
+            ],
+        )
         return (OPS_CONFIG_API_LAMBDA, "POST", "ops/config/projects", body, None)
 
     if operation == "update_project":
-        project_id = params.pop("project_id", "")
-        body = {}
-        mapping = {
-            "name": "name",
-            "description": "description",
-            "color": "color",
-            "is_active": "isActive",
-            "status": "status",
-            "owner_id": "ownerId",
-            "owner_name": "ownerName",
-            "goals": "goals",
-            "start_date": "startDate",
-            "end_date": "endDate",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
-        # board_ids is a list, pass through directly
-        if params.get("board_ids") is not None:
-            body["boardIds"] = params["board_ids"]
+        project_id = _p(params, "projectId", "project_id") or ""
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("description", "description"),
+                ("color", "color"),
+                ("isActive", "isActive", "is_active"),
+                ("status", "status"),
+                ("ownerId", "ownerId", "owner_id"),
+                ("ownerName", "ownerName", "owner_name"),
+                ("goals", "goals"),
+                ("startDate", "startDate", "start_date"),
+                ("endDate", "endDate", "end_date"),
+                ("boardIds", "boardIds", "board_ids"),
+            ],
+        )
         return (
             OPS_CONFIG_API_LAMBDA,
             "PUT",
@@ -353,7 +399,7 @@ def _resolve_lambda_and_request(
         )
 
     if operation == "delete_project":
-        project_id = params.get("project_id", "")
+        project_id = _p(params, "projectId", "project_id") or ""
         return (
             OPS_CONFIG_API_LAMBDA,
             "DELETE",
@@ -364,36 +410,34 @@ def _resolve_lambda_and_request(
 
     # ── Custom fields (admin-only backend) ──
     if operation == "create_field":
-        body = {}
-        mapping = {
-            "name": "name",
-            "field_type": "fieldType",
-            "category": "category",
-            "required": "required",
-            "help_text": "helpText",
-            "default_value": "defaultValue",
-            "options": "options",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("fieldType", "fieldType", "field_type"),
+                ("category", "category"),
+                ("required", "required"),
+                ("helpText", "helpText", "help_text"),
+                ("defaultValue", "defaultValue", "default_value"),
+                ("options", "options"),
+            ],
+        )
         return (OPS_CONFIG_API_LAMBDA, "POST", "ops/config/fields", body, None)
 
     if operation == "update_field":
-        field_id = params.get("field_id", "")
-        body = {}
-        mapping = {
-            "name": "name",
-            "field_type": "fieldType",
-            "category": "category",
-            "required": "required",
-            "help_text": "helpText",
-            "default_value": "defaultValue",
-            "options": "options",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        field_id = _p(params, "fieldId", "field_id") or ""
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("fieldType", "fieldType", "field_type"),
+                ("category", "category"),
+                ("required", "required"),
+                ("helpText", "helpText", "help_text"),
+                ("defaultValue", "defaultValue", "default_value"),
+                ("options", "options"),
+            ],
+        )
         return (
             OPS_CONFIG_API_LAMBDA,
             "PUT",
@@ -403,7 +447,7 @@ def _resolve_lambda_and_request(
         )
 
     if operation == "delete_field":
-        field_id = params.get("field_id", "")
+        field_id = _p(params, "fieldId", "field_id") or ""
         return (
             OPS_CONFIG_API_LAMBDA,
             "DELETE",
@@ -414,31 +458,29 @@ def _resolve_lambda_and_request(
 
     # ── Ticket types (admin-only backend) ──
     if operation == "create_ticket_type":
-        body = {}
-        mapping = {
-            "name": "name",
-            "prefix": "prefix",
-            "icon": "icon",
-            "color": "color",
-            "default_fields": "defaultFields",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("prefix", "prefix"),
+                ("icon", "icon"),
+                ("color", "color"),
+                ("defaultFields", "defaultFields", "default_fields"),
+            ],
+        )
         return (OPS_CONFIG_API_LAMBDA, "POST", "ops/config/ticket-types", body, None)
 
     if operation == "update_ticket_type":
-        ticket_type_id = params.get("ticket_type_id", "")
-        body = {}
-        mapping = {
-            "name": "name",
-            "icon": "icon",
-            "color": "color",
-            "default_fields": "defaultFields",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        ticket_type_id = _p(params, "ticketTypeId", "ticket_type_id") or ""
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("icon", "icon"),
+                ("color", "color"),
+                ("defaultFields", "defaultFields", "default_fields"),
+            ],
+        )
         return (
             OPS_CONFIG_API_LAMBDA,
             "PUT",
@@ -448,7 +490,7 @@ def _resolve_lambda_and_request(
         )
 
     if operation == "delete_ticket_type":
-        ticket_type_id = params.get("ticket_type_id", "")
+        ticket_type_id = _p(params, "ticketTypeId", "ticket_type_id") or ""
         return (
             OPS_CONFIG_API_LAMBDA,
             "DELETE",
@@ -459,30 +501,28 @@ def _resolve_lambda_and_request(
 
     # ── Statuses (admin-only backend) ──
     if operation == "create_status":
-        body = {}
-        mapping = {
-            "name": "name",
-            "type": "type",
-            "color": "color",
-            "icon": "icon",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("type", "type"),
+                ("color", "color"),
+                ("icon", "icon"),
+            ],
+        )
         return (OPS_CONFIG_API_LAMBDA, "POST", "ops/config/statuses", body, None)
 
     if operation == "update_status":
-        status_id = params.get("status_id", "")
-        body = {}
-        mapping = {
-            "name": "name",
-            "type": "type",
-            "color": "color",
-            "icon": "icon",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        status_id = _p(params, "statusId", "status_id") or ""
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("type", "type"),
+                ("color", "color"),
+                ("icon", "icon"),
+            ],
+        )
         return (
             OPS_CONFIG_API_LAMBDA,
             "PUT",
@@ -496,33 +536,31 @@ def _resolve_lambda_and_request(
     # callers can send only the keys they want to change. customerRecord /
     # customerRecord.sections and layout are nested objects on the CRM config.
     if operation == "update_crm_config":
-        body = {}
-        mapping = {
-            "lifecycle_stages": "lifecycleStages",
-            "customer_flags": "customerFlags",
-            "document_types": "documentTypes",
-            "territories": "territories",
-            "industries": "industries",
-            "default_stage": "defaultStage",
-            "customer_record": "customerRecord",
-            "layout": "layout",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        body = _build_body(
+            params,
+            [
+                ("lifecycleStages", "lifecycleStages", "lifecycle_stages"),
+                ("customerFlags", "customerFlags", "customer_flags"),
+                ("documentTypes", "documentTypes", "document_types"),
+                ("territories", "territories"),
+                ("industries", "industries"),
+                ("defaultStage", "defaultStage", "default_stage"),
+                ("customerRecord", "customerRecord", "customer_record"),
+                ("layout", "layout"),
+            ],
+        )
         return (OPS_CONFIG_API_LAMBDA, "PUT", "ops/config/crm-settings", body, None)
 
     if operation == "update_supplier_config":
-        body = {}
-        mapping = {
-            "lifecycle_stages": "lifecycleStages",
-            "supplier_flags": "supplierFlags",
-            "document_types": "documentTypes",
-            "default_stage": "defaultStage",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        body = _build_body(
+            params,
+            [
+                ("lifecycleStages", "lifecycleStages", "lifecycle_stages"),
+                ("supplierFlags", "supplierFlags", "supplier_flags"),
+                ("documentTypes", "documentTypes", "document_types"),
+                ("defaultStage", "defaultStage", "default_stage"),
+            ],
+        )
         return (
             OPS_CONFIG_API_LAMBDA,
             "PUT",
@@ -533,177 +571,198 @@ def _resolve_lambda_and_request(
 
     # ── CRM operations → numa-ops-crm-api ──
     if operation == "list_customers":
-        qp = {}
-        param_map = {
-            "search": "search",
-            "stage": "stage",
-            "owner_id": "ownerId",
-            "territory": "territory",
-            "industry": "industry",
-            "flags": "flags",
-            "limit": "limit",
-            "cursor": "cursor",
-        }
-        for snake, camel in param_map.items():
-            if params.get(snake):
-                qp[camel] = params[snake]
-        return (OPS_CRM_API_LAMBDA, "GET", "ops/customers", None, qp or None)
+        qp = _build_qp(
+            params,
+            [
+                ("search", "search"),
+                ("stage", "stage"),
+                ("ownerId", "ownerId", "owner_id"),
+                ("territory", "territory"),
+                ("industry", "industry"),
+                ("flags", "flags"),
+                ("limit", "limit"),
+                ("cursor", "cursor"),
+            ],
+        )
+        return (OPS_CRM_API_LAMBDA, "GET", "ops/customers", None, qp)
 
     if operation == "get_customer":
+        customer_id = _p(params, "customerId", "customer_id") or ""
+        return (OPS_CRM_API_LAMBDA, "GET", f"ops/customers/{customer_id}", None, None)
+
+    _CUSTOMER_FIELDS = [
+        ("companyName", "companyName", "company_name"),
+        ("industry", "industry"),
+        ("lifecycleStage", "lifecycleStage", "lifecycle_stage"),
+        ("ownerId", "ownerId", "owner_id"),
+        ("ownerName", "ownerName", "owner_name"),
+        ("companySize", "companySize", "company_size"),
+        ("website", "website"),
+        ("territory", "territory"),
+        ("flags", "flags"),
+        ("source", "source"),
+        ("contractStartDate", "contractStartDate", "contract_start_date"),
+        ("contractTerm", "contractTerm", "contract_term"),
+        ("renewalDate", "renewalDate", "renewal_date"),
+        ("contractValue", "contractValue", "contract_value"),
+        ("products", "products"),
+        ("productNotes", "productNotes", "product_notes"),
+        ("notes", "notes"),
+        ("contacts", "contacts"),
+        ("customFields", "customFields", "custom_fields"),
+    ]
+
+    if operation == "create_customer":
+        body = _build_body(params, _CUSTOMER_FIELDS)
+        return (OPS_CRM_API_LAMBDA, "POST", "ops/customers", body, None)
+
+    if operation == "update_customer":
+        customer_id = _p(params, "customerId", "customer_id") or ""
+        body = _build_body(params, _CUSTOMER_FIELDS)
+        return (OPS_CRM_API_LAMBDA, "PUT", f"ops/customers/{customer_id}", body, None)
+
+    if operation == "delete_customer":
+        customer_id = _p(params, "customerId", "customer_id") or ""
         return (
             OPS_CRM_API_LAMBDA,
-            "GET",
-            f"ops/customers/{params.get('customer_id', '')}",
+            "DELETE",
+            f"ops/customers/{customer_id}",
             None,
             None,
         )
 
-    if operation == "create_customer":
-        body = {}
-        mapping = {
-            "company_name": "companyName",
-            "industry": "industry",
-            "lifecycle_stage": "lifecycleStage",
-            "owner_id": "ownerId",
-            "owner_name": "ownerName",
-            "company_size": "companySize",
-            "website": "website",
-            "territory": "territory",
-            "flags": "flags",
-            "source": "source",
-            "contract_start_date": "contractStartDate",
-            "contract_term": "contractTerm",
-            "renewal_date": "renewalDate",
-            "contract_value": "contractValue",
-            "products": "products",
-            "product_notes": "productNotes",
-            "notes": "notes",
-            "contacts": "contacts",
-            "custom_fields": "customFields",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
-        return (OPS_CRM_API_LAMBDA, "POST", "ops/customers", body, None)
+    _ACTIVITY_FIELDS = [
+        ("type", "type"),
+        ("summary", "summary"),
+        ("date", "date"),
+        ("direction", "direction"),
+        ("duration", "duration"),
+        ("outcome", "outcome"),
+        ("nextActionDate", "nextActionDate", "next_action_date"),
+        ("nextActionType", "nextActionType", "next_action_type"),
+    ]
 
-    if operation == "update_customer":
-        customer_id = params.pop("customer_id", "")
-        body = {}
-        mapping = {
-            "company_name": "companyName",
-            "industry": "industry",
-            "lifecycle_stage": "lifecycleStage",
-            "owner_id": "ownerId",
-            "owner_name": "ownerName",
-            "company_size": "companySize",
-            "website": "website",
-            "territory": "territory",
-            "flags": "flags",
-            "source": "source",
-            "contract_start_date": "contractStartDate",
-            "contract_term": "contractTerm",
-            "renewal_date": "renewalDate",
-            "contract_value": "contractValue",
-            "products": "products",
-            "product_notes": "productNotes",
-            "notes": "notes",
-            "contacts": "contacts",
-            "custom_fields": "customFields",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
-        return (OPS_CRM_API_LAMBDA, "PUT", f"ops/customers/{customer_id}", body, None)
+    if operation == "create_customer_activity":
+        customer_id = _p(params, "customerId", "customer_id") or ""
+        body = _build_body(params, _ACTIVITY_FIELDS)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "POST",
+            f"ops/customers/{customer_id}/activities",
+            body,
+            None,
+        )
 
-    if operation == "delete_customer":
+    if operation == "update_customer_activity":
+        customer_id = _p(params, "customerId", "customer_id") or ""
+        activity_id = _p(params, "activityId", "activity_id") or ""
+        body = _build_body(params, _ACTIVITY_FIELDS)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "PUT",
+            f"ops/customers/{customer_id}/activities/{activity_id}",
+            body,
+            None,
+        )
+
+    if operation == "delete_customer_activity":
+        customer_id = _p(params, "customerId", "customer_id") or ""
+        activity_id = _p(params, "activityId", "activity_id") or ""
         return (
             OPS_CRM_API_LAMBDA,
             "DELETE",
-            f"ops/customers/{params.get('customer_id', '')}",
+            f"ops/customers/{customer_id}/activities/{activity_id}",
             None,
             None,
         )
 
     if operation == "list_suppliers":
-        qp = {}
-        param_map = {
-            "search": "search",
-            "stage": "stage",
-            "owner_id": "ownerId",
-            "territory": "territory",
-            "industry": "industry",
-            "flags": "flags",
-            "limit": "limit",
-            "cursor": "cursor",
-        }
-        for snake, camel in param_map.items():
-            if params.get(snake):
-                qp[camel] = params[snake]
-        return (OPS_CRM_API_LAMBDA, "GET", "ops/suppliers", None, qp or None)
+        qp = _build_qp(
+            params,
+            [
+                ("search", "search"),
+                ("stage", "stage"),
+                ("ownerId", "ownerId", "owner_id"),
+                ("territory", "territory"),
+                ("industry", "industry"),
+                ("flags", "flags"),
+                ("limit", "limit"),
+                ("cursor", "cursor"),
+            ],
+        )
+        return (OPS_CRM_API_LAMBDA, "GET", "ops/suppliers", None, qp)
 
     if operation == "get_supplier":
+        supplier_id = _p(params, "supplierId", "supplier_id") or ""
+        return (OPS_CRM_API_LAMBDA, "GET", f"ops/suppliers/{supplier_id}", None, None)
+
+    _SUPPLIER_FIELDS = [
+        ("companyName", "companyName", "company_name"),
+        ("industry", "industry"),
+        ("lifecycleStage", "lifecycleStage", "lifecycle_stage"),
+        ("ownerId", "ownerId", "owner_id"),
+        ("ownerName", "ownerName", "owner_name"),
+        ("companySize", "companySize", "company_size"),
+        ("website", "website"),
+        ("territory", "territory"),
+        ("flags", "flags"),
+        ("source", "source"),
+        ("annualSpend", "annualSpend", "annual_spend"),
+        ("paymentTerms", "paymentTerms", "payment_terms"),
+        ("notes", "notes"),
+        ("contacts", "contacts"),
+        ("customFields", "customFields", "custom_fields"),
+    ]
+
+    if operation == "create_supplier":
+        body = _build_body(params, _SUPPLIER_FIELDS)
+        return (OPS_CRM_API_LAMBDA, "POST", "ops/suppliers", body, None)
+
+    if operation == "update_supplier":
+        supplier_id = _p(params, "supplierId", "supplier_id") or ""
+        body = _build_body(params, _SUPPLIER_FIELDS)
+        return (OPS_CRM_API_LAMBDA, "PUT", f"ops/suppliers/{supplier_id}", body, None)
+
+    if operation == "delete_supplier":
+        supplier_id = _p(params, "supplierId", "supplier_id") or ""
         return (
             OPS_CRM_API_LAMBDA,
-            "GET",
-            f"ops/suppliers/{params.get('supplier_id', '')}",
+            "DELETE",
+            f"ops/suppliers/{supplier_id}",
             None,
             None,
         )
 
-    if operation == "create_supplier":
-        body = {}
-        mapping = {
-            "company_name": "companyName",
-            "industry": "industry",
-            "lifecycle_stage": "lifecycleStage",
-            "owner_id": "ownerId",
-            "owner_name": "ownerName",
-            "company_size": "companySize",
-            "website": "website",
-            "territory": "territory",
-            "flags": "flags",
-            "source": "source",
-            "annual_spend": "annualSpend",
-            "payment_terms": "paymentTerms",
-            "notes": "notes",
-            "contacts": "contacts",
-            "custom_fields": "customFields",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
-        return (OPS_CRM_API_LAMBDA, "POST", "ops/suppliers", body, None)
+    if operation == "create_supplier_activity":
+        supplier_id = _p(params, "supplierId", "supplier_id") or ""
+        body = _build_body(params, _ACTIVITY_FIELDS)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "POST",
+            f"ops/suppliers/{supplier_id}/activities",
+            body,
+            None,
+        )
 
-    if operation == "update_supplier":
-        supplier_id = params.pop("supplier_id", "")
-        body = {}
-        mapping = {
-            "company_name": "companyName",
-            "industry": "industry",
-            "lifecycle_stage": "lifecycleStage",
-            "owner_id": "ownerId",
-            "owner_name": "ownerName",
-            "company_size": "companySize",
-            "website": "website",
-            "territory": "territory",
-            "flags": "flags",
-            "source": "source",
-            "annual_spend": "annualSpend",
-            "payment_terms": "paymentTerms",
-            "notes": "notes",
-            "contacts": "contacts",
-            "custom_fields": "customFields",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
-        return (OPS_CRM_API_LAMBDA, "PUT", f"ops/suppliers/{supplier_id}", body, None)
+    if operation == "update_supplier_activity":
+        supplier_id = _p(params, "supplierId", "supplier_id") or ""
+        activity_id = _p(params, "activityId", "activity_id") or ""
+        body = _build_body(params, _ACTIVITY_FIELDS)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "PUT",
+            f"ops/suppliers/{supplier_id}/activities/{activity_id}",
+            body,
+            None,
+        )
 
-    if operation == "delete_supplier":
+    if operation == "delete_supplier_activity":
+        supplier_id = _p(params, "supplierId", "supplier_id") or ""
+        activity_id = _p(params, "activityId", "activity_id") or ""
         return (
             OPS_CRM_API_LAMBDA,
             "DELETE",
-            f"ops/suppliers/{params.get('supplier_id', '')}",
+            f"ops/suppliers/{supplier_id}/activities/{activity_id}",
             None,
             None,
         )
@@ -713,58 +772,51 @@ def _resolve_lambda_and_request(
         return (OPS_API_LAMBDA, "GET", "ops/teams", None, None)
 
     if operation == "get_team":
-        return (
-            OPS_API_LAMBDA,
-            "GET",
-            f"ops/teams/{params.get('team_id', '')}",
-            None,
-            None,
-        )
+        team_id = _p(params, "teamId", "team_id") or ""
+        return (OPS_API_LAMBDA, "GET", f"ops/teams/{team_id}", None, None)
 
     if operation == "create_team":
-        body = {}
-        mapping = {
-            "name": "name",
-            "description": "description",
-            "color": "color",
-            "ticket_type_id": "ticketTypeId",
-            "allowed_ticket_types": "allowedTicketTypes",
-            "field_overrides": "fieldOverrides",
-            "added_fields": "addedFields",
-            "access_control": "accessControl",
-            "work_unit_series": "workUnitSeries",
-            "preset": "preset",
-            "announcement": "announcement",
-            "custom_stages": "customStages",
-            "zones": "zones",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("description", "description"),
+                ("color", "color"),
+                ("ticketTypeId", "ticketTypeId", "ticket_type_id"),
+                ("allowedTicketTypes", "allowedTicketTypes", "allowed_ticket_types"),
+                ("fieldOverrides", "fieldOverrides", "field_overrides"),
+                ("addedFields", "addedFields", "added_fields"),
+                ("accessControl", "accessControl", "access_control"),
+                ("workUnitSeries", "workUnitSeries", "work_unit_series"),
+                ("preset", "preset"),
+                ("announcement", "announcement"),
+                ("customStages", "customStages", "custom_stages"),
+                ("zones", "zones"),
+            ],
+        )
         return (OPS_API_LAMBDA, "POST", "ops/teams", body, None)
 
     if operation == "update_team":
-        team_id = params.pop("team_id", "")
-        body = {}
-        mapping = {
-            "name": "name",
-            "description": "description",
-            "color": "color",
-            "ticket_type_id": "ticketTypeId",
-            "allowed_ticket_types": "allowedTicketTypes",
-            "field_overrides": "fieldOverrides",
-            "added_fields": "addedFields",
-            "access_control": "accessControl",
-            "work_unit_series": "workUnitSeries",
-            "announcement": "announcement",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        team_id = _p(params, "teamId", "team_id") or ""
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("description", "description"),
+                ("color", "color"),
+                ("ticketTypeId", "ticketTypeId", "ticket_type_id"),
+                ("allowedTicketTypes", "allowedTicketTypes", "allowed_ticket_types"),
+                ("fieldOverrides", "fieldOverrides", "field_overrides"),
+                ("addedFields", "addedFields", "added_fields"),
+                ("accessControl", "accessControl", "access_control"),
+                ("workUnitSeries", "workUnitSeries", "work_unit_series"),
+                ("announcement", "announcement"),
+            ],
+        )
         return (OPS_API_LAMBDA, "PUT", f"ops/teams/{team_id}", body, None)
 
     if operation == "update_zones":
-        team_id = params.get("team_id", "")
+        team_id = _p(params, "teamId", "team_id") or ""
         zones = params.get("zones", [])
         return (
             OPS_API_LAMBDA,
@@ -775,7 +827,7 @@ def _resolve_lambda_and_request(
         )
 
     if operation == "update_stages":
-        team_id = params.get("team_id", "")
+        team_id = _p(params, "teamId", "team_id") or ""
         stages = params.get("stages", [])
         return (
             OPS_API_LAMBDA,
@@ -786,199 +838,193 @@ def _resolve_lambda_and_request(
         )
 
     if operation == "list_tickets":
-        qp = {}
-        param_map = {
-            "team_id": "teamId",
-            "stage_id": "stageId",
-            "status_type": "statusType",
-            "assignee_id": "assigneeId",
-            "customer_id": "customerId",
-            "work_unit_id": "workUnitId",
-            "project_id": "projectId",
-            "priority": "priority",
-            "include_archived": "includeArchived",
-            "limit": "limit",
-            "cursor": "cursor",
-        }
-        for snake, camel in param_map.items():
-            if params.get(snake):
-                qp[camel] = params[snake]
-        return (OPS_API_LAMBDA, "GET", "ops/tickets", None, qp or None)
+        qp = _build_qp(
+            params,
+            [
+                ("teamId", "teamId", "team_id"),
+                ("stageId", "stageId", "stage_id"),
+                ("statusType", "statusType", "status_type"),
+                ("assigneeId", "assigneeId", "assignee_id"),
+                ("customerId", "customerId", "customer_id"),
+                ("workUnitId", "workUnitId", "work_unit_id"),
+                ("projectId", "projectId", "project_id"),
+                ("priority", "priority"),
+                ("includeArchived", "includeArchived", "include_archived"),
+                ("limit", "limit"),
+                ("cursor", "cursor"),
+            ],
+        )
+        return (OPS_API_LAMBDA, "GET", "ops/tickets", None, qp)
 
     if operation == "get_ticket":
-        if params.get("display_id"):
+        display_id = _p(params, "displayId", "display_id")
+        if display_id:
             return (
                 OPS_API_LAMBDA,
                 "GET",
-                f"ops/tickets/by-display-id/{params['display_id']}",
+                f"ops/tickets/by-display-id/{display_id}",
                 None,
                 None,
             )
-        qp = {}
-        if params.get("team_id"):
-            qp["teamId"] = params["team_id"]
+        ticket_id = _p(params, "ticketId", "ticket_id") or ""
+        qp = _build_qp(params, [("teamId", "teamId", "team_id")])
         return (
             OPS_API_LAMBDA,
             "GET",
-            f"ops/tickets/{params.get('ticket_id', '')}",
+            f"ops/tickets/{ticket_id}",
             None,
-            qp or None,
+            qp,
         )
 
     if operation == "search_tickets":
-        qp = {"search": params.get("query", "")}
-        if params.get("team_id"):
-            qp["teamId"] = params["team_id"]
+        qp = {"search": _p(params, "query", "search") or ""}
+        team_id = _p(params, "teamId", "team_id")
+        if team_id:
+            qp["teamId"] = team_id
         return (OPS_API_LAMBDA, "GET", "ops/tickets", None, qp)
 
     if operation == "create_ticket":
-        # Map snake_case params to camelCase expected by the API
-        body = {}
-        mapping = {
-            "team_id": "teamId",
-            "title": "title",
-            "ticket_type_id": "ticketTypeId",
-            "description": "description",
-            "stage_id": "stageId",
-            "zone_id": "zoneId",
-            "priority": "priority",
-            "assignee_id": "assigneeId",
-            "assignee_name": "assigneeName",
-            "reporter_id": "reporterId",
-            "reporter_name": "reporterName",
-            "due_date": "dueDate",
-            "customer_id": "customerId",
-            "customer_name": "customerName",
-            "supplier_id": "supplierId",
-            "supplier_name": "supplierName",
-            "work_unit_id": "workUnitId",
-            "project_id": "projectId",
-            "tags": "tags",
-            "fields": "fields",
-            "effort_points": "effortPoints",
-            "source_type": "sourceType",
-            "source_id": "sourceId",
-            "source_app_type": "sourceAppType",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        body = _build_body(
+            params,
+            [
+                ("teamId", "teamId", "team_id"),
+                ("title", "title", "name"),  # accept "name" as alias for "title"
+                ("ticketTypeId", "ticketTypeId", "ticket_type_id"),
+                ("description", "description"),
+                ("stageId", "stageId", "stage_id"),
+                ("zoneId", "zoneId", "zone_id"),
+                ("priority", "priority"),
+                ("assigneeId", "assigneeId", "assignee_id"),
+                ("assigneeName", "assigneeName", "assignee_name"),
+                ("reporterId", "reporterId", "reporter_id"),
+                ("reporterName", "reporterName", "reporter_name"),
+                ("dueDate", "dueDate", "due_date"),
+                ("customerId", "customerId", "customer_id"),
+                ("customerName", "customerName", "customer_name"),
+                ("supplierId", "supplierId", "supplier_id"),
+                ("supplierName", "supplierName", "supplier_name"),
+                ("workUnitId", "workUnitId", "work_unit_id"),
+                ("projectId", "projectId", "project_id"),
+                ("tags", "tags"),
+                ("fields", "fields"),
+                ("effortPoints", "effortPoints", "effort_points"),
+                ("sourceType", "sourceType", "source_type"),
+                ("sourceId", "sourceId", "source_id"),
+                ("sourceAppType", "sourceAppType", "source_app_type"),
+            ],
+        )
         return (OPS_API_LAMBDA, "POST", "ops/tickets", body, None)
 
     if operation == "update_ticket":
-        ticket_id = params.pop("ticket_id", "")
-        body = {}
-        mapping = {
-            "team_id": "teamId",
-            "current_team_id": "currentTeamId",
-            "title": "title",
-            "description": "description",
-            "stage_id": "stageId",
-            "zone_id": "zoneId",
-            "priority": "priority",
-            "assignee_id": "assigneeId",
-            "assignee_name": "assigneeName",
-            "reporter_id": "reporterId",
-            "reporter_name": "reporterName",
-            "due_date": "dueDate",
-            "customer_id": "customerId",
-            "customer_name": "customerName",
-            "supplier_id": "supplierId",
-            "supplier_name": "supplierName",
-            "work_unit_id": "workUnitId",
-            "project_id": "projectId",
-            "tags": "tags",
-            "fields": "fields",
-            "effort_points": "effortPoints",
-            "order": "order",
-            "version": "version",
-            "archived": "archived",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        ticket_id = _p(params, "ticketId", "ticket_id") or ""
+        body = _build_body(
+            params,
+            [
+                ("teamId", "teamId", "team_id"),
+                ("currentTeamId", "currentTeamId", "current_team_id"),
+                ("title", "title", "name"),
+                ("description", "description"),
+                ("stageId", "stageId", "stage_id"),
+                ("zoneId", "zoneId", "zone_id"),
+                ("priority", "priority"),
+                ("assigneeId", "assigneeId", "assignee_id"),
+                ("assigneeName", "assigneeName", "assignee_name"),
+                ("reporterId", "reporterId", "reporter_id"),
+                ("reporterName", "reporterName", "reporter_name"),
+                ("dueDate", "dueDate", "due_date"),
+                ("customerId", "customerId", "customer_id"),
+                ("customerName", "customerName", "customer_name"),
+                ("supplierId", "supplierId", "supplier_id"),
+                ("supplierName", "supplierName", "supplier_name"),
+                ("workUnitId", "workUnitId", "work_unit_id"),
+                ("projectId", "projectId", "project_id"),
+                ("tags", "tags"),
+                ("fields", "fields"),
+                ("effortPoints", "effortPoints", "effort_points"),
+                ("order", "order"),
+                ("version", "version"),
+                ("archived", "archived"),
+            ],
+        )
         return (OPS_API_LAMBDA, "PUT", f"ops/tickets/{ticket_id}", body, None)
 
     if operation == "delete_ticket":
-        ticket_id = params.get("ticket_id", "")
-        qp = {}
-        if params.get("team_id"):
-            qp["teamId"] = params["team_id"]
-        return (OPS_API_LAMBDA, "DELETE", f"ops/tickets/{ticket_id}", None, qp or None)
+        ticket_id = _p(params, "ticketId", "ticket_id") or ""
+        qp = _build_qp(params, [("teamId", "teamId", "team_id")])
+        return (OPS_API_LAMBDA, "DELETE", f"ops/tickets/{ticket_id}", None, qp)
 
     if operation == "bulk_update_tickets":
         changes = dict(params.get("changes", {}))
-        # Backend requires teamId in changes for ticket lookup
-        if params.get("team_id") and "teamId" not in changes:
-            changes["teamId"] = params["team_id"]
+        team_id = _p(params, "teamId", "team_id")
+        if team_id and "teamId" not in changes:
+            changes["teamId"] = team_id
         body = {
-            "ticketIds": params.get("ticket_ids", []),
+            "ticketIds": _p(params, "ticketIds", "ticket_ids") or [],
             "changes": changes,
         }
         return (OPS_API_LAMBDA, "POST", "ops/tickets/bulk", body, None)
 
     if operation == "add_comment":
-        ticket_id = params.get("ticket_id", "")
+        ticket_id = _p(params, "ticketId", "ticket_id") or ""
         body = {
             "content": params.get("content", ""),
-            "teamId": params.get("team_id"),
-            "displayId": params.get("display_id"),
+            "teamId": _p(params, "teamId", "team_id"),
+            "displayId": _p(params, "displayId", "display_id"),
         }
         if "attachments" in params:
             body["attachments"] = params["attachments"]
         return (OPS_API_LAMBDA, "POST", f"ops/tickets/{ticket_id}/comments", body, None)
 
     if operation == "list_comments":
-        ticket_id = params.get("ticket_id", "")
+        ticket_id = _p(params, "ticketId", "ticket_id") or ""
         return (OPS_API_LAMBDA, "GET", f"ops/tickets/{ticket_id}/comments", None, None)
 
     if operation == "get_audit":
-        ticket_id = params.get("ticket_id", "")
+        ticket_id = _p(params, "ticketId", "ticket_id") or ""
         return (OPS_API_LAMBDA, "GET", f"ops/tickets/{ticket_id}/audit", None, None)
 
     if operation == "upload_attachment":
         body = {
-            "fileName": params.get("file_name", ""),
-            "contentType": params.get("content_type", "application/octet-stream"),
-            "contextId": params.get("ticket_id"),
+            "fileName": _p(params, "fileName", "file_name") or "",
+            "contentType": _p(params, "contentType", "content_type")
+            or "application/octet-stream",
+            "contextId": _p(params, "ticketId", "ticket_id", "contextId"),
         }
         return (OPS_API_LAMBDA, "POST", "ops/uploads/presigned-url", body, None)
 
     if operation == "list_work_units":
-        team_id = params.get("team_id", "")
+        team_id = _p(params, "teamId", "team_id") or ""
         return (OPS_API_LAMBDA, "GET", f"ops/teams/{team_id}/work-units", None, None)
 
     if operation == "create_work_unit":
-        team_id = params.get("team_id", "")
-        body = {}
-        mapping = {
-            "name": "name",
-            "goal": "goal",
-            "start_date": "startDate",
-            "end_date": "endDate",
-            "status": "status",
-            "capacity": "capacity",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        team_id = _p(params, "teamId", "team_id") or ""
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("goal", "goal"),
+                ("startDate", "startDate", "start_date"),
+                ("endDate", "endDate", "end_date"),
+                ("status", "status"),
+                ("capacity", "capacity"),
+            ],
+        )
         return (OPS_API_LAMBDA, "POST", f"ops/teams/{team_id}/work-units", body, None)
 
     if operation == "update_work_unit":
-        team_id = params.get("team_id", "")
-        work_unit_id = params.get("work_unit_id", "")
-        body = {}
-        mapping = {
-            "name": "name",
-            "goal": "goal",
-            "start_date": "startDate",
-            "end_date": "endDate",
-            "status": "status",
-            "capacity": "capacity",
-        }
-        for snake, camel in mapping.items():
-            if params.get(snake) is not None:
-                body[camel] = params[snake]
+        team_id = _p(params, "teamId", "team_id") or ""
+        work_unit_id = _p(params, "workUnitId", "work_unit_id") or ""
+        body = _build_body(
+            params,
+            [
+                ("name", "name"),
+                ("goal", "goal"),
+                ("startDate", "startDate", "start_date"),
+                ("endDate", "endDate", "end_date"),
+                ("status", "status"),
+                ("capacity", "capacity"),
+            ],
+        )
         return (
             OPS_API_LAMBDA,
             "PUT",
@@ -988,8 +1034,8 @@ def _resolve_lambda_and_request(
         )
 
     if operation == "delete_work_unit":
-        team_id = params.get("team_id", "")
-        work_unit_id = params.get("work_unit_id", "")
+        team_id = _p(params, "teamId", "team_id") or ""
+        work_unit_id = _p(params, "workUnitId", "work_unit_id") or ""
         return (
             OPS_API_LAMBDA,
             "DELETE",
@@ -999,21 +1045,24 @@ def _resolve_lambda_and_request(
         )
 
     if operation == "create_link":
-        ticket_id = params.get("ticket_id", "")
+        ticket_id = _p(params, "ticketId", "ticket_id") or ""
         body = {
-            "linkedTicketId": params.get("linked_ticket_id", ""),
-            "linkedTicketDisplayId": params.get("linked_ticket_display_id", ""),
-            "linkedTicketTitle": params.get("linked_ticket_title"),
-            "linkType": params.get("link_type", ""),
-            "teamId": params.get("team_id"),
-            "linkedTeamId": params.get("linked_team_id"),
+            "linkedTicketId": _p(params, "linkedTicketId", "linked_ticket_id") or "",
+            "linkedTicketDisplayId": _p(
+                params, "linkedTicketDisplayId", "linked_ticket_display_id"
+            )
+            or "",
+            "linkedTicketTitle": _p(params, "linkedTicketTitle", "linked_ticket_title"),
+            "linkType": _p(params, "linkType", "link_type") or "",
+            "teamId": _p(params, "teamId", "team_id"),
+            "linkedTeamId": _p(params, "linkedTeamId", "linked_team_id"),
         }
         return (OPS_API_LAMBDA, "POST", f"ops/tickets/{ticket_id}/links", body, None)
 
     if operation == "delete_link":
-        ticket_id = params.get("ticket_id", "")
-        link_type = params.get("link_type", "")
-        linked_ticket_id = params.get("linked_ticket_id", "")
+        ticket_id = _p(params, "ticketId", "ticket_id") or ""
+        link_type = _p(params, "linkType", "link_type") or ""
+        linked_ticket_id = _p(params, "linkedTicketId", "linked_ticket_id") or ""
         return (
             OPS_API_LAMBDA,
             "DELETE",
@@ -1024,10 +1073,13 @@ def _resolve_lambda_and_request(
 
     if operation == "get_metrics":
         qp = {}
-        if params.get("team_ids"):
-            qp["teamIds"] = params["team_ids"]
-        elif params.get("team_id"):
-            qp["teamIds"] = params["team_id"]
+        team_ids = _p(params, "teamIds", "team_ids")
+        if team_ids:
+            qp["teamIds"] = team_ids
+        else:
+            team_id = _p(params, "teamId", "team_id")
+            if team_id:
+                qp["teamIds"] = team_id
         return (OPS_API_LAMBDA, "GET", "ops/metrics", None, qp or None)
 
     raise ValueError(f"Unknown ops operation: {operation}")
@@ -1173,8 +1225,8 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
             )
 
     # ── Resolve display IDs for mutation operations ─────────────────────
-    # If the caller provided a display_id (e.g. 'BUG-002') instead of a
-    # ticket_id UUID, resolve it before routing to the Lambda.
+    # If the caller provided a displayId (e.g. 'BUG-002') instead of a
+    # ticketId UUID, resolve it before routing to the Lambda.
     _ticket_mutations = {
         "update_ticket",
         "delete_ticket",
@@ -1183,24 +1235,32 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
         "get_audit",
     }
     if operation in _ticket_mutations:
-        has_ticket_id = bool(op_params.get("ticket_id"))
-        has_display_id = bool(op_params.get("display_id"))
+        has_ticket_id = bool(op_params.get("ticketId") or op_params.get("ticket_id"))
+        has_display_id = bool(op_params.get("displayId") or op_params.get("display_id"))
         if not has_ticket_id and not has_display_id:
             raise ValueError(
                 f"Missing required parameter for {operation}: "
-                "ticket_id (UUID) or display_id (e.g. 'BUG-002')"
+                "ticketId (UUID) or displayId (e.g. 'BUG-002')"
             )
         if has_display_id and not has_ticket_id:
+            display_id_val = op_params.get("displayId") or op_params.get("display_id")
+            if not isinstance(display_id_val, str) or not display_id_val:
+                raise ValueError(
+                    f"Invalid displayId for {operation}: expected a non-empty string"
+                )
             resolved_id, resolved_team_id = _resolve_ticket_by_display_id(
-                op_params["display_id"],
+                display_id_val,
                 user_sub=user_sub,
                 user_email=user_email,
                 user_name=user_name,
                 user_groups=user_groups,
             )
-            op_params["ticket_id"] = resolved_id
-            if not op_params.get("team_id") and resolved_team_id:
-                op_params["team_id"] = resolved_team_id
+            op_params["ticketId"] = resolved_id
+            if (
+                not (op_params.get("teamId") or op_params.get("team_id"))
+                and resolved_team_id
+            ):
+                op_params["teamId"] = resolved_team_id
 
     try:
         lambda_name, method, path, body, query_params = _resolve_lambda_and_request(

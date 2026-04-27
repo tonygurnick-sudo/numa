@@ -1,0 +1,187 @@
+{
+  "title": "Numa Files",
+  "subtitle": "Browse and manage your files and folders",
+  "tabs": {
+    "userFiles": "User Files",
+    "companyFiles": "Company Files",
+    "shared": "External Share",
+    "remote": "Connector Files",
+    "webCrawler": "Web Crawler"
+  },
+  "actions": {
+    "newFolder": "New Folder",
+    "uploadFiles": "Upload Files",
+    "settings": "Settings",
+    "refresh": "Refresh"
+  },
+  "folderList": {
+    "name": "Name",
+    "documents": "Documents",
+    "role": "Role",
+    "actions": "Actions",
+    "sharing": "Shared with others",
+    "files": "Files",
+    "private": "Private",
+    "settings": "Settings",
+    "loading": "Loading folders...",
+    "empty": {
+      "title": "No folders yet",
+      "message": "Create your first folder to start organizing files"
+    },
+    "sharedTooltip": "Shared with {{count}} users",
+    "sharedWithYou": "Shared with you"
+  },
+  "badges": {
+    "owner": "Owner",
+    "editor": "Editor",
+    "viewer": "Viewer",
+    "shared": "Shared",
+    "personal": "Personal"
+  },
+  "breadcrumb": {
+    "userFiles": "User Files",
+    "companyFiles": "Company Files",
+    "shared": "Shared"
+  },
+  "createFolder": {
+    "title": "Create New Folder",
+    "nameLabel": "Folder Name",
+    "namePlaceholder": "e.g., Project Documents",
+    "nameHelp": "Choose a descriptive name for your folder.",
+    "typeLabel": "Folder Visibility",
+    "typePersonalHelp": "Only you will have access to this folder.",
+    "typeSharedHelp": "Share this folder with specific users who can view or edit.",
+    "viewersLabel": "Viewers (user IDs or emails)",
+    "viewersPlaceholder": "Type an email or ID and press Add/Enter",
+    "viewersHelp": "Editors are automatically included as viewers.",
+    "editorsLabel": "Editors (user IDs or emails)",
+    "editorsPlaceholder": "Type an email or ID and press Add/Enter",
+    "editorsHelp": "Editors can upload files and modify this folder; they automatically gain viewer access.",
+    "invalidEmails": "These look unusual as emails: {{values}}",
+    "noteTitle": "Note:",
+    "notes": {
+      "creator": "You will be set as the creator and automatically added as an editor.",
+      "personal": "Personal folders: Only you have access.",
+      "shared": "Shared folders: Specify viewers (can query) and editors (can upload/modify). Editors automatically have viewer permissions.",
+      "isolation": "Files uploaded to this folder are isolated from other folders."
+    },
+    "creating": "Creating...",
+    "createButton": "Create Folder",
+    "errors": {
+      "nameRequired": "Please provide a name for the folder.",
+      "editorsMustBeViewers": "Editors must also be viewers for shared folders."
+    }
+  },
+  "folderSettings": {
+    "title": "Folder Settings",
+    "nameLabel": "Folder Name",
+    "visibility": "Visibility",
+    "personal": "Personal (only you)",
+    "shared": "Shared (specific users)",
+    "public": "Public (everyone can view)",
+    "publicEditor": "Public (everyone can view and edit)",
+    "viewers": "Viewers",
+    "editors": "Editors",
+    "noViewers": "No viewers",
+    "noEditors": "No editors",
+    "delete": "Delete Folder",
+    "deleteConfirm": "Are you sure you want to delete this folder? This action cannot be undone.",
+    "deleteWarning": "This will permanently delete this folder configuration. Files will remain in storage but will no longer be associated with this folder.",
+    "deleting": "Deleting...",
+    "close": "Close"
+  },
+  "webCrawler": {
+    "destinationLabel": "Destination Folder",
+    "destinationHint": "Crawled content will be added to this folder.",
+    "selectDestination": "Select a destination folder",
+    "companyFiles": "Company Files"
+  },
+  "shared": {
+    "title": "Shared Files",
+    "subtitle": "Share files and create drop zones for external document collection.",
+    "hint": "File sharing and drop zones will be available here.",
+    "helpers": {
+      "sharing": {
+        "title": "Document Sharing",
+        "description": "Share files with external users via a secure link. Visitors can view, download, and ask AI questions about the document."
+      },
+      "dropZone": {
+        "title": "Drop Zones",
+        "description": "Create an upload link for external users to submit files to you. Great for collecting documents, reports, or submissions."
+      }
+    }
+  },
+  "remote": {
+    "title": "Remote Files",
+    "subtitle": "Connect to external file providers to browse and import files.",
+    "comingSoon": "Remote file browsing will be available here.",
+    "connectProvider": "Connect a provider from Data Connectors to get started."
+  },
+  "rootFiles": {
+    "title": "My Files",
+    "upload": "Upload files",
+    "empty": "No loose files. Upload files here or create a folder to organise them."
+  },
+  "upload": {
+    "title": "Upload Files to {{name}}",
+    "body": "Files will be automatically indexed and made available for querying in Numa Chat.",
+    "noteLabel": "Note:",
+    "note": "Maximum file size is 50MB per file.",
+    "folderLabel": "Upload to subfolder",
+    "success": "Files uploaded successfully!"
+  },
+  "largeFile": {
+    "title": "Large Raw Data File Detected",
+    "description": "You are about to upload large raw data files that may not be optimal for indexing:",
+    "warning": "This can incur higher than expected cost, or may fail to index successfully.",
+    "recommendationLabel": "Recommendation:",
+    "recommendation": "For better performance, consider breaking large raw data files into smaller chunks.",
+    "confirm": "Do you want to proceed with uploading these files anyway?",
+    "confirmButton": "Proceed Anyway",
+    "cancelButton": "Cancel Upload"
+  },
+  "nav": {
+    "files": "Files",
+    "expandTooltip": "Show file categories"
+  },
+  "search": {
+    "truncatedTooltip": "Search covers the first 50,000 files — open a subfolder for the rest"
+  },
+  "move": {
+    "success_one": "Moved {{count}} file",
+    "success_other": "Moved {{count}} files",
+    "partial": "Moved {{succeeded}} file(s); {{failed}} failed",
+    "error": "Move failed: {{error}}",
+    "collision": "One or more files already exist at the destination. Rename or delete them first.",
+    "cannotEditDest": "You don't have permission to move files here.",
+    "inProgress": "Moving files..."
+  },
+  "filters": {
+    "all": "All",
+    "type": "Type",
+    "status": "Status",
+    "uploadedBy": "Uploaded by",
+    "date": "Modified",
+    "dateOptions": {
+      "today": "Today",
+      "last7": "Last 7 days",
+      "last30": "Last 30 days"
+    },
+    "types": {
+      "pdf": "PDF",
+      "document": "Documents",
+      "spreadsheet": "Spreadsheets",
+      "presentation": "Presentations",
+      "text": "Text",
+      "image": "Images",
+      "other": "Other"
+    },
+    "statuses": {
+      "pending": "Pending",
+      "indexed": "Indexed",
+      "failed": "Failed",
+      "warning": "Warning"
+    },
+    "clear": "Clear filters"
+  }
+}

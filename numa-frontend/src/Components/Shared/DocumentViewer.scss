@@ -2,6 +2,14 @@
   height: 100%;
   padding: 1rem;
   background: var(--bs-gray-100, #f8f9fa);
+  overflow: auto;
+  max-width: 100%;
+
+  // Constrain child content (DocxPreview, XlsxPreview etc) to panel width
+  > * {
+    max-width: 100%;
+    overflow-x: auto;
+  }
 
   .document-frame {
     width: 100%;

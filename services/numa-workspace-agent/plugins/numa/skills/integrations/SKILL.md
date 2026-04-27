@@ -9,11 +9,11 @@ Execute actions, search data, and make API calls to connected external applicati
 
 ## Available MCP Tools
 
-| Tool                                 | Purpose                                                      | Approval            |
-| ------------------------------------ | ------------------------------------------------------------ | ------------------- |
-| `mcp__integrations__run_action`      | Execute an integration action (search, create, update, etc.) | Required for writes |
-| `mcp__integrations__configure_props` | Resolve dynamic dropdown properties before running actions   | No                  |
-| `mcp__integrations__proxy_request`   | Make raw authenticated API requests to connected apps        | Required            |
+| Tool                                 | Purpose                                                      | Approval                         |
+| ------------------------------------ | ------------------------------------------------------------ | -------------------------------- |
+| `mcp__integrations__run_action`      | Execute an integration action (search, create, update, etc.) | May require approval (see below) |
+| `mcp__integrations__configure_props` | Resolve dynamic dropdown properties before running actions   | No                               |
+| `mcp__integrations__proxy_request`   | Make raw authenticated API requests to connected apps        | May require approval (see below) |
 
 ---
 
@@ -154,9 +154,23 @@ When downloading files from integrations:
 
 ---
 
+## Approval mode varies per workspace
+
+Workspaces configure one of three integration-approval modes:
+
+- `always` — every call shows a user-facing approval card the user has to click.
+- `non_destructive` — only writes/destructive actions show a card; reads auto-approve.
+- `never` — all calls auto-approve server-side with no card shown.
+
+You do NOT have direct visibility into which mode is active. Tool results will tell you: a completed call was approved (either by the user clicking or by auto-approve), a `denied` status means the user rejected it, and a `timeout` status means a card was shown but not responded to. Handle these per the Error Handling table.
+
+Do NOT assume approvals are pending, in flight, or timing out when you have no tool result saying so. When a user asks why something was slow, diagnose from observable signals (tool durations, context size, file re-reads, retries) — never from guessed approval state. The `description` parameter is still always required because approval may apply; write it as if the user will read it.
+
+---
+
 ## Writing Descriptions for Approval
 
-The `description` parameter is shown to users before they approve.
+The `description` parameter is shown to users before they approve (when approval applies).
 
 **Read operations** — brief is fine:
 

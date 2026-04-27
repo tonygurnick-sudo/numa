@@ -38,8 +38,6 @@ export interface ChatAgentHttpProps {
   cloudfrontSharedSecret: string;
   /** Optional AWS account ID to use for cross-account Bedrock quota sharing */
   bedrockAccount?: string;
-  /** Optional crawl URLs table name for web crawler stats in KB state */
-  crawlUrlsTableName?: string;
   /** Shared secret to authenticate internal schedule runner calls */
   scheduleRunnerSecret: string;
 }
@@ -126,7 +124,6 @@ export class NumaChatAgent extends Construct {
         AWS_LWA_INVOKE_MODE: 'response_stream',
         ...(props.mcpPolicyTableName && { MCP_POLICY_TABLE_NAME: props.mcpPolicyTableName }),
         ...(props.bedrockAccount && { BEDROCK_ACCOUNT: props.bedrockAccount }),
-        ...(props.crawlUrlsTableName && { CRAWL_URLS_TABLE_NAME: props.crawlUrlsTableName }),
       },
       logGroup: agentLogGroup,
       resourceNameSuffix: '_chat_agent',
@@ -167,11 +164,6 @@ export class NumaChatAgent extends Construct {
         },
         {
           effect: 'Allow',
-          actions: ['s3:DeleteObject'],
-          resources: [`${props.dataBucketArn}/documents/*`],
-        },
-        {
-          effect: 'Allow',
           actions: ['s3:ListBucket'],
           resources: [props.outputsBucketArn, props.dataBucketArn],
         },
@@ -189,26 +181,17 @@ export class NumaChatAgent extends Construct {
         },
         {
           effect: 'Allow',
-          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminGetUser'],
-          resources: [`arn:aws:cognito-idp:${props.region}:${callerIdentity.accountId}:userpool/${props.userPoolId}`],
-        },
-        {
-          effect: 'Allow',
           actions: ['dynamodb:Query', 'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
           resources: [
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-chat-history`,
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-*-chat-history`,
           ],
         },
+        // Chat needs to read the KB membership table to determine which KBs a
+        // user may enable for a turn. Writes happen via numa-kb-manager.
         {
           effect: 'Allow',
-          actions: [
-            'dynamodb:Query',
-            'dynamodb:GetItem',
-            'dynamodb:PutItem',
-            'dynamodb:UpdateItem',
-            'dynamodb:DeleteItem',
-          ],
+          actions: ['dynamodb:Query', 'dynamodb:GetItem'],
           resources: [
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.knowledgeBasesTableName}`,
             `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.knowledgeBasesTableName}/index/*`,
@@ -233,20 +216,6 @@ export class NumaChatAgent extends Construct {
                   `arn:aws:bedrock:${props.region}:${callerIdentity.accountId}:knowledge-base/${props.chatAgentConfiguration.bedrockKnowledgeBaseId}`,
                 ],
               },
-              // KB state endpoint permissions (list data sources, ingestion jobs, documents)
-              {
-                effect: 'Allow',
-                actions: [
-                  'bedrock:ListDataSources',
-                  'bedrock:ListIngestionJobs',
-                  'bedrock:GetIngestionJob',
-                  'bedrock:ListKnowledgeBaseDocuments',
-                ],
-                resources: [
-                  `arn:aws:bedrock:${props.region}:${callerIdentity.accountId}:knowledge-base/${props.chatAgentConfiguration.bedrockKnowledgeBaseId}`,
-                  `arn:aws:bedrock:${props.region}:${callerIdentity.accountId}:knowledge-base/${props.chatAgentConfiguration.bedrockKnowledgeBaseId}/data-source/*`,
-                ],
-              },
             ]
           : []),
         ...(props.chatAgentConfiguration.qApplicationId
@@ -256,16 +225,6 @@ export class NumaChatAgent extends Construct {
                 actions: ['qbusiness:SearchRelevantContent'],
                 resources: [
                   `arn:aws:qbusiness:${props.region}:${callerIdentity.accountId}:application/${props.chatAgentConfiguration.qApplicationId}`,
-                ],
-              },
-              // KB state endpoint permissions (list data sources, sync jobs, documents)
-              {
-                effect: 'Allow',
-                actions: ['qbusiness:ListDataSources', 'qbusiness:ListDataSourceSyncJobs', 'qbusiness:ListDocuments'],
-                resources: [
-                  `arn:aws:qbusiness:${props.region}:${callerIdentity.accountId}:application/${props.chatAgentConfiguration.qApplicationId}`,
-                  `arn:aws:qbusiness:${props.region}:${callerIdentity.accountId}:application/${props.chatAgentConfiguration.qApplicationId}/index/*`,
-                  `arn:aws:qbusiness:${props.region}:${callerIdentity.accountId}:application/${props.chatAgentConfiguration.qApplicationId}/index/*/data-source/*`,
                 ],
               },
             ]
@@ -317,11 +276,6 @@ export class NumaChatAgent extends Construct {
               },
             ]
           : []),
-        {
-          effect: 'Allow',
-          actions: ['cognito-idp:AdminGetUser'],
-          resources: [`arn:aws:cognito-idp:${props.region}:${callerIdentity.accountId}:userpool/${props.userPoolId}`],
-        },
         // Cross-account Bedrock quota sharing - allow assuming role in shared account
         ...(props.bedrockAccount
           ? [
@@ -329,19 +283,6 @@ export class NumaChatAgent extends Construct {
                 effect: 'Allow',
                 actions: ['sts:AssumeRole'],
                 resources: [`arn:aws:iam::${props.bedrockAccount}:role/bedrock-quota-sharing`],
-              },
-            ]
-          : []),
-        // Web crawler stats - read from crawl URLs table for KB state endpoint
-        ...(props.crawlUrlsTableName
-          ? [
-              {
-                effect: 'Allow',
-                actions: ['dynamodb:Query'],
-                resources: [
-                  `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.crawlUrlsTableName}`,
-                  `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.crawlUrlsTableName}/index/*`,
-                ],
               },
             ]
           : []),

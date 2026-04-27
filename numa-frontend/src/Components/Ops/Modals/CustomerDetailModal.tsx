@@ -7,6 +7,7 @@ import Spinner from 'react-bootstrap/Spinner';
 import Table from 'react-bootstrap/Table';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useToast } from '../../../Providers/ToastContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import type {
@@ -91,7 +92,8 @@ export function CustomerDetailModal({
   onUpdated,
 }: CustomerDetailModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-  const { numaGet, numaPut } = useNumaRequest();
+  const { numaGet, numaPost, numaPut } = useNumaRequest();
+  const { showToast } = useToast();
   const { config, selectedTeamId, teams, teamData } = useOps();
 
   // ── Core state ──────────────────────────────────────────────────────────
@@ -107,6 +109,9 @@ export function CustomerDetailModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = React.useRef<HTMLInputElement>(null);
 
   // Linked work view state
   const [linkedWorkStatusFilter, setLinkedWorkStatusFilter] = useState<LinkedWorkStatusFilter>('all');
@@ -233,6 +238,9 @@ export function CustomerDetailModal({
       setDocuments(response.documents ?? []);
       setLinkedTickets(resolvedLinkedTickets);
       setLinkedTicketCount(resolvedCount);
+
+      // Use backend-presigned logo URL (resolved server-side like staff avatars)
+      setLogoUrl(response.customer?.logoPresignedUrl ?? null);
     } catch (err) {
       console.error('[CustomerDetailModal] Failed to load customer', err);
       setError(String(err));
@@ -245,12 +253,6 @@ export function CustomerDetailModal({
     if (show && customerId) {
       void loadCustomer();
       setEditingField(null);
-      // Load linked tickets
-      setLoadingTickets(true);
-      void OpsService.listTickets(numaGet, { customerId })
-        .then((res) => setLinkedTickets(res.tickets))
-        .catch((err) => console.error('[CustomerDetailModal] Failed to load linked tickets', err))
-        .finally(() => setLoadingTickets(false));
     }
     if (!show) {
       setCustomer(null);
@@ -273,6 +275,7 @@ export function CustomerDetailModal({
   const handleUpdate = useCallback(
     async (payload: UpdateCustomerPayload) => {
       if (!customer || !customerId) return;
+      const prev = customer;
       setSaving(true);
       try {
         const updated = await OpsService.updateCustomer(numaPut, customerId, payload);
@@ -280,12 +283,61 @@ export function CustomerDetailModal({
         onUpdated?.();
       } catch (err) {
         console.error('[CustomerDetailModal] Update failed', err);
+        setCustomer(prev);
+        showToast({ message: t('crm.updateFailed'), variant: 'error' });
       } finally {
         setSaving(false);
       }
     },
-    [customer, customerId, numaPut, onUpdated]
+    [customer, customerId, numaPut, onUpdated, showToast, t]
   );
+
+  // ── Logo upload ───────────────────────────────────────────────────────
+
+  const handleLogoUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !customerId) return;
+      // Reset input so re-selecting same file triggers change
+      e.target.value = '';
+
+      setUploadingLogo(true);
+      try {
+        // Get presigned upload URL
+        const { uploadUrl, s3Key } = await OpsService.getPresignedUrl(numaPost, {
+          context: 'customer',
+          contextId: customerId,
+          fileName: file.name,
+          contentType: file.type,
+        });
+
+        // Upload to S3
+        await fetch(uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type },
+        });
+
+        // Save s3Key on customer record
+        await handleUpdate({ logoS3Key: s3Key } as UpdateCustomerPayload);
+
+        // Resolve for display
+        const url = await OpsService.getPresignedDownloadUrl(numaGet, s3Key);
+        setLogoUrl(url);
+      } catch (err) {
+        console.error('[CustomerDetailModal] Logo upload failed', err);
+        showToast({ message: t('crm.updateFailed'), variant: 'error' });
+      } finally {
+        setUploadingLogo(false);
+      }
+    },
+    [customerId, numaPost, numaGet, handleUpdate, showToast, t]
+  );
+
+  const handleLogoRemove = useCallback(async () => {
+    await handleUpdate({ logoS3Key: null } as UpdateCustomerPayload);
+    setLogoUrl(null);
+  }, [handleUpdate]);
 
   // ── Notes inline edit helpers ─────────────────────────────────────────
 
@@ -515,55 +567,129 @@ export function CustomerDetailModal({
 
     return (
       <Modal.Header closeButton className="align-items-start">
-        <div className="d-flex flex-column flex-grow-1 me-2" style={{ minWidth: 0 }}>
-          {/* Company name + stage badge */}
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            <h5
-              className="mb-0 fw-bold text-truncate"
-              style={{ maxWidth: '100%', minWidth: 0 }}
-              title={customer.companyName}
-            >
-              {customer.companyName}
-            </h5>
-            {stage && (
-              <span
-                className="ticket-badge"
-                style={{
-                  maxWidth: 'none',
-                  background: `${stageColor}18`,
-                  color: stageColor,
-                  border: `1px solid ${stageColor}40`,
-                  fontWeight: 600,
-                }}
-              >
-                {stage.name}
-              </span>
+        {/* Hidden file input for logo upload */}
+        <input ref={logoInputRef} type="file" accept="image/*" className="d-none" onChange={handleLogoUpload} />
+        <div className="d-flex flex-grow-1 me-2 gap-3" style={{ minWidth: 0 }}>
+          {/* Logo */}
+          <div
+            className="flex-shrink-0 d-flex align-items-center justify-content-center position-relative"
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 10,
+              border: logoUrl ? '1px solid #e5e7eb' : '2px dashed #d1d5db',
+              backgroundColor: logoUrl ? '#fff' : '#f9fafb',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              transition: 'border-color 0.15s, background-color 0.15s',
+            }}
+            role="button"
+            tabIndex={0}
+            title={t('crm.uploadLogo')}
+            onClick={() => logoInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') logoInputRef.current?.click();
+            }}
+            onMouseEnter={(e) => {
+              if (!logoUrl) {
+                (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf6';
+                (e.currentTarget as HTMLElement).style.backgroundColor = '#faf5ff';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!logoUrl) {
+                (e.currentTarget as HTMLElement).style.borderColor = '#d1d5db';
+                (e.currentTarget as HTMLElement).style.backgroundColor = '#f9fafb';
+              }
+            }}
+          >
+            {uploadingLogo ? (
+              <Spinner animation="border" size="sm" />
+            ) : logoUrl ? (
+              <>
+                <img
+                  src={logoUrl}
+                  alt={customer.companyName}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={() => setLogoUrl(null)}
+                />
+                {/* Hover overlay for existing logo */}
+                <div
+                  className="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.4)',
+                    opacity: 0,
+                    transition: 'opacity 0.15s',
+                    borderRadius: 8,
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.opacity = '1';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.opacity = '0';
+                  }}
+                >
+                  <i className="bi bi-camera" style={{ color: '#fff', fontSize: '1rem' }} />
+                </div>
+              </>
+            ) : (
+              <div className="d-flex flex-column align-items-center">
+                <i className="bi bi-image" style={{ fontSize: '1rem', color: '#9ca3af' }} />
+                <span style={{ fontSize: '0.55rem', color: '#9ca3af', marginTop: 1 }}>{t('crm.logo')}</span>
+              </div>
             )}
-            {saving && <Spinner animation="border" size="sm" className="ms-1" />}
           </div>
 
-          {/* Flag toggles */}
-          <div className="d-flex flex-wrap gap-1 mt-2">
-            {customerFlags.map((flag) => {
-              const isActive = customer.flags.includes(flag.id);
-              return (
+          <div className="d-flex flex-column flex-grow-1" style={{ minWidth: 0 }}>
+            {/* Company name + stage badge */}
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <h5
+                className="mb-0 fw-bold text-truncate"
+                style={{ maxWidth: '100%', minWidth: 0 }}
+                title={customer.companyName}
+              >
+                {customer.companyName}
+              </h5>
+              {stage && (
                 <span
-                  key={flag.id}
-                  className={`ticket-badge ${isActive ? 'ticket-badge-customer' : 'ticket-badge-inactive'}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => toggleFlag(flag.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') toggleFlag(flag.id);
+                  className="ticket-badge"
+                  style={{
+                    maxWidth: 'none',
+                    background: `${stageColor}18`,
+                    color: stageColor,
+                    border: `1px solid ${stageColor}40`,
+                    fontWeight: 600,
                   }}
-                  title={flag.name}
-                  style={{ cursor: 'pointer', maxWidth: 'none' }}
                 >
-                  {flag.icon && <i className={`bi bi-${flag.icon} me-1`} />}
-                  {flag.name}
+                  {stage.name}
                 </span>
-              );
-            })}
+              )}
+              {saving && <Spinner animation="border" size="sm" className="ms-1" />}
+            </div>
+
+            {/* Flag toggles */}
+            <div className="d-flex flex-wrap gap-1 mt-2">
+              {customerFlags.map((flag) => {
+                const isActive = customer.flags.includes(flag.id);
+                return (
+                  <span
+                    key={flag.id}
+                    className={`ticket-badge ${isActive ? 'ticket-badge-customer' : 'ticket-badge-inactive'}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleFlag(flag.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') toggleFlag(flag.id);
+                    }}
+                    title={flag.name}
+                    style={{ cursor: 'pointer', maxWidth: 'none' }}
+                  >
+                    {flag.icon && <i className={`bi bi-${flag.icon} me-1`} />}
+                    {flag.name}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         </div>
       </Modal.Header>

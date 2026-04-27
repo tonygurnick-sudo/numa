@@ -41,6 +41,7 @@ import { CoreNumaInfra, coreNumaInfraPropsSchema } from '../constructs/core-numa
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { NumaChatAgent } from '../constructs/numa-chat-agent-construct';
+import { NumaKbManager } from '../constructs/numa-kb-manager-construct';
 import { SharedChatConstruct } from '../constructs/shared-chat-construct';
 import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
@@ -53,7 +54,7 @@ import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { NumaLambda } from '../constructs/numa-lambda';
 import { OAuthIntegrationConstruct } from '../constructs/oauth-integration-construct';
 import { OpsConstruct } from '../constructs/ops-construct';
-import { TranscriptionServiceConstruct } from '../constructs/transcription-service-construct';
+import { SearchConstruct } from '../constructs/search-construct';
 import { RacetechDataFeedConstruct } from '../constructs/racetech-data-feed-construct';
 import { VaultSecretsConstruct } from '../constructs/vault-secrets-construct';
 import { DisasterRecoveryConstruct } from '../constructs/disaster-recovery-construct';
@@ -78,7 +79,7 @@ export class NumaClientStack extends TerraformStack {
       domainSuffix: props.domainSuffix,
       embeddingModel: 'amazon.titan-embed-text-v2:0',
       bedrockParserModel: 'amazon.nova-lite-v1:0',
-      visionModelType: 'haiku',
+      visionModelType: 'nova-pro',
       provisionQResources: false,
     };
     const domainName = props.clientConfig.customDomain ?? `${props.clientName}.${defaults.domainSuffix}`;
@@ -300,9 +301,27 @@ export class NumaClientStack extends TerraformStack {
       cloudfrontSharedSecret: cfSecretParam.value,
       // Cross-account Bedrock quota sharing
       bedrockAccount: clientConfig.bedrockAccount,
-      // Web crawler stats for KB state endpoint
-      crawlUrlsTableName: core.webCrawler.crawlUrlsTable.name,
       scheduleRunnerSecret: agentScheduleSecretParam.value,
+    });
+
+    // KB management API — handles /api/kb* requests via its own Function URL.
+    // Split out of the chat agent so KB CRUD doesn't pay the chat lambda's
+    // heavy cold-start cost. Same Cognito + CloudFront auth model.
+    const kbManager = new NumaKbManager(this, 'kb-manager', {
+      clientName: props.clientName,
+      region: clientConfig.region,
+      knowledgeBaseConfiguration: {
+        preferredKnowledgeBase: clientConfig.preferredKnowledgeBase as 'q' | 'bedrock' | 'none',
+        qApplicationId: core.qBusinessApplicationId,
+        qIndexId: core.qBusinessIndexId,
+        bedrockKnowledgeBaseId: knowledgeBase?.knowledgeBaseId,
+      },
+      userPoolId: core.userPoolId,
+      userPoolClientId: core.userPoolClient.id,
+      knowledgeBasesTableName: core.knowledgeBasesTable.name,
+      dataBucketArn: core.dataBucket.bucket.arn,
+      cloudfrontSharedSecret: cfSecretParam.value,
+      crawlUrlsTableName: core.webCrawler.crawlUrlsTable.name,
     });
 
     // Shared Document Q&A - public API for sharing documents with Nova 2 Lite
@@ -471,6 +490,9 @@ export class NumaClientStack extends TerraformStack {
         extApiDocBucketName: core.extApiDocBucket.bucket.bucket,
         extApiDocBucketArn: core.extApiDocBucket.bucket.arn,
         extractContentLambdaArn: extractContentLambdaArn,
+        // Document converter Lambda for DOCX/Office → PDF conversion
+        // (used by Nolia funding pre-extraction and MD→PDF/DOCX output rendering)
+        documentConverterLambdaArn: documentConverterLambdaArn,
         // Numa Ops feature flag
         numaOpsEnabled: clientConfig.numaOps,
         // Frontend URL for constructing links (e.g. ticket URLs in chat)
@@ -548,6 +570,7 @@ export class NumaClientStack extends TerraformStack {
       accountId: clientConfig.clientAccountId,
       knowledgeBase,
       chatAgentFunctionUrl: chatAgent.functionUrl,
+      kbManagerFunctionUrl: kbManager.functionUrl,
       cloudfrontSecretParam: cfSecretParam,
       // Workspace chat agent proxy Lambda Function URL is routed through main CloudFront
       // (AgentCore has no public HTTP endpoint, so we use a proxy Lambda)
@@ -612,8 +635,6 @@ export class NumaClientStack extends TerraformStack {
       agentScheduleRunnerSecret: agentScheduleSecretParam.value,
       bedrockKbId: knowledgeBase?.knowledgeBaseId,
       bedrockDataSourceId: knowledgeBase?.dataSourceId,
-      filesTableName: core.filesTable?.name,
-      filesTableArn: core.filesTable?.arn,
       usageAnalyticsEventsTableName: core.usageAnalyticsEventsTable.name,
       usageAnalyticsEventsTableArn: core.usageAnalyticsEventsTable.arn,
       usageAnalyticsKeysTableName: core.usageAnalyticsKeysTable.name,
@@ -662,6 +683,16 @@ export class NumaClientStack extends TerraformStack {
       });
     }
 
+    // Site-wide search (DynamoDB index + GET /api/search query Lambda)
+    if (clientConfig.siteWideSearch) {
+      new SearchConstruct(this, safeConstructId + '-search', {
+        apiGatewayAuthorizerId: fe.authorizer.id,
+        apiGatewayId: fe.apiGateway.id,
+        clientName: props.clientName,
+        environmentName: props.environmentName,
+      });
+    }
+
     // Racetech external data feed (Glenn's daily SQLite upload via presigned URL)
     if (clientConfig.racetechDataFeed) {
       new RacetechDataFeedConstruct(this, safeConstructId + '-racetech-data-feed', {
@@ -682,28 +713,6 @@ export class NumaClientStack extends TerraformStack {
         region: clientConfig.region,
         vaultAuditLogTableName: core.vaultAuditLogTable.name,
         vaultAuditLogTableArn: core.vaultAuditLogTable.arn,
-      });
-    }
-
-    // Transcription Service (async job queue for document transcription)
-    if (clientConfig.transcriptionService) {
-      new TranscriptionServiceConstruct(this, safeConstructId + '-transcription', {
-        apiGatewayAuthorizerId: fe.authorizer.id,
-        apiGatewayId: fe.apiGateway.id,
-        clientName: props.clientName,
-        region: clientConfig.region,
-        dataBucketArn: core.dataBucket.bucket.arn,
-        dataBucketName: core.dataBucket.bucket.bucket,
-        outputsBucketArn: core.outputsBucket.bucket.arn,
-        extractContentLambdaArn: coreApis.extractContentLambda.arn,
-        extractContentLambdaName: coreApis.extractContentLambda.functionName,
-        notificationsTableName: core.notificationsTable.name,
-        notificationsTableArn: core.notificationsTable.arn,
-        usageAnalyticsEventsTableName: core.usageAnalyticsEventsTable.name,
-        usageAnalyticsEventsTableArn: core.usageAnalyticsEventsTable.arn,
-        auditAutomationTableName: core.auditAutomationTable.name,
-        auditAutomationTableArn: core.auditAutomationTable.arn,
-        deployerRoleArn: deployerRole,
       });
     }
 
@@ -854,15 +863,14 @@ export class NumaClientStack extends TerraformStack {
         SCHEDULING: clientConfig.scheduling ?? false,
         SCHEDULING_MIN_INTERVAL_MINUTES: clientConfig.schedulingMinIntervalMinutes ?? null,
         GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: props.globalSchedulingMinIntervalMinutes ?? null,
-        NUMA_FILES: clientConfig.numaFiles ?? false,
         KNOWLEDGE_BASES: true,
         DEVELOPER_MODE: clientConfig.developerMode ?? false,
         NUMA_OPS: clientConfig.numaOps ?? false,
+        SITE_WIDE_SEARCH: clientConfig.siteWideSearch ?? false,
         MFA_ENABLED: clientConfig.mfa ?? false,
         SECRETS_VAULT_ENABLED: clientConfig.secretsVaultEnabled ?? false,
-        // Dependency cascade — children forced off when parent is off
-        NUMA_DROP_ZONES: (clientConfig.numaFiles ?? false) ? (clientConfig.numaDropZones ?? false) : false,
-        NUMA_SHARING: (clientConfig.numaFiles ?? false) ? (clientConfig.numaSharing ?? false) : false,
+        NUMA_DROP_ZONES: clientConfig.numaDropZones ?? false,
+        NUMA_SHARING: clientConfig.numaSharing ?? false,
         WORKSPACE_CHAT_MODEL_SELECTION:
           (clientConfig.numaWorkspaceChat ?? false) ? (clientConfig.workspaceChatModelSelection ?? false) : false,
         OAUTH_AVAILABLE: true, // Always available - infrastructure always deployed, admin flags control UI access only
@@ -874,7 +882,6 @@ export class NumaClientStack extends TerraformStack {
         V2_APPS: clientConfig.v2Apps ?? false,
         NUMA_APPS: clientConfig.allApps ?? false,
         JOB_HISTORY: (clientConfig.allApps ?? false) ? (clientConfig.jobHistory ?? true) : false,
-        TRANSCRIPTION_SERVICE: (clientConfig.numaFiles ?? false) ? (clientConfig.transcriptionService ?? false) : false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         PUBLIC_DEMO: clientConfig.publicDemo ?? false,
@@ -1283,13 +1290,6 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         schedulingMinIntervalMinutes: z.number().int().min(5).optional(),
 
         /**
-         * Whether to enable the Numa Files feature (file management page and backend).
-         *
-         * @default false
-         */
-        numaFiles: z.boolean().optional().default(false),
-
-        /**
          * Whether to enable Drop Zone creation in the Files shared tab.
          *
          * @default false
@@ -1327,6 +1327,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         numaOps: z.boolean().optional().default(false),
 
         /**
+         * Whether to enable site-wide search (DynamoDB search index + /api/search).
+         * Foundational only — producers populate the index in follow-up work.
+         *
+         * @default false
+         */
+        siteWideSearch: z.boolean().optional().default(false),
+
+        /**
          * Whether to enable the Racetech external data feed upload endpoint.
          * Provisions a presigned S3 PUT URL API for Glenn's daily SQLite upload.
          *
@@ -1358,13 +1366,6 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         v2Apps: z.boolean().optional().default(false),
-
-        /**
-         * Whether to enable the Transcription Service (async job queue for document transcription).
-         *
-         * @default false
-         */
-        transcriptionService: z.boolean().optional().default(false),
 
         /**
          * Enable job history viewer.

@@ -239,4 +239,7 @@ v2-apps/nolia/{user_sub}/{runId}/
 - **Developer skill:** `.claude/skills/nolia-developer-guide/` — full dev context, key files, testing, log tracing
 - **Local testing skill:** `.claude/skills/workspace-agent-local-test/` — Docker testing guide + Nolia-specific notes
 - **Backend code:** `services/numa-workspace-agent/numa_workspace_agent/agent_types/nolia/`
-- **Nolia frontend:** `numa-whitelabel-investigation/` (separate repo)
+- **Nolia frontends (separate repos):**
+  - `arcanum/nolia/nolia-app/` — bank / MDB procurement (MoH Indonesia)
+  - `arcanum/nolia/nolia-funding-app/` — funding application assessment (Ngāi Tahu, variant-aware)
+  - `arcanum/nolia/CLAUDE.md` — umbrella context across both products
