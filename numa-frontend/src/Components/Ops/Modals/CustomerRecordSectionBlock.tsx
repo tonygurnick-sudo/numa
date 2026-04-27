@@ -690,7 +690,7 @@ export function renderEditControl(
             <option value="">{ctx.t('common.selectOption')}</option>
             {ctx.staff.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name}
+                {s.name || s.email}
               </option>
             ))}
           </Form.Select>
@@ -827,7 +827,13 @@ function renderReadValue(fieldId: string, value: unknown, customer: Customer, ct
       return value ? <span>{String(value)}</span> : empty;
     case 'select-owner': {
       const match = ctx.staff.find((s) => s.id === value);
-      return match ? <span>{match.name}</span> : customer.ownerName ? <span>{customer.ownerName}</span> : empty;
+      return match ? (
+        <span>{match.name || match.email}</span>
+      ) : customer.ownerName ? (
+        <span>{customer.ownerName}</span>
+      ) : (
+        empty
+      );
     }
     case 'select-lifecycle': {
       const stage = (ctx.crmConfig.lifecycleStages ?? []).find((s) => s.id === value);

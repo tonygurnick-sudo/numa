@@ -348,6 +348,28 @@ export const NumaIntegrations = () => {
     );
   };
 
+  const reconnectApp = async (appName: string) => {
+    if (!lambdaClient || !user) return;
+    try {
+      setConnectingApp(appName);
+      setError(null);
+      const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+      // Disconnect the dead/unhealthy connection first
+      await PipedreamProxyService.disconnectIntegration(lambdaClient, externalUserId, { appName });
+      try {
+        await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
+      } catch {
+        /* ignore invalidate errors */
+      }
+    } catch {
+      /* best-effort disconnect before reconnect */
+    } finally {
+      setConnectingApp(null);
+    }
+    // Now trigger a fresh connect flow
+    await connectApp(appName);
+  };
+
   const renderIntegrationRow = (integration: IntegrationListItem) => {
     const status = getConnectionStatus(integration.name_slug);
     const isConnected = status === 'connected';
@@ -357,6 +379,7 @@ export const NumaIntegrations = () => {
     const conn = getConnection(integration.name_slug);
     const isUnhealthy = isConnected && conn?.healthy === false;
     const isDead = isConnected && conn?.dead === true;
+    const needsReconnect = isDead || isUnhealthy;
 
     return (
       <div key={integration.name_slug} className="mb-2">
@@ -375,7 +398,7 @@ export const NumaIntegrations = () => {
               <div className="integrations-row-card__text">
                 <h6 className="integrations-row-card__name">{integration.name}</h6>
                 <p className="integrations-row-card__description">{integration.description}</p>
-                {isConnected && conn?.connection_name && (
+                {isConnected && !needsReconnect && conn?.connection_name && (
                   <div className="integrations-row-card__meta">
                     {conn.connection_name}
                     {conn.connected_at && (
@@ -386,16 +409,19 @@ export const NumaIntegrations = () => {
                     )}
                   </div>
                 )}
+                {needsReconnect && (
+                  <div className="integrations-row-card__meta text-danger">{t('status.connectionExpired')}</div>
+                )}
               </div>
             </div>
 
             <div className="integrations-row-card__controls">
               {isConnected && (
-                <div className={`integrations-row-status ${isUnhealthy || isDead ? 'is-warning' : ''}`}>
-                  {isUnhealthy || isDead ? (
+                <div className={`integrations-row-status ${needsReconnect ? 'is-warning' : ''}`}>
+                  {needsReconnect ? (
                     <>
                       <AlertTriangle size={14} className="integrations-row-status__icon" />
-                      <span>{isDead ? t('status.accountInactive') : t('status.reconnectRequired')}</span>
+                      <span>{t('status.reconnectRequired')}</span>
                     </>
                   ) : (
                     <>
@@ -407,7 +433,48 @@ export const NumaIntegrations = () => {
               )}
 
               <div className="integrations-row-actions">
-                {isConnected ? (
+                {isConnected && needsReconnect ? (
+                  <>
+                    <Button
+                      variant="light"
+                      size="sm"
+                      onClick={() => reconnectApp(integration.name_slug)}
+                      disabled={isConnecting}
+                      className="integrations-row-btn integrations-row-btn--primary"
+                    >
+                      {isConnecting ? (
+                        <>
+                          <Spinner size="sm" className="integrations-row-btn__spinner" />
+                          <span className="integrations-row-btn__label">{t('actions.connecting')}</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw size={14} className="integrations-row-btn__icon" />
+                          <span className="integrations-row-btn__label">{t('actions.reconnect')}</span>
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="light"
+                      size="sm"
+                      onClick={() => disconnectApp(integration.name_slug)}
+                      disabled={!!disconnectingApp}
+                      className="integrations-row-btn integrations-row-btn--neutral"
+                    >
+                      {disconnectingApp === integration.name_slug ? (
+                        <>
+                          <Spinner size="sm" className="integrations-row-btn__spinner" />
+                          <span className="integrations-row-btn__label">{t('actions.disconnecting')}</span>
+                        </>
+                      ) : (
+                        <>
+                          <X size={14} className="integrations-row-btn__icon" />
+                          <span className="integrations-row-btn__label">{t('actions.disconnect')}</span>
+                        </>
+                      )}
+                    </Button>
+                  </>
+                ) : isConnected ? (
                   <>
                     <Button
                       variant="light"
@@ -661,11 +728,19 @@ export const NumaIntegrations = () => {
                           const adminDisabledB = globalSettings[b.name_slug]?.status === 'disabled';
                           if (adminDisabledA !== adminDisabledB) return adminDisabledA ? 1 : -1;
 
-                          // Then connected first
+                          // Then connected first, with dead/unhealthy connections at the very top
                           const statusA = getConnectionStatus(a.name_slug);
                           const statusB = getConnectionStatus(b.name_slug);
                           const connectedA = statusA === 'connected';
                           const connectedB = statusB === 'connected';
+                          const connA = getConnection(a.name_slug);
+                          const connB = getConnection(b.name_slug);
+                          const needsReconnectA = connectedA && (connA?.dead || connA?.healthy === false);
+                          const needsReconnectB = connectedB && (connB?.dead || connB?.healthy === false);
+                          // Dead/unhealthy connections first (need attention)
+                          if (needsReconnectA && !needsReconnectB) return -1;
+                          if (!needsReconnectA && needsReconnectB) return 1;
+                          // Then healthy connected
                           if (connectedA && !connectedB) return -1;
                           if (!connectedA && connectedB) return 1;
 

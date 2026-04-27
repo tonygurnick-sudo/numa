@@ -178,7 +178,6 @@ import: init get
 
 deploy: init get
 	lambdas/package-all.sh
-	cd services && ./package-service.sh transcription-service
 	cd services && ./package-service.sh numa-workspace-agent
 	yarn --cwd numa-frontend build
 	$(CDKTF) deploy $(STACK) --auto-approve

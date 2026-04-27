@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Button, Form, Spinner, Badge, Alert } from 'react-bootstrap';
 import {
   DndContext,
@@ -18,39 +18,57 @@ import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { Customer, CrmConfig, CrmLifecycleStage } from '../../../types/ops';
+import type { Customer, CrmConfig, CrmLifecycleStage, StaffProfile, SavedFilter } from '../../../types/ops';
 import { getCached, setCache } from '../../../utils/opsCache';
 import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
+import { formatRelativeDate } from '../Shared/ticketUtils';
 import { CustomerCard } from './CustomerCard';
 import { CustomerDetailModal } from '../Modals/CustomerDetailModal';
 import { CreateCustomerModal } from '../Modals/CreateCustomerModal';
+import { FilterDropdown } from '../AllTicketsView/FilterDropdown';
+import { QuickFilterDropdown } from '../AllTicketsView/QuickFilterDropdown';
+import { ColumnPicker, type ColumnDef as PickerColumnDef } from '../AllTicketsView/ColumnPicker';
+import { SaveViewModal, LoadViewDropdown } from '../AllTicketsView/SavedViewsDropdown';
+import { StaffAvatar } from '../Shared/StaffAvatar';
+import {
+  type SortDirection,
+  type FilterEntry,
+  type ActiveFilters,
+  matchesFilter,
+  compareValues,
+} from '../Shared/filterUtils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type FilterType = 'all' | 'active_tickets' | 'at_risk' | 'prospects';
 type ViewMode = 'board' | 'list';
 
+type CrmColumnDef = {
+  key: string;
+  label: string;
+  sortable: boolean;
+  filterType: 'text' | 'enum' | 'date' | 'number';
+  filterOptions?: () => { value: string; label: string }[];
+  accessor: (c: Customer) => unknown;
+  render?: (c: Customer) => React.ReactNode;
+  defaultVisible?: boolean;
+  category?: string;
+  flex?: string;
+};
+
+type CrmSavedViewConfig = {
+  filters: ActiveFilters;
+  visibleColumnKeys: string[];
+  sortColumn: string;
+  sortDirection: SortDirection;
+  quickFilter: FilterType;
+  quickStageFilter: string[];
+  quickTerritoryFilter: string[];
+  quickOwnerFilter: string[];
+  quickIndustryFilter: string[];
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatLastContact(
-  dateStr: string | null | undefined,
-  t: (key: string, options?: Record<string, unknown>) => string
-): string {
-  if (!dateStr) return t('crm.noLastContact');
-
-  const timestamp = new Date(dateStr).getTime();
-  if (Number.isNaN(timestamp)) return t('crm.noLastContact');
-
-  const diffMs = Date.now() - timestamp;
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays <= 0) return t('crm.lastContactToday');
-  if (diffDays === 1) return t('crm.lastContactYesterday');
-  if (diffDays < 7) return t('crm.lastContactDaysAgo', { count: diffDays });
-  if (diffDays < 30) return t('crm.lastContactWeeksAgo', { count: Math.floor(diffDays / 7) });
-  if (diffDays < 365) return t('crm.lastContactMonthsAgo', { count: Math.floor(diffDays / 30) });
-  return t('crm.lastContactYearsAgo', { count: Math.floor(diffDays / 365) });
-}
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -64,6 +82,16 @@ function formatCurrency(value: number): string {
 // ─── Constants & Helpers ─────────────────────────────────────────────────────
 
 const ORDER_GAP = 1000;
+
+const DEFAULT_VISIBLE_KEYS = [
+  'companyName',
+  'lifecycleStage',
+  'primaryContact',
+  'industry',
+  'territory',
+  'lastContactDate',
+  'openTicketCount',
+];
 
 function calculateNewOrder(items: { order?: number }[], insertIndex: number): number {
   const defaultItems = items.map((item) => ({ ...item, order: item.order ?? 0 }));
@@ -88,10 +116,17 @@ interface DroppableColumnProps {
   stage: CrmLifecycleStage;
   customers: Customer[];
   crmConfig: CrmConfig;
+  staff?: StaffProfile[];
   onCustomerClick: (customer: Customer) => void;
 }
 
-function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: DroppableColumnProps): React.JSX.Element {
+function DroppableColumn({
+  stage,
+  customers,
+  crmConfig,
+  staff,
+  onCustomerClick,
+}: DroppableColumnProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
 
@@ -99,32 +134,26 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
   const textColor = getContrastTextColor(stageColor);
 
   return (
-    <div className="kanban-column d-flex flex-column" style={{ height: '100%' }}>
-      {/* Colored column header */}
+    <div className="kanban-column" style={{ background: isOver ? '#faf5ff' : undefined }}>
       <div
-        className="shadow-sm"
         style={{
           backgroundColor: stageColor,
           color: textColor,
-          borderRadius: '10px 10px 0 0',
-          padding: '10px 14px',
+          borderRadius: 8,
+          padding: '7px 12px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          border: `1px solid ${stageColor}`,
-          borderBottom: 'none',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.025)',
-          zIndex: 10,
-          position: 'relative',
+          marginBottom: 12,
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>{stage.name}</span>
+        <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>{stage.name}</span>
         <span
           style={{
             backgroundColor: 'rgba(255,255,255,0.25)',
             borderRadius: 10,
-            padding: '1px 8px',
-            fontSize: '0.7rem',
+            padding: '1px 7px',
+            fontSize: '0.68rem',
             fontWeight: 700,
             color: textColor,
           }}
@@ -133,31 +162,22 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
         </span>
       </div>
 
-      {/* Column body */}
-      <div
-        ref={setNodeRef}
-        style={{
-          flex: 1,
-          borderRadius: '0 0 10px 10px',
-          padding: '12px 8px',
-          backgroundColor: isOver ? '#f5f3ff' : '#f8fafc',
-          borderLeft: '1px solid #e2e8f0',
-          borderRight: '1px solid #e2e8f0',
-          borderBottom: isOver ? `2px dashed ${stageColor}` : '1px solid #e2e8f0',
-          transition: 'background-color 0.2s ease, border-color 0.2s',
-          overflowY: 'auto',
-          minHeight: 100,
-        }}
-      >
+      <div ref={setNodeRef}>
         <SortableContext items={customers.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {customers.length === 0 && (
             <div className="text-center py-4">
-              <i className="bi bi-people" style={{ fontSize: '1.4rem', color: '#d1d5db' }} />
-              <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noCustomers')}</div>
+              <i className="bi bi-people" style={{ fontSize: '1.2rem', color: '#d1d5db' }} />
+              <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noCustomers')}</div>
             </div>
           )}
           {customers.map((customer) => (
-            <CustomerCard key={customer.id} customer={customer} crmConfig={crmConfig} onClick={onCustomerClick} />
+            <CustomerCard
+              key={customer.id}
+              customer={customer}
+              crmConfig={crmConfig}
+              staff={staff}
+              onClick={onCustomerClick}
+            />
           ))}
         </SortableContext>
       </div>
@@ -165,195 +185,21 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
   );
 }
 
-// ─── List View ───────────────────────────────────────────────────────────────
-
-interface CustomerListViewProps {
-  customers: Customer[];
-  crmConfig: CrmConfig;
-  onCustomerClick: (customer: Customer) => void;
-}
-
-function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerListViewProps): React.JSX.Element {
-  const { t } = useTranslation('ops');
-
-  if (customers.length === 0) {
-    return (
-      <div className="text-center py-5">
-        <i className="bi bi-people fs-1 d-block mb-2" style={{ color: '#d1d5db' }} />
-        <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>{t('empty.noCustomers')}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden', backgroundColor: '#fff' }}>
-      {/* Header row */}
-      <div
-        className="ops-list-header px-3 py-2"
-        style={{
-          backgroundColor: '#f9fafb',
-          borderBottom: '1px solid #e5e7eb',
-          fontSize: '0.7rem',
-          fontWeight: 700,
-          color: '#6b7280',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-        }}
-      >
-        <span style={{ flex: '0 0 28%' }}>{t('common.name')}</span>
-        <span style={{ flex: '0 0 16%' }}>{t('crm.lifecycleStage')}</span>
-        <span style={{ flex: '0 0 22%' }}>{t('crm.primaryContact')}</span>
-        <span style={{ flex: '0 0 16%' }}>{t('crm.industry')}</span>
-        <span style={{ flex: '0 0 12%' }}>{t('crm.lastContact')}</span>
-        <span style={{ flex: '0 0 6%', textAlign: 'right' }}>{t('tickets.links')}</span>
-      </div>
-
-      {/* Data rows */}
-      {customers.map((customer) => {
-        const stage = crmConfig.lifecycleStages.find((s) => s.id === customer.lifecycleStage);
-        const stageColor = stage ? stage.color || getColorForPosition(stage.colorPosition) : '#6c757d';
-        const stageTextColor = getContrastTextColor(stageColor);
-        const primaryContact = customer.contacts.find((c) => c.isPrimary);
-        const lastContact = formatLastContact(customer.lastContactDate, t);
-
-        return (
-          <div
-            key={customer.id}
-            className="ops-list-row px-3 py-2"
-            style={{
-              borderBottom: '1px solid #f3f4f6',
-              cursor: 'pointer',
-              transition: 'background-color 0.1s',
-            }}
-            onClick={() => onCustomerClick(customer)}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.backgroundColor = '#f9fafb';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-            }}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') onCustomerClick(customer);
-            }}
-          >
-            {/* Company name */}
-            <div className="ops-list-col is-title" style={{ flex: '0 0 28%', minWidth: 0, paddingRight: 12 }}>
-              <span
-                className="fw-semibold d-block text-truncate"
-                style={{ fontSize: '0.85rem', color: '#111827' }}
-                title={customer.companyName}
-              >
-                {customer.companyName}
-              </span>
-              {customer.contractValue != null && customer.contractValue > 0 && (
-                <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>
-                  {formatCurrency(customer.contractValue)}
-                </span>
-              )}
-            </div>
-
-            {/* Stage badge */}
-            <div
-              className="ops-list-col"
-              data-label={t('crm.lifecycleStage')}
-              style={{ flex: '0 0 16%', paddingRight: 12 }}
-            >
-              <Badge pill bg="" style={{ backgroundColor: stageColor, color: stageTextColor, fontSize: '0.72rem' }}>
-                {stage?.name ?? '—'}
-              </Badge>
-            </div>
-
-            {/* Primary contact */}
-            <div
-              className="ops-list-col"
-              data-label={t('crm.primaryContact')}
-              style={{ flex: '0 0 22%', minWidth: 0, paddingRight: 12 }}
-            >
-              {primaryContact ? (
-                <div className="d-flex align-items-center gap-1">
-                  <i className="bi bi-star-fill" style={{ color: '#f59e0b', fontSize: '0.6rem', flexShrink: 0 }} />
-                  <span className="text-truncate" style={{ fontSize: '0.82rem', color: '#374151' }}>
-                    {primaryContact.name}
-                    {primaryContact.role && (
-                      <span style={{ color: '#9ca3af', marginLeft: 3 }}>({primaryContact.role})</span>
-                    )}
-                  </span>
-                </div>
-              ) : (
-                <span style={{ color: '#d1d5db', fontStyle: 'italic', fontSize: '0.8rem' }}>—</span>
-              )}
-            </div>
-
-            {/* Industry · Size */}
-            <div
-              className="ops-list-col"
-              data-label={t('crm.industry')}
-              style={{ flex: '0 0 16%', minWidth: 0, paddingRight: 12 }}
-            >
-              <span
-                className="text-truncate d-block"
-                style={{ fontSize: '0.8rem', color: '#6b7280' }}
-                title={[customer.industry, customer.companySize].filter(Boolean).join(' · ')}
-              >
-                {[customer.industry, customer.companySize].filter(Boolean).join(' · ') || '—'}
-              </span>
-            </div>
-
-            {/* Last contact */}
-            <div className="ops-list-col" data-label={t('crm.lastContact')} style={{ flex: '0 0 12%' }}>
-              <span style={{ fontSize: '0.78rem', color: lastContact === 'No contact' ? '#d1d5db' : '#6b7280' }}>
-                {lastContact}
-              </span>
-            </div>
-
-            {/* Open tickets */}
-            <div
-              className="ops-list-col"
-              data-label={t('tickets.links')}
-              style={{ flex: '0 0 6%', textAlign: 'right' }}
-            >
-              {customer.openTicketCount > 0 ? (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    backgroundColor: '#eff6ff',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: 6,
-                    padding: '1px 6px',
-                    fontSize: '0.7rem',
-                    color: '#2563eb',
-                    fontWeight: 600,
-                  }}
-                >
-                  {customer.openTicketCount}
-                </span>
-              ) : (
-                <span style={{ color: '#d1d5db', fontSize: '0.78rem' }}>—</span>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 const CrmMirrorView = (): React.JSX.Element => {
   const { t } = useTranslation('ops');
   const { numaGet, numaPut } = useNumaRequest();
   const { config, crmRefreshVersion } = useOps();
 
-  // ── DnD: 8px movement before drag activates (so clicks work cleanly) ──────
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  // ── State ─────────────────────────────────────────────────────────────────
+  // ── State ──────────────────────────────────────────────────────────────────
   const [customers, setCustomers] = useState<Customer[]>(() => getCached<Customer[]>('customers') ?? []);
   const [loading, setLoading] = useState(() => !getCached('customers'));
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     try {
       const saved = localStorage.getItem('numa_ops_customers_view_mode');
@@ -362,6 +208,25 @@ const CrmMirrorView = (): React.JSX.Element => {
       return 'list';
     }
   });
+
+  // ── List view state ────────────────────────────────────────────────────────
+  const [sortColumn, setSortColumn] = useState<string>('companyName');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(DEFAULT_VISIBLE_KEYS);
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+
+  // Quick filter dropdowns
+  const [quickStageFilter, setQuickStageFilter] = useState<string[]>([]);
+  const [quickTerritoryFilter, setQuickTerritoryFilter] = useState<string[]>([]);
+  const [quickOwnerFilter, setQuickOwnerFilter] = useState<string[]>([]);
+  const [quickIndustryFilter, setQuickIndustryFilter] = useState<string[]>([]);
+
+  // Saved views
+  const [savedViews, setSavedViews] = useState<SavedFilter[]>([]);
+  const [currentViewName, setCurrentViewName] = useState<string | undefined>();
+  const [viewSnapshot, setViewSnapshot] = useState<string | null>(null);
+  const [showSaveViewModal, setShowSaveViewModal] = useState(false);
 
   const handleSetViewMode = useCallback((mode: ViewMode) => {
     setViewMode(mode);
@@ -379,6 +244,391 @@ const CrmMirrorView = (): React.JSX.Element => {
 
   const crmConfig: CrmConfig | null = config?.crmConfig ?? null;
   const stages = crmConfig?.lifecycleStages ?? [];
+  const staff = config?.staff ?? [];
+
+  // ── Debounced search ─────────────────────────────────────────────────────
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [search]);
+
+  // ── Saved view helpers ────────────────────────────────────────────────────
+  const buildCurrentViewConfig = useCallback(
+    (): CrmSavedViewConfig => ({
+      filters: activeFilters,
+      visibleColumnKeys,
+      sortColumn,
+      sortDirection,
+      quickFilter: activeFilter,
+      quickStageFilter,
+      quickTerritoryFilter,
+      quickOwnerFilter,
+      quickIndustryFilter,
+    }),
+    [
+      activeFilters,
+      visibleColumnKeys,
+      sortColumn,
+      sortDirection,
+      activeFilter,
+      quickStageFilter,
+      quickTerritoryFilter,
+      quickOwnerFilter,
+      quickIndustryFilter,
+    ]
+  );
+
+  const isViewModified = useMemo(() => {
+    if (!viewSnapshot) return false;
+    return JSON.stringify(buildCurrentViewConfig()) !== viewSnapshot;
+  }, [buildCurrentViewConfig, viewSnapshot]);
+
+  // Load saved views from localStorage (CRM views are lightweight, no backend persistence needed yet)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('numa_ops_crm_saved_views');
+      if (raw) setSavedViews(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persistSavedViews = useCallback((views: SavedFilter[]) => {
+    setSavedViews(views);
+    try {
+      localStorage.setItem('numa_ops_crm_saved_views', JSON.stringify(views));
+    } catch {
+      /* quota exceeded */
+    }
+  }, []);
+
+  const handleSaveView = useCallback(
+    (name: string) => {
+      const config = buildCurrentViewConfig();
+      const view: SavedFilter = { name, config: config as unknown as Record<string, unknown> };
+      const updated = [...savedViews.filter((v) => v.name !== name), view];
+      persistSavedViews(updated);
+      setCurrentViewName(name);
+      setViewSnapshot(JSON.stringify(config));
+    },
+    [buildCurrentViewConfig, savedViews, persistSavedViews]
+  );
+
+  const handleUpdateView = useCallback(() => {
+    if (!currentViewName) return;
+    handleSaveView(currentViewName);
+  }, [currentViewName, handleSaveView]);
+
+  const handleLoadView = useCallback((view: SavedFilter) => {
+    const cfg = view.config as unknown as CrmSavedViewConfig;
+    if (cfg.filters) setActiveFilters(cfg.filters);
+    if (cfg.visibleColumnKeys) setVisibleColumnKeys(cfg.visibleColumnKeys);
+    if (cfg.sortColumn) setSortColumn(cfg.sortColumn);
+    if (cfg.sortDirection) setSortDirection(cfg.sortDirection);
+    if (cfg.quickFilter) setActiveFilter(cfg.quickFilter);
+    if (cfg.quickStageFilter) setQuickStageFilter(cfg.quickStageFilter);
+    if (cfg.quickTerritoryFilter) setQuickTerritoryFilter(cfg.quickTerritoryFilter);
+    if (cfg.quickOwnerFilter) setQuickOwnerFilter(cfg.quickOwnerFilter);
+    if (cfg.quickIndustryFilter) setQuickIndustryFilter(cfg.quickIndustryFilter);
+    setCurrentViewName(view.name);
+    setViewSnapshot(JSON.stringify(cfg));
+  }, []);
+
+  const handleDeleteView = useCallback(
+    (name: string) => {
+      const updated = savedViews.filter((v) => v.name !== name);
+      persistSavedViews(updated);
+      if (currentViewName === name) {
+        setCurrentViewName(undefined);
+        setViewSnapshot(null);
+      }
+    },
+    [savedViews, persistSavedViews, currentViewName]
+  );
+
+  const handleClearView = useCallback(() => {
+    setCurrentViewName(undefined);
+    setViewSnapshot(null);
+  }, []);
+
+  // ── Column definitions ─────────────────────────────────────────────────────
+  const columns: CrmColumnDef[] = useMemo(
+    () => [
+      {
+        key: 'companyName',
+        label: t('common.name'),
+        sortable: true,
+        filterType: 'text' as const,
+        accessor: (c: Customer) => c.companyName,
+        defaultVisible: true,
+        category: 'system',
+        flex: '1 1 0',
+        render: (c: Customer) => (
+          <div style={{ minWidth: 0 }}>
+            <span
+              className="fw-semibold d-block text-truncate"
+              style={{ fontSize: '0.85rem', color: '#111827' }}
+              title={c.companyName}
+            >
+              {c.companyName}
+            </span>
+            {c.contractValue != null && c.contractValue > 0 && (
+              <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>
+                {formatCurrency(c.contractValue)}
+              </span>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: 'lifecycleStage',
+        label: t('crm.lifecycleStage'),
+        sortable: true,
+        filterType: 'enum' as const,
+        filterOptions: () => stages.map((s) => ({ value: s.id, label: s.name })),
+        accessor: (c: Customer) => c.lifecycleStage,
+        defaultVisible: true,
+        category: 'crm',
+        flex: '0 0 130px',
+        render: (c: Customer) => {
+          const stage = stages.find((s) => s.id === c.lifecycleStage);
+          const stageColor = stage ? stage.color || getColorForPosition(stage.colorPosition) : '#6c757d';
+          const stageTextColor = getContrastTextColor(stageColor);
+          return (
+            <Badge pill bg="" style={{ backgroundColor: stageColor, color: stageTextColor, fontSize: '0.72rem' }}>
+              {stage?.name ?? '-'}
+            </Badge>
+          );
+        },
+      },
+      {
+        key: 'primaryContact',
+        label: t('crm.primaryContact'),
+        sortable: true,
+        filterType: 'text' as const,
+        accessor: (c: Customer) => {
+          const pc = c.contacts?.find((ct) => ct.isPrimary);
+          return pc?.name ?? '';
+        },
+        defaultVisible: true,
+        category: 'crm',
+        flex: '0 0 180px',
+        render: (c: Customer) => {
+          const pc = c.contacts?.find((ct) => ct.isPrimary);
+          return pc ? (
+            <div className="d-flex align-items-center gap-1">
+              <i className="bi bi-star-fill" style={{ color: '#f59e0b', fontSize: '0.6rem', flexShrink: 0 }} />
+              <span className="text-truncate" style={{ fontSize: '0.82rem', color: '#374151' }}>
+                {pc.name}
+                {pc.role && <span style={{ color: '#9ca3af', marginLeft: 3 }}>({pc.role})</span>}
+              </span>
+            </div>
+          ) : (
+            <span style={{ color: '#d1d5db', fontStyle: 'italic', fontSize: '0.8rem' }}>-</span>
+          );
+        },
+      },
+      {
+        key: 'industry',
+        label: t('crm.industry'),
+        sortable: true,
+        filterType: 'enum' as const,
+        filterOptions: () => {
+          const industries = new Set(customers.map((c) => c.industry).filter(Boolean) as string[]);
+          return Array.from(industries)
+            .sort()
+            .map((i) => ({ value: i, label: i }));
+        },
+        accessor: (c: Customer) => c.industry ?? '',
+        defaultVisible: true,
+        category: 'crm',
+        flex: '0 0 130px',
+      },
+      {
+        key: 'territory',
+        label: t('crm.territory'),
+        sortable: true,
+        filterType: 'enum' as const,
+        filterOptions: () => {
+          const territories = new Set(customers.map((c) => c.territory).filter(Boolean) as string[]);
+          return Array.from(territories)
+            .sort()
+            .map((t) => ({ value: t, label: t }));
+        },
+        accessor: (c: Customer) => c.territory ?? '',
+        defaultVisible: true,
+        category: 'crm',
+        flex: '0 0 120px',
+      },
+      {
+        key: 'ownerName',
+        label: t('crm.owner'),
+        sortable: true,
+        filterType: 'enum' as const,
+        filterOptions: () => staff.filter((s) => s.isActive).map((s) => ({ value: s.id, label: s.name || s.email })),
+        accessor: (c: Customer) => c.ownerName ?? '',
+        category: 'crm',
+        flex: '0 0 140px',
+        render: (c: Customer) => {
+          const s = c.ownerId ? staff.find((st) => st.id === c.ownerId) : undefined;
+          return s || c.ownerName ? (
+            <span className="d-inline-flex align-items-center gap-2">
+              <StaffAvatar staff={s} name={!s ? (c.ownerName ?? undefined) : undefined} size={22} />
+              <span className="text-truncate" style={{ fontSize: '0.82rem' }}>
+                {s ? s.name || s.email : c.ownerName}
+              </span>
+            </span>
+          ) : (
+            <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+              -
+            </span>
+          );
+        },
+      },
+      {
+        key: 'companySize',
+        label: t('crm.companySize'),
+        sortable: true,
+        filterType: 'enum' as const,
+        filterOptions: () => {
+          const sizes = new Set(customers.map((c) => c.companySize).filter(Boolean) as string[]);
+          return Array.from(sizes)
+            .sort()
+            .map((s) => ({ value: s, label: s }));
+        },
+        accessor: (c: Customer) => c.companySize ?? '',
+        category: 'crm',
+        flex: '0 0 100px',
+      },
+      {
+        key: 'source',
+        label: t('crm.source'),
+        sortable: true,
+        filterType: 'text' as const,
+        accessor: (c: Customer) => c.source ?? '',
+        category: 'crm',
+        flex: '0 0 110px',
+      },
+      {
+        key: 'contractValue',
+        label: t('crm.contractValue'),
+        sortable: true,
+        filterType: 'number' as const,
+        accessor: (c: Customer) => c.contractValue ?? 0,
+        category: 'crm',
+        flex: '0 0 120px',
+        render: (c: Customer) =>
+          c.contractValue != null && c.contractValue > 0 ? (
+            <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.82rem' }}>
+              {formatCurrency(c.contractValue)}
+            </span>
+          ) : (
+            <span className="text-muted">-</span>
+          ),
+      },
+      {
+        key: 'lastContactDate',
+        label: t('crm.lastContact'),
+        sortable: true,
+        filterType: 'date' as const,
+        accessor: (c: Customer) => c.lastContactDate ?? '',
+        defaultVisible: true,
+        category: 'crm',
+        flex: '0 0 120px',
+      },
+      {
+        key: 'openTicketCount',
+        label: t('crm.openTickets'),
+        sortable: true,
+        filterType: 'number' as const,
+        accessor: (c: Customer) => c.openTicketCount ?? 0,
+        defaultVisible: true,
+        category: 'system',
+        flex: '0 0 80px',
+        render: (c: Customer) =>
+          c.openTicketCount > 0 ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                backgroundColor: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: 6,
+                padding: '1px 6px',
+                fontSize: '0.7rem',
+                color: '#2563eb',
+                fontWeight: 600,
+              }}
+            >
+              {c.openTicketCount}
+            </span>
+          ) : (
+            <span style={{ color: '#d1d5db', fontSize: '0.78rem' }}>-</span>
+          ),
+      },
+      {
+        key: 'flags',
+        label: t('crm.flags'),
+        sortable: false,
+        filterType: 'text' as const,
+        accessor: (c: Customer) => (c.flags ?? []).join(', '),
+        category: 'crm',
+        flex: '0 0 100px',
+        render: (c: Customer) =>
+          (c.flags ?? []).length > 0 ? (
+            <span className="d-flex flex-wrap gap-1">
+              {c.flags.map((f) => (
+                <Badge key={f} bg="warning" text="dark" style={{ fontSize: '0.68rem' }}>
+                  {f}
+                </Badge>
+              ))}
+            </span>
+          ) : null,
+      },
+      {
+        key: 'createdAt',
+        label: t('crm.created'),
+        sortable: true,
+        filterType: 'date' as const,
+        accessor: (c: Customer) => c.createdAt,
+        category: 'system',
+        flex: '0 0 110px',
+        render: (c: Customer) => (
+          <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+            {formatRelativeDate(c.createdAt)}
+          </span>
+        ),
+      },
+      {
+        key: 'website',
+        label: t('crm.website'),
+        sortable: true,
+        filterType: 'text' as const,
+        accessor: (c: Customer) => c.website ?? '',
+        category: 'crm',
+        flex: '0 0 140px',
+      },
+    ],
+    [t, stages, staff, customers]
+  );
+
+  const columnMap = useMemo(() => {
+    const map = new Map<string, CrmColumnDef>();
+    for (const col of columns) map.set(col.key, col);
+    return map;
+  }, [columns]);
+
+  const visibleColumns = useMemo(
+    () => visibleColumnKeys.map((key) => columns.find((c) => c.key === key)).filter(Boolean) as CrmColumnDef[],
+    [columns, visibleColumnKeys]
+  );
 
   // ── Load ──────────────────────────────────────────────────────────────────
   const loadCustomers = useCallback(async () => {
@@ -398,9 +648,11 @@ const CrmMirrorView = (): React.JSX.Element => {
     void loadCustomers();
   }, [loadCustomers, crmRefreshVersion]);
 
-  // ── Filtering ─────────────────────────────────────────────────────────────
+  // ── Filtering ──────────────────────────────────────────────────────────────
   const filteredCustomers = useMemo(() => {
     let result = customers;
+
+    // Quick filter (pills)
     switch (activeFilter) {
       case 'active_tickets':
         result = result.filter((c) => c.openTicketCount > 0);
@@ -416,12 +668,70 @@ const CrmMirrorView = (): React.JSX.Element => {
       default:
         break;
     }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      result = result.filter((c) => c.companyName.toLowerCase().includes(q));
+
+    // Quick dropdown filters
+    if (quickStageFilter.length > 0) {
+      result = result.filter((c) => quickStageFilter.includes(c.lifecycleStage));
     }
+    if (quickTerritoryFilter.length > 0) {
+      result = result.filter((c) => c.territory && quickTerritoryFilter.includes(c.territory));
+    }
+    if (quickOwnerFilter.length > 0) {
+      result = result.filter((c) => c.ownerId && quickOwnerFilter.includes(c.ownerId));
+    }
+    if (quickIndustryFilter.length > 0) {
+      result = result.filter((c) => c.industry && quickIndustryFilter.includes(c.industry));
+    }
+
+    // Text search
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase();
+      result = result.filter(
+        (c) =>
+          c.companyName.toLowerCase().includes(q) ||
+          (c.industry && c.industry.toLowerCase().includes(q)) ||
+          (c.territory && c.territory.toLowerCase().includes(q)) ||
+          (c.ownerName && c.ownerName.toLowerCase().includes(q))
+      );
+    }
+
+    // Per-column filters
+    if (Object.keys(activeFilters).length > 0) {
+      result = result.filter((c) => {
+        for (const [colKey, filter] of Object.entries(activeFilters)) {
+          const colDef = columnMap.get(colKey);
+          if (!colDef) continue;
+          const value = colDef.accessor(c);
+          if (!matchesFilter(value, filter, colDef.filterType)) return false;
+        }
+        return true;
+      });
+    }
+
+    // Sorting (list view only)
+    if (viewMode === 'list') {
+      const sortCol = columnMap.get(sortColumn);
+      if (sortCol) {
+        result = [...result].sort((a, b) => compareValues(sortCol.accessor(a), sortCol.accessor(b), sortDirection));
+      }
+    }
+
     return result;
-  }, [customers, activeFilter, search, stages]);
+  }, [
+    customers,
+    activeFilter,
+    debouncedSearch,
+    stages,
+    quickStageFilter,
+    quickTerritoryFilter,
+    quickOwnerFilter,
+    quickIndustryFilter,
+    activeFilters,
+    columnMap,
+    sortColumn,
+    sortDirection,
+    viewMode,
+  ]);
 
   const filterCounts = useMemo(
     () => ({
@@ -435,7 +745,84 @@ const CrmMirrorView = (): React.JSX.Element => {
     [customers, stages]
   );
 
-  // ── Create customer ───────────────────────────────────────────────────────
+  // ── Quick filter options ──────────────────────────────────────────────────
+  const stageOptions = useMemo(() => stages.map((s) => ({ value: s.id, label: s.name })), [stages]);
+  const territoryOptions = useMemo(() => {
+    const set = new Set(customers.map((c) => c.territory).filter(Boolean) as string[]);
+    return Array.from(set)
+      .sort()
+      .map((t) => ({ value: t, label: t }));
+  }, [customers]);
+  const ownerOptions = useMemo(
+    () => staff.filter((s) => s.isActive).map((s) => ({ value: s.id, label: s.name || s.email })),
+    [staff]
+  );
+  const industryOptions = useMemo(() => {
+    const set = new Set(customers.map((c) => c.industry).filter(Boolean) as string[]);
+    return Array.from(set)
+      .sort()
+      .map((i) => ({ value: i, label: i }));
+  }, [customers]);
+
+  // ── Sort handler ──────────────────────────────────────────────────────────
+  const handleSort = useCallback((column: string, direction: SortDirection) => {
+    setSortColumn(column);
+    setSortDirection(direction);
+  }, []);
+
+  // ── Column filter handlers ────────────────────────────────────────────────
+  const handleApplyFilter = useCallback((colKey: string, filter: FilterEntry) => {
+    setActiveFilters((prev) => ({ ...prev, [colKey]: filter }));
+  }, []);
+
+  const handleClearFilter = useCallback((colKey: string) => {
+    setActiveFilters((prev) => {
+      const next = { ...prev };
+      delete next[colKey];
+      return next;
+    });
+  }, []);
+
+  // ── Column picker ─────────────────────────────────────────────────────────
+  const pickerColumns: PickerColumnDef[] = useMemo(
+    () =>
+      columns.map((col) => ({
+        id: col.key,
+        label: col.label,
+        category: col.category ?? 'crm',
+        visible: visibleColumnKeys.includes(col.key),
+      })),
+    [columns, visibleColumnKeys]
+  );
+
+  const handleColumnsChange = useCallback((updated: PickerColumnDef[]) => {
+    setVisibleColumnKeys(updated.filter((c) => c.visible).map((c) => c.id));
+  }, []);
+
+  // ── View summary (for save modal) ────────────────────────────────────────
+  const viewSummary = useMemo(() => {
+    const filterCount = Object.keys(activeFilters).length;
+    const filterDetails = Object.entries(activeFilters).map(([key, filter]) => {
+      const col = columnMap.get(key);
+      return {
+        label: col?.label ?? key,
+        value:
+          filter.operator === 'in' && Array.isArray(filter.value)
+            ? `${(filter.value as string[]).length} selected`
+            : `${filter.operator}: ${String(filter.value)}`,
+      };
+    });
+    return {
+      scope: t('crm.allCustomers'),
+      columnCount: visibleColumnKeys.length,
+      sortColumn: columnMap.get(sortColumn)?.label ?? sortColumn,
+      sortDirection,
+      filterCount,
+      filterDetails,
+    };
+  }, [activeFilters, visibleColumnKeys, sortColumn, sortDirection, columnMap, t]);
+
+  // ── Create customer ──────────────────────────────────────────────────────
   const defaultCreateStageId = stages.length > 0 ? stages[0].id : undefined;
 
   const handleOpenCreateCustomer = useCallback(() => {
@@ -450,13 +837,13 @@ const CrmMirrorView = (): React.JSX.Element => {
     setShowDetail(true);
   }, []);
 
-  // ── Click handler ─────────────────────────────────────────────────────────
+  // ── Click handler ────────────────────────────────────────────────────────
   const handleCustomerClick = useCallback((customer: Customer) => {
     setDetailCustomerId(customer.id);
     setShowDetail(true);
   }, []);
 
-  // ── Drag handlers ─────────────────────────────────────────────────────────
+  // ── Drag handlers ────────────────────────────────────────────────────────
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       setActiveCustomer(filteredCustomers.find((c) => c.id === event.active.id) ?? null);
@@ -519,7 +906,6 @@ const CrmMirrorView = (): React.JSX.Element => {
       if (overId.startsWith('stage-')) {
         newStageId = overId.replace('stage-', '');
       } else {
-        // Dropped over another customer card
         const overCustomer = customers.find((c) => c.id === overId);
         if (overCustomer) {
           newStageId = overCustomer.lifecycleStage;
@@ -552,7 +938,6 @@ const CrmMirrorView = (): React.JSX.Element => {
 
       const newOrder = calculateNewOrder(destCustomers, insertIndex);
 
-      // If nothing changed in position or stage, skip
       if (customer.lifecycleStage === newStageId && customer.order === newOrder) return;
 
       setCustomers((prev) =>
@@ -566,7 +951,7 @@ const CrmMirrorView = (): React.JSX.Element => {
         await loadCustomers();
       }
     },
-    [customers, numaPut, loadCustomers]
+    [customers, filteredCustomers, numaPut, loadCustomers]
   );
 
   // ── Grouped by stage ──────────────────────────────────────────────────────
@@ -580,6 +965,14 @@ const CrmMirrorView = (): React.JSX.Element => {
     }
     return map;
   }, [filteredCustomers, stages]);
+
+  // ── Active filter count (for toolbar badge) ──────────────────────────────
+  const totalActiveFilterCount =
+    Object.keys(activeFilters).length +
+    quickStageFilter.length +
+    quickTerritoryFilter.length +
+    quickOwnerFilter.length +
+    quickIndustryFilter.length;
 
   // ── Guards ────────────────────────────────────────────────────────────────
   if (loading && customers.length === 0) {
@@ -604,10 +997,10 @@ const CrmMirrorView = (): React.JSX.Element => {
   return (
     <>
       <div className="d-flex flex-column h-100">
-        {/* ── Toolbar ────────────────────────────────────────────────────── */}
+        {/* ── Toolbar ──────────────────────────────────────────────────── */}
         <div
           className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white"
-          style={{ minHeight: 64 }}
+          style={{ minHeight: 48 }}
         >
           <Form.Control
             type="text"
@@ -662,8 +1055,12 @@ const CrmMirrorView = (): React.JSX.Element => {
 
           <div className="flex-grow-1" />
 
-          {/* Header controls (View toggles, Create button) */}
+          {/* Controls */}
           <div className="d-flex align-items-center gap-2">
+            <span className="text-muted" style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+              {filteredCustomers.length} {filteredCustomers.length === 1 ? 'customer' : 'customers'}
+            </span>
+
             <Button variant="primary" size="sm" onClick={handleOpenCreateCustomer}>
               <i className="bi bi-plus me-1" />
               {t('crm.newCustomer')}
@@ -716,7 +1113,97 @@ const CrmMirrorView = (): React.JSX.Element => {
           </div>
         </div>
 
-        {/* ── Board or List content ─────────────────────────────────────── */}
+        {/* ── Filter bar (shared across board + list) ─────────────────── */}
+        <div
+          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom"
+          style={{ backgroundColor: '#fafbfc' }}
+        >
+          <div className="d-flex flex-wrap align-items-center gap-2">
+            <QuickFilterDropdown
+              label={t('crm.allStages')}
+              options={stageOptions}
+              selected={quickStageFilter}
+              onChange={setQuickStageFilter}
+            />
+            <QuickFilterDropdown
+              label={t('crm.allTerritories')}
+              options={territoryOptions}
+              selected={quickTerritoryFilter}
+              onChange={setQuickTerritoryFilter}
+            />
+            <QuickFilterDropdown
+              label={t('crm.allOwners')}
+              options={ownerOptions}
+              selected={quickOwnerFilter}
+              onChange={setQuickOwnerFilter}
+            />
+            <QuickFilterDropdown
+              label={t('crm.allIndustries')}
+              options={industryOptions}
+              selected={quickIndustryFilter}
+              onChange={setQuickIndustryFilter}
+            />
+
+            {totalActiveFilterCount > 0 && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
+                onClick={() => {
+                  setActiveFilters({});
+                  setQuickStageFilter([]);
+                  setQuickTerritoryFilter([]);
+                  setQuickOwnerFilter([]);
+                  setQuickIndustryFilter([]);
+                }}
+              >
+                <i className="bi bi-x-circle" />
+                {t('filters.clearAll')}
+              </button>
+            )}
+          </div>
+
+          <div className="flex-grow-1" />
+
+          <div className="d-flex flex-wrap align-items-center justify-content-end gap-2 ms-auto">
+            <LoadViewDropdown
+              savedViews={savedViews}
+              currentViewName={currentViewName}
+              isModified={isViewModified}
+              onLoad={handleLoadView}
+              onDelete={handleDeleteView}
+              onClear={handleClearView}
+            />
+
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => setShowSaveViewModal(true)}
+              className="d-inline-flex align-items-center gap-1"
+            >
+              <i className="bi bi-bookmark" />
+              {t('filters.saveView')}
+            </Button>
+
+            {viewMode === 'list' && (
+              <button
+                type="button"
+                className="btn btn-sm d-inline-flex align-items-center gap-1"
+                style={{
+                  backgroundColor: '#f8f9fa',
+                  border: '1px solid #dee2e6',
+                  borderRadius: 8,
+                  color: '#495057',
+                }}
+                onClick={() => setShowColumnPicker(true)}
+              >
+                <i className="bi bi-layout-three-columns" />
+                {t('columns.manage')}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Board or List content ────────────────────────────────────── */}
         {error && (
           <div className="px-3">
             <Alert variant="danger" onClose={() => setError(null)} dismissible className="py-2 mb-0">
@@ -726,11 +1213,94 @@ const CrmMirrorView = (): React.JSX.Element => {
         )}
         <div className="flex-grow-1 overflow-auto px-3 pb-3 pt-3">
           {viewMode === 'list' ? (
-            <CustomerListView
-              customers={filteredCustomers}
-              crmConfig={crmConfig}
-              onCustomerClick={handleCustomerClick}
-            />
+            <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden', backgroundColor: '#fff' }}>
+              {/* Header row with FilterDropdown per column */}
+              <div
+                className="d-flex align-items-center px-3 py-2"
+                style={{
+                  backgroundColor: '#f9fafb',
+                  borderBottom: '1px solid #e5e7eb',
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  gap: 8,
+                }}
+              >
+                {visibleColumns.map((col) => (
+                  <div key={col.key} style={{ flex: col.flex ?? '1 1 0', minWidth: 0, paddingRight: 4 }}>
+                    <FilterDropdown
+                      column={col.key}
+                      columnLabel={col.label}
+                      columnType={col.filterType}
+                      options={col.filterOptions?.()}
+                      currentFilter={activeFilters[col.key]}
+                      onApply={(filter) => handleApplyFilter(col.key, filter)}
+                      onClear={() => handleClearFilter(col.key)}
+                      sortable={col.sortable}
+                      currentSortColumn={sortColumn}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Data rows */}
+              {filteredCustomers.length === 0 ? (
+                <div className="text-center py-5">
+                  <i className="bi bi-people fs-1 d-block mb-2" style={{ color: '#d1d5db' }} />
+                  <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>{t('empty.noCustomers')}</span>
+                </div>
+              ) : (
+                filteredCustomers.map((customer) => (
+                  <div
+                    key={customer.id}
+                    className="d-flex align-items-center px-3 py-2"
+                    style={{
+                      borderBottom: '1px solid #f3f4f6',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.1s',
+                      gap: 8,
+                    }}
+                    onClick={() => handleCustomerClick(customer)}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#f9fafb';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') handleCustomerClick(customer);
+                    }}
+                  >
+                    {visibleColumns.map((col) => (
+                      <div
+                        key={col.key}
+                        style={{
+                          flex: col.flex ?? '1 1 0',
+                          minWidth: 0,
+                          paddingRight: 4,
+                          fontSize: '0.82rem',
+                          color: '#374151',
+                        }}
+                      >
+                        {col.render ? (
+                          col.render(customer)
+                        ) : (
+                          <span className="text-truncate d-block" title={String(col.accessor(customer) ?? '')}>
+                            {String(col.accessor(customer) ?? '') || <span className="text-muted">-</span>}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
           ) : filteredCustomers.length === 0 ? (
             <div className="text-center py-5">
               <i className="bi bi-people fs-1 mb-2 d-block" style={{ color: '#d1d5db' }} />
@@ -751,6 +1321,7 @@ const CrmMirrorView = (): React.JSX.Element => {
                     stage={stage}
                     customers={customersByStage.get(stage.id) ?? []}
                     crmConfig={crmConfig}
+                    staff={config?.staff}
                     onCustomerClick={handleCustomerClick}
                   />
                 ))}
@@ -762,7 +1333,8 @@ const CrmMirrorView = (): React.JSX.Element => {
                     <CustomerCard
                       customer={activeCustomer}
                       crmConfig={crmConfig}
-                      onClick={() => {}} // No-op during drag
+                      staff={config?.staff}
+                      onClick={() => {}}
                     />
                   </div>
                 ) : null}
@@ -787,6 +1359,22 @@ const CrmMirrorView = (): React.JSX.Element => {
         onHide={() => setShowCreate(false)}
         onCreated={handleCustomerCreated}
         defaultLifecycleStage={defaultCreateStageId}
+      />
+
+      <ColumnPicker
+        show={showColumnPicker}
+        onHide={() => setShowColumnPicker(false)}
+        columns={pickerColumns}
+        onColumnsChange={handleColumnsChange}
+      />
+
+      <SaveViewModal
+        show={showSaveViewModal}
+        onHide={() => setShowSaveViewModal(false)}
+        onSave={handleSaveView}
+        currentViewName={currentViewName}
+        onUpdate={handleUpdateView}
+        viewSummary={viewSummary}
       />
     </>
   );

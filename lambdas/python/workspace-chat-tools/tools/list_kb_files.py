@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Union
 import structlog
 
 from prm import client as prm_client
-from tools.kb_permissions import verify_kb_access
+from tools.kb_permissions import is_root_kb, verify_kb_access
 
 logger = structlog.get_logger()
 
@@ -34,15 +34,19 @@ SYSTEM_KB_IDS = {"company", "numa-support"}
 MAX_KB_ID_LENGTH = 128
 
 
-def _get_s3_kb_id(kb_id: str) -> str:
+def _get_s3_kb_id(kb_id: str, user_sub: str = "") -> str:
     """
     Get S3-compatible KB ID (prepend 'kb-' for non-company KBs).
 
-    S3 paths use 'documents/company/' for company KB
-    and 'documents/kb-{uuid}/' for user KBs.
+    S3 paths use 'documents/company/' for company KB,
+    'documents/kb-{uuid}/' for user KBs, and
+    'documents/kb-{user_sub}/' for root files.
     """
     if kb_id in SYSTEM_KB_IDS:
         return kb_id
+    # Root KB: kb_id is the user's sub
+    if user_sub and is_root_kb(kb_id, user_sub):
+        return f"kb-{kb_id}"
     if kb_id.startswith("kb-"):
         return kb_id
     return f"kb-{kb_id}"
@@ -74,9 +78,9 @@ def _validate_kb_id(kb_id: Any, field_name: str = "kb_id") -> str:
     return normalized
 
 
-def _get_s3_prefix(kb_id: str) -> str:
+def _get_s3_prefix(kb_id: str, user_sub: str = "") -> str:
     """Get S3 prefix for a knowledge base."""
-    s3_kb_id = _get_s3_kb_id(kb_id)
+    s3_kb_id = _get_s3_kb_id(kb_id, user_sub)
     return f"documents/{s3_kb_id}/"
 
 
@@ -275,7 +279,7 @@ def handle_list_kb_files(params: Dict[str, Any]) -> Dict[str, Any]:
                 continue
 
             # Get S3 prefix and list top-level contents
-            prefix = _get_s3_prefix(kb_id)
+            prefix = _get_s3_prefix(kb_id, user_sub)
             listing = _list_top_level(DATA_BUCKET_NAME, prefix)
 
             if "error" in listing:

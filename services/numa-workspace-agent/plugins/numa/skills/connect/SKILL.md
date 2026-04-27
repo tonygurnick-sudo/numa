@@ -1,11 +1,11 @@
 ---
 name: connect
-description: Find files beyond the workspace — check My Files / Company Files via numa_tool files, and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d) via the connectors tool. Use when a user asks about files not in /workdir/
+description: Find files beyond the workspace — check knowledge bases (My Files / Company Files) via numa_tool knowledge_base, and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d) via the connectors tool. Use when a user asks about files not in /workdir/
 ---
 
 # Connect Skill
 
-Access files from external sources using the **connectors** MCP tool (OAuth cloud storage, Synergy 12d, generic HTTP) and the **files** operation in **numa_tool** (My Files / Company Files from the S3 data bucket).
+Access files from external sources using the **connectors** MCP tool (OAuth cloud storage, Synergy 12d, generic HTTP). For My Files / Company Files use the **knowledge_base** operation in **numa_tool** — see the `knowledge-base` skill for the full reference.
 
 ## When to Use
 
@@ -17,51 +17,11 @@ Use these tools when:
 
 **Strategy — check in this order:**
 
-1. **My Files / Company Files first** (always connected, fast) — use `numa_tool` with `name="files"`
-2. **Connected drives** — use `connectors` tool, only if files doesn't have what you need
+1. **My Files / Company Files first** (always connected, fast) — use `numa_tool` with `name="knowledge_base"` (see the `knowledge-base` skill)
+2. **Connected drives** — use `connectors` tool, only if the knowledge bases don't have what you need
 3. **Skip disconnected connectors** — don't waste tool calls; tell the user where to connect instead
 
 Always call `connectors` with `name="status"` first to see what external connectors are available.
-
----
-
-## My Files / Company Files (numa_tool → files)
-
-Use `numa_tool` with `name="files"` to browse the S3 data bucket.
-
-### List files
-
-```
-numa_tool(name="files", params={operation: "list"})                           # Root — shows My Files and Company Files
-numa_tool(name="files", params={operation: "list", folder_id: "files:my"})    # My Files
-numa_tool(name="files", params={operation: "list", folder_id: "files:company"})  # Company Files
-numa_tool(name="files", params={operation: "list", folder_id: "files:my/Reports"})  # Subfolder
-```
-
-### Search files
-
-```
-numa_tool(name="files", params={operation: "search", query: "quarterly report"})
-numa_tool(name="files", params={operation: "search", query: "budget", folder_id: "files:company"})
-```
-
-### Download files
-
-```
-numa_tool(name="files", params={operation: "download", file_id: "files/company/report.pdf"})
-```
-
-Files are saved to `/workdir/uploads/files/` and can then be read, analyzed, or processed.
-
-### Folder ID Reference
-
-| Level             | folder_id            | S3 prefix                        |
-| ----------------- | -------------------- | -------------------------------- |
-| Root              | _(omit)_             | Returns: My Files, Company Files |
-| My files          | `files:my`           | `files/user/{user_sub}/`         |
-| My subfolder      | `files:my/path`      | `files/user/{user_sub}/path/`    |
-| Company files     | `files:company`      | `files/company/`                 |
-| Company subfolder | `files:company/path` | `files/company/path/`            |
 
 ---
 

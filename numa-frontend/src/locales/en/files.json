@@ -6,35 +6,7 @@
     "company": "Company",
     "myFiles": "My Files",
     "shared": "Shared",
-    "remote": "Remote",
-    "transcripts": "Transcripts",
-    "uploads": "Uploads"
-  },
-  "transcripts": {
-    "empty": "No transcripts yet",
-    "emptyMessage": "Completed transcriptions will appear here",
-    "viewOutput": "View transcript",
-    "loadMore": "Load more",
-    "headers": {
-      "format": "Format"
-    },
-    "viewer": {
-      "title": "Transcript",
-      "page": "Page {{num}}",
-      "noContent": "No content available",
-      "metadata": {
-        "fileName": "Source file",
-        "fileSize": "File size",
-        "format": "Format",
-        "transcribed": "Transcribed"
-      }
-    },
-    "errors": {
-      "loadOutputFailed": "Failed to load transcript content"
-    },
-    "rebuild": "Rebuild from S3",
-    "rebuilding": "Rebuilding...",
-    "rebuildResult": "Created: {{created}}, Skipped: {{skipped}}, Failed: {{failed}}"
+    "remote": "Remote"
   },
   "remote": {
     "rootLabel": "Remote",
@@ -86,16 +58,6 @@
     "gridView": "Folder view",
     "galleryView": "Gallery view"
   },
-  "uploads": {
-    "ignoreList": "Ignore List",
-    "ignoreModal": {
-      "title": "Ignored File Patterns",
-      "description": "Files matching these patterns are hidden everywhere and skipped during upload.",
-      "placeholder": "e.g. *.log or .env",
-      "add": "Add",
-      "remove": "Remove"
-    }
-  },
   "dropZone": {
     "message": "Drop files to upload"
   },
@@ -140,54 +102,6 @@
     "more": "More actions",
     "addToKB": "Add to Knowledge Base",
     "remoteNotAvailable": "Not available for remote files"
-  },
-  "selectionToolbar": {
-    "selected": "{{count}} selected",
-    "clearSelection": "Clear selection"
-  },
-  "summarizePanel": {
-    "title": "Summary",
-    "generating": "Generating summary...",
-    "generatingDetail": "This may take a moment for larger documents.",
-    "error": "Failed to generate summary",
-    "retry": "Try again",
-    "close": "Close"
-  },
-  "fileInfoPanel": {
-    "title": "File information",
-    "name": "Name",
-    "size": "Size",
-    "modified": "Last modified",
-    "path": "Location",
-    "type": "Type",
-    "source": "Source",
-    "close": "Close"
-  },
-  "addToKBModal": {
-    "title": "Add to Knowledge Base",
-    "subtitle": "Select a knowledge base and destination folder",
-    "companyKB": "Company Knowledge Base",
-    "sharedBadge": "Shared",
-    "rootFolder": "Root (top level)",
-    "loadingKBs": "Loading knowledge bases...",
-    "loadingFolders": "Loading folders...",
-    "noKBs": "No knowledge bases available. You need Editor or Owner access to add files.",
-    "addButton": "Add to KB",
-    "adding": "Adding...",
-    "progress": "{{completed}} of {{total}} files copied",
-    "success": "Added to knowledge base successfully",
-    "error": "Failed to add to knowledge base",
-    "multipleItems": "{{count}} items"
-  },
-  "moveModal": {
-    "title": "Move to",
-    "destination": "Select destination folder",
-    "move": "Move here",
-    "cancel": "Cancel",
-    "loading": "Loading folders...",
-    "root": "Root",
-    "success": "Moved successfully",
-    "error": "Failed to move: {{error}}"
   },
   "projects": {
     "create": "New Project",
@@ -263,7 +177,13 @@
     "openShare": "Open Share",
     "defaultPrompt": "You are a helpful assistant that answers questions about the shared document. Be concise and accurate. If the answer is not in the document, say so.",
     "noFiles": "No files available",
+    "noFolderContents": "This folder is empty",
+    "loadingFiles": "Loading files...",
     "uploadFirst": "Upload a file to share it",
+    "browseRoot": "Browse",
+    "browseUp": "Up",
+    "or": "or",
+    "myFilesRoot": "My Files (root)",
     "extractionNotice": "Document content will be extracted for AI chat. This may take a moment for PDFs and other complex documents.",
     "extractionUnsupported": "This file type is not supported for AI chat. Only viewing and downloading will be available.",
     "unsupportedFileTypes": "Supported formats for AI chat: PDFs, Word documents (.docx), Excel files (.xlsx), images (.jpg, .png), text files (.txt, .md, .csv), audio/video files (.mp3, .mp4, .wav), and Outlook emails (.msg).",

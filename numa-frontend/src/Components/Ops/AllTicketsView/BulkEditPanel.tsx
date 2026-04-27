@@ -174,7 +174,7 @@ export function BulkEditPanel({
               <option value="">{t('fields.unassigned')}</option>
               {staff.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {s.name || s.email}
                 </option>
               ))}
             </Form.Select>

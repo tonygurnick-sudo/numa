@@ -88,9 +88,12 @@ Search a window of +/- 1 hour around the reported time to account for imprecise 
 ### Useful Filter Patterns
 
 ```bash
-# Set time window (epoch ms)
-START_TIME=$(($(date -u -j -f "%Y-%m-%dT%H:%M:%S" "{start-utc}" +%s) * 1000))
-END_TIME=$(($(date -u -j -f "%Y-%m-%dT%H:%M:%S" "{end-utc}" +%s) * 1000))
+# Set time window (epoch ms) -- ALWAYS use python3 for date->epoch conversion.
+# macOS `date -j -f` is unreliable and silently produces wrong values.
+START_TIME=$(python3 -c "from datetime import datetime,timezone; print(int(datetime(2026,4,24,0,0,tzinfo=timezone.utc).timestamp()*1000))")
+END_TIME=$(python3 -c "from datetime import datetime,timezone; print(int(datetime(2026,4,25,0,0,tzinfo=timezone.utc).timestamp()*1000))")
+# Or if you already have an epoch ms value (e.g. from DynamoDB), use it directly:
+# START_TIME=1776950000000
 
 # Filter by user sub
 AWS_PROFILE={client} aws logs filter-log-events \

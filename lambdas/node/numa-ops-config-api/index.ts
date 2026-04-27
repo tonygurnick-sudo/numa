@@ -691,7 +691,7 @@ const handleStaffSync = async (
     // Prefer user-profile name over Cognito name (users set their display name
     // in the profile settings — it's more accurate than the Cognito attribute).
     // Returns null when no real name is available — frontend displays email.
-    const enrichedName = profile?.name?.trim() || cu.name || null;
+    const enrichedName = profile?.name?.trim() || cu.name || cu.email?.split('@')[0] || null;
 
     // Map jobTitle from user profile → role field on staff record
     const enrichedRole = profile?.jobTitle?.trim() || undefined;

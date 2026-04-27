@@ -236,7 +236,6 @@ class TestCheckOperationAllowed:
                     "query_knowledge_base",
                     "create_agent_tool",
                     "memories_tool",
-                    "files_tool",
                 ]
             ),
         )

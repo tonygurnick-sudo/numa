@@ -322,6 +322,7 @@
     "authError": "Authentication Error",
     "disabledByAdmin": "Disabled by your administrator",
     "reconnectRequired": "Reconnect Required",
+    "connectionExpired": "Connection expired — please reconnect",
     "connectedSince": "Since {{date}}",
     "accountInactive": "Account inactive"
   },
@@ -331,6 +332,7 @@
     "pleaseWait": "Please wait...",
     "disconnecting": "Disconnecting...",
     "disconnect": "Disconnect",
+    "reconnect": "Reconnect",
     "connect": "Connect",
     "connecting": "Connecting...",
     "refresh": "Refresh",

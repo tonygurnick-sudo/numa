@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { listMyShares, getShareAnalytics } from '../Services/sharedChatService';
 import type { ShareListItem, ShareAnalytics } from '../Services/sharedChatService';
+import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 export interface ShareAnalyticsSummary {
   /** All shares owned by the user */
@@ -30,8 +31,12 @@ export interface UseShareAnalyticsReturn {
  * Hook for loading shared link analytics from the backend API.
  * Fetches data from listMyShares and getShareAnalytics endpoints.
  */
+const SWR_CACHE_KEY = 'shareAnalytics';
+
 export function useShareAnalytics(): UseShareAnalyticsReturn {
-  const [summary, setSummary] = useState<ShareAnalyticsSummary | null>(null);
+  const [summary, setSummary] = useState<ShareAnalyticsSummary | null>(() =>
+    getSwrCache<ShareAnalyticsSummary>(SWR_CACHE_KEY)
+  );
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,13 +60,15 @@ export function useShareAnalytics(): UseShareAnalyticsReturn {
         return true;
       }).length;
 
-      setSummary((prev) => ({
+      const newSummary: ShareAnalyticsSummary = {
         shares,
         totalMessages,
         totalViews,
         activeShareCount,
-        shareDetails: prev?.shareDetails ?? {},
-      }));
+        shareDetails: summary?.shareDetails ?? {},
+      };
+      setSummary(newSummary);
+      setSwrCache(SWR_CACHE_KEY, newSummary, 500_000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load shares');
     } finally {

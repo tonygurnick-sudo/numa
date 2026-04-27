@@ -149,6 +149,11 @@ export class SharedChatConstruct extends Construct {
                 actions: ['s3:GetObject', 's3:PutObject'],
                 resources: [`${props.dataBucketArn}/shared/*`],
               },
+              {
+                effect: 'Allow' as const,
+                actions: ['s3:GetObject', 's3:PutObject'],
+                resources: [`${props.dataBucketArn}/documents/kb-*`],
+              },
             ]
           : []),
         // Bedrock KB retrieval (only when KB is configured)

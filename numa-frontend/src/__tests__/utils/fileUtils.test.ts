@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, test, expect } from 'vitest';
-import { getContentType, isFileTypeValidForBedrockKB, getBedrockKBSupportedExtensions } from '../../utils/fileUtils';
+import { getContentType, getBedrockKBSupportedExtensions } from '../../utils/fileUtils';
 
 describe('getContentType', () => {
   test('should return correct MIME type for PDF', () => {
@@ -38,44 +38,6 @@ describe('getContentType', () => {
   test('should handle null or undefined filenames', () => {
     expect(getContentType(null)).toBe('application/octet-stream');
     expect(getContentType(undefined)).toBe('application/octet-stream');
-  });
-});
-
-describe('isFileTypeValidForBedrockKB', () => {
-  test('should return true for valid file types', () => {
-    const pdfFile = { name: 'document.pdf', type: 'application/pdf' };
-    const docxFile = {
-      name: 'document.docx',
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    };
-    const txtFile = { name: 'document.txt', type: 'text/plain' };
-
-    expect(isFileTypeValidForBedrockKB(pdfFile)).toBe(true);
-    expect(isFileTypeValidForBedrockKB(docxFile)).toBe(true);
-    expect(isFileTypeValidForBedrockKB(txtFile)).toBe(true);
-  });
-
-  test('should return false for invalid file types', () => {
-    const imageFile = { name: 'image.jpg', type: 'image/jpeg' };
-    const zipFile = { name: 'archive.zip', type: 'application/zip' };
-
-    expect(isFileTypeValidForBedrockKB(imageFile)).toBe(false);
-    expect(isFileTypeValidForBedrockKB(zipFile)).toBe(false);
-  });
-
-  test('should handle files with no MIME type by checking extension', () => {
-    const pdfFileNoMime = { name: 'document.pdf', type: '' };
-    const docxFileNoMime = { name: 'document.docx', type: '' };
-    const invalidFileNoMime = { name: 'image.jpg', type: '' };
-
-    expect(isFileTypeValidForBedrockKB(pdfFileNoMime)).toBe(true);
-    expect(isFileTypeValidForBedrockKB(docxFileNoMime)).toBe(true);
-    expect(isFileTypeValidForBedrockKB(invalidFileNoMime)).toBe(false);
-  });
-
-  test('should handle null or undefined files', () => {
-    expect(isFileTypeValidForBedrockKB(null)).toBe(false);
-    expect(isFileTypeValidForBedrockKB(undefined)).toBe(false);
   });
 });
 

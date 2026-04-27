@@ -232,7 +232,6 @@ async function streamWorkspaceChatAttempt(
     connectedDataConnectors: request.connectedDataConnectors,
     // Feature flags for conditional tool registration in the workspace agent
     featureFlags: {
-      NUMA_FILES: sessionStorage.getItem('NUMA_FILES') === 'true',
       OAUTH_INTEGRATIONS_ENABLED: sessionStorage.getItem('OAUTH_AVAILABLE') === 'true',
       SECRETS_VAULT_ENABLED: sessionStorage.getItem('SECRETS_VAULT_ENABLED') === 'true',
       // Data connectors toggle — when false, the connectors MCP server is NOT registered
@@ -997,7 +996,6 @@ export async function invokeWorkspaceAgentSync(
     availableIntegrations: request.availableIntegrations,
     connectedDataConnectors: request.connectedDataConnectors,
     featureFlags: {
-      NUMA_FILES: sessionStorage.getItem('NUMA_FILES') === 'true',
       OAUTH_INTEGRATIONS_ENABLED: sessionStorage.getItem('OAUTH_AVAILABLE') === 'true',
       SECRETS_VAULT_ENABLED: sessionStorage.getItem('SECRETS_VAULT_ENABLED') === 'true',
       // Data connectors toggle — when false, the connectors MCP server is NOT registered

@@ -74,20 +74,26 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     currentUserSub && (team?.createdBy === currentUserSub || team?.accessControl?.owners?.includes(currentUserSub))
   );
 
-  // ── Sync state from team data when modal opens ──────────────────────────
-  // Only sync on the show=false->true transition. Previously this depended on
-  // existingZones/existingStages which are new array refs every render, causing
-  // the effect to re-fire and reset all local edits (breaking stage reorder, etc.)
+  // ── Sync state from team data when modal opens or team changes ──────────
+  // Only initialize once per modal-open cycle so local edits are not clobbered
+  // by fresh array refs, but re-initialize if the selected team changes while
+  // the modal stays open or if team data arrives after the modal is opened.
   const initializedRef = useRef(false);
   const initialZoneIdsRef = useRef<Set<string>>(new Set());
+  const prevTeamIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!show) {
       initializedRef.current = false;
       initialZoneIdsRef.current = new Set();
+      prevTeamIdRef.current = null;
       return;
     }
-    if (show && !initializedRef.current && team && existingZones.length > 0) {
+
+    const teamChanged = team && team.id !== prevTeamIdRef.current;
+    const shouldInitialize = Boolean(team && existingZones.length > 0 && (!initializedRef.current || teamChanged));
+
+    if (shouldInitialize && team) {
       setName(team.name);
       setColor(team.color);
       setWorkUnitSeries(team.workUnitSeries ?? null);
@@ -109,6 +115,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
 
       initialZoneIdsRef.current = new Set(existingZones.filter((z) => z.id).map((z) => z.id!));
       initializedRef.current = true;
+      prevTeamIdRef.current = team.id;
     }
   }, [show, team, existingZones, existingStages, config.ticketTypes]);
 

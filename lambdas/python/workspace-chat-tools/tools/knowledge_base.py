@@ -32,7 +32,7 @@ from urllib.parse import urlparse
 import structlog
 
 from prm import client as prm_client
-from tools.kb_permissions import _get_dynamodb_client, verify_kb_access
+from tools.kb_permissions import _get_dynamodb_client, is_root_kb, verify_kb_access
 
 from .approval import check_approval, create_approval_request, poll_approval
 
@@ -691,6 +691,10 @@ def verify_kb_write_access(user_sub: str, kb_id: str) -> bool:
     if kb_id == "company":
         return is_user_admin(user_sub)
 
+    # Root KB: user is always the owner of their own root files
+    if is_root_kb(kb_id, user_sub):
+        return True
+
     # For user KBs, check if user is editor or creator
     table_name = f"numa-{CLIENT_NAME}-knowledge-bases"
     dynamodb = _get_dynamodb_client()
@@ -1281,21 +1285,22 @@ def _get_s3_kb_id(kb_id: str) -> str:
     """
     Get S3-compatible KB ID (prepend 'kb-' for non-company KBs).
 
-    S3 paths use 'documents/company/' for company KB
-    and 'documents/kb-{uuid}/' for user KBs.
+    S3 paths use 'documents/company/' for company KB,
+    'documents/kb-{uuid}/' for user KBs, and
+    'documents/kb-{user_sub}/' for root files (kb_id == user_sub).
 
     Args:
-        kb_id: KB ID (plain UUID or 'company')
+        kb_id: KB ID (plain UUID, 'company', or user_sub for root files)
 
     Returns:
-        S3-compatible KB ID with 'kb-' prefix for user KBs
+        S3-compatible KB ID with 'kb-' prefix for user/root KBs
     """
     if kb_id in SYSTEM_KB_IDS:
         return kb_id
     # If already has prefix, return as-is
     if kb_id.startswith("kb-"):
         return kb_id
-    # Prepend kb- for user KBs
+    # Prepend kb- for user KBs and root KBs (user_sub)
     return f"kb-{kb_id}"
 
 
@@ -1711,7 +1716,7 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
 
     if mode == "download":
         # Download mode - supports either URI or file+kb_id
-        uri = params.get("uri")
+        uri = params.get("uri") or params.get("s3_uri")
         filename = params.get("file")
         kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
 

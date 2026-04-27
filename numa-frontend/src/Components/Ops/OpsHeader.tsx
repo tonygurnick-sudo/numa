@@ -276,9 +276,10 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
       <BoardSettingsModal
         show={showBoardSettings}
         onHide={() => setShowBoardSettings(false)}
-        onSaved={() => {
+        onSaved={async () => {
           setShowBoardSettings(false);
-          refreshTeam();
+          await refreshTeam();
+          refreshTeams();
         }}
       />
       <GlobalSettingsModal

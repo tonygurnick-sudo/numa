@@ -300,9 +300,14 @@
       "addedBy": "Added By",
       "status": "Status",
       "uploadDate": "Upload Date",
+      "modified": "Modified",
+      "type": "Type",
+      "typeFolder": "Folder",
       "size": "Size",
       "select": "Select",
-      "selectShort": "Sel"
+      "selectShort": "Sel",
+      "items_one": "{{count}} item",
+      "items_other": "{{count}} items"
     },
     "badges": {
       "empty": "Empty"

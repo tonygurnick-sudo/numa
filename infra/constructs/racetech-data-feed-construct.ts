@@ -194,8 +194,9 @@ export class RacetechDataFeedConstruct extends ApiGatewayLambdaCollection {
 
     // Trigger on .zip uploads to the racetech-data prefix only.
     // Loop-safe: extracted .sqlite files don't match the .zip suffix filter.
-    // Note: racetech has numaFiles=false so no existing S3BucketNotification
-    // on this bucket — safe to create one here without conflict.
+    // S3 allows only one notification configuration per bucket; if any other
+    // construct ever needs notifications on the data bucket, consolidate them
+    // into a single S3BucketNotification rather than creating a second one.
     new S3BucketNotification(this, 'racetech-data-bucket-notification', {
       bucket: props.dataBucketName,
       dependsOn: [unzipS3Permission],
