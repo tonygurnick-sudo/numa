@@ -59,8 +59,10 @@ default:
 # Without this, docs-only MRs (e.g. changes under services/**/*.md) fail with
 # "Pipeline creation failed" because every other job is gated on changes: to
 # source paths, and GitLab refuses to create an empty pipeline.
+# Stage must be a regular stage (not .pre/.post) — pipelines composed solely
+# of .pre/.post jobs fail to create.
 mr-sanity:
-  stage: .pre
+  stage: check
   image: alpine:latest
   script:
     - echo "MR pipeline non-empty guard."
