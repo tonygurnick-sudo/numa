@@ -162,7 +162,7 @@ function DroppableColumn({
         </span>
       </div>
 
-      <div ref={setNodeRef}>
+      <div ref={setNodeRef} className="kanban-column-body">
         <SortableContext items={customers.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {customers.length === 0 && (
             <div className="text-center py-4">
