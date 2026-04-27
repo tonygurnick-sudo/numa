@@ -415,9 +415,9 @@ Use this skill when the user:
 - Wants to "copy/duplicate an agent"
 - Asks about "my saved agents" or "company agents"
 
-### Trigger Phrases for Interactive Creation
+### Creation Trigger Phrases
 
-When you hear any of these phrases, **start the Interactive Agent Creation Process** (see Common Workflows section):
+When you hear any of these phrases, start one of the two creation flows:
 
 - "Help me create an agent"
 - "I want to build an agent"
@@ -425,10 +425,19 @@ When you hear any of these phrases, **start the Interactive Agent Creation Proce
 - "Make me an agent that..."
 - "I need an agent to..."
 - "Can you make an agent..."
+- "Save this as an agent"
+- "Turn this into an agent"
 - "Let's create an agent"
 - "Build me a bot that..."
 
-**Important:** For these creation requests, always start with Step 1 (Use Case Discovery) rather than immediately asking for technical parameters. The interactive process helps users who don't know exactly what parameters they need.
+**Pick the right path — this is the single most important decision for creation:**
+
+- **Context-Aware Path (DEFAULT when there is any prior conversation).** If the current conversation already contains a substantive exchange — the user asked for something, Numa did it, there's a repeatable task, or files exist in `/workdir/` — mine the transcript and pre-fill a full draft. Do NOT restart with open discovery questions. Skip to the draft and only ask about the gaps you cannot infer (visibility, approval modes, time saved, reference files to attach).
+- **Discovery Path (cold start only).** Only when the conversation has no meaningful prior context — the user's very first message is "create an agent" with nothing before it — run the full 7-step Interactive Agent Creation Process.
+
+**Quick heuristic:** If you can already answer _"what would this agent do?"_ from what's been said or produced in this conversation, use the Context-Aware Path. If you'd have to ask "what should it help with?" to find out, use the Discovery Path.
+
+When in doubt, default to Context-Aware — users asking mid-chat almost always mean "save what we've been doing".
 
 ## When NOT to Use
 
@@ -440,9 +449,106 @@ When you hear any of these phrases, **start the Interactive Agent Creation Proce
 
 ## Common Workflows
 
-### Interactive Agent Creation Process
+### Context-Aware Creation (DEFAULT — use this mid-chat)
 
-When a user wants to create an agent, follow this structured conversation flow. **NEVER skip directly to creating an agent - always gather requirements first.**
+Use this path whenever the user asks to create an agent and the conversation already contains the raw material to do it. This is the common case — the user has been working on something and now wants it saved as a reusable agent. Do not restart from scratch.
+
+#### Step 1: Mine the conversation
+
+Before asking anything, read the transcript and extract:
+
+- **The recurring task.** What did the user ask for? What did Numa produce? State it in one sentence.
+- **The approach / style.** How did Numa structure the answer? Output format (bullets, tables, sections), tone, length, constraints, any steps Numa took that worked well. The system prompt needs to capture not just _what_ the agent does but _how_ it does it.
+- **Inputs.** What kind of input does the task take (a CSV, a CV, a meeting transcript, a free-text brief)? How should the agent ask for it if the user doesn't provide it?
+- **Outputs / artifacts.** What did Numa deliver? Files, inline tables, a summary? The agent should reproduce this.
+- **Tools used.** Which tools did Numa actually use in the conversation (web search, a specific KB, a specific integration, code execution)? These become the agent's `toolsConfig`.
+- **Reference files.** Anything under `/workdir/uploads/`, `/workdir/outputs/`, or `/workdir/chat-workflows/` that the task depends on is a candidate for `attach_files`. Prefer source material (templates, policies, guidelines) over one-off outputs.
+
+#### Step 2: Draft everything you can infer
+
+Pre-fill as much of the draft as the conversation supports:
+
+- `title` — short, descriptive, reflects the task (e.g. "Weekly Sales Summary Agent", "CV Screening Agent")
+- `description` — one line
+- `systemPrompt` — written from the conversation. Include the task, the input shape, the output format, the style/tone observed, and any constraints the user applied. Do not copy-paste the transcript; distil it into reusable instructions. If helpful, include a short "How to respond" block that mirrors what worked in the conversation.
+- `toolsConfig` — set `webSearchEnabled`, `allowedKnowledgeBases`, `enabledConnections` to match what was actually used. Default `approvalModes` to the recommended set (see Step 3 of the Discovery Path).
+- `attach_files` — list any obvious reference files from the conversation
+
+#### Step 3: Ask ONLY about gaps
+
+Present the pre-filled draft, then ask for the handful of things you genuinely cannot infer. Keep this short:
+
+- **Visibility:** personal or public? (required)
+- **Approval modes:** "Default to Writes-only for integrations, Auto-approve for everything else — want to adjust?" (required, but one-line)
+- **Time saved estimate:** "Roughly how many minutes does this save per use?" (required)
+- **Reference files:** Only ask if you spotted candidates — "I saw `brand-guidelines.pdf` in the workspace. Attach it as a reference file?"
+
+Do **NOT** ask "what would you like this agent to help you with?" — you already know.
+
+#### Step 4: Present the draft
+
+Use the same draft layout as the Discovery Path (see Step 6 there). Lead with: _"Based on what we've been working on, here's a draft — let me know if you want changes, or say 'create it' to proceed."_
+
+#### Step 5: Confirm and create
+
+Wait for explicit approval. On confirmation, call the `create` operation with the full payload (see Create Operation section for the exact parameter shape).
+
+#### Example — Context-Aware creation
+
+```
+[Prior conversation: user uploaded sales.csv and asked Numa to summarise top-5 customers
+ by revenue for Q3, with YoY comparison and a short narrative. Numa produced a tidy
+ markdown summary with a table and 3 bullet trends.]
+
+User: Save this as an agent.
+
+Numa: Here's a draft based on what we've been doing:
+
+      ## Agent Draft
+
+      **Title:** Quarterly Sales Summary Agent
+      **Description:** Summarises top customers by revenue from a sales CSV with YoY
+                       comparison and trend commentary.
+      **Visibility:** (need your input — personal or public?)
+
+      **System Prompt:**
+      > You help produce quarterly sales summaries from a CSV of sales data.
+      > When the user provides a sales CSV:
+      > 1. Identify the top 5 customers by revenue for the requested quarter.
+      > 2. Calculate YoY change vs. the same quarter last year where data allows.
+      > 3. Return a markdown summary with: a table of the top 5 (customer, revenue,
+      >    YoY %), followed by 3 short bullet trends (growth, risk, standouts).
+      > 4. Keep commentary factual and concise — no speculation beyond the data.
+      > If the CSV is missing required columns (customer, revenue, date), ask the
+      > user to clarify before proceeding.
+
+      **Tools Configuration:**
+      - Web Search: disabled
+      - Knowledge Bases: none
+      - Integrations: none
+
+      **Approval Modes:** defaults (Writes-only for integrations, Auto-approve otherwise)
+
+      **Reference Files:** none detected — attach a template if you have one.
+
+      Two things I need from you:
+      1. Personal or public?
+      2. Roughly how many minutes does this save per use?
+
+User: Personal, probably 20 minutes.
+
+Numa: Great. Ready to create?
+
+User: Yes.
+
+Numa: [executes create call]
+```
+
+---
+
+### Interactive Agent Creation Process (cold start only)
+
+Use this path **only when there is no useful conversation context** — the user's first message of the conversation is "create an agent" and there is nothing to mine. Follow this structured flow and gather requirements one step at a time. **NEVER skip directly to creating an agent - always gather requirements first.**
 
 #### Step 1: Use Case Discovery (Open-ended)
 
@@ -709,35 +815,6 @@ Numa: [Executes create call and confirms success]
 ```
 
 ---
-
-### Create an agent from conversation context
-
-If the user has been working on a task and wants to save it as a reusable agent based on what you've discussed:
-
-1. Summarize what you've learned about their needs from the conversation
-2. **Still follow Steps 2-7** of the interactive process above
-3. Pre-fill the draft based on conversation context, but still get confirmation
-
-```python
-mcp__numa__numa_tool(name="agents", description="Create weekly report helper agent", params={
-    "operation": "create",
-    "title": "Weekly Report Helper",
-    "systemPrompt": "Based on our conversation, here are the instructions...",
-    "description": "Helps create weekly status reports",
-    "toolsConfig": {
-        "webSearchEnabled": false,
-        "allowedKnowledgeBases": null,
-        "enabledConnections": [],
-        "approvalModes": {
-            "integrations": "non_destructive",
-            "agents": "never",
-            "memories": "never",
-            "knowledgeBases": "never",
-            "ops": "never"
-        }
-    }
-})
-```
 
 ### Find and use an agent
 

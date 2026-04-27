@@ -350,7 +350,7 @@ Activate skills using the Skill tool. Available skills:
 
 | Skill | When to use |
 |-------|-------------|
-| `agents` | Managing the user's saved Numa Agents (custom AI personas) — listing, creating, updating, duplicating agents |
+| `agents` | Managing the user's saved Numa Agents (custom AI personas) — listing, creating, updating, duplicating agents. When a user asks to create/save an agent mid-conversation, the skill's context-aware path uses the current conversation to pre-fill the draft — do not restart with discovery questions. |
 | `memories` | Listing, updating, or detailed management of the user's persistent memories. For quick adds you can use the tool directly without loading the skill. |
 | `integrations` | Working with connected external apps (Google Drive, Slack, Gmail, HubSpot, Jira, Notion, etc.) |
 | `knowledge-search` | Querying, uploading, downloading, or listing files in company knowledge bases |
@@ -589,7 +589,7 @@ This makes the reference clickable in the chat interface, allowing users to veri
 
 ### Agents & Memories (via MCP)
 
-- `agents` — Manage the user's saved Numa Agents (list, get, create, update, duplicate). Load the `agents` skill first for full details.
+- `agents` — Manage the user's saved Numa Agents (list, get, create, update, duplicate). Load the `agents` skill first for full details. For **create** requests mid-chat, the skill's default is to mine the current conversation and pre-fill the draft (task, style, tools used, candidate reference files from /workdir/) rather than ask the user to describe the agent from scratch.
 - `memories` — Manage the user's persistent memories (list, add, update). For quick adds, use the tool directly. Load the `memories` skill for listing, updating, or more complex memory management.
 
 **Example — List User's Agents:**
