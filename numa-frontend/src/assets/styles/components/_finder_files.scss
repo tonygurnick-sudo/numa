@@ -475,6 +475,16 @@
     font-size: 0.8125rem;
   }
 
+  .finder-search-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.75rem;
+    border-bottom: 1px solid var(--finder-border, #e4e4e7);
+  }
+
   // ── Grid template for columns ────────────────────────────────
   // 6 columns: Name | Type | Added by | Modified | Size | Actions
   // Breakpoints mirror the Bootstrap d-*-flex visibility classes on the headers:
@@ -501,6 +511,85 @@
   @media (max-width: 575.98px) {
     .finder-grid-6 {
       grid-template-columns: 1fr 70px 60px;
+    }
+  }
+
+  // ── Grid template for Chat Artifacts ─────────────────────────
+  // 6 columns: Name | From Chat | Updated | Size | Type | Actions
+  // Breakpoints mirror the d-*-block / d-*-flex visibility on rows + headers:
+  //  ≥ lg (992px):  all 6 cols
+  //  ≥ md (768px):  hide Type — 5 cols
+  //  ≥ sm (576px):  hide Updated too — 4 cols
+  //  < sm:          hide Size too — 3 cols
+  .finder-grid-artifacts {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) 110px 90px 90px 90px;
+  }
+
+  @media (max-width: 991.98px) {
+    .finder-grid-artifacts {
+      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) 110px 90px 90px;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    .finder-grid-artifacts {
+      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) 90px 90px;
+    }
+  }
+
+  @media (max-width: 575.98px) {
+    .finder-grid-artifacts {
+      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) 90px;
+    }
+  }
+
+  // ── Inline link-style button used inside finder rows ─────────
+  // Used by Chat Artifacts to make the chat title clickable while
+  // keeping the row's overall meta typography intact.
+  .finder-row__link-btn {
+    border: none;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    transition: color 0.1s;
+
+    &:hover {
+      color: var(--brand-primary, var(--color-primary));
+      text-decoration: underline;
+    }
+  }
+
+  // ── Chat Artifacts accent ─────────────────────────────────────
+  // Scoped subtle brand-primary touches that signal these are
+  // AI-generated artifacts, without overwhelming the neutral grid.
+  &.chat-artifacts {
+    .finder-row .finder-icon--file {
+      color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 70%, #a1a1aa 30%);
+    }
+
+    .finder-row__meta--type {
+      display: inline-block;
+      padding: 0.0625rem 0.4rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 8%, transparent);
+      color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 85%, #3f3f46 15%);
+      font-size: 0.65rem;
+      letter-spacing: 0.04em;
+      max-width: max-content;
+      align-self: center;
+      justify-self: start;
+    }
+
+    .finder-empty > i {
+      color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 60%, #a1a1aa 40%);
+      opacity: 0.6;
     }
   }
 }

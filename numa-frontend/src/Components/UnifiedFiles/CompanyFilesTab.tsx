@@ -186,11 +186,14 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     }
   }, []);
 
+  const [isDeepLoading, setIsDeepLoading] = useState(false);
+
   const fetchDeepFiles = useCallback(async (force = false) => {
     setFileState((prev) => {
       if (!force && prev.deepLoaded) return prev;
       return prev;
     });
+    setIsDeepLoading(true);
     try {
       const result = await knowledgeBaseService.listKBFilesRecursive('company');
       setFileState((prev) => {
@@ -213,6 +216,8 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
       });
     } catch (err) {
       console.error('Failed to deep-fetch company KB', err);
+    } finally {
+      setIsDeepLoading(false);
     }
   }, []);
 
@@ -774,6 +779,20 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
         </div>
         <div className="finder-col"></div>
       </div>
+
+      {/* Search status hints */}
+      {isFilterOrSearchActive && isDeepLoading && (
+        <div className="finder-search-hint">
+          <Spinner animation="border" size="sm" variant="secondary" style={{ width: '0.65rem', height: '0.65rem' }} />
+          <span className="text-muted small">{t('search.loadingDeep')}</span>
+        </div>
+      )}
+      {isFilterOrSearchActive && !isDeepLoading && fileState.deepLoaded && (
+        <div className="finder-search-hint">
+          <i className="bi bi-info-circle text-muted" style={{ fontSize: '0.75rem' }} />
+          <span className="text-muted small">{t('search.cachedHint')}</span>
+        </div>
+      )}
 
       {/* File list */}
       <div className="finder-list">

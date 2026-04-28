@@ -248,11 +248,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     }
   }, []);
 
+  const [deepLoadingKbs, setDeepLoadingKbs] = useState<Set<string>>(new Set());
+
   const fetchDeepKbFiles = useCallback(async (kbId: string, force = false) => {
     // Skip if already deep-loaded this session, unless the caller is the
     // Refresh button (force=true) asking for a fresh copy.
     const existing = kbFileStatesRef.current.get(kbId);
     if (!force && existing?.deepLoaded) return;
+    setDeepLoadingKbs((prev) => new Set(prev).add(kbId));
     try {
       const result = await knowledgeBaseService.listKBFilesRecursive(kbId);
       setKbFileStates((prev) => {
@@ -283,6 +286,12 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       });
     } catch (err) {
       console.error('Failed to deep-fetch KB', kbId, err);
+    } finally {
+      setDeepLoadingKbs((prev) => {
+        const next = new Set(prev);
+        next.delete(kbId);
+        return next;
+      });
     }
   }, []);
 
@@ -1214,6 +1223,20 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         </div>
         <div className="finder-col"></div>
       </div>
+
+      {/* Search status hints */}
+      {isFilterOrSearchActive && deepLoadingKbs.size > 0 && (
+        <div className="finder-search-hint">
+          <Spinner animation="border" size="sm" variant="secondary" style={{ width: '0.65rem', height: '0.65rem' }} />
+          <span className="text-muted small">{t('search.loadingDeep')}</span>
+        </div>
+      )}
+      {isFilterOrSearchActive && deepLoadingKbs.size === 0 && (
+        <div className="finder-search-hint">
+          <i className="bi bi-info-circle text-muted" style={{ fontSize: '0.75rem' }} />
+          <span className="text-muted small">{t('search.cachedHint')}</span>
+        </div>
+      )}
 
       {/* File list */}
       <div className="finder-list">

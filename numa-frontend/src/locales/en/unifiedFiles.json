@@ -6,7 +6,8 @@
     "companyFiles": "Company Files",
     "shared": "External Share",
     "remote": "Connector Files",
-    "webCrawler": "Web Crawler"
+    "webCrawler": "Web Crawler",
+    "chatArtifacts": "Chat Artifacts"
   },
   "actions": {
     "newFolder": "New Folder",
@@ -145,7 +146,9 @@
     "expandTooltip": "Show file categories"
   },
   "search": {
-    "truncatedTooltip": "Search covers the first 50,000 files — open a subfolder for the rest"
+    "truncatedTooltip": "Search covers the first 50,000 files — open a subfolder for the rest",
+    "loadingDeep": "Loading all files for search...",
+    "cachedHint": "Searching cached files — hit refresh for the latest."
   },
   "move": {
     "success_one": "Moved {{count}} file",
@@ -155,6 +158,35 @@
     "collision": "One or more files already exist at the destination. Rename or delete them first.",
     "cannotEditDest": "You don't have permission to move files here.",
     "inProgress": "Moving files..."
+  },
+  "chatArtifacts": {
+    "searchPlaceholder": "Search by file or chat name…",
+    "untitledChat": "Untitled chat",
+    "count_one": "{{count}} artifact",
+    "count_other": "{{count}} artifacts",
+    "truncated": "Showing the most recent results — narrow your filters to see more.",
+    "filters": {
+      "chat": "Chat"
+    },
+    "columns": {
+      "name": "Name",
+      "fromChat": "From Chat",
+      "chatUpdated": "Chat Updated",
+      "size": "Size",
+      "type": "Type",
+      "actions": "Actions"
+    },
+    "actions": {
+      "preview": "Preview",
+      "download": "Download",
+      "openChat": "Open chat"
+    },
+    "empty": {
+      "title": "No chat artifacts yet",
+      "body": "Files Numa generates in your chats — charts, reports, exports — will appear here.",
+      "filteredTitle": "No artifacts match your filters",
+      "filteredBody": "Try a different search or clear the active filters."
+    }
   },
   "filters": {
     "all": "All",
