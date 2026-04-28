@@ -5,6 +5,28 @@
     "close": "כלוסה",
     "delete": "דהלהטה"
   },
+  "confirm": {
+    "defaultTitle": "כונפירמ",
+    "delete": "דהלהטה",
+    "disconnect": "דיסכוננהכט",
+    "leave": "להאוה",
+    "discard": "דיסכארד",
+    "save": "סאוה"
+  },
+  "alert": {
+    "titles": {
+      "info": "נוטיכה",
+      "success": "סוככהסס",
+      "warning": "וארנינג",
+      "error": "הררור"
+    }
+  },
+  "prompt": {
+    "defaultTitle": "הנטהר א ואלוה",
+    "rename": "רהנאמה",
+    "insertLink": "ינסהרט לינק",
+    "insertImage": "ינסהרט ימאגה"
+  },
   "loading": {
     "generic": "לואדינג..."
   },

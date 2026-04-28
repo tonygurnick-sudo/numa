@@ -16,6 +16,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
+import { useConfirm } from '../../../Providers/ConfirmContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
@@ -612,8 +613,10 @@ function FilterDropdown({ label, value, options, onChange, allLabel }: FilterDro
 
 const BacklogView = () => {
   const { t } = useTranslation('ops');
+  const { t: tCommon } = useTranslation('common');
   const { numaPost, numaPut, numaDelete } = useNumaRequest();
   const { user } = useAuth();
+  const confirm = useConfirm();
   const {
     teamData,
     workUnits,
@@ -656,7 +659,12 @@ const BacklogView = () => {
   const handleDeleteSprint = useCallback(
     async (wu: WorkUnit) => {
       if (!teamId || deletingSprint) return;
-      if (!window.confirm(t('sprints.deleteSprintConfirm', { name: wu.name }))) return;
+      const ok = await confirm({
+        message: t('sprints.deleteSprintConfirm', { name: wu.name }),
+        confirmLabel: tCommon('confirm.delete'),
+        variant: 'danger',
+      });
+      if (!ok) return;
       setDeletingSprint(true);
       try {
         await OpsService.deleteWorkUnit(numaDelete, teamId, wu.id);
@@ -667,7 +675,7 @@ const BacklogView = () => {
         setDeletingSprint(false);
       }
     },
-    [teamId, deletingSprint, numaDelete, refreshWorkUnits, refreshTickets, t]
+    [teamId, deletingSprint, numaDelete, refreshWorkUnits, refreshTickets, t, tCommon, confirm]
   );
 
   // ── Filters ────────────────────────────────────────────────────
@@ -1117,7 +1125,12 @@ const BacklogView = () => {
 
   const handleBulkDelete = useCallback(async () => {
     if (selectedTickets.length === 0 || bulkActing) return;
-    if (!window.confirm(t('tickets.deleteConfirm'))) return;
+    const ok = await confirm({
+      message: t('tickets.deleteConfirm'),
+      confirmLabel: tCommon('confirm.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBulkActing(true);
     try {
       await Promise.all(selectedTickets.map((tk) => OpsService.deleteTicket(numaDelete, tk.id, tk.teamId)));
@@ -1128,7 +1141,7 @@ const BacklogView = () => {
     } finally {
       setBulkActing(false);
     }
-  }, [selectedTickets, bulkActing, numaDelete, refreshTickets, t]);
+  }, [selectedTickets, bulkActing, numaDelete, refreshTickets, t, tCommon, confirm]);
 
   const handleTicketClick = useCallback((ticketId: string) => {
     setDetailTicketId(ticketId);

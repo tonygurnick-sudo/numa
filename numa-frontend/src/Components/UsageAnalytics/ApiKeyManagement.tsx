@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, Button, Form, InputGroup, Spinner, Alert } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { useConfirm } from '../../Providers/ConfirmContext';
 import { AdminUsageAnalyticsService, type ApiKeyMetadata } from '../../Services/AdminUsageAnalyticsService';
 
 /**
@@ -14,7 +15,9 @@ const RETENTION_OPTIONS = [1, 3, 6, 12, 15];
 
 export default function ApiKeyManagement() {
   const { t } = useTranslation('settings');
+  const { t: tCommon } = useTranslation('common');
   const { numaGet, numaPost, numaPut } = useNumaRequest();
+  const confirmDialog = useConfirm();
 
   const [loading, setLoading] = useState(true);
   const [metadata, setMetadata] = useState<ApiKeyMetadata | null>(null);
@@ -64,9 +67,12 @@ export default function ApiKeyManagement() {
   };
 
   const regenerateKey = async () => {
-    if (!confirm(t('usageAnalytics.confirm.regenerateKey'))) {
-      return;
-    }
+    const ok = await confirmDialog({
+      message: t('usageAnalytics.confirm.regenerateKey'),
+      confirmLabel: tCommon('common.ok'),
+      variant: 'warning',
+    });
+    if (!ok) return;
 
     setRegenerating(true);
     try {

@@ -3,8 +3,11 @@
  */
 import { ChatReferencesDropdown } from '../../Components/Chat/ChatReferencesDropdown';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
+import { render as rtlRender, screen, act, fireEvent, waitFor } from '@testing-library/react';
+import { ConfirmProvider } from '../../Providers/ConfirmProvider';
 import * as fileUtils from '../../utils/fileUtils';
+
+const render: typeof rtlRender = (ui, options) => rtlRender(ui, { wrapper: ConfirmProvider, ...(options ?? {}) });
 
 // Mock the fileUtils module
 vi.mock('../../utils/fileUtils', () => ({
@@ -47,8 +50,8 @@ describe('ChatReferencesDropdown', () => {
   });
 
   test('should not render anything when no references are provided', () => {
-    const { container } = render(<ChatReferencesDropdown references={[]} getCredentials={() => {}} />);
-    expect(container.firstChild).toBeNull();
+    render(<ChatReferencesDropdown references={[]} getCredentials={() => {}} />);
+    expect(screen.queryByText('Show References')).toBeNull();
   });
 
   test('should render dropdown when references are provided', async () => {

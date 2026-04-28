@@ -12,6 +12,7 @@ import { getIntegrationsListFormat, type IntegrationListItem } from '../config/i
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { useConfirm } from '../Providers/ConfirmContext';
 import type { ConnectionStatus } from '../types/pipedream';
 import { getDefaultDenyTools } from '../config/integrationToolsDefault';
 import { PageHeader } from '../Components/PageHeader';
@@ -24,8 +25,10 @@ type PipedreamConnection = ConnectionStatus & {
 
 export const NumaIntegrations = () => {
   const { t, i18n } = useTranslation('integrations');
+  const { t: tCommon } = useTranslation('common');
   const { user, lambdaClient } = useAuth();
   const { numaGet } = useNumaRequest();
+  const confirm = useConfirm();
   const [connections, setConnections] = useState<PipedreamConnection[]>([]);
   const availableApps = useMemo<IntegrationListItem[]>(() => {
     const isAdmin = Boolean(user?.groups?.includes('admin'));
@@ -238,7 +241,11 @@ export const NumaIntegrations = () => {
     if (!lambdaClient || !user) return;
     try {
       setError(null);
-      const confirmed = window.confirm(t('confirm.disconnect', { appName }));
+      const confirmed = await confirm({
+        message: t('confirm.disconnect', { appName }),
+        confirmLabel: tCommon('confirm.disconnect'),
+        variant: 'danger',
+      });
       if (!confirmed) return;
       setDisconnectingApp(appName);
       const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
@@ -845,13 +852,19 @@ export const SettingsModal = ({
   globalDenyTools?: string[];
 }) => {
   const { t } = useTranslation('integrations');
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
   // Check if there are unsaved changes
   const hasUnsavedChanges = JSON.stringify(toggles) !== JSON.stringify(initialToggles);
 
   // Custom close handler with confirmation
-  const handleClose = () => {
+  const handleClose = async () => {
     if (hasUnsavedChanges) {
-      const confirmClose = window.confirm(t('settingsModal.confirmClose'));
+      const confirmClose = await confirm({
+        message: t('settingsModal.confirmClose'),
+        confirmLabel: tCommon('confirm.discard'),
+        variant: 'warning',
+      });
       if (!confirmClose) return;
     }
     onHide();

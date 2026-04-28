@@ -5,6 +5,28 @@
     "close": "Close",
     "delete": "Delete"
   },
+  "confirm": {
+    "defaultTitle": "Confirm",
+    "delete": "Delete",
+    "disconnect": "Disconnect",
+    "leave": "Leave",
+    "discard": "Discard",
+    "save": "Save"
+  },
+  "alert": {
+    "titles": {
+      "info": "Notice",
+      "success": "Success",
+      "warning": "Warning",
+      "error": "Error"
+    }
+  },
+  "prompt": {
+    "defaultTitle": "Enter a value",
+    "rename": "Rename",
+    "insertLink": "Insert link",
+    "insertImage": "Insert image"
+  },
   "loading": {
     "generic": "Loading...",
     "geniric": "Loading..."

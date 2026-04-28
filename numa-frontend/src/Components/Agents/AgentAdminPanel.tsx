@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { ChevronDown, ChevronRight, Copy, Shield, Trash2 } from 'lucide-react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { useConfirm } from '../../Providers/ConfirmContext';
 import { adminListAgents, deleteAgent, duplicateAgent } from '../../Services/AgentsService';
 import type { AdminAgentEntry } from '../../types/agents';
 import { useTranslation } from 'react-i18next';
@@ -24,7 +25,9 @@ const scopeStyle = (scope: string) => {
 
 export const AgentAdminPanel = ({ onAgentDeleted, onAgentDuplicated }: Props) => {
   const { t } = useTranslation('agents');
+  const { t: tCommon } = useTranslation('common');
   const { numaGet, numaDelete, numaPost } = useNumaRequest();
+  const confirm = useConfirm();
   const [expanded, setExpanded] = useState(false);
   const [agents, setAgents] = useState<AdminAgentEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,7 +46,12 @@ export const AgentAdminPanel = ({ onAgentDeleted, onAgentDuplicated }: Props) =>
   }, [expanded, numaGet]);
 
   const handleDelete = async (agentId: string, title: string) => {
-    if (!window.confirm(t('adminPanel.confirmDelete', { title }))) return;
+    const ok = await confirm({
+      message: t('adminPanel.confirmDelete', { title }),
+      confirmLabel: tCommon('confirm.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteAgent(numaDelete, agentId);
       setAgents((prev) => prev.filter((a) => a.agentId !== agentId));

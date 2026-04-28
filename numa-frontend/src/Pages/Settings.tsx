@@ -23,6 +23,7 @@ import { AdminSchedulingSettingsService } from '../Services/AdminSchedulingSetti
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { useAlert, useConfirm } from '../Providers/ConfirmContext';
 import BrandingAdminPanel from '../Components/Branding/BrandingAdminPanel';
 import UsageAnalyticsPanel from '../Components/UsageAnalytics/UsageAnalyticsPanel';
 import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
@@ -59,6 +60,8 @@ import { loadAdminCapabilityGating } from '../utils/adminCapabilityGating';
 
 const useNavigationConfirm = (when: boolean, message: string) => {
   const navigationContext = useContext(UNSAFE_NavigationContext);
+  const confirm = useConfirm();
+  const { t: tCommon } = useTranslation('common');
 
   useEffect(() => {
     if (!when) {
@@ -73,17 +76,18 @@ const useNavigationConfirm = (when: boolean, message: string) => {
     }
 
     const unblock = navigator.block((tx: { retry: () => void }) => {
-      const confirmLeave = window.confirm(message);
-      if (confirmLeave) {
-        unblock();
-        tx.retry();
-      }
+      confirm({ message, confirmLabel: tCommon('confirm.leave'), variant: 'warning' }).then((ok) => {
+        if (ok) {
+          unblock();
+          tx.retry();
+        }
+      });
     });
 
     return () => {
       unblock();
     };
-  }, [navigationContext, when, message]);
+  }, [navigationContext, when, message, confirm, tCommon]);
 };
 
 const AUDIT_SUB_DEFAULTS: Record<string, string> = {
@@ -95,8 +99,11 @@ const AUDIT_SUB_DEFAULTS: Record<string, string> = {
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
+  const { t: tCommon } = useTranslation('common');
   const { user, getCredentials, lambdaClient } = useAuth();
   const { numaGet, numaPut, numaPost, numaDelete } = useNumaRequest();
+  const confirm = useConfirm();
+  const showAlert = useAlert();
   const { scope: urlScope, tab: urlTab } = useParams<{ scope?: string; tab?: string }>();
   const navigate = useNavigate();
   const [activeKey, setActiveKey] = useState<string>(urlTab || 'users');
@@ -589,7 +596,11 @@ export default function SettingsPage() {
   const toggleIntegration = async (integrationId: string, nextEnabled: boolean) => {
     try {
       if (!nextEnabled && globalSettings[integrationId]?.status === 'enabled') {
-        const ok = window.confirm(t('confirm.disableIntegration', { integrationId }));
+        const ok = await confirm({
+          message: t('confirm.disableIntegration', { integrationId }),
+          confirmLabel: tCommon('common.ok'),
+          variant: 'warning',
+        });
         if (!ok) return;
       }
       await AdminIntegrationsService.updateWithNuma(
@@ -611,7 +622,11 @@ export default function SettingsPage() {
       const cap = capabilities.find((c) => c.flag === flagName);
       if (!nextEnabled && capabilitySettings[flagName]?.status !== 'disabled') {
         const displayName = cap?.labelKey ? t(cap.labelKey) : (cap?.name ?? flagName);
-        const ok = window.confirm(t('capabilities.disableConfirm', { name: displayName }));
+        const ok = await confirm({
+          message: t('capabilities.disableConfirm', { name: displayName }),
+          confirmLabel: tCommon('common.ok'),
+          variant: 'warning',
+        });
         if (!ok) return;
       }
       await CapabilitiesService.update(flagName, { status: nextEnabled ? 'enabled' : 'disabled' }, numaPut);
@@ -628,13 +643,17 @@ export default function SettingsPage() {
   }, []);
 
   const handleTabSelect = useCallback(
-    (nextKey: string | null) => {
+    async (nextKey: string | null) => {
       if (!nextKey) {
         return;
       }
 
       if (activeKey === 'branding' && nextKey !== 'branding' && isBrandingDirty) {
-        const confirmLeave = window.confirm(t('navigation.unsavedBranding'));
+        const confirmLeave = await confirm({
+          message: t('navigation.unsavedBranding'),
+          confirmLabel: tCommon('confirm.leave'),
+          variant: 'warning',
+        });
 
         if (!confirmLeave) {
           return;
@@ -645,7 +664,7 @@ export default function SettingsPage() {
 
       setActiveKey(nextKey);
     },
-    [activeKey, isBrandingDirty]
+    [activeKey, isBrandingDirty, confirm, t, tCommon]
   );
 
   const renderIntegrationRow = (integration: IntegrationListItem) => {
@@ -1843,14 +1862,21 @@ export default function SettingsPage() {
                                 } else {
                                   message = t('agents.confirm.full');
                                 }
-                                const ok = window.confirm(message);
+                                const ok = await confirm({
+                                  message,
+                                  confirmLabel: tCommon('common.ok'),
+                                  variant: 'warning',
+                                });
                                 if (!ok) return;
                                 try {
                                   setAgentsSaving(true);
                                   await AdminAgentsService.update(opt.key as AgentsMode, numaPut);
                                   setAgentsMode(opt.key as AgentsMode);
                                 } catch (e) {
-                                  alert((e as Error).message || t('errors.updateAgentsPolicy'));
+                                  await showAlert({
+                                    message: (e as Error).message || t('errors.updateAgentsPolicy'),
+                                    variant: 'error',
+                                  });
                                 } finally {
                                   setAgentsSaving(false);
                                 }

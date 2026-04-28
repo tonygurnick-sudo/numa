@@ -3,6 +3,7 @@ import { Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { useAuth } from '../../Providers/AuthProvider';
+import { useConfirm, usePrompt } from '../../Providers/ConfirmContext';
 import AgentAvatar from '../Agents/AgentAvatar';
 import { useAgentById } from '../../hooks/useAgentById';
 import { useDrawerBackClose } from '../../hooks/useDrawerBackClose';
@@ -82,6 +83,9 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
     ref
   ) {
     const { t } = useTranslation('chat');
+    const { t: tCommon } = useTranslation('common');
+    const confirm = useConfirm();
+    const prompt = usePrompt();
     const [isLoading, setIsLoading] = useState(false);
     const [show, setShow] = useState(false);
     const [conversations, setConversations] = useState<ConversationMeta[]>([]);
@@ -190,7 +194,13 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
      * Prompts for a new name, calls the DynamoDB client, and refreshes the list.
      */
     const handleRename = async (conversationId, currentName) => {
-      const newName = prompt(t('history.renamePrompt'), currentName);
+      const newName = await prompt({
+        title: tCommon('prompt.rename'),
+        message: t('history.renamePrompt'),
+        defaultValue: currentName,
+        confirmLabel: tCommon('confirm.save'),
+        required: true,
+      });
       if (newName === null) return; // user cancelled
       if (!numaChatDynamoUtils) {
         console.error('DynamoDB client not initialized');
@@ -212,10 +222,12 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
      */
     const handleDelete = async (conversationIdToDelete) => {
       if (!numaChatDynamoUtils) return;
-      // Confirm deletion with the user
-      if (!window.confirm(t('history.deleteConfirm'))) {
-        return;
-      }
+      const ok = await confirm({
+        message: t('history.deleteConfirm'),
+        confirmLabel: tCommon('confirm.delete'),
+        variant: 'danger',
+      });
+      if (!ok) return;
       try {
         // Assuming your DynamoDB client has a deleteConversation or similar method.
         await numaChatDynamoUtils.deleteConversation(conversationIdToDelete, sub);

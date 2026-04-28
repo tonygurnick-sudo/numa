@@ -3,6 +3,7 @@ import { Modal, Button, Alert, Badge, Row, Col, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { getUserStatusBadgeVariant, getUserStatusLabel } from './userStatusUtils';
+import { useAlert } from '../../Providers/ConfirmContext';
 
 export interface User {
   username: string;
@@ -39,6 +40,7 @@ export function UserDetailsModal({
   onResetMfa,
 }: UserDetailsModalProps): React.JSX.Element {
   const { t } = useTranslation('userManagement');
+  const showAlert = useAlert();
   const [view, setView] = useState<ModalView>('details');
   const [isProcessing, setIsProcessing] = useState(false);
   const [mfaResetSuccess, setMfaResetSuccess] = useState(false);
@@ -226,7 +228,7 @@ export function UserDetailsModal({
                 variant="secondary"
                 onClick={() => {
                   // Show admin deletion warning
-                  alert(t('details.adminDeleteBlocked'));
+                  void showAlert({ message: t('details.adminDeleteBlocked'), variant: 'warning' });
                 }}
               >
                 {t('actions.deleteUser')}
