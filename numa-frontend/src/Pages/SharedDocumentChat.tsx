@@ -87,7 +87,9 @@ export const SharedDocumentChat = () => {
           }
         } else if (err instanceof Error) {
           setIsDocumentProcessing(false);
-          if (err.message.includes('404')) {
+          if (err.message.includes('IP address not authorized')) {
+            setError(t('errors.unauthorizedIp'));
+          } else if (err.message.includes('404')) {
             setError(t('errors.notFound'));
           } else if (err.message.includes('410')) {
             setError(t('errors.expired'));

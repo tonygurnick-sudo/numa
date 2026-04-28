@@ -7,6 +7,7 @@
     "expired": "This share has expired",
     "loadFailed": "Failed to load share",
     "extractionFailed": "Document processing failed. Please try creating a new share.",
+    "unauthorizedIp": "IP address not authorized",
     "tryAgain": "Please check the link and try again."
   },
   "processing": {
