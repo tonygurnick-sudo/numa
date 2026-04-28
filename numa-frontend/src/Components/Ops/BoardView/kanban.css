@@ -48,11 +48,11 @@
 .kanban-columns {
   display: flex;
   gap: 0;
-  height: 100%;
   align-items: stretch;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: scroll;
+  overflow-y: auto;
   flex-wrap: nowrap;
+  min-height: 0;
 }
 
 @media (max-width: 991px) {
@@ -163,11 +163,8 @@
 
 .kanban-column-body {
   flex: 1;
-  overflow-y: auto;
   min-height: 40px;
   padding: 4px 0 2px;
-  scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
   transition:
     background-color 0.15s,
     box-shadow 0.15s;
@@ -193,15 +190,6 @@
 
 .kanban-drop-indicator--active {
   opacity: 1;
-}
-
-.kanban-column-body::-webkit-scrollbar {
-  width: 4px;
-}
-
-.kanban-column-body::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 4px;
 }
 
 /* ── Quick-add at top (triggered from header +) ──────────────────────────── */
