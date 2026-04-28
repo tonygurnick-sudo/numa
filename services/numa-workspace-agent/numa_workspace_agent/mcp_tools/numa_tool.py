@@ -1402,6 +1402,23 @@ async def numa_tool(args: dict[str, Any]) -> dict[str, Any]:
     name = args.get("name", "")
     params = args.get("params", {})
 
+    # Recover from a known model malformation: when the params payload is large,
+    # Claude sometimes inlines it as a JSON-encoded string instead of an object.
+    # Parse it back, or return a structured error so the model can self-correct.
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except json.JSONDecodeError as e:
+            return _err(
+                f"Invalid params for '{name}': expected an object, got a string "
+                f"that could not be parsed as JSON ({e}). Pass params as a JSON "
+                f"object, not a stringified blob."
+            )
+    if not isinstance(params, dict):
+        return _err(
+            f"Invalid params for '{name}': expected object, got {type(params).__name__}."
+        )
+
     handler = TOOL_HANDLERS.get(name)
     if not handler:
         return _err(
