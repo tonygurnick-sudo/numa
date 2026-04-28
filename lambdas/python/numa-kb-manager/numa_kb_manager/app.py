@@ -924,6 +924,156 @@ async def move_kb_files(request: Request, kb_id: str) -> Response:
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
+# ── KB files (rename) ────────────────────────────────────────────────────────
+
+
+@app.post("/api/kb/{kb_id}/files/rename")
+async def rename_kb_file(request: Request, kb_id: str) -> Response:
+    """Rename a single file within a KB (same folder, new filename).
+
+    Body:
+        {
+            "key": "documents/kb-<id>/reports/old-name.pdf",
+            "newFilename": "new-name.pdf"
+        }
+
+    Performs a collision check, then copies the file + metadata sidecar to
+    the new key and deletes the originals. The file stays in the same folder.
+    """
+    guard, user = _guard_request(request)
+    if guard is not None:
+        return guard
+
+    try:
+        user_id = user["sub"]
+        kb_manager = KnowledgeBaseManager()
+
+        user_groups = user.get("cognito:groups", []) or []
+        is_company_admin = kb_id == "company" and "admin" in user_groups
+        if not is_company_admin and not kb_manager.check_permission(
+            kb_id, user_id, "EDITOR"
+        ):
+            logger.warning(
+                "Access denied - user lacks EDITOR permission for file rename",
+                kb_id=kb_id,
+                user_id=user_id,
+            )
+            return JSONResponse({"error": "Access denied"}, status_code=403)
+
+        kb = kb_manager.get_kb(kb_id)
+        if not kb:
+            return JSONResponse({"error": "KB not found"}, status_code=404)
+
+        s3_prefix = kb.get("s3_prefix", "")
+        if not s3_prefix:
+            return JSONResponse(
+                {"error": "KB configuration incomplete"}, status_code=500
+            )
+
+        body = await request.json()
+        key = body.get("key", "")
+        new_filename = body.get("newFilename", "").strip()
+
+        if not key or not isinstance(key, str):
+            return JSONResponse({"error": "'key' is required"}, status_code=400)
+        if not new_filename or not isinstance(new_filename, str):
+            return JSONResponse({"error": "'newFilename' is required"}, status_code=400)
+        if "/" in new_filename or "\\" in new_filename or ".." in new_filename:
+            return JSONResponse(
+                {"error": "Filename must not contain path separators"},
+                status_code=400,
+            )
+
+        if not key.startswith(s3_prefix):
+            return JSONResponse(
+                {"error": f"Key '{key}' is outside this KB's prefix"},
+                status_code=400,
+            )
+        if key.endswith("/"):
+            return JSONResponse({"error": "Cannot rename folders"}, status_code=400)
+
+        # Build new key: same parent folder, new filename.
+        parent = key.rsplit("/", 1)[0] + "/"
+        new_key = f"{parent}{new_filename}"
+
+        if new_key == key:
+            return JSONResponse(
+                {"sourceKey": key, "destKey": new_key, "message": "No-op rename"},
+                status_code=200,
+            )
+
+        s3 = prm_client("s3", region=REGION)
+
+        # Collision check.
+        try:
+            s3.head_object(Bucket=DATA_BUCKET, Key=new_key)
+            return JSONResponse(
+                {"error": "Destination collision", "collision": new_key},
+                status_code=409,
+            )
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code not in ("404", "NoSuchKey", "NotFound"):
+                return JSONResponse(
+                    {"error": f"Pre-check failed: {e}"}, status_code=500
+                )
+
+        # Copy file to new key.
+        s3.copy_object(
+            Bucket=DATA_BUCKET,
+            CopySource={"Bucket": DATA_BUCKET, "Key": key},
+            Key=new_key,
+            MetadataDirective="COPY",
+        )
+
+        # Copy metadata sidecar if it exists.
+        metadata_source = f"{key}.metadata.json"
+        metadata_dest = f"{new_key}.metadata.json"
+        had_metadata = False
+        try:
+            s3.copy_object(
+                Bucket=DATA_BUCKET,
+                CopySource={"Bucket": DATA_BUCKET, "Key": metadata_source},
+                Key=metadata_dest,
+                MetadataDirective="COPY",
+            )
+            had_metadata = True
+        except ClientError as meta_err:
+            code = meta_err.response.get("Error", {}).get("Code", "")
+            if code not in ("404", "NoSuchKey", "NotFound"):
+                logger.warning(
+                    "Metadata sidecar copy failed during rename",
+                    key=metadata_source,
+                    error=str(meta_err),
+                )
+
+        # Delete originals.
+        delete_objects = [{"Key": key}]
+        if had_metadata:
+            delete_objects.append({"Key": metadata_source})
+        s3.delete_objects(
+            Bucket=DATA_BUCKET,
+            Delete={"Objects": delete_objects, "Quiet": True},
+        )
+
+        logger.info(
+            "KB file renamed",
+            kb_id=kb_id,
+            user_id=user_id,
+            source_key=key,
+            dest_key=new_key,
+        )
+
+        return JSONResponse(
+            {"sourceKey": key, "destKey": new_key},
+            status_code=200,
+        )
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB file rename failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 # ── KB sync state (Bedrock or Q Business) ─────────────────────────────────
 
 

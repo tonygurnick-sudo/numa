@@ -123,6 +123,15 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const [folderOptions, setFolderOptions] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
 
+  // Delete
+  const [deleteConfirm, setDeleteConfirm] = useState<{ keys: string[]; label: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Rename
+  const [renameTarget, setRenameTarget] = useState<{ key: string; currentName: string } | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+
   // File preview
   const {
     filePreview,
@@ -584,6 +593,105 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     fetchFiles();
   }
 
+  // ── Delete handlers ─────────────────────────────────────────
+
+  const confirmDeleteFiles = useCallback(
+    (keys: string[], label?: string) => {
+      // Include .metadata.json sidecars in the delete set.
+      const withMeta = keys.flatMap((k) => [k, `${k}.metadata.json`]);
+      setDeleteConfirm({
+        keys: withMeta,
+        label: label ?? t('delete.confirm', { count: keys.length }),
+      });
+    },
+    [t]
+  );
+
+  const confirmDeleteSubfolder = useCallback(
+    (folderId: string, folderName: string) => {
+      const prefix = folderId.endsWith('/') ? folderId : `${folderId}/`;
+      const folderFileKeys = fileState.files
+        .filter((f) => f.Key.startsWith(prefix) && !f.Key.endsWith('/'))
+        .map((f) => f.Key);
+      if (folderFileKeys.length === 0) return;
+      const withMeta = folderFileKeys.flatMap((k) => [k, `${k}.metadata.json`]);
+      setDeleteConfirm({
+        keys: withMeta,
+        label: t('delete.confirmFolder', { name: folderName, count: folderFileKeys.length }),
+      });
+    },
+    [fileState.files, t]
+  );
+
+  const executeDelete = useCallback(async () => {
+    if (!deleteConfirm) return;
+    setIsDeleting(true);
+    try {
+      const result = await knowledgeBaseService.deleteKBFiles('company', deleteConfirm.keys);
+      const realSucceeded = result.successful.filter((k) => !k.endsWith('.metadata.json')).length;
+      const realFailed = result.failed.filter((f) => !f.key.endsWith('.metadata.json')).length;
+      // Optimistically remove deleted files from state immediately.
+      const deletedSet = new Set(result.successful);
+      setFileState((prev) => ({
+        ...prev,
+        files: prev.files.filter((f) => !deletedSet.has(f.Key)),
+      }));
+      if (realFailed > 0) {
+        showToast({
+          message: t('delete.partial', { succeeded: realSucceeded, failed: realFailed }),
+          variant: 'warning',
+        });
+      } else {
+        showToast({ message: t('delete.success', { count: realSucceeded }), variant: 'success' });
+      }
+      setSelectedKeys(new Set());
+      fetchFiles();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({ message: t('delete.error', { error: msg }), variant: 'error' });
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirm(null);
+    }
+  }, [deleteConfirm, showToast, t, fetchFiles]);
+
+  // ── Rename handlers ────────────────────────────────────────
+
+  const openRename = useCallback((key: string, currentName: string) => {
+    setRenameTarget({ key, currentName });
+    setRenameValue(currentName);
+  }, []);
+
+  const executeRename = useCallback(async () => {
+    if (!renameTarget || !renameValue.trim()) return;
+    const trimmed = renameValue.trim();
+    if (trimmed.includes('/') || trimmed.includes('\\')) {
+      showToast({ message: t('rename.invalidName'), variant: 'error' });
+      return;
+    }
+    setIsRenaming(true);
+    try {
+      const result = await knowledgeBaseService.renameKBFile('company', renameTarget.key, trimmed);
+      // Optimistically swap old key for new key in state.
+      setFileState((prev) => ({
+        ...prev,
+        files: prev.files.map((f) => (f.Key === result.sourceKey ? { ...f, Key: result.destKey } : f)),
+      }));
+      showToast({ message: t('rename.success', { name: trimmed }), variant: 'success' });
+      fetchFiles();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/409|collision/i.test(msg)) {
+        showToast({ message: t('rename.collision'), variant: 'error' });
+      } else {
+        showToast({ message: t('rename.error', { error: msg }), variant: 'error' });
+      }
+    } finally {
+      setIsRenaming(false);
+      setRenameTarget(null);
+    }
+  }, [renameTarget, renameValue, showToast, t, fetchFiles]);
+
   function handleSortToggle(column: SortColumn): void {
     if (column === sortColumn) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -729,6 +837,16 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
             <option value="7d">{t('filters.dateOptions.last7')}</option>
             <option value="30d">{t('filters.dateOptions.last30')}</option>
           </select>
+          {canDelete && selectedKeys.size > 0 && (
+            <button
+              className="finder-btn finder-btn--danger"
+              onClick={() => confirmDeleteFiles(Array.from(selectedKeys))}
+              title={t('delete.confirm', { count: selectedKeys.size })}
+            >
+              <i className="bi bi-trash" />
+              <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
+            </button>
+          )}
           {canAdd && (
             <button className="finder-btn" onClick={() => setShowUploadModal(true)}>
               <i className="bi bi-upload" />
@@ -931,7 +1049,28 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                       >
                         <i className="bi bi-download" />
                       </button>
+                      {canAdd && (
+                        <button onClick={() => openRename(row.originalKey!, row.name)} title={t('rename.title')}>
+                          <i className="bi bi-pencil" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => confirmDeleteFiles([row.originalKey!])}
+                          title={t('delete.confirm', { count: 1 })}
+                        >
+                          <i className="bi bi-trash" />
+                        </button>
+                      )}
                     </>
+                  )}
+                  {isFolder && canDelete && (
+                    <button
+                      onClick={() => confirmDeleteSubfolder(row.id, row.displayName || row.name)}
+                      title={t('delete.confirm', { count: 1 })}
+                    >
+                      <i className="bi bi-trash" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -1021,6 +1160,69 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
           size="lg"
         />
       )}
+
+      {/* Delete confirmation modal */}
+      <Modal show={!!deleteConfirm} onHide={() => setDeleteConfirm(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{deleteConfirm?.label}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-0">{t('delete.confirmMessage')}</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <button className="btn btn-secondary btn-sm" onClick={() => setDeleteConfirm(null)} disabled={isDeleting}>
+            {t('rename.cancel')}
+          </button>
+          <button className="btn btn-danger btn-sm" onClick={executeDelete} disabled={isDeleting}>
+            {isDeleting ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-1" />
+                {t('delete.inProgress')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-trash me-1" />
+                {t('delete.confirm', {
+                  count: deleteConfirm?.keys.filter((k) => !k.endsWith('.metadata.json')).length ?? 0,
+                })}
+              </>
+            )}
+          </button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Rename modal */}
+      <Modal show={!!renameTarget} onHide={() => setRenameTarget(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{t('rename.title')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <label className="form-label small">{t('rename.label')}</label>
+          <input
+            type="text"
+            className="form-control form-control-sm"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') executeRename();
+            }}
+            placeholder={t('rename.placeholder')}
+            autoFocus
+          />
+        </Modal.Body>
+        <Modal.Footer>
+          <button className="btn btn-secondary btn-sm" onClick={() => setRenameTarget(null)} disabled={isRenaming}>
+            {t('rename.cancel')}
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={executeRename}
+            disabled={isRenaming || !renameValue.trim() || renameValue.trim() === renameTarget?.currentName}
+          >
+            {isRenaming ? <Spinner animation="border" size="sm" /> : t('rename.confirm')}
+          </button>
+        </Modal.Footer>
+      </Modal>
 
       {/* Mobile file preview modal */}
       <Modal
