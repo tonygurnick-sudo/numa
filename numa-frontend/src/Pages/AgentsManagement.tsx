@@ -723,6 +723,7 @@ export const AgentsManagement = () => {
               roleBadge={roleBadgeMap?.get(agent.agentId)}
               onChat={handleStartChat}
               onEdit={agent.scope === 'user' || agent.createdBy.userId === userId ? handleEdit : undefined}
+              onDuplicate={handleDuplicate}
               onDelete={agent.scope === 'user' || agent.createdBy.userId === userId ? handleDelete : undefined}
               onToggleFavorite={handleToggleFavorite}
               onToggleHidden={agent.scope !== 'user' ? handleToggleHidden : undefined}
