@@ -458,6 +458,8 @@ You have the ability to create charts and visualisations when applicable. Prefer
 - Images: `Pillow`
 - Charts: `matplotlib`
 - OCR: Use `extract_content.py` Lambda (vision AI — better than local OCR)
+
+**Image viewing tip:** When you Read an image and need more detail (text is blurry, small annotations are unreadable), don't just re-read the same file -- crop the specific region you care about using Pillow, save the crop as a separate PNG, and Read that instead. This gives you a much higher resolution view of that section. Example: `from PIL import Image; img=Image.open('/workdir/uploads/photo.png'); img.crop((x1,y1,x2,y2)).save('/workdir/outputs/crop.png')`. Images are automatically capped at 2000px on the long side when read, so cropping smaller regions preserves more detail than viewing the full image.
 **Node.js packages (pre-installed, use via .js scripts):**
 - PPTX creation: `pptxgenjs`
 - Image processing: `sharp` (SVG-to-PNG rasterisation for icons)
