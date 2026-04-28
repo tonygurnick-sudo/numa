@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import secrets
@@ -166,6 +167,7 @@ class CreateShareRequest(BaseModel):
     enable_chat: bool = True  # Whether AI chat is enabled on the share page
     allow_download: bool = True  # Whether document download is allowed
     kb_id: str | None = None  # Optional Knowledge Base ID for enhanced chat
+    allowed_ips: list[str] | None = None  # List of allowed IPs or CIDR blocks
 
 
 class CreateShareResponse(BaseModel):
@@ -191,6 +193,7 @@ class ShareInfoResponse(BaseModel):
     allow_download: bool = True
     max_calls: int | None = None  # None = unlimited
     call_count: int = 0
+    allowed_ips: list[str] | None = None
 
 
 class ShareListItem(BaseModel):
@@ -215,6 +218,7 @@ class ShareListItem(BaseModel):
     auth_mode: str | None = None
     passcode: str | None = None  # Plain passcode for owner display
     max_calls: int | None = None
+    allowed_ips: list[str] | None = None
 
 
 class ShareListResponse(BaseModel):
@@ -240,6 +244,7 @@ class CreateDropZoneRequest(BaseModel):
     description: str | None = None
     max_calls: int | None = None  # Max chat questions (None = unlimited)
     kb_id: str | None = None  # Optional Knowledge Base ID for chat
+    allowed_ips: list[str] | None = None
 
 
 class DropZoneAuthRequest(BaseModel):
@@ -801,6 +806,42 @@ def _check_dropzone_auth(share: dict[str, Any], authorization: str | None) -> No
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
+def _check_ip_allowlist(share: dict[str, Any], request: Request) -> None:
+    """Validate client IP against the share's allowlist."""
+    allowed_ips = share.get("allowed_ips")
+    if not allowed_ips:
+        return
+
+    # Get client IP from X-Forwarded-For header (first IP in the list)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if not forwarded_for:
+        # Fallback to direct client host (useful for local testing)
+        client_ip_str = request.client.host if request.client else None
+    else:
+        client_ip_str = forwarded_for.split(",")[0].strip()
+
+    if not client_ip_str:
+        raise HTTPException(status_code=403, detail="IP address not authorized")
+
+    try:
+        client_ip = ipaddress.ip_address(client_ip_str)
+        for allowed in allowed_ips:
+            # Handle exact IP or CIDR notation
+            if "/" in allowed:
+                network = ipaddress.ip_network(allowed.strip(), strict=False)
+                if client_ip in network:
+                    return
+            else:
+                allowed_ip = ipaddress.ip_address(allowed.strip())
+                if client_ip == allowed_ip:
+                    return
+    except ValueError:
+        # Invalid IP format
+        pass
+
+    raise HTTPException(status_code=403, detail="IP address not authorized")
+
+
 # ── API Endpoints ───────────────────────────────────────────────────────────
 
 
@@ -897,6 +938,8 @@ async def create_share(
     item["allow_download"] = body.allow_download
     if body.kb_id:
         item["kb_id"] = body.kb_id
+    if body.allowed_ips:
+        item["allowed_ips"] = body.allowed_ips
 
     # Determine chat_status: content readiness for AI chat
     chat_status = "ready"
@@ -1045,6 +1088,8 @@ async def create_dropzone(
         item["max_calls"] = body.max_calls
     if body.kb_id:
         item["kb_id"] = body.kb_id
+    if body.allowed_ips:
+        item["allowed_ips"] = body.allowed_ips
 
     # Hash and store passcode (keep plain copy for owner display)
     if body.auth_mode == "passcode" and body.passcode:
@@ -1289,6 +1334,8 @@ async def get_share_info(uuid: str, request: Request):
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
 
+    _check_ip_allowlist(share, request)
+
     # Check expiry only if set (permanent shares have no expiry field)
     raw_expiry = share.get("expiry")
     expiry = int(raw_expiry) if raw_expiry is not None else None
@@ -1496,7 +1543,7 @@ def query_knowledge_base(query: str, kb_id: str, max_results: int = 5) -> str:
 
 
 @app.post("/api/shared/{uuid}/generate-description")
-async def generate_description(uuid: str):
+async def generate_description(uuid: str, request: Request):
     """Generate an AI description for a shared document (public endpoint).
 
     Requires chat_status="ready" so that document text is available.
@@ -1505,6 +1552,8 @@ async def generate_description(uuid: str):
     share = get_share(uuid)
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
+
+    _check_ip_allowlist(share, request)
 
     # Check expiry
     raw_expiry = share.get("expiry")
@@ -1591,6 +1640,8 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
 
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
+
+    _check_ip_allowlist(share, request)
 
     # Check if chat is enabled for this share
     if not share.get("enable_chat", True):
@@ -1876,7 +1927,7 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
 
 
 @app.post("/api/shared/{uuid}/auth")
-async def dropzone_auth(uuid: str, body: DropZoneAuthRequest):
+async def dropzone_auth(uuid: str, body: DropZoneAuthRequest, request: Request):
     """Authenticate to a drop zone (public endpoint).
 
     Verifies the passcode and returns a short-lived token.
@@ -1884,6 +1935,8 @@ async def dropzone_auth(uuid: str, body: DropZoneAuthRequest):
     share = get_share(uuid)
     if not share:
         raise HTTPException(status_code=404, detail="Drop zone not found")
+
+    _check_ip_allowlist(share, request)
 
     if share.get("share_type") != "dropzone":
         raise HTTPException(status_code=400, detail="Not a drop zone")
@@ -1916,6 +1969,7 @@ async def dropzone_auth(uuid: str, body: DropZoneAuthRequest):
 async def dropzone_upload(
     uuid: str,
     body: DropZoneUploadRequest,
+    request: Request,
     authorization: str | None = Header(None),
 ):
     """Request a presigned upload URL for a drop zone (public with optional auth).
@@ -1926,6 +1980,8 @@ async def dropzone_upload(
     share = get_share(uuid)
     if not share:
         raise HTTPException(status_code=404, detail="Drop zone not found")
+
+    _check_ip_allowlist(share, request)
 
     if share.get("share_type") != "dropzone":
         raise HTTPException(status_code=400, detail="Not a drop zone")
@@ -2041,6 +2097,7 @@ async def dropzone_upload(
 async def dropzone_upload_confirm(
     uuid: str,
     body: DropZoneUploadConfirmRequest,
+    request: Request,
     authorization: str | None = Header(None),
 ):
     """Confirm a completed upload to a drop zone (public with optional auth).
@@ -2050,6 +2107,8 @@ async def dropzone_upload_confirm(
     share = get_share(uuid)
     if not share:
         raise HTTPException(status_code=404, detail="Drop zone not found")
+
+    _check_ip_allowlist(share, request)
 
     if share.get("share_type") != "dropzone":
         raise HTTPException(status_code=400, detail="Not a drop zone")
@@ -2115,12 +2174,15 @@ async def dropzone_upload_confirm(
 @app.get("/api/shared/{uuid}/files")
 async def dropzone_files(
     uuid: str,
+    request: Request,
     authorization: str | None = Header(None),
 ):
     """List uploaded files in a drop zone (public with optional auth)."""
     share = get_share(uuid)
     if not share:
         raise HTTPException(status_code=404, detail="Drop zone not found")
+
+    _check_ip_allowlist(share, request)
 
     if share.get("share_type") != "dropzone":
         raise HTTPException(status_code=400, detail="Not a drop zone")
