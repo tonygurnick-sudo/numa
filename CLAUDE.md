@@ -99,7 +99,7 @@ If the Context7 MCP server is enabled, always use it automatically when doing co
 | ------------------------- | ---------- | ------------ | ------------------------------------------------------------------------------- |
 | `q-demo`                  | Q Demo     | 905418183804 | Dev/demo stacks — all dev client accounts live here                             |
 | `arcanum-q-deployer-prod` | Q Deployer | 207567759910 | Deployer account — holds `numa-client-config` table, deploys to client accounts |
-| `arcanum-prod-numa-demo`  | HQ/Demo    | —            | HQ stack (the main Arcanum internal/demo environment)                           |
+| `arcanum-prod-numa-demo`  | HQ/Demo    | —            | HQ stack — Arcanum's own Numa instance (dogfooding). Client name: `hq`          |
 
 Use `AWS_PROFILE=q-demo` for most local dev and client account access. Use `AWS_PROFILE=arcanum-prod-numa-demo` for the HQ stack. Use `AWS_PROFILE=arcanum-q-deployer-prod` for deployer-level operations (e.g., `cd tools/ && AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config nolia`).
 
@@ -232,6 +232,8 @@ Each client deploys into its own isolated AWS account. The deployer account (Q D
 **Instance URLs:** All Numa instances follow the pattern `https://<client-name>.numa.arcanum.ai/`. The custom domain field in client config exists but is unreliable without manual fiddling -- don't use it. Assume the standard subdomain pattern.
 
 **Single source of truth:** The `numa-client-config` DynamoDB table in the deployer account holds all client configuration — region, feature flags, preferred knowledge base, budget, etc. The frontend `public/config.json` is gitignored and local-only — developers edit it for localhost. In deployed environments, it’s auto-generated from the DynamoDB table.
+
+**Reading client config:** Always use the `retrieve-config` tool rather than raw DynamoDB queries: `cd tools/ && AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config <client-name>`. It resolves defaults and merges correctly — raw DynamoDB items may omit flags that default to `false`, giving an incomplete picture.
 
 ### clientConfigProd.json — Local Dev Override
 
