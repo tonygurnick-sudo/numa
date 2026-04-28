@@ -3,6 +3,7 @@ import { Nav } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useAlert } from '../../../Providers/ConfirmContext';
 import { useOps } from '../OpsContext';
 import { CreateBoardWizard } from '../Modals/CreateBoardWizard';
 import { ConfirmModal } from '../Modals/ConfirmModal';
@@ -26,6 +27,7 @@ const AllTeamsView = () => {
   const { t } = useTranslation('ops');
   const { user } = useAuth();
   const { numaDelete } = useNumaRequest();
+  const showAlert = useAlert();
   const {
     teams,
     selectedTeamId,
@@ -73,9 +75,9 @@ const AllTeamsView = () => {
     } catch (err: unknown) {
       const msg = String(err);
       if (msg.includes('409')) {
-        alert(t('teams.deleteTeamHasTickets'));
+        await showAlert({ message: t('teams.deleteTeamHasTickets'), variant: 'warning' });
       } else {
-        alert(t('errors.saveFailed', { message: msg }));
+        await showAlert({ message: t('errors.saveFailed', { message: msg }), variant: 'error' });
       }
     }
   };

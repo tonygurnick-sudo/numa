@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Search, Trash2, Pencil, Bot, Clock } from 'lucide-react';
 import { useAuth } from '../Providers/AuthProvider';
+import { useConfirm, usePrompt } from '../Providers/ConfirmContext';
 import { PageHeader } from '../Components/PageHeader';
 import { StickyToolbar } from '../Components/StickyToolbar';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
@@ -22,6 +23,9 @@ type ConversationMeta = {
 
 const ChatHistoryPage = () => {
   const { t, i18n } = useTranslation('chat');
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const navigate = useNavigate();
   const { user, numaChatDynamoUtils } = useAuth();
   const sub = user?.decoded_tokens?.idToken?.sub;
@@ -112,7 +116,13 @@ const ChatHistoryPage = () => {
   }, [numaChatDynamoUtils, user, sub, cursor, isLoadingMore, hasMore, filterStartDate, filterEndDate]);
 
   const handleRename = async (conversationId: string, currentName?: string | null) => {
-    const newName = prompt(t('history.renamePrompt', 'Enter a new name:'), currentName || '');
+    const newName = await prompt({
+      title: tCommon('prompt.rename'),
+      message: t('history.renamePrompt', 'Enter a new name:'),
+      defaultValue: currentName || '',
+      confirmLabel: tCommon('confirm.save'),
+      required: true,
+    });
     if (newName === null) return;
     if (!numaChatDynamoUtils) return;
     try {
@@ -126,7 +136,12 @@ const ChatHistoryPage = () => {
 
   const handleDelete = async (conversationId: string) => {
     if (!numaChatDynamoUtils) return;
-    if (!window.confirm(t('history.deleteConfirm', 'Are you sure you want to delete this conversation?'))) return;
+    const ok = await confirm({
+      message: t('history.deleteConfirm', 'Are you sure you want to delete this conversation?'),
+      confirmLabel: tCommon('confirm.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await numaChatDynamoUtils.deleteConversation(conversationId, sub);
       fetchConversations();

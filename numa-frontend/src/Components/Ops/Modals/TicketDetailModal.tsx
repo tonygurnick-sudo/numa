@@ -6,6 +6,7 @@ import Form from 'react-bootstrap/Form';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useAlert } from '../../../Providers/ConfirmContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import type {
@@ -153,6 +154,7 @@ export function TicketDetailModal({
   const { t } = useTranslation('ops');
   const { numaGet, numaPut, numaDelete } = useNumaRequest();
   const { showToast } = useToast();
+  const showAlert = useAlert();
   const [archiving, setArchiving] = useState(false);
   const { config, teamData, teams, workUnits, refreshTickets, refreshCrmData } = useOps();
 
@@ -328,7 +330,7 @@ export function TicketDetailModal({
         // Check for 409 conflict
         const isConflict = err instanceof Error && (err.message.includes('409') || err.message.includes('conflict'));
         if (isConflict) {
-          window.alert(t('tickets.conflictMessage'));
+          await showAlert({ message: t('tickets.conflictMessage'), variant: 'warning' });
           void loadTicket();
         } else {
           console.error('[TicketDetailModal] Update failed', err);

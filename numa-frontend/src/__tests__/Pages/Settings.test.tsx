@@ -2,12 +2,15 @@
  * @vitest-environment jsdom
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render as rtlRender, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { MemoryRouter } from 'react-router-dom';
 
 import SettingsPage from '../../Pages/Settings';
+import { ConfirmProvider } from '../../Providers/ConfirmProvider';
+
+const render: typeof rtlRender = (ui, options) => rtlRender(ui, { wrapper: ConfirmProvider, ...(options ?? {}) });
 
 const mockUseAuth = vi.fn();
 const mockNumaGet = vi.fn();

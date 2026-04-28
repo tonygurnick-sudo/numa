@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { Button, Form, Card, Badge, Table, ProgressBar } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useConfirm } from '../../../Providers/ConfirmContext';
 import * as OpsService from '../../../Services/OpsService';
 import type { Document as OpsDocument, DocTypeEntry, CreateDocumentPayload } from '../../../types/ops';
 
@@ -74,6 +75,8 @@ export function DocumentSection({
   documentTypes,
 }: DocumentSectionProps): React.JSX.Element {
   const { t } = useTranslation('ops');
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
   const { numaPost, numaDelete } = useNumaRequest();
 
   // ── Local state ───────────────────────────────────────────────────────────
@@ -173,7 +176,12 @@ export function DocumentSection({
       // Only customer documents have a delete endpoint.
       if (entityType !== 'customer') return;
 
-      if (!window.confirm(t('documents.deleteConfirm'))) return;
+      const ok = await confirm({
+        message: t('documents.deleteConfirm'),
+        confirmLabel: tCommon('confirm.delete'),
+        variant: 'danger',
+      });
+      if (!ok) return;
 
       try {
         await OpsService.deleteCustomerDocument(numaDelete, entityId, documentId);
@@ -182,7 +190,7 @@ export function DocumentSection({
         console.error('[DocumentSection] Failed to delete document', err);
       }
     },
-    [entityType, entityId, numaDelete, t]
+    [entityType, entityId, numaDelete, t, tCommon, confirm]
   );
 
   const formatDate = (dateStr: string) => {

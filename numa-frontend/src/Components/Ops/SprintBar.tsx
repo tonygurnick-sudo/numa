@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { useConfirm } from '../../Providers/ConfirmContext';
 import { useOps } from './OpsContext';
 import * as OpsService from '../../Services/OpsService';
 import {
@@ -13,7 +14,9 @@ import type { WorkUnit } from '../../types/ops';
 
 const SprintBar = () => {
   const { t } = useTranslation('ops');
+  const { t: tCommon } = useTranslation('common');
   const { numaDelete } = useNumaRequest();
+  const confirm = useConfirm();
   const {
     teamData,
     workUnits,
@@ -125,7 +128,12 @@ const SprintBar = () => {
   const handleDeleteSprint = useCallback(
     async (wu: WorkUnit) => {
       if (!teamId || deleting) return;
-      if (!window.confirm(t('sprints.deleteSprintConfirm', { name: wu.name }))) return;
+      const ok = await confirm({
+        message: t('sprints.deleteSprintConfirm', { name: wu.name }),
+        confirmLabel: tCommon('confirm.delete'),
+        variant: 'danger',
+      });
+      if (!ok) return;
       setDeleting(true);
       try {
         await OpsService.deleteWorkUnit(numaDelete, teamId, wu.id);
@@ -137,7 +145,7 @@ const SprintBar = () => {
         setDeleting(false);
       }
     },
-    [teamId, deleting, numaDelete, selectWorkUnit, refreshWorkUnits, refreshTickets, t]
+    [teamId, deleting, numaDelete, selectWorkUnit, refreshWorkUnits, refreshTickets, t, tCommon, confirm]
   );
 
   return (

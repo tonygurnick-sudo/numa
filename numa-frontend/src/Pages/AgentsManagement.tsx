@@ -4,6 +4,7 @@ import { Badge, Button, Col, Container, Dropdown, Form, Row, Spinner, Alert, Mod
 import { useNavigate } from 'react-router-dom';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
+import { useConfirm } from '../Providers/ConfirmContext';
 import {
   listAgents,
   getCachedAgents,
@@ -68,9 +69,11 @@ const LS_SHOW_HIDDEN = 'numa_agents_show_hidden';
 
 export const AgentsManagement = () => {
   const { t } = useTranslation('agents');
+  const { t: tCommon } = useTranslation('common');
   const { numaGet, numaDelete, numaPost, numaPut } = useNumaRequest();
   const { user, lambdaClient } = useAuth();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const agentsFeatureEnabled = getFlag('AGENTS');
   const schedulingEnabled = getFlag('SCHEDULING');
 
@@ -510,9 +513,19 @@ export const AgentsManagement = () => {
           count: activeSchedules.length,
         })}\n\n• ${scheduleNames}`;
 
-        if (!window.confirm(confirmMessage)) return;
+        const ok = await confirm({
+          message: confirmMessage,
+          confirmLabel: tCommon('confirm.delete'),
+          variant: 'danger',
+        });
+        if (!ok) return;
       } else {
-        if (!window.confirm(t('management.confirmDelete', { title: agent.title }))) return;
+        const ok = await confirm({
+          message: t('management.confirmDelete', { title: agent.title }),
+          confirmLabel: tCommon('confirm.delete'),
+          variant: 'danger',
+        });
+        if (!ok) return;
       }
 
       await deleteAgent(numaDelete, agent.agentId);

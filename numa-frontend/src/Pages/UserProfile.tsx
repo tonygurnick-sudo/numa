@@ -7,6 +7,7 @@ import axios from 'axios';
 import { useAuth } from '../Providers/AuthProvider';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { useConfirm } from '../Providers/ConfirmContext';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -65,6 +66,8 @@ export default function UserProfilePage({
   settingsScope = 'user',
 }: UserProfilePageProps) {
   const { t } = useTranslation('settings');
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
   const {
     user,
     getCredentials,
@@ -274,8 +277,13 @@ export default function UserProfilePage({
 
   const handleGenerateRecoveryCodes = useCallback(async () => {
     // Confirm before regenerating — existing codes will be invalidated
-    if (recoveryCodesStatus?.hasRecoveryCodes && !window.confirm(t('userProfile.recoveryCodes.regenerateConfirm'))) {
-      return;
+    if (recoveryCodesStatus?.hasRecoveryCodes) {
+      const ok = await confirm({
+        message: t('userProfile.recoveryCodes.regenerateConfirm'),
+        confirmLabel: tCommon('common.ok'),
+        variant: 'warning',
+      });
+      if (!ok) return;
     }
     setRecoveryCodesGenerating(true);
     setRecoveryCodesError(null);
@@ -291,7 +299,7 @@ export default function UserProfilePage({
     } finally {
       setRecoveryCodesGenerating(false);
     }
-  }, [numaPost, numaGet, t, recoveryCodesStatus?.hasRecoveryCodes]);
+  }, [numaPost, numaGet, t, tCommon, confirm, recoveryCodesStatus?.hasRecoveryCodes]);
 
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;

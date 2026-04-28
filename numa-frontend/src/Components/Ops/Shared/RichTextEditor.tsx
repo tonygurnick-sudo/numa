@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAlert, usePrompt } from '../../../Providers/ConfirmContext';
 
 interface RichTextEditorProps {
   value: string;
@@ -53,6 +54,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   ref
 ) {
   const { t } = useTranslation('ops');
+  const { t: tCommon } = useTranslation('common');
+  const promptDialog = usePrompt();
+  const showAlert = useAlert();
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
@@ -121,10 +125,17 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     [disabled, isHtmlMode]
   );
 
-  const handleLink = useCallback(() => {
-    const url = window.prompt('Enter URL:', 'https://');
+  const handleLink = useCallback(async () => {
+    const url = await promptDialog({
+      title: tCommon('prompt.insertLink'),
+      message: t('richText.linkUrlPrompt', 'Enter URL'),
+      defaultValue: 'https://',
+      placeholder: 'https://example.com',
+      inputType: 'url',
+      required: true,
+    });
     if (url) exec('createLink', url);
-  }, [exec]);
+  }, [exec, promptDialog, t, tCommon]);
 
   const handleTableInsert = useCallback(() => {
     if (disabled) return;
@@ -144,11 +155,18 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     document.execCommand('insertHTML', false, tableHtml);
   }, [disabled]);
 
-  const _handleImageInsert = useCallback(() => {
+  const _handleImageInsert = useCallback(async () => {
     if (disabled) return;
-    const url = window.prompt('Enter image URL:', 'https://');
+    const url = await promptDialog({
+      title: tCommon('prompt.insertImage'),
+      message: t('richText.imageUrlPrompt', 'Enter image URL'),
+      defaultValue: 'https://',
+      placeholder: 'https://example.com/image.png',
+      inputType: 'url',
+      required: true,
+    });
     if (url) document.execCommand('insertImage', false, url);
-  }, [disabled]);
+  }, [disabled, promptDialog, t, tCommon]);
 
   const handleFileAttach = useCallback(() => {
     if (disabled) return;
@@ -187,15 +205,22 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     }
   }, []);
 
-  const handleInsertImage = useCallback(() => {
+  const handleInsertImage = useCallback(async () => {
     if (onImageUpload && fileInputRef.current) {
       saveSelection(); // Save selection before file picker steals focus
       fileInputRef.current.click();
       return;
     }
-    const url = window.prompt('Enter image URL (must be public):', 'https://');
+    const url = await promptDialog({
+      title: tCommon('prompt.insertImage'),
+      message: t('richText.publicImageUrlPrompt', 'Enter image URL (must be public)'),
+      defaultValue: 'https://',
+      placeholder: 'https://example.com/image.png',
+      inputType: 'url',
+      required: true,
+    });
     if (url) exec('insertImage', url);
-  }, [exec, onImageUpload, saveSelection]);
+  }, [exec, onImageUpload, saveSelection, promptDialog, t, tCommon]);
 
   const handleImageFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,13 +234,16 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         exec('insertImage', url);
       } catch (err) {
         console.error('Failed to upload image:', err);
-        window.alert('Failed to upload image.');
+        await showAlert({
+          message: t('richText.imageUploadFailed', 'Failed to upload image.'),
+          variant: 'error',
+        });
       } finally {
         setIsUploadingImage(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     },
-    [onImageUpload, exec, restoreSelection]
+    [onImageUpload, exec, restoreSelection, showAlert, t]
   );
 
   /** Read current editor HTML, normalising empty content to ''. */
@@ -357,7 +385,6 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         el.innerHTML = htmlValue;
       }
     }
-     
   }, [isHtmlMode]);
 
   // Expose flush() to the parent via ref

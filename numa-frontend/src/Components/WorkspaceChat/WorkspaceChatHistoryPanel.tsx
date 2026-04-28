@@ -5,6 +5,7 @@ import { Bot, Pencil, Trash2 } from 'lucide-react';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import i18n from '../../i18n';
 import { useAuth } from '../../Providers/AuthProvider';
+import { useConfirm, usePrompt } from '../../Providers/ConfirmContext';
 
 const PAGE_SIZE = 50;
 
@@ -94,7 +95,10 @@ const getMonthYearLabel = (timestamp: number): string => {
 export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef, WorkspaceChatHistoryPanelProps>(
   function WorkspaceChatHistoryPanel({ isOpen, currentConversationId, onSelectConversation }, ref) {
     const { t } = useTranslation('chat');
+    const { t: tCommon } = useTranslation('common');
     const { user, numaChatDynamoUtils } = useAuth();
+    const confirm = useConfirm();
+    const prompt = usePrompt();
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [localError, setLocalError] = useState<string | null>(null);
@@ -167,7 +171,13 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
     }, [numaChatDynamoUtils, user, sub, cursor, isLoadingMore, hasMore]);
 
     const handleRename = async (conversationId: string, currentName?: string | null) => {
-      const newName = prompt(t('history.renamePrompt'), currentName || '');
+      const newName = await prompt({
+        title: tCommon('prompt.rename'),
+        message: t('history.renamePrompt'),
+        defaultValue: currentName || '',
+        confirmLabel: tCommon('confirm.save'),
+        required: true,
+      });
       if (newName === null) return;
       if (!numaChatDynamoUtils) return;
       try {
@@ -181,7 +191,12 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
 
     const handleDelete = async (conversationId: string) => {
       if (!numaChatDynamoUtils) return;
-      if (!window.confirm(t('history.deleteConfirm'))) return;
+      const ok = await confirm({
+        message: t('history.deleteConfirm'),
+        confirmLabel: tCommon('confirm.delete'),
+        variant: 'danger',
+      });
+      if (!ok) return;
       try {
         await numaChatDynamoUtils.deleteConversation(conversationId, sub);
         fetchConversations();

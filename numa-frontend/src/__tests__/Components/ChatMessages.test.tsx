@@ -2,10 +2,13 @@
  * @vitest-environment jsdom
  */
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import { ChatMessages } from '../../Components/Chat/ChatMessages';
+import { ConfirmProvider } from '../../Providers/ConfirmProvider';
 import '@testing-library/jest-dom';
+
+const render: typeof rtlRender = (ui, options) => rtlRender(ui, { wrapper: ConfirmProvider, ...(options ?? {}) });
 
 // Mock the useAuth hook
 vi.mock('../../Providers/AuthProvider', () => ({
