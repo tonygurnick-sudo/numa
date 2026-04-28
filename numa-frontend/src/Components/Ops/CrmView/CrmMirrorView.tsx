@@ -145,6 +145,10 @@ function DroppableColumn({
           alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: 12,
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          boxShadow: '0 4px 8px -2px rgba(0, 0, 0, 0.08)',
         }}
       >
         <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>{stage.name}</span>
