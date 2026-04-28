@@ -164,7 +164,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     title: 'Secrets Vault',
     description: 'Secure credential storage for integrations and connections.',
     icon: 'bi-key',
-    system_only: false,
+    system_only: true,
     dev_only: true,
     enabled: false,
     dependencies: [],
