@@ -24,22 +24,17 @@ class NetSuiteProvider(OAuthProvider):
         self,
         client_id: str,
         client_secret: str | None = None,
-        credentials: dict[str, Any] | None = None,
+        account_id: str = "",
+        **_: Any,
     ):
+        # NetSuite is a public OAuth client (PKCE) — client_secret is always None
+        # in production. The kwarg is accepted only to satisfy the OAuthProvider
+        # base signature and the auto-discovery instantiation.
         super().__init__(client_id=client_id, client_secret=client_secret)
-        self.credentials = credentials or {}
-        # Try to pull from kwargs first, fallback to the credential dictionary keys
-        actual_client_id = client_id or self.credentials.get("clientId", "")
-        # NetSuite PKCE does not use Client Secret. We map Account ID to the Secret field for ease of vault storage.
-        self.account_id = (
-            client_secret
-            or self.credentials.get("accountId", "")
-            or self.credentials.get("account_id", "")
-        )
-
         # NetSuite API domains strictly require account IDs to be lowercased
-        # and underscores replaced with hyphens (e.g. 1234567_SB1 -> 1234567-sb1)
-        sanitized_account_id = self.account_id.lower().replace("_", "-")
+        # and underscores replaced with hyphens (e.g. 1234567_SB1 -> 1234567-sb1).
+        self.account_id = account_id
+        sanitized_account_id = account_id.lower().replace("_", "-")
         self.base_url = f"https://{sanitized_account_id}.suitetalk.api.netsuite.com"
         self.mcp_url = f"{self.base_url}{self.MCP_PATH}"
 

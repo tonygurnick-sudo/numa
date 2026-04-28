@@ -29,13 +29,29 @@ logger = structlog.get_logger()
 # Connector type sets for routing
 SYNERGY_CONNECTORS = {"synergy"}
 
-# Operations that are read-only and safe to auto-approve
+# Operations that are read-only and safe to auto-approve. `mcp_call` is
+# conditionally safe (per-method); the handler gates write methods on approval.
 SAFE_CONNECTOR_OPERATIONS = frozenset(
-    {"status", "list_files", "search_files", "download_file", "get_file_info"}
+    {
+        "status",
+        "list_files",
+        "search_files",
+        "download_file",
+        "get_file_info",
+        "mcp_call",
+    }
 )
 
-# Operations that mutate external state and require approval
+# Operations that always mutate external state and require approval
 UNSAFE_CONNECTOR_OPERATIONS = frozenset({"request"})
+
+# Connector-specific write methods. Keys are method names the agent passes to
+# `mcp_call`; values are human-readable descriptions shown in the approval
+# prompt. Listed methods require explicit user approval before dispatch.
+MCP_WRITE_METHODS: dict[str, str] = {
+    "ns_createRecord": "Create a NetSuite record",
+    "ns_updateRecord": "Update a NetSuite record",
+}
 
 
 def is_safe_connector_operation(operation: str) -> bool:
@@ -754,6 +770,77 @@ async def _handle_request(params: dict[str, Any]) -> dict[str, Any]:
 # Connector operation dispatch map + MCP tool definition
 # ═════════════════════════════════════════════════════════════════════════════
 
+
+async def _handle_mcp_call(params: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch a JSON-RPC 2.0 MCP method to a connector that speaks MCP.
+
+    Today only NetSuite exposes an MCP endpoint (`com.netsuite.mcpstandardtools`).
+    The Lambda-side routing key is `connect_{connector}_mcp`.
+
+    Write methods listed in `MCP_WRITE_METHODS` are gated by the approval
+    system; read methods run immediately.
+    """
+    connector = (params.get("connector") or "").strip()
+    method = (params.get("method") or "").strip()
+    arguments = params.get("arguments") or {}
+
+    if not connector:
+        return {
+            "content": [
+                {"type": "text", "text": "Error: 'connector' is required for mcp_call"}
+            ],
+            "isError": True,
+        }
+    if not method:
+        return {
+            "content": [
+                {"type": "text", "text": "Error: 'method' is required for mcp_call"}
+            ],
+            "isError": True,
+        }
+
+    write_desc = MCP_WRITE_METHODS.get(method)
+    if write_desc:
+        decision = _await_approval(f"{connector}-{method}", write_desc)
+        if decision != "approved":
+            return {
+                "content": [
+                    {"type": "text", "text": f"Action not approved ({decision})."}
+                ],
+                "isError": True,
+            }
+
+    result = _invoke_connect_tool(
+        f"connect_{connector}_mcp",
+        {"method": method, "arguments": arguments},
+    )
+
+    if isinstance(result, dict) and (result.get("error") or result.get("error_code")):
+        needs_cred = _check_needs_credential(result)
+        if needs_cred:
+            return needs_cred
+        auth_err = _check_auth_error(result)
+        if auth_err:
+            return auth_err
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Error: {result.get('error', result.get('error_code'))}",
+                }
+            ],
+            "isError": True,
+        }
+
+    data = result.get("result", {}) if isinstance(result, dict) else {}
+    body_str = (
+        json.dumps(data, indent=2) if isinstance(data, (dict, list)) else str(data)
+    )
+    if len(body_str) > 10000:
+        body_str = body_str[:10000] + "\n... (truncated)"
+    return {"content": [{"type": "text", "text": body_str}]}
+
+
 CONNECTOR_HANDLERS = {
     "status": _handle_status,
     "list_files": _handle_list_files,
@@ -761,6 +848,7 @@ CONNECTOR_HANDLERS = {
     "download_file": _handle_download_file,
     "get_file_info": _handle_get_file_info,
     "request": _handle_request,
+    "mcp_call": _handle_mcp_call,
 }
 
 CONNECTOR_OPERATIONS = list(CONNECTOR_HANDLERS.keys())
@@ -770,9 +858,11 @@ CONNECTOR_OPERATIONS = list(CONNECTOR_HANDLERS.keys())
     name="connectors",
     description=(
         "Access connected cloud storage and external services. Use for OAuth cloud "
-        "storage (Google Drive, OneDrive, Dropbox), Synergy 12d, and authenticated "
-        "HTTP calls to any OAuth-connected API. Use 'status' to see available "
-        "connectors, then browse/search/download files or make API requests."
+        "storage (Google Drive, OneDrive, Dropbox), Synergy 12d, authenticated "
+        "HTTP calls to any OAuth-connected API, and MCP-based ERPs (NetSuite). "
+        "Use 'status' to see available connectors, then browse/search/download "
+        "files, make API requests, or invoke MCP methods via 'mcp_call' with "
+        "{connector, method, arguments}."
     ),
     input_schema={
         "type": "object",
@@ -786,9 +876,11 @@ CONNECTOR_OPERATIONS = list(CONNECTOR_HANDLERS.keys())
                 "type": "object",
                 "description": (
                     "Operation-specific parameters. Most operations need 'connector' "
-                    "(e.g. googledrive, onedrive, dropbox, synergy). "
+                    "(e.g. googledrive, onedrive, dropbox, synergy, netsuite). "
                     "list_files/download_file need 'file_id' or 'folder_id'. "
-                    "search_files needs 'query'. request needs 'url'."
+                    "search_files needs 'query'. request needs 'url'. "
+                    "mcp_call needs 'connector', 'method' (e.g. ns_runCustomSuiteQL), "
+                    "and 'arguments' (method-specific object)."
                 ),
             },
             "description": {

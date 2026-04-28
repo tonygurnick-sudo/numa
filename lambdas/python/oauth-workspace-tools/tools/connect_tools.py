@@ -655,7 +655,14 @@ def handle_connect_synergy_download(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Execute a JSON-RPC 2.0 MCP method against NetSuite AI Connector Service."""
+    """Execute a JSON-RPC 2.0 MCP method against NetSuite AI Connector Service.
+
+    Connector config (client_id, account_id) is read from the COMPANY vault
+    entry `oauth-client-netsuite` — admin-managed, framework convention. The
+    per-user OAuth tokens live in the user vault as `oauth-netsuite` and are
+    fetched via `get_oauth_token`. NetSuite is a public OAuth client (PKCE),
+    so there is no client_secret to propagate.
+    """
     import asyncio
 
     try:
@@ -668,6 +675,41 @@ def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
         if not method:
             return {"status": "error", "result": None, "error": "Missing method"}
 
+        try:
+            company_secrets = _get_consolidated_company_vault() or {}
+        except Exception:
+            company_secrets = {}
+        entry = company_secrets.get("oauth-client-netsuite")
+        if not entry:
+            return {
+                "status": "error",
+                "result": None,
+                "error": (
+                    "NetSuite connector is not configured. Ask an admin to set it up "
+                    "under Data Connectors in Settings."
+                ),
+            }
+
+        fields = entry.get("fields") or entry
+        if not isinstance(fields, dict):
+            return {
+                "status": "error",
+                "result": None,
+                "error": "NetSuite connector config is malformed. Ask an admin to re-save the connector.",
+            }
+
+        client_id = fields.get("client_id", "")
+        account_id = fields.get("account_id", "")
+        if not client_id or not account_id:
+            return {
+                "status": "error",
+                "result": None,
+                "error": (
+                    "NetSuite connector is missing Client ID or Account ID. Ask an admin "
+                    "to re-save the connector under Data Connectors."
+                ),
+            }
+
         async def do_call():
             from oauth_providers import create_provider
 
@@ -676,27 +718,17 @@ def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
                 return {
                     "status": "error",
                     "result": None,
-                    "error": "No valid NetSuite OAuth token. Please connect your account first.",
+                    "error": (
+                        "You are not connected to NetSuite. Open Data Connectors in Settings "
+                        "and click Connect on the NetSuite entry to complete the OAuth flow."
+                    ),
                 }
 
-            from .oauth_tools import _get_consolidated_company_vault
-
-            company_vault = _get_consolidated_company_vault()
-            company_secrets = company_vault if company_vault else {}
-            entry = company_secrets.get("oauth-client-netsuite")
-            if not entry:
-                return {
-                    "status": "error",
-                    "result": None,
-                    "error": "Missing NetSuite provider company configuration in vault.",
-                }
-
-            fields = entry.get("fields") or entry
             provider = create_provider(
                 "netsuite",
-                fields.get("client_id", ""),
-                client_secret=fields.get("client_secret", ""),
-                credentials=fields,
+                client_id=client_id,
+                client_secret=None,
+                account_id=account_id,
             )
 
             try:

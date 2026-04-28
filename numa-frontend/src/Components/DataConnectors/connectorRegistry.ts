@@ -19,6 +19,14 @@ export interface CredentialFieldDef {
   placeholder?: string;
   required: boolean;
   helpText?: string;
+  /**
+   * When true, the value is normalised to a DNS-safe hostname component
+   * (lowercased, `_` replaced with `-`) at URL-placeholder substitution time.
+   * Only affects values interpolated into authUrl / tokenUrl — the stored
+   * field value keeps the admin's original input. Needed for providers that
+   * embed tenant identifiers in the hostname (e.g. NetSuite account IDs).
+   */
+  hostnameSafe?: boolean;
 }
 
 export interface ConnectorEventType {
@@ -441,24 +449,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     },
   },
   {
-    id: 'netsuite',
-    displayName: 'NetSuite',
-    icon: 'bi-graph-up',
-    description: 'Oracle NetSuite cloud ERP — financials, CRM, e-commerce',
-    category: 'ERP',
-    authType: 'oauth2',
-    oauth: {
-      // NetSuite uses per-account endpoints where the account id is embedded
-      // in the hostname (e.g. `{account-id}.suitetalk.api.netsuite.com`).
-      // Admins supply the account id at registration time; auth/token URLs
-      // are derived at runtime. See ext-api-doc/netsuite/03-connector-setup.md.
-      authUrl: '',
-      tokenUrl: '',
-      scopes: 'rest_webservices',
-      extraAuthParams: '{"prompt":"consent"}',
-    },
-  },
-  {
     id: 'zoho-crm',
     displayName: 'Zoho CRM',
     icon: 'bi-person-rolodex',
@@ -597,6 +587,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'text',
         placeholder: 'e.g. 1234567 or 1234567_SB1',
         required: true,
+        hostnameSafe: true,
         helpText: 'Your NetSuite Account ID. This is required for OAuth routing.',
       },
     ],

@@ -80,8 +80,12 @@ whichever credential the user has stored; you don't handle auth yourself.
 
 **Pass a path, not a full URL, for connectors with an admin-configured
 instance URL.** The backend expands `/api/v1/...` to `{instance_url}/api/v1/...`
-automatically for Synergy, Workbench, NetSuite, MYOB Acumatica, and any other
-customer-hosted API. You never have to discover or store the instance URL.
+automatically for Synergy, Workbench, MYOB Acumatica, and any other
+customer-hosted HTTP API. You never have to discover or store the instance URL.
+
+**NetSuite does not speak plain HTTP** — it uses MCP (JSON-RPC 2.0). Use the
+`mcp_call` operation instead of `request` for NetSuite. See the MCP section
+below.
 
 ```
 # Fully-qualified URL (OAuth providers — their API hosts are fixed):
@@ -109,6 +113,33 @@ connectors(name="request", params={
 If you pass a relative path for a connector whose admin hasn't configured
 an `instance_url`, you'll get a clear error naming the missing config. Only
 the `data-bucket` (internal S3) rejects the request operation outright.
+
+### MCP Calls (mcp_call operation)
+
+For connectors that expose a Model Context Protocol (JSON-RPC 2.0) endpoint
+rather than plain REST — today that's NetSuite via the AI Connector Service
+SuiteApp. Pass `connector`, `method`, and `arguments`:
+
+```
+connectors(name="mcp_call", params={
+    connector: "netsuite",
+    method: "ns_runCustomSuiteQL",
+    arguments: {
+        sqlQuery: "SELECT id, companyname FROM customer WHERE ROWNUM <= 10",
+        description: "List 10 customers"
+    }
+}, description: "Query NetSuite customers")
+```
+
+Available NetSuite MCP methods: `ns_getRecordTypeMetadata`, `ns_getRecord`,
+`ns_createRecord`_, `ns_updateRecord`_, `ns_runCustomSuiteQL`,
+`ns_getSuiteQLMetadata`, `ns_listSavedSearches`, `ns_runSavedSearch`,
+`ns_listAllReports`, `ns_runReport`, `ns_getSubsidiaries`.
+
+Methods marked `*` write to NetSuite and require user approval. For create /
+update, always call `ns_getRecordTypeMetadata` first to discover fields.
+SuiteQL uses Oracle dialect (ROWNUM, not LIMIT; `||` for concat; `'T'`/`'F'`
+for booleans).
 
 ### What to tell users when not connected
 

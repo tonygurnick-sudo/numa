@@ -510,14 +510,18 @@ export const OAuthWizard = ({
       // Build scopes string from checkboxes or raw input
       const scopeString = scopeDefs ? buildScopeString(pid, form.selectedScopeIds) : form.scopes.trim();
 
-      // Dynamic URL interpolation
+      // Dynamic URL interpolation. Fields declared with `hostnameSafe: true`
+      // are normalised to DNS-safe form (lowercased, `_` → `-`) before being
+      // spliced into authUrl / tokenUrl so admins can enter Account IDs like
+      // `1234567_SB1` and still get a resolvable hostname.
       let finalAuthUrl = form.authUrl.trim();
       let finalTokenUrl = form.tokenUrl.trim();
+      const hostnameSafeKeys = new Set(
+        (registryEntry?.credentialFields ?? []).filter((f) => f.hostnameSafe).map((f) => f.key)
+      );
       Object.entries(form.customCredentials).forEach(([key, value]) => {
-        let safeValue = value.trim();
-        if (key === 'account_id') {
-          safeValue = safeValue.toLowerCase().replace(/_/g, '-');
-        }
+        const raw = value.trim();
+        const safeValue = hostnameSafeKeys.has(key) ? raw.toLowerCase().replace(/_/g, '-') : raw;
         const placeholder = `<${key.toUpperCase()}>`;
         finalAuthUrl = finalAuthUrl.replace(new RegExp(placeholder, 'g'), safeValue);
         finalTokenUrl = finalTokenUrl.replace(new RegExp(placeholder, 'g'), safeValue);
