@@ -247,6 +247,7 @@ export const CreateShareModal = ({
   // ─── Configuration state ───────────────────────────────────────────
   const [description, setDescription] = useState('');
   const [expiryHours, setExpiryHours] = useState<number | null>(null);
+  const [allowedIps, setAllowedIps] = useState('');
   const [maxQuestions, setMaxQuestions] = useState(12);
   const [enableChat, setEnableChat] = useState(true);
   const [allowDownload, setAllowDownload] = useState(true);
@@ -322,6 +323,7 @@ export const CreateShareModal = ({
       setSelectedFile(preSelectedFile ?? null);
       setDescription('');
       setExpiryHours(null);
+      setAllowedIps('');
       setMaxQuestions(12);
       setEnableChat(true);
       setAllowDownload(true);
@@ -707,6 +709,12 @@ export const CreateShareModal = ({
         enable_chat: enableChat,
         allow_download: allowDownload,
         kb_id: selectedKbId ?? undefined,
+        allowed_ips: allowedIps
+          ? allowedIps
+              .split(',')
+              .map((ip) => ip.trim())
+              .filter(Boolean)
+          : undefined,
       });
 
       setShareResult(result);
@@ -807,6 +815,12 @@ export const CreateShareModal = ({
         description: description || undefined,
         max_calls: enableChat && dropzoneMaxQuestions ? parseInt(dropzoneMaxQuestions, 10) : undefined,
         kb_id: enableChat && selectedKbId ? selectedKbId : undefined,
+        allowed_ips: allowedIps
+          ? allowedIps
+              .split(',')
+              .map((ip) => ip.trim())
+              .filter(Boolean)
+          : undefined,
       });
 
       setShareResult(result);
@@ -1310,6 +1324,7 @@ export const CreateShareModal = ({
               <Form.Select
                 value={expiryHours ?? ''}
                 onChange={(e) => setExpiryHours(e.target.value === '' ? null : Number(e.target.value))}
+                className="mb-4"
               >
                 <option value="">{t('createShare.expiryOptions.never')}</option>
                 <option value={168}>{t('createShare.expiryOptions.7')}</option>
@@ -1317,6 +1332,21 @@ export const CreateShareModal = ({
                 <option value={720}>{t('createShare.expiryOptions.30')}</option>
                 <option value={2160}>{t('createShare.expiryOptions.90')}</option>
               </Form.Select>
+
+              <h6 className="mb-2">
+                {t('createShare.wizard.ipWhitelistTitle', { defaultValue: 'IP Whitelist (Optional)' })}
+              </h6>
+              <p className="text-muted small mb-3">
+                {t('createShare.wizard.ipWhitelistHelp', {
+                  defaultValue: 'Restrict access to specific IP addresses. Separate multiple IPs with commas.',
+                })}
+              </p>
+              <Form.Control
+                type="text"
+                placeholder="e.g. 192.168.1.1, 10.0.0.0/24"
+                value={allowedIps}
+                onChange={(e) => setAllowedIps(e.target.value)}
+              />
             </div>
           );
 
@@ -1521,6 +1551,21 @@ export const CreateShareModal = ({
                 </div>
 
                 <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
+                  <span className="small fw-semibold text-muted">
+                    {t('createShare.wizard.reviewIpWhitelist', { defaultValue: 'IP Whitelist' })}
+                  </span>
+                  <span className="text-end text-truncate" style={{ maxWidth: '60%', fontSize: 13 }}>
+                    {allowedIps ? (
+                      allowedIps
+                    ) : (
+                      <em className="text-muted">
+                        {t('createShare.wizard.reviewNoIpWhitelist', { defaultValue: 'None (Public)' })}
+                      </em>
+                    )}
+                  </span>
+                </div>
+
+                <div className="d-flex justify-content-between align-items-center p-3 border-bottom bg-light">
                   <span className="small fw-semibold text-muted">{t('dropzoneWizard.reviewMaxFileSize')}</span>
                   <span>{maxFileSizeMb ? `${maxFileSizeMb} MB` : t('dropzoneWizard.reviewNoLimit')}</span>
                 </div>
@@ -2295,6 +2340,7 @@ export const CreateShareModal = ({
             <Form.Select
               value={expiryHours ?? ''}
               onChange={(e) => setExpiryHours(e.target.value === '' ? null : Number(e.target.value))}
+              className="mb-4"
             >
               <option value="">{t('createShare.expiryOptions.never')}</option>
               <option value={168}>{t('createShare.expiryOptions.7')}</option>
@@ -2302,6 +2348,21 @@ export const CreateShareModal = ({
               <option value={720}>{t('createShare.expiryOptions.30')}</option>
               <option value={2160}>{t('createShare.expiryOptions.90')}</option>
             </Form.Select>
+
+            <h6 className="mb-2">
+              {t('createShare.wizard.ipWhitelistTitle', { defaultValue: 'IP Whitelist (Optional)' })}
+            </h6>
+            <p className="text-muted small mb-3">
+              {t('createShare.wizard.ipWhitelistHelp', {
+                defaultValue: 'Restrict access to specific IP addresses. Separate multiple IPs with commas.',
+              })}
+            </p>
+            <Form.Control
+              type="text"
+              placeholder="e.g. 192.168.1.1, 10.0.0.0/24"
+              value={allowedIps}
+              onChange={(e) => setAllowedIps(e.target.value)}
+            />
           </div>
         );
 
@@ -2399,6 +2460,22 @@ export const CreateShareModal = ({
               <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
                 <span className="small fw-semibold text-muted">{t('createShare.wizard.reviewExpiry')}</span>
                 <span>{expiryLabel(expiryHours)}</span>
+              </div>
+
+              {/* IP Whitelist */}
+              <div className="d-flex justify-content-between align-items-center p-3 border-bottom bg-light">
+                <span className="small fw-semibold text-muted">
+                  {t('createShare.wizard.reviewIpWhitelist', { defaultValue: 'IP Whitelist' })}
+                </span>
+                <span className="text-end text-truncate" style={{ maxWidth: '60%', fontSize: 13 }}>
+                  {allowedIps ? (
+                    allowedIps
+                  ) : (
+                    <em className="text-muted">
+                      {t('createShare.wizard.reviewNoIpWhitelist', { defaultValue: 'None (Public)' })}
+                    </em>
+                  )}
+                </span>
               </div>
 
               {/* Chat */}
