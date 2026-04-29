@@ -770,9 +770,9 @@
     }
   },
   "kbTargetSelector": {
-    "label": "Target Knowledge Base",
-    "placeholder": "Select a knowledge base",
-    "createKB": "Create KB"
+    "label": "Target folder",
+    "placeholder": "Select a folder",
+    "createKB": "Create folder"
   },
   "synergyJobsTree": {
     "subfolders": "{{count}} subfolders",
@@ -788,7 +788,7 @@
   "dataConnectorsPage": {
     "title": "Data Connectors",
     "subtitle": {
-      "synergy": "Select Synergy 12d jobs and folders to connect into a knowledge base.",
+      "synergy": "Select Synergy 12d jobs and folders to connect into a folder.",
       "list": "Choose a connector to configure connected data sources."
     },
     "saving": "Saving...",
@@ -801,7 +801,7 @@
     "backToConnectors": "Back to connectors",
     "synergyNotConnected": "Synergy 12d is not connected. Connect your Synergy 12d credentials in Integrations first.",
     "synergyAuthError": "Your Synergy 12d access token has expired or been revoked. Please reconnect with new credentials.",
-    "skipUnsupportedFiles": "Skip files that the knowledge base cannot ingest",
+    "skipUnsupportedFiles": "Skip files that can't be ingested",
     "loadingConnectors": "Loading data connectors...",
     "searchJobs": "Search jobs...",
     "connectedJobs": "Connected Jobs",
@@ -816,9 +816,9 @@
       "loadStatus": "Failed to load data connector status.",
       "loadJobs": "Failed to load Synergy 12d jobs.",
       "loadConfigs": "Failed to load sync selections.",
-      "loadKbs": "Failed to load knowledge bases.",
+      "loadKbs": "Failed to load folders.",
       "saveChanges": "Failed to save changes.",
-      "selectKbFirst": "Select a knowledge base before connecting."
+      "selectKbFirst": "Select a folder before connecting."
     }
   }
 }

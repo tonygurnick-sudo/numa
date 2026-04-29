@@ -5,6 +5,7 @@ import { Database, Lightbulb, Link45deg, Search, Robot } from 'react-bootstrap-i
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { useAlert, useConfirm } from '../../Providers/ConfirmContext';
 import { useBranding } from '../../Providers/BrandingContext';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { ChipsInput } from '../Inputs/ChipsInput';
@@ -91,6 +92,9 @@ export const AgentCreateModal = ({
   teams = [],
 }: AgentCreateModalProps) => {
   const { t } = useTranslation('agents');
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
+  const showAlert = useAlert();
   const { user, lambdaClient } = useAuth();
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const schedulingEnabled = getFlag('SCHEDULING');
@@ -571,7 +575,7 @@ export const AgentCreateModal = ({
       } else {
         // Check if we've reached the limit of 4 integrations
         if (enabled.size >= 4) {
-          window.alert(t('createModal.integrations.maxAlert'));
+          void showAlert({ message: t('createModal.integrations.maxAlert'), variant: 'warning' });
           return prev;
         }
         enabled.add(integrationId);
@@ -722,7 +726,11 @@ export const AgentCreateModal = ({
     const isNewPublicAgent = !editingAgent && formState.visibility === 'public';
 
     if (isBecomingPublic || isNewPublicAgent) {
-      const confirmed = window.confirm(t('createModal.visibility.publicConfirm'));
+      const confirmed = await confirm({
+        message: t('createModal.visibility.publicConfirm'),
+        confirmLabel: tCommon('common.ok'),
+        variant: 'warning',
+      });
       if (!confirmed) {
         return;
       }
@@ -844,9 +852,15 @@ export const AgentCreateModal = ({
       }
       setReferenceFiles([]);
       if (warnings.length) {
-        window.alert(t('createModal.import.notes', { notes: warnings.join('\n- ') }));
+        await showAlert({
+          message: t('createModal.import.notes', { notes: warnings.join('\n- ') }),
+          variant: 'warning',
+        });
       } else {
-        window.alert(t('createModal.import.success'));
+        await showAlert({
+          message: t('createModal.import.success'),
+          variant: 'success',
+        });
       }
       // Reset file input so the same file can be chosen again if needed
       e.target.value = '';
@@ -1331,7 +1345,7 @@ export const AgentCreateModal = ({
                           className="fs-5"
                         />
                       </div>
-                      {/* Knowledge Base Access */}
+                      {/* Folder access (Numa Files) */}
                       <div className="p-3 bg-white border rounded-2">
                         <div className="d-flex align-items-center gap-3 mb-3">
                           <div

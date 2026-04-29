@@ -209,7 +209,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     pipedreamIntegrations: 'Pipedream Integrations',
     dataConnectorsEnabled: 'Data Connectors',
     allowBedrockQuotaSharing: 'Bedrock Quota Sharing',
-    preferredKnowledgeBase: 'Knowledge Base Type',
+    preferredKnowledgeBase: 'Numa Files backend',
     qBusinessRegion: 'Q Business Region',
     embeddingModel: 'Embedding Model',
     bedrockParserModel: 'Parser Model',

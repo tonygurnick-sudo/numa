@@ -5,6 +5,7 @@ import App from './App.jsx';
 import i18n from './i18n';
 
 import { fetchConfigAddtoSession } from './Components/ConfigSetup';
+import { ConfirmProvider } from './Providers/ConfirmProvider';
 import { NicetyProvider } from './Providers/NicetyProvider';
 import { ToastProvider } from './Providers/ToastProvider';
 import { startVersionChecker } from './utils/versionChecker';
@@ -25,9 +26,11 @@ createRoot(document.getElementById('root')).render(
         }
       >
         <ToastProvider>
-          <NicetyProvider>
-            <App />
-          </NicetyProvider>
+          <ConfirmProvider>
+            <NicetyProvider>
+              <App />
+            </NicetyProvider>
+          </ConfirmProvider>
         </ToastProvider>
       </Suspense>
     </I18nextProvider>

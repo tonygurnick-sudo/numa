@@ -65,7 +65,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     label: 'Search files',
     description: "Search your organization's documents and data",
     icon: 'search',
-    prompt: 'I want help searching my knowledge base for something.',
+    prompt: 'I want help searching my Numa Files for something.',
     behavior: 'send',
     category: 'research',
     requiresFeature: 'knowledgeBase',

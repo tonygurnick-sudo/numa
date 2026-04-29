@@ -456,7 +456,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
       if (fileError) errors.push(fileError);
     });
 
-    if (errors.length > 0) {
+    if (validFiles.length === 0 && errors.length > 0) {
       setError(errors.join('\n'));
       onNotComplete();
       return;
@@ -465,10 +465,9 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     if (validFiles.length > 0) {
       updateUploadStatus(null, null);
       setUploadProgress(0);
-      setError(null);
       onNotComplete();
       onChange(null);
-      await handleUpload(validFiles);
+      await handleUpload(validFiles, errors.length > 0 ? errors.join('\n') : null);
     }
   };
 
@@ -513,7 +512,10 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
   };
 
   // ---- Upload core ----
-  const handleUpload = async (filesToUpload: File[] | StandardizedFile[] = selectedFiles) => {
+  const handleUpload = async (
+    filesToUpload: File[] | StandardizedFile[] = selectedFiles,
+    validationErrors: string | null = null
+  ) => {
     const isChatFileUpload = task?.id === 'chatFileUpload';
 
     if (!userUuid) {
@@ -547,7 +549,11 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     const results: StandardizedFile[] = [];
 
     try {
-      setError(null);
+      if (!validationErrors) {
+        setError(null);
+      } else {
+        setError(validationErrors);
+      }
 
       // For non-chat uploads, ensure we have a job ID
       if (!isChatFileUpload && numaAppData) {
@@ -738,6 +744,9 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
         onChange(updatedFiles);
         return updatedFiles;
       });
+      if (validationErrors) {
+        setError(validationErrors);
+      }
       onComplete(results || []);
     } catch (err) {
       console.error('Error during file upload:', err);

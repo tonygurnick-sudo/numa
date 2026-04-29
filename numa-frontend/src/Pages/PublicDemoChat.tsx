@@ -797,7 +797,7 @@ export const PublicDemoChat = () => {
           <p className="mb-2">
             {t(
               'demo.trial.body',
-              "What you're seeing is a lightweight taste of Numa. On the full platform you can connect your own tools, build custom agents, access your company's knowledge base, schedule automations, and much more."
+              "What you're seeing is a lightweight taste of Numa. On the full platform you can connect your own tools, build custom agents, access your company's files (Numa Files), schedule automations, and much more."
             )}
           </p>
           <p className="mb-0 text-muted">

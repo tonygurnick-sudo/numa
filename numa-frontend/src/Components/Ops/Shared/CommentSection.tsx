@@ -4,6 +4,7 @@ import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
+import { useConfirm } from '../../../Providers/ConfirmContext';
 import * as OpsService from '../../../Services/OpsService';
 import type { Comment } from '../../../types/ops';
 import { RichTextEditor } from './RichTextEditor';
@@ -100,6 +101,8 @@ function relativeTime(dateStr: string, t: (key: string, opts?: Record<string, un
  */
 export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Element {
   const { t } = useTranslation('ops');
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { user } = useAuth() as { user: any };
@@ -166,7 +169,12 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
   };
 
   const handleDelete = async (commentId: string) => {
-    if (!window.confirm(t('comments.deleteConfirm'))) return;
+    const ok = await confirm({
+      message: t('comments.deleteConfirm'),
+      confirmLabel: tCommon('confirm.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await OpsService.deleteComment(numaDelete, ticketId, commentId);
       await loadComments();

@@ -454,6 +454,34 @@ class KnowledgeBaseService {
   }
 
   /**
+   * Rename a single file within a KB (same folder, new filename).
+   * The backend copies the file + metadata sidecar to the new key and
+   * deletes the originals. Returns 409 if the destination already exists.
+   */
+  async renameKBFile(kbId: string, key: string, newFilename: string): Promise<{ sourceKey: string; destKey: string }> {
+    try {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/files/rename`), {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ key, newFilename }),
+      });
+
+      const result = await this.parseJsonResponse<{ sourceKey: string; destKey: string }>(
+        response,
+        i18n.t('errors:knowledgeBase.renameFileFailed', { defaultValue: 'Failed to rename file' })
+      );
+
+      clearSwrCache(`kbFiles_${kbId}`);
+      clearSwrCache(`kbFilesDeep_${kbId}`);
+
+      return result;
+    } catch (error) {
+      console.error('Error renaming KB file:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get KB state including documents, sync status, and ingestion jobs
    * This replaces the frontend AWS SDK calls for KB state
    */

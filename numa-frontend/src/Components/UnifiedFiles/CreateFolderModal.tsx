@@ -1,8 +1,13 @@
-import React, { useMemo, useState } from 'react';
-import { Modal, Button, Form, Alert } from 'react-bootstrap';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Modal, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
-import { ChipsInput } from '../Inputs/ChipsInput';
+import { UsersService, type WorkspaceUser } from '../../Services/UsersService';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { UserPicker } from '../Inputs/UserPicker';
+import type { StaffProfile } from '../../types/ops';
+
+type Visibility = 'personal' | 'shared' | 'public' | 'public_editor';
 
 interface CreateFolderModalProps {
   readonly show: boolean;
@@ -10,42 +15,51 @@ interface CreateFolderModalProps {
   readonly onSuccess: () => void;
 }
 
-const EMAILish = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
-
-function normalizeIdentifiers(list: readonly string[]): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of list) {
-    const trimmed = raw.trim();
-    if (!trimmed) continue;
-    const lower = trimmed.toLowerCase();
-    if (seen.has(lower)) continue;
-    seen.add(lower);
-    out.push(trimmed);
-  }
-  return out;
-}
-
-function findInvalidEmailLikes(list: readonly string[]): string[] {
-  return list.filter((v) => v.includes('@') && !EMAILish.test(v));
+function toStaffProfile(u: WorkspaceUser): StaffProfile {
+  return {
+    id: u.sub ?? u.email,
+    name: u.displayName || u.name || null,
+    email: u.email,
+    role: '',
+    avatarUrl: u.avatarUrl ?? null,
+    isActive: u.enabled,
+  };
 }
 
 export function CreateFolderModal({ show, onHide, onSuccess }: CreateFolderModalProps): React.JSX.Element {
   const { t } = useTranslation('unifiedFiles');
   const { t: tKB } = useTranslation('knowledgeBase');
+  const { numaGet } = useNumaRequest();
 
   const [folderName, setFolderName] = useState('');
-  const [viewerChips, setViewerChips] = useState<string[]>([]);
-  const [editorChips, setEditorChips] = useState<string[]>([]);
-  const [visibility, setVisibility] = useState<'personal' | 'shared' | 'public' | 'public_editor'>('personal');
+  const [viewerIds, setViewerIds] = useState<string[]>([]);
+  const [editorIds, setEditorIds] = useState<string[]>([]);
+  const [visibility, setVisibility] = useState<Visibility>('personal');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceUser[]>([]);
+
+  const staffProfiles = useMemo(() => workspaceUsers.map(toStaffProfile), [workspaceUsers]);
+
+  // Fetch users when modal opens
+  useEffect(() => {
+    if (!show) return;
+    let cancelled = false;
+    UsersService.list(numaGet)
+      .then((users) => {
+        if (!cancelled) setWorkspaceUsers(users);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [show, numaGet]);
 
   const handleClose = (): void => {
     if (isSubmitting) return;
     setFolderName('');
-    setViewerChips([]);
-    setEditorChips([]);
+    setViewerIds([]);
+    setEditorIds([]);
     setVisibility('personal');
     setError(null);
     onHide();
@@ -53,18 +67,18 @@ export function CreateFolderModal({ show, onHide, onSuccess }: CreateFolderModal
 
   const normalizedViewers = useMemo(() => {
     if (visibility === 'public' || visibility === 'public_editor') return ['*'];
-    if (visibility === 'shared') return normalizeIdentifiers([...viewerChips, ...editorChips]);
+    if (visibility === 'shared') {
+      const all = new Set([...viewerIds, ...editorIds]);
+      return [...all];
+    }
     return [];
-  }, [visibility, viewerChips, editorChips]);
+  }, [visibility, viewerIds, editorIds]);
 
   const normalizedEditors = useMemo(() => {
     if (visibility === 'public_editor') return ['*'];
-    if (visibility === 'shared' || visibility === 'public') return normalizeIdentifiers(editorChips);
+    if (visibility === 'shared' || visibility === 'public') return [...new Set(editorIds)];
     return [];
-  }, [visibility, editorChips]);
-
-  const invalidViewers = useMemo(() => findInvalidEmailLikes(normalizedViewers), [normalizedViewers]);
-  const invalidEditors = useMemo(() => findInvalidEmailLikes(normalizedEditors), [normalizedEditors]);
+  }, [visibility, editorIds]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -75,15 +89,6 @@ export function CreateFolderModal({ show, onHide, onSuccess }: CreateFolderModal
     if (!trimmedName) {
       setError(t('createFolder.errors.nameRequired'));
       return;
-    }
-
-    if (visibility === 'shared') {
-      const viewerSet = new Set(normalizedViewers);
-      if (!normalizedEditors.every((ed) => viewerSet.has(ed))) {
-        setError(t('createFolder.errors.editorsMustBeViewers'));
-        setIsSubmitting(false);
-        return;
-      }
     }
 
     setIsSubmitting(true);
@@ -111,148 +116,146 @@ export function CreateFolderModal({ show, onHide, onSuccess }: CreateFolderModal
   };
 
   return (
-    <Modal show={show} onHide={handleClose} backdrop={isSubmitting ? 'static' : true}>
-      <Modal.Header closeButton={!isSubmitting}>
-        <Modal.Title>{t('createFolder.title')}</Modal.Title>
-      </Modal.Header>
+    <Modal show={show} onHide={handleClose} backdrop={isSubmitting ? 'static' : true} className="create-folder-modal">
+      <form onSubmit={handleSubmit} noValidate>
+        <div className="create-folder-modal__header">
+          <h5 className="create-folder-modal__title">
+            <i className="bi bi-folder-plus" />
+            {t('createFolder.title')}
+          </h5>
+          {!isSubmitting && (
+            <button type="button" className="create-folder-modal__close" onClick={handleClose} aria-label="Close">
+              <i className="bi bi-x-lg" />
+            </button>
+          )}
+        </div>
 
-      <Form onSubmit={handleSubmit} noValidate>
-        <Modal.Body>
+        <div className="create-folder-modal__body">
           {error !== null && (
-            <Alert variant="danger" className="mb-3" role="alert">
+            <div className="create-folder-modal__error" role="alert">
               <i className="bi bi-exclamation-triangle me-2" />
               {error}
-            </Alert>
+            </div>
           )}
 
-          <Form.Group className="mb-3" controlId="folderName">
-            <Form.Label>
-              {t('createFolder.nameLabel')} <span className="text-danger">*</span>
-            </Form.Label>
-            <Form.Control
+          {/* Folder Name */}
+          <div className="create-folder-modal__section">
+            <label className="create-folder-modal__label">
+              {t('createFolder.nameLabel')} <span className="create-folder-modal__required">*</span>
+            </label>
+            <input
               type="text"
+              className="create-folder-modal__input"
               placeholder={t('createFolder.namePlaceholder')}
               value={folderName}
-              onChange={(ev: React.ChangeEvent<HTMLInputElement>): void => setFolderName(ev.target.value)}
+              onChange={(e) => setFolderName(e.target.value)}
               disabled={isSubmitting}
               required
               maxLength={120}
-              aria-required="true"
             />
-            <Form.Text className="text-muted">{t('createFolder.nameHelp')}</Form.Text>
-          </Form.Group>
+            <p className="create-folder-modal__hint">{t('createFolder.nameHelp')}</p>
+          </div>
 
-          <Form.Group className="mb-3" controlId="folderVisibility">
-            <Form.Label>{t('createFolder.typeLabel')}</Form.Label>
-            <div className="d-flex flex-wrap gap-3">
-              <Form.Check
-                type="radio"
-                id="folder-vis-personal"
-                label={tKB('settings.permissions.visibility.personal')}
-                checked={visibility === 'personal'}
-                onChange={() => setVisibility('personal')}
-                disabled={isSubmitting}
-              />
-              <Form.Check
-                type="radio"
-                id="folder-vis-shared"
-                label={tKB('settings.permissions.visibility.shared')}
-                checked={visibility === 'shared'}
-                onChange={() => setVisibility('shared')}
-                disabled={isSubmitting}
-              />
-              <Form.Check
-                type="radio"
-                id="folder-vis-public"
-                label={tKB('settings.permissions.visibility.public')}
-                checked={visibility === 'public'}
-                onChange={() => setVisibility('public')}
-                disabled={isSubmitting}
-              />
-              <Form.Check
-                type="radio"
-                id="folder-vis-public-editor"
-                label={tKB('settings.permissions.visibility.publicEditor')}
-                checked={visibility === 'public_editor'}
-                onChange={() => setVisibility('public_editor')}
-                disabled={isSubmitting}
-              />
+          {/* Visibility */}
+          <div className="create-folder-modal__section">
+            <label className="create-folder-modal__label">{t('createFolder.typeLabel')}</label>
+            <div className="create-folder-modal__radio-group">
+              {(['personal', 'shared', 'public', 'public_editor'] as Visibility[]).map((vis) => (
+                <label
+                  key={vis}
+                  className={`create-folder-modal__radio-option${visibility === vis ? ' create-folder-modal__radio-option--active' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="folder-visibility"
+                    checked={visibility === vis}
+                    onChange={() => setVisibility(vis)}
+                    disabled={isSubmitting}
+                  />
+                  <span>
+                    {vis === 'public_editor'
+                      ? tKB('settings.permissions.visibility.publicEditor')
+                      : tKB(`settings.permissions.visibility.${vis}`)}
+                  </span>
+                </label>
+              ))}
             </div>
-            <Form.Text className="text-muted">
+            <p className="create-folder-modal__hint">
               {visibility === 'personal' && t('createFolder.typePersonalHelp')}
               {visibility === 'shared' && t('createFolder.typeSharedHelp')}
               {(visibility === 'public' || visibility === 'public_editor') &&
                 tKB('settings.permissions.visibility.help')}
-            </Form.Text>
-          </Form.Group>
+            </p>
+          </div>
 
+          {/* Viewers */}
           {visibility === 'shared' && (
-            <ChipsInput
-              id="folderViewers"
-              label={t('createFolder.viewersLabel')}
-              chips={viewerChips}
-              onChange={setViewerChips}
-              placeholder={t('createFolder.viewersPlaceholder')}
-              helperText={t('createFolder.viewersHelp')}
-              disabled={isSubmitting}
-            />
+            <div className="create-folder-modal__section">
+              <label className="create-folder-modal__label">{t('folderSettings.viewers')}</label>
+              <p className="create-folder-modal__hint">{t('createFolder.viewersHelp')}</p>
+              <UserPicker
+                staff={staffProfiles}
+                selectedIds={viewerIds}
+                onChange={setViewerIds}
+                mode="multi"
+                placeholder={t('folderSettings.searchUsers')}
+                disabled={isSubmitting}
+              />
+            </div>
           )}
 
+          {/* Editors */}
           {(visibility === 'shared' || visibility === 'public') && (
-            <ChipsInput
-              id="folderEditors"
-              label={t('createFolder.editorsLabel')}
-              chips={editorChips}
-              onChange={setEditorChips}
-              placeholder={t('createFolder.editorsPlaceholder')}
-              helperText={t('createFolder.editorsHelp')}
-              disabled={isSubmitting}
-            />
-          )}
-
-          {visibility === 'shared' && invalidViewers.length > 0 && (
-            <div className="mt-2 small text-warning" aria-live="polite">
-              <i className="bi bi-exclamation-circle me-1" />
-              {t('createFolder.invalidEmails', { values: invalidViewers.join(', ') })}
-            </div>
-          )}
-          {(visibility === 'shared' || visibility === 'public') && invalidEditors.length > 0 && (
-            <div className="mt-2 small text-warning" aria-live="polite">
-              <i className="bi bi-exclamation-circle me-1" />
-              {t('createFolder.invalidEmails', { values: invalidEditors.join(', ') })}
+            <div className="create-folder-modal__section">
+              <label className="create-folder-modal__label">{t('folderSettings.editors')}</label>
+              <p className="create-folder-modal__hint">{t('createFolder.editorsHelp')}</p>
+              <UserPicker
+                staff={staffProfiles}
+                selectedIds={editorIds}
+                onChange={setEditorIds}
+                mode="multi"
+                placeholder={t('folderSettings.searchUsers')}
+                disabled={isSubmitting}
+              />
             </div>
           )}
 
-          <Alert variant="light" className="mb-0">
+          {/* Notes */}
+          <div className="create-folder-modal__notes">
             <strong>{t('createFolder.noteTitle')}</strong>
-            <ul className="mb-0 mt-2">
+            <ul>
               <li>{t('createFolder.notes.creator')}</li>
               <li>{t('createFolder.notes.personal')}</li>
               <li>{t('createFolder.notes.shared')}</li>
               <li>{t('createFolder.notes.isolation')}</li>
             </ul>
-          </Alert>
-        </Modal.Body>
+          </div>
+        </div>
 
-        <Modal.Footer>
-          <Button variant="secondary" onClick={handleClose} disabled={isSubmitting}>
+        <div className="create-folder-modal__footer">
+          <button
+            type="button"
+            className="create-folder-modal__cancel-btn"
+            onClick={handleClose}
+            disabled={isSubmitting}
+          >
             {tKB('actions.cancel')}
-          </Button>
-          <Button variant="primary" type="submit" disabled={isSubmitting}>
+          </button>
+          <button type="submit" className="create-folder-modal__submit-btn" disabled={isSubmitting}>
             {isSubmitting ? (
               <>
-                <span className="spinner-border spinner-border-sm me-2" />
+                <Spinner animation="border" size="sm" />
                 {t('createFolder.creating')}
               </>
             ) : (
               <>
-                <i className="bi bi-folder-plus me-2" />
+                <i className="bi bi-folder-plus" />
                 {t('createFolder.createButton')}
               </>
             )}
-          </Button>
-        </Modal.Footer>
-      </Form>
+          </button>
+        </div>
+      </form>
     </Modal>
   );
 }

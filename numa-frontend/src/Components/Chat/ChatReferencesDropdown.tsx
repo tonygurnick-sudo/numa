@@ -5,6 +5,7 @@ import { getUrlTagFromS3Object } from '../../utils/s3Utils';
 import { Button, Collapse } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { withPRM } from '../../utils/prmUtils';
+import { useAlert } from '../../Providers/ConfirmContext';
 
 type ChatReferencesDropdownProps = {
   references: string[];
@@ -24,6 +25,7 @@ const ChatReferencesDropdown = ({
   noIndent = false,
 }: ChatReferencesDropdownProps) => {
   const { t } = useTranslation('chat');
+  const showAlert = useAlert();
   const [open, setOpen] = useState(false);
   const [processedRefs, setProcessedRefs] = useState([]);
   const [downloadingIndex, setDownloadingIndex] = useState(null);
@@ -186,7 +188,7 @@ const ChatReferencesDropdown = ({
     } catch (error) {
       console.error('Error accessing document:', error);
       const message = error instanceof Error ? error.message : String(error);
-      alert(t('references.unableToAccessAlert', { message }));
+      await showAlert({ message: t('references.unableToAccessAlert', { message }), variant: 'error' });
     } finally {
       setDownloadingIndex(null);
     }

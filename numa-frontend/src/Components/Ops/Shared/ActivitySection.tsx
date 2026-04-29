@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Button, Form, Badge, Card } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useConfirm } from '../../../Providers/ConfirmContext';
 import * as OpsService from '../../../Services/OpsService';
 import type {
   Activity,
@@ -52,6 +53,8 @@ export function ActivitySection({
   activities: activitiesProp,
 }: ActivitySectionProps): React.JSX.Element {
   const { t } = useTranslation('ops');
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
   const { numaPost, numaDelete, numaPut } = useNumaRequest();
 
   // ── Local state ───────────────────────────────────────────────────────────
@@ -191,7 +194,12 @@ export function ActivitySection({
       // Only customer activities have a delete endpoint.
       if (entityType !== 'customer') return;
 
-      if (!window.confirm(t('activities.deleteConfirm'))) return;
+      const ok = await confirm({
+        message: t('activities.deleteConfirm'),
+        confirmLabel: tCommon('confirm.delete'),
+        variant: 'danger',
+      });
+      if (!ok) return;
 
       try {
         await OpsService.deleteCustomerActivity(numaDelete, entityId, activityId);
@@ -203,7 +211,7 @@ export function ActivitySection({
         console.error('[ActivitySection] Failed to delete activity', err);
       }
     },
-    [editingActivityId, entityType, entityId, handleCancelForm, numaDelete, t]
+    [editingActivityId, entityType, entityId, handleCancelForm, numaDelete, t, tCommon, confirm]
   );
 
   const formatDate = (dateStr: string) => {

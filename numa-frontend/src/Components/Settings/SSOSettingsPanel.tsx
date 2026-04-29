@@ -12,6 +12,7 @@ import {
   type SSOUser,
 } from '../../Services/AdminSSOSettingsService';
 import { getFlag } from '../../utils/featureFlags';
+import { useConfirm } from '../../Providers/ConfirmContext';
 
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 type NumaPut = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
@@ -72,6 +73,8 @@ const IDP_OPTIONS: { value: IdpType; labelKey: string; descKey: string; icon: st
 
 const SSOSettingsPanel = ({ numaGet, numaPut, numaPost, numaDelete }: SSOSettingsPanelProps) => {
   const { t } = useTranslation('settings');
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
 
   // State
   const [config, setConfig] = useState<SSOConfig | null>(null);
@@ -457,7 +460,14 @@ const SSOSettingsPanel = ({ numaGet, numaPut, numaPost, numaDelete }: SSOSetting
                 checked={config.ssoOnlyMode || false}
                 onChange={async (e) => {
                   const newMode = e.target.checked;
-                  if (newMode && !window.confirm(t('sso.ssoOnly.enableConfirm'))) return;
+                  if (newMode) {
+                    const ok = await confirm({
+                      message: t('sso.ssoOnly.enableConfirm'),
+                      confirmLabel: tCommon('common.ok'),
+                      variant: 'warning',
+                    });
+                    if (!ok) return;
+                  }
                   clearMessages();
                   setActionLoading(true);
                   try {
@@ -651,7 +661,12 @@ const SSOSettingsPanel = ({ numaGet, numaPut, numaPost, numaDelete }: SSOSetting
                             variant="outline-warning"
                             size="sm"
                             onClick={async () => {
-                              if (!window.confirm(t('sso.users.unlinkConfirm', { email: user.email }))) return;
+                              const ok = await confirm({
+                                message: t('sso.users.unlinkConfirm', { email: user.email }),
+                                confirmLabel: t('sso.users.unlink'),
+                                variant: 'warning',
+                              });
+                              if (!ok) return;
                               try {
                                 await AdminSSOSettingsService.unlinkUser(user.sub, numaPost);
                                 setSuccess(t('sso.users.unlinkSuccess', { email: user.email }));
@@ -721,7 +736,12 @@ const SSOSettingsPanel = ({ numaGet, numaPut, numaPost, numaDelete }: SSOSetting
                       size="sm"
                       className="ms-2"
                       onClick={async () => {
-                        if (!window.confirm(t('sso.scim.revokeConfirm'))) return;
+                        const ok = await confirm({
+                          message: t('sso.scim.revokeConfirm'),
+                          confirmLabel: t('sso.scim.revokeButton'),
+                          variant: 'danger',
+                        });
+                        if (!ok) return;
                         try {
                           await AdminSSOSettingsService.revokeScimToken(numaDelete);
                           setScimToken(null);

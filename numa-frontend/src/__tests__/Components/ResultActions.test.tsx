@@ -164,22 +164,22 @@ describe('ResultActions Component', () => {
     // Check for "Share" dropdown
     expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument();
 
-    // Check for "Add to Knowledge Base" dropdown (renamed from "Add to Company Knowledge")
+    // Check for "Add to folder" dropdown (post Numa Files rebrand)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /add to knowledge base/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /add to folder/i })).toBeInTheDocument();
     });
   });
 
-  it('shows KB dropdown options when clicked', async () => {
+  it('shows folder dropdown options when clicked', async () => {
     renderWithProviders(<ResultActions content="Some test content" title="Test Title" />);
 
-    // Wait for the KB dropdown to be available
+    // Wait for the folder dropdown to be available
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /add to knowledge base/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /add to folder/i })).toBeInTheDocument();
     });
 
-    // Click the KB dropdown
-    fireEvent.click(screen.getByRole('button', { name: /add to knowledge base/i }));
+    // Click the folder dropdown
+    fireEvent.click(screen.getByRole('button', { name: /add to folder/i }));
 
     // Check that user KBs with OWNER/EDITOR role are shown
     await waitFor(() => {
@@ -193,11 +193,11 @@ describe('ResultActions Component', () => {
 
     // Wait for the KB dropdown to be available
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /add to knowledge base/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /add to folder/i })).toBeInTheDocument();
     });
 
     // Click the KB dropdown
-    fireEvent.click(screen.getByRole('button', { name: /add to knowledge base/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add to folder/i }));
 
     // Wait for dropdown items and click one
     await waitFor(() => {

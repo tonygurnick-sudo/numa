@@ -162,6 +162,21 @@ export class WorkspaceChatAgentProxy extends Construct {
                 actions: ['s3:GetObject'],
                 resources: [`${props.outputsBucketArn}/numa-chat/workspace/*`],
               },
+              // ListBucket scoped to the workspace prefix — used by the
+              // /artifacts endpoint to aggregate generated files across a
+              // user's conversations without going through AgentCore.
+              {
+                effect: 'Allow' as const,
+                actions: ['s3:ListBucket'],
+                resources: [props.outputsBucketArn],
+                condition: [
+                  {
+                    test: 'StringLike',
+                    variable: 's3:prefix',
+                    values: ['numa-chat/workspace/*'],
+                  },
+                ],
+              },
             ]
           : []),
         // Lambda invoke for workspace-chat-tools (document conversion for preview)

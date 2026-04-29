@@ -109,3 +109,27 @@ body {
 .text-muted-dark {
   color: rgba(255, 255, 255, 0.6) !important;
 }
+
+.client-picker-list {
+  scrollbar-width: auto;
+  scrollbar-color: var(--arcanum-purple, #8e50a7) #e9ecef;
+}
+
+.client-picker-list::-webkit-scrollbar {
+  width: 12px;
+}
+
+.client-picker-list::-webkit-scrollbar-track {
+  background: #e9ecef;
+  border-radius: 6px;
+}
+
+.client-picker-list::-webkit-scrollbar-thumb {
+  background-color: var(--arcanum-purple, #8e50a7);
+  border-radius: 6px;
+  border: 2px solid #e9ecef;
+}
+
+.client-picker-list::-webkit-scrollbar-thumb:hover {
+  background-color: var(--arcanum-purple-dark, #7a4593);
+}

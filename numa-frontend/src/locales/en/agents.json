@@ -1,13 +1,13 @@
 {
   "card": {
-    "companyKb": "Company Knowledge Base",
+    "companyKb": "Company Files",
     "visibility": {
       "company": "Company Agent",
       "personal": "Personal Agent"
     },
     "timeSaved": "Saved {{time}}",
     "knowledgeBases": {
-      "all": "All Knowledge Bases"
+      "all": "All folders"
     },
     "favorite": {
       "add": "Add to favorites",
@@ -20,7 +20,7 @@
     "noDescription": "No description provided.",
     "labels": {
       "tools": "TOOLS",
-      "knowledgeBases": "KNOWLEDGE BASES",
+      "knowledgeBases": "FOLDERS",
       "integrations": "INTEGRATIONS",
       "timeSaved": "TIME SAVED",
       "files": "FILES",
@@ -154,7 +154,7 @@
     "tools": {
       "summary": {
         "auto": "Auto",
-        "kb": "KB",
+        "kb": "Files",
         "web": "Web",
         "agentCreation": "Agent creation",
         "integrations": "{{count}} integrations"
@@ -164,15 +164,15 @@
         "description": "Let the agent pick the right tools per request."
       },
       "kbAccess": {
-        "title": "Knowledge base access",
-        "description": "Choose which knowledge bases this agent can use.",
-        "none": "No knowledge bases",
-        "all": "All knowledge bases",
-        "selected": "Selected knowledge bases",
-        "noneAvailable": "No knowledge bases available.",
+        "title": "Folder access",
+        "description": "Choose which folders this agent can use.",
+        "none": "No folders",
+        "all": "All folders",
+        "selected": "Selected folders",
+        "noneAvailable": "No folders available.",
         "defaultBadge": "Default",
         "sharedBadge": "Shared",
-        "compareLink": "Compare reference files vs knowledge bases"
+        "compareLink": "Compare reference files vs Numa Files"
       },
       "webSearch": {
         "title": "Web search",
@@ -218,7 +218,7 @@
       "integrations": "Integrations",
       "agents": "Agents",
       "memories": "Memories",
-      "knowledgeBases": "Knowledge Bases",
+      "knowledgeBases": "Numa Files",
       "ops": "Ops"
     },
     "scheduling": {
@@ -274,15 +274,15 @@
     "referenceFiles": {
       "count": "{{count}} files",
       "comparison": {
-        "title": "Reference files vs knowledge bases",
+        "title": "Reference files vs Numa Files",
         "referenceTitle": "Reference files",
         "referenceAlways": "Always included",
         "referenceIncluded": "Included in every request.",
         "referenceMax": "Up to 5 files.",
         "referenceSizes": "Best for small sets of docs.",
-        "kbTitle": "Knowledge bases",
+        "kbTitle": "Numa Files",
         "kbQueried": "Queried when relevant",
-        "kbSearches": "Searches content across your data sources.",
+        "kbSearches": "Searches files across your folders.",
         "kbUnlimited": "Unlimited files.",
         "kbSizes": "Great for large collections."
       },
@@ -371,6 +371,7 @@
       "createFirst": "Create Your First Agent",
       "favorite": "Toggle favourite",
       "share": "Share agent",
+      "duplicate": "Duplicate agent",
       "hide": "Hide agent",
       "unhide": "Show agent",
       "delete": "Delete agent",
@@ -937,7 +938,7 @@
       "applicationNotice": "Application scheduling will be available in a future update.",
       "dataSyncNotice": "Data synchronization scheduling will be available in a future update.",
       "sourceTypes": {
-        "knowledgeBase": "Knowledge Base Refresh",
+        "knowledgeBase": "Numa Files Refresh",
         "s3": "S3 Data Sync",
         "api": "API Data Sync"
       },

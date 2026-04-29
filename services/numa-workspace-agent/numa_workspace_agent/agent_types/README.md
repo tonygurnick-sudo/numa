@@ -26,7 +26,7 @@ Agent types are different configurations of the same workspace agent engine. Eac
 
 1. **Claude SDK Tools** — Built-in capabilities (Read, Write, Bash, etc.) controlled by `tools`, `allowed_tools`, `disallowed_tools`
 2. **MCP Tools** — Server-side endpoints (execute_script, integration actions) controlled by `enable_scripts_mcp`, `enable_integrations_mcp`
-3. **Numa Tool Reference Docs** — Documentation files copied to `/workdir/tools/` (knowledge_search, web_search, etc.) controlled by `enabled_numa_tools`. These are read-only references — all operations go through the `numa_tool` MCP tool.
+3. **Numa Tool Reference Docs** — Documentation files copied to `/workdir/tools/` (numa_files_search, web_search, etc.) controlled by `enabled_numa_tools`. These are read-only references — all operations go through the `numa_tool` MCP tool.
 
 ### MCP Server Architecture
 

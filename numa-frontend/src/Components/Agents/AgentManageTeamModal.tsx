@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { Search, Trash2, UserPlus, Users } from 'lucide-react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { useConfirm } from '../../Providers/ConfirmContext';
 import {
   createTeam,
   getTeam,
@@ -41,8 +42,10 @@ const roleBadgeStyle = (role: TeamRole) => {
 
 export const AgentManageTeamModal = ({ show, onHide, team, onTeamCreated, onTeamDeleted, onTeamUpdated }: Props) => {
   const { t } = useTranslation('agents');
+  const { t: tCommon } = useTranslation('common');
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const { user } = useAuth();
+  const confirm = useConfirm();
   const currentUserEmail = user?.decoded_tokens?.idToken?.email as string | undefined;
   const currentUserName = user?.decoded_tokens?.idToken?.name as string | undefined;
   const currentUserSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
@@ -185,7 +188,13 @@ export const AgentManageTeamModal = ({ show, onHide, team, onTeamCreated, onTeam
   };
 
   const handleDelete = async () => {
-    if (!effectiveTeam || !window.confirm(t('teamModal.confirmDelete', { name: effectiveTeam.teamName }))) return;
+    if (!effectiveTeam) return;
+    const ok = await confirm({
+      message: t('teamModal.confirmDelete', { name: effectiveTeam.teamName }),
+      confirmLabel: tCommon('confirm.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteTeam(numaDelete, effectiveTeam.teamId);
       onTeamDeleted?.();

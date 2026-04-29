@@ -213,7 +213,7 @@ export default function SupportDocsManager() {
             Support Docs Manager
           </h1>
           <p className="text-muted mb-0">
-            Manage master Numa support docs and deploy them into client knowledge bases.
+            Manage master Numa support docs and deploy them into client Numa Files folders.
           </p>
         </div>
         <Button variant="outline-secondary" onClick={() => navigate('/tools')}>

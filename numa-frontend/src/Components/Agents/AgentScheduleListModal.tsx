@@ -5,6 +5,7 @@ import type { AgentSummary } from '../../types/agents';
 import type { AgentSchedule } from '../../types/agentSchedules';
 import { ScheduleService } from '../../Services/ScheduleService';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { useConfirm } from '../../Providers/ConfirmContext';
 import { describeCronExpression } from '../../utils/cronUtils';
 
 type ScheduleListModalProps = {
@@ -47,7 +48,9 @@ export const AgentScheduleListModal = ({
   onCreateSchedule,
 }: ScheduleListModalProps) => {
   const { t } = useTranslation('agents');
+  const { t: tCommon } = useTranslation('common');
   const { numaGet, numaDelete, numaPut } = useNumaRequest();
+  const confirm = useConfirm();
   const [schedules, setSchedules] = useState<AgentSchedule[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,9 +80,12 @@ export const AgentScheduleListModal = ({
   }, [show, agent]);
 
   const handleDeleteSchedule = async (schedule: AgentSchedule) => {
-    if (!window.confirm(t('scheduling.confirmDelete', { label: schedule.label || t('scheduling.labels.unnamed') }))) {
-      return;
-    }
+    const ok = await confirm({
+      message: t('scheduling.confirmDelete', { label: schedule.label || t('scheduling.labels.unnamed') }),
+      confirmLabel: tCommon('confirm.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     try {
       setDeletingId(schedule.scheduleId);

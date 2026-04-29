@@ -35,6 +35,7 @@ export interface ShareInfo {
   used_quota_mb?: number;
   allowed_extensions?: string[] | null;
   view_count?: number;
+  allowed_ips?: string[] | null;
 }
 
 export interface SessionAnalytics {
@@ -400,6 +401,7 @@ export interface ShareListItem {
   auth_mode?: string;
   passcode?: string;
   max_calls?: number | null;
+  allowed_ips?: string[] | null;
 }
 
 export interface ActivityItem {
@@ -422,6 +424,7 @@ export interface CreateShareRequest {
   enable_chat: boolean;
   allow_download: boolean;
   kb_id?: string; // Optional Knowledge Base ID for enhanced chat
+  allowed_ips?: string[];
 }
 
 export interface CreateShareResponse {
@@ -608,6 +611,7 @@ export interface CreateDropZoneRequest {
   description?: string;
   max_calls?: number;
   kb_id?: string;
+  allowed_ips?: string[];
 }
 
 export interface CreateDropZoneResponse {

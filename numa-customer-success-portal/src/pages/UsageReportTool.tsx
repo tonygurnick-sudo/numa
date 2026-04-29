@@ -83,8 +83,8 @@ const REPORT_OPTIONS: { value: UsageReportType; label: string; description: stri
   },
   {
     value: 'knowledge-bases',
-    label: 'Knowledge Bases',
-    description: 'Knowledge bases configured per client with file counts',
+    label: 'Numa Files',
+    description: 'Numa Files folders configured per client with file counts',
   },
 ];
 
@@ -522,10 +522,14 @@ export default function UsageReportTool() {
       });
     }
     if (metadata.totalKnowledgeBases !== undefined) {
-      cards.push({ label: 'Knowledge Bases', value: metadata.totalKnowledgeBases.toLocaleString(), variant: 'info' });
+      cards.push({ label: 'Folders', value: metadata.totalKnowledgeBases.toLocaleString(), variant: 'info' });
     }
     if (metadata.totalKnowledgeBaseFiles !== undefined) {
-      cards.push({ label: 'KB Files', value: metadata.totalKnowledgeBaseFiles.toLocaleString(), variant: 'secondary' });
+      cards.push({
+        label: 'Files in Folders',
+        value: metadata.totalKnowledgeBaseFiles.toLocaleString(),
+        variant: 'secondary',
+      });
     }
 
     cards.push({ label: 'Time Period', value: metadata.displayName, variant: 'warning' });
@@ -979,7 +983,7 @@ export default function UsageReportTool() {
           {knowledgeBaseRows.length === 0 && (
             <tr>
               <td colSpan={11} className="text-center text-muted">
-                No knowledge bases found for the selected clients.
+                No Numa Files folders found for the selected clients.
               </td>
             </tr>
           )}
@@ -1075,7 +1079,7 @@ export default function UsageReportTool() {
   if (selectedReportsFromResult.includes('knowledge-bases')) {
     tabConfigs.push({
       key: 'knowledge-bases',
-      title: `Knowledge Bases (${knowledgeBaseRows.length})`,
+      title: `Numa Files (${knowledgeBaseRows.length})`,
       content: renderKnowledgeBasesTable(),
     });
   }

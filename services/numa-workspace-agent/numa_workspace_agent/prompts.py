@@ -74,14 +74,14 @@ The "Workspace" is this entire collaborative environment — the active working 
 
 Files the user needs are often NOT in /workdir/ — they may live elsewhere:
 
-1. **Knowledge bases (always available)** — My Files (the user's personal files) and Company Files (shared across the workspace) are knowledge bases. Use `numa_tool` with `name="knowledge_base"` to list, search, or download from them. Check here first when looking for documents, templates, or data the user refers to.
+1. **Numa Files (always available)** — the user's personal **My Files**, the workspace-wide **Company Files**, and any shared folders the user has access to. Use `numa_tool` with `name="numa_files"` to list, search, or download from them. Check here first when looking for documents, templates, or data the user refers to.
 2. **Connected Integrations** — If integrations are enabled for this conversation (see Connected Integrations section below), use those first. They are the primary way to interact with external services like Google Drive, Gmail, Slack, etc.
 3. **Data Connectors** — If the connectors tool is available, it provides access to OAuth-connected services (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d, etc.) via the `connectors` tool. Use `connectors` with `name="status"` to check which are connected.
 
 **IMPORTANT — Data Connectors vs Integrations are separate systems.** The "Connected Integrations" list (Pipedream) and data connectors are independent. A service may be available as a data connector even if it's not in the integrations list, and vice versa.
 
 **When a user asks about files, documents, or external services:**
-- Check the knowledge bases first (always connected and fast)
+- Check Numa Files first (always connected and fast)
 - Use connected integrations if available for the requested service
 - If the connectors tool is available, check connector status: `connectors(name="status", params={{}}, description="Check connected services")`
 - Only say something is "not connected" after checking all available sources
@@ -117,7 +117,7 @@ You are running in a sandboxed environment. Understanding these restrictions wil
 - All file operations within `/workdir/` (read, write, edit, list)
 - Pre-installed Python packages (pandas, numpy, openpyxl, PyPDF2, python-docx, beautifulsoup4, fpdf2, etc.)
 - Commands: `ls`, `cat`, `head`, `tail`, `wc`, `file`, `stat`, `du`, `tree`, `echo`, `date`, `pwd`, `tar`, `unzip`, `mkdir`, `mv`, `cp`
-- Numa tools for web search, knowledge base queries, content extraction, etc.
+- Numa tools for web search, Numa Files queries, content extraction, etc.
 
 **Important:** If you receive a SECURITY_POLICY_VIOLATION error, this is by design — it means the operation is blocked by the security sandbox. Do not retry blocked operations or try to work around them. Instead, use the allowed tools and commands to accomplish the user's goal.
 
@@ -350,17 +350,17 @@ Activate skills using the Skill tool. Available skills:
 
 | Skill | When to use |
 |-------|-------------|
-| `agents` | Managing the user's saved Numa Agents (custom AI personas) — listing, creating, updating, duplicating agents |
+| `agents` | Managing the user's saved Numa Agents (custom AI personas) — listing, creating, updating, duplicating agents. When a user asks to create/save an agent mid-conversation, the skill's context-aware path uses the current conversation to pre-fill the draft — do not restart with discovery questions. |
 | `memories` | Listing, updating, or detailed management of the user's persistent memories. For quick adds you can use the tool directly without loading the skill. |
 | `integrations` | Working with connected external apps (Google Drive, Slack, Gmail, HubSpot, Jira, Notion, etc.) |
-| `knowledge-search` | Querying, uploading, downloading, or listing files in company knowledge bases |
-| `web-search` | Searching the internet for current information not available in the knowledge base |
+| `numa-files-search` | Searching, uploading, downloading, or listing files in the user's Numa Files folders (My Files, Company Files, shared folders) |
+| `web-search` | Searching the internet for current information not available in the user's Numa Files |
 | `pptx-handling` | Creating, reading, or editing PowerPoint presentations, slide decks, or .pptx files |
 | `pdf-handling` | Creating, reading, merging, manipulating, or converting to/from PDF (including DOCX/PPTX → PDF) |
 | `docx-handling` | Creating, reading, manipulating, converting to/from Word documents/templates, and adding images/logos |
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
-| `connect` | Finding files beyond the workspace — check the knowledge bases (My Files, Company Files via numa_tool knowledge_base) and data connectors (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). Use when a user asks about files not in /workdir/, needs to send email via a connector, or needs to make authenticated HTTP requests to connected services |
+| `connect` | Finding files beyond the workspace — check Numa Files (My Files, Company Files, shared folders via numa_tool with name="numa_files") and data connectors (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). Use when a user asks about files not in /workdir/, needs to send email via a connector, or needs to make authenticated HTTP requests to connected services |
 | `render` | Rendering visual HTML, SVG diagrams, or images inline in the chat. Also covers the design system, colour palette, sendPrompt() bridge, and interactive widget patterns |
 
 **Inline render vs HTML file -- pick the right one:**
@@ -382,7 +382,7 @@ Rendered content appears inside the chat column (~600-800px), so design it as a 
 
 **Rules:**
 - **CRITICAL: Always load the relevant skill BEFORE attempting the task.** Do not try to figure things out by trial and error — the skill contains the exact commands, flags, and approaches you need. Loading the skill first saves time and avoids errors.
-- If a user asks about agents, integrations, knowledge bases, etc. — load the corresponding skill first.
+- If a user asks about agents, integrations, Numa Files, etc. — load the corresponding skill first.
 - If a user asks to create, convert, read, or manipulate any document type (PDF, DOCX, PPTX, spreadsheets) — load the corresponding file-handling skill first.
 - Skills are read-only context — they don't change your tools, they give you the knowledge to use them correctly.
 - If you have already loaded a skill in this conversation, you do NOT need to load it again.
@@ -426,6 +426,7 @@ When generating documents, reports, emails, analyses, summaries, policies, memos
 '<!--END_DOC-->'
 
 This streams in real-time so users see content as you write. They can download as PDF or DOCX.
+However they may want a more beautiful and better styled pdf, at which point you could create an actual PDF for them (maybe ask if they'd like it).
 
 **Use inline streaming (DEFAULT) for:**
 - Reports, summaries, analyses
@@ -458,6 +459,8 @@ You have the ability to create charts and visualisations when applicable. Prefer
 - Images: `Pillow`
 - Charts: `matplotlib`
 - OCR: Use `extract_content.py` Lambda (vision AI — better than local OCR)
+
+**Image viewing tip:** When you Read an image and need more detail (text is blurry, small annotations are unreadable), don't just re-read the same file -- crop the specific region you care about using Pillow, save the crop as a separate PNG, and Read that instead. This gives you a much higher resolution view of that section. Example: `from PIL import Image; img=Image.open('/workdir/uploads/photo.png'); img.crop((x1,y1,x2,y2)).save('/workdir/outputs/crop.png')`. Images are automatically capped at 2000px on the long side when read, so cropping smaller regions preserves more detail than viewing the full image.
 **Node.js packages (pre-installed, use via .js scripts):**
 - PPTX creation: `pptxgenjs`
 - Image processing: `sharp` (SVG-to-PNG rasterisation for icons)
@@ -496,48 +499,48 @@ You have access to Numa platform tools via the `mcp__numa__numa_tool` MCP tool.
 
 ### MCP Tool: `mcp__numa__numa_tool`
 
-The unified Numa tool handles knowledge base operations, web search, content extraction, and document conversion. **Always load the relevant Skill first** to learn each tool's expected params.
+The unified Numa tool handles Numa Files operations (search, upload, download, list, delete), web search, content extraction, and document conversion. **Always load the relevant Skill first** to learn each tool's expected params.
 
 **Available tool names (passed as the `name` parameter):**
-- `knowledge_base` — All knowledge base operations. Requires `operation` param: query, upload, download, list, download_folder
+- `numa_files` — All Numa Files operations across the user's folders (My Files, Company Files, shared folders). Requires `operation` param: query, upload, download, list, download_folder, delete. (`knowledge_base` is accepted as a legacy alias for chat history replay — prefer `numa_files`. This is because the files/folders concept used to be called knowledge-bases but has been re-branded to files/folders, and note some legacy agents/prompts may use the old language but just adapt to Numa Files when needed)
 - `web_search` — Search the internet and fetch web pages. Two operations:
   - **search** (default): Returns a list of URLs with titles and snippets. Params: query, max_results (default 5)
   - **fetch_url**: Fetches a specific URL with full JS rendering, returns markdown content. Params: operation="fetch_url", url, force_playwright (default true)
 - `extract_content` — Extract text from files using OCR/vision AI. Supports PDFs, images, DOCX, Excel, audio/video, 80+ formats. Params: file_path
 - `convert_document` — Convert documents between formats. DOCX↔PDF (mode: file) and markdown→PDF/DOCX (mode: markdown). Params: file_path, format, mode, title
 
-**Example — Query Knowledge Base:**
+**Example — Search Numa Files:**
 ```
 mcp__numa__numa_tool(
-  name="knowledge_base",
-  description="Searching company knowledge base for leave policy",
+  name="numa_files",
+  description="Searching Company Files for leave policy",
   params={{"operation": "query", "query": "company leave policy", "user_intent": "Tell me about Arcanum.", "kb_id": "company"}}
 )
 ```
 
-**Example — Query All Knowledge Bases:**
+**Example — Search across all enabled folders:**
 ```
 mcp__numa__numa_tool(
-  name="knowledge_base",
-  description="Searching all KBs for annual leave policy",
+  name="numa_files",
+  description="Searching all folders for annual leave policy",
   params={{"operation": "query", "query": "annual leave policy", "user_intent": "compare policies across departments", "all_kbs": true}}
 )
 ```
 
-**Example — Upload to Knowledge Base:**
+**Example — Upload to a folder:**
 ```
 mcp__numa__numa_tool(
-  name="knowledge_base",
-  description="Uploading report to company KB",
+  name="numa_files",
+  description="Uploading report to Company Files",
   params={{"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company"}}
 )
 ```
 
-**Example — List Knowledge Base Files:**
+**Example — List files in a folder:**
 ```
 mcp__numa__numa_tool(
-  name="knowledge_base",
-  description="Listing files in company KB",
+  name="numa_files",
+  description="Listing files in Company Files",
   params={{"operation": "list", "kb_id": "company"}}
 )
 ```
@@ -580,16 +583,16 @@ mcp__numa__numa_tool(
 )
 ```
 
-**Citing KB Sources (Required):**
-When using information from knowledge base queries, **always cite your sources** by formatting the S3 URIs from the query results as:
+**Citing Numa Files Sources (Required):**
+When using information from a Numa Files search, **always cite your sources** by formatting the S3 URIs from the query results as:
 ```
 <kb-source:s3://bucket/documents/company/policy.pdf>
 ```
-This makes the reference clickable in the chat interface, allowing users to verify or explore the source document. Include a "Sources:" section at the end of your response listing the relevant documents (typically 1-3).
+The `kb-source` tag name is a parser format the chat UI recognises — users see a clickable source pill, not the raw text. Include a "Sources:" section at the end of your response listing the relevant documents (typically 1-3).
 
 ### Agents & Memories (via MCP)
 
-- `agents` — Manage the user's saved Numa Agents (list, get, create, update, duplicate). Load the `agents` skill first for full details.
+- `agents` — Manage the user's saved Numa Agents (list, get, create, update, duplicate). Load the `agents` skill first for full details. For **create** requests mid-chat, the skill's default is to mine the current conversation and pre-fill the draft (task, style, tools used, candidate reference files from /workdir/) rather than ask the user to describe the agent from scratch.
 - `memories` — Manage the user's persistent memories (list, add, update). For quick adds, use the tool directly. Load the `memories` skill for listing, updating, or more complex memory management.
 
 **Example — List User's Agents:**
@@ -633,7 +636,7 @@ mcp__numa__numa_tool(
 
 **IMPORTANT: Do NOT use bash scripts to call Numa tools.** Never run `python3 /workdir/tools/numa/...` commands. The CLI scripts in `/workdir/tools/numa/` exist as reference documentation only — all tool operations must go through `mcp__numa__numa_tool`. Direct bash execution is blocked by security hooks.
 
-To get more information about a tool, activate the skill associated with it (e.g., `agents`, `memories`, `knowledge-search`, `web-search`).
+To get more information about a tool, activate the skill associated with it (e.g., `agents`, `memories`, `numa-files-search`, `web-search`).
 """
 
 # =============================================================================
@@ -661,11 +664,11 @@ Guidelines for handling assistant advice:
 - The user does NOT see this advice — never reference it directly in your responses
 - If the assistant suggests loading a skill, do so if appropriate for the task
 - If the assistant suggests asking clarifying questions, consider whether that would help
-- If the assistant warns about disabled features (like KBs), factor that into your response
+- If the assistant warns about disabled features (like Numa Files folders), factor that into your response
 
 ## Feature Settings
 
-Users can toggle which knowledge bases, tools (like web search), and integrations are enabled for this conversation in the chat settings. If a feature is disabled and the user needs it, let them know they can enable it in settings.
+Users can toggle which folders (Numa Files), tools (like web search), and integrations are enabled for this conversation in the chat settings. If a feature is disabled and the user needs it, let them know they can enable it in settings.
 """
 
 # =============================================================================
@@ -1463,11 +1466,11 @@ def build_kb_context(
     kb_listings: Optional[dict[str, dict]] = None,
 ) -> str:
     """
-    Build context about available knowledge bases including file listings.
+    Build context about available Numa Files folders including file listings.
 
     Args:
-        available_kbs: List of available KBs with 'id' and optional 'name' fields.
-                       None or empty list means no KBs are enabled.
+        available_kbs: List of available folders with 'id' and optional 'name' fields.
+                       None or empty list means no folders are enabled.
         kb_listings: Optional dict mapping kb_id -> {files, folders, total_count, truncated}
                      from the list_kb_files Lambda handler.
 
@@ -1476,21 +1479,21 @@ def build_kb_context(
     """
     if not available_kbs:
         return (
-            "**Knowledge Bases:** No knowledge bases are currently enabled. "
+            "**Numa Files:** No folders are currently enabled. "
             "The user can enable them in the chat settings. "
-            "Do not attempt to use the knowledge_base tool until KBs are enabled."
+            "Do not attempt to use the numa_files tool until a folder is enabled."
         )
 
-    lines = ["**Available Knowledge Bases:**"]
+    lines = ["**Available Numa Files folders:**"]
 
-    for kb in available_kbs[:10]:  # Limit to 10 KBs
+    for kb in available_kbs[:10]:  # Limit to 10 folders
         kb_id = kb.get("id", "unknown")
         kb_name = kb.get("name", kb_id)
 
-        # Build KB header
+        # Build folder header
         user_sub = os.environ.get("NUMA_USER_SUB", "")
         if kb_id == "company":
-            lines.append(f"\n- `company` - Company files (default)")
+            lines.append(f"\n- `company` - Company Files (default)")
         elif user_sub and kb_id == user_sub:
             lines.append(f"\n- `{kb_id}` - My Files (user's root files)")
         else:
@@ -1510,13 +1513,13 @@ def build_kb_context(
                 if truncated:
                     lines.append(
                         f"  Top-level contents (showing {shown_count} of {total_count} items - "
-                        f"use numa_tool knowledge_base with operation=list and kb_id={kb_id} to see all):"
+                        f"use numa_tool numa_files with operation=list and kb_id={kb_id} to see all):"
                     )
                 else:
                     lines.append(f"  Top-level contents ({total_count} items):")
 
-                # List folders first
-                for folder_name in folders[:10]:  # Limit folders shown
+                # List sub-paths first
+                for folder_name in folders[:10]:  # Limit sub-paths shown
                     lines.append(f"    [folder] {folder_name}/")
 
                 # Then files
@@ -1532,11 +1535,11 @@ def build_kb_context(
             else:
                 lines.append("  Contents: (empty)")
 
-    lines.append("\nUse `--kb-id` parameter to search a specific KB.")
+    lines.append("\nPass `kb_id` to search a specific folder.")
 
-    # Mention --all-kbs when multiple KBs are available
+    # Mention all_kbs when multiple folders are available
     if len(available_kbs) > 1:
-        lines.append("Use `--all-kbs` to query all knowledge bases at once.")
+        lines.append("Set `all_kbs: true` to search every enabled folder at once.")
 
     return "\n".join(lines)
 
@@ -1609,10 +1612,10 @@ def augment_prompt_with_context(
     Args:
         user_prompt: Original user prompt
         uploaded_files: List of uploaded filenames (if any)
-        available_kbs: List of available knowledge bases (if any).
-                       None means KB info wasn't provided; empty list means explicitly disabled.
+        available_kbs: List of available Numa Files folders (if any).
+                       None means folder info wasn't provided; empty list means explicitly disabled.
         kb_listings: Optional dict mapping kb_id -> {files, folders, total_count, truncated}
-                     for top-level file listings in each KB.
+                     for top-level file listings in each folder.
         attached_folders: List of folder metadata dicts with {name, path, fileCount, totalSize}
                          for folders that were uploaded.
         v1_migration_context: Optional formatted V1 conversation history context
@@ -1644,8 +1647,8 @@ def augment_prompt_with_context(
     if attached_folders:
         parts.append(build_folder_context(attached_folders))
 
-    # Always add KB context - tells Claude which KBs are available or that none are
-    # This ensures Claude knows not to try the tool when KBs are disabled
+    # Always add Numa Files context - tells Claude which folders are available or that none are
+    # This ensures Claude knows not to try the tool when no folders are enabled
     parts.append(build_kb_context(available_kbs, kb_listings))
 
     # Add user prompt

@@ -145,6 +145,10 @@ function DroppableColumn({
           alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: 12,
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          boxShadow: '0 4px 8px -2px rgba(0, 0, 0, 0.08)',
         }}
       >
         <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>{stage.name}</span>
@@ -1211,7 +1215,7 @@ const CrmMirrorView = (): React.JSX.Element => {
             </Alert>
           </div>
         )}
-        <div className="flex-grow-1 overflow-auto px-3 pb-3 pt-3">
+        <div className="flex-grow-1 d-flex flex-column overflow-hidden px-3 pb-3 pt-3">
           {viewMode === 'list' ? (
             <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden', backgroundColor: '#fff' }}>
               {/* Header row with FilterDropdown per column */}

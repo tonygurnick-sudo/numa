@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Modal, Button, Form, Nav, Tab, Table, Badge, Accordion, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useAlert } from '../../../Providers/ConfirmContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import {
@@ -141,6 +142,7 @@ export function GlobalSettingsModal({
 }: GlobalSettingsModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
+  const showAlert = useAlert();
   const { config, teams, refreshTeams, refreshStaff, refreshConfig } = useOps();
 
   // ── Local state (edited copies of config) ──────────────────────────────────
@@ -1286,7 +1288,7 @@ export function GlobalSettingsModal({
                       className="text-danger border-0"
                       onClick={() => {
                         if ((crmConfig.lifecycleStages || []).length <= 1) {
-                          alert('Cannot delete the last lifecycle stage.');
+                          void showAlert({ message: 'Cannot delete the last lifecycle stage.', variant: 'warning' });
                           return;
                         }
                         const updated = structuredClone(crmConfig);
@@ -1599,7 +1601,7 @@ export function GlobalSettingsModal({
                       className="text-danger border-0"
                       onClick={() => {
                         if ((supplierConfig.lifecycleStages || []).length <= 1) {
-                          alert('Cannot delete the last lifecycle stage.');
+                          void showAlert({ message: 'Cannot delete the last lifecycle stage.', variant: 'warning' });
                           return;
                         }
                         const updated = structuredClone(supplierConfig);
@@ -2308,7 +2310,10 @@ export function GlobalSettingsModal({
           <Button
             variant="primary"
             onClick={() => {
-              if (!lifecycleStageForm.name.trim()) return alert('Please enter a stage name');
+              if (!lifecycleStageForm.name.trim()) {
+                void showAlert({ message: 'Please enter a stage name', variant: 'warning' });
+                return;
+              }
               const updated = structuredClone(crmConfig);
               if (editingLifecycleStage) {
                 const stage = updated.lifecycleStages.find((s) => s.id === editingLifecycleStage.id);
@@ -2394,7 +2399,10 @@ export function GlobalSettingsModal({
           <Button
             variant="primary"
             onClick={() => {
-              if (!flagForm.name.trim()) return alert('Please enter a flag name');
+              if (!flagForm.name.trim()) {
+                void showAlert({ message: 'Please enter a flag name', variant: 'warning' });
+                return;
+              }
               const updated = structuredClone(crmConfig);
               if (editingFlag) {
                 const flag = updated.customerFlags.find((f) => f.id === editingFlag.id);
@@ -2444,7 +2452,10 @@ export function GlobalSettingsModal({
             variant="primary"
             size="sm"
             onClick={() => {
-              if (!docTypeForm.name.trim()) return alert('Please enter a document type name');
+              if (!docTypeForm.name.trim()) {
+                void showAlert({ message: 'Please enter a document type name', variant: 'warning' });
+                return;
+              }
               const updated = structuredClone(crmConfig);
               if (editingDocType) {
                 const dt = updated.documentTypes.find((d) => d.id === editingDocType.id);
@@ -2557,7 +2568,10 @@ export function GlobalSettingsModal({
             className="border-0 text-white"
             style={{ backgroundColor: '#14b8a6' }}
             onClick={() => {
-              if (!supplierLifecycleStageForm.name.trim()) return alert('Please enter a stage name');
+              if (!supplierLifecycleStageForm.name.trim()) {
+                void showAlert({ message: 'Please enter a stage name', variant: 'warning' });
+                return;
+              }
               const updated = structuredClone(supplierConfig);
               if (editingSupplierLifecycleStage) {
                 const stage = updated.lifecycleStages.find((s) => s.id === editingSupplierLifecycleStage.id);
@@ -2702,7 +2716,7 @@ export function GlobalSettingsModal({
             variant="primary"
             onClick={() => {
               if (!ticketTypeForm.name.trim() || !ticketTypeForm.prefix.trim() || !ticketTypeForm.icon.trim()) {
-                alert('Name, Prefix, and Icon are required.');
+                void showAlert({ message: 'Name, Prefix, and Icon are required.', variant: 'warning' });
                 return;
               }
               if (editingTicketType) {
@@ -2907,7 +2921,10 @@ export function GlobalSettingsModal({
             style={{ backgroundColor: '#14b8a6', borderColor: '#14b8a6' }}
             className="text-white"
             onClick={() => {
-              if (!supplierLifecycleStageForm.name.trim()) return alert('Please enter a stage name');
+              if (!supplierLifecycleStageForm.name.trim()) {
+                void showAlert({ message: 'Please enter a stage name', variant: 'warning' });
+                return;
+              }
               const updated = structuredClone(supplierConfig);
               if (editingSupplierLifecycleStage) {
                 const stage = updated.lifecycleStages.find((s) => s.id === editingSupplierLifecycleStage.id);
@@ -3001,7 +3018,10 @@ export function GlobalSettingsModal({
             className="border-0 text-white"
             style={{ backgroundColor: '#14b8a6' }}
             onClick={() => {
-              if (!supplierFlagForm.name.trim()) return alert('Please enter a flag name');
+              if (!supplierFlagForm.name.trim()) {
+                void showAlert({ message: 'Please enter a flag name', variant: 'warning' });
+                return;
+              }
               const updated = structuredClone(supplierConfig);
               if (editingSupplierFlag) {
                 const flag = updated.supplierFlags.find((f) => f.id === editingSupplierFlag.id);
@@ -3056,7 +3076,10 @@ export function GlobalSettingsModal({
             className="border-0 text-white"
             style={{ backgroundColor: '#14b8a6' }}
             onClick={() => {
-              if (!supplierDocTypeForm.name.trim()) return alert('Please enter a document type name');
+              if (!supplierDocTypeForm.name.trim()) {
+                void showAlert({ message: 'Please enter a document type name', variant: 'warning' });
+                return;
+              }
               const updated = structuredClone(supplierConfig);
               if (editingSupplierDocType) {
                 const dt = updated.documentTypes.find((d) => d.id === editingSupplierDocType.id);

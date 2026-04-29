@@ -448,6 +448,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setUser(null);
     setAuthError(null);
     setLoading(false);
+    setTokenValidationComplete(true);
   }, [clearScheduledRefresh]);
 
   const refreshTokens = useCallback(async () => {

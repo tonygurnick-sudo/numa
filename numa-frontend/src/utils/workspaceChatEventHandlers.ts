@@ -456,7 +456,8 @@ export function getSubagentLabel(subagentType: string): string {
     explore: 'Exploring codebase',
     'general-purpose': 'Running analysis',
     plan: 'Planning',
-    'knowledge-search': 'Searching knowledge base',
+    'knowledge-search': 'Searching Numa Files',
+    'numa-files-search': 'Searching Numa Files',
   };
   return labels[subagentType] || `Running ${subagentType}`;
 }
@@ -2866,6 +2867,20 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
         isAwaitingCompactionSummary = false;
         compactionMetadata = null;
         // Skip creating a user message bubble - this is an injected summary
+        continue;
+      }
+
+      // Skip synthetic image-resize notes injected by the bundled Claude Code CLI:
+      //   "[Image: original 5788x942, displayed at 2000x326. Multiply coordinates by 2.89 to map to original image.]"
+      // The CLI emits these as user-role text whenever it auto-downsamples an image,
+      // so they appear under "You:" in the UI even though the user never typed them.
+      // The model still needs to see them in the underlying trace for coordinate math —
+      // this filter only suppresses rendering. Anchored so a user typing the phrase
+      // mid-sentence is not filtered. Observed in claude-agent-sdk 0.1.59 (2026-04).
+      // TODO: revisit if other synthetic-note variants appear.
+      const SDK_IMAGE_NOTE_RE =
+        /^\s*\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\]\s*$/;
+      if (SDK_IMAGE_NOTE_RE.test(userText)) {
         continue;
       }
 

@@ -611,7 +611,7 @@ def check_bash_command(
             True,
             "Direct execution of Numa CLI tools via bash is not allowed. "
             "Use the mcp__numa__numa_tool MCP tool instead. "
-            "Load the relevant Skill (agents, memories, knowledge-search, etc.) "
+            "Load the relevant Skill (agents, memories, numa-files-search, etc.) "
             "to learn the correct MCP tool parameters.",
         )
 

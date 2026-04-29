@@ -52,7 +52,10 @@ MESSAGE_HINTS: list[tuple[str, str]] = [
         "docx-handling",
     ),
     (r"\b(excel|spreadsheet)\b", "spreadsheet-handling"),
-    (r"\b(knowledge\s*base|KB|company\s+docs?|internal\s+docs?)\b", "knowledge-search"),
+    (
+        r"\b(numa\s+files|company\s+files|my\s+files|knowledge\s*base|KB|company\s+docs?|internal\s+docs?)\b",
+        "numa-files-search",
+    ),
     (
         r"\b(search\s+online|web\s+search|find\s+online|look\s+up\s+online|google|internet|current|latest\s+news)\b",
         "web-search",
@@ -306,9 +309,9 @@ def build_assistant_prompt(context: AssistantContext) -> str:
         kb_names = [
             kb.get("name", kb.get("id", "unknown")) for kb in context.available_kbs
         ]
-        tool_lines.append(f"- knowledge_base: ENABLED (KBs: {', '.join(kb_names)})")
+        tool_lines.append(f"- numa_files: ENABLED (folders: {', '.join(kb_names)})")
     else:
-        tool_lines.append("- knowledge_base: DISABLED (user can enable in settings)")
+        tool_lines.append("- numa_files: DISABLED (user can enable in settings)")
 
     if context.enabled_integrations:
         tool_lines.append(
@@ -329,12 +332,12 @@ def build_assistant_prompt(context: AssistantContext) -> str:
 
 | Skill | Strong Signals | Activate When User Wants To... |
 |-------|----------------|-------------------------------|
-| knowledge-search | "KB", "knowledge base", "company docs", "internal docs" | Search internal/company documents, find policies, look up procedures, retrieve stored info |
+| numa-files-search | "Numa Files", "company files", "my files", "KB", "knowledge base", "company docs", "internal docs" | Search files in the user's Numa Files folders (My Files, Company Files, shared folders), find policies, look up procedures, retrieve stored info |
 | pdf-handling | "pdf", file.pdf mentioned | Read, create, merge, annotate, or work with PDF files |
 | docx-handling | "word doc", "docx", file.docx mentioned, "letterhead", "logo" | Create, edit, add images/logos to Word documents |
 | spreadsheet-handling | "excel", "spreadsheet", "csv", file.xlsx/.csv mentioned | Analyze data, work with tables, create charts |
 | data-analysis | "slow", "optimize", "large dataset", "sqlite", "million rows", "chart", "matplotlib" | Optimize performance for large files (50MB+), convert to SQLite for fast queries, create visualizations |
-| web-search | "search online", "google", "latest news", "current" | Find recent/external info, look up things not in company docs |
+| web-search | "search online", "google", "latest news", "current" | Find recent/external info, look up things not in the user's Numa Files |
 | agents | "agent", "agents", "numa agent", "saved agent", "my agent" | List, create, update, configure, or do ANYTHING with Numa agents |
 | integrations | "integration", "connected app", "slack", "google drive", "gmail", app names | Use connected integrations to run actions, search data, or make API calls to external apps |
 

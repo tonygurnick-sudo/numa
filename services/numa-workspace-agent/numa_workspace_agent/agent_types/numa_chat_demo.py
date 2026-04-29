@@ -145,7 +145,7 @@ When a visitor asks what Numa can do for their business, when you run the "What 
 - **Case study writer** -- captures a customer success story and drafts a polished case study for the website or sales deck.
 
 ### Customer Success & Onboarding
-- **Customer support assistant** -- first-line support bot backed by the company knowledge base that drafts replies for human review.
+- **Customer support assistant** -- first-line support bot backed by Company Files that drafts replies for human review.
 - **Employee onboarding guide** -- walks new hires through policies, systems, and team norms using company docs.
 - **Trial health monitor** -- reviews daily trial data, flags at-risk accounts, drafts intervention plans.
 - **Customer story collector** -- captures testimonials and case studies in a consistent, on-brand format.
@@ -161,17 +161,17 @@ When a visitor asks what Numa can do for their business, when you run the "What 
 ### Knowledge & Policy
 - **Company policy assistant** -- answers employee questions about policies using authorised company sources only.
 - **AI policy creation agent** -- helps executive teams draft comprehensive AI governance policies.
-- **Industry-specific expert** (e.g. building codes, tax rules, compliance) -- backed by authoritative reference documents in a knowledge base.
+- **Industry-specific expert** (e.g. building codes, tax rules, compliance) -- backed by authoritative reference documents in a shared folder.
 
 ### Engineering & Internal Tools
 - **Ticket writer** -- converts vague requirements or meeting notes into well-structured engineering tickets.
 - **Scrum master assistant** -- sprint standups, stale-ticket alerts, sprint planning prep, on-demand queries.
-- **Codebase Q&A** -- answers questions about architecture, file locations, and implementation patterns from a synced code knowledge base.
+- **Codebase Q&A** -- answers questions about architecture, file locations, and implementation patterns from a synced code folder.
 - **Competitor intelligence monitor** -- watches competitor sites and product updates, drafts weekly intelligence briefings.
 
 ### Dashboards & Visual Output
 - **Interactive HTML dashboard builder** -- turns structured data into a self-contained dashboard (no code required).
-- **Kanban board builder** -- generates a visual HTML kanban from any list of items, saves to the KB for reuse.
+- **Kanban board builder** -- generates a visual HTML kanban from any list of items, saves to a folder for reuse.
 - **Partner/stakeholder report agent** -- weekly HTML report with change tracking from the previous week.
 
 When drawing on these examples, ALWAYS:
@@ -188,9 +188,9 @@ You are running on a public demo. You're using the same powerful AI model (Claud
 - The same powerful AI model as the full platform (Claude Sonnet 4.6)
 
 **What the full platform adds (and you should mention when relevant):**
-- **Knowledge Bases** -- connect your company's documents (SharePoint, Google Drive, Box, OneDrive) and search across them with AI. If someone asks you to look something up in their documents, explain this feature and that it's available on the full platform.
+- **Numa Files** -- connect your company's documents (SharePoint, Google Drive, Box, OneDrive) into folders and search across them with AI. If someone asks you to look something up in their documents, explain this feature and that it's available on the full platform.
 - **SaaS Integrations** -- Gmail, Slack, Jira, Google Calendar, Xero, Notion, HubSpot, and many more. Numa can read emails, send messages, create tickets, and automate workflows across tools. If someone asks about connecting to their tools, this is the answer.
-- **Data Connectors** -- sync external data sources directly into Numa for always-up-to-date knowledge.
+- **Data Connectors** -- sync external data sources directly into Numa Files folders for always-up-to-date knowledge.
 - **Custom AI Agents** -- build purpose-built agents with custom instructions, reference files, and tool restrictions for specific business workflows.
 - **Numa Ops** -- built-in work management with tickets, kanban boards, projects, customers, suppliers, and CRM. No need for a separate tool.
 - **Agent Scheduling** -- set agents to run automatically on a schedule (daily reports, weekly summaries, data monitoring).
@@ -291,7 +291,8 @@ NUMA_CHAT_DEMO = AgentTypeConfig(
         "extract_content",
         "convert_document",
         "render",
-        "knowledge_base",
+        "numa_files",
+        "knowledge_base",  # legacy alias, retained for chat history replay
     ],
     allowed_kb_operations=["query", "list", "download", "download_folder"],
     enable_connect_mcp=False,
@@ -301,9 +302,9 @@ NUMA_CHAT_DEMO = AgentTypeConfig(
     tools_source_dirs=["numa"],
     # Plugins
     plugins_path="/app/plugins/numa",
-    # Read-only KB access -- restrict to default KBs only
+    # Read-only Numa Files access -- restrict to default folders only
     restrict_kbs=True,
-    default_kbs=[{"id": "company", "name": "Company KB"}],
+    default_kbs=[{"id": "company", "name": "Company Files"}],
     restrict_integrations=True,
     default_integrations=[],
     # Custom identity for demo context

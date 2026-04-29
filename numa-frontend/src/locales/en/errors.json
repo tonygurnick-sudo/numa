@@ -37,16 +37,16 @@
     "appNotFound": "App with ID {{appId}} not found"
   },
   "knowledgeBase": {
-    "htmlResponse": "Knowledge base API returned HTML. This usually means the request was routed to the web app instead of the backend API. Check your API proxy or authentication configuration.",
-    "listFailed": "Failed to list knowledge bases",
+    "htmlResponse": "Numa Files API returned HTML. This usually means the request was routed to the web app instead of the backend API. Check your API proxy or authentication configuration.",
+    "listFailed": "Failed to list folders",
     "authNotReady": "Authentication tokens not ready. Please wait or refresh the page.",
-    "detailsFailed": "Failed to get knowledge base details",
-    "createFailed": "Failed to create knowledge base",
-    "updateFailed": "Failed to update knowledge base",
-    "deleteFailed": "Failed to delete knowledge base",
-    "listFilesFailed": "Failed to list knowledge base files",
+    "detailsFailed": "Failed to load folder details",
+    "createFailed": "Failed to create folder",
+    "updateFailed": "Failed to update folder",
+    "deleteFailed": "Failed to delete folder",
+    "listFilesFailed": "Failed to list files in folder",
     "deleteFilesFailed": "Failed to delete files",
-    "stateFailed": "Failed to get knowledge base state"
+    "stateFailed": "Failed to load folder status"
   },
   "branding": {
     "presignHtml": "Branding asset upload endpoint returned HTML instead of JSON. Verify Branding API configuration."

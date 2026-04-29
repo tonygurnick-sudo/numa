@@ -16,6 +16,7 @@ import {
 } from '../../Services/VaultService';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useAuth } from '../../Providers/AuthProvider';
+import { useConfirm } from '../../Providers/ConfirmContext';
 // SynergyConnectorCard removed — Synergy now uses standard connector flow
 import { OAuthConnectorCard } from './OAuthConnectorCard';
 import { SynergyPatBadge } from './SynergyPatBadge';
@@ -51,6 +52,8 @@ type DataConnectorsTabProps = {
 
 export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => {
   const { t } = useTranslation('integrations');
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
   const { numaGet } = useNumaRequest();
   const { user } = useAuth();
   const isAdmin = Boolean(user?.groups?.includes('admin'));
@@ -271,7 +274,11 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   };
 
   const handleOAuthDisconnect = async (providerId: string, displayName: string) => {
-    const confirmed = window.confirm(t('dataConnectors.confirm.disconnect', { name: displayName }));
+    const confirmed = await confirm({
+      message: t('dataConnectors.confirm.disconnect', { name: displayName }),
+      confirmLabel: tCommon('confirm.disconnect'),
+      variant: 'danger',
+    });
     if (!confirmed) return;
     setDisconnectingId(providerId);
     try {
@@ -329,7 +336,11 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   };
 
   const handleConnectorDelete = async (connectorId: string, displayName: string) => {
-    const confirmed = window.confirm(t('dataConnectors.confirm.deleteCredentials', { name: displayName }));
+    const confirmed = await confirm({
+      message: t('dataConnectors.confirm.deleteCredentials', { name: displayName }),
+      confirmLabel: tCommon('confirm.delete'),
+      variant: 'danger',
+    });
     if (!confirmed) return;
     setDisconnectingId(connectorId);
     try {

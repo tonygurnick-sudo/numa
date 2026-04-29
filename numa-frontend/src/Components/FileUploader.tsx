@@ -30,6 +30,13 @@ interface FileUploaderProps {
   kb_id?: string;
   selectedFolder?: string;
   enableFolderUpload?: boolean;
+  /**
+   * When true, the picker hides the "Select Folder" button and any directory
+   * dragged into the drop zone is rejected with an inline alert. Loose files
+   * in the same drop are still accepted. Used at the User Files root, where
+   * folders correspond to knowledge bases and must be created explicitly.
+   */
+  rejectFolders?: boolean;
 }
 
 /** System/OS files that should be excluded from folder uploads. */
@@ -60,7 +67,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   kb_id,
   selectedFolder,
   enableFolderUpload = false,
+  rejectFolders = false,
 }) => {
+  const showFolderPicker = enableFolderUpload && !rejectFolders;
   const { t } = useTranslation('common');
   const formatKB = (bytes: number, digits = 2) => t('fileSize.kb', { size: (bytes / 1024).toFixed(digits) });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -77,6 +86,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [totalFiles, setTotalFiles] = useState<number>(0);
   const [currentFileName, setCurrentFileName] = useState<string>('');
   const [detailedError, setDetailedError] = useState<string | null>(null);
+  const [folderRejection, setFolderRejection] = useState<'folders-only' | 'mixed' | null>(null);
   const [fileStructure, setFileStructure] = useState<FileStructure>({
     files: [],
     folders: new Set(),
@@ -106,6 +116,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       setTotalFiles(0);
       setCurrentFileName('');
       setDetailedError(null);
+      setFolderRejection(null);
 
       // Clear file input values
       if (fileInputRef.current) {
@@ -118,27 +129,34 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   }, [clearFiles]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    const fileList = Array.from(event.target.files || []) as ExtendedFile[];
+    const rawFileList = Array.from(event.target.files || []) as ExtendedFile[];
 
     // Always call onFileSelect first to allow parent to handle validation and warnings
     if (onFileSelect) {
-      onFileSelect(fileList);
+      onFileSelect(rawFileList);
     }
+
+    let validFiles = rawFileList;
+    let invalidFileNames = '';
 
     // Validate files if validateFile function is provided
     if (validateFile) {
-      const invalidFiles = fileList.filter((file) => !validateFile(file));
+      const invalidFiles = rawFileList.filter((file) => !validateFile(file));
       if (invalidFiles.length > 0) {
-        // Don't add invalid files to the list
-        return; // Stop processing if there are invalid files
+        invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
+        validFiles = rawFileList.filter((file) => validateFile(file));
+        if (validFiles.length === 0) {
+          setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
+          return;
+        }
       }
     }
 
     // Create a set of unique folder paths
-    const combinedFiles = [...files, ...fileList];
+    const combinedFiles = [...files, ...validFiles];
     const folders = new Set([...fileStructure.folders]);
 
-    fileList.forEach((file) => {
+    validFiles.forEach((file) => {
       const path = file.webkitRelativePath || file.name;
       const parts = path.split('/');
       // Add all parent folders
@@ -153,17 +171,27 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       folders: folders,
     });
     setTotalFiles(combinedFiles.length);
-    setError(null);
+    if (invalidFileNames) {
+      setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
+    } else {
+      setError(null);
+    }
     setSuccess(false);
     setUploadProgress(0);
+    setFolderRejection(null);
 
     // Notify parent component about file selection
     if (onFileSelect) {
-      onFileSelect(fileList);
+      onFileSelect(validFiles);
     }
   };
 
   const handleFolderSelect = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    if (rejectFolders) {
+      setFolderRejection('folders-only');
+      if (folderInputRef.current) folderInputRef.current.value = '';
+      return;
+    }
     const rawFiles = Array.from(event.target.files || []) as ExtendedFile[];
 
     // Set customRelativePath from webkitRelativePath and filter out system/false-folder files
@@ -183,7 +211,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
     // Filter out invalid file types but don't reject the whole batch
     const filesToAdd = validateFile ? validFiles.filter((file) => validateFile(file)) : validFiles;
-    if (!filesToAdd.length) return;
+    const invalidFiles = validateFile ? validFiles.filter((file) => !validateFile(file)) : [];
+
+    if (!filesToAdd.length) {
+      if (invalidFiles.length > 0) {
+        const invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
+        setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
+      }
+      return;
+    }
 
     const combinedFiles = [...files, ...filesToAdd];
     const folders = new Set([...fileStructure.folders]);
@@ -199,7 +235,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setFiles(combinedFiles);
     setFileStructure({ files: combinedFiles, folders });
     setTotalFiles(combinedFiles.length);
-    setError(null);
+    if (invalidFiles.length > 0) {
+      const invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
+      setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
+    } else {
+      setError(null);
+    }
     setSuccess(false);
     setUploadProgress(0);
   };
@@ -224,8 +265,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       const invalidFiles = files.filter((file) => !validateFile(file));
       if (invalidFiles.length > 0) {
         const invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
-        setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
-        return;
+        const validFiles = files.filter((file) => validateFile(file));
+        if (validFiles.length === 0) {
+          setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
+          return;
+        }
       }
     }
 
@@ -403,19 +447,32 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
     const items = Array.from(e.dataTransfer.items);
     const files: ExtendedFile[] = [];
+    let droppedDirectory = false;
+    let droppedLooseFile = false;
 
     for (const item of items) {
       if (item.kind === 'file') {
         const entry = item.webkitGetAsEntry();
         if (entry?.isDirectory) {
-          await readDirectory(entry as FileSystemDirectoryEntry, files);
+          droppedDirectory = true;
+          if (!rejectFolders) {
+            await readDirectory(entry as FileSystemDirectoryEntry, files);
+          }
         } else if (entry?.isFile) {
+          droppedLooseFile = true;
           const file = item.getAsFile();
           if (file) {
             files.push(file as ExtendedFile);
           }
         }
       }
+    }
+
+    if (rejectFolders && droppedDirectory) {
+      setFolderRejection(droppedLooseFile ? 'mixed' : 'folders-only');
+    } else if (!droppedDirectory) {
+      // Clear any prior rejection on a clean drop
+      setFolderRejection(null);
     }
 
     if (files.length) {
@@ -425,21 +482,27 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       }
 
       // Validate files if validateFile function is provided
+      let validFiles = files;
+      let invalidFileNames = '';
       if (validateFile) {
         const invalidFiles = files.filter((file) => !validateFile(file));
         if (invalidFiles.length > 0) {
-          // Don't add invalid files to the list
-          return; // Stop processing if there are invalid files
+          invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
+          validFiles = files.filter((file) => validateFile(file));
+          if (validFiles.length === 0) {
+            setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
+            return;
+          }
         }
       }
 
       // Create a set of unique folder paths
       // Get existing files from state and combine with newly dropped files
       const stateFiles = [...fileStructure.files]; // Get existing files from state
-      const combinedFiles = [...stateFiles, ...files];
+      const combinedFiles = [...stateFiles, ...validFiles];
       const folders = new Set([...fileStructure.folders]);
 
-      files.forEach((file) => {
+      validFiles.forEach((file) => {
         const path = file.customRelativePath || file.webkitRelativePath || file.name;
         const parts = path.split('/');
         // Add all parent folders
@@ -454,7 +517,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       });
       setFiles(combinedFiles);
       setTotalFiles(combinedFiles.length);
-      setError(null);
+      if (invalidFileNames) {
+        setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
+      } else {
+        setError(null);
+      }
       setSuccess(false);
       setUploadProgress(0);
     }
@@ -529,6 +596,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setTotalFiles(0);
     setError(null);
     setSuccess(false);
+    setFolderRejection(null);
 
     // Reset file inputs to allow re-adding the same files
     if (fileInputRef.current) {
@@ -684,9 +752,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         </Alert>
       )}
 
+      {folderRejection && (
+        <Alert variant="warning" dismissible onClose={() => setFolderRejection(null)}>
+          <div>{t('fileUploader.foldersRejected')}</div>
+          {folderRejection === 'mixed' && <div className="mt-2">{t('fileUploader.foldersRejectedFilesAdded')}</div>}
+        </Alert>
+      )}
+
       <div className="text-center">
         <input style={{ display: 'none' }} ref={fileInputRef} type="file" onChange={handleFileSelect} multiple />
-        {enableFolderUpload && (
+        {showFolderPicker && (
           <input
             style={{ display: 'none' }}
             ref={folderInputRef}
@@ -701,7 +776,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         <div className="mb-3">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
           <p className="mt-2">
-            {enableFolderUpload ? t('fileUploader.dragAndDropFilesOrFolders') : t('fileUploader.dragAndDrop')}
+            {showFolderPicker ? t('fileUploader.dragAndDropFilesOrFolders') : t('fileUploader.dragAndDrop')}
           </p>
           <div className="d-flex gap-2 justify-content-center">
             <Button
@@ -712,7 +787,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             >
               {t('fileUploader.selectFiles')}
             </Button>
-            {enableFolderUpload && (
+            {showFolderPicker && (
               <Button
                 variant="primary"
                 type="button"

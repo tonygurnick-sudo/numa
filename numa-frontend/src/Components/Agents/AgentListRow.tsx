@@ -1,5 +1,5 @@
 import { Badge } from 'react-bootstrap';
-import { Eye, EyeOff, Heart, MessageSquare, Share2, Trash2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, Heart, MessageSquare, Share2, Trash2 } from 'lucide-react';
 import { AgentAvatar } from './AgentAvatar';
 import type { AgentSummary } from '../../types/agents';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,7 @@ type Props = {
   roleBadge?: string;
   onChat?: (agent: AgentSummary) => void;
   onEdit?: (agent: AgentSummary) => void;
+  onDuplicate?: (agent: AgentSummary) => void;
   onDelete?: (agent: AgentSummary) => void;
   onToggleFavorite?: (agent: AgentSummary, next: boolean) => void;
   onToggleHidden?: (agent: AgentSummary, next: boolean) => void;
@@ -38,6 +39,7 @@ export const AgentListRow = ({
   roleBadge,
   onChat,
   onEdit,
+  onDuplicate,
   onDelete,
   onToggleFavorite,
   onToggleHidden,
@@ -114,6 +116,16 @@ export const AgentListRow = ({
             style={{ padding: '4px 6px' }}
           >
             <Share2 size={14} />
+          </button>
+        )}
+        {onDuplicate && (
+          <button
+            className="btn btn-sm btn-outline-light border text-muted"
+            onClick={() => onDuplicate(agent)}
+            title={t('management.actions.duplicate')}
+            style={{ padding: '4px 6px' }}
+          >
+            <Copy size={14} />
           </button>
         )}
         {onToggleHidden && agent.scope === 'workspace' && (

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type
 import { Button, Alert, Modal, Collapse } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../Providers/AuthProvider';
+import { useConfirm, usePrompt } from '../Providers/ConfirmContext';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { ChatHistorySidebar } from '../Components/Chat/ChatHistorySidebar';
 import { ChatFileUpload } from '../Components/Chat/ChatFileUpload';
@@ -77,6 +78,9 @@ const resolveErrorMessage = (error: unknown, fallback: string): string => {
 
 const NumaChatAgents = () => {
   const { t } = useTranslation(['chat', 'errors']);
+  const { t: tCommon } = useTranslation('common');
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   // Basic UI state
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -881,7 +885,13 @@ const NumaChatAgents = () => {
 
   // Handle renaming a conversation from NewChat view
   const handleRenameConversation = async (conversationId: string, currentName: string) => {
-    const newName = prompt(t('history.renamePrompt'), currentName);
+    const newName = await prompt({
+      title: tCommon('prompt.rename'),
+      message: t('history.renamePrompt'),
+      defaultValue: currentName,
+      confirmLabel: tCommon('confirm.save'),
+      required: true,
+    });
     if (newName === null) return; // user cancelled
     if (!numaChatDynamoUtils) {
       console.error('DynamoDB client not initialized');
@@ -902,10 +912,12 @@ const NumaChatAgents = () => {
   // Handle deleting a conversation from NewChat view
   const handleDeleteConversation = async (conversationId: string) => {
     if (!numaChatDynamoUtils) return;
-    // Confirm deletion with the user
-    if (!window.confirm(t('history.deleteConfirm'))) {
-      return;
-    }
+    const ok = await confirm({
+      message: t('history.deleteConfirm'),
+      confirmLabel: tCommon('confirm.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await numaChatDynamoUtils.deleteConversation(conversationId, sub);
       refreshSidebar();

@@ -214,7 +214,8 @@ class AgentTypeConfig:
 # The files are documentation only — direct bash execution is blocked by
 # security hooks.
 TOOL_FILE_MAP: dict[str, list[str]] = {
-    "knowledge_search": ["knowledge_base.py"],
+    "numa_files_search": ["numa_files.py"],
+    "knowledge_search": ["numa_files.py"],  # legacy alias for stored configs
     "web_search": ["web_search.py"],
     "agents": ["numa-agents.py"],
     "memories": ["numa-memories.py"],

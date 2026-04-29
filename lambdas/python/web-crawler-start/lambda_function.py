@@ -150,8 +150,8 @@ def _start_crawler(body: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, A
             "body": json.dumps(
                 {
                     "success": False,
-                    "error": "Read-only knowledge base",
-                    "message": f"Web crawler cannot target read-only KB '{kb_id}'",
+                    "error": "Read-only folder",
+                    "message": f"Web crawler cannot target read-only folder '{kb_id}'",
                 }
             ),
         }
@@ -283,8 +283,8 @@ def handler(
                     "body": json.dumps(
                         {
                             "success": False,
-                            "error": "Read-only knowledge base",
-                            "message": f"Web crawler stats are not available for read-only KB '{kb_id}'",
+                            "error": "Read-only folder",
+                            "message": f"Web crawler stats are not available for read-only folder '{kb_id}'",
                         }
                     ),
                 }
