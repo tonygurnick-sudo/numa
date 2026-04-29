@@ -1012,11 +1012,19 @@ def _get_allowed_operations() -> list[str] | None:
 # (but can still be restricted by NUMA_ALLOWED_OPERATIONS at agent type level).
 #
 # Each operation maps to a *list* of accepted toggle keys. The canonical name
-# is "knowledge_base" (matching the MCP operation). Legacy names
-# (query_knowledge_base, knowledge_search) are kept for backward compatibility
-# with existing schedule records in DynamoDB.
+# is "numa_files" (matching the user-facing rebrand). Legacy names
+# ("knowledge_base", "query_knowledge_base", "knowledge_search") are accepted
+# for backward compatibility with chat history replay, scheduled runs, and
+# existing agent configs in DynamoDB.
+_KB_TOGGLE_KEYS = [
+    "numa_files",
+    "knowledge_base",
+    "query_knowledge_base",
+    "knowledge_search",
+]
 _OPERATION_TO_ENABLED_TOOL_KEYS: dict[str, list[str]] = {
-    "knowledge_base": ["knowledge_base", "query_knowledge_base", "knowledge_search"],
+    "numa_files": _KB_TOGGLE_KEYS,
+    "knowledge_base": _KB_TOGGLE_KEYS,  # legacy operation name, same gating
     "web_search": ["web_search"],
     "agents": ["create_agent_tool"],
     "memories": ["memories_tool"],
@@ -1043,7 +1051,8 @@ def _check_operation_allowed(operation: str) -> str | None:
         if not any(key in enabled_tools for key in toggle_keys):
             # User-friendly messages per tool
             messages = {
-                "knowledge_base": "Knowledge base is not enabled. Enable a knowledge base in chat settings.",
+                "numa_files": "No folders are enabled. Enable a folder in chat settings.",
+                "knowledge_base": "No folders are enabled. Enable a folder in chat settings.",
                 "web_search": "Web search is not enabled. Enable 'Web Search' in chat settings.",
                 "agents": "Agent tools are not enabled. Enable 'Agent Creation' in chat settings.",
                 "memories": "Memory management is not enabled. Enable 'Update Memory' in chat settings.",
@@ -1056,7 +1065,7 @@ def _check_operation_allowed(operation: str) -> str | None:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Knowledge Base handler (consolidated)
+# Numa Files handler (consolidated)
 # ═════════════════════════════════════════════════════════════════════════════
 
 _KB_OPERATIONS = {
@@ -1070,7 +1079,7 @@ _KB_OPERATIONS = {
 
 
 def _get_allowed_kb_operations() -> list[str] | None:
-    """Return the allowed KB sub-operations, or None if unrestricted."""
+    """Return the allowed Numa Files sub-operations, or None if unrestricted."""
     raw = os.environ.get("NUMA_ALLOWED_KB_OPERATIONS")
     if raw is None:
         return None
@@ -1081,23 +1090,26 @@ def _get_allowed_kb_operations() -> list[str] | None:
 
 
 async def _handle_knowledge_base(params: dict[str, Any]) -> dict[str, Any]:
-    """Knowledge base operations — query, upload, download, list, download_folder, delete.
+    """Numa Files operations — query, upload, download, list, download_folder, delete.
+
+    Dispatched by both `name="numa_files"` (preferred) and the legacy
+    `name="knowledge_base"` (kept for chat history replay).
 
     Params:
         operation: One of query, upload, download, list, download_folder, delete
-        (remaining keys are operation-specific, see knowledge-search SKILL.md)
+        (remaining keys are operation-specific, see numa-files-search SKILL.md)
     """
     operation = params.get("operation")
     handler = _KB_OPERATIONS.get(operation or "")
     if not handler:
         valid = ", ".join(_KB_OPERATIONS)
-        return _err(f"Invalid knowledge_base operation: '{operation}'. Valid: {valid}")
+        return _err(f"Invalid numa_files operation: '{operation}'. Valid: {valid}")
 
-    # Check agent-type-level KB operation restriction (e.g. read-only access)
+    # Check agent-type-level Numa Files sub-operation restriction (e.g. read-only access)
     allowed_kb_ops = _get_allowed_kb_operations()
     if allowed_kb_ops is not None and operation not in allowed_kb_ops:
         return _err(
-            f"The '{operation}' knowledge base operation is not available for this agent type. "
+            f"The '{operation}' Numa Files operation is not available for this agent type. "
             f"Available operations: {', '.join(allowed_kb_ops) if allowed_kb_ops else 'none'}."
         )
 
@@ -1343,7 +1355,8 @@ async def _handle_render(params: dict[str, Any]) -> dict[str, Any]:
 # ═════════════════════════════════════════════════════════════════════════════
 
 TOOL_HANDLERS = {
-    "knowledge_base": _handle_knowledge_base,
+    "numa_files": _handle_knowledge_base,
+    "knowledge_base": _handle_knowledge_base,  # legacy alias for chat history replay
     "web_search": _handle_web_search,
     "extract_content": _handle_extract_content,
     "convert_document": _handle_convert_document,
@@ -1363,9 +1376,10 @@ TOOL_NAMES = list(TOOL_HANDLERS.keys())
 @tool(
     name="numa_tool",
     description=(
-        "Execute a Numa platform tool. Use for knowledge base operations, "
-        "web search, content extraction, document conversion, agent management, "
-        "and memory management. "
+        'Execute a Numa platform tool. Use `name="numa_files"` to search, '
+        "upload, download, or list files in the user's Numa Files folders. "
+        "Other names: web_search, extract_content, convert_document, agents, "
+        "memories. "
         "Always load the relevant Skill first to learn each tool's expected params."
     ),
     input_schema={

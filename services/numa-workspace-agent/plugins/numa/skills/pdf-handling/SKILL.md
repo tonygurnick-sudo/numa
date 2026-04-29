@@ -89,6 +89,71 @@ if metadata:
 
 ---
 
+## High-Resolution Images & 2000px Dimension Limit
+
+> **WARNING:** Once a conversation has more than 20 images attached, every image in the request must be ≤2000px on its longest side. If even one image exceeds this, the API rejects the entire turn with the error: `"An image in the conversation exceeds the dimension limit for many-image requests (2000px). Start a new session with fewer images."` The session becomes **permanently stuck** — every subsequent turn re-fails because the offending image is already in history. This is an Anthropic API constraint with no configuration override.
+
+A backstop hook silently downsamples any image you `Read` that exceeds 2000px on the long side, so you cannot accidentally jam a session. **But a downsampled image loses detail** — when small text, dimensions, or fine annotations matter (building plans, engineering drawings, dense tables), render the right size up-front instead of relying on the backstop.
+
+### Render at the right DPI
+
+For a single overview render, target the largest DPI that keeps the long side ≤2000px:
+
+```
+dpi = 72 * 2000 / max(page_width_pt, page_height_pt)
+```
+
+Worked examples (page sizes in points, where 72pt = 1 inch):
+
+- A4 portrait (595 × 842 pt): max DPI ≈ `72 * 2000 / 842` ≈ **170 DPI**
+- A3 portrait (842 × 1191 pt): max DPI ≈ `72 * 2000 / 1191` ≈ **120 DPI**
+- A1 architectural plan (1684 × 2384 pt): max DPI ≈ `72 * 2000 / 2384` ≈ **60 DPI**
+
+```python
+import fitz
+
+doc = fitz.open("/workdir/uploads/plan.pdf")
+page = doc[0]
+w_pt, h_pt = page.rect.width, page.rect.height
+dpi = int(72 * 2000 / max(w_pt, h_pt))
+pix = page.get_pixmap(dpi=dpi)
+pix.save("/workdir/outputs/page_1_overview.png")
+print(f"Overview at {dpi} DPI: {pix.width}x{pix.height}")
+doc.close()
+```
+
+### Tile for detail when small text matters
+
+For dense plans where overview-DPI loses readable detail (mm dimensions on elevations, individual line items in a schedule), use a two-pass pattern:
+
+1. **Overview pass.** Render the full page at the right DPI for the page size (formula above) and `Read` it to identify the regions you need to inspect.
+2. **Detail pass.** Render only the sub-rectangle you need at higher zoom using `fitz.Matrix` and `clip`. Each tile must satisfy `(rect_width_pt × zoom) ≤ 2000` and `(rect_height_pt × zoom) ≤ 2000`.
+
+```python
+import fitz
+
+doc = fitz.open("/workdir/uploads/plan.pdf")
+page = doc[0]
+
+# Detail pass: top-right cladding schedule, zoom 3x
+clip = fitz.Rect(420, 50, 800, 280)  # x0, y0, x1, y1 in PDF points
+zoom = 3
+assert (clip.width * zoom) <= 2000 and (clip.height * zoom) <= 2000, "tile too large"
+pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), clip=clip)
+pix.save("/workdir/outputs/page_1_cladding_schedule.png")
+print(f"Detail crop: {pix.width}x{pix.height}")
+
+doc.close()
+```
+
+To read a region that would exceed 2000px even at zoom 1, split it into multiple tiles (e.g. left half + right half) and `Read` each. Name them so the relationship is obvious: `floor_plan_top.png`, `floor_plan_bottom.png`.
+
+### Auto-downsample backstop
+
+If you forget the rules and `Read` a 5000×4000 PNG anyway, a hook intercepts it, writes a 2000×1600 copy to `/workdir/outputs/.resized/`, and rewrites the read transparently. You'll see a context note telling you the original dimensions and recommending the tiling pattern above. The hook prevents session jams but **does not recover detail** — render correctly the first time when detail matters.
+
+---
+
 ## Visual Extraction with PyMuPDF (fitz)
 
 PyMuPDF can render PDF pages as images and extract embedded images — essential for visual analysis.

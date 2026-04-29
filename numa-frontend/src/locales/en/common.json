@@ -77,8 +77,8 @@
       "scheduling": "Scheduling",
       "automations": "Automations",
       "company": "Company",
-      "companyKnowledgeBase": "Company KB",
-      "userKnowledgeBase": "User KBs",
+      "companyKnowledgeBase": "Company Files",
+      "userKnowledgeBase": "My Folders",
       "profile": "Profile",
       "settings": "Settings",
       "adminSettings": "Admin Settings",
@@ -95,13 +95,13 @@
       "library": "Library",
       "workflows": "Workflows",
       "timeline": "Timeline",
-      "knowledgeBases": "Knowledge Bases"
+      "knowledgeBases": "Numa Files"
     },
     "expanded": {
       "apps": "Apps",
       "files": "Files",
-      "knowledgeBase": "Knowledge Base",
-      "knowledgeBaseManagement": "Knowledge Base Management",
+      "knowledgeBase": "Numa Files",
+      "knowledgeBaseManagement": "Numa Files Management",
       "numaChat": "Numa Chat",
       "numaChatV2": "Numa Chat V2",
       "applications": "Applications",
@@ -127,7 +127,7 @@
     "SECTIONS": {
       "WORKFLOWS": "Workflows",
       "TIMELINE": "Timeline",
-      "KNOWLEDGEBASES": "Knowledge Bases"
+      "KNOWLEDGEBASES": "Numa Files"
     }
   },
   "pagination": {
@@ -220,9 +220,9 @@
     "retryReason": "Reason: {{reason}}"
   },
   "manageKBs": {
-    "title": "Your Knowledge Bases",
-    "loading": "Loading your knowledge bases...",
-    "empty": "You don't have any editable knowledge bases yet. Create one to get started!",
+    "title": "Your folders",
+    "loading": "Loading your folders...",
+    "empty": "You don't have any editable folders yet. Create one to get started!",
     "columns": {
       "name": "Name",
       "status": "Status",
@@ -242,15 +242,15 @@
     "editorsCount_one": "{{count}} user",
     "editorsCount_other": "{{count}} users",
     "errors": {
-      "updateFailed": "Failed to update knowledge base",
-      "loadFailed": "Failed to load knowledge bases",
-      "deleteFailed": "Failed to delete knowledge base"
+      "updateFailed": "Failed to update folder",
+      "loadFailed": "Failed to load folders",
+      "deleteFailed": "Failed to delete folder"
     },
     "editModal": {
-      "title": "Edit Knowledge Base",
-      "defaultNotice": "This is the default company knowledge base. Some settings cannot be changed.",
-      "nameLabel": "Knowledge Base Name",
-      "publicLabel": "Make this KB accessible to all users",
+      "title": "Edit folder",
+      "defaultNotice": "This is the default Company Files folder. Some settings cannot be changed.",
+      "nameLabel": "Folder name",
+      "publicLabel": "Make this folder accessible to all users",
       "viewersLabel": "Viewers (Emails)",
       "viewersPlaceholder": "e.g., user1@example.com, user2@example.com",
       "editorsLabel": "Editors (Emails)",
@@ -261,10 +261,10 @@
     },
     "deleteModal": {
       "title": "Confirm Delete",
-      "confirm": "Are you sure you want to archive the knowledge base {{name}}?",
+      "confirm": "Are you sure you want to archive the folder {{name}}?",
       "willDo": "This action will:",
       "steps": {
-        "archive": "Archive the knowledge base (soft delete)",
+        "archive": "Archive the folder (soft delete)",
         "inaccessible": "Make it inaccessible to all users",
         "preserve": "Preserve the files in S3 (not deleted)"
       },
@@ -291,7 +291,9 @@
       "selectFilesFirst": "Please select files first",
       "invalidFiles": "Cannot upload invalid files: {{files}}",
       "uploadFailed": "Error uploading files"
-    }
+    },
+    "foldersRejected": "Folders can't be uploaded to the root. Top-level folders have their own access controls that determine what's searchable in chat, so they must be created through the UI. Click + Create folder to make one, then upload files or nested folders inside it.",
+    "foldersRejectedFilesAdded": "Any loose files in your drop were added."
   },
   "uploads": {
     "dragAndDrop": "Drag and drop your file(s) here, or",
@@ -344,34 +346,34 @@
     "removeUser": "Remove {{name}}"
   },
   "createKB": {
-    "title": "Create New Knowledge Base",
-    "nameLabel": "Knowledge Base Name",
-    "namePlaceholder": "e.g., Product Team KB",
-    "nameHelp": "Choose a descriptive name for your knowledge base.",
-    "typeLabel": "Knowledge Base Type",
+    "title": "Create new folder",
+    "nameLabel": "Folder name",
+    "namePlaceholder": "e.g., Product Team",
+    "nameHelp": "Choose a descriptive name for your folder.",
+    "typeLabel": "Folder type",
     "typePersonal": "Personal",
     "typeShared": "Shared",
-    "typePersonalHelp": "Only you will have access to this KB.",
-    "typeSharedHelp": "Share this KB with specific users who can view or edit.",
+    "typePersonalHelp": "Only you will have access to this folder.",
+    "typeSharedHelp": "Share this folder with specific users who can view or edit.",
     "viewersLabel": "Viewers (user IDs or emails)",
     "viewersPlaceholder": "Type an email or ID and press Add/Enter",
     "viewersHelp": "Editors are automatically included as viewers.",
     "editorsLabel": "Editors (user IDs or emails)",
     "editorsPlaceholder": "Type an email or ID and press Add/Enter",
-    "editorsHelp": "Editors can upload files and modify this KB; they automatically gain viewer access.",
+    "editorsHelp": "Editors can upload files and modify this folder; they automatically gain viewer access.",
     "invalidEmails": "These look unusual as emails: {{values}}",
     "noteTitle": "Note:",
     "notes": {
       "creator": "You will be set as the creator and automatically added as an editor.",
-      "personal": "Personal KBs: Only you have access. No need to specify viewers/editors.",
-      "shared": "Shared KBs: Specify viewers (can query) and editors (can upload/modify). Editors automatically have viewer permissions.",
-      "isolation": "Files uploaded to this KB are isolated from other KBs."
+      "personal": "Personal folders: Only you have access. No need to specify viewers/editors.",
+      "shared": "Shared folders: Specify viewers (can search) and editors (can upload/modify). Editors automatically have viewer permissions.",
+      "isolation": "Files uploaded to this folder are isolated from other folders."
     },
     "creating": "Creating...",
-    "createButton": "Create Knowledge Base",
+    "createButton": "Create folder",
     "errors": {
-      "nameRequired": "Please provide a name for the knowledge base.",
-      "editorsMustBeViewers": "Editors must also be viewers for shared knowledge bases."
+      "nameRequired": "Please provide a name for the folder.",
+      "editorsMustBeViewers": "Editors must also be viewers for shared folders."
     }
   },
   "followUp": {
@@ -445,14 +447,14 @@
       "json": "JSON",
       "docx": "DOCX"
     },
-    "addToKnowledgeBase": "Add to Knowledge Base",
+    "addToKnowledgeBase": "Add to folder",
     "badges": {
       "default": "Default",
       "role": "{{role}}"
     },
-    "noKnowledgeBases": "No knowledge bases available",
-    "knowledgeBase": "Knowledge Base",
-    "yourKnowledgeBase": "your knowledge base",
+    "noKnowledgeBases": "No folders available",
+    "knowledgeBase": "Folder",
+    "yourKnowledgeBase": "your folder",
     "kbUploadSuccess": "Text file \"{{fileName}}\" has been added to \"{{kbName}}\" and will be searchable after the next scheduled sync.",
     "kbUploadFailed": "Failed to upload: {{error}}",
     "modal": {
@@ -524,7 +526,7 @@
   },
   "toolLabels": {
     "webSearch": "Web Search",
-    "knowledgeBase": "Knowledge Base",
+    "knowledgeBase": "Numa Files",
     "agentCreation": "Agent Creation",
     "dataAnalysis": "Data Analysis",
     "integration": "Integration",
@@ -544,8 +546,8 @@
       "fetching": "Fetching {{url}}..."
     },
     "knowledgeBase": {
-      "query": "Running query \"{{query}}\"...",
-      "running": "Running query..."
+      "query": "Searching Numa Files for \"{{query}}\"...",
+      "running": "Searching Numa Files..."
     },
     "dataAnalysis": {
       "calling": "Making a tool call to Data Analysis...",
@@ -588,9 +590,9 @@
       "pageFetched": "Fetched: {{title}}"
     },
     "knowledgeBase": {
-      "default": "Knowledge Base results",
+      "default": "Numa Files results",
       "sourcesFound": "{{count}} sources found ({{provider}})",
-      "entriesFound": "{{count}} knowledge entries found ({{provider}})"
+      "entriesFound": "{{count}} files found ({{provider}})"
     },
     "fallback": {
       "denied": "{{label}}: Denied - User Confirmation Needed",

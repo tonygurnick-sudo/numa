@@ -325,13 +325,20 @@ class TestCheckOperationAllowed:
         assert "Web search" in result
 
     def test_frontend_toggle_blocks_kb_search(self, monkeypatch):
-        """Layer 2 blocks knowledge_base when not in enabledTools."""
+        """Layer 2 blocks the Numa Files operations when not in enabledTools.
+
+        The error message uses the user-facing "folder" wording (post-rebrand).
+        Both `numa_files` (preferred) and `knowledge_base` (legacy) operation
+        names produce the same gating message so chat history replay still
+        surfaces a coherent error.
+        """
         monkeypatch.delenv("NUMA_ALLOWED_OPERATIONS", raising=False)
         monkeypatch.setenv("NUMA_ENABLED_TOOLS", json.dumps([]))
 
-        result = _check_operation_allowed("knowledge_base")
-        assert result is not None
-        assert "Knowledge base" in result
+        for op in ("numa_files", "knowledge_base"):
+            result = _check_operation_allowed(op)
+            assert result is not None
+            assert "folder" in result.lower()
 
     def test_unmapped_ops_bypass_frontend_toggle(self, monkeypatch):
         """Operations not in _OPERATION_TO_ENABLED_TOOL_KEYS bypass frontend checks."""
@@ -345,15 +352,15 @@ class TestCheckOperationAllowed:
             ), f"{op} should bypass frontend toggle"
 
     def test_layer2_blocks_kb_operations_when_toggle_off(self, monkeypatch):
-        """knowledge_base is blocked when query_knowledge_base not in enabledTools."""
+        """knowledge_base is blocked when no Numa Files toggle is enabled."""
         monkeypatch.delenv("NUMA_ALLOWED_OPERATIONS", raising=False)
         monkeypatch.setenv("NUMA_ENABLED_TOOLS", json.dumps([]))
 
         result = _check_operation_allowed("knowledge_base")
         assert (
             result is not None
-        ), "knowledge_base should be blocked when KB not enabled"
-        assert "Knowledge base" in result
+        ), "knowledge_base should be blocked when no folder is enabled"
+        assert "folder" in result.lower()
 
     def test_layer2_passes_kb_operations_when_toggle_on(self, monkeypatch):
         """knowledge_base passes when query_knowledge_base is in enabledTools."""
@@ -497,11 +504,19 @@ class TestOperationToEnabledToolKeysMapping:
         assert "memories_tool" in _OPERATION_TO_ENABLED_TOOL_KEYS["memories"]
 
     def test_kb_toggle_accepts_legacy_keys(self):
-        """The knowledge_base operation accepts both canonical and legacy toggle keys."""
+        """The numa_files operation accepts both canonical and legacy toggle keys."""
         kb_keys = _OPERATION_TO_ENABLED_TOOL_KEYS["knowledge_base"]
+        assert "numa_files" in kb_keys
         assert "knowledge_base" in kb_keys
         assert "query_knowledge_base" in kb_keys
         assert "knowledge_search" in kb_keys
+
+    def test_numa_files_and_knowledge_base_share_toggle_keys(self):
+        """Both operation names accept the same set of toggle keys."""
+        assert (
+            _OPERATION_TO_ENABLED_TOOL_KEYS["numa_files"]
+            == _OPERATION_TO_ENABLED_TOOL_KEYS["knowledge_base"]
+        )
 
     def test_utility_operations_are_not_mapped(self):
         """Pure utility operations should not have frontend toggles."""
@@ -509,6 +524,16 @@ class TestOperationToEnabledToolKeysMapping:
             assert (
                 op not in _OPERATION_TO_ENABLED_TOOL_KEYS
             ), f"{op} should not be in the mapping (no frontend toggle)"
+
+    def test_tool_handlers_dispatch_both_numa_files_and_knowledge_base(self):
+        """Both name='numa_files' (preferred) and name='knowledge_base' (legacy)
+        must dispatch to the same handler so old chat history still replays."""
+        assert "numa_files" in TOOL_HANDLERS
+        assert "knowledge_base" in TOOL_HANDLERS
+        assert TOOL_HANDLERS["numa_files"] is TOOL_HANDLERS["knowledge_base"]
+        assert TOOL_HANDLERS["numa_files"] is _handle_knowledge_base
+        assert "numa_files" in TOOL_NAMES
+        assert "knowledge_base" in TOOL_NAMES
 
 
 # ---------------------------------------------------------------------------
@@ -627,7 +652,7 @@ class TestHandleKnowledgeBase:
         result = await _handle_knowledge_base({})
 
         assert result["isError"] is True
-        assert "Invalid knowledge_base operation" in result["content"][0]["text"]
+        assert "Invalid numa_files operation" in result["content"][0]["text"]
 
     async def test_operation_param_stripped_from_sub_handler_params(self):
         """The 'operation' key should not be passed to the sub-handler."""

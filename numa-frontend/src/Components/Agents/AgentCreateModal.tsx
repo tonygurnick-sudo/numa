@@ -1345,7 +1345,7 @@ export const AgentCreateModal = ({
                           className="fs-5"
                         />
                       </div>
-                      {/* Knowledge Base Access */}
+                      {/* Folder access (Numa Files) */}
                       <div className="p-3 bg-white border rounded-2">
                         <div className="d-flex align-items-center gap-3 mb-3">
                           <div

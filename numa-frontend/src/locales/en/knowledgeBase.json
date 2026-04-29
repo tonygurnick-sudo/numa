@@ -1,6 +1,6 @@
 {
   "tabs": {
-    "knowledgeBase": "Knowledge Base",
+    "knowledgeBase": "Folder",
     "dataSources": "Data Sources",
     "webCrawler": "Web Crawler",
     "settings": "Settings"
@@ -18,26 +18,26 @@
   },
   "selector": {
     "loadingLabel": "Loading...",
-    "loadingMessage": "Loading your knowledge bases...",
-    "label": "Knowledge Base:",
+    "loadingMessage": "Loading your folders...",
+    "label": "Folder:",
     "defaultBadge": "Default",
-    "companyKbName": "Company KB",
+    "companyKbName": "Company Files",
     "numaSupportKbName": "Numa Support",
-    "selectPlaceholder": "Select KB",
-    "header": "Your Knowledge Bases",
-    "empty": "No KBs available",
+    "selectPlaceholder": "Select folder",
+    "header": "Your folders",
+    "empty": "No folders available",
     "refresh": "Refresh",
-    "emptyTitle": "No Knowledge Bases Yet",
-    "emptyHint": "Create your first knowledge base to get started",
-    "searchPlaceholder": "Search knowledge bases...",
+    "emptyTitle": "No folders yet",
+    "emptyHint": "Create your first folder to get started",
+    "searchPlaceholder": "Search folders...",
     "filters": {
-      "all": "All KBs",
+      "all": "All folders",
       "shared": "Shared",
       "personal": "Personal"
     },
-    "resultsCount_one": "{{count}} knowledge base",
-    "resultsCount_other": "{{count}} knowledge bases",
-    "noResultsTitle": "No knowledge bases found",
+    "resultsCount_one": "{{count}} folder",
+    "resultsCount_other": "{{count}} folders",
+    "noResultsTitle": "No folders found",
     "noResultsHint": "Try adjusting your search or filter",
     "badges": {
       "shared": "Shared",
@@ -49,25 +49,25 @@
     "viewDetails": "View Details"
   },
   "folderSelector": {
-    "label": "Upload to folder",
+    "label": "Upload to sub-path",
     "rootOption": "/ (Root)",
     "uploadHint": "Files will be uploaded to: {{folder}}"
   },
   "fileUploaderSection": {
     "title": "Upload New Files or Folders",
     "description": "Once uploaded, files are automatically indexed every 30 minutes where they will be available for querying in Numa Chat.",
-    "destinationLabel": "Destination Knowledge Base",
-    "destinationHint": "Files will be uploaded to this knowledge base.",
+    "destinationLabel": "Destination folder",
+    "destinationHint": "Files will be uploaded to this folder.",
     "validationTitle": "File Validation Error:"
   },
   "webCrawlerSection": {
     "title": "Web Crawler",
-    "destinationLabel": "Destination Knowledge Base",
-    "destinationHint": "Crawled content will be added to this knowledge base."
+    "destinationLabel": "Destination folder",
+    "destinationHint": "Crawled content will be added to this folder."
   },
   "webCrawlerComponent": {
     "title": "Website Crawler",
-    "subtitle": "Add content from websites to your knowledge base by specifying URLs to crawl.",
+    "subtitle": "Add content from websites to your folder by specifying URLs to crawl.",
     "form": {
       "urlLabel": "Website URL",
       "urlPlaceholder": "https://example.com",
@@ -82,7 +82,7 @@
     "about": {
       "title": "About",
       "webCrawlerTitle": "Web Crawler",
-      "webCrawlerBody": "Indexes website content for your knowledge base.",
+      "webCrawlerBody": "Indexes website content into your folder.",
       "depthTitle": "Depth Setting (1-5)",
       "depthBody": "Higher values crawl deeper into the site structure. 5 is recommended."
     },
@@ -149,7 +149,7 @@
       "webCrawlers": "No web crawler data sources configured",
       "other": "No other data sources configured"
     },
-    "emptyValue": "\u2014",
+    "emptyValue": "—",
     "table": {
       "name": "Name",
       "type": "Type",
@@ -172,13 +172,13 @@
   },
   "webCrawler": {
     "startTitle": "Start New Web Crawl",
-    "startDescription": "Enter URLs to crawl and add to your knowledge base. Crawled content is automatically indexed every 30 minutes.",
+    "startDescription": "Enter URLs to crawl and add to your folder. Crawled content is automatically indexed every 30 minutes.",
     "permissionRequired": "You need editor permissions to start new web crawls.",
     "crawledTitle": "Crawled URLs",
     "errorLabel": "Error:",
     "loading": "Loading...",
     "loadingList": "Loading crawled URLs...",
-    "emptyTitle": "No web crawls found for this knowledge base",
+    "emptyTitle": "No web crawls found for this folder",
     "emptyHint": "Start a new crawl above to add web content",
     "table": {
       "seedUrl": "Seed URL",
@@ -194,9 +194,9 @@
   },
   "settings": {
     "errorLabel": "Error:",
-    "emptyValue": "\u2014",
+    "emptyValue": "—",
     "status": {
-      "title": "Knowledge Base Status",
+      "title": "Folder Status",
       "refresh": "Refresh",
       "loading": "Loading...",
       "fields": {
@@ -218,7 +218,7 @@
     "permissions": {
       "title": "Permissions",
       "edit": "Edit",
-      "companyNote": "Access to the company knowledge base is controlled by group roles.",
+      "companyNote": "Access to Company Files is controlled by group roles.",
       "company": {
         "view": "View Company Data",
         "add": "Add to Company Data",
@@ -235,7 +235,7 @@
         "shared": "Shared (specific users)",
         "public": "Public (everyone can view)",
         "publicEditor": "Public (everyone can view and edit)",
-        "help": "Public allows all users in your organization to view this knowledge base. Editors still must be explicitly granted."
+        "help": "Public allows all users in your organization to view this folder. Editors still must be explicitly granted."
       },
       "viewers": {
         "label": "Viewers (user IDs or emails)",
@@ -248,36 +248,36 @@
       "editors": {
         "label": "Editors (user IDs or emails)",
         "placeholder": "Type an email or ID then press Add/Enter",
-        "helper": "Editors can upload files and modify this KB; they automatically gain viewer permissions.",
+        "helper": "Editors can upload files and modify this folder; they automatically gain viewer permissions.",
         "invalid": "These editors look unusual as emails: {{items}}",
         "title_one": "Editors ({{count}}):",
         "title_other": "Editors ({{count}}):"
       },
       "publicPrefix": "This is a",
       "publicLabel": "public",
-      "publicSuffix": "knowledge base. Anyone in your organization can view it.",
+      "publicSuffix": "folder. Anyone in your organization can view it.",
       "personalPrefix": "This is a",
       "personalLabel": "personal",
-      "personalSuffix": "knowledge base. Only you have access."
+      "personalSuffix": "folder. Only you have access."
     },
     "delete": {
-      "title": "Delete Knowledge Base",
+      "title": "Delete Folder",
       "warningLabel": "Warning:",
-      "warningBody": "This action permanently deletes this knowledge base configuration and its membership settings. Files previously uploaded remain in S3 but will no longer be associated with this KB.",
-      "action": "Delete this Knowledge Base",
+      "warningBody": "This action permanently deletes this folder's configuration and its membership settings. Files previously uploaded remain in S3 but will no longer be associated with this folder.",
+      "action": "Delete this folder",
       "confirmTitle": "Confirm Delete",
       "confirmPrefix": "Deleting",
-      "confirmSuffix": "cannot be undone. To confirm, type the knowledge base name below:",
-      "fallbackName": "this knowledge base",
-      "placeholder": "Knowledge base name",
-      "failed": "Failed to delete knowledge base",
+      "confirmSuffix": "cannot be undone. To confirm, type the folder name below:",
+      "fallbackName": "this folder",
+      "placeholder": "Folder name",
+      "failed": "Failed to delete folder",
       "deleting": "Deleting...",
       "confirm": "Delete"
     }
   },
   "fileExplorer": {
     "errorLabel": "Error:",
-    "emptyValue": "\u2014",
+    "emptyValue": "—",
     "searchPlaceholder": "Search files...",
     "addedByUnknown": "Unknown",
     "filters": {
@@ -287,7 +287,7 @@
       "clear": "Clear",
       "selectAll": "Select All",
       "delete": "Delete",
-      "newFolder": "New Folder",
+      "newFolder": "New sub-folder",
       "refresh": "Refresh",
       "previewInPanel": "Preview file",
       "downloadFile": "Download file"
@@ -302,7 +302,7 @@
       "uploadDate": "Upload Date",
       "modified": "Modified",
       "type": "Type",
-      "typeFolder": "Folder",
+      "typeFolder": "Sub-folder",
       "size": "Size",
       "select": "Select",
       "selectShort": "Sel",
@@ -331,50 +331,50 @@
       "deleteButton_other": "Delete ({{count}} files)"
     },
     "createFolder": {
-      "title": "Create Folder",
-      "nameLabel": "Folder name",
+      "title": "Create sub-folder",
+      "nameLabel": "Sub-folder name",
       "namePlaceholder": "e.g., project-a",
-      "parentLabel": "Parent folder",
+      "parentLabel": "Parent sub-folder",
       "root": "Root",
       "creating": "Creating...",
-      "create": "Create Folder"
+      "create": "Create sub-folder"
     },
     "errors": {
       "clientNameMissing": "CLIENT_NAME is not set",
-      "folderNameRequired": "Folder name is required",
-      "folderNameSlash": "Folder name cannot contain slashes",
-      "folderExists": "A folder with that name already exists here",
-      "createFolder": "Failed to create folder",
+      "folderNameRequired": "Sub-folder name is required",
+      "folderNameSlash": "Sub-folder name cannot contain slashes",
+      "folderExists": "A sub-folder with that name already exists here",
+      "createFolder": "Failed to create sub-folder",
       "prepareDelete": "Failed to prepare deletion. Please try again.",
       "noItems": "No items found to delete. Please try again.",
       "partialDelete": "Partially successful: {{deleted}} files deleted, {{failed}} failed.",
       "deleteItems": "Failed to delete items. Please try again.",
-      "deletePermission": "You do not have permission to delete files in this knowledge base."
+      "deletePermission": "You do not have permission to delete files in this folder."
     }
   },
   "userKnowledgeBases": {
-    "title": "User KBs",
-    "subtitle": "Select a file space to manage files and settings",
-    "create": "Create Knowledge Base",
+    "title": "My folders",
+    "subtitle": "Select a folder to manage its files and settings",
+    "create": "Create folder",
     "actions": {
       "refresh": "Refresh",
       "viewDetails": "View Details"
     },
     "search": {
-      "placeholder": "Search knowledge bases..."
+      "placeholder": "Search folders..."
     },
     "filters": {
-      "all": "All KBs",
+      "all": "All folders",
       "shared": "Shared",
       "personal": "Personal"
     },
-    "count": "{{count}} knowledge bases",
-    "count_one": "{{count}} knowledge base",
-    "count_other": "{{count}} knowledge bases",
+    "count": "{{count}} folders",
+    "count_one": "{{count}} folder",
+    "count_other": "{{count}} folders",
     "loading": "Loading...",
-    "loadingMessage": "Loading your knowledge bases...",
+    "loadingMessage": "Loading your folders...",
     "empty": {
-      "title": "No knowledge bases found",
+      "title": "No folders found",
       "subtitle": "Try adjusting your search or filter"
     },
     "badges": {
@@ -387,7 +387,7 @@
   },
   "webCrawlerPage": {
     "title": "Web Crawler",
-    "subtitle": "Use this tool to crawl websites and add content to your knowledge base.",
+    "subtitle": "Use this tool to crawl websites and add content to a folder.",
     "howItWorks": {
       "title": "How It Works",
       "steps": {
@@ -400,7 +400,7 @@
         "startTitle": "Start the crawler",
         "startDescription": "The system will process the pages in the background",
         "useTitle": "Use the crawled content",
-        "useDescription": "All content will be available in your knowledge base"
+        "useDescription": "All content will be available in the destination folder"
       }
     },
     "tips": {
@@ -415,21 +415,21 @@
     }
   },
   "companyKnowledgeBase": {
-    "title": "Company KB",
-    "subtitle": "Shared knowledge across your organization",
+    "title": "Company Files",
+    "subtitle": "Shared files across your organization",
     "actions": {
-      "newFolder": "New Folder",
+      "newFolder": "New sub-folder",
       "uploadFiles": "Upload Files"
     },
-    "permissionWarning": "You do not have permission to view the company knowledge base. Contact your administrator for access.",
+    "permissionWarning": "You do not have permission to view Company Files. Contact your administrator for access.",
     "uploadSuccess": "Files uploaded successfully!",
     "uploadModal": {
-      "title": "Upload Files to Company KB",
+      "title": "Upload Files to Company Files",
       "close": "Close",
       "body": "Files will be automatically indexed every 30 minutes and made available for querying in Numa Chat.",
       "noteLabel": "Note:",
       "note": "Maximum file size is 50MB per file.",
-      "folderLabel": "Upload to folder",
+      "folderLabel": "Upload to sub-folder",
       "validationTitle": "File Validation Error:"
     },
     "validation": {
@@ -437,10 +437,10 @@
     },
     "largeFile": {
       "title": "Large Raw Data File Detected",
-      "description": "You are about to upload large raw data files that may not be optimal for knowledge base indexing:",
-      "warning": "This can incur higher than expected cost, or may fail to index successfully into the knowledge base.",
+      "description": "You are about to upload large raw data files that may not be optimal for indexing:",
+      "warning": "This can incur higher than expected cost, or may fail to index successfully.",
       "recommendationLabel": "Recommendation:",
-      "recommendation": "For better knowledge base performance, consider breaking large raw data files into smaller chunks.",
+      "recommendation": "For better search performance, consider breaking large raw data files into smaller chunks.",
       "confirm": "Do you want to proceed with uploading these files anyway?",
       "confirmButton": "Proceed Anyway",
       "cancelButton": "Cancel Upload"
@@ -450,12 +450,12 @@
     "loading": {
       "title": "Loading...",
       "subtitle": "Please wait",
-      "body": "Loading knowledge base..."
+      "body": "Loading folder..."
     },
     "shared": "Shared with you",
-    "personal": "Personal Knowledge Base",
+    "personal": "Personal folder",
     "actions": {
-      "newFolder": "New Folder",
+      "newFolder": "New sub-folder",
       "uploadFiles": "Upload Files"
     },
     "uploadSuccess": "Files uploaded successfully!",
@@ -465,7 +465,7 @@
       "body": "Files will be automatically indexed every 30 minutes and made available for querying in Numa Chat.",
       "noteLabel": "Note:",
       "note": "Maximum file size is 50MB per file.",
-      "folderLabel": "Upload to folder",
+      "folderLabel": "Upload to sub-folder",
       "validationTitle": "File Validation Error:"
     },
     "validation": {
@@ -473,10 +473,10 @@
     },
     "largeFile": {
       "title": "Large Raw Data File Detected",
-      "description": "You are about to upload large raw data files that may not be optimal for knowledge base indexing:",
-      "warning": "This can incur higher than expected cost, or may fail to index successfully into the knowledge base.",
+      "description": "You are about to upload large raw data files that may not be optimal for indexing:",
+      "warning": "This can incur higher than expected cost, or may fail to index successfully.",
       "recommendationLabel": "Recommendation:",
-      "recommendation": "For better knowledge base performance, consider breaking large raw data files into smaller chunks.",
+      "recommendation": "For better search performance, consider breaking large raw data files into smaller chunks.",
       "confirm": "Do you want to proceed with uploading these files anyway?",
       "confirmButton": "Proceed Anyway",
       "cancelButton": "Cancel Upload"

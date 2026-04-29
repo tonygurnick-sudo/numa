@@ -535,6 +535,90 @@ async def list_conversation_files(
     )
 
 
+# Cap on artifacts returned in a single /artifacts response — protects the
+# Lambda payload size and keeps the frontend cache footprint sane.
+ARTIFACTS_MAX_ITEMS = 5000
+
+
+@app.get(f"{PREFIX}/artifacts")
+async def list_artifacts(
+    authorization: str | None = Header(None),
+    x_arcanum_cloudfront_secret: str | None = Header(
+        None, alias="x-arcanum-cloudfront-secret"
+    ),
+):
+    """List artifacts generated across all the user's workspace conversations.
+
+    Includes files at the conversation workspace root and under ``outputs/``;
+    skips ``tmp/``, ``uploads/`` (user-supplied inputs, not generated), and
+    ``_system/`` (traces, SDK archives).
+
+    Implemented as a direct S3 ListObjectsV2 — does not call AgentCore.
+    """
+    validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
+    user_sub = extract_user_sub(authorization)
+
+    if not s3_client or not OUTPUTS_BUCKET_NAME:
+        raise HTTPException(status_code=500, detail="Outputs bucket not configured")
+
+    prefix = f"numa-chat/workspace/{user_sub}/conversations/"
+    artifacts: list[dict] = []
+    truncated = False
+
+    paginator = s3_client.get_paginator("list_objects_v2")
+    pages = paginator.paginate(Bucket=OUTPUTS_BUCKET_NAME, Prefix=prefix)
+
+    for page in pages:
+        for obj in page.get("Contents") or []:
+            key = obj["Key"]
+            rest = key[len(prefix) :]
+            if not rest:
+                continue
+
+            slash_idx = rest.find("/")
+            if slash_idx == -1:
+                # Stray object directly at conversations/<conv_id>; ignore.
+                continue
+            conversation_id = rest[:slash_idx]
+            rel_path = rest[slash_idx + 1 :]
+            if not rel_path or rel_path.endswith("/"):
+                continue
+
+            # Excluded prefixes: tmp/, uploads/, _system/
+            if (
+                rel_path.startswith("tmp/")
+                or rel_path.startswith("uploads/")
+                or rel_path.startswith("_system/")
+            ):
+                continue
+
+            # Include only root files OR anything under outputs/.
+            if "/" in rel_path and rel_path.split("/", 1)[0] != "outputs":
+                continue
+
+            last_modified = obj.get("LastModified")
+            artifacts.append(
+                {
+                    "conversationId": conversation_id,
+                    "key": key,
+                    "relPath": rel_path,
+                    "name": rel_path.rsplit("/", 1)[-1],
+                    "size": int(obj.get("Size", 0)),
+                    "lastModified": (
+                        last_modified.isoformat() if last_modified else None
+                    ),
+                }
+            )
+
+            if len(artifacts) >= ARTIFACTS_MAX_ITEMS:
+                truncated = True
+                break
+        if truncated:
+            break
+
+    return JSONResponse(content={"artifacts": artifacts, "truncated": truncated})
+
+
 @app.get(f"{PREFIX}/history/{{conversation_id}}")
 async def get_history(
     conversation_id: str,

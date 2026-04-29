@@ -36,7 +36,7 @@ const KanbanZone: React.FC<KanbanZoneProps> = ({
   const isCollapsible = zone.zoneType === 'backlog';
 
   const renderColumns = () => (
-    <div className="kanban-columns">
+    <div className="kanban-columns flex-grow-1">
       {sortedStages.map((stage) => {
         const stageTickets = tickets.filter((tk) => tk.stageId === stage.id).sort((a, b) => a.order - b.order);
 

@@ -1,11 +1,11 @@
 ---
 name: web-search
-description: Search the internet and fetch web pages. Use when needing real-time data, recent news, external references, or information not in the knowledge base. Supports search (find URLs) and fetch_url (get full page content with JS rendering).
+description: Search the internet and fetch web pages. Use when needing real-time data, recent news, external references, or information not in the user's Numa Files. Supports search (find URLs) and fetch_url (get full page content with JS rendering).
 ---
 
 # Web Search Skill
 
-Search the internet and fetch web pages for current information not available in the knowledge base.
+Search the internet and fetch web pages for current information not available in the user's Numa Files.
 
 ## Operations
 
@@ -81,6 +81,6 @@ mcp__numa__numa_tool(
 
 - Information may have changed after January 2025
 - Looking for current prices, news, or announcements
-- External standards or regulations referenced in KB docs
-- Topics not covered in the company knowledge base
+- External standards or regulations referenced in Numa Files
+- Topics not covered in the user's Numa Files folders
 - Need full page content from JS-rendered sites (use fetch_url)

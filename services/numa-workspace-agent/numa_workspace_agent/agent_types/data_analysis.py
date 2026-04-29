@@ -288,7 +288,8 @@ DATA_ANALYSIS_V2 = AgentTypeConfig(
     enable_numa_mcp=True,  # KB queries, web search, content extraction, document conversion
     # Scope Numa operations to what's relevant for data analysis (exclude agents/memories)
     allowed_numa_operations=[
-        "knowledge_base",
+        "numa_files",
+        "knowledge_base",  # legacy alias, retained for chat history replay
         "web_search",
         "extract_content",
         "convert_document",

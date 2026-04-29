@@ -763,7 +763,7 @@ const BoardView = () => {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="p-3">
+        <div className="p-3 d-flex flex-column h-100">
           {/* Unsorted tickets bar */}
           {unsortedCount > 0 && !unsortedDismissed && (
             <div

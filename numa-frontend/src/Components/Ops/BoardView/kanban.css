@@ -48,11 +48,11 @@
 .kanban-columns {
   display: flex;
   gap: 0;
-  height: 100%;
   align-items: stretch;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: scroll;
+  overflow-y: auto;
   flex-wrap: nowrap;
+  min-height: 0;
 }
 
 @media (max-width: 991px) {
@@ -73,6 +73,7 @@
   border-right: 1px solid var(--ops-border);
   border-radius: 0;
   padding: 0 14px;
+  align-self: stretch;
 }
 
 .kanban-column:last-child {
@@ -102,6 +103,22 @@
   justify-content: space-between;
   padding: 6px 0 12px;
   user-select: none;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--brand-background, var(--color-bg-lightest, #f8f9fa));
+}
+
+.kanban-column-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.06), transparent);
+  pointer-events: none;
+  translate: 0 100%;
 }
 
 .kanban-column-header-left {
@@ -163,11 +180,8 @@
 
 .kanban-column-body {
   flex: 1;
-  overflow-y: auto;
   min-height: 40px;
   padding: 4px 0 2px;
-  scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
   transition:
     background-color 0.15s,
     box-shadow 0.15s;
@@ -193,15 +207,6 @@
 
 .kanban-drop-indicator--active {
   opacity: 1;
-}
-
-.kanban-column-body::-webkit-scrollbar {
-  width: 4px;
-}
-
-.kanban-column-body::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 4px;
 }
 
 /* ── Quick-add at top (triggered from header +) ──────────────────────────── */

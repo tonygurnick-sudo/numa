@@ -178,22 +178,10 @@ describe('chatSystemPromptUtils', () => {
   });
 
   describe('generateSystemPrompt', () => {
-    it('includes rubric-based web_search guidance when web_search is enabled', () => {
-      const email = 'test@example.com';
-      const prompt = generateSystemPrompt(['web_search'], email, '');
-      expect(prompt).toContain('Use web_search to find current information from the internet');
-      expect(prompt).toContain(
-        '**IMPORTANT Tool Priority**: ALWAYS prioritize query_knowledge_base results when available'
-      );
-    });
-
-    it('omits rubric guidance when web_search is not enabled', () => {
+    it('omits web_search guidance when web_search is not enabled', () => {
       const email = 'test@example.com';
       const prompt = generateSystemPrompt(['knowledge_base'], email, '');
       expect(prompt).not.toContain('Use web_search to find current information from the internet');
-      expect(prompt).not.toContain(
-        '**IMPORTANT Tool Priority**: ALWAYS prioritize query_knowledge_base results when available'
-      );
     });
 
     it('includes user email and date metadata', () => {

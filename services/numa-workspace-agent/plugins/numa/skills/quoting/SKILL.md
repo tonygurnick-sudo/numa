@@ -21,7 +21,7 @@ Read the user's request carefully. Sources of quote requirements include:
 
 ### 2. Look Up Pricing and Products
 
-Use the knowledge base to find:
+Use Numa Files to find:
 
 - Product names, SKUs, and descriptions
 - Current unit prices and volume discounts
@@ -29,7 +29,7 @@ Use the knowledge base to find:
 - Lead times and availability
 
 ```
-Use the numa_tool with operation "knowledge_base" to search for product and pricing data.
+Use numa_tool with name="numa_files" and operation="query" to search the user's folders for product and pricing data.
 ```
 
 ### 3. Check Templates

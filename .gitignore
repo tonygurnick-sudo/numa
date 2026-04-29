@@ -2,7 +2,7 @@
 secrets.env
 *.log
 # Application
-data
+/data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

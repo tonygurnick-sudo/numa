@@ -125,6 +125,15 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const [folderOptions, setFolderOptions] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
 
+  // Delete
+  const [deleteConfirm, setDeleteConfirm] = useState<{ kbId: string; keys: string[]; label: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Rename
+  const [renameTarget, setRenameTarget] = useState<{ kbId: string; key: string; currentName: string } | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+
   // File preview
   const {
     filePreview,
@@ -248,11 +257,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     }
   }, []);
 
+  const [deepLoadingKbs, setDeepLoadingKbs] = useState<Set<string>>(new Set());
+
   const fetchDeepKbFiles = useCallback(async (kbId: string, force = false) => {
     // Skip if already deep-loaded this session, unless the caller is the
     // Refresh button (force=true) asking for a fresh copy.
     const existing = kbFileStatesRef.current.get(kbId);
     if (!force && existing?.deepLoaded) return;
+    setDeepLoadingKbs((prev) => new Set(prev).add(kbId));
     try {
       const result = await knowledgeBaseService.listKBFilesRecursive(kbId);
       setKbFileStates((prev) => {
@@ -283,6 +295,12 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       });
     } catch (err) {
       console.error('Failed to deep-fetch KB', kbId, err);
+    } finally {
+      setDeepLoadingKbs((prev) => {
+        const next = new Set(prev);
+        next.delete(kbId);
+        return next;
+      });
     }
   }, []);
 
@@ -826,6 +844,122 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     setShowUploadModal(true);
   }, []);
 
+  // ── Delete handlers ─────────────────────────────────────────
+
+  const confirmDeleteFiles = useCallback(
+    (kbId: string, keys: string[], label?: string) => {
+      const withMeta = keys.flatMap((k) => [k, `${k}.metadata.json`]);
+      setDeleteConfirm({
+        kbId,
+        keys: withMeta,
+        label: label ?? t('delete.confirm', { count: keys.length }),
+      });
+    },
+    [t]
+  );
+
+  const confirmDeleteSubfolder = useCallback(
+    (kbId: string, folderId: string, folderName: string) => {
+      const prefix = folderId.endsWith('/') ? folderId : `${folderId}/`;
+      const state = kbFileStates.get(kbId);
+      if (!state) return;
+      const folderFileKeys = state.files
+        .filter((f) => f.Key.startsWith(prefix) && !f.Key.endsWith('/'))
+        .map((f) => f.Key);
+      if (folderFileKeys.length === 0) return;
+      const withMeta = folderFileKeys.flatMap((k) => [k, `${k}.metadata.json`]);
+      setDeleteConfirm({
+        kbId,
+        keys: withMeta,
+        label: t('delete.confirmFolder', { name: folderName, count: folderFileKeys.length }),
+      });
+    },
+    [kbFileStates, t]
+  );
+
+  const executeDelete = useCallback(async () => {
+    if (!deleteConfirm) return;
+    setIsDeleting(true);
+    try {
+      const result = await knowledgeBaseService.deleteKBFiles(deleteConfirm.kbId, deleteConfirm.keys);
+      const realSucceeded = result.successful.filter((k) => !k.endsWith('.metadata.json')).length;
+      const realFailed = result.failed.filter((f) => !f.key.endsWith('.metadata.json')).length;
+      // Optimistically remove deleted files from state immediately.
+      const deletedSet = new Set(result.successful);
+      setKbFileStates((prev) => {
+        const next = new Map(prev);
+        const s = prev.get(deleteConfirm.kbId);
+        if (s) {
+          next.set(deleteConfirm.kbId, {
+            ...s,
+            files: s.files.filter((f) => !deletedSet.has(f.Key)),
+          });
+        }
+        return next;
+      });
+      if (realFailed > 0) {
+        showToast({
+          message: t('delete.partial', { succeeded: realSucceeded, failed: realFailed }),
+          variant: 'warning',
+        });
+      } else {
+        showToast({ message: t('delete.success', { count: realSucceeded }), variant: 'success' });
+      }
+      setSelectedKeys(new Set());
+      fetchKbFiles(deleteConfirm.kbId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({ message: t('delete.error', { error: msg }), variant: 'error' });
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirm(null);
+    }
+  }, [deleteConfirm, showToast, t, fetchKbFiles]);
+
+  // ── Rename handlers ────────────────────────────────────────
+
+  const openRename = useCallback((kbId: string, key: string, currentName: string) => {
+    setRenameTarget({ kbId, key, currentName });
+    setRenameValue(currentName);
+  }, []);
+
+  const executeRename = useCallback(async () => {
+    if (!renameTarget || !renameValue.trim()) return;
+    const trimmed = renameValue.trim();
+    if (trimmed.includes('/') || trimmed.includes('\\')) {
+      showToast({ message: t('rename.invalidName'), variant: 'error' });
+      return;
+    }
+    setIsRenaming(true);
+    try {
+      const result = await knowledgeBaseService.renameKBFile(renameTarget.kbId, renameTarget.key, trimmed);
+      // Optimistically swap old key for new key in state.
+      setKbFileStates((prev) => {
+        const next = new Map(prev);
+        const s = prev.get(renameTarget.kbId);
+        if (s) {
+          next.set(renameTarget.kbId, {
+            ...s,
+            files: s.files.map((f) => (f.Key === result.sourceKey ? { ...f, Key: result.destKey } : f)),
+          });
+        }
+        return next;
+      });
+      showToast({ message: t('rename.success', { name: trimmed }), variant: 'success' });
+      fetchKbFiles(renameTarget.kbId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/409|collision/i.test(msg)) {
+        showToast({ message: t('rename.collision'), variant: 'error' });
+      } else {
+        showToast({ message: t('rename.error', { error: msg }), variant: 'error' });
+      }
+    } finally {
+      setIsRenaming(false);
+      setRenameTarget(null);
+    }
+  }, [renameTarget, renameValue, showToast, t, fetchKbFiles]);
+
   function handleSortToggle(column: SortColumn): void {
     if (column === sortColumn) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -1141,6 +1275,26 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             <option value="7d">{t('filters.dateOptions.last7')}</option>
             <option value="30d">{t('filters.dateOptions.last30')}</option>
           </select>
+          {selectedKeys.size > 0 && isInsideFolder && canEditCurrent && (
+            <button
+              className="finder-btn finder-btn--danger"
+              onClick={() => confirmDeleteFiles(currentFolder!.kbId, Array.from(selectedKeys))}
+              title={t('delete.confirm', { count: selectedKeys.size })}
+            >
+              <i className="bi bi-trash" />
+              <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
+            </button>
+          )}
+          {selectedKeys.size > 0 && !isInsideFolder && rootKB && (
+            <button
+              className="finder-btn finder-btn--danger"
+              onClick={() => confirmDeleteFiles(rootKB.kb_id, Array.from(selectedKeys))}
+              title={t('delete.confirm', { count: selectedKeys.size })}
+            >
+              <i className="bi bi-trash" />
+              <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
+            </button>
+          )}
           {(!isInsideFolder || canEditCurrent) && (
             <button className="finder-btn" onClick={() => setShowCreateModal(true)}>
               <i className="bi bi-folder-plus" />
@@ -1214,6 +1368,20 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         </div>
         <div className="finder-col"></div>
       </div>
+
+      {/* Search status hints */}
+      {isFilterOrSearchActive && deepLoadingKbs.size > 0 && (
+        <div className="finder-search-hint">
+          <Spinner animation="border" size="sm" variant="secondary" style={{ width: '0.65rem', height: '0.65rem' }} />
+          <span className="text-muted small">{t('search.loadingDeep')}</span>
+        </div>
+      )}
+      {isFilterOrSearchActive && deepLoadingKbs.size === 0 && (
+        <div className="finder-search-hint">
+          <i className="bi bi-info-circle text-muted" style={{ fontSize: '0.75rem' }} />
+          <span className="text-muted small">{t('search.cachedHint')}</span>
+        </div>
+      )}
 
       {/* File list */}
       <div className="finder-list">
@@ -1459,7 +1627,28 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                     >
                       <i className="bi bi-download" />
                     </button>
+                    {rowCanEdit && (
+                      <button onClick={() => openRename(kbId, row.originalKey!, row.name)} title={t('rename.title')}>
+                        <i className="bi bi-pencil" />
+                      </button>
+                    )}
+                    {rowCanEdit && (
+                      <button
+                        onClick={() => confirmDeleteFiles(kbId, [row.originalKey!])}
+                        title={t('delete.confirm', { count: 1 })}
+                      >
+                        <i className="bi bi-trash" />
+                      </button>
+                    )}
                   </>
+                )}
+                {isSubfolder && rowCanEdit && (
+                  <button
+                    onClick={() => confirmDeleteSubfolder(kbId, row.id, row.displayName || row.name)}
+                    title={t('delete.confirm', { count: 1 })}
+                  >
+                    <i className="bi bi-trash" />
+                  </button>
                 )}
               </div>
             </div>
@@ -1481,7 +1670,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           onHide={() => setShowSettingsDrawer(false)}
           kbId={settingsKb.kb_id}
           kbName={settingsKb.kb_name}
+          role={settingsKb.role}
           onDeleted={handleFolderDeleted}
+          onUpdated={refreshKBs}
         />
       )}
 
@@ -1517,6 +1708,27 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   disabled={loadingFolders}
                   label={t('upload.folderLabel')}
                 />
+                {!!rootKB && uploadTargetKb.kb_id === rootKB.kb_id && !selectedFolder && (
+                  <Alert variant="info" className="d-flex align-items-start gap-2 mb-3">
+                    <i className="bi bi-info-circle mt-1" style={{ flexShrink: 0 }} />
+                    <div className="flex-grow-1">
+                      <div>
+                        <strong>{t('upload.folderHintTitle')}</strong> {t('upload.folderHintBody')}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm mt-2"
+                        onClick={() => {
+                          setShowUploadModal(false);
+                          setShowCreateModal(true);
+                        }}
+                      >
+                        <i className="bi bi-folder-plus me-1" />
+                        {t('upload.folderHintButton')}
+                      </button>
+                    </div>
+                  </Alert>
+                )}
                 <FileUploader
                   onUploadSuccess={handleUploadSuccess}
                   onFileSelect={handleFileSelect}
@@ -1524,6 +1736,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   kb_id={uploadTargetKb.kb_id}
                   selectedFolder={selectedFolder}
                   enableFolderUpload
+                  rejectFolders={!!rootKB && uploadTargetKb.kb_id === rootKB.kb_id && !selectedFolder}
                 />
               </div>
             </div>
@@ -1564,6 +1777,69 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           size="lg"
         />
       )}
+
+      {/* Delete confirmation modal */}
+      <Modal show={!!deleteConfirm} onHide={() => setDeleteConfirm(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{deleteConfirm?.label}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-0">{t('delete.confirmMessage')}</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <button className="btn btn-secondary btn-sm" onClick={() => setDeleteConfirm(null)} disabled={isDeleting}>
+            {t('rename.cancel')}
+          </button>
+          <button className="btn btn-danger btn-sm" onClick={executeDelete} disabled={isDeleting}>
+            {isDeleting ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-1" />
+                {t('delete.inProgress')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-trash me-1" />
+                {t('delete.confirm', {
+                  count: deleteConfirm?.keys.filter((k) => !k.endsWith('.metadata.json')).length ?? 0,
+                })}
+              </>
+            )}
+          </button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Rename modal */}
+      <Modal show={!!renameTarget} onHide={() => setRenameTarget(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{t('rename.title')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <label className="form-label small">{t('rename.label')}</label>
+          <input
+            type="text"
+            className="form-control form-control-sm"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') executeRename();
+            }}
+            placeholder={t('rename.placeholder')}
+            autoFocus
+          />
+        </Modal.Body>
+        <Modal.Footer>
+          <button className="btn btn-secondary btn-sm" onClick={() => setRenameTarget(null)} disabled={isRenaming}>
+            {t('rename.cancel')}
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={executeRename}
+            disabled={isRenaming || !renameValue.trim() || renameValue.trim() === renameTarget?.currentName}
+          >
+            {isRenaming ? <Spinner animation="border" size="sm" /> : t('rename.confirm')}
+          </button>
+        </Modal.Footer>
+      </Modal>
 
       <Modal
         show={isMobile && showFilePreviewModal && !!filePreview}

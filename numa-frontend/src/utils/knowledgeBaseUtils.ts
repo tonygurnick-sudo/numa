@@ -127,7 +127,7 @@ export const queryBedrockKnowledgeBase = async (bedrockAgentClient, knowledgeBas
         knowledgeText,
         references,
         success: true,
-        message: `**Relevant Knowledge Base Content:**\n${knowledgeText}\n**End of Relevant Knowledge Base Content**`,
+        message: `**Relevant Numa Files Content:**\n${knowledgeText}\n**End of Relevant Numa Files Content**`,
         metadata: { totalResults: response.retrievalResults.length, source: 'bedrock', knowledgeBaseId, query },
       };
     }
@@ -136,7 +136,7 @@ export const queryBedrockKnowledgeBase = async (bedrockAgentClient, knowledgeBas
       knowledgeText: '',
       references: [],
       success: true,
-      message: 'No relevant content found in knowledge base.',
+      message: 'No relevant content found in Numa Files.',
       metadata: { totalResults: 0, source: 'bedrock', knowledgeBaseId, query },
     };
   } catch (error) {
@@ -145,7 +145,7 @@ export const queryBedrockKnowledgeBase = async (bedrockAgentClient, knowledgeBas
       knowledgeText: '',
       references: [],
       success: false,
-      message: 'Error querying knowledge base. Please try again later.',
+      message: 'Error querying Numa Files. Please try again later.',
       metadata: { error: error.message, source: 'bedrock', knowledgeBaseId, query },
     };
   }
@@ -185,7 +185,7 @@ export const queryKnowledgeBase = async (config, query, maxResults = 6) => {
       knowledgeText: '',
       references: [],
       success: false,
-      message: 'Error querying knowledge base. Please try again later.',
+      message: 'Error querying Numa Files. Please try again later.',
       metadata: { error: error.message, preferredKnowledgeBase, query },
     };
   }
@@ -203,7 +203,7 @@ export const formatKnowledgeBaseResults = (result) => {
   }
 
   if (result.metadata?.totalResults > 0) {
-    const source = result.metadata.source === 'bedrock' ? 'Bedrock Knowledge Base' : 'Q Business';
+    const source = result.metadata.source === 'bedrock' ? 'Numa Files (Bedrock)' : 'Numa Files (Q Business)';
     return `${prefix}Found ${result.metadata.totalResults} relevant documents from ${source}:\n${result.message}`;
   }
 

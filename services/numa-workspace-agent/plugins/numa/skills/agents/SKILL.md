@@ -211,7 +211,7 @@ mcp__numa__numa_tool(name="agents", description="Create policy expert agent", pa
 mcp__numa__numa_tool(name="agents", description="Create research agent", params={
     "operation": "create",
     "title": "Research Agent",
-    "systemPrompt": "You help with research tasks using web search and company KB.",
+    "systemPrompt": "You help with research tasks using web search and Company Files.",
     "toolsConfig": {
         "webSearchEnabled": true,
         "allowedKnowledgeBases": ["company"],
@@ -247,9 +247,9 @@ mcp__numa__numa_tool(name="agents", description="Create research agent", params=
 
 - `autoToolsEnabled` - Enable automatic tool selection (default: true)
 - `webSearchEnabled` - Allow web search (default: false)
-- `allowedKnowledgeBases` - Which KBs can be queried (null = all, [] = none, array = specific)
+- `allowedKnowledgeBases` - Which Numa Files folders this agent may search (null = all, [] = none, array = specific). Field name kept for backward compatibility — semantically this gates folder access.
 - `enabledConnections` - Which integrations the agent can use ([] = none, array of slugs = specific)
-- `approvalModes` - Per-category approval mode overrides. Categories: `integrations`, `agents`, `memories`, `knowledgeBases`, `ops`. Values:
+- `approvalModes` - Per-category approval mode overrides. Categories: `integrations`, `agents`, `memories`, `knowledgeBases` (gates Numa Files actions), `ops`. Values:
   - `"always"` - Require user approval for every action in this category
   - `"non_destructive"` - Auto-approve read-only actions, require approval for writes/mutations
   - `"never"` - Auto-approve all actions in this category
@@ -574,10 +574,10 @@ Once you understand the use case, determine who should have access:
 Based on the use case, ask about the tools and capabilities the agent needs:
 
 - **Web Search:** "Will this agent need to search the web for current information?"
-- **Knowledge Bases:** "Should it have access to your company's knowledge bases?"
-  - Check the **Available Knowledge Bases** section in your context. If KBs are listed, present them by name so the user can choose specific ones.
-  - If yes: "All knowledge bases, or specific ones?" (list the available KB names)
-  - If no KBs are available in your context, inform the user: "No knowledge bases are currently configured."
+- **Numa Files:** "Should it have access to your Numa Files folders (My Files, Company Files, shared folders)?"
+  - Check the **Available Numa Files folders** section in your context. If folders are listed, present them by name so the user can choose specific ones.
+  - If yes: "All folders, or specific ones?" (list the available folder names)
+  - If no folders are available in your context, inform the user: "No Numa Files folders are currently configured."
 - **Integrations:** "Should this agent be able to use any connected integrations?"
   - Check the **Connected Integrations** section in your context. It shows all integrations the user has connected, with their status (Enabled for this conversation, or Available). Present ALL connected integrations by name so the user can choose which ones to enable on the agent -- not just the ones enabled for this conversation.
   - If no integrations are listed in your context, inform the user: "No integrations are currently connected." and move on.
@@ -586,7 +586,7 @@ Based on the use case, ask about the tools and capabilities the agent needs:
   - **Integrations:** Writes only (auto-approve reads, require approval for writes)
   - **Agents:** Auto-approve
   - **Memories:** Auto-approve
-  - **Knowledge Bases:** Auto-approve
+  - **Numa Files:** Auto-approve
   - **Ops:** Auto-approve
   - "Would you like to use these defaults, or customise any category?"
   - The three options per category are: **Always** (approve every action), **Writes only** (approve writes/mutations only), **Auto-approve** (no approval needed)
@@ -727,10 +727,10 @@ Numa: Got it, personal visibility.
 
 User: No web search needed
 
-Numa: **Knowledge Bases:** Should it access your company's knowledge bases?
-      You have these available: Company KB, Product Docs, HR Policies
+Numa: **Numa Files:** Should it access your Numa Files folders?
+      You have these available: Company Files, Product Docs, HR Policies
 
-User: Yes, just the Company KB
+User: Yes, just Company Files
 
 Numa: **Integrations:** Should this agent use any of your connected integrations?
       You have: Google Drive, Slack, Jira

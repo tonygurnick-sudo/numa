@@ -131,7 +131,7 @@ class TestWebCrawlerStart(TestCase):
 
         self.assertEqual(response["statusCode"], 403)
         self.assertFalse(payload["success"])
-        self.assertIn("Read-only knowledge base", payload["error"])
+        self.assertIn("Read-only folder", payload["error"])
         mock_step_function_client.start_execution.assert_not_called()
 
     @mock.patch("lambda_function.step_function_client")
@@ -296,5 +296,5 @@ class TestWebCrawlerStart(TestCase):
 
         self.assertEqual(response["statusCode"], 403)
         self.assertFalse(payload["success"])
-        self.assertIn("Read-only knowledge base", payload["error"])
+        self.assertIn("Read-only folder", payload["error"])
         mock_dynamodb.Table.assert_not_called()

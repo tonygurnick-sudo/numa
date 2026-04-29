@@ -10,10 +10,11 @@ import { CompanyFilesTab } from '../Components/UnifiedFiles/CompanyFilesTab';
 import { SharedFoldersTab } from '../Components/UnifiedFiles/SharedFoldersTab';
 import { RemoteTab } from '../Components/UnifiedFiles/RemoteTab';
 import { WebCrawlerTab } from '../Components/UnifiedFiles/WebCrawlerTab';
+import { ChatArtifactsTab } from '../Components/UnifiedFiles/ChatArtifactsTab';
 import { getFlag } from '../utils/featureFlags';
 import { useAuth } from '../Providers/AuthProvider';
 
-type TabKey = 'user' | 'company' | 'shared' | 'remote' | 'crawler';
+type TabKey = 'user' | 'company' | 'shared' | 'remote' | 'crawler' | 'chatArtifacts';
 
 export function UnifiedFilesPage(): React.JSX.Element {
   const { t } = useTranslation('unifiedFiles');
@@ -45,6 +46,7 @@ export function UnifiedFilesPage(): React.JSX.Element {
     if (canViewCompany) {
       items.push({ key: 'company', label: t('tabs.companyFiles'), iconClassName: 'bi bi-building' });
     }
+    items.push({ key: 'chatArtifacts', label: t('tabs.chatArtifacts'), iconClassName: 'bi bi-file-earmark-text' });
     if (dataConnectorsEnabled) {
       items.push({ key: 'remote', label: t('tabs.remote'), iconClassName: 'bi bi-cloud' });
     }
@@ -74,6 +76,7 @@ export function UnifiedFilesPage(): React.JSX.Element {
         {activeTab === 'shared' && <SharedFoldersTab onActionChange={handleActionChange} />}
         {activeTab === 'remote' && <RemoteTab onActionChange={handleActionChange} />}
         {activeTab === 'crawler' && <WebCrawlerTab />}
+        {activeTab === 'chatArtifacts' && <ChatArtifactsTab onActionChange={handleActionChange} />}
       </LayoutDashboard>
     </div>
   );

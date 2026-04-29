@@ -1,11 +1,11 @@
 ---
 name: connect
-description: Find files beyond the workspace — check knowledge bases (My Files / Company Files) via numa_tool knowledge_base, and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d) via the connectors tool. Use when a user asks about files not in /workdir/
+description: Find files beyond the workspace — check the user's Numa Files (My Files / Company Files / shared folders) via numa_tool with name="numa_files", and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d) via the connectors tool. Use when a user asks about files not in /workdir/
 ---
 
 # Connect Skill
 
-Access files from external sources using the **connectors** MCP tool (OAuth cloud storage, Synergy 12d, generic HTTP). For My Files / Company Files use the **knowledge_base** operation in **numa_tool** — see the `knowledge-base` skill for the full reference.
+Access files from external sources using the **connectors** MCP tool (OAuth cloud storage, Synergy 12d, generic HTTP). For Numa Files (My Files / Company Files / shared folders) use the **numa_files** operation in **numa_tool** — see the `numa-files-search` skill for the full reference.
 
 ## When to Use
 
@@ -17,8 +17,8 @@ Use these tools when:
 
 **Strategy — check in this order:**
 
-1. **My Files / Company Files first** (always connected, fast) — use `numa_tool` with `name="knowledge_base"` (see the `knowledge-base` skill)
-2. **Connected drives** — use `connectors` tool, only if the knowledge bases don't have what you need
+1. **Numa Files first** (always connected, fast) — use `numa_tool` with `name="numa_files"` (see the `numa-files-search` skill)
+2. **Connected drives** — use `connectors` tool, only if Numa Files doesn't have what you need
 3. **Skip disconnected connectors** — don't waste tool calls; tell the user where to connect instead
 
 Always call `connectors` with `name="status"` first to see what external connectors are available.

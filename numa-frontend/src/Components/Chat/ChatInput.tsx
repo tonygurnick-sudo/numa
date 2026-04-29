@@ -47,7 +47,7 @@ const ChatInput = ({
   placeholderOverride = undefined,
   uploadsInProgress = false,
   noToolsActive: _noToolsActive = false,
-  // Multi‑KB selection (controlled by parent)
+  // Multi‑folder selection (controlled by parent)
   enabledKBIds = [],
   setEnabledKBIds,
   dropdownDirection = 'up',
@@ -514,11 +514,11 @@ const ChatInput = ({
         {variant === 'v1' && (
           <div className="input-controls">
             <div className="left-controls">
-              {/* Attachment Button & Knowledge Base Selector */}
+              {/* Attachment Button & Numa Files folder selector */}
               {renderUploadButton()}
               <FeatureWrapper requiredFeature="useCompanyData">
                 <>
-                  {/* V1 only: KB Dropdown (V2 has KB in settings panel) */}
+                  {/* V1 only: folder dropdown (V2 has folder picker in settings panel) */}
                   {variant === 'v1' && (
                     <OverlayTrigger
                       placement="top"

@@ -91,7 +91,7 @@ export interface WorkspaceChatSettingsPanelProps {
   dataConnectorsFeatureEnabled: boolean;
   agentsFeatureEnabled: boolean;
 
-  // Knowledge Bases
+  // Numa Files folders (legacy var names retained)
   enabledKBIds: string[];
   setEnabledKBIds: Dispatch<SetStateAction<string[]>>;
   availableKBs: KnowledgeBase[];

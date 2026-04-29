@@ -61,6 +61,7 @@ NON_CRITICAL_ERROR_PATTERNS = [
     "Access to this model is not available for channel program accounts",
     "The provided model identifier is invalid",  # Model not available in region
     "Access to Bedrock models is not allowed for this account",  # Account-level block (e.g. Error 002)
+    "Your account is not authorized to invoke this API operation",  # Model removed/deprecated from Bedrock
 ]
 
 # Delay between API calls to avoid rate limiting

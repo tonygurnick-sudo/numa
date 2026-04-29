@@ -89,11 +89,8 @@ function toUserMessage(err: unknown): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const anyErr = err as any;
   const msg =
-    anyErr?.response?.data?.message ??
-    anyErr?.response?.data?.error ??
-    anyErr?.message ??
-    'Failed to create knowledge base.';
-  return typeof msg === 'string' && msg.trim().length > 0 ? msg : 'Failed to create knowledge base.';
+    anyErr?.response?.data?.message ?? anyErr?.response?.data?.error ?? anyErr?.message ?? 'Failed to create folder.';
+  return typeof msg === 'string' && msg.trim().length > 0 ? msg : 'Failed to create folder.';
 }
 
 /** ─────────────────────────────────────────────────────────────────────────────
