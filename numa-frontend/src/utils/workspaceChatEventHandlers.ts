@@ -456,7 +456,8 @@ export function getSubagentLabel(subagentType: string): string {
     explore: 'Exploring codebase',
     'general-purpose': 'Running analysis',
     plan: 'Planning',
-    'knowledge-search': 'Searching knowledge base',
+    'knowledge-search': 'Searching Numa Files',
+    'numa-files-search': 'Searching Numa Files',
   };
   return labels[subagentType] || `Running ${subagentType}`;
 }

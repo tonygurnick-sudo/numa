@@ -327,7 +327,7 @@ export default function ConfigSearchTool() {
       'Agents',
       'Integrations',
       'All Prod Apps',
-      'Preferred KB',
+      'Numa Files backend',
     ];
     const rows = searchResults.map((r) => [
       r.clientName,
@@ -588,7 +588,7 @@ export default function ConfigSearchTool() {
                                         <strong>Domain:</strong> {result.config.customDomain || 'n/a'}
                                       </div>
                                       <div>
-                                        <strong>Preferred KB:</strong>{' '}
+                                        <strong>Numa Files backend:</strong>{' '}
                                         {result.config.preferredKnowledgeBase || 'bedrock'}
                                       </div>
                                       <div>

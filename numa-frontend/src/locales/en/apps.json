@@ -750,17 +750,17 @@
         "deleteConfirm": "Delete this file?"
       },
       "knowledgeBases": {
-        "title": "Knowledge Bases",
-        "description": "Select which knowledge bases agents can access",
+        "title": "Numa Files",
+        "description": "Select which folders agents can access",
         "selected": "{{count}} selected",
         "noneSelected": "None selected",
-        "loading": "Loading knowledge bases..."
+        "loading": "Loading folders..."
       },
       "tools": {
         "title": "Tools",
         "description": "Select which tools agents can use",
         "webSearch": "Web Search",
-        "knowledgeBase": "Knowledge Base",
+        "knowledgeBase": "Numa Files",
         "dataAnalysis": "Data Analysis"
       },
       "integrations": {
@@ -788,11 +788,11 @@
   },
   "v2Quoting": {
     "title": "Quoting",
-    "description": "Create and manage professional quotes from requests, templates, and pricing data. Integrates with your inbox and knowledge base.",
+    "description": "Create and manage professional quotes from requests, templates, and pricing data. Integrates with your inbox and Numa Files.",
     "agents": {
       "quoteBuilder": {
         "name": "Quote Builder",
-        "description": "Drafts professional quotes from requests using your templates, pricing data, and knowledge base"
+        "description": "Drafts professional quotes from requests using your templates, pricing data, and Numa Files content"
       }
     },
     "upload": {

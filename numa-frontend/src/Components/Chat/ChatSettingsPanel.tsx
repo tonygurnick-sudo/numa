@@ -29,7 +29,7 @@ export type ChatSettingsPanelProps = {
   setCreateAgentEnabled: Dispatch<SetStateAction<boolean>>;
   agentsFeatureEnabled: boolean;
 
-  // Knowledge Bases
+  // Numa Files folders (legacy var names retained)
   enabledKBIds: string[];
   setEnabledKBIds: Dispatch<SetStateAction<string[]>>;
   availableKBs: KnowledgeBase[];
@@ -110,7 +110,7 @@ export const ChatSettingsPanel = ({
 
   return (
     <div className="chat-settings-panel">
-      {/* Knowledge Bases Section */}
+      {/* Numa Files / folders section */}
       <div className="settings-section">
         <Form.Label className="fw-semibold text-muted small text-uppercase mb-2">
           <i className="bi bi-folder2-open me-2" />

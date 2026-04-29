@@ -173,7 +173,7 @@
     "confirm_one": "Delete {{count}} file?",
     "confirm_other": "Delete {{count}} files?",
     "confirmFolder": "Delete all files in \"{{name}}\"? This will remove {{count}} file(s).",
-    "confirmMessage": "This action cannot be undone. Deleted files will be removed from the knowledge base.",
+    "confirmMessage": "This action cannot be undone. Deleted files will be removed from the folder.",
     "success_one": "Deleted {{count}} file",
     "success_other": "Deleted {{count}} files",
     "partial": "Deleted {{succeeded}} file(s); {{failed}} failed",

@@ -520,7 +520,7 @@ export default function CreateClientConfig() {
                         helpText="Provision Q Business resources in this account"
                       />
                       <ConfigField
-                        label="Preferred Knowledge Base"
+                        label="Numa Files backend"
                         value={preferredKnowledgeBase}
                         defaultValue={defaults.preferredKnowledgeBase}
                         onChange={(v: any) => setPreferredKnowledgeBase(v as 'q' | 'bedrock' | 'none')}
@@ -528,9 +528,9 @@ export default function CreateClientConfig() {
                         options={[
                           { label: 'Bedrock', value: 'bedrock' },
                           { label: 'Q Business', value: 'q' },
-                          { label: 'None (no KB)', value: 'none' },
+                          { label: 'None (disabled)', value: 'none' },
                         ]}
-                        helpText="Select knowledge base service to use by default"
+                        helpText="Indexing backend that powers Numa Files search for this client"
                       />
                     </Col>
                   </Row>

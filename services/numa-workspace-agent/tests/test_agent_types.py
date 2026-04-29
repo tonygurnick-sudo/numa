@@ -109,7 +109,7 @@ class TestToolFileMap:
 
     def test_all_known_tools_present(self):
         expected_tools = [
-            "knowledge_search",
+            "numa_files_search",
             "web_search",
             "agents",
             "convert_document",
@@ -117,6 +117,12 @@ class TestToolFileMap:
         ]
         for tool in expected_tools:
             assert tool in TOOL_FILE_MAP, f"Tool {tool!r} missing from TOOL_FILE_MAP"
+
+    def test_legacy_knowledge_search_alias(self):
+        """The legacy `knowledge_search` key still resolves to the renamed reference doc."""
+        assert "knowledge_search" in TOOL_FILE_MAP
+        assert TOOL_FILE_MAP["knowledge_search"] == ["numa_files.py"]
+        assert TOOL_FILE_MAP["numa_files_search"] == ["numa_files.py"]
 
     def test_all_values_are_lists(self):
         for tool_name, files in TOOL_FILE_MAP.items():

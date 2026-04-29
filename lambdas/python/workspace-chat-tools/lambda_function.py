@@ -239,7 +239,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "result": None,
-                "error": "No knowledge bases are enabled for this conversation",
+                "error": "No Numa Files folders are enabled for this conversation",
             }
 
         # For all_kbs mode, we query all allowed KBs (no single kb_id validation needed)
@@ -253,7 +253,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "result": None,
-                "error": f"Knowledge base '{kb_id}' is not enabled. Enabled KBs: {allowed_kbs}",
+                "error": f"Folder '{kb_id}' is not enabled. Enabled folders: {allowed_kbs}",
             }
 
         logger.info(
@@ -279,7 +279,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                     return {
                         "status": "error",
                         "result": None,
-                        "error": f"Access denied to knowledge base '{verify_kb_id}'",
+                        "error": f"Access denied to folder '{verify_kb_id}'",
                     }
             logger.info(
                 "KB access validated (server-side DynamoDB)",
@@ -298,7 +298,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "result": None,
-                "error": "No knowledge bases are enabled for this conversation",
+                "error": "No Numa Files folders are enabled for this conversation",
             }
 
         if not user_sub:
@@ -330,7 +330,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                 return {
                     "status": "error",
                     "result": None,
-                    "error": f"Access denied to knowledge base '{kb_id}'",
+                    "error": f"Access denied to folder '{kb_id}'",
                 }
             logger.info(
                 "KB file access validated (server-side DynamoDB)",
@@ -371,7 +371,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "result": None,
-                "error": "No knowledge bases are enabled for this conversation",
+                "error": "No Numa Files folders are enabled for this conversation",
             }
 
         # Validate that the requested kb_id is in the allowed list
@@ -384,7 +384,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "result": None,
-                "error": f"Knowledge base '{kb_id}' is not enabled. Enabled KBs: {allowed_kbs}",
+                "error": f"Folder '{kb_id}' is not enabled. Enabled folders: {allowed_kbs}",
             }
 
         logger.info(
@@ -410,7 +410,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "result": None,
-                "error": "No knowledge bases are enabled for this conversation",
+                "error": "No Numa Files folders are enabled for this conversation",
             }
 
         if kb_id not in allowed_kbs:
@@ -422,7 +422,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "result": None,
-                "error": f"Knowledge base '{kb_id}' is not enabled. Enabled KBs: {allowed_kbs}",
+                "error": f"Folder '{kb_id}' is not enabled. Enabled folders: {allowed_kbs}",
             }
 
         logger.info(
@@ -448,7 +448,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "result": None,
-                "error": "No knowledge bases are enabled for this conversation",
+                "error": "No Numa Files folders are enabled for this conversation",
             }
 
         if not user_sub:

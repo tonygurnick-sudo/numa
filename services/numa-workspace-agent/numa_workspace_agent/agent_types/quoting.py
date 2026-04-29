@@ -3,7 +3,7 @@ Quoting V2 — fire-and-forget agent type for quote generation and management.
 
 Stage 1: Basic quoting system that can:
     - Read quote requests (from uploaded files or email via integrations)
-    - Look up products/pricing from knowledge base
+    - Look up products/pricing from Numa Files
     - Use templates from the app workspace
     - Generate structured quote documents
     - Output quotes as Markdown + CSV/HTML for review
@@ -107,19 +107,19 @@ If the user has email integrations connected (Gmail, Outlook), you can:
 
 When processing an email request:
 1. Extract the key details (customer, items, quantities, specs)
-2. Look up pricing from the knowledge base or workspace files
+2. Look up pricing from Numa Files or workspace files
 3. Generate the quote document
 4. Summarise what was requested and what you quoted
 
-## Knowledge Base
+## Numa Files
 
-Use the knowledge base to look up:
+Use Numa Files (the user's folders) to look up:
 - Product catalogs and specifications
 - Current pricing and price lists
 - Customer history and previous quotes
 - Company policies on discounts, minimum orders, etc.
 
-Always cite the knowledge base source when using pricing or product data
+Always cite the Numa Files source when using pricing or product data
 so the user can verify accuracy.
 
 ## Tools and Environment
@@ -144,7 +144,7 @@ so the user can verify accuracy.
 1) **Understand the request**: Read uploaded files, email content, or user prompt
    to understand what needs to be quoted.
 2) **Gather information**: Check app-workspace for templates and pricing data.
-   Query the knowledge base for products, prices, and customer info.
+   Query Numa Files for products, prices, and customer info.
 3) **Calculate**: Compute line item totals, subtotals, tax, and grand total.
    Show your working for complex calculations.
 4) **Generate the quote**: Produce a professional quote document using any
@@ -305,7 +305,8 @@ QUOTING_V2 = AgentTypeConfig(
     enable_numa_mcp=True,
     # Scope Numa operations to what's relevant for quoting
     allowed_numa_operations=[
-        "knowledge_base",
+        "numa_files",
+        "knowledge_base",  # legacy alias, retained for chat history replay
         "web_search",
         "extract_content",
         "convert_document",

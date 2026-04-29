@@ -133,13 +133,13 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
   },
   {
     key: 'preferredKnowledgeBase',
-    label: 'Preferred Knowledge Base',
+    label: 'Numa Files backend',
     type: 'enum',
     options: [
       { label: 'Bedrock', value: 'bedrock' },
       { label: 'Q Business', value: 'q' },
     ],
-    description: 'Select knowledge base service to use by default',
+    description: 'Indexing backend that powers Numa Files search for this client',
   },
   {
     key: 'provisionQResources',

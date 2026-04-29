@@ -23,7 +23,7 @@
     },
     "aria": {
       "upload": "Upload Files",
-      "knowledgeBase": "Knowledge Base",
+      "knowledgeBase": "Numa Files",
       "toolsSettings": "Tools Settings",
       "close": "Close"
     },
@@ -48,10 +48,10 @@
       }
     },
     "kb": {
-      "title": "Knowledge Bases",
-      "available": "Available Knowledge Bases",
-      "empty": "No KBs available",
-      "companyName": "Company Knowledge Base",
+      "title": "Folders",
+      "available": "Available folders",
+      "empty": "No folders available",
+      "companyName": "Company Files",
       "roles": {
         "owner": "Owner",
         "editor": "Editor",
@@ -189,9 +189,9 @@
   },
   "settingsPanel": {
     "knowledgeBases": "Files",
-    "loadingKnowledgeBases": "Loading knowledge bases...",
-    "noKnowledgeBases": "No knowledge bases available",
-    "selectKnowledgeBases": "Select knowledge bases to query during this chat",
+    "loadingKnowledgeBases": "Loading folders...",
+    "noKnowledgeBases": "No folders available",
+    "selectKnowledgeBases": "Select folders to search during this chat",
     "tools": "Tools",
     "allTools": "All Tools",
     "allToolsDescription": "When enabled, all tools are automatically available",
@@ -481,10 +481,10 @@
     "noUploads": "No uploaded files",
     "noOutputFiles": "No files generated yet",
     "refreshFiles": "Refresh files",
-    "knowledgeBases": "Knowledge Bases",
-    "selectKBs": "Select knowledge bases to search",
+    "knowledgeBases": "Numa Files",
+    "selectKBs": "Select folders to search",
     "loading": "Loading...",
-    "noKBs": "No knowledge bases available",
+    "noKBs": "No folders available",
     "selectAll": "Select All",
     "clear": "Clear",
     "tools": "Tools",
