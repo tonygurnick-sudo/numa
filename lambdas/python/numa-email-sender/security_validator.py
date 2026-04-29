@@ -238,13 +238,16 @@ class EmailSecurityValidator:
         """
         Validate that the caller account is a known Numa client account.
 
-        Scans numa-client-config for any record where clientAccountId matches.
+        Scans numa-client-config for any record where config.clientAccountId
+        matches. The field lives nested inside the `config` map written by
+        `lib/client-config-node` — earlier flat-schema records (only the
+        `nd-labs` dev fixture today) are no longer matched.
         """
         try:
             response = self.client_config_table.scan(
-                FilterExpression="clientAccountId = :acct_id",
+                FilterExpression="config.clientAccountId = :acct_id",
                 ExpressionAttributeValues={":acct_id": account_id},
-                ProjectionExpression="clientName, clientAccountId",
+                ProjectionExpression="clientName",
             )
 
             items = response.get("Items", [])
