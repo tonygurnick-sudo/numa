@@ -902,6 +902,7 @@ async def stream_claude_sdk(
                                 _nt_category = {
                                     "agents": "agents",
                                     "memories": "memories",
+                                    "numa_files": "knowledgeBases",
                                     "knowledge_base": "knowledgeBases",
                                 }.get(_nt_name, "")
                                 if not _nt_category:
@@ -1696,6 +1697,7 @@ async def run_claude_sdk(
                                 _nt_category = {
                                     "agents": "agents",
                                     "memories": "memories",
+                                    "numa_files": "knowledgeBases",
                                     "knowledge_base": "knowledgeBases",
                                 }.get(_nt_name, "")
                                 if not _nt_category:
