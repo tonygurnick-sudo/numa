@@ -34,6 +34,13 @@ export const AVAILABLE_TOOLS: Tool[] = [
     ],
   },
   {
+    id: 'cost-analytics',
+    name: 'Cost Analytics',
+    description: 'Analyze AWS costs per client with service breakdowns, monthly trends, and spend forecasts.',
+    category: 'analytics',
+    parameters: [],
+  },
+  {
     id: 'get-system-user-secret',
     name: 'Retrieve System User Secret',
     description: 'Fetch the system user password/secret for a client account via the NextGen broker.',
