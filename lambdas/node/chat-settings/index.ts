@@ -43,6 +43,7 @@ export type ChatSettings = {
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
   chatScrollMode: ChatScrollMode;
+  chatSuggestionsEnabled: boolean;
 };
 
 export type UserChatSettings = ChatSettings & {
@@ -207,6 +208,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
   chatScrollMode: 'auto',
+  chatSuggestionsEnabled: true,
 };
 
 const DEFAULT_GLOBAL_CHAT_SETTINGS: GlobalChatSettings = {
@@ -300,6 +302,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       emailSignatureEnabled: DEFAULT_SETTINGS.emailSignatureEnabled,
       emailSignatureText: DEFAULT_SETTINGS.emailSignatureText,
       chatScrollMode: DEFAULT_SETTINGS.chatScrollMode,
+      chatSuggestionsEnabled: DEFAULT_SETTINGS.chatSuggestionsEnabled,
       allowUserDefaults: false,
       allowedPythonLibraries: [],
     };
@@ -346,6 +349,10 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       typeof item?.chatScrollMode === 'string' && VALID_SCROLL_MODES.includes(item!.chatScrollMode as ChatScrollMode)
         ? (item!.chatScrollMode as ChatScrollMode)
         : DEFAULT_SETTINGS.chatScrollMode,
+    chatSuggestionsEnabled:
+      typeof item?.chatSuggestionsEnabled === 'boolean'
+        ? item!.chatSuggestionsEnabled
+        : DEFAULT_SETTINGS.chatSuggestionsEnabled,
     allowUserDefaults,
     allowedPythonLibraries: Array.isArray(item?.allowedPythonLibraries)
       ? item!.allowedPythonLibraries
@@ -417,6 +424,10 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     VALID_SCROLL_MODES.includes(userItem.chatScrollMode as ChatScrollMode)
       ? (userItem.chatScrollMode as ChatScrollMode)
       : globalSettings.chatScrollMode;
+  const chatSuggestionsEnabled =
+    typeof userItem?.chatSuggestionsEnabled === 'boolean'
+      ? (userItem.chatSuggestionsEnabled as boolean)
+      : globalSettings.chatSuggestionsEnabled;
   const userDefaultsEnabled =
     parseBoolean(userItem?.userDefaultsEnabled) ?? parseBoolean(userItem?.user_defaults_enabled) ?? true;
 
@@ -434,6 +445,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     emailSignatureEnabled,
     emailSignatureText,
     chatScrollMode,
+    chatSuggestionsEnabled,
     userDefaultsEnabled,
   };
 }
@@ -533,6 +545,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         emailSignatureEnabled: currentGlobal.emailSignatureEnabled,
         emailSignatureText: currentGlobal.emailSignatureText,
         chatScrollMode: currentGlobal.chatScrollMode,
+        chatSuggestionsEnabled:
+          'chatSuggestionsEnabled' in body && typeof body.chatSuggestionsEnabled === 'boolean'
+            ? body.chatSuggestionsEnabled
+            : currentGlobal.chatSuggestionsEnabled,
         allowUserDefaults,
         allowedPythonLibraries:
           'allowedPythonLibraries' in body && Array.isArray(body.allowedPythonLibraries)
@@ -564,6 +580,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         emailSignatureEnabled: updatedSettings.emailSignatureEnabled,
         emailSignatureText: updatedSettings.emailSignatureText,
         chatScrollMode: updatedSettings.chatScrollMode,
+        chatSuggestionsEnabled: updatedSettings.chatSuggestionsEnabled,
         allowUserDefaults: updatedSettings.allowUserDefaults,
         allowedPythonLibraries: updatedSettings.allowedPythonLibraries,
       };
@@ -616,6 +633,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
         chatScrollMode: merged.chatScrollMode,
+        chatSuggestionsEnabled: merged.chatSuggestionsEnabled,
       };
 
       if (profileView) {
@@ -643,6 +661,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
         chatScrollMode: merged.chatScrollMode,
+        chatSuggestionsEnabled: merged.chatSuggestionsEnabled,
       };
 
       return {
@@ -844,6 +863,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         next.chatScrollMode = current.chatScrollMode as ChatScrollMode;
       }
 
+      // chatSuggestionsEnabled
+      if ('chatSuggestionsEnabled' in body) {
+        if ((body as Record<string, unknown>).chatSuggestionsEnabled === null) {
+          // clear override
+        } else if (typeof (body as Record<string, unknown>).chatSuggestionsEnabled === 'boolean') {
+          next.chatSuggestionsEnabled = (body as Record<string, unknown>).chatSuggestionsEnabled as boolean;
+        }
+      } else if (typeof current.chatSuggestionsEnabled === 'boolean') {
+        next.chatSuggestionsEnabled = current.chatSuggestionsEnabled as boolean;
+      }
+
       // userDefaultsEnabled
       if ('userDefaultsEnabled' in body) {
         if (body.userDefaultsEnabled === null) {
@@ -877,6 +907,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'emailSignatureEnabled' in next ||
         'emailSignatureText' in next ||
         'chatScrollMode' in next ||
+        'chatSuggestionsEnabled' in next ||
         'userDefaultsEnabled' in next;
 
       const itemToStore = hasOverrides ? next : { user_id: userId, updatedAt: next.updatedAt };

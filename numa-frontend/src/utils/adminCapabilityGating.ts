@@ -19,12 +19,22 @@ import { CapabilitiesService } from '../Services/CapabilitiesService';
 export const CAPABILITIES_CHANGED_EVENT = 'numa-capabilities-changed';
 
 /**
+ * Capabilities that are deployed-everywhere but OFF by default — admins must
+ * explicitly enable them via the Capabilities tab. This lets us ship a feature
+ * for general availability while leaving each client opted-out until they ask.
+ */
+export const DEFAULT_DISABLED_FLAGS = new Set<string>(['CHAT_SUGGESTIONS']);
+
+/**
  * Fetch admin capability overrides and apply gating to sessionStorage.
  *
  * For each entry in the capabilities table:
  *   - If admin has set status = 'disabled', overwrite the live flag to 'false'
  *   - If admin has set status = 'enabled', restore the live flag to 'true'
  *   - Hard deploy denials (DEPLOY_FLAG = 'false') are never overridden
+ *
+ * For DEFAULT_DISABLED_FLAGS with no admin entry: live flag is forced to 'false'.
+ * Admin must explicitly enable to turn it on.
  *
  * @param numaGet — authenticated GET function from NumaRequestContext
  */
@@ -33,6 +43,15 @@ export async function loadAdminCapabilityGating(
 ): Promise<void> {
   try {
     const settings = await CapabilitiesService.list(numaGet);
+
+    // Default-disabled flags: force off when admin has not explicitly enabled them.
+    for (const flagName of DEFAULT_DISABLED_FLAGS) {
+      const deployValue = sessionStorage.getItem(`DEPLOY_${flagName}`);
+      if (deployValue === 'false') continue; // honour hard deploy denial
+      if (!(flagName in settings)) {
+        sessionStorage.setItem(flagName, 'false');
+      }
+    }
 
     for (const [flagName, setting] of Object.entries(settings)) {
       const deployValue = sessionStorage.getItem(`DEPLOY_${flagName}`);

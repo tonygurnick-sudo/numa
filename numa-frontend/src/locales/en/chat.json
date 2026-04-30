@@ -561,5 +561,11 @@
       "cardBrainstormTitle": "Brainstorm ideas",
       "cardBrainstormDesc": "Explore ideas, challenge assumptions, and think through business problems."
     }
+  },
+  "suggestions": {
+    "tipTitle": "Chat suggestions",
+    "tipMessage": "Numa suggests what you might say next after each response. You can turn this off in Settings → Chat Defaults.",
+    "tipDismiss": "Got it",
+    "ariaLabel": "Suggested next messages"
   }
 }

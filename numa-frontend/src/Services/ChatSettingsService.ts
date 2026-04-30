@@ -43,6 +43,7 @@ export type ChatSettings = {
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
   chatScrollMode: ChatScrollMode;
+  chatSuggestionsEnabled: boolean;
 };
 
 export type ChatSettingsUpdate = {
@@ -117,6 +118,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
   chatScrollMode: 'auto',
+  chatSuggestionsEnabled: true,
 };
 
 // Helper types for RequestProvider integration
@@ -357,6 +359,10 @@ function validateSettings(data: unknown): ChatSettings {
       typeof obj.chatScrollMode === 'string' && VALID_SCROLL_MODES.includes(obj.chatScrollMode as ChatScrollMode)
         ? (obj.chatScrollMode as ChatScrollMode)
         : DEFAULT_CHAT_SETTINGS.chatScrollMode,
+    chatSuggestionsEnabled:
+      typeof obj.chatSuggestionsEnabled === 'boolean'
+        ? obj.chatSuggestionsEnabled
+        : DEFAULT_CHAT_SETTINGS.chatSuggestionsEnabled,
   };
 }
 

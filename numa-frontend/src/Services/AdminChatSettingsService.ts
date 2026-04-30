@@ -176,5 +176,13 @@ function validateGlobal(data: unknown): GlobalChatSettings {
             typeof lib === 'object' && lib !== null && typeof (lib as Record<string, unknown>).name === 'string'
         )
       : DEFAULT_GLOBAL_CHAT_SETTINGS.allowedPythonLibraries,
+    dataConnectorsEnabled:
+      typeof obj.dataConnectorsEnabled === 'boolean'
+        ? obj.dataConnectorsEnabled
+        : DEFAULT_GLOBAL_CHAT_SETTINGS.dataConnectorsEnabled,
+    chatSuggestionsEnabled:
+      typeof obj.chatSuggestionsEnabled === 'boolean'
+        ? obj.chatSuggestionsEnabled
+        : DEFAULT_GLOBAL_CHAT_SETTINGS.chatSuggestionsEnabled,
   };
 }

@@ -240,6 +240,17 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: ['NUMA_WORKSPACE_CHAT'],
   },
   {
+    flag: 'CHAT_SUGGESTIONS',
+    title: 'Suggested Next Messages',
+    description:
+      'Show clickable next-message suggestions above the chat input after each response, helping users discover what Numa can do.',
+    icon: 'bi-lightbulb',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['NUMA_WORKSPACE_CHAT'],
+  },
+  {
     flag: 'RACETECH_DATA_FEED',
     title: 'RaceTech Data Feed',
     description: 'External data feed upload endpoint for daily database imports.',

@@ -56,7 +56,7 @@ import { ROUTE_CONFIG } from '../utils/routeConfig';
 import type { CapabilityItem } from '../utils/capabilityRegistry';
 import { getFlagRegistry } from '../utils/featureFlags';
 import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
-import { loadAdminCapabilityGating } from '../utils/adminCapabilityGating';
+import { loadAdminCapabilityGating, DEFAULT_DISABLED_FLAGS } from '../utils/adminCapabilityGating';
 
 const useNavigationConfirm = (when: boolean, message: string) => {
   const navigationContext = useContext(UNSAFE_NavigationContext);
@@ -783,7 +783,7 @@ export default function SettingsPage() {
 
   const renderCapabilityRow = (cap: CapabilityItem, isChild = false) => {
     const capSetting = capabilitySettings[cap.flag];
-    const adminEnabled = capSetting ? capSetting.status === 'enabled' : true;
+    const adminEnabled = capSetting ? capSetting.status === 'enabled' : !DEFAULT_DISABLED_FLAGS.has(cap.flag);
     const isSystemOnly = cap.systemOnly ?? false;
     const displayName = cap.labelKey ? t(cap.labelKey, { defaultValue: cap.name }) : cap.name;
     const displayDescription = cap.descriptionKey

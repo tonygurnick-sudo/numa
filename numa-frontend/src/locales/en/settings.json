@@ -724,6 +724,14 @@
         "autoHelp": "Chat automatically scrolls to the latest message.",
         "manual": "Manual scroll",
         "manualHelp": "Chat does not automatically scroll; you control the scroll position."
+      },
+      "chatSuggestions": {
+        "label": "Suggested next messages",
+        "help": "After each response, Numa suggests a few things you could say next based on the conversation.",
+        "enabled": "Show suggestions",
+        "enabledHelp": "Short clickable prompts appear above the chat input after each response.",
+        "disabled": "Hide suggestions",
+        "disabledHelp": "No suggestions will appear."
       }
     },
     "approval": {
