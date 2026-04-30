@@ -1,4 +1,5 @@
 # pylint: disable=protected-access
+import base64
 import json
 import os
 import unittest
@@ -847,6 +848,263 @@ class TestBuildConnectionStatusNewFields(unittest.TestCase):
         self.assertFalse(gmail["healthy"])
         self.assertTrue(gmail["dead"])
         self.assertEqual(gmail["connection_name"], "old-account@example.com")
+
+
+class TestBuildBinaryResult(unittest.TestCase):
+    """Tests for the encode-measure-decide binary response path.
+
+    Covers the boundary between inline base64 (small files) and the S3
+    presigned URL fallback (oversize files) introduced to fix the AWS
+    Lambda 6 MB sync invoke response payload limit.
+    """
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:pipedream-credentials",
+            "BINARY_CACHE_BUCKET": "pipedream-proxy-binary-cache-prod",
+        }
+        self.external_user_id = "tleaft_a1b2c3d4-0000-7000-8000-000000000001"
+        self.request_id = "test-request-id-abcdef"
+
+    def _make_ops(self) -> PipedreamOperations:
+        with patch.dict(os.environ, self.env_vars):
+            return PipedreamOperations()
+
+    def test_small_binary_returned_inline_unchanged_shape(self) -> None:
+        """A 1 KB PDF fits inline → response uses base64_body, no S3 call."""
+        content = b"%PDF-1.4 fake pdf content " + b"x" * 1000
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            mock_s3 = Mock()
+            ops._s3_client = mock_s3
+
+            result = ops._build_binary_result(
+                response_content=content,
+                content_type="application/pdf",
+                content_disposition='attachment; filename="report.pdf"',
+                external_user_id=self.external_user_id,
+                request_id=self.request_id,
+            )
+
+        self.assertTrue(result["binary"])
+        self.assertIn("base64_body", result)
+        self.assertNotIn("presigned_url", result)
+        self.assertNotIn("binary_storage", result)
+        self.assertEqual(result["content_type"], "application/pdf")
+        self.assertEqual(result["size"], len(content))
+        self.assertEqual(result["filename_hint"], "report.pdf")
+        # No S3 interaction for files that fit inline.
+        mock_s3.upload_fileobj.assert_not_called()
+        mock_s3.generate_presigned_url.assert_not_called()
+        # base64 round-trips.
+        self.assertEqual(base64.b64decode(result["base64_body"]), content)
+
+    def test_edge_under_threshold_returns_inline(self) -> None:
+        """A binary just under the inline ceiling stays inline.
+
+        With a 16 KB safety margin against the 6,291,556 B Lambda limit,
+        the actual inline ceiling is ~4.49 MB raw. 4.4 MB is comfortably
+        under that.
+        """
+        content = b"\x00" * (int(4.4 * 1024 * 1024))
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            mock_s3 = Mock()
+            ops._s3_client = mock_s3
+
+            result = ops._build_binary_result(
+                response_content=content,
+                content_type="application/octet-stream",
+                content_disposition="",
+                external_user_id=self.external_user_id,
+                request_id=self.request_id,
+            )
+
+        self.assertIn("base64_body", result)
+        self.assertNotIn("presigned_url", result)
+        mock_s3.upload_fileobj.assert_not_called()
+
+    def test_edge_over_threshold_uploads_to_s3(self) -> None:
+        """A binary just over the inline ceiling lands on S3 with a presigned URL."""
+        # 4.8 MB raw → ~6.4 MB base64 — exceeds the 6 MB Lambda response limit.
+        content = b"\x00" * (int(4.8 * 1024 * 1024))
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            mock_s3 = Mock()
+            mock_s3.generate_presigned_url.return_value = "https://pipedream-proxy-binary-cache-prod.s3.amazonaws.com/key?signed=yes"
+            ops._s3_client = mock_s3
+
+            result = ops._build_binary_result(
+                response_content=content,
+                content_type="application/pdf",
+                content_disposition='attachment; filename="big-report.pdf"',
+                external_user_id=self.external_user_id,
+                request_id=self.request_id,
+            )
+
+        self.assertTrue(result["binary"])
+        self.assertEqual(result["binary_storage"], "s3_presigned")
+        self.assertIn("presigned_url", result)
+        self.assertEqual(result["presigned_url_expires_in"], 900)
+        self.assertNotIn("base64_body", result)
+        self.assertEqual(result["size"], len(content))
+        self.assertEqual(result["filename_hint"], "big-report.pdf")
+
+        mock_s3.upload_fileobj.assert_called_once()
+        upload_call = mock_s3.upload_fileobj.call_args
+        # Bucket is positional arg 1; key is positional arg 2.
+        self.assertEqual(upload_call.args[1], "pipedream-proxy-binary-cache-prod")
+        key = upload_call.args[2]
+        self.assertTrue(key.startswith(f"{self.external_user_id}/{self.request_id}/"))
+        self.assertTrue(key.endswith(".pdf"))
+        extra = upload_call.kwargs["ExtraArgs"]
+        self.assertEqual(extra["ContentType"], "application/pdf")
+        self.assertEqual(extra["ServerSideEncryption"], "AES256")
+        self.assertIn(
+            'attachment; filename="big-report.pdf"', extra["ContentDisposition"]
+        )
+
+        mock_s3.generate_presigned_url.assert_called_once()
+        get_call = mock_s3.generate_presigned_url.call_args
+        self.assertEqual(get_call.args[0], "get_object")
+        self.assertEqual(get_call.kwargs["ExpiresIn"], 900)
+
+    def test_tleaft_repro_size_uses_s3(self) -> None:
+        """The exact failure size from the tleaft incident routes to S3."""
+        # The customer was downloading Pipedrive attachments where the
+        # base64-wrapped payload exceeded 6,291,556 bytes. A 5.5 MB raw
+        # binary reproduces that.
+        content = b"\x00" * (int(5.5 * 1024 * 1024))
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            mock_s3 = Mock()
+            mock_s3.generate_presigned_url.return_value = "https://s3.example/url"
+            ops._s3_client = mock_s3
+
+            result = ops._build_binary_result(
+                response_content=content,
+                content_type="application/pdf",
+                content_disposition="",
+                external_user_id=self.external_user_id,
+                request_id=self.request_id,
+            )
+
+        self.assertEqual(result["binary_storage"], "s3_presigned")
+        self.assertNotIn("base64_body", result)
+
+    def test_large_binary_uses_s3(self) -> None:
+        """A 20 MB binary uses S3 — comfortably above any plausible inline limit."""
+        content = b"\x00" * (20 * 1024 * 1024)
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            mock_s3 = Mock()
+            mock_s3.generate_presigned_url.return_value = "https://s3.example/url"
+            ops._s3_client = mock_s3
+
+            result = ops._build_binary_result(
+                response_content=content,
+                content_type="application/zip",
+                content_disposition="",
+                external_user_id=self.external_user_id,
+                request_id=self.request_id,
+            )
+
+        self.assertEqual(result["binary_storage"], "s3_presigned")
+        self.assertNotIn("base64_body", result)
+        # Content-type → .zip extension on the S3 key.
+        upload_call = mock_s3.upload_fileobj.call_args
+        self.assertTrue(upload_call.args[2].endswith(".zip"))
+
+    def test_oversize_without_bucket_configured_raises(self) -> None:
+        """Without BINARY_CACHE_BUCKET, oversize responses raise a clean error.
+
+        Better to surface a structured error than let the lambda runtime
+        413 the response — the latter is what the bug looked like in prod.
+        """
+        env_no_bucket = {
+            "PIPEDREAM_SECRET_ARN": self.env_vars["PIPEDREAM_SECRET_ARN"],
+        }
+        content = b"\x00" * (int(5.5 * 1024 * 1024))
+
+        with patch.dict(os.environ, env_no_bucket, clear=True):
+            ops = PipedreamOperations()
+            with self.assertRaises(Exception) as ctx:
+                ops._build_binary_result(
+                    response_content=content,
+                    content_type="application/pdf",
+                    content_disposition="",
+                    external_user_id=self.external_user_id,
+                    request_id=self.request_id,
+                )
+
+        self.assertIn("too large to inline", str(ctx.exception))
+
+    def test_filename_hint_omitted_when_no_disposition(self) -> None:
+        """No Content-Disposition header → no filename_hint in the result."""
+        content = b"%PDF-1.4 small"
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            ops._s3_client = Mock()
+
+            result = ops._build_binary_result(
+                response_content=content,
+                content_type="application/pdf",
+                content_disposition="",
+                external_user_id=self.external_user_id,
+                request_id=self.request_id,
+            )
+
+        self.assertNotIn("filename_hint", result)
+
+    def test_safe_filename_strips_path_separators(self) -> None:
+        """Malicious filenames with path separators are sanitized before use."""
+        content = b"\x00" * (int(5.5 * 1024 * 1024))
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            mock_s3 = Mock()
+            mock_s3.generate_presigned_url.return_value = "https://s3.example/url"
+            ops._s3_client = mock_s3
+
+            result = ops._build_binary_result(
+                response_content=content,
+                content_type="application/pdf",
+                content_disposition='attachment; filename="../../etc/passwd"',
+                external_user_id=self.external_user_id,
+                request_id=self.request_id,
+            )
+
+        # Path traversal characters scrubbed.
+        self.assertNotIn("/", result["filename_hint"])
+        self.assertNotIn("\\", result["filename_hint"])
+
+    def test_request_id_missing_uses_placeholder(self) -> None:
+        """A missing request_id should not crash; key uses 'no-request-id'."""
+        content = b"\x00" * (int(5.5 * 1024 * 1024))
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            mock_s3 = Mock()
+            mock_s3.generate_presigned_url.return_value = "https://s3.example/url"
+            ops._s3_client = mock_s3
+
+            ops._build_binary_result(
+                response_content=content,
+                content_type="application/pdf",
+                content_disposition="",
+                external_user_id=self.external_user_id,
+                request_id=None,
+            )
+
+        upload_call = mock_s3.upload_fileobj.call_args
+        key = upload_call.args[2]
+        self.assertIn("/no-request-id/", key)
 
 
 if __name__ == "__main__":

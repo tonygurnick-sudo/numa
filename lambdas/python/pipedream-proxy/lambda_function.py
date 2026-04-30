@@ -221,7 +221,13 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                     "proxy_request requires upstream_url and account_id parameters",
                 )
             result = pipedream_ops.proxy_request(
-                external_user_id, account_id, method, upstream_url, body, headers
+                external_user_id,
+                account_id,
+                method,
+                upstream_url,
+                body,
+                headers,
+                request_id=context.aws_request_id,
             )
 
         elif operation == "batch_get_schemas":

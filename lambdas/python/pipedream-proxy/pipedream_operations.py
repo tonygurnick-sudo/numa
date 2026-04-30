@@ -5,10 +5,13 @@ Contains all the Pipedream-specific logic ported from existing lambdas.
 """
 
 import base64
+import io
 import json
 import os
 import re
 import time
+import uuid
+from email.message import EmailMessage
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -29,6 +32,81 @@ _TOOL_LIST_TTL_SECONDS = 600.0  # 10 minutes
 # value = (schema_dict, expires_epoch)
 _ACTION_SCHEMA_CACHE: Dict[str, Tuple[Dict[str, Any], float]] = {}
 _ACTION_SCHEMA_TTL_SECONDS = 600.0  # 10 minutes
+
+# AWS Lambda hard limit for synchronous invoke response payloads.
+# Source: error logs show "Exceeded maximum allowed payload size (6291556 bytes)".
+LAMBDA_RESPONSE_LIMIT_BYTES = 6_291_556
+
+# Headroom kept free in front of the Lambda limit. The actual response
+# envelope is ~200 bytes; 16 KB is a deliberately wide safety belt that
+# absorbs any future drift in keys, headers, or wrapper shape.
+LAMBDA_RESPONSE_SAFETY_MARGIN_BYTES = 16_384
+
+# Lifetime of presigned GET URLs returned for oversize binary responses.
+# Long enough for the workspace agent to fetch immediately + retry once;
+# short enough that a leaked URL stops working quickly.
+PRESIGNED_URL_EXPIRES_IN_SECONDS = 900  # 15 minutes
+
+# Content-Type → file extension mapping used for the S3 key suffix and
+# filename_hint fallback. Not exhaustive — anything missing falls to .bin
+# and the workspace agent can rename based on Content-Disposition.
+_CONTENT_TYPE_EXTENSIONS: Dict[str, str] = {
+    "application/pdf": ".pdf",
+    "application/json": ".json",
+    "application/xml": ".xml",
+    "application/zip": ".zip",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "application/octet-stream": ".bin",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "image/tiff": ".tiff",
+    "text/plain": ".txt",
+    "text/html": ".html",
+    "text/csv": ".csv",
+    "text/markdown": ".md",
+}
+
+
+def _content_type_to_extension(content_type: str) -> str:
+    """Best-effort file extension from a Content-Type header."""
+    base = (content_type or "").split(";")[0].strip().lower()
+    return _CONTENT_TYPE_EXTENSIONS.get(base, ".bin")
+
+
+def _extract_filename_from_content_disposition(disposition: str) -> Optional[str]:
+    """Extract filename from a Content-Disposition header, or None.
+
+    Uses email.message.EmailMessage which handles RFC 2231/5987 encoded
+    filenames correctly (filename*=UTF-8''...).
+    """
+    if not disposition:
+        return None
+    try:
+        msg = EmailMessage()
+        msg["Content-Disposition"] = disposition
+        filename = msg.get_filename()
+        if isinstance(filename, str) and filename.strip():
+            return filename.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _safe_filename(name: str) -> str:
+    """Strip path separators and cap length for use as an S3 key suffix or hint."""
+    if not name:
+        return ""
+    cleaned = name.replace("/", "_").replace("\\", "_").lstrip(".")
+    return cleaned[:120]
 
 
 def _extract_tool_info(tool: Any) -> Dict[str, Any]:
@@ -110,6 +188,13 @@ class PipedreamOperations:
 
         self.secrets_client = prm_client("secretsmanager")
         self._credentials: Optional[Dict[str, str]] = None
+        self._s3_client: Optional[Any] = None
+
+    def _get_s3_client(self) -> Any:
+        """Lazy-init S3 client. Used for oversize binary upload + presigned URL."""
+        if self._s3_client is None:
+            self._s3_client = prm_client("s3")
+        return self._s3_client
 
     def get_credentials(self) -> Dict[str, str]:
         """Get Pipedream credentials from Secrets Manager."""
@@ -863,6 +948,169 @@ class PipedreamOperations:
                 f"Failed to configure props for {action_key}.{prop_name}: {str(e)}"
             ) from e
 
+    def _build_binary_result(
+        self,
+        response_content: bytes,
+        content_type: str,
+        content_disposition: str,
+        external_user_id: str,
+        request_id: Optional[str],
+    ) -> Dict[str, Any]:
+        """Build a binary response payload, falling back to S3 when oversized.
+
+        Strategy: encode → measure → decide. The base64 body is built and
+        wrapped in the same envelope the lambda will return. If the actual
+        serialized size (plus a generous safety margin) fits inside the
+        Lambda 6 MB sync invoke limit, the inline payload is returned. If
+        not, the raw bytes are uploaded to the configured binary cache
+        bucket and a short-lived presigned GET URL replaces the body.
+
+        The two response shapes are intentionally distinguishable so old
+        and new consumers can both handle them:
+          - inline:   {binary, base64_body, content_type, size, filename_hint}
+          - oversize: {binary, binary_storage="s3_presigned", presigned_url,
+                       presigned_url_expires_in, content_type, size,
+                       filename_hint}
+
+        Old workspace agents that look for `base64_body` will find it on
+        small files (today's behavior unchanged) and fall through to the
+        existing JSON-save path on large files (URL surfaced to the user).
+        """
+        size = len(response_content)
+        upstream_filename = _extract_filename_from_content_disposition(
+            content_disposition
+        )
+        ext = _content_type_to_extension(content_type)
+        filename_hint = _safe_filename(upstream_filename) if upstream_filename else ""
+
+        # Build the inline candidate first so we can measure it precisely.
+        b64 = base64.b64encode(response_content).decode()
+        inline_result: Dict[str, Any] = {
+            "binary": True,
+            "base64_body": b64,
+            "content_type": content_type,
+            "size": size,
+        }
+        if filename_hint:
+            inline_result["filename_hint"] = filename_hint
+
+        # Measure against the actual envelope the lambda returns.
+        # See lambda_function.handler: {"statusCode": 200, "body": json.dumps({"success": True, "operation": ..., "data": result})}
+        envelope = {
+            "statusCode": 200,
+            "body": json.dumps(
+                {
+                    "success": True,
+                    "operation": "proxy_request",
+                    "data": inline_result,
+                }
+            ),
+        }
+        encoded_size = len(json.dumps(envelope))
+
+        if (
+            encoded_size + LAMBDA_RESPONSE_SAFETY_MARGIN_BYTES
+            < LAMBDA_RESPONSE_LIMIT_BYTES
+        ):
+            return inline_result
+
+        # Oversize: upload to the binary cache bucket and return a
+        # presigned GET URL instead of the inline body.
+        bucket = os.environ.get("BINARY_CACHE_BUCKET")
+        if not bucket:
+            # No bucket configured — surface a clean error rather than
+            # letting the runtime 413 the response.
+            logger.error(
+                "Oversize binary response and no BINARY_CACHE_BUCKET configured",
+                size=size,
+                content_type=content_type,
+            )
+            raise Exception(
+                f"Upstream binary response is too large to inline "
+                f"({size} bytes) and the binary cache bucket is not configured. "
+                "Try a smaller file or contact support."
+            )
+
+        # Key layout: {tenant}/{request_id}/{uuid}{ext}
+        # The tenant prefix from external_user_id (e.g. "tleaft_<sub>") gives
+        # us per-tenant scoping for any future bucket-policy work; request_id
+        # gives audit traceability; uuid4 prevents accidental collision when
+        # request_id is missing.
+        tenant_prefix = _safe_filename(external_user_id) or "unknown"
+        request_segment = _safe_filename(request_id or "") or "no-request-id"
+        object_uuid = uuid.uuid4().hex
+        key = f"{tenant_prefix}/{request_segment}/{object_uuid}{ext}"
+
+        s3 = self._get_s3_client()
+        extra_args: Dict[str, Any] = {
+            "ContentType": content_type or "application/octet-stream",
+            "ServerSideEncryption": "AES256",
+        }
+        if upstream_filename:
+            # Suggested filename when the user clicks the presigned URL.
+            extra_args["ContentDisposition"] = (
+                f'attachment; filename="{_safe_filename(upstream_filename)}"'
+            )
+
+        try:
+            s3.upload_fileobj(
+                io.BytesIO(response_content),
+                bucket,
+                key,
+                ExtraArgs=extra_args,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to upload oversize binary response to cache bucket",
+                bucket=bucket,
+                key=key,
+                size=size,
+                error=str(e),
+            )
+            raise Exception(
+                "Failed to stage oversize upstream binary response for download"
+            ) from e
+
+        try:
+            presigned_url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": key},
+                ExpiresIn=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to generate presigned URL for oversize binary",
+                bucket=bucket,
+                key=key,
+                error=str(e),
+            )
+            raise Exception(
+                "Failed to generate download URL for oversize upstream binary"
+            ) from e
+
+        # NOTE: log only the bucket key, not the presigned URL. The URL is a
+        # bearer token; CloudWatch retains logs for 30 days and that's longer
+        # than we want any download credential to live.
+        logger.info(
+            "Oversize binary response staged to S3",
+            bucket=bucket,
+            key=key,
+            size=size,
+            content_type=content_type,
+        )
+
+        oversize_result: Dict[str, Any] = {
+            "binary": True,
+            "binary_storage": "s3_presigned",
+            "presigned_url": presigned_url,
+            "presigned_url_expires_in": PRESIGNED_URL_EXPIRES_IN_SECONDS,
+            "content_type": content_type,
+            "size": size,
+        }
+        if filename_hint:
+            oversize_result["filename_hint"] = filename_hint
+        return oversize_result
+
     def proxy_request(
         self,
         external_user_id: str,
@@ -871,6 +1119,7 @@ class PipedreamOperations:
         upstream_url: str,
         body: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
+        request_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make a raw API call through Pipedream's proxy.
 
@@ -883,9 +1132,14 @@ class PipedreamOperations:
             upstream_url: The upstream API URL to call
             body: Optional JSON body for POST/PUT requests
             headers: Optional custom headers (e.g., x-pd-proxy- prefixed)
+            request_id: Optional Lambda request ID, used as part of the S3 key
+                when an oversize binary response is offloaded to the cache bucket.
 
         Returns:
-            Raw upstream API response
+            Raw upstream API response. For binary responses that fit within the
+            Lambda response payload limit, the body is returned inline as
+            base64. Larger binaries are uploaded to the binary cache bucket
+            and a short-lived presigned GET URL is returned instead.
         """
         credentials = self.get_credentials()
         access_token = self.get_access_token()
@@ -940,12 +1194,15 @@ class PipedreamOperations:
                         "force-download",
                     )
                 ):
-                    result = {
-                        "binary": True,
-                        "base64_body": base64.b64encode(response.content).decode(),
-                        "content_type": content_type,
-                        "size": len(response.content),
-                    }
+                    result = self._build_binary_result(
+                        response_content=response.content,
+                        content_type=content_type,
+                        content_disposition=response.headers.get(
+                            "content-disposition", ""
+                        ),
+                        external_user_id=external_user_id,
+                        request_id=request_id,
+                    )
                 else:
                     result = {"text": response.text}
 

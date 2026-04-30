@@ -8,6 +8,11 @@ import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group
 import { CloudwatchEventRule } from '@cdktf/provider-aws/lib/cloudwatch-event-rule';
 import { CloudwatchEventTarget } from '@cdktf/provider-aws/lib/cloudwatch-event-target';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
+import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
+import { S3BucketLifecycleConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-lifecycle-configuration';
+import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
+import { S3BucketPublicAccessBlock } from '@cdktf/provider-aws/lib/s3-bucket-public-access-block';
+import { S3BucketServerSideEncryptionConfigurationA } from '@cdktf/provider-aws/lib/s3-bucket-server-side-encryption-configuration';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { S3Backend, TerraformStack, Fn } from 'cdktf';
 import { Construct } from 'constructs';
@@ -180,6 +185,74 @@ export class PipedreamProxyStack extends TerraformStack {
       },
     });
 
+    // S3 bucket for staging oversize binary upstream responses.
+    // When an upstream API returns a binary response that would exceed AWS
+    // Lambda's 6 MB sync invoke payload limit, the proxy uploads the raw
+    // bytes here and returns a short-lived (15 min) presigned GET URL in
+    // place of the inline base64 body. Objects are auto-deleted after 1 day
+    // so storage stays bounded.
+    const binaryCacheBucket = new S3Bucket(this, 'binary-cache-bucket', {
+      bucket: `pipedream-proxy-binary-cache-${props.environmentName}`,
+      forceDestroy: true,
+      tags: {
+        Name: 'pipedream-proxy-binary-cache',
+        Environment: props.environmentName,
+        Purpose: 'oversize-binary-response-cache',
+      },
+    });
+
+    new S3BucketPublicAccessBlock(this, 'binary-cache-public-access-block', {
+      bucket: binaryCacheBucket.id,
+      blockPublicAcls: true,
+      blockPublicPolicy: true,
+      ignorePublicAcls: true,
+      restrictPublicBuckets: true,
+    });
+
+    new S3BucketServerSideEncryptionConfigurationA(this, 'binary-cache-encryption', {
+      bucket: binaryCacheBucket.id,
+      rule: [
+        {
+          applyServerSideEncryptionByDefault: { sseAlgorithm: 'AES256' },
+        },
+      ],
+    });
+
+    new S3BucketLifecycleConfiguration(this, 'binary-cache-lifecycle', {
+      bucket: binaryCacheBucket.id,
+      rule: [
+        {
+          id: 'expire-staged-binaries',
+          status: 'Enabled',
+          filter: [{ prefix: '' }],
+          expiration: [{ days: 1 }],
+          abortIncompleteMultipartUpload: [{ daysAfterInitiation: 1 }],
+        },
+      ],
+    });
+
+    // Deny any non-TLS access. The presigned URLs the lambda generates are
+    // bearer tokens; downloading them over plain HTTP would leak both the
+    // signature and the bytes. This is belt-and-braces — S3 already serves
+    // presigned URLs over HTTPS by default — but a deny statement makes
+    // the contract explicit and audit-friendly.
+    new S3BucketPolicy(this, 'binary-cache-bucket-policy', {
+      bucket: binaryCacheBucket.id,
+      policy: JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Sid: 'DenyInsecureTransport',
+            Effect: 'Deny',
+            Principal: '*',
+            Action: 's3:*',
+            Resource: [binaryCacheBucket.arn, `${binaryCacheBucket.arn}/*`],
+            Condition: { Bool: { 'aws:SecureTransport': 'false' } },
+          },
+        ],
+      }),
+    });
+
     // IAM role for the proxy lambda
     const proxyLambdaRole = new IamRole(this, 'proxy-lambda-role', {
       name: 'pipedream-proxy-lambda-role',
@@ -237,6 +310,16 @@ export class PipedreamProxyStack extends TerraformStack {
             Effect: 'Allow',
             Action: ['dynamodb:BatchGetItem', 'dynamodb:GetItem'],
             Resource: this.schemaCacheTable.arn,
+          },
+          // S3 permissions for the binary cache bucket. PutObject is used to
+          // stage oversize binary upstream responses; GetObject is required
+          // because generate_presigned_url('get_object', ...) signs the URL
+          // with the lambda's principal — the principal must itself be
+          // authorized to perform the action being signed.
+          {
+            Effect: 'Allow',
+            Action: ['s3:PutObject', 's3:GetObject'],
+            Resource: `${binaryCacheBucket.arn}/*`,
           },
         ],
       }),
@@ -324,6 +407,7 @@ export class PipedreamProxyStack extends TerraformStack {
           ALLOWED_ACCOUNTS_TABLE: this.allowedAccountsTable.name,
           SCHEMA_CACHE_TABLE: this.schemaCacheTable.name,
           PIPEDREAM_SECRET_ARN: this.pipedreamSecret.arn,
+          BINARY_CACHE_BUCKET: binaryCacheBucket.bucket,
           LOG_LEVEL: 'INFO',
           ENVIRONMENT: props.environmentName,
           SUPPORTED_INTEGRATIONS: JSON.stringify(SUPPORTED_INTEGRATIONS),

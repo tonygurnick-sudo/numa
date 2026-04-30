@@ -343,3 +343,200 @@ class TestSaveResult:
         # just verify at least one file exists and both paths are non-empty
         assert Path(path1).exists()
         assert Path(path2).exists()
+
+
+# ---------------------------------------------------------------------------
+# save_result() — oversize binary (s3_presigned) path
+# ---------------------------------------------------------------------------
+
+
+class TestSaveResultS3PresignedBinary:
+    """Tests for the s3_presigned binary branch in save_result().
+
+    The proxy uploads oversize binary upstream responses to a short-lived
+    S3 cache and returns a presigned GET URL. save_result() fetches that
+    URL into /workdir so the agent sees a real file the same way it does
+    for small inline binaries.
+    """
+
+    @pytest.fixture(autouse=True)
+    def use_tmp_results_dir(self, tmp_path, monkeypatch):
+        """Redirect RESULTS_DIR to a temp directory for test isolation."""
+        test_dir = str(tmp_path / "results")
+        monkeypatch.setattr(
+            "numa_workspace_agent.mcp_tools.lambda_client.RESULTS_DIR",
+            test_dir,
+        )
+        self.results_dir = Path(test_dir)
+
+    @staticmethod
+    def _fake_urlretrieve(payload: bytes):
+        """Build a fake urlretrieve that writes payload to the destination path."""
+
+        def _retrieve(url, filename=None):
+            assert filename is not None, "save_result must pass an explicit destination"
+            Path(filename).write_bytes(payload)
+            return (filename, None)
+
+        return _retrieve
+
+    def _make_result(self, **overrides):
+        base = {
+            "status": "success",
+            "result": {
+                "binary": True,
+                "binary_storage": "s3_presigned",
+                "presigned_url": "https://example-bucket.s3.amazonaws.com/k?signed=yes",
+                "presigned_url_expires_in": 900,
+                "content_type": "application/pdf",
+                "size": 5 * 1024 * 1024,
+                "filename_hint": "report.pdf",
+            },
+        }
+        base["result"].update(overrides)
+        return base
+
+    def test_downloads_with_filename_hint(self):
+        """A presigned response with filename_hint lands at /workdir/<hint>."""
+        payload = b"%PDF-1.4 actual binary bytes from S3"
+        result = self._make_result()
+
+        with patch(
+            "urllib.request.urlretrieve",
+            side_effect=self._fake_urlretrieve(payload),
+        ):
+            file_path, preview = save_result(result, "proxy_GET", "Download attachment")
+
+        # The JSON file is still written to the action-named slot.
+        assert Path(file_path).suffix == ".json"
+
+        # The binary lands at /workdir/.../report.pdf with real bytes.
+        downloaded = self.results_dir / "report.pdf"
+        assert downloaded.exists()
+        assert downloaded.read_bytes() == payload
+
+        # Preview surfaces the download path so the LLM sees it.
+        assert "Downloaded files:" in preview
+        assert str(downloaded) in preview
+
+    def test_downloads_without_filename_hint(self):
+        """Missing filename_hint falls back to {action_key}-binary{ext}."""
+        payload = b"PDF content here"
+        result = self._make_result(filename_hint=None)
+        # Simulate the absence of filename_hint cleanly.
+        del result["result"]["filename_hint"]
+
+        with patch(
+            "urllib.request.urlretrieve",
+            side_effect=self._fake_urlretrieve(payload),
+        ):
+            file_path, preview = save_result(result, "proxy_GET", "desc")
+
+        downloaded = self.results_dir / "proxy_GET-binary.pdf"
+        assert downloaded.exists()
+        assert downloaded.read_bytes() == payload
+        assert str(downloaded) in preview
+
+    def test_filename_hint_path_traversal_sanitized(self):
+        """Path-traversal characters in filename_hint are stripped."""
+        payload = b"data"
+        result = self._make_result(filename_hint="../../etc/passwd")
+
+        with patch(
+            "urllib.request.urlretrieve",
+            side_effect=self._fake_urlretrieve(payload),
+        ):
+            save_result(result, "proxy_GET", "desc")
+
+        # The actual file should land directly under results_dir, not /etc/.
+        downloaded_files = list(self.results_dir.iterdir())
+        # JSON record + the downloaded binary
+        binary_files = [p for p in downloaded_files if p.suffix != ".json"]
+        assert len(binary_files) == 1
+        assert "/" not in binary_files[0].name
+        assert "\\" not in binary_files[0].name
+        # Should not start with a dot (lstrip)
+        assert not binary_files[0].name.startswith(".")
+        assert binary_files[0].read_bytes() == payload
+
+    def test_filename_hint_without_extension_appends_ext(self):
+        """A filename_hint without an extension gets one from content_type."""
+        payload = b"\x89PNG fake"
+        result = self._make_result(
+            filename_hint="screenshot",
+            content_type="image/png",
+        )
+
+        with patch(
+            "urllib.request.urlretrieve",
+            side_effect=self._fake_urlretrieve(payload),
+        ):
+            save_result(result, "proxy_GET", "desc")
+
+        downloaded = self.results_dir / "screenshot.png"
+        assert downloaded.exists()
+        assert downloaded.read_bytes() == payload
+
+    def test_download_failure_is_logged_and_swallowed(self):
+        """A failed urlretrieve does not raise — the JSON file is still written."""
+        result = self._make_result()
+
+        def _failing(url, filename=None):
+            raise OSError("HTTP 403 Forbidden")
+
+        with patch("urllib.request.urlretrieve", side_effect=_failing):
+            file_path, preview = save_result(result, "proxy_GET", "desc")
+
+        # JSON record still written.
+        assert Path(file_path).exists()
+        # Binary not present, no "Downloaded files:" section.
+        assert "Downloaded files:" not in preview
+        # The presigned URL itself is preserved in the JSON for the LLM
+        # to surface to the user as a fallback.
+        record = json.loads(Path(file_path).read_text())
+        assert record["result"]["presigned_url"].startswith("https://")
+
+    def test_missing_presigned_url_skips_download(self):
+        """A result with binary_storage=s3_presigned but no URL is left alone."""
+        result = self._make_result(presigned_url="")
+
+        with patch("urllib.request.urlretrieve") as mock_retrieve:
+            file_path, preview = save_result(result, "proxy_GET", "desc")
+
+        mock_retrieve.assert_not_called()
+        assert "Downloaded files:" not in preview
+        assert Path(file_path).exists()
+
+    def test_other_binary_storage_values_ignored(self):
+        """Only binary_storage='s3_presigned' triggers the new path."""
+        result = self._make_result(binary_storage="some_future_scheme")
+
+        with patch("urllib.request.urlretrieve") as mock_retrieve:
+            save_result(result, "proxy_GET", "desc")
+
+        mock_retrieve.assert_not_called()
+
+    def test_inline_base64_path_still_works(self):
+        """Pre-existing base64_body path keeps working for small files."""
+        import base64 as b64
+
+        payload = b"%PDF-1.4 small inline content"
+        result = {
+            "status": "success",
+            "result": {
+                "binary": True,
+                "base64_body": b64.b64encode(payload).decode(),
+                "content_type": "application/pdf",
+                "size": len(payload),
+            },
+        }
+
+        # urlretrieve must NOT be called for base64 inline responses.
+        with patch("urllib.request.urlretrieve") as mock_retrieve:
+            file_path, preview = save_result(result, "proxy_GET", "desc")
+
+        mock_retrieve.assert_not_called()
+        downloaded = self.results_dir / "proxy_GET-binary.pdf"
+        assert downloaded.exists()
+        assert downloaded.read_bytes() == payload
+        assert str(downloaded) in preview
