@@ -125,6 +125,8 @@ You are running in a sandboxed environment. Understanding these restrictions wil
 - Use /workdir/uploads/ to access files the user shared for this conversation
 - Use /workdir/outputs/ for intermediate files that don't need to persist
 - Use /workdir/ root level for outputs specific to this conversation
+
+**Disk limit (1 GB):** /workdir has a 1 GB cap. You can stream/load larger files in memory, but any single file >1 GB on disk must be deleted before your turn ends or the container will crash on the next turn. Applies anywhere — /workdir/uploads/, /workdir/outputs/, root. Example: a 2 GB CSV loaded into pandas → 500 MB SQLite produced → delete the CSV before finishing.
 """
 
 # =============================================================================

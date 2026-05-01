@@ -6,6 +6,7 @@ Streams SDK message types directly for frontend consumption.
 """
 
 import asyncio
+import errno
 import json
 import os
 import time
@@ -1361,11 +1362,23 @@ async def stream_claude_sdk(
         ) and _strip_prefix(options.model) != _strip_prefix(FALLBACK_MODEL):
             mark_quota_exhausted(options.model)
 
+        # If the disk filled mid-stream, surface a friendlier message so the
+        # user knows what to do (delete files / new conversation) rather than
+        # seeing a raw `[Errno 28] No space left on device:` traceback.
+        display_error = error_str
+        if isinstance(e, OSError) and getattr(e, "errno", None) == errno.ENOSPC:
+            display_error = (
+                f"Workspace storage is full ({error_str}). "
+                "Free space by deleting files in the workspace settings panel "
+                "(uploads/outputs tabs), or start a new conversation."
+            )
+
         error_event = {
             "type": "error",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": error_str,
+            "error": display_error,
             "error_type": type(e).__name__,
+            "errno": getattr(e, "errno", None),
             **extra_info,
         }
         # Write to trace file (NDJSON format for storage)
@@ -2031,11 +2044,22 @@ async def run_claude_sdk(
         ) and _strip_prefix(options.model) != _strip_prefix(FALLBACK_MODEL):
             mark_quota_exhausted(options.model)
 
+        # If the disk filled mid-run, surface a friendlier message (matches
+        # the streaming path).
+        display_error = error_str
+        if isinstance(e, OSError) and getattr(e, "errno", None) == errno.ENOSPC:
+            display_error = (
+                f"Workspace storage is full ({error_str}). "
+                "Free space by deleting files in the workspace settings panel "
+                "(uploads/outputs tabs), or start a new conversation."
+            )
+
         error_event = {
             "type": "error",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": error_str,
+            "error": display_error,
             "error_type": type(e).__name__,
+            "errno": getattr(e, "errno", None),
         }
         with trace_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(error_event) + "\n")
@@ -2046,7 +2070,7 @@ async def run_claude_sdk(
             "artifacts": [],
             "usage": result_meta,
             "session_id": captured_session_id or session_id or "",
-            "error": error_str,
+            "error": display_error,
         }
 
     finally:
