@@ -31,6 +31,7 @@ import { resolveCustomerRecord, resolveCustomerRecordLayout } from '../Shared/cu
 import { CreateTicketModal } from './CreateTicketModal';
 import { CustomerRecordSectionBlock } from './CustomerRecordSectionBlock';
 import { TicketDetailModal } from './TicketDetailModal';
+import { ConfirmModal } from './ConfirmModal';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ export function CustomerDetailModal({
   onUpdated,
 }: CustomerDetailModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-  const { numaGet, numaPost, numaPut } = useNumaRequest();
+  const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const { showToast } = useToast();
   const { config, selectedTeamId, teams, teamData } = useOps();
 
@@ -109,6 +110,8 @@ export function CustomerDetailModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = React.useRef<HTMLInputElement>(null);
@@ -291,6 +294,24 @@ export function CustomerDetailModal({
     },
     [customer, customerId, numaPut, onUpdated, showToast, t]
   );
+
+  // ── Delete ────────────────────────────────────────────────────────────
+  const handleDelete = useCallback(async () => {
+    if (!customerId) return;
+    setDeleting(true);
+    try {
+      await OpsService.deleteCustomer(numaDelete, customerId);
+      showToast({ message: t('crm.customerDeleted'), variant: 'success' });
+      setShowDeleteConfirm(false);
+      onUpdated?.();
+      onHide();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showToast({ message: t('errors.saveFailed', { message }), variant: 'error' });
+    } finally {
+      setDeleting(false);
+    }
+  }, [customerId, numaDelete, onHide, onUpdated, showToast, t]);
 
   // ── Logo upload ───────────────────────────────────────────────────────
 
@@ -1038,6 +1059,16 @@ export function CustomerDetailModal({
                   {t('tickets.created')}:{' '}
                   {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : t('common.none')}
                 </span>
+                <Button
+                  variant="outline-danger"
+                  size="sm"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={deleting}
+                  title={t('crm.deleteCustomer')}
+                >
+                  <i className="bi bi-trash me-1" />
+                  {t('common.delete')}
+                </Button>
                 <button type="button" className="ticket-detail-footer-btn" onClick={onHide}>
                   {t('common.close')}
                 </button>
@@ -1068,6 +1099,17 @@ export function CustomerDetailModal({
           setLinkedTicketDetailId(null);
           setLinkedTicketDetailTeamId(null);
         }}
+      />
+
+      <ConfirmModal
+        show={showDeleteConfirm}
+        onHide={() => setShowDeleteConfirm(false)}
+        onConfirm={() => void handleDelete()}
+        title={t('crm.deleteCustomer')}
+        message={t('crm.deleteCustomerConfirm', { name: customer?.companyName ?? '' })}
+        confirmLabel={t('common.delete')}
+        variant="danger"
+        typeToConfirm={customer?.companyName}
       />
     </>
   );

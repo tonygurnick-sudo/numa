@@ -2413,24 +2413,24 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     switch (resource) {
       case 'teams':
-        return handleTeams(method, rest, body, auth);
+        return await handleTeams(method, rest, body, auth);
 
       case 'tickets': {
         // Handle the by-display-id sub-path specially
         if (rest[0] === 'by-display-id') {
-          return handleTickets(method, rest, body, auth, event);
+          return await handleTickets(method, rest, body, auth, event);
         }
-        return handleTickets(method, rest, body, auth, event);
+        return await handleTickets(method, rest, body, auth, event);
       }
 
       case 'metrics':
-        return handleMetrics(auth, event);
+        return await handleMetrics(auth, event);
 
       case 'uploads':
-        return handleUploads(method, rest, body, event.queryStringParameters ?? {});
+        return await handleUploads(method, rest, body, event.queryStringParameters ?? {});
 
       case 'user-preferences':
-        return handleUserPreferences(method, rest, body, auth);
+        return await handleUserPreferences(method, rest, body, auth);
 
       default:
         return errorResponse(404, 'Route not found');
@@ -2449,6 +2449,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         stack: err.stack,
       })
     );
+    if (err.name === 'ValidationException' && /item size has exceeded/i.test(err.message)) {
+      return errorResponse(
+        413,
+        'Description is too large to save. Try removing or shrinking embedded images, or attach them as files instead.'
+      );
+    }
     return errorResponse(500, `Internal Server Error: ${err.message}`);
   }
 };

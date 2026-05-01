@@ -913,23 +913,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     switch (entity) {
       case 'ticket-types':
-        return handleTicketTypes(method, entitySegments, body, auth);
+        return await handleTicketTypes(method, entitySegments, body, auth);
       case 'statuses':
-        return handleStatuses(method, entitySegments, body, auth);
+        return await handleStatuses(method, entitySegments, body, auth);
       case 'fields':
-        return handleFields(method, entitySegments, body, auth);
+        return await handleFields(method, entitySegments, body, auth);
       case 'staff':
         // POST /ops/config/staff/sync — Cognito staff sync
         if (method === 'POST' && entitySegments[0] === 'sync') {
-          return handleStaffSync(event, auth);
+          return await handleStaffSync(event, auth);
         }
-        return handleStaff(method, entitySegments, body, auth);
+        return await handleStaff(method, entitySegments, body, auth);
       case 'projects':
-        return handleProjects(method, entitySegments, body, auth);
+        return await handleProjects(method, entitySegments, body, auth);
       case 'crm-settings':
-        return handleCrmSettings(method, body, auth);
+        return await handleCrmSettings(method, body, auth);
       case 'supplier-settings':
-        return handleSupplierSettings(method, body, auth);
+        return await handleSupplierSettings(method, body, auth);
       default:
         return errorResponse(404, 'Route not found');
     }

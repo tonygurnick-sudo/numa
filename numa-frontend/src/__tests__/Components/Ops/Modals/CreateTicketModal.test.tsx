@@ -21,6 +21,9 @@ vi.mock('../../../../Components/Ops/OpsContext', () => ({
 vi.mock('../../../../Providers/AuthProvider', () => ({
   useAuth: vi.fn(),
 }));
+vi.mock('../../../../Providers/ToastContext', () => ({
+  useToast: () => ({ showToast: vi.fn() }),
+}));
 vi.mock('../../../../Services/OpsService', () => ({
   listCustomers: vi.fn().mockResolvedValue([]),
   listSuppliers: vi.fn().mockResolvedValue([]),

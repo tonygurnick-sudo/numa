@@ -777,9 +777,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     switch (resource) {
       case 'customers':
-        return handleCustomers(method, rest, body, auth, event);
+        return await handleCustomers(method, rest, body, auth, event);
       case 'suppliers':
-        return handleSuppliers(method, rest, body, auth, event);
+        return await handleSuppliers(method, rest, body, auth, event);
       default:
         return errorResponse(404, 'Route not found');
     }

@@ -27,6 +27,7 @@ import { LinkedTicketsSection } from '../Shared/LinkedTicketsSection';
 import { AttachmentsSection } from '../Shared/AttachmentsSection';
 import { RichTextEditor } from '../Shared/RichTextEditor';
 import type { RichTextEditorHandle } from '../Shared/RichTextEditor';
+import { uploadAttachmentToTicket } from '../Shared/attachmentUploader';
 import { DynamicField } from '../Shared/DynamicField';
 import { ConfirmModal } from './ConfirmModal';
 import { MoveTicketModal } from './MoveTicketModal';
@@ -152,7 +153,7 @@ export function TicketDetailModal({
   teamIdOverride = null,
 }: TicketDetailModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-  const { numaGet, numaPut, numaDelete } = useNumaRequest();
+  const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const { showToast } = useToast();
   const showAlert = useAlert();
   const [archiving, setArchiving] = useState(false);
@@ -193,6 +194,9 @@ export function TicketDetailModal({
 
   // ── Share / copy link feedback ────────────────────────────────────────
   const [copied, setCopied] = useState(false);
+
+  // ── Attachments refresh trigger (bumped after a paste-uploaded image) ───
+  const [attachmentsRefreshKey, setAttachmentsRefreshKey] = useState(0);
 
   // ── Ref for title input auto-focus ──────────────────────────────────────
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -1195,6 +1199,27 @@ export function TicketDetailModal({
     );
   };
 
+  // ── Pasted-image-too-large -> auto-attach ─────────────────────────────
+  const handleLargeImagePaste = useCallback(
+    (file: File) => {
+      if (!ticket) return;
+      const ticketId = ticket.id;
+      void (async () => {
+        try {
+          await uploadAttachmentToTicket(numaPost, ticketId, file);
+          setAttachmentsRefreshKey((k) => k + 1);
+          showToast({ message: t('tickets.largeImagePastedAttached'), variant: 'info' });
+        } catch (err) {
+          showToast({
+            message: err instanceof Error ? err.message : t('errors.uploadFailed', 'Upload failed'),
+            variant: 'error',
+          });
+        }
+      })();
+    },
+    [numaPost, ticket, showToast, t]
+  );
+
   // ── Render: Main body ─────────────────────────────────────────────────
 
   const renderBody = () => {
@@ -1218,6 +1243,7 @@ export function TicketDetailModal({
                   void handleUpdate({ description: html });
                 }
               }}
+              onLargeImagePaste={handleLargeImagePaste}
               placeholder={t('common.description') + '\u2026'}
               minHeight={120}
               disabled={saving}
@@ -1230,7 +1256,7 @@ export function TicketDetailModal({
               <i className="bi bi-paperclip me-2" />
               {t('tickets.attachments')}
             </div>
-            <AttachmentsSection ticketId={ticket.id} />
+            <AttachmentsSection ticketId={ticket.id} refreshKey={attachmentsRefreshKey} />
           </div>
 
           {/* Activity / Comments */}

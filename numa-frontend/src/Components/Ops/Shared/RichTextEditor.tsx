@@ -7,12 +7,26 @@ interface RichTextEditorProps {
   onSave: (html: string) => void;
   onChange?: (html: string) => void;
   onImageUpload?: (file: File) => Promise<string>;
+  /**
+   * Called when a pasted image exceeds {@link LARGE_PASTED_IMAGE_BYTES}. The editor
+   * blocks the inline insert; the consumer is expected to route the file to an
+   * attachment-style upload path. If omitted, large images fall through to the
+   * default contenteditable paste behaviour (inline base64).
+   */
+  onLargeImagePaste?: (file: File) => void;
   placeholder?: string;
   minHeight?: number;
   disabled?: boolean;
   onFileAttach?: (file: File) => void;
   mentionOptions?: { id: string; display: string }[];
 }
+
+/**
+ * Size above which a pasted image is treated as too large to embed inline as
+ * base64. DynamoDB items are capped at 400KB; ~200KB leaves room for the rest
+ * of the ticket fields, indexes, and base64 expansion overhead.
+ */
+export const LARGE_PASTED_IMAGE_BYTES = 200 * 1024;
 
 export interface RichTextEditorHandle {
   /** Read current content and call onSave if it changed. */
@@ -45,6 +59,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     onSave,
     onChange,
     onImageUpload,
+    onLargeImagePaste,
     placeholder = 'Add a description…',
     minHeight = 120,
     disabled = false,
@@ -347,6 +362,27 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     checkMention();
   }, [readClean, onChange, checkMention]);
 
+  // Intercept image pastes that would balloon the description past DynamoDB's
+  // 400KB item limit. Smaller images fall through to the default browser paste
+  // behaviour (inline base64).
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLDivElement>) => {
+      if (!onLargeImagePaste) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+        const file = item.getAsFile();
+        if (!file) continue;
+        if (file.size <= LARGE_PASTED_IMAGE_BYTES) continue;
+        e.preventDefault();
+        onLargeImagePaste(file);
+        return;
+      }
+    },
+    [onLargeImagePaste]
+  );
+
   const handleHtmlChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const updatedHtml = e.target.value;
@@ -600,6 +636,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
             data-placeholder={placeholder}
             onInput={handleInput}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             onBlur={flush}
             style={{
               minHeight,
