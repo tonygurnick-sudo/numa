@@ -707,15 +707,13 @@ def _resolve_names_in_params(
     def has_id(*ks: str) -> bool:
         return any(params.get(k) for k in ks)
 
-    # ── boardName / boardName → boardId (run first; many others need boardId)
+    # ── boardName → boardId (run first; many others need boardId)
     if not has_id("boardId", "board_id"):
-        board_name = _pop_first(
-            params, "boardName", "board_name", "boardName", "board_name"
-        )
+        board_name = _pop_first(params, "boardName", "board_name")
         if board_name:
             params["boardId"] = _resolve_board(cache, board_name)
     else:
-        _drop_keys(params, "boardName", "board_name", "boardName", "board_name")
+        _drop_keys(params, "boardName", "board_name")
 
     board_id = params.get("boardId") or params.get("board_id") or parent_board_id or ""
 
@@ -1836,7 +1834,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
     # assigneeName, etc.) alongside or instead of IDs. The bridge resolves
     # them here so the API only ever sees IDs. Lookups are cached per
     # invocation so multiple resolutions on the same request don't repeat
-    # the same get_team / get_config / list_* calls.
+    # the same get_board / get_config / list_* calls.
     cache = _LookupCache(
         user_sub=user_sub,
         user_email=user_email,

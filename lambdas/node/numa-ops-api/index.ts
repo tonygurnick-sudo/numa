@@ -2372,12 +2372,17 @@ const handleUserPreferences = async (
     return jsonResponse(200, item ?? {});
   }
 
-  // PUT /ops/user-preferences/{teamId}
+  // PUT /ops/user-preferences/{boardId}
   if (method === 'PUT') {
     const existing = await getItem(pk, sk);
+    // Strip API-shape keys from the spread so we don't store both `boardId`
+    // (from body) and `teamId` (the canonical DB attribute) on the item.
+    const { boardId: _boardId, board: _board, ...bodyRest } = body as Record<string, unknown>;
+    void _boardId;
+    void _board;
     const updated: Record<string, unknown> = {
       ...(existing ?? {}),
-      ...body,
+      ...bodyRest,
       PK: pk,
       SK: sk,
       entityType: 'USER_PREFERENCE',
