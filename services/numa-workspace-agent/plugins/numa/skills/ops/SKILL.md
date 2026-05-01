@@ -11,6 +11,8 @@ Manage work items on the Numa Ops kanban boards. Create tickets, search and filt
 
 > **Naming note:** The UI calls them "Boards" but the API uses "teams" / `teamId`. When talking to users, say "board". When calling the API, use `teamId`.
 
+> **Use names, not IDs.** Pass human-readable names (e.g. `stageName: "Funnel"`, `customerName: "Acme Corp"`, `assigneeName: "Tom Wiltshire"`) and the bridge will resolve them to IDs automatically. You only need to call `get_team` / `get_config` / `list_*` first if you need to _show_ the data to the user, or if a name lookup fails and you need to disambiguate. **Never invent IDs** — if you don't already know the ID, pass the name and let the bridge resolve it. See [Name-based parameters](#name-based-parameters) below.
+
 ## Available MCP Tool
 
 | Tool                       | Purpose                                                                       | Approval            |
@@ -26,10 +28,39 @@ The `numa_ops_tool` accepts an `operation` string and a `params` JSON string. Th
 ```
 mcp__numa__numa_ops_tool(
     operation="list_tickets",
-    params='{"teamId": "team-abc123"}',
+    params='{"teamName": "Engineering"}',
     description="List all tickets for the Engineering board"
 )
 ```
+
+You can pass either an ID (`teamId`) or the human-readable name (`teamName`) -- the bridge resolves names to IDs automatically.
+
+---
+
+## Name-based parameters
+
+Anywhere an operation accepts an entity ID, you can pass the entity's name instead and the bridge will resolve it for you. This is the preferred way to call ops operations -- skip the get*team / get_config / list*\* dance unless you actually need to display the data to the user.
+
+| Pass this name                                | Resolves to                             | Notes                                                                                                                                                                                                                        |
+| --------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `teamName` / `boardName`                      | `teamId`                                | Case-insensitive match against the user's accessible boards.                                                                                                                                                                 |
+| `stageName`                                   | `stageId`                               | Requires `teamId` or `teamName`. Add `zoneName` if the same stage name appears in multiple zones.                                                                                                                            |
+| `zoneName`                                    | `zoneId`                                | Requires `teamId` or `teamName`.                                                                                                                                                                                             |
+| `workUnitName` / `sprintName`                 | `workUnitId`                            | Requires `teamId` or `teamName`. Active sprint wins on tie.                                                                                                                                                                  |
+| `projectName`                                 | `projectId`                             | Case-insensitive match.                                                                                                                                                                                                      |
+| `ticketTypeName`                              | `ticketTypeId`                          | Matches name (e.g. "Bug") or prefix (e.g. "BUG").                                                                                                                                                                            |
+| `assigneeName` / `reporterName` / `ownerName` | `assigneeId` / `reporterId` / `ownerId` | Matches the staff member's full name; falls back to substring match against name and email.                                                                                                                                  |
+| `customerName`                                | `customerId`                            | Used to _link_ a ticket / activity to a customer. (For `create_customer` / `update_customer` itself, use `companyName` -- that's the actual field for the customer's name.)                                                  |
+| `supplierName`                                | `supplierId`                            | Same pattern as `customerName`.                                                                                                                                                                                              |
+| `lifecycleStageName`                          | `lifecycleStage` (customer)             | Used on customers and on `list_customers` filters.                                                                                                                                                                           |
+| `supplierLifecycleStageName`                  | `lifecycleStage` (supplier)             | Use this on supplier operations to disambiguate from the customer config. (For `list_suppliers`, `update_supplier`, etc., a plain `lifecycleStageName` will also work -- the bridge knows the operation is supplier-scoped.) |
+
+**Rules:**
+
+- **ID wins.** If you pass both an ID and a name (e.g. `stageId` and `stageName`), the ID is used and the name is ignored.
+- **Errors are surfaced cleanly.** If a name doesn't match (or matches multiple entities), the bridge returns a structured error listing the available options. Pass that information back to the user and ask for clarification.
+- **Display names are canonicalized.** When you pass `assigneeName: "tom"` and the bridge resolves to "Tom Wiltshire", the canonical name is what gets stored on the ticket. You don't need to look up the canonical spelling first.
+- **bulk_update_tickets:** name-based fields work inside the `changes` dict too.
 
 ---
 
@@ -238,9 +269,9 @@ Valid `statusType` values per zone type:
 
 #### create_ticket
 
-**IMPORTANT:** Call `get_config` first to get valid ticket types and staff. Call `get_team` to get valid stage IDs for the board.
+**Preferred:** Pass `teamName`, `stageName`, `assigneeName`, `customerName`, etc. and the bridge resolves them to IDs (see [Name-based parameters](#name-based-parameters)). Only call `get_config` / `get_team` first if you need to _show_ the data to the user.
 
-> **WARNING:** `stageId` MUST be a valid UUID from the `get_team` response (`zones[].stages[].id`). Do NOT use status names like "backlog", "completed", or "active" -- they will be rejected. Invalid stage IDs will return a 400 error.
+> **NEVER invent IDs.** If you don't already know the `stageId` for a stage, pass `stageName` and let the bridge resolve it. Hallucinated IDs (e.g. `custom-1234567890-abc123` patterns from previous tool results) will be rejected with a 400 error.
 
 | Parameter       | Type   | Required | Description                                                                     |
 | --------------- | ------ | -------- | ------------------------------------------------------------------------------- |
@@ -552,16 +583,19 @@ Parameters are identical to customer activity operations, but use `supplierId` i
 
 ### Uploads
 
-| Operation           | Description                                                 | Approval |
-| ------------------- | ----------------------------------------------------------- | -------- |
-| `upload_attachment` | Get a presigned URL to upload a file attachment to a ticket | Yes      |
+| Operation           | Description                                                                | Approval |
+| ------------------- | -------------------------------------------------------------------------- | -------- |
+| `upload_attachment` | Upload a file from the workspace to a ticket as an attachment on a comment | Yes      |
 
-| Parameter           | Type   | Required | Description                                                         |
-| ------------------- | ------ | -------- | ------------------------------------------------------------------- |
-| `fileName`          | string | Yes      | Name of the file to upload                                          |
-| `contentType`       | string | Yes      | MIME type (e.g., "application/pdf")                                 |
-| `ticketId`          | string | No       | Associate with a specific ticket                                    |
-| `workspaceFilePath` | string | No       | Pass absolute workspace path (e.g., `/workdir/foo`) to auto-upload. |
+The file at `workspaceFilePath` is PUT to S3 via a presigned URL, and a system comment (`📎 Attached: <name>`) is added to the ticket carrying the attachment record. The attachment shows up under the ticket's Attachments section in the UI and in `get_ticket` under `comments[].attachments`.
+
+| Parameter           | Type   | Required | Description                                                                                                      |
+| ------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `workspaceFilePath` | string | Yes      | Absolute workspace path (e.g. `/workdir/uploads/screenshot.png`). User-pasted files land in `/workdir/uploads/`. |
+| `ticketId`          | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)                                                                  |
+| `displayId`         | string | No       | Display ID (e.g. `BUG-064`) -- resolves automatically                                                            |
+| `fileName`          | string | Yes      | Name to store the file as (typically the basename of `workspaceFilePath`).                                       |
+| `contentType`       | string | Yes      | MIME type (e.g., `image/png`, `application/pdf`).                                                                |
 
 ---
 
@@ -697,41 +731,53 @@ create_customer(
 
 ## Workflow Examples
 
-### Create a ticket
+### Create a ticket (preferred -- names only)
 
 ```
-# 1. Load config to get ticket types, statuses, staff
-mcp__numa__numa_ops_tool(operation="get_config", params='{}', description="Load ops config")
-
-# 2. List boards to find the right one
-mcp__numa__numa_ops_tool(operation="list_teams", params='{}', description="List all boards")
-
-# 3. Get the board to find valid stage IDs
-mcp__numa__numa_ops_tool(operation="get_team", params='{"teamId":"team-abc"}', description="Get board details with stages")
-
-# 4. Create the ticket with a valid stageId
+# One call. The bridge resolves teamName, stageName, ticketTypeName, and
+# assigneeName to IDs automatically.
 mcp__numa__numa_ops_tool(
     operation="create_ticket",
-    params='{"teamId":"team-abc","stageId":"stage-xyz","title":"Fix login bug","ticketTypeId":"tt-bug123","priority":"high","description":"<p>Users report <strong>500 errors</strong> on the login page.</p><ul><li>Affects all browsers</li><li>Started after last deploy</li></ul>"}',
-    description="Create ticket: Fix login bug (high priority) in Engineering board"
+    params='{"teamName":"Engineering","stageName":"Triage","title":"Fix login bug","ticketTypeName":"Bug","priority":"high","assigneeName":"Tom Wiltshire","description":"<p>Users report <strong>500 errors</strong> on the login page.</p><ul><li>Affects all browsers</li><li>Started after last deploy</li></ul>"}',
+    description="Create ticket: Fix login bug (high priority) in Engineering board, assigned to Tom Wiltshire"
 )
 ```
 
 ### Search and update
 
 ```
-# Search for tickets
+# Search for tickets by board name
 mcp__numa__numa_ops_tool(
     operation="search_tickets",
-    params='{"query":"login bug","teamId":"team-abc"}',
-    description="Search for login bug tickets"
+    params='{"query":"login bug","teamName":"Engineering"}',
+    description="Search for login bug tickets in Engineering board"
 )
 
-# Move ticket to a different stage
+# Move ticket to a different stage by name
 mcp__numa__numa_ops_tool(
     operation="update_ticket",
-    params='{"ticketId":"ticket-xyz","teamId":"team-abc","stageId":"stage-inprogress"}',
-    description="Move ticket to In Progress stage"
+    params='{"displayId":"BUG-081","stageName":"In Progress"}',
+    description='Move BUG-081 to "In Progress" stage'
+)
+```
+
+### Move a customer through their lifecycle
+
+```
+mcp__numa__numa_ops_tool(
+    operation="update_customer",
+    params='{"customerName":"Acme Corp","lifecycleStageName":"At Risk"}',
+    description='Move Acme Corp to "At Risk" lifecycle stage'
+)
+```
+
+### Bulk reassign by name
+
+```
+mcp__numa__numa_ops_tool(
+    operation="bulk_update_tickets",
+    params='{"ticketIds":["t-1","t-2","t-3"],"changes":{"teamName":"Engineering","assigneeName":"Tom Wiltshire"}}',
+    description="Reassign 3 tickets to Tom Wiltshire"
 )
 ```
 
@@ -739,11 +785,12 @@ mcp__numa__numa_ops_tool(
 
 ## Best Practices
 
-1. **Always call `get_config` first** — you need ticket types, statuses, and staff IDs before creating tickets
-2. **Call `get_team` to get stage IDs** — `stageId` must be a valid UUID from `get_team` stages. The API will reject invalid stage IDs with a 400 error. Do not use status names like "backlog" or "completed" as stage IDs
-3. **Link tickets using ticketUrl** — ticket responses include a `ticketUrl` field (e.g., `https://acme.numa.arcanum.ai/ops?ticket=ENG-42`). Always include this link when referencing tickets so users can click through directly
-4. **Include full content in approval descriptions** — for write operations, describe exactly what will be created/changed
-5. **Respect team scoping** — users can only see boards they have access to
-6. **Use search before creating** — check if a similar ticket already exists
-7. **Use HTML for rich text** — ticket descriptions and comments render HTML, not markdown. Use `<p>`, `<strong>`, `<em>`, `<ul><li>`, `<ol><li>`, `<a href="...">`, `<h3>`, etc. Plain text is also fine but will not be formatted. Do NOT use markdown syntax (e.g., `**bold**`, `- list`) as it will render as literal text
-8. **Board owner operations** — `update_team`, `update_zones`, `update_stages` require board owner or admin access. Use `get_team` to check the current user's permissions
+1. **Use names, not IDs.** Pass `teamName`, `stageName`, `assigneeName`, `customerName`, `lifecycleStageName`, etc. The bridge resolves them to IDs. Skip the lookup dance unless you need to show data to the user.
+2. **Never invent IDs.** If you don't know an ID, pass the name -- the bridge resolves it. Don't pattern-match IDs from prior tool results into a guess.
+3. **Trust the structured errors.** When a name doesn't match or matches multiple entities, the bridge returns the available options. Pass that back to the user; don't guess.
+4. **Link tickets using ticketUrl** -- ticket responses include a `ticketUrl` field (e.g. `https://acme.numa.arcanum.ai/ops?ticket=ENG-42`). Always include this link when referencing tickets so users can click through.
+5. **Include full content in approval descriptions** -- for write operations, describe exactly what will be created/changed.
+6. **Respect team scoping** -- users can only see boards they have access to.
+7. **Use search before creating** -- check if a similar ticket already exists.
+8. **Use HTML for rich text** -- ticket descriptions and comments render HTML, not markdown. Use `<p>`, `<strong>`, `<em>`, `<ul><li>`, `<ol><li>`, `<a href="...">`, `<h3>`, etc. Plain text is also fine but will not be formatted. Do NOT use markdown syntax (e.g. `**bold**`, `- list`) as it will render as literal text.
+9. **Board owner operations** -- `update_team`, `update_zones`, `update_stages` require board owner or admin access.

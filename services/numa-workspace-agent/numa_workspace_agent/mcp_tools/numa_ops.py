@@ -255,7 +255,13 @@ def _save_ops_result(result: Any, operation: str) -> str:
                 "description": (
                     "JSON string of operation-specific parameters using camelCase keys "
                     "(e.g. teamId, stageId, ticketTypeId, assigneeId, displayId). "
-                    "See the ops skill documentation for required/optional params per operation."
+                    "PREFER passing names instead of IDs -- the bridge resolves "
+                    "teamName/boardName, stageName, zoneName, ticketTypeName, "
+                    "assigneeName/reporterName/ownerName, customerName, supplierName, "
+                    "projectName, workUnitName/sprintName, and lifecycleStageName "
+                    "to their corresponding IDs automatically. NEVER invent IDs -- "
+                    "if you don't already know one, pass the name. "
+                    "See the ops skill for required/optional params per operation."
                 ),
             },
             "description": {
@@ -287,6 +293,38 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
         params = json.loads(params_str) if isinstance(params_str, str) else params_str
     except json.JSONDecodeError as e:
         return _err(f"Invalid params JSON: {e}")
+
+    # upload_attachment is a workspace-driven flow: the file must exist on the
+    # MicroVM filesystem and must be linked to a ticket. Without both, the API
+    # returns a presigned URL but the file is never uploaded and no comment is
+    # created, so the call silently no-ops (BUG-065).
+    if operation == "upload_attachment":
+        ws_path = params.get("workspaceFilePath") or params.get("workspace_file_path")
+        ticket_ref = (
+            params.get("ticketId")
+            or params.get("ticket_id")
+            or params.get("displayId")
+            or params.get("display_id")
+        )
+        if not ws_path:
+            return _err(
+                "upload_attachment requires workspaceFilePath. Pass an absolute path "
+                "to the file in the workspace (e.g. '/workdir/uploads/screenshot.png'). "
+                "The file is uploaded directly from the workspace; there is no other "
+                "supported upload path from chat."
+            )
+        if not ticket_ref:
+            return _err(
+                "upload_attachment requires ticketId or displayId so the file can be "
+                "linked to a ticket. Without one, the upload would not be associated "
+                "with anything."
+            )
+        if not Path(ws_path).is_file():
+            return _err(
+                f"Workspace file not found at {ws_path}. "
+                "User-pasted files land in /workdir/uploads/. Use the Glob tool to "
+                "locate the actual filename before calling upload_attachment."
+            )
 
     # Pop approval ID assigned by sdk_runner (must match its key format)
     approval_key = f"ops-{operation.replace('_', '-')}"
@@ -364,23 +402,28 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                         urllib.request.urlopen(req, timeout=60.0)
 
                     ticket_id = params.get("ticketId") or params.get("ticket_id")
-                    if ticket_id and "s3Key" in result:
+                    display_id = params.get("displayId") or params.get("display_id")
+                    if (ticket_id or display_id) and "s3Key" in result:
+                        comment_params: dict[str, Any] = {
+                            "content": f"📎 Attached: {local_path.name}",
+                            "attachments": [
+                                {
+                                    "name": local_path.name,
+                                    "s3Key": result["s3Key"],
+                                    "size": file_size,
+                                    "mimeType": content_type,
+                                }
+                            ],
+                        }
+                        if ticket_id:
+                            comment_params["ticketId"] = ticket_id
+                        else:
+                            comment_params["displayId"] = display_id
                         invoke_workspace_tool(
                             "ops_add_comment",
                             {
                                 "operation": "add_comment",
-                                "params": {
-                                    "ticketId": ticket_id,
-                                    "content": f"📎 Attached: {local_path.name}",
-                                    "attachments": [
-                                        {
-                                            "name": local_path.name,
-                                            "s3Key": result["s3Key"],
-                                            "size": file_size,
-                                            "mimeType": content_type,
-                                        }
-                                    ],
-                                },
+                                "params": comment_params,
                                 "description": f"Auto-attaching uploaded file {local_path.name} to ticket",
                                 "auto_approved": True,
                                 "request_id": None,
