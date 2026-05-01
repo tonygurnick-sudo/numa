@@ -21,17 +21,17 @@ class FakeCache:
     Any unused method falls back to empty results.
     """
 
-    def teams(self):
+    def boards(self):
         return [
-            {"id": "team-eng", "name": "Engineering"},
-            {"id": "team-sales", "name": "Sales"},
+            {"id": "board-eng", "name": "Engineering"},
+            {"id": "board-sales", "name": "Sales"},
         ]
 
-    def team_details(self, team_id):
-        if team_id != "team-eng":
+    def board_details(self, board_id):
+        if board_id != "board-eng":
             return {}
         return {
-            "team": {"id": "team-eng", "name": "Engineering"},
+            "board": {"id": "board-eng", "name": "Engineering"},
             "zones": [
                 {"id": "zone-backlog", "name": "Backlog", "zoneType": "backlog"},
                 {"id": "zone-board", "name": "Board", "zoneType": "board"},
@@ -80,13 +80,13 @@ class FakeCache:
     def suppliers_by_search(self, _term):
         return []
 
-    def work_units(self, _team_id):
+    def work_units(self, _board_id):
         return [{"id": "wu-sprint1", "name": "Sprint 1", "status": "active"}]
 
 
 def test_full_create_ticket_resolves_all_names():
     params = {
-        "teamName": "Engineering",
+        "boardName": "Engineering",
         "stageName": "Triage",
         "ticketTypeName": "Bug",
         "assigneeName": "Tom",
@@ -94,20 +94,20 @@ def test_full_create_ticket_resolves_all_names():
         "priority": "high",
     }
     ops._resolve_names_in_params(params, FakeCache())
-    assert params["teamId"] == "team-eng"
+    assert params["boardId"] == "board-eng"
     assert params["stageId"] == "stage-triage"
     assert params["ticketTypeId"] == "tt-bug"
     assert params["assigneeId"] == "sub-tom"
     # Canonical name replaces partial input
     assert params["assigneeName"] == "Tom Wiltshire"
     # Lookup-only keys are popped
-    assert "teamName" not in params
+    assert "boardName" not in params
     assert "stageName" not in params
     assert "ticketTypeName" not in params
 
 
 def test_stage_ambiguity_surfaces_zone_options():
-    params = {"teamName": "Engineering", "stageName": "Done"}
+    params = {"boardName": "Engineering", "stageName": "Done"}
     with pytest.raises(ValueError) as exc_info:
         ops._resolve_names_in_params(params, FakeCache())
     msg = str(exc_info.value)
@@ -116,28 +116,28 @@ def test_stage_ambiguity_surfaces_zone_options():
 
 
 def test_stage_disambiguation_via_zone_name():
-    params = {"teamName": "Engineering", "stageName": "Done", "zoneName": "Board"}
+    params = {"boardName": "Engineering", "stageName": "Done", "zoneName": "Board"}
     ops._resolve_names_in_params(params, FakeCache())
     assert params["stageId"] == "stage-done-2"
 
 
 def test_id_wins_over_name():
-    params = {"teamId": "team-eng", "teamName": "Sales"}
+    params = {"boardId": "board-eng", "boardName": "Sales"}
     ops._resolve_names_in_params(params, FakeCache())
-    assert params["teamId"] == "team-eng"
-    assert "teamName" not in params
+    assert params["boardId"] == "board-eng"
+    assert "boardName" not in params
 
 
-def test_stage_without_team_raises_clear_error():
+def test_stage_without_board_raises_clear_error():
     params = {"stageName": "Triage"}
     with pytest.raises(ValueError) as exc_info:
         ops._resolve_names_in_params(params, FakeCache())
     msg = str(exc_info.value).lower()
-    assert "without" in msg and "team" in msg
+    assert "without" in msg and "board" in msg
 
 
 def test_missing_stage_lists_available_options():
-    params = {"teamName": "Engineering", "stageName": "Marshmallow"}
+    params = {"boardName": "Engineering", "stageName": "Marshmallow"}
     with pytest.raises(ValueError) as exc_info:
         ops._resolve_names_in_params(params, FakeCache())
     msg = str(exc_info.value)
@@ -172,11 +172,11 @@ def test_partial_staff_name_canonicalizes_to_full_name():
     assert params["assigneeName"] == "Tom Wiltshire"
 
 
-def test_bulk_update_changes_resolves_with_parent_team():
-    top = {"teamName": "Engineering", "ticketIds": ["t1"]}
+def test_bulk_update_changes_resolves_with_parent_board():
+    top = {"boardName": "Engineering", "ticketIds": ["t1"]}
     ops._resolve_names_in_params(top, FakeCache())
     changes = {"stageName": "Triage", "assigneeName": "Greg"}
-    ops._resolve_names_in_params(changes, FakeCache(), parent_team_id=top["teamId"])
+    ops._resolve_names_in_params(changes, FakeCache(), parent_board_id=top["boardId"])
     assert changes["stageId"] == "stage-triage"
     assert changes["assigneeId"] == "sub-greg"
 
@@ -187,15 +187,15 @@ def test_ticket_type_resolves_by_prefix():
     assert params["ticketTypeId"] == "tt-feat"
 
 
-def test_board_name_alias_for_team_name():
+def test_board_name_resolves_to_id():
     params = {"boardName": "Sales"}
     ops._resolve_names_in_params(params, FakeCache())
-    assert params["teamId"] == "team-sales"
+    assert params["boardId"] == "board-sales"
 
 
 def test_no_name_fields_is_a_no_op():
     """Resolution shouldn't disturb params when no name fields are present."""
-    params = {"teamId": "team-eng", "stageId": "stage-triage", "title": "X"}
+    params = {"boardId": "board-eng", "stageId": "stage-triage", "title": "X"}
     before = dict(params)
     ops._resolve_names_in_params(params, FakeCache())
     assert params == before

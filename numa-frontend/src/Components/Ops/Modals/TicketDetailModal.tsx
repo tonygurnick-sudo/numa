@@ -46,7 +46,7 @@ interface TicketDetailModalProps {
   ticketId: string | null;
   onHide: () => void;
   onDeleted?: () => void;
-  teamIdOverride?: string | null;
+  boardIdOverride?: string | null;
 }
 
 // ─── Priority Options ───────────────────────────────────────────────────────
@@ -150,14 +150,14 @@ export function TicketDetailModal({
   ticketId,
   onHide,
   onDeleted,
-  teamIdOverride = null,
+  boardIdOverride = null,
 }: TicketDetailModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const { showToast } = useToast();
   const showAlert = useAlert();
   const [archiving, setArchiving] = useState(false);
-  const { config, teamData, teams, workUnits, refreshTickets, refreshCrmData } = useOps();
+  const { config, boardData, boards, workUnits, refreshTickets, refreshCrmData } = useOps();
 
   // ── Core state ──────────────────────────────────────────────────────────
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -213,8 +213,8 @@ export function TicketDetailModal({
     ? config?.ticketTypes.find((tt) => tt.id === ticket.ticketTypeId)
     : undefined;
 
-  const team = teamData?.team ?? null;
-  const effectiveTeamId = teamIdOverride ?? team?.id ?? null;
+  const team = boardData?.board ?? null;
+  const effectiveTeamId = boardIdOverride ?? team?.id ?? null;
 
   // ── Load ticket ─────────────────────────────────────────────────────────
 
@@ -229,12 +229,12 @@ export function TicketDetailModal({
       setLinks(response.links ?? []);
 
       // Load the ticket's actual team data so the stage dropdown is always accurate
-      const ticketTeam = response.ticket.teamId;
+      const ticketTeam = response.ticket.boardId;
       if (ticketTeam) {
-        OpsService.getTeam(numaGet, ticketTeam)
+        OpsService.getBoard(numaGet, ticketTeam)
           .then((teamResp) => setTicketTeamData({ zones: teamResp.zones, stages: teamResp.stages }))
           .catch(() => {
-            /* fall back to context teamData */
+            /* fall back to context boardData */
           });
       }
     } catch (err) {
@@ -321,7 +321,7 @@ export function TicketDetailModal({
       try {
         const updated = await OpsService.updateTicket(numaPut, ticketId, {
           ...payload,
-          teamId: ticket.teamId,
+          boardId: ticket.boardId,
           version: ticket.version,
         });
         setTicket(updated);
@@ -589,13 +589,13 @@ export function TicketDetailModal({
     if (!ticket || !config) return null;
 
     const staff = config.staff;
-    const ticketTeamId = ticket.teamId;
+    const ticketTeamId = ticket.boardId;
     const projects = config.projects.filter(
       (p) => !p.boardIds?.length || p.boardIds.includes(ticketTeamId) || p.id === ticket.projectId
     );
     const hasWorkUnits = team?.workUnitSeries?.enabled === true;
-    const allZones = ticketTeamData?.zones ?? teamData?.zones ?? [];
-    const allStages = ticketTeamData?.stages ?? teamData?.stages ?? [];
+    const allZones = ticketTeamData?.zones ?? boardData?.zones ?? [];
+    const allStages = ticketTeamData?.stages ?? boardData?.stages ?? [];
     const currentStage = allStages.find((s) => s.id === ticket.stageId);
     const pillColor = STATUS_PILL_COLORS[currentStage?.statusType ?? 'backlog'] ?? '#9ca3af';
 
@@ -1128,10 +1128,10 @@ export function TicketDetailModal({
                 </span>
               </>
             )}
-            {teamData?.team?.name && (
+            {boardData?.board?.name && (
               <>
                 <i className="bi bi-chevron-right" style={{ fontSize: '0.5rem' }} />
-                <span>{teamData.team.name}</span>
+                <span>{boardData.board.name}</span>
               </>
             )}
 
@@ -1356,7 +1356,7 @@ export function TicketDetailModal({
                   <i className="bi bi-clock-history" />
                   {t('tickets.history')}
                 </button>
-                {teams.length > 1 && (
+                {boards.length > 1 && (
                   <button type="button" className="ticket-detail-footer-btn" onClick={() => setShowMoveModal(true)}>
                     <i className="bi bi-arrow-right-square" />
                     {t('moveToBoard.button')}
@@ -1392,8 +1392,8 @@ export function TicketDetailModal({
           onHide={() => setShowMoveModal(false)}
           onMoved={handleTicketMoved}
           ticket={ticket}
-          currentTeamName={teams.find((t) => t.id === ticket.teamId)?.name ?? teamData?.team?.name ?? ''}
-          availableTeams={teams.filter((t) => t.id !== ticket.teamId)}
+          currentBoardName={boards.find((t) => t.id === ticket.boardId)?.name ?? boardData?.board?.name ?? ''}
+          availableBoards={boards.filter((t) => t.id !== ticket.boardId)}
         />
       )}
 

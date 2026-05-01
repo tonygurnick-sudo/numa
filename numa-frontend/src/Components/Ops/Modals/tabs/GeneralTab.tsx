@@ -59,7 +59,7 @@ export function GeneralTab({
         <div className="d-flex align-items-center gap-2 mb-3 p-2 bg-light rounded">
           <StaffAvatar staff={owner} size={28} />
           <div>
-            <div className="small text-muted">{t('teams.owner')}</div>
+            <div className="small text-muted">{t('boards.owner')}</div>
             <div style={{ fontSize: '0.85rem' }}>{owner.name || owner.email}</div>
           </div>
         </div>
@@ -69,12 +69,12 @@ export function GeneralTab({
       <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
         <h6 className="fw-bold text-dark mb-3">Basic Information</h6>
         <Form.Group className="mb-3">
-          <Form.Label className="small fw-medium text-muted">{t('teams.name')}</Form.Label>
+          <Form.Label className="small fw-medium text-muted">{t('boards.name')}</Form.Label>
           <Form.Control type="text" value={name} onChange={(e) => setName(e.target.value)} />
         </Form.Group>
 
         <Form.Group>
-          <Form.Label className="small fw-medium text-muted">{t('teams.color')}</Form.Label>
+          <Form.Label className="small fw-medium text-muted">{t('boards.color')}</Form.Label>
           <div className="d-flex align-items-center gap-3">
             <Form.Control
               type="color"

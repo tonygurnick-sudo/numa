@@ -212,7 +212,7 @@ export type WorkUnitSeriesConfig = {
   backlogZoneId?: string;
 } | null;
 
-export type Team = {
+export type Board = {
   id: string;
   name: string;
   description?: string;
@@ -233,13 +233,19 @@ export type Team = {
   order: number;
 };
 
+/** @deprecated Use Board instead. */
+export type Team = Board;
+
 export type ZoneType = 'board' | 'backlog';
 
-export type TeamPreset = 'basic' | 'normal' | 'support' | 'solo' | 'monthly' | 'development';
+export type BoardPreset = 'basic' | 'normal' | 'support' | 'solo' | 'monthly' | 'development';
+
+/** @deprecated Use BoardPreset instead. */
+export type TeamPreset = BoardPreset;
 
 export type WorkZone = {
   id: string;
-  teamId: string;
+  boardId: string;
   name: string;
   zoneType: ZoneType;
   order: number;
@@ -249,7 +255,7 @@ export type WorkZone = {
 
 export type WorkStage = {
   id: string;
-  teamId: string;
+  boardId: string;
   zoneId: string;
   name: string;
   statusType: StatusType;
@@ -268,7 +274,7 @@ export type TicketSourceType = 'app' | 'chat' | 'agent' | 'manual';
 export type Ticket = {
   id: string;
   displayId: string;
-  teamId: string;
+  boardId: string;
   ticketTypeId: string;
   title: string;
   description: string;
@@ -315,7 +321,7 @@ export type Ticket = {
 export type LinkedWorkTicket = {
   id: string;
   displayId: string;
-  teamId: string;
+  boardId: string;
   title: string;
   statusType: StatusType;
   priority: TicketPriority;
@@ -336,7 +342,7 @@ export type Comment = {
   id: string;
   commentId?: string;
   ticketId: string;
-  teamId?: string;
+  boardId?: string;
   content: string;
   authorId: string;
   authorEmail?: string;
@@ -365,7 +371,7 @@ export type WorkUnitStatus = 'planning' | 'active' | 'completed';
 
 export type WorkUnit = {
   id: string;
-  teamId: string;
+  boardId: string;
   name: string;
   goal?: string | null;
   status: WorkUnitStatus;
@@ -396,7 +402,7 @@ export type AuditChange = {
 export type AuditEntry = {
   id: string;
   ticketId: string;
-  teamId: string;
+  boardId: string;
   userId: string;
   userName: string;
   action: AuditAction;
@@ -414,7 +420,7 @@ export type UserPreference = {
   savedFilters?: SavedFilter[] | null;
   columnOrder?: string[] | null;
   columnVisibility?: Record<string, boolean> | null;
-  lastViewedTeamId?: string | null;
+  lastViewedBoardId?: string | null;
   updatedAt: string;
 };
 
@@ -525,7 +531,7 @@ export type Document = {
 // ─── Request Payload Types ─────────────────────────────────────────────────
 
 export type CreateTicketPayload = {
-  teamId: string;
+  boardId: string;
   ticketTypeId: string;
   title: string;
   description?: string;
@@ -557,8 +563,8 @@ export type UpdateTicketPayload = {
   statusType?: StatusType | 'deleted';
   zoneId?: string;
   stageId?: string;
-  teamId?: string;
-  currentTeamId?: string;
+  boardId?: string;
+  currentBoardId?: string;
   ticketTypeId?: string;
   archived?: boolean;
   assigneeId?: string | null;
@@ -580,7 +586,7 @@ export type UpdateTicketPayload = {
   version: number;
 };
 
-export type CreateTeamPayload = {
+export type CreateBoardPayload = {
   name: string;
   color?: string;
   preset?: string;
@@ -595,6 +601,9 @@ export type CreateTeamPayload = {
   announcement?: string | null;
 };
 
+/** @deprecated Use CreateBoardPayload instead. */
+export type CreateTeamPayload = CreateBoardPayload;
+
 export type CreateCommentPayload = {
   content: string;
   attachments?: CommentAttachment[];
@@ -605,8 +614,8 @@ export type CreateLinkPayload = {
   linkedTicketDisplayId: string;
   linkedTicketTitle?: string;
   linkType: TicketLinkType;
-  teamId?: string;
-  linkedTeamId?: string;
+  boardId?: string;
+  linkedBoardId?: string;
 };
 
 export type PresignedUrlPayload = {
@@ -700,7 +709,7 @@ export type UpdateWorkUnitPayload = {
 export type BulkUpdateTicketsPayload = {
   ticketIds: string[];
   changes: {
-    teamId?: string;
+    boardId?: string;
     assigneeId?: string | null;
     zoneId?: string;
     stageId?: string;
@@ -722,14 +731,17 @@ export type TicketResponse = {
   links?: TicketLink[];
 };
 
-export type TeamResponse = {
-  team: Team;
+export type BoardResponse = {
+  board: Board;
   zones: WorkZone[];
   stages: WorkStage[];
   activeWorkUnit?: WorkUnit | null;
 };
 
-export type TeamSummary = {
+/** @deprecated Use BoardResponse instead. */
+export type TeamResponse = BoardResponse;
+
+export type BoardSummary = {
   id: string;
   name: string;
   color?: string;
@@ -738,15 +750,21 @@ export type TeamSummary = {
   accessControl?: AccessControl;
 };
 
+/** @deprecated Use BoardSummary instead. */
+export type TeamSummary = BoardSummary;
+
 export type StaffSyncResponse = {
   staff: StaffProfile[];
   lastSyncedAt: string;
   skipped?: boolean;
 };
 
-export type TeamSummaryListResponse = {
-  teams: TeamSummary[];
+export type BoardSummaryListResponse = {
+  boards: BoardSummary[];
 };
+
+/** @deprecated Use BoardSummaryListResponse instead. */
+export type TeamSummaryListResponse = BoardSummaryListResponse;
 
 export type CommentListResponse = {
   comments: Comment[];
@@ -768,9 +786,9 @@ export type WorkUnitResponse = {
 };
 
 export type MetricsResponse = {
-  teams: {
-    teamId: string;
-    teamName: string;
+  boards: {
+    boardId: string;
+    boardName: string;
     counts: Record<StatusType, number>;
   }[];
   totals: {

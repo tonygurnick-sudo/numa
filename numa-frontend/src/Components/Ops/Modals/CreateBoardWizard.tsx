@@ -6,7 +6,7 @@ import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import { BOARD_COLORS } from '../Shared/colorUtils';
 import {
-  TEAM_PRESETS,
+  BOARD_PRESETS,
   ZONE_STATUS_TYPES,
   ZONE_TYPE_BADGE_COLORS,
   getPreset,
@@ -40,7 +40,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
   const [step, setStep] = useState(1);
 
   // ── Step 1: Name & Color ─────────────────────────────────────────────────
-  const [teamName, setTeamName] = useState('');
+  const [boardName, setTeamName] = useState('');
   const [teamColor, setTeamColor] = useState(BOARD_COLORS[0]);
   const [presetId, setPresetId] = useState('standard');
   const [enableWorkUnits, setEnableWorkUnits] = useState(false);
@@ -138,8 +138,8 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
       const isAllSelected = selectedTicketTypes.length === config.ticketTypes.length + customTicketTypes.length;
 
       // Create the team
-      const team = await OpsService.createTeam(numaPost, {
-        name: teamName.trim(),
+      const team = await OpsService.createBoard(numaPost, {
+        name: boardName.trim(),
         color: teamColor,
         preset: presetId,
         customStages: customStages ?? undefined,
@@ -149,7 +149,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
           : resolvedTicketTypes.length > 0
             ? resolvedTicketTypes
             : undefined,
-        accessControl: { mode: accessMode, users: accessMode === 'specific' ? selectedUserIds : [] },
+        accessControl: { mode: accessMode, users: accessMode === 'specific' ? selectedUserIds : [], owners: [] },
       });
 
       // Always refresh global config so newly created ticket types
@@ -164,7 +164,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
       setCreating(false);
     }
   }, [
-    teamName,
+    boardName,
     teamColor,
     presetId,
     customStages,
@@ -185,7 +185,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
   const canProceed = (): boolean => {
     switch (step) {
       case 1:
-        return teamName.trim().length > 0;
+        return boardName.trim().length > 0;
       case 2:
         return selectedTicketTypes.length > 0 || customTicketTypes.length > 0;
       case 3:
@@ -209,13 +209,13 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
   const stepTitle = (): string => {
     switch (step) {
       case 1:
-        return t('teams.step1');
+        return t('boards.step1');
       case 2:
-        return t('teams.step2');
+        return t('boards.step2');
       case 3:
-        return t('teams.step3');
+        return t('boards.step3');
       case 4:
-        return t('teams.step4');
+        return t('boards.step4');
       default:
         return '';
     }
@@ -270,7 +270,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
   return (
     <Modal show={show} onHide={onHide} size="lg" fullscreen="lg-down" centered scrollable>
       <Modal.Header closeButton>
-        <Modal.Title>{t('teams.create')}</Modal.Title>
+        <Modal.Title>{t('boards.create')}</Modal.Title>
       </Modal.Header>
 
       <Modal.Body style={{ minHeight: 360 }}>
@@ -298,12 +298,12 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
         {step === 1 && (
           <>
             <Form.Group className="mb-3">
-              <Form.Label>{t('teams.name')}</Form.Label>
-              <Form.Control type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} autoFocus />
+              <Form.Label>{t('boards.name')}</Form.Label>
+              <Form.Control type="text" value={boardName} onChange={(e) => setTeamName(e.target.value)} autoFocus />
             </Form.Group>
 
             <Form.Group className="mb-3">
-              <Form.Label>{t('teams.color')}</Form.Label>
+              <Form.Label>{t('boards.color')}</Form.Label>
               <div className="d-flex align-items-center gap-3">
                 <Form.Control
                   type="color"
@@ -324,9 +324,9 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
             </Form.Group>
 
             <Form.Group className="mb-3">
-              <Form.Label>{t('teams.preset')}</Form.Label>
+              <Form.Label>{t('boards.preset')}</Form.Label>
               <div className="d-flex flex-wrap gap-2">
-                {TEAM_PRESETS.map((p) => (
+                {BOARD_PRESETS.map((p) => (
                   <div
                     key={p.id}
                     className={`border rounded p-3 flex-grow-1 cursor-pointer ${presetId === p.id ? 'border-primary bg-primary bg-opacity-10' : ''}`}
@@ -388,19 +388,19 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                 <Form.Check
                   type="switch"
                   id="enable-work-units-wizard"
-                  label={t('teams.enableWorkUnits')}
+                  label={t('boards.enableWorkUnits')}
                   checked={enableWorkUnits}
                   onChange={(e) => setEnableWorkUnits(e.target.checked)}
                 />
-                <p className="text-muted small mb-3">{t('teams.enableWorkUnitsHelp')}</p>
+                <p className="text-muted small mb-3">{t('boards.enableWorkUnitsHelp')}</p>
                 {enableWorkUnits && (
                   <div className="d-flex gap-3 ps-4">
                     <Form.Group>
-                      <Form.Label>{t('teams.workUnitLabel')}</Form.Label>
+                      <Form.Label>{t('boards.workUnitLabel')}</Form.Label>
                       <Form.Control size="sm" value={wuLabel} onChange={(e) => setWuLabel(e.target.value)} />
                     </Form.Group>
                     <Form.Group>
-                      <Form.Label>{t('teams.patternStart')}</Form.Label>
+                      <Form.Label>{t('boards.patternStart')}</Form.Label>
                       {wuPatternType === 'sequential' ? (
                         <Form.Control
                           size="sm"
@@ -449,7 +449,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
         {step === 2 && (
           <>
             <p className="text-muted small mb-3">
-              {t('teams.ticketTypesHelp', 'Please select the ticket types you want for this board.')}
+              {t('boards.ticketTypesHelp', 'Please select the ticket types you want for this board.')}
             </p>
 
             {config.ticketTypes.map((tt) => (
@@ -506,7 +506,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                       size="sm"
                       value={newTypeName}
                       onChange={(e) => setNewTypeName(e.target.value)}
-                      placeholder={t('teams.newTypeName')}
+                      placeholder={t('boards.newTypeName')}
                     />
                   </Form.Group>
                   <Form.Group style={{ width: 120 }}>
@@ -514,7 +514,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                       size="sm"
                       value={newTypePrefix}
                       onChange={(e) => setNewTypePrefix(e.target.value)}
-                      placeholder={t('teams.newTypePrefix')}
+                      placeholder={t('boards.newTypePrefix')}
                       maxLength={6}
                     />
                   </Form.Group>
@@ -529,7 +529,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
             ) : (
               <Button variant="outline-secondary" size="sm" className="mt-2" onClick={() => setShowAddType(true)}>
                 <i className="bi bi-plus me-1" />
-                {t('teams.addCustomType')}
+                {t('boards.addCustomType')}
               </Button>
             )}
           </>
@@ -538,7 +538,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
         {/* ── Step 3: Workflow Preview/Customization ── */}
         {step === 3 && (
           <>
-            <p className="text-muted small mb-3">{t('teams.workflowPreviewHelp')}</p>
+            <p className="text-muted small mb-3">{t('boards.workflowPreviewHelp')}</p>
 
             {workflowZones.map((zone, zoneIdx) => (
               <div key={zoneIdx} className="border rounded mb-3">
@@ -572,7 +572,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                   <div className="d-flex gap-2 mt-2">
                     <Form.Control
                       size="sm"
-                      placeholder={t('teams.newStageName')}
+                      placeholder={t('boards.newStageName')}
                       value={newStageByZone[zoneIdx]?.name ?? ''}
                       onChange={(e) =>
                         setNewStageByZone((prev) => ({
@@ -619,19 +619,19 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                 </div>
               </div>
             ))}
-            <p className="text-muted small">{t('teams.workflowCustomiseLater')}</p>
+            <p className="text-muted small">{t('boards.workflowCustomiseLater')}</p>
           </>
         )}
 
         {/* ── Step 4: Access Control ── */}
         {step === 4 && (
           <>
-            <p className="text-muted small mb-3">{t('teams.accessControlHelp')}</p>
+            <p className="text-muted small mb-3">{t('boards.accessControlHelp')}</p>
             <Form.Check
               type="radio"
               id="access-all"
               name="access"
-              label={t('teams.allUsers')}
+              label={t('boards.allUsers')}
               checked={accessMode === 'all'}
               onChange={() => setAccessMode('all')}
               className="mb-2"
@@ -640,14 +640,14 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
               type="radio"
               id="access-specific"
               name="access"
-              label={t('teams.specificUsers')}
+              label={t('boards.specificUsers')}
               checked={accessMode === 'specific'}
               onChange={() => setAccessMode('specific')}
               className="mb-3"
             />
             {accessMode === 'specific' && config.staff && (
               <div className="ps-4">
-                <Form.Label className="small text-muted">{t('teams.selectMembers')}</Form.Label>
+                <Form.Label className="small text-muted">{t('boards.selectMembers')}</Form.Label>
                 <UserPicker
                   staff={config.staff}
                   selectedIds={selectedUserIds}

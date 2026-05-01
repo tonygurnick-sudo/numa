@@ -1,7 +1,7 @@
 """
 Numa Ops MCP tool for the workspace agent.
 
-Provides a single tool for all Numa Ops operations (tickets, teams,
+Provides a single tool for all Numa Ops operations (tickets, boards,
 customers, suppliers, projects, config). Feature-flagged via
 NUMA_OPS_ENABLED env var — only registered when the flag is true.
 
@@ -37,8 +37,8 @@ _FRONTEND_URL = os.environ.get("NUMA_FRONTEND_URL") or (
 SAFE_OPERATIONS = frozenset(
     {
         "get_config",
-        "list_teams",
-        "get_team",
+        "list_boards",
+        "get_board",
         "list_tickets",
         "get_ticket",
         "search_tickets",
@@ -57,8 +57,8 @@ SAFE_OPERATIONS = frozenset(
 # All valid operations
 VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
     {
-        "create_team",
-        "update_team",
+        "create_board",
+        "update_board",
         "update_zones",
         "update_stages",
         "create_ticket",
@@ -177,14 +177,14 @@ def _count_items(result: Any, operation: str = "") -> int | None:
 
 def _build_summary(result: Any, operation: str) -> str | None:
     """Build a richer summary for specific operations."""
-    if operation == "get_team" and isinstance(result, dict):
+    if operation == "get_board" and isinstance(result, dict):
         zones = result.get("zones", [])
         stages = result.get("stages", [])
-        team = result.get("team", {})
-        name = team.get("name", "")
+        board = result.get("board", {})
+        name = board.get("name", "")
         parts = []
         if name:
-            parts.append(f"Team: {name}")
+            parts.append(f"Board: {name}")
         parts.append(f"{len(zones)} zones, {len(stages)} stages")
         stage_names = [s.get("name", "") for s in stages if isinstance(s, dict)]
         if stage_names:
@@ -215,7 +215,7 @@ def _save_ops_result(result: Any, operation: str) -> str:
 @tool(
     name="numa_ops_tool",
     description=(
-        "Manage Numa Ops boards — create/search tickets, manage teams, "
+        "Manage Numa Ops boards — create/search tickets, manage boards, "
         "customers, suppliers, activities, and projects. Also supports admin config "
         "management: custom fields (ticket and CRM), ticket types, statuses, "
         "and CRM/supplier configuration (lifecycle stages, record layout, "
@@ -229,10 +229,10 @@ def _save_ops_result(result: Any, operation: str) -> str:
                 "type": "string",
                 "description": (
                     "The operation to perform. "
-                    "Read operations: get_config, list_teams, get_team, list_tickets, "
+                    "Read operations: get_config, list_boards, get_board, list_tickets, "
                     "get_ticket, search_tickets, list_comments, get_audit, list_work_units, "
                     "list_customers, get_customer, list_suppliers, get_supplier, list_projects, get_metrics. "
-                    "Write operations: create_team, update_team, update_zones, update_stages, "
+                    "Write operations: create_board, update_board, update_zones, update_stages, "
                     "create_ticket, update_ticket, delete_ticket, bulk_update_tickets, "
                     "add_comment, create_work_unit, update_work_unit, delete_work_unit, "
                     "create_link, delete_link, "
@@ -254,9 +254,9 @@ def _save_ops_result(result: Any, operation: str) -> str:
                 "type": "string",
                 "description": (
                     "JSON string of operation-specific parameters using camelCase keys "
-                    "(e.g. teamId, stageId, ticketTypeId, assigneeId, displayId). "
+                    "(e.g. boardId, stageId, ticketTypeId, assigneeId, displayId). "
                     "PREFER passing names instead of IDs -- the bridge resolves "
-                    "teamName/boardName, stageName, zoneName, ticketTypeName, "
+                    "boardName, stageName, zoneName, ticketTypeName, "
                     "assigneeName/reporterName/ownerName, customerName, supplierName, "
                     "projectName, workUnitName/sprintName, and lifecycleStageName "
                     "to their corresponding IDs automatically. NEVER invent IDs -- "

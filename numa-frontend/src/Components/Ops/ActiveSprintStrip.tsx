@@ -13,13 +13,13 @@ import type { WorkUnit } from '../../types/ops';
  */
 const ActiveSprintStrip = () => {
   const { t } = useTranslation('ops');
-  const { teamData, workUnits, tickets, selectWorkUnit, refreshTeam, refreshTickets, refreshWorkUnits } = useOps();
+  const { boardData, workUnits, tickets, selectWorkUnit, refreshBoard, refreshTickets, refreshWorkUnits } = useOps();
 
   const [showComplete, setShowComplete] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successWorkUnit, setSuccessWorkUnit] = useState<WorkUnit | null>(null);
 
-  const teamId = teamData?.team?.id ?? '';
+  const boardId = boardData?.board?.id ?? '';
   const activeWorkUnit = workUnits.find((wu) => wu.status === 'active') ?? null;
 
   const stats = useMemo(() => {
@@ -111,7 +111,7 @@ const ActiveSprintStrip = () => {
         show={showComplete}
         workUnit={activeWorkUnit}
         workUnits={workUnits}
-        teamId={teamId}
+        boardId={boardId}
         incompleteCount={incompleteCount}
         completedCount={stats.done}
         onHide={() => setShowComplete(false)}
@@ -120,7 +120,7 @@ const ActiveSprintStrip = () => {
           setSuccessWorkUnit(activeWorkUnit);
           setShowSuccess(true);
           selectWorkUnit(null);
-          await refreshTeam();
+          await refreshBoard();
           await Promise.all([refreshTickets(), refreshWorkUnits()]);
         }}
       />

@@ -143,7 +143,7 @@ export function GlobalSettingsModal({
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const showAlert = useAlert();
-  const { config, teams, refreshTeams, refreshStaff, refreshConfig } = useOps();
+  const { config, boards, refreshBoards, refreshStaff, refreshConfig } = useOps();
 
   // ── Local state (edited copies of config) ──────────────────────────────────
   const [staff, setStaff] = useState<StaffProfile[]>([]);
@@ -545,10 +545,10 @@ export function GlobalSettingsModal({
 
   // ── Board delete handler ──────────────────────────────────────────────────
   const handleDeleteBoard = useCallback(
-    async (teamId: string) => {
+    async (boardId: string) => {
       try {
-        await OpsService.deleteTeam(numaDelete, teamId);
-        await refreshTeams();
+        await OpsService.deleteBoard(numaDelete, boardId);
+        await refreshBoards();
       } catch (err) {
         const msg = String(err);
         if (msg.includes('409')) {
@@ -558,7 +558,7 @@ export function GlobalSettingsModal({
         }
       }
     },
-    [numaDelete, refreshTeams, t]
+    [numaDelete, refreshBoards, t]
   );
 
   // ── New customer handler ───────────────────────────────────────────────────
@@ -1941,7 +1941,7 @@ export function GlobalSettingsModal({
         <i className="bi bi-info-circle me-2" />
         {t('globalSettings.boardsInfo')}
       </div>
-      {teams.length === 0 ? (
+      {boards.length === 0 ? (
         <div className="text-center py-4 text-muted">{t('boards.noBoards')}</div>
       ) : (
         <Table size="sm" hover className="ops-settings-table">
@@ -1953,7 +1953,7 @@ export function GlobalSettingsModal({
             </tr>
           </thead>
           <tbody>
-            {teams.map((team) => (
+            {boards.map((team) => (
               <tr key={team.id}>
                 <td className="fw-medium">
                   <div className="d-flex align-items-center gap-2">
@@ -2181,7 +2181,7 @@ export function GlobalSettingsModal({
               </Nav.Item>
               <Nav.Item>
                 <Nav.Link eventKey="boards">
-                  {t('settings.boards')} ({teams.length})
+                  {t('settings.boards')} ({boards.length})
                 </Nav.Link>
               </Nav.Item>
               <Nav.Item>

@@ -249,7 +249,7 @@ export const fieldOverrideSchema = z.object({
   required: z.boolean().optional().default(false),
 });
 
-export const teamSchema = z.object({
+export const boardSchema = z.object({
   entityType: z.literal('TEAM'),
   id: z.string(),
   name: z.string().min(1),
@@ -265,13 +265,16 @@ export const teamSchema = z.object({
   order: z.number(),
 });
 
-/** @deprecated Use teamSchema instead. */
-export const processBoardSchema = teamSchema;
+/** @deprecated Use boardSchema instead. */
+export const teamSchema = boardSchema;
+
+/** @deprecated Use boardSchema instead. */
+export const processBoardSchema = boardSchema;
 
 export const workZoneSchema = z.object({
   entityType: z.literal('WORK_ZONE'),
   id: z.string(),
-  teamId: z.string(),
+  boardId: z.string(),
   name: z.string().min(1),
   zoneType: zoneTypeSchema,
   order: z.number(),
@@ -282,7 +285,7 @@ export const workZoneSchema = z.object({
 export const workStageSchema = z.object({
   entityType: z.literal('WORK_STAGE'),
   id: z.string(),
-  teamId: z.string(),
+  boardId: z.string(),
   zoneId: z.string(),
   name: z.string().min(1),
   statusId: z.string(),
@@ -297,7 +300,7 @@ export const ticketSchema = z.object({
   entityType: z.literal('TICKET'),
   id: z.string(),
   displayId: z.string(),
-  teamId: z.string(),
+  boardId: z.string(),
   ticketTypeId: z.string(),
   title: z.string().min(1),
   description: z.string().optional().default(''),
@@ -348,7 +351,7 @@ export const commentSchema = z.object({
   entityType: z.literal('COMMENT'),
   id: z.string(),
   ticketId: z.string(),
-  teamId: z.string(),
+  boardId: z.string(),
   content: z.string(),
   authorId: z.string(),
   authorName: z.string(),
@@ -372,7 +375,7 @@ export const ticketLinkSchema = z.object({
 export const workUnitSchema = z.object({
   entityType: z.literal('WORK_UNIT'),
   id: z.string(),
-  teamId: z.string(),
+  boardId: z.string(),
   name: z.string().min(1),
   goal: z.string().nullable().optional(),
   status: workUnitStatusSchema,
@@ -393,7 +396,7 @@ export const auditEntrySchema = z.object({
   entityType: z.literal('AUDIT'),
   id: z.string(),
   ticketId: z.string(),
-  teamId: z.string(),
+  boardId: z.string(),
   userId: z.string(),
   userName: z.string(),
   action: auditActionSchema,
@@ -412,7 +415,7 @@ export const userPrefSchema = z.object({
   savedFilters: z.array(filterConfigSchema).nullable().optional(),
   columnOrder: z.array(z.string()).nullable().optional(),
   columnVisibility: z.record(z.string(), z.boolean()).nullable().optional(),
-  lastViewedTeamId: z.string().nullable().optional(),
+  lastViewedBoardId: z.string().nullable().optional(),
   updatedAt: z.string(),
 });
 
@@ -516,7 +519,7 @@ export const crmDocumentSchema = z.object({
 
 // ─── Request Schemas ────────────────────────────────────────────────────────────
 
-export const createTeamZoneSchema = z.object({
+export const createBoardZoneSchema = z.object({
   name: z.string().min(1),
   zoneType: zoneTypeSchema,
   stages: z.array(
@@ -527,7 +530,10 @@ export const createTeamZoneSchema = z.object({
   ),
 });
 
-export const createTeamRequestSchema = z.object({
+/** @deprecated Use createBoardZoneSchema instead. */
+export const createTeamZoneSchema = createBoardZoneSchema;
+
+export const createBoardRequestSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   color: z.string().optional(),
   preset: z.string().optional(),
@@ -547,10 +553,13 @@ export const createTeamRequestSchema = z.object({
   fieldOverrides: z.record(z.string(), fieldOverrideSchema).optional(),
   workUnitSeries: workUnitSeriesSchema.nullable().optional(),
   accessControl: accessControlSchema.optional().default({ mode: 'all', users: [] }),
-  zones: z.array(createTeamZoneSchema).optional(),
+  zones: z.array(createBoardZoneSchema).optional(),
 });
 
-export const updateTeamRequestSchema = z.object({
+/** @deprecated Use createBoardRequestSchema instead. */
+export const createTeamRequestSchema = createBoardRequestSchema;
+
+export const updateBoardRequestSchema = z.object({
   name: z.string().min(1).optional(),
   color: z.string().optional(),
   allowedTicketTypes: z.array(z.string()).optional(),
@@ -560,8 +569,11 @@ export const updateTeamRequestSchema = z.object({
   order: z.number().optional(),
 });
 
+/** @deprecated Use updateBoardRequestSchema instead. */
+export const updateTeamRequestSchema = updateBoardRequestSchema;
+
 export const createTicketRequestSchema = z.object({
-  teamId: z.string().min(1, 'Team ID is required'),
+  boardId: z.string().min(1, 'Board ID is required'),
   ticketTypeId: z.string().min(1, 'Ticket type ID is required'),
   title: z.string().min(1, 'Title is required').max(500),
   description: z.string().max(100000).optional().default(''),
@@ -592,7 +604,7 @@ export const updateTicketRequestSchema = z.object({
   description: z.string().max(100000).optional(),
   zoneId: z.string().optional(),
   stageId: z.string().optional(),
-  teamId: z.string().optional(),
+  boardId: z.string().optional(),
   archived: z.boolean().optional(),
   assigneeId: z.string().nullable().optional(),
   assigneeName: z.string().nullable().optional(),
@@ -639,8 +651,8 @@ export const createLinkRequestSchema = z.object({
   linkedTicketDisplayId: z.string().min(1, 'Linked ticket display ID is required'),
   linkedTicketTitle: z.string().optional(),
   linkType: linkTypeSchema,
-  teamId: z.string().optional(),
-  linkedTeamId: z.string().optional(),
+  boardId: z.string().optional(),
+  linkedBoardId: z.string().optional(),
 });
 
 export const createWorkUnitRequestSchema = z.object({
@@ -829,7 +841,7 @@ export const updateUserPrefRequestSchema = z.object({
   savedFilters: z.array(filterConfigSchema).nullable().optional(),
   columnOrder: z.array(z.string()).nullable().optional(),
   columnVisibility: z.record(z.string(), z.boolean()).nullable().optional(),
-  lastViewedTeamId: z.string().nullable().optional(),
+  lastViewedBoardId: z.string().nullable().optional(),
 });
 
 export const batchUpdateZonesRequestSchema = z.array(
@@ -844,7 +856,7 @@ export const batchUpdateZonesRequestSchema = z.array(
 export const batchUpdateStagesRequestSchema = z.array(
   z.object({
     id: z.string().optional(),
-    teamId: z.string(),
+    boardId: z.string(),
     zoneId: z.string(),
     name: z.string().min(1),
     statusId: z.string(),
@@ -887,12 +899,14 @@ export type LinkTypeConfig = z.infer<typeof linkTypeConfigSchema>;
 export type LinkConfig = z.infer<typeof linkConfigSchema>;
 
 export type AccessControl = z.infer<typeof accessControlSchema>;
-export type Team = z.infer<typeof teamSchema>;
+export type Board = z.infer<typeof boardSchema>;
+/** @deprecated Use Board instead. */
+export type Team = Board;
 export type WorkUnitSeries = z.infer<typeof workUnitSeriesSchema>;
 export type MirrorConfig = z.infer<typeof mirrorConfigSchema>;
 export type FieldOverride = z.infer<typeof fieldOverrideSchema>;
-/** @deprecated Use Team instead. */
-export type ProcessBoard = Team;
+/** @deprecated Use Board instead. */
+export type ProcessBoard = Board;
 export type WorkZone = z.infer<typeof workZoneSchema>;
 export type WorkStage = z.infer<typeof workStageSchema>;
 export type Ticket = z.infer<typeof ticketSchema>;
@@ -911,8 +925,12 @@ export type Supplier = z.infer<typeof supplierSchema>;
 export type Activity = z.infer<typeof activitySchema>;
 export type CrmDocument = z.infer<typeof crmDocumentSchema>;
 
-export type CreateTeamRequest = z.infer<typeof createTeamRequestSchema>;
-export type UpdateTeamRequest = z.infer<typeof updateTeamRequestSchema>;
+export type CreateBoardRequest = z.infer<typeof createBoardRequestSchema>;
+export type UpdateBoardRequest = z.infer<typeof updateBoardRequestSchema>;
+/** @deprecated Use CreateBoardRequest instead. */
+export type CreateTeamRequest = CreateBoardRequest;
+/** @deprecated Use UpdateBoardRequest instead. */
+export type UpdateTeamRequest = UpdateBoardRequest;
 export type CreateTicketRequest = z.infer<typeof createTicketRequestSchema>;
 export type UpdateTicketRequest = z.infer<typeof updateTicketRequestSchema>;
 export type BulkUpdateTicketsRequest = z.infer<typeof bulkUpdateTicketsRequestSchema>;

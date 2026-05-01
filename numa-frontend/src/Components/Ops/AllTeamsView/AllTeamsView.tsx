@@ -11,7 +11,7 @@ import ActiveSprintStrip from '../ActiveSprintStrip';
 import BoardView from '../BoardView/BoardView';
 import BacklogView from '../BacklogView/BacklogView';
 import * as OpsService from '../../../Services/OpsService';
-import type { TeamSummary } from '../../../types/ops';
+import type { BoardSummary } from '../../../types/ops';
 
 /**
  * AllTeamsView — "All Teams" board-view mode.
@@ -20,7 +20,7 @@ import type { TeamSummary } from '../../../types/ops';
  * highlighted and its zone tabs are shown beneath it. Below the card
  * row the active zone's content (board or backlog) is rendered.
  *
- * Selecting a different team card triggers the normal selectTeam flow
+ * Selecting a different team card triggers the normal selectBoard flow
  * which loads that team's data, tickets, and work units.
  */
 const AllTeamsView = () => {
@@ -29,13 +29,13 @@ const AllTeamsView = () => {
   const { numaDelete } = useNumaRequest();
   const showAlert = useAlert();
   const {
-    teams,
-    selectedTeamId,
-    selectTeam,
-    refreshTeams,
+    boards,
+    selectedBoardId,
+    selectBoard,
+    refreshBoards,
     refreshConfig,
-    teamData,
-    teamLoading,
+    boardData,
+    boardLoading,
     tickets,
     workUnits,
     activeZoneId,
@@ -43,18 +43,18 @@ const AllTeamsView = () => {
   } = useOps();
 
   const [showCreateTeam, setShowCreateTeam] = useState(false);
-  const [teamToDelete, setTeamToDelete] = useState<TeamSummary | null>(null);
+  const [boardToDelete, setBoardToDelete] = useState<BoardSummary | null>(null);
 
-  const zones = teamData?.zones ?? [];
+  const zones = boardData?.zones ?? [];
   const activeZone = useMemo(() => zones.find((z) => z.id === activeZoneId) ?? null, [zones, activeZoneId]);
 
-  const hasWorkUnits = Boolean(teamData?.team?.workUnitSeries?.enabled);
+  const hasWorkUnits = Boolean(boardData?.board?.workUnitSeries?.enabled);
   const showSprintStrip = activeZone?.zoneType === 'board' && hasWorkUnits;
 
   // Ticket count per team (only available for the selected team)
-  const selectedTeamTicketCount = useMemo(
-    () => (selectedTeamId ? tickets.filter((tk) => !tk.archived).length : 0),
-    [selectedTeamId, tickets]
+  const selectedBoardTicketCount = useMemo(
+    () => (selectedBoardId ? tickets.filter((tk) => !tk.archived).length : 0),
+    [selectedBoardId, tickets]
   );
 
   // Active work unit for the selected team
@@ -64,25 +64,25 @@ const AllTeamsView = () => {
   );
 
   const handleDeleteTeam = async () => {
-    if (!teamToDelete) return;
+    if (!boardToDelete) return;
     try {
-      await OpsService.deleteTeam(numaDelete, teamToDelete.id);
-      setTeamToDelete(null);
-      refreshTeams();
-      if (selectedTeamId === teamToDelete.id) {
-        selectTeam('');
+      await OpsService.deleteBoard(numaDelete, boardToDelete.id);
+      setBoardToDelete(null);
+      refreshBoards();
+      if (selectedBoardId === boardToDelete.id) {
+        selectBoard('');
       }
     } catch (err: unknown) {
       const msg = String(err);
       if (msg.includes('409')) {
-        await showAlert({ message: t('teams.deleteTeamHasTickets'), variant: 'warning' });
+        await showAlert({ message: t('boards.deleteTeamHasTickets'), variant: 'warning' });
       } else {
         await showAlert({ message: t('errors.saveFailed', { message: msg }), variant: 'error' });
       }
     }
   };
 
-  if (teams.length === 0) {
+  if (boards.length === 0) {
     return (
       <>
         <div className="d-flex justify-content-center align-items-start py-5 px-3">
@@ -95,16 +95,16 @@ const AllTeamsView = () => {
               >
                 <i className="bi bi-kanban fs-2" style={{ color: '#6366f1' }} />
               </div>
-              <h4 className="fw-bold mb-1">{t('teams.welcome.headline')}</h4>
-              <p className="text-muted mb-0">{t('teams.welcome.subtitle')}</p>
+              <h4 className="fw-bold mb-1">{t('boards.welcome.headline')}</h4>
+              <p className="text-muted mb-0">{t('boards.welcome.subtitle')}</p>
             </div>
 
             {/* Feature highlights */}
             <div className="d-flex justify-content-center gap-4 mb-4">
               {[
-                { icon: 'bi-check2-square', text: t('teams.welcome.featureTracking') },
-                { icon: 'bi-sliders', text: t('teams.welcome.featureWorkflows') },
-                { icon: 'bi-lightning-charge', text: t('teams.welcome.featureSprints') },
+                { icon: 'bi-check2-square', text: t('boards.welcome.featureTracking') },
+                { icon: 'bi-sliders', text: t('boards.welcome.featureWorkflows') },
+                { icon: 'bi-lightning-charge', text: t('boards.welcome.featureSprints') },
               ].map(({ icon, text }) => (
                 <div key={icon} className="text-center" style={{ maxWidth: 120 }}>
                   <i className={`bi ${icon} fs-5 text-primary d-block mb-1`} />
@@ -114,17 +114,17 @@ const AllTeamsView = () => {
             </div>
 
             {/* Description */}
-            <p className="text-center text-muted mb-2">{t('teams.welcome.body')}</p>
+            <p className="text-center text-muted mb-2">{t('boards.welcome.body')}</p>
             <p className="text-center mb-4" style={{ fontSize: '0.85rem' }}>
               <i className="bi bi-lightbulb text-warning me-1" />
-              <span className="text-muted fst-italic">{t('teams.welcome.soloTip')}</span>
+              <span className="text-muted fst-italic">{t('boards.welcome.soloTip')}</span>
             </p>
 
             {/* CTA */}
             <div className="text-center">
               <button type="button" className="btn btn-primary btn-lg px-4" onClick={() => setShowCreateTeam(true)}>
                 <i className="bi bi-plus-lg me-2" />
-                {t('teams.welcome.cta')}
+                {t('boards.welcome.cta')}
               </button>
             </div>
           </div>
@@ -135,8 +135,8 @@ const AllTeamsView = () => {
           onCreated={async (team) => {
             setShowCreateTeam(false);
             await refreshConfig();
-            refreshTeams();
-            selectTeam(team.id);
+            refreshBoards();
+            selectBoard(team.id);
           }}
         />
       </>
@@ -147,24 +147,24 @@ const AllTeamsView = () => {
     <div className="d-flex flex-column h-100">
       {/* ── Team Cards Row ─────────────────────────────────────── */}
       <div className="d-flex flex-wrap gap-3 px-3 py-3">
-        {teams.map((team) => (
+        {boards.map((team) => (
           <TeamCard
             key={team.id}
             team={team}
-            isSelected={team.id === selectedTeamId}
-            ticketCount={team.id === selectedTeamId ? selectedTeamTicketCount : null}
-            activeWorkUnitName={team.id === selectedTeamId ? (activeWorkUnit?.name ?? null) : null}
-            onSelect={() => selectTeam(team.id)}
+            isSelected={team.id === selectedBoardId}
+            ticketCount={team.id === selectedBoardId ? selectedBoardTicketCount : null}
+            activeWorkUnitName={team.id === selectedBoardId ? (activeWorkUnit?.name ?? null) : null}
+            onSelect={() => selectBoard(team.id)}
             isOwner={Boolean(
               team.createdBy && user?.decoded_tokens?.idToken?.sub && team.createdBy === user.decoded_tokens.idToken.sub
             )}
-            onDelete={() => setTeamToDelete(team)}
+            onDelete={() => setBoardToDelete(team)}
           />
         ))}
       </div>
 
       {/* ── Zone Tabs for Selected Team ────────────────────────── */}
-      {selectedTeamId && zones.length > 0 && (
+      {selectedBoardId && zones.length > 0 && (
         <div className="px-3 border-bottom bg-white">
           <Nav variant="tabs" className="border-0 gap-1">
             {zones.map((zone) => (
@@ -189,13 +189,13 @@ const AllTeamsView = () => {
 
       {/* ── Zone Content ───────────────────────────────────────── */}
       <div className="flex-grow-1 overflow-auto">
-        {teamLoading && !teamData ? (
+        {boardLoading && !boardData ? (
           <div className="d-flex justify-content-center align-items-center py-5 text-muted">
             <div className="spinner-border spinner-border-sm me-2" role="status" />
             {t('common.loading')}
           </div>
-        ) : !selectedTeamId ? (
-          <div className="text-center text-muted py-5">{t('teams.noTeams')}</div>
+        ) : !selectedBoardId ? (
+          <div className="text-center text-muted py-5">{t('boards.noBoards')}</div>
         ) : activeZone?.zoneType === 'board' ? (
           <BoardView />
         ) : activeZone?.zoneType === 'backlog' ? (
@@ -204,13 +204,13 @@ const AllTeamsView = () => {
       </div>
 
       <ConfirmModal
-        show={teamToDelete !== null}
-        title={t('teams.deleteTeam')}
-        message={t('teams.deleteTeamConfirm', { name: teamToDelete?.name ?? '' })}
-        confirmLabel={t('teams.deleteTeam')}
+        show={boardToDelete !== null}
+        title={t('boards.deleteTeam')}
+        message={t('boards.deleteTeamConfirm', { name: boardToDelete?.name ?? '' })}
+        confirmLabel={t('boards.deleteTeam')}
         variant="danger"
         onConfirm={handleDeleteTeam}
-        onHide={() => setTeamToDelete(null)}
+        onHide={() => setBoardToDelete(null)}
       />
     </div>
   );
@@ -219,7 +219,7 @@ const AllTeamsView = () => {
 // ─── Team Card ──────────────────────────────────────────────────────────────
 
 interface TeamCardProps {
-  team: TeamSummary;
+  team: BoardSummary;
   isSelected: boolean;
   ticketCount: number | null;
   activeWorkUnitName: string | null;
@@ -286,7 +286,7 @@ const TeamCard = ({
         {/* Ticket count (only shown for selected team) */}
         {ticketCount !== null && (
           <span className="text-muted" style={{ fontSize: '0.75rem' }}>
-            {t('teams.tickets', { count: ticketCount })}
+            {t('boards.tickets', { count: ticketCount })}
           </span>
         )}
 
@@ -295,7 +295,7 @@ const TeamCard = ({
           <span
             className="badge bg-success bg-opacity-10 text-success"
             style={{ fontSize: '0.65rem' }}
-            title={t('teams.activeSprint')}
+            title={t('boards.activeSprint')}
           >
             <i className="bi bi-lightning-charge me-1" />
             {activeWorkUnitName}

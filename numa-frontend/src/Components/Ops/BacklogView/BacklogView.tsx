@@ -618,13 +618,13 @@ const BacklogView = () => {
   const { user } = useAuth();
   const confirm = useConfirm();
   const {
-    teamData,
+    boardData,
     workUnits,
     tickets,
     config,
     refreshTickets,
     refreshWorkUnits,
-    refreshTeam,
+    refreshBoard,
     setActiveZone,
     setTickets,
     myWorkFilter,
@@ -647,18 +647,18 @@ const BacklogView = () => {
   const [successWorkUnit, setSuccessWorkUnit] = useState<WorkUnit | null>(null);
 
   const hasActiveWu = useMemo(() => workUnits.some((wu) => wu.status === 'active'), [workUnits]);
-  const teamId = teamData?.team?.id ?? '';
-  const workUnitsEnabled = Boolean(teamData?.team?.workUnitSeries);
+  const boardId = boardData?.board?.id ?? '';
+  const workUnitsEnabled = Boolean(boardData?.board?.workUnitSeries);
   const defaultSprintName = useMemo(() => {
-    const label = teamData?.team?.workUnitSeries?.label ?? 'Sprint';
+    const label = boardData?.board?.workUnitSeries?.label ?? 'Sprint';
     return `${label} ${workUnits.length + 1}`;
-  }, [teamData?.team?.workUnitSeries?.label, workUnits.length]);
+  }, [boardData?.board?.workUnitSeries?.label, workUnits.length]);
 
   // ── Delete Sprint handler ────────────────────────────────────
   const [deletingSprint, setDeletingSprint] = useState(false);
   const handleDeleteSprint = useCallback(
     async (wu: WorkUnit) => {
-      if (!teamId || deletingSprint) return;
+      if (!boardId || deletingSprint) return;
       const ok = await confirm({
         message: t('sprints.deleteSprintConfirm', { name: wu.name }),
         confirmLabel: tCommon('confirm.delete'),
@@ -667,7 +667,7 @@ const BacklogView = () => {
       if (!ok) return;
       setDeletingSprint(true);
       try {
-        await OpsService.deleteWorkUnit(numaDelete, teamId, wu.id);
+        await OpsService.deleteWorkUnit(numaDelete, boardId, wu.id);
         await Promise.all([refreshWorkUnits(), refreshTickets()]);
       } catch (err) {
         console.error('[BacklogView] Failed to delete work unit:', err);
@@ -675,7 +675,7 @@ const BacklogView = () => {
         setDeletingSprint(false);
       }
     },
-    [teamId, deletingSprint, numaDelete, refreshWorkUnits, refreshTickets, t, tCommon, confirm]
+    [boardId, deletingSprint, numaDelete, refreshWorkUnits, refreshTickets, t, tCommon, confirm]
   );
 
   // ── Filters ────────────────────────────────────────────────────
@@ -688,7 +688,7 @@ const BacklogView = () => {
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
     try {
-      const saved = localStorage.getItem(`numa_ops_collapsed_groups_${teamId}`);
+      const saved = localStorage.getItem(`numa_ops_collapsed_groups_${boardId}`);
       return saved ? new Set(JSON.parse(saved) as string[]) : new Set();
     } catch {
       return new Set();
@@ -696,7 +696,7 @@ const BacklogView = () => {
   });
   const [groupOrder, setGroupOrder] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem(`numa_ops_group_order_${teamId}`);
+      const saved = localStorage.getItem(`numa_ops_group_order_${boardId}`);
       return saved ? (JSON.parse(saved) as string[]) : [];
     } catch {
       return [];
@@ -732,18 +732,18 @@ const BacklogView = () => {
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  const zones = teamData?.zones ?? [];
+  const zones = boardData?.zones ?? [];
 
   // ── Lookup maps ────────────────────────────────────────────────
   const stageMap = useMemo(() => {
     const map = new Map<string, { name: string; statusType: StatusType; zoneId: string }>();
-    if (teamData) {
-      for (const s of teamData.stages) {
+    if (boardData) {
+      for (const s of boardData.stages) {
         map.set(s.id, { name: s.name, statusType: s.statusType as StatusType, zoneId: s.zoneId });
       }
     }
     return map;
-  }, [teamData]);
+  }, [boardData]);
 
   const typeMap = useMemo(() => {
     const map = new Map<string, { name: string; color: string }>();
@@ -829,9 +829,9 @@ const BacklogView = () => {
     if (!config?.projects) return [];
     const usedIds = new Set(backlogTickets.map((tk) => tk.projectId).filter(Boolean));
     return config.projects
-      .filter((p) => usedIds.has(p.id) && (!p.boardIds?.length || p.boardIds.includes(teamId)))
+      .filter((p) => usedIds.has(p.id) && (!p.boardIds?.length || p.boardIds.includes(boardId)))
       .map((p) => ({ id: p.id, label: p.name, color: p.color }));
-  }, [config?.projects, backlogTickets, teamId]);
+  }, [config?.projects, backlogTickets, boardId]);
 
   // ── Customer options for filter ────────────────────────────────
   const customerOptions = useMemo(() => {
@@ -852,9 +852,9 @@ const BacklogView = () => {
 
   // ── Backlog stages (ordered) ──────────────────────────────────
   const backlogStages = useMemo(() => {
-    if (!teamData) return [];
-    return teamData.stages.filter((s) => backlogZoneIds.has(s.zoneId)).sort((a, b) => a.order - b.order);
-  }, [teamData, backlogZoneIds]);
+    if (!boardData) return [];
+    return boardData.stages.filter((s) => backlogZoneIds.has(s.zoneId)).sort((a, b) => a.order - b.order);
+  }, [boardData, backlogZoneIds]);
 
   // ── Build groups (using filteredTickets) ───────────────────────
   const groups = useMemo<TicketGroup[]>(() => {
@@ -894,7 +894,7 @@ const BacklogView = () => {
 
     for (const wu of planningUnits) {
       const wuTickets = filteredTickets.filter((tk) => tk.workUnitId === wu.id);
-      const wuZoneId = (teamData?.team?.workUnitSeries?.backlogZoneId as string | undefined) ?? firstBacklogZoneId;
+      const wuZoneId = (boardData?.board?.workUnitSeries?.backlogZoneId as string | undefined) ?? firstBacklogZoneId;
       result.push({
         id: wu.id,
         label: wu.name,
@@ -907,7 +907,7 @@ const BacklogView = () => {
     }
 
     return result;
-  }, [filteredTickets, backlogStages, planningUnits, t, firstBacklogZoneId, teamData]);
+  }, [filteredTickets, backlogStages, planningUnits, t, firstBacklogZoneId, boardData]);
 
   // ── Group lookup maps (for DnD) ────────────────────────────────
   const groupMap = useMemo(() => {
@@ -952,15 +952,15 @@ const BacklogView = () => {
       const newOrder = [...currentOrder];
       [newOrder[idx], newOrder[targetIdx]] = [newOrder[targetIdx], newOrder[idx]];
       setGroupOrder(newOrder);
-      if (teamId) {
+      if (boardId) {
         try {
-          localStorage.setItem(`numa_ops_group_order_${teamId}`, JSON.stringify(newOrder));
+          localStorage.setItem(`numa_ops_group_order_${boardId}`, JSON.stringify(newOrder));
         } catch {
           /* noop */
         }
       }
     },
-    [orderedGroups, teamId]
+    [orderedGroups, boardId]
   );
 
   // ── Toggle collapse ────────────────────────────────────────────
@@ -970,9 +970,9 @@ const BacklogView = () => {
         const next = new Set(prev);
         if (next.has(groupId)) next.delete(groupId);
         else next.add(groupId);
-        if (teamId) {
+        if (boardId) {
           try {
-            localStorage.setItem(`numa_ops_collapsed_groups_${teamId}`, JSON.stringify([...next]));
+            localStorage.setItem(`numa_ops_collapsed_groups_${boardId}`, JSON.stringify([...next]));
           } catch {
             /* noop */
           }
@@ -980,22 +980,22 @@ const BacklogView = () => {
         return next;
       });
     },
-    [teamId]
+    [boardId]
   );
 
   // Reload collapsed/order state when team changes
   useEffect(() => {
-    if (!teamId) return;
+    if (!boardId) return;
     try {
-      const savedCollapsed = localStorage.getItem(`numa_ops_collapsed_groups_${teamId}`);
+      const savedCollapsed = localStorage.getItem(`numa_ops_collapsed_groups_${boardId}`);
       setCollapsedGroups(savedCollapsed ? new Set(JSON.parse(savedCollapsed) as string[]) : new Set());
-      const savedOrder = localStorage.getItem(`numa_ops_group_order_${teamId}`);
+      const savedOrder = localStorage.getItem(`numa_ops_group_order_${boardId}`);
       setGroupOrder(savedOrder ? (JSON.parse(savedOrder) as string[]) : []);
     } catch {
       setCollapsedGroups(new Set());
       setGroupOrder([]);
     }
-  }, [teamId]);
+  }, [boardId]);
 
   // ── Project name lookup ─────────────────────────────────────────
   const projectNameMap = useMemo(() => {
@@ -1007,7 +1007,7 @@ const BacklogView = () => {
   }, [config?.projects]);
 
   // ── All stages for inline picker ──────────────────────────────
-  const allStages = useMemo(() => (teamData?.stages ?? []).sort((a, b) => a.order - b.order), [teamData?.stages]);
+  const allStages = useMemo(() => (boardData?.stages ?? []).sort((a, b) => a.order - b.order), [boardData?.stages]);
 
   // Stages grouped by zone (for pickers with zone headers)
   const stageGroups = useMemo<StageGroup[]>(() => {
@@ -1056,7 +1056,7 @@ const BacklogView = () => {
 
       try {
         await OpsService.updateTicket(numaPut, ticketId, {
-          teamId: ticket.teamId,
+          boardId: ticket.boardId,
           stageId: newStageId,
           zoneId: stage.zoneId,
           version: ticket.version,
@@ -1096,7 +1096,7 @@ const BacklogView = () => {
       try {
         await OpsService.bulkUpdateTickets(numaPost, {
           ticketIds: selectedTickets.map((tk) => tk.id),
-          changes: { stageId, zoneId: stage.zoneId, teamId },
+          changes: { stageId, zoneId: stage.zoneId, boardId },
         });
         setSelectedIds(new Set());
         await refreshTickets();
@@ -1113,7 +1113,7 @@ const BacklogView = () => {
     if (selectedTickets.length === 0 || bulkActing) return;
     setBulkActing(true);
     try {
-      await Promise.all(selectedTickets.map((tk) => OpsService.archiveTicket(numaPut, tk.id, tk.version, tk.teamId)));
+      await Promise.all(selectedTickets.map((tk) => OpsService.archiveTicket(numaPut, tk.id, tk.version, tk.boardId)));
       setSelectedIds(new Set());
       await refreshTickets();
     } catch (err) {
@@ -1133,7 +1133,7 @@ const BacklogView = () => {
     if (!ok) return;
     setBulkActing(true);
     try {
-      await Promise.all(selectedTickets.map((tk) => OpsService.deleteTicket(numaDelete, tk.id, tk.teamId)));
+      await Promise.all(selectedTickets.map((tk) => OpsService.deleteTicket(numaDelete, tk.id, tk.boardId)));
       setSelectedIds(new Set());
       await refreshTickets();
     } catch (err) {
@@ -1155,13 +1155,13 @@ const BacklogView = () => {
 
   const handleBacklogQuickAdd = useCallback(
     async (title: string, zoneId: string, stageId?: string, ticketTypeId?: string, workUnitId?: string) => {
-      if (!teamId || !config?.ticketTypes?.[0]) return;
-      const resolvedStageId = stageId ?? teamData?.stages?.find((s) => s.zoneId === zoneId)?.id;
+      if (!boardId || !config?.ticketTypes?.[0]) return;
+      const resolvedStageId = stageId ?? boardData?.stages?.find((s) => s.zoneId === zoneId)?.id;
       if (!resolvedStageId) return;
       const resolvedTypeId = ticketTypeId ?? config.ticketTypes[0].id;
       try {
         await OpsService.createTicket(numaPost, {
-          teamId,
+          boardId,
           ticketTypeId: resolvedTypeId,
           title,
           stageId: resolvedStageId,
@@ -1174,7 +1174,7 @@ const BacklogView = () => {
         console.error('[BacklogView] Quick add failed:', err);
       }
     },
-    [teamId, config?.ticketTypes, teamData?.stages, numaPost, refreshTickets]
+    [boardId, config?.ticketTypes, boardData?.stages, numaPost, refreshTickets]
   );
 
   const toggleAssignee = useCallback((assigneeId: string) => {
@@ -1301,7 +1301,7 @@ const BacklogView = () => {
 
       try {
         await OpsService.updateTicket(numaPut, ticketId, {
-          teamId: ticket.teamId,
+          boardId: ticket.boardId,
           stageId: newStageId,
           zoneId: newZoneId,
           workUnitId: newWorkUnitId,
@@ -1775,7 +1775,7 @@ const BacklogView = () => {
       {workUnitsEnabled && (
         <CreateWorkUnitModal
           show={showCreateSprint}
-          teamId={teamId}
+          boardId={boardId}
           defaultName={defaultSprintName}
           onHide={() => setShowCreateSprint(false)}
           onCreated={async () => {
@@ -1808,7 +1808,7 @@ const BacklogView = () => {
       <StartWorkUnitModal
         show={showStartSprint}
         workUnits={workUnits}
-        teamId={teamId}
+        boardId={boardId}
         tickets={tickets}
         zones={zones}
         preselectedId={startSprintId}
@@ -1821,7 +1821,7 @@ const BacklogView = () => {
             setShowSprintSuccess(true);
           }
           const beforeZoneIds = new Set(zones.map((z) => z.id));
-          const updated = await refreshTeam();
+          const updated = await refreshBoard();
           if (updated) {
             const newZone = updated.zones.find((z) => !beforeZoneIds.has(z.id));
             if (newZone) setActiveZone(newZone.id);

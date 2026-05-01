@@ -1,4 +1,4 @@
-import type { StatusType, ZoneType, TeamPreset } from '../types/ops';
+import type { StatusType, ZoneType, BoardPreset } from '../types/ops';
 
 // ─── Zone-to-Status-Type Mapping ────────────────────────────────────────────
 //
@@ -60,22 +60,22 @@ export type PresetZone = {
   stages: PresetStage[];
 };
 
-export type TeamPresetConfig = {
+export type BoardPresetConfig = {
   id: string;
   name: string;
   description: string;
-  mode: TeamPreset;
+  mode: BoardPreset;
   zones: PresetZone[];
   allowedTicketTypePrefixes?: string[];
   suggestedTicketTypes?: { name: string; prefix: string; icon: string; color: string }[];
 };
 
-export const TEAM_PRESETS: TeamPresetConfig[] = [
+export const BOARD_PRESETS: BoardPresetConfig[] = [
   {
     id: 'standard',
     name: 'Blank Board',
     description: 'Empty template to build your board from scratch.',
-    mode: 'normal' as TeamPreset,
+    mode: 'normal' as BoardPreset,
     zones: [
       {
         name: 'Backlog',
@@ -436,55 +436,55 @@ export const ZONE_TYPE_BADGE_COLORS: Record<ZoneType, string> = {
 
 // ─── Team Preset Metadata ───────────────────────────────────────────────────
 
-export type TeamPresetInfo = {
-  mode: TeamPreset;
+export type BoardPresetInfo = {
+  mode: BoardPreset;
   name: string;
   nameKey: string;
   descriptionKey: string;
   defaultPreset: string;
 };
 
-export const TEAM_PRESETS_INFO: TeamPresetInfo[] = [
+export const BOARD_PRESETS_INFO: BoardPresetInfo[] = [
   {
-    mode: 'normal' as TeamPreset,
+    mode: 'normal' as BoardPreset,
     name: 'Empty Template',
-    nameKey: 'teams.modeStandard',
-    descriptionKey: 'teams.modeStandardDesc',
+    nameKey: 'boards.modeStandard',
+    descriptionKey: 'boards.modeStandardDesc',
     defaultPreset: 'standard',
   },
   {
     mode: 'development',
     name: 'Product Development',
-    nameKey: 'teams.modeDevelopment',
-    descriptionKey: 'teams.modeDevelopmentDesc',
+    nameKey: 'boards.modeDevelopment',
+    descriptionKey: 'boards.modeDevelopmentDesc',
     defaultPreset: 'development',
   },
   {
     mode: 'support',
     name: 'Support Desk',
-    nameKey: 'teams.modeSupport',
-    descriptionKey: 'teams.modeSupportDesc',
+    nameKey: 'boards.modeSupport',
+    descriptionKey: 'boards.modeSupportDesc',
     defaultPreset: 'support',
   },
   {
     mode: 'monthly',
     name: 'Monthly Cycles',
-    nameKey: 'teams.modeMonthly',
-    descriptionKey: 'teams.modeMonthlyDesc',
+    nameKey: 'boards.modeMonthly',
+    descriptionKey: 'boards.modeMonthlyDesc',
     defaultPreset: 'monthly',
   },
   {
     mode: 'solo',
     name: 'Solo Consultant',
-    nameKey: 'teams.modeSolo',
-    descriptionKey: 'teams.modeSoloDesc',
+    nameKey: 'boards.modeSolo',
+    descriptionKey: 'boards.modeSoloDesc',
     defaultPreset: 'solo',
   },
   {
     mode: 'basic',
     name: 'Basic Kanban',
-    nameKey: 'teams.modeBasic',
-    descriptionKey: 'teams.modeBasicDesc',
+    nameKey: 'boards.modeBasic',
+    descriptionKey: 'boards.modeBasicDesc',
     defaultPreset: 'simple',
   },
 ];
@@ -535,8 +535,8 @@ export const isStatusTypeAllowedInZone = (statusType: StatusType, zoneType: Zone
 
 export const getDefaultZoneForStatusType = (statusType: StatusType): ZoneType => STATUS_TYPE_TO_ZONES[statusType][0];
 
-export const getPreset = (presetId?: string): TeamPresetConfig =>
-  TEAM_PRESETS.find((p) => p.id === presetId) ?? TEAM_PRESETS[0];
+export const getPreset = (presetId?: string): BoardPresetConfig =>
+  BOARD_PRESETS.find((p) => p.id === presetId) ?? BOARD_PRESETS[0];
 
 // ─── Default Industries (from Ian's core data v185a) ────────────────────────
 //

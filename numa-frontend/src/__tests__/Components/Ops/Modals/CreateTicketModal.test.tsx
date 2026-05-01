@@ -51,9 +51,9 @@ describe('CreateTicketModal (FEAT-108 validation)', () => {
       projects: [],
     };
 
-    const mockTeamData = {
-      team: {
-        id: 'team-1',
+    const mockBoardData = {
+      board: {
+        id: 'board-1',
         allowedTicketTypes: ['tt-1'],
         preset: 'software',
       },
@@ -63,7 +63,7 @@ describe('CreateTicketModal (FEAT-108 validation)', () => {
 
     (useOps as any).mockReturnValue({
       config: mockConfig,
-      teamData: mockTeamData,
+      boardData: mockBoardData,
       workUnits: [],
       refreshTickets: vi.fn(),
       refreshCrmData: vi.fn(),

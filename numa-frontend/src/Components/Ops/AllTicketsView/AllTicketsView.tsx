@@ -218,11 +218,11 @@ export function AllTicketsView(): React.JSX.Element {
     tickets,
     ticketsLoading,
     refreshTickets,
-    teamData,
+    boardData,
     workUnits,
-    selectedTeamId,
-    teams,
-    selectTeam,
+    selectedBoardId,
+    boards,
+    selectBoard,
     pendingSprintFilter,
     setPendingSprintFilter,
     myWorkFilter,
@@ -252,11 +252,11 @@ export function AllTicketsView(): React.JSX.Element {
 
   // Load tickets across all teams when scope is "allBoards"
   useEffect(() => {
-    if (scope !== 'allBoards' || teams.length === 0) return;
+    if (scope !== 'allBoards' || boards.length === 0) return;
     let cancelled = false;
     setAllBoardsLoading(true);
 
-    Promise.all(teams.map((tm) => OpsService.listTickets(numaGet, { teamId: tm.id })))
+    Promise.all(boards.map((tm) => OpsService.listTickets(numaGet, { boardId: tm.id })))
       .then((responses) => {
         if (cancelled) return;
         const combined = responses.flatMap((r) => r.tickets);
@@ -274,7 +274,7 @@ export function AllTicketsView(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [scope, teams, numaGet]);
+  }, [scope, boards, numaGet]);
 
   // ── Column visibility ──────────────────────────────────────────────────
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(DEFAULT_VISIBLE_KEYS);
@@ -345,21 +345,21 @@ export function AllTicketsView(): React.JSX.Element {
   }, [buildCurrentViewConfig, viewSnapshot]);
 
   // ── Load saved views from backend ─────────────────────────────────────
-  // Runs whenever selectedTeamId changes. Uses a ref to track the last team
+  // Runs whenever selectedBoardId changes. Uses a ref to track the last team
   // we fetched for so we don't refetch on every render.
   const lastFetchedTeamRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!selectedTeamId) return;
+    if (!selectedBoardId) return;
     // Skip if we already loaded prefs for this exact team
-    if (lastFetchedTeamRef.current === selectedTeamId) return;
+    if (lastFetchedTeamRef.current === selectedBoardId) return;
 
     let cancelled = false;
 
-    OpsService.getUserPreferences(numaGet, selectedTeamId)
+    OpsService.getUserPreferences(numaGet, selectedBoardId)
       .then((prefs) => {
         if (cancelled) return;
-        lastFetchedTeamRef.current = selectedTeamId;
+        lastFetchedTeamRef.current = selectedBoardId;
         if (prefs.savedFilters) {
           setSavedViews(prefs.savedFilters);
         } else {
@@ -368,7 +368,7 @@ export function AllTicketsView(): React.JSX.Element {
       })
       .catch((err) => {
         if (cancelled) return;
-        lastFetchedTeamRef.current = selectedTeamId;
+        lastFetchedTeamRef.current = selectedBoardId;
         console.warn('[AllTicketsView] Could not load user preferences:', err);
         setSavedViews([]);
       });
@@ -376,7 +376,7 @@ export function AllTicketsView(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [selectedTeamId, numaGet]);
+  }, [selectedBoardId, numaGet]);
 
   // ── Debounced search ────────────────────────────────────────────────────
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -395,9 +395,9 @@ export function AllTicketsView(): React.JSX.Element {
   const ticketTypes = config?.ticketTypes ?? [];
   const staff = config?.staff ?? [];
   const projects = config?.projects ?? [];
-  const selectedTeamName = useMemo(
-    () => teams.find((tm) => tm.id === selectedTeamId)?.name ?? '',
-    [teams, selectedTeamId]
+  const selectedBoardName = useMemo(
+    () => boards.find((tm) => tm.id === selectedBoardId)?.name ?? '',
+    [boards, selectedBoardId]
   );
 
   // ── Column definitions ──────────────────────────────────────────────────
@@ -442,9 +442,9 @@ export function AllTicketsView(): React.JSX.Element {
         label: t('tickets.status'),
         sortable: true,
         filterType: 'enum',
-        filterOptions: () => (teamData?.stages ?? []).map((s) => ({ value: s.id, label: s.name })),
+        filterOptions: () => (boardData?.stages ?? []).map((s) => ({ value: s.id, label: s.name })),
         accessor: (tk) => tk.stageId,
-        render: (tk) => <StageBadge stageId={tk.stageId} stages={teamData?.stages ?? []} />,
+        render: (tk) => <StageBadge stageId={tk.stageId} stages={boardData?.stages ?? []} />,
       },
       {
         key: 'workUnit',
@@ -454,7 +454,7 @@ export function AllTicketsView(): React.JSX.Element {
         filterOptions: () =>
           workUnits.map((wu) => ({
             value: wu.id,
-            label: selectedTeamName ? `${selectedTeamName} — ${wu.name}` : wu.name,
+            label: selectedBoardName ? `${selectedBoardName} — ${wu.name}` : wu.name,
           })),
         accessor: (tk) => {
           const wu = workUnits.find((w) => w.id === tk.workUnitId);
@@ -579,15 +579,15 @@ export function AllTicketsView(): React.JSX.Element {
         render: (tk) => tk.reporterName || <span className="text-muted">{t('fields.unknown')}</span>,
       },
     ],
-    [t, ticketTypes, teamData?.stages, staff, workUnits, projects, selectedTeamName]
+    [t, ticketTypes, boardData?.stages, staff, workUnits, projects, selectedBoardName]
   );
 
   // ── Board name lookup (for "All Boards" scope) ─────────────────────
-  const teamNameMap = useMemo(() => {
+  const boardNameMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const tm of teams) map.set(tm.id, tm.name);
+    for (const tm of boards) map.set(tm.id, tm.name);
     return map;
-  }, [teams]);
+  }, [boards]);
 
   // ── Board column (injected when scope is allBoards) ────────────────
   const boardColumn: ColumnDef = useMemo(
@@ -596,11 +596,11 @@ export function AllTicketsView(): React.JSX.Element {
       label: t('allTicketsView.board'),
       sortable: true,
       filterType: 'enum' as const,
-      filterOptions: () => teams.map((tm) => ({ value: tm.id, label: tm.name })),
-      accessor: (tk) => teamNameMap.get(tk.teamId) ?? '',
-      render: (tk) => <span>{teamNameMap.get(tk.teamId) ?? '-'}</span>,
+      filterOptions: () => boards.map((tm) => ({ value: tm.id, label: tm.name })),
+      accessor: (tk) => boardNameMap.get(tk.boardId) ?? '',
+      render: (tk) => <span>{boardNameMap.get(tk.boardId) ?? '-'}</span>,
     }),
-    [t, teams, teamNameMap]
+    [t, boards, boardNameMap]
   );
 
   // ── Visible columns (ordered) — inject Board column when scope is allBoards
@@ -789,16 +789,16 @@ export function AllTicketsView(): React.JSX.Element {
 
   const persistViews = useCallback(
     async (views: SavedFilter[]) => {
-      if (!selectedTeamId) return;
+      if (!selectedBoardId) return;
       try {
-        await OpsService.saveUserPreferences(numaPut, selectedTeamId, {
+        await OpsService.saveUserPreferences(numaPut, selectedBoardId, {
           savedFilters: views,
         });
       } catch (err) {
         console.error('[AllTicketsView] Failed to persist saved views:', err);
       }
     },
-    [selectedTeamId, numaPut]
+    [selectedBoardId, numaPut]
   );
 
   const handleSaveView = useCallback(
@@ -893,7 +893,7 @@ export function AllTicketsView(): React.JSX.Element {
 
   const handleRowClick = useCallback((ticket: Ticket) => {
     setDetailTicketId(ticket.id);
-    setDetailTeamId(ticket.teamId);
+    setDetailTeamId(ticket.boardId);
     setShowDetail(true);
   }, []);
 
@@ -913,7 +913,7 @@ export function AllTicketsView(): React.JSX.Element {
           case 'assignToMe':
             if (user?.decoded_tokens?.idToken?.sub) {
               await OpsService.updateTicket(numaPut, ticket.id, {
-                teamId: ticket.teamId,
+                boardId: ticket.boardId,
                 assigneeId: user.decoded_tokens.idToken.sub,
                 version: ticket.version,
               });
@@ -922,7 +922,7 @@ export function AllTicketsView(): React.JSX.Element {
             break;
           case 'assignTo':
             await OpsService.updateTicket(numaPut, ticket.id, {
-              teamId: ticket.teamId,
+              boardId: ticket.boardId,
               assigneeId: payload as string,
               version: ticket.version,
             });
@@ -930,9 +930,9 @@ export function AllTicketsView(): React.JSX.Element {
             break;
           case 'changeStage': {
             const newStageId = payload as string;
-            const targetStage = (teamData?.stages ?? []).find((s) => s.id === newStageId);
+            const targetStage = (boardData?.stages ?? []).find((s) => s.id === newStageId);
             await OpsService.updateTicket(numaPut, ticket.id, {
-              teamId: ticket.teamId,
+              boardId: ticket.boardId,
               stageId: newStageId,
               zoneId: targetStage?.zoneId,
               version: ticket.version,
@@ -948,15 +948,15 @@ export function AllTicketsView(): React.JSX.Element {
             await navigator.clipboard.writeText(`${window.location.origin}/ops?ticket=${ticket.displayId}`);
             break;
           case 'archive':
-            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.teamId);
+            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.boardId);
             await refreshTickets();
             break;
           case 'unarchive':
-            await OpsService.unarchiveTicket(numaPut, ticket.id, ticket.version, ticket.teamId);
+            await OpsService.unarchiveTicket(numaPut, ticket.id, ticket.version, ticket.boardId);
             await refreshTickets();
             break;
           case 'delete':
-            await OpsService.deleteTicket(numaDelete, ticket.id, ticket.teamId);
+            await OpsService.deleteTicket(numaDelete, ticket.id, ticket.boardId);
             await refreshTickets();
             break;
         }
@@ -1025,7 +1025,7 @@ export function AllTicketsView(): React.JSX.Element {
           </div>
 
           {/* Scope toggle: This Board / All Boards */}
-          {teams.length > 1 && (
+          {boards.length > 1 && (
             <ButtonGroup size="sm">
               <Button
                 variant={scope === 'thisBoard' ? 'primary' : 'outline-secondary'}
@@ -1044,8 +1044,8 @@ export function AllTicketsView(): React.JSX.Element {
             </ButtonGroup>
           )}
 
-          {/* Team selector — hidden when All Boards scope is active */}
-          {teams.length > 1 && scope === 'thisBoard' && (
+          {/* Board selector — hidden when All Boards scope is active */}
+          {boards.length > 1 && scope === 'thisBoard' && (
             <div className="position-relative d-inline-block">
               <select
                 className="form-select form-select-sm"
@@ -1058,10 +1058,10 @@ export function AllTicketsView(): React.JSX.Element {
                   paddingRight: 28,
                   minWidth: 140,
                 }}
-                value={selectedTeamId ?? ''}
-                onChange={(e) => selectTeam(e.target.value)}
+                value={selectedBoardId ?? ''}
+                onChange={(e) => selectBoard(e.target.value)}
               >
-                {teams.map((tm) => (
+                {boards.map((tm) => (
                   <option key={tm.id} value={tm.id}>
                     {tm.name}
                   </option>
@@ -1073,7 +1073,7 @@ export function AllTicketsView(): React.JSX.Element {
           {/* Quick-filter: All Status */}
           <QuickFilterDropdown
             label={t('allTicketsView.allStatus')}
-            options={(teamData?.stages ?? []).map((s) => ({ value: s.id, label: s.name }))}
+            options={(boardData?.stages ?? []).map((s) => ({ value: s.id, label: s.name }))}
             selected={quickStatusFilter}
             onChange={setQuickStatusFilter}
           />
@@ -1083,7 +1083,7 @@ export function AllTicketsView(): React.JSX.Element {
             label={t('allTicketsView.allSprints')}
             options={workUnits.map((wu) => ({
               value: wu.id,
-              label: selectedTeamName ? `${selectedTeamName} — ${wu.name}` : wu.name,
+              label: selectedBoardName ? `${selectedBoardName} — ${wu.name}` : wu.name,
             }))}
             selected={quickSprintFilter}
             onChange={setQuickSprintFilter}
@@ -1343,7 +1343,7 @@ export function AllTicketsView(): React.JSX.Element {
       <TicketDetailModal
         show={showDetail}
         ticketId={detailTicketId}
-        teamIdOverride={detailTeamId}
+        boardIdOverride={detailTeamId}
         onHide={() => {
           setShowDetail(false);
           setDetailTicketId(null);
@@ -1361,8 +1361,8 @@ export function AllTicketsView(): React.JSX.Element {
         position={ctxMenu.position}
         ticket={ctxMenu.ticket}
         context="table"
-        stages={teamData?.stages ?? []}
-        zones={teamData?.zones ?? []}
+        stages={boardData?.stages ?? []}
+        zones={boardData?.zones ?? []}
         staff={config?.staff ?? []}
         onClose={() => setCtxMenu((prev) => ({ ...prev, show: false }))}
         onAction={handleContextMenuAction}

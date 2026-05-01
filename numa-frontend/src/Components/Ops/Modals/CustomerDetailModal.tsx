@@ -95,7 +95,7 @@ export function CustomerDetailModal({
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const { showToast } = useToast();
-  const { config, selectedTeamId, teams, teamData } = useOps();
+  const { config, selectedBoardId, boards, boardData } = useOps();
 
   // ── Core state ──────────────────────────────────────────────────────────
 
@@ -179,18 +179,18 @@ export function CustomerDetailModal({
       const response = await OpsService.getCustomer(numaGet, customerId);
 
       // Load linked work via tickets API (cross-team customer index).
-      // Tickets endpoint requires teamId even for customerId index queries.
-      const queryTeamId = selectedTeamId ?? teams[0]?.id;
+      // Tickets endpoint requires boardId even for customerId index queries.
+      const queryTeamId = selectedBoardId ?? boards[0]?.id;
       let resolvedLinkedTickets: Ticket[] = [];
       if (queryTeamId) {
         try {
           const linkedResponse = await OpsService.listTickets(numaGet, {
-            teamId: queryTeamId,
+            boardId: queryTeamId,
             customerId,
             includeArchived: true,
           });
           const rawTickets = linkedResponse.tickets as Array<
-            Ticket & { entityType?: string; ticketId?: string; teamId?: string }
+            Ticket & { entityType?: string; ticketId?: string; boardId?: string }
           >;
 
           // Customer index queries can return lightweight TICKET_INDEX rows.
@@ -202,7 +202,7 @@ export function CustomerDetailModal({
               }
 
               const ticketId = row.ticketId || row.id;
-              const ticketTeamId = row.teamId || queryTeamId;
+              const ticketTeamId = row.boardId || queryTeamId;
               if (!ticketId || !ticketTeamId) return null;
 
               try {
@@ -250,7 +250,7 @@ export function CustomerDetailModal({
     } finally {
       setLoading(false);
     }
-  }, [numaGet, customerId, selectedTeamId, teams]);
+  }, [numaGet, customerId, selectedBoardId, boards]);
 
   useEffect(() => {
     if (show && customerId) {
@@ -408,20 +408,20 @@ export function CustomerDetailModal({
     [customer, handleUpdate]
   );
 
-  const teamNameById = useMemo(() => {
-    const entries = teams.map((team) => [team.id, team.name] as const);
+  const boardNameById = useMemo(() => {
+    const entries = boards.map((team) => [team.id, team.name] as const);
     return new Map(entries);
-  }, [teams]);
+  }, [boards]);
 
-  const selectedTeamZoneNameById = useMemo(() => {
-    const entries = (teamData?.zones ?? []).map((zone) => [zone.id, zone.name] as const);
+  const selectedBoardZoneNameById = useMemo(() => {
+    const entries = (boardData?.zones ?? []).map((zone) => [zone.id, zone.name] as const);
     return new Map(entries);
-  }, [teamData?.zones]);
+  }, [boardData?.zones]);
 
-  const selectedTeamStageNameById = useMemo(() => {
-    const entries = (teamData?.stages ?? []).map((stage) => [stage.id, stage.name] as const);
+  const selectedBoardStageNameById = useMemo(() => {
+    const entries = (boardData?.stages ?? []).map((stage) => [stage.id, stage.name] as const);
     return new Map(entries);
-  }, [teamData?.stages]);
+  }, [boardData?.stages]);
 
   const openLinkedTicket = useCallback((ticket: Ticket) => {
     setSelectedTicket(ticket);
@@ -456,24 +456,24 @@ export function CustomerDetailModal({
 
   const resolveLinkedTicketZoneName = useCallback(
     (ticket: Ticket) => {
-      if (ticket.teamId !== selectedTeamId) return ticket.zoneId || t('common.none');
-      return selectedTeamZoneNameById.get(ticket.zoneId) ?? t('common.none');
+      if (ticket.boardId !== selectedBoardId) return ticket.zoneId || t('common.none');
+      return selectedBoardZoneNameById.get(ticket.zoneId) ?? t('common.none');
     },
-    [selectedTeamId, selectedTeamZoneNameById, t]
+    [selectedBoardId, selectedBoardZoneNameById, t]
   );
 
   const resolveLinkedTicketStageName = useCallback(
     (ticket: Ticket) => {
-      if (ticket.teamId !== selectedTeamId) {
+      if (ticket.boardId !== selectedBoardId) {
         if (!ticket.statusType) return t('common.none');
         return t(`globalSettings.statusTypes.${ticket.statusType}`);
       }
-      const stageName = ticket.stageId ? selectedTeamStageNameById.get(ticket.stageId) : undefined;
+      const stageName = ticket.stageId ? selectedBoardStageNameById.get(ticket.stageId) : undefined;
       if (stageName) return stageName;
       if (!ticket.statusType) return t('common.none');
       return t(`globalSettings.statusTypes.${ticket.statusType}`);
     },
-    [selectedTeamId, selectedTeamStageNameById, t]
+    [selectedBoardId, selectedBoardStageNameById, t]
   );
 
   const resolveLinkedTicketStatusLabel = useCallback(
@@ -509,14 +509,14 @@ export function CustomerDetailModal({
   const groupedLinkedTickets = useMemo(() => {
     const byTeam = new Map<string, Ticket[]>();
     visibleLinkedTickets.forEach((ticket) => {
-      const teamName = teamNameById.get(ticket.teamId) ?? ticket.teamId;
-      if (!byTeam.has(teamName)) byTeam.set(teamName, []);
-      byTeam.get(teamName)?.push(ticket);
+      const boardName = boardNameById.get(ticket.boardId) ?? ticket.boardId;
+      if (!byTeam.has(boardName)) byTeam.set(boardName, []);
+      byTeam.get(boardName)?.push(ticket);
     });
     return Array.from(byTeam.entries())
-      .map(([teamName, tickets]) => ({ teamName, tickets }))
-      .sort((a, b) => a.teamName.localeCompare(b.teamName));
-  }, [visibleLinkedTickets, teamNameById]);
+      .map(([boardName, tickets]) => ({ boardName, tickets }))
+      .sort((a, b) => a.boardName.localeCompare(b.boardName));
+  }, [visibleLinkedTickets, boardNameById]);
 
   const lastContactLabel = useMemo(
     () => formatRelativeDateLabel(customer?.lastContactDate, t),
@@ -846,9 +846,9 @@ export function CustomerDetailModal({
                 ) : (
                   <div className="d-flex flex-column gap-3">
                     {groupedLinkedTickets.map((group) => (
-                      <div key={group.teamName}>
+                      <div key={group.boardName}>
                         <div className="d-flex align-items-center justify-content-between mb-1">
-                          <span className="small fw-semibold">{group.teamName}</span>
+                          <span className="small fw-semibold">{group.boardName}</span>
                           <Badge bg="light" text="dark" pill>
                             {group.tickets.length}
                           </Badge>
@@ -1093,7 +1093,7 @@ export function CustomerDetailModal({
       <TicketDetailModal
         show={showLinkedTicketDetail}
         ticketId={linkedTicketDetailId}
-        teamIdOverride={linkedTicketDetailTeamId}
+        boardIdOverride={linkedTicketDetailTeamId}
         onHide={() => {
           setShowLinkedTicketDetail(false);
           setLinkedTicketDetailId(null);

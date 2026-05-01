@@ -19,12 +19,12 @@ import type { WorkUnit } from '../../../types/ops';
 const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
   const { t } = useTranslation('ops');
   const {
-    teamData,
+    boardData,
     workUnits,
     tickets,
     selectedWorkUnitId,
     selectWorkUnit,
-    refreshTeam,
+    refreshBoard,
     refreshTickets,
     refreshWorkUnits,
     setActiveZone,
@@ -38,9 +38,9 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
   const [successAction, setSuccessAction] = useState<'started' | 'completed'>('started');
   const [successWorkUnit, setSuccessWorkUnit] = useState<WorkUnit | null>(null);
 
-  const zones = teamData?.zones ?? [];
-  const hasWorkUnits = Boolean(teamData?.team?.workUnitSeries?.enabled);
-  const teamId = teamData?.team?.id ?? '';
+  const zones = boardData?.zones ?? [];
+  const hasWorkUnits = Boolean(boardData?.board?.workUnitSeries?.enabled);
+  const boardId = boardData?.board?.id ?? '';
 
   // ── Derived sprint stats ─────────────────────────────────────────────
   const workUnitStats = useMemo(() => {
@@ -104,9 +104,9 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
 
   // ── Default name for the next sprint ──────────────────────────────────
   const defaultSprintName = useMemo(() => {
-    const label = teamData?.team?.workUnitSeries?.label ?? 'Sprint';
+    const label = boardData?.board?.workUnitSeries?.label ?? 'Sprint';
     return `${label} ${workUnits.length + 1}`;
-  }, [teamData?.team?.workUnitSeries?.label, workUnits.length]);
+  }, [boardData?.board?.workUnitSeries?.label, workUnits.length]);
 
   if (!hasWorkUnits) return null;
 
@@ -221,7 +221,7 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
       {/* ── Work Unit Modals ──────────────────────────────────────────── */}
       <CreateWorkUnitModal
         show={showCreate}
-        teamId={teamId}
+        boardId={boardId}
         defaultName={defaultSprintName}
         onHide={() => setShowCreate(false)}
         onCreated={async () => {
@@ -232,7 +232,7 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
       <StartWorkUnitModal
         show={showStart}
         workUnits={workUnits}
-        teamId={teamId}
+        boardId={boardId}
         tickets={tickets}
         zones={zones}
         onHide={() => setShowStart(false)}
@@ -245,7 +245,7 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
             setShowSuccess(true);
           }
           const beforeZoneIds = new Set(zones.map((z) => z.id));
-          const updated = await refreshTeam();
+          const updated = await refreshBoard();
           if (updated) {
             const newZone = updated.zones.find((z) => !beforeZoneIds.has(z.id));
             if (newZone) setActiveZone(newZone.id);
@@ -258,7 +258,7 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
           show={showComplete}
           workUnit={activeWorkUnit}
           workUnits={workUnits}
-          teamId={teamId}
+          boardId={boardId}
           incompleteCount={incompleteCount}
           completedCount={completedCount}
           onHide={() => setShowComplete(false)}
@@ -269,7 +269,7 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
             setShowSuccess(true);
             // Clear the sprint filter so the board doesn't stay stuck on the completed sprint
             selectWorkUnit(null);
-            await refreshTeam();
+            await refreshBoard();
             await Promise.all([refreshTickets(), refreshWorkUnits()]);
           }}
         />

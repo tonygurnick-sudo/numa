@@ -57,7 +57,7 @@ export interface OpsTicket {
   status?: { id?: string; name?: string; type?: string };
 }
 
-export interface OpsTeam {
+export interface OpsBoard {
   id?: string;
   name?: string;
   description?: string;
@@ -68,6 +68,9 @@ export interface OpsTeam {
   workUnitSeries?: { enabled?: boolean; label?: string };
   allowedTicketTypes?: string[];
 }
+
+/** @deprecated Use OpsBoard instead. */
+export type OpsTeam = OpsBoard;
 
 export interface OpsCustomer {
   id?: string;
@@ -112,12 +115,15 @@ export interface OpsStage {
   order?: number;
 }
 
-/** Rich team detail returned by get_team (includes board structure) */
-export interface OpsTeamDetail {
-  team: OpsTeam;
+/** Rich board detail returned by get_board (includes board structure) */
+export interface OpsBoardDetail {
+  board: OpsBoard;
   zones?: OpsZone[];
   stages?: OpsStage[];
 }
+
+/** @deprecated Use OpsBoardDetail instead. */
+export type OpsTeamDetail = OpsBoardDetail;
 
 export interface OpsFieldDefinition {
   id?: string;
@@ -180,7 +186,7 @@ export interface OpsComment {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Unwrap an ops API response — find the first array value in {teams:[...]} etc. */
+/** Unwrap an ops API response — find the first array value in {boards:[...]} etc. */
 export function unwrapOpsResult(data: unknown): unknown[] {
   if (Array.isArray(data)) return data;
   if (data && typeof data === 'object') {
@@ -285,7 +291,7 @@ export function getOpsPayload(result: ToolResultLike): OpsPayload | null {
 
 type OpsCategory =
   | 'tickets'
-  | 'teams'
+  | 'boards'
   | 'customers'
   | 'suppliers'
   | 'projects'
@@ -298,7 +304,7 @@ type OpsCategory =
 export function getOpsCategory(operation: string): OpsCategory {
   if (operation === 'get_config') return 'config';
   if (operation.includes('ticket')) return 'tickets';
-  if (operation.includes('team')) return 'teams';
+  if (operation.includes('board') || operation.includes('team')) return 'boards';
   if (operation.includes('customer')) return 'customers';
   if (operation.includes('supplier')) return 'suppliers';
   if (operation.includes('project')) return 'projects';

@@ -4,7 +4,7 @@ import { useOpsData, type OpsDataState } from './useOpsData';
 // ─── Context ────────────────────────────────────────────────────────────────
 
 /**
- * OpsContext holds the full ops-page state: config, teams, active team
+ * OpsContext holds the full ops-page state: config, boards, active board
  * with its zones / stages / tickets / work-units, plus view and selection state.
  *
  * Consumers must be wrapped in an <OpsProvider> — the useOps() convenience

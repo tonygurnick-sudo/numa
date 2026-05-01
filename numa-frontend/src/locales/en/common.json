@@ -669,7 +669,7 @@
     },
     "numaOps": {
       "noTickets": "No tickets found",
-      "noTeams": "No teams found",
+      "noBoards": "No boards found",
       "noCustomers": "No customers found",
       "noSuppliers": "No suppliers found",
       "noProjects": "No projects found",

@@ -7,6 +7,12 @@
 
 const PREFIX = 'ops_cache_';
 
+/** localStorage key constants used across the Ops UI. Renamed in the
+ * team→board cleanup; legacy key migration lives in useOpsData. */
+export const LS_ACTIVE_BOARD = 'numa_ops_active_board';
+/** @deprecated Replaced by LS_ACTIVE_BOARD. Kept only for migration shim. */
+export const LS_ACTIVE_BOARD_LEGACY = 'numa_ops_active_team';
+
 /** Return cached data for `key`, or null if not present / corrupt. */
 export function getCached<T>(key: string): T | null {
   try {
