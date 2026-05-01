@@ -355,6 +355,8 @@ print("Dashboard saved: /workdir/outputs/dashboard.html")
 
 Use Numa's purple (`#8e50a7`) as the primary color. HTML dashboards are responsive, interactive, and more professional for non-chart visualizations.
 
+**When injecting dynamic rows or values into the template** (CRM records, ticket titles, anything containing user-entered strings), follow the embedding rules in the `render` skill: serialise data via `<script type="application/json">` and escape element text with `html.escape()`. Raw `&`, `<`, `>`, `/` in real data will silently break the page.
+
 ---
 
 ## Basic Chart Visualization with matplotlib

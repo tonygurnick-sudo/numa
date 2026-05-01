@@ -268,6 +268,48 @@ For interactive content (calculators, steppers, explorable explanations), use fu
 
 ---
 
+## Embedding Dynamic Data Safely
+
+When rendering data that contains user-entered strings (company names, ticket titles, comments, notes), do not string-interpolate or template the data directly into `<script>` or inline HTML. Characters common in real data -- `&`, `<`, `>`, `/` -- will silently break HTML/JS parsing. The chart at the top renders, the section below renders blank, and there's no console error.
+
+**Never sanitize the source data.** Escape on output, never on input. "Chandler Glass & Packaging" must round-trip exactly.
+
+### Safe pattern: JSON in a typed script tag
+
+```html
+<script type="application/json" id="page-data">
+  {payload}
+</script>
+<script>
+  const data = JSON.parse(document.getElementById('page-data').textContent);
+  // build the page from data
+</script>
+```
+
+Inside `<script type="application/json">`, the only sequence that can close the tag early is `</`. Escape it once when serialising:
+
+```python
+import json
+payload = json.dumps(data).replace("</", "<\\/")
+```
+
+### Inserting strings into HTML element text or attributes
+
+Use `html.escape()`, not f-strings:
+
+```python
+import html
+row = f"<tr><td>{html.escape(name)}</td><td>{html.escape(notes)}</td></tr>"
+```
+
+`html.escape()` defaults to `quote=True`, which also escapes `"` for attribute values.
+
+### Don't trust "this field looks safe"
+
+`&` shows up in company names, `<` `>` in templates, `/` in product codes, smart quotes everywhere. If a string came from a person, escape it.
+
+---
+
 ## Component Patterns
 
 ### Metric Cards
