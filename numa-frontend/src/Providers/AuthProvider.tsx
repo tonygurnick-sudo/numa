@@ -126,6 +126,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const refreshInProgressRef = useRef(false);
   const refreshPromiseRef = useRef(null);
   const tokenCheckRef = useRef(null);
+  // Holds the current getIdToken so AWS SDK credential providers can refresh
+  // the Cognito ID token on demand (e.g. after laptop wake) without depending
+  // on a re-memoized callback identity.
+  const getIdTokenRef = useRef<(() => Promise<string | null>) | null>(null);
 
   const lastRefreshTimeRef = useRef(0);
   const refreshTimeoutRef = useRef(null);
@@ -824,6 +828,12 @@ export const AuthProvider = ({ children, initialTokens }) => {
     return tokensRef.current.idToken;
   }, [refreshTokens]);
 
+  // Keep the ref in sync so credentialProvider closures captured at SDK-client
+  // init time always reach the latest getIdToken.
+  useEffect(() => {
+    getIdTokenRef.current = getIdToken;
+  }, [getIdToken]);
+
   const initializeQBusinessClient = useCallback(async () => {
     if (!user) return;
 
@@ -863,13 +873,19 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return;
       }
 
-      const credentialProvider = () =>
-        fromWebToken({
+      const credentialProvider = async () => {
+        // Self-heal: refresh Cognito ID token if expired before trading it for
+        // STS creds. Prevents ExpiredTokenException after laptop wake when the
+        // SDK fires before AuthProvider's visibility-change refresh completes.
+        const idToken = (await getIdTokenRef.current?.()) ?? tokensRef.current.idToken;
+        if (!idToken) throw new Error('No ID token available for QBusinessClient credentials');
+        return fromWebToken({
           roleSessionName: 'numa-qbusiness-client',
           roleArn: roleArn,
-          webIdentityToken: tokensRef.current.idToken,
+          webIdentityToken: idToken,
           durationSeconds: 900,
         })();
+      };
 
       const newClient = withPRM(QBusinessClient, {
         region: REGION,
@@ -924,13 +940,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
       // Frontend uses direct Bedrock access within client account
       // Cross-account quota sharing is backend-only
-      const credentialProvider = () =>
-        fromWebToken({
+      const credentialProvider = async () => {
+        const idToken = (await getIdTokenRef.current?.()) ?? tokensRef.current.idToken;
+        if (!idToken) throw new Error('No ID token available for BedrockRuntimeClient credentials');
+        return fromWebToken({
           roleSessionName: 'numa-bedrock-client',
           roleArn: roleArn,
-          webIdentityToken: tokensRef.current.idToken,
+          webIdentityToken: idToken,
           durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
         })();
+      };
 
       const newClient = withPRM(BedrockRuntimeClient, {
         region: REGION,
@@ -985,13 +1004,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return;
       }
 
-      const credentialProvider = () =>
-        fromWebToken({
+      const credentialProvider = async () => {
+        const idToken = (await getIdTokenRef.current?.()) ?? tokensRef.current.idToken;
+        if (!idToken) throw new Error('No ID token available for BedrockAgentRuntimeClient credentials');
+        return fromWebToken({
           roleSessionName: 'numa-bedrock-agent-runtime-client',
           roleArn: roleArn,
-          webIdentityToken: tokensRef.current.idToken,
+          webIdentityToken: idToken,
           durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
         })();
+      };
 
       const newClient = withPRM(BedrockAgentRuntimeClient, {
         region: REGION,
@@ -1043,13 +1065,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return;
       }
 
-      const credentialProvider = () =>
-        fromWebToken({
+      const credentialProvider = async () => {
+        const idToken = (await getIdTokenRef.current?.()) ?? tokensRef.current.idToken;
+        if (!idToken) throw new Error('No ID token available for BedrockAgentClient credentials');
+        return fromWebToken({
           roleSessionName: 'numa-bedrock-agent-client',
           roleArn: roleArn,
-          webIdentityToken: tokensRef.current.idToken,
+          webIdentityToken: idToken,
           durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
         })();
+      };
 
       const newClient = withPRM(BedrockAgentClient, {
         region: REGION,
@@ -1106,13 +1131,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return;
       }
 
-      const credentialProvider = () =>
-        fromWebToken({
+      const credentialProvider = async () => {
+        const idToken = (await getIdTokenRef.current?.()) ?? tokensRef.current.idToken;
+        if (!idToken) throw new Error('No ID token available for DynamoDBClient credentials');
+        return fromWebToken({
           roleSessionName: 'numa-dynamo-client',
           roleArn: roleArn,
-          webIdentityToken: tokensRef.current.idToken,
+          webIdentityToken: idToken,
           durationSeconds: 900,
         })();
+      };
 
       const newClient = withPRM(DynamoDBClient, {
         region: REGION,
@@ -1167,13 +1195,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return;
       }
 
-      const credentialProvider = () =>
-        fromWebToken({
+      const credentialProvider = async () => {
+        const idToken = (await getIdTokenRef.current?.()) ?? tokensRef.current.idToken;
+        if (!idToken) throw new Error('No ID token available for QAppsClient credentials');
+        return fromWebToken({
           roleSessionName: 'numa-qapps-client',
           roleArn: roleArn,
-          webIdentityToken: tokensRef.current.idToken,
+          webIdentityToken: idToken,
           durationSeconds: 900,
         })();
+      };
 
       const newQAppsClient = withPRM(QAppsClient, {
         region: REGION,
@@ -1223,13 +1254,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return;
       }
 
-      const credentialProvider = () =>
-        fromWebToken({
+      const credentialProvider = async () => {
+        const idToken = (await getIdTokenRef.current?.()) ?? tokensRef.current.idToken;
+        if (!idToken) throw new Error('No ID token available for LambdaClient credentials');
+        return fromWebToken({
           roleSessionName: 'numa-lambda-client',
           roleArn: roleArn,
-          webIdentityToken: tokensRef.current.idToken,
+          webIdentityToken: idToken,
           durationSeconds: 900,
         })();
+      };
 
       const newClient = withPRM(LambdaClient, {
         region: REGION,
