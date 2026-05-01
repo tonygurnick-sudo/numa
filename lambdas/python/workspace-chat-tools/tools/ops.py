@@ -1489,7 +1489,7 @@ def _resolve_lambda_and_request(
             params,
             [
                 ("boardId", "boardId", "board_id"),
-                ("currentTeamId", "currentTeamId", "current_board_id"),
+                ("currentBoardId", "currentBoardId", "current_board_id"),
                 ("title", "title", "name"),
                 ("description", "description"),
                 ("stageId", "stageId", "stage_id"),
@@ -1623,7 +1623,7 @@ def _resolve_lambda_and_request(
             "linkedTicketTitle": _p(params, "linkedTicketTitle", "linked_ticket_title"),
             "linkType": _p(params, "linkType", "link_type") or "",
             "boardId": _p(params, "boardId", "board_id"),
-            "linkedTeamId": _p(params, "linkedTeamId", "linked_board_id"),
+            "linkedBoardId": _p(params, "linkedBoardId", "linked_board_id"),
         }
         return (OPS_API_LAMBDA, "POST", f"ops/tickets/{ticket_id}/links", body, None)
 

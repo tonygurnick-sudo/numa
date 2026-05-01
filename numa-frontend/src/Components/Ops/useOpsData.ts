@@ -183,7 +183,7 @@ export const useOpsData = (): OpsDataState => {
     try {
       const saved = localStorage.getItem(LS_BOARD_VIEW_MODE);
       // Migrate old singleTeam/allTeams values to singleBoard/allBoards.
-      if (saved === 'singleBoard' || saved === 'singleBoard') return 'singleBoard';
+      if (saved === 'singleBoard' || saved === 'singleTeam') return 'singleBoard';
       return 'allBoards';
     } catch {
       return 'allBoards';

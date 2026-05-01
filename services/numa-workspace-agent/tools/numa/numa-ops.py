@@ -3,14 +3,17 @@
 Numa Ops — MCP Tool Reference
 ===============================
 
-Manage Numa Ops (tickets, boards/teams, customers, suppliers, projects) via the
+Manage Numa Ops (tickets, boards, customers, suppliers, projects) via the
 mcp__numa__numa_ops_tool MCP tool.  Load the `ops` skill for the full
 interactive workflow and detailed guidance.
 
 Tool name:  mcp__numa__numa_ops_tool
 
-NOTE: The UI calls them "Boards" but the API uses "teams" / team_id.
-When talking to users, say "board". When calling the API, use team_id.
+TIP: Pass NAMES instead of IDs whenever possible. The bridge resolves
+boardName, stageName, assigneeName, customerName, projectName,
+workUnitName, lifecycleStageName, and ticketTypeName to their IDs
+automatically. Skip the get_board / get_config / list_* lookup dance
+unless you actually need to display data to the user. Never invent IDs.
 
 All examples below are mcp__numa__numa_ops_tool calls.
 
@@ -19,20 +22,20 @@ Operations
 ----------
 
   Tickets:
-    list_tickets     List tickets (filter by team, stage, assignee, status type, priority)
+    list_tickets     List tickets (filter by board, stage, assignee, status type, priority)
     get_ticket       Get ticket details by ID or display ID
     search_tickets   Search tickets by query string
-    create_ticket    Create a new ticket (requires team_id, stage_id, title)
+    create_ticket    Create a new ticket (requires board_id, stage_id, title)
     update_ticket    Update an existing ticket
-    delete_ticket    Delete a ticket (requires team_id)
+    delete_ticket    Delete a ticket (requires board_id)
     add_comment      Add a comment to a ticket
     list_comments    List comments on a ticket
 
-  Teams (Boards):
-    list_teams       List all boards
-    get_team         Get board details by ID (includes zones and stages)
-    create_team      Create a new board
-    update_team      Update an existing board
+  Boards:
+    list_boards       List all boards
+    get_board         Get board details by ID (includes zones and stages)
+    create_board      Create a new board
+    update_board      Update an existing board
 
   Customers:
     list_customers   List customers (search, filter by stage, owner, territory, etc.)
@@ -68,7 +71,7 @@ List Tickets
 
 Parameters:
   operation    (required)  "list_tickets"
-  params       (required)  team_id (required), optional: stage_id, status_type,
+  params       (required)  board_id (required), optional: stage_id, status_type,
                            assignee_id, customer_id, work_unit_id, priority,
                            include_archived, limit, cursor
 
@@ -77,14 +80,14 @@ Examples:
   # List all tickets for a board
   mcp__numa__numa_ops_tool(
     operation="list_tickets",
-    params='{"team_id": "team-uuid-here"}',
+    params='{"board_id": "board-uuid-here"}',
     description="List tickets for board"
   )
 
   # Filter by status type and priority
   mcp__numa__numa_ops_tool(
     operation="list_tickets",
-    params='{"team_id": "team-uuid", "status_type": "active", "priority": "high"}',
+    params='{"board_id": "board-uuid", "status_type": "active", "priority": "high"}',
     description="List high priority active tickets"
   )
 
@@ -94,18 +97,18 @@ Get Ticket
 
 Parameters:
   operation    (required)  "get_ticket"
-  params       (required)  ticket_id + team_id, OR display_id
+  params       (required)  ticket_id + board_id, OR display_id
 
 Examples:
 
-  # Get by ticket ID (requires team_id)
+  # Get by ticket ID (requires board_id)
   mcp__numa__numa_ops_tool(
     operation="get_ticket",
-    params='{"ticket_id": "ticket-uuid-here", "team_id": "team-uuid"}',
+    params='{"ticket_id": "ticket-uuid-here", "board_id": "board-uuid"}',
     description="Get ticket details"
   )
 
-  # Get by display ID (e.g. "DEV-123") — no team_id needed
+  # Get by display ID (e.g. "DEV-123") — no board_id needed
   mcp__numa__numa_ops_tool(
     operation="get_ticket",
     params='{"display_id": "DEV-123"}',
@@ -118,13 +121,13 @@ Search Tickets
 
 Parameters:
   operation    (required)  "search_tickets"
-  params       (required)  query (search term), optionally team_id
+  params       (required)  query (search term), optionally board_id
 
 Examples:
 
   mcp__numa__numa_ops_tool(
     operation="search_tickets",
-    params='{"query": "login bug", "team_id": "team-uuid"}',
+    params='{"query": "login bug", "board_id": "board-uuid"}',
     description="Search for login bug tickets"
   )
 
@@ -133,11 +136,11 @@ Create Ticket
 -------------
 
 IMPORTANT: Call get_config first to get ticket types and staff.
-           Call get_team to get valid stage IDs for the board.
+           Call get_board to get valid stage IDs for the board.
 
 Parameters:
   operation    (required)  "create_ticket"
-  params       (required)  team_id, stage_id, title
+  params       (required)  board_id, stage_id, title
                            optional: description, ticket_type_id, priority
                            (lowest/low/medium/high/highest), assignee_id,
                            assignee_name, reporter_id, reporter_name, due_date,
@@ -149,7 +152,7 @@ Examples:
 
   mcp__numa__numa_ops_tool(
     operation="create_ticket",
-    params='{"team_id": "team-uuid", "stage_id": "stage-uuid", "title": "Fix login page", "description": "Users cannot log in", "priority": "high"}',
+    params='{"board_id": "board-uuid", "stage_id": "stage-uuid", "title": "Fix login page", "description": "Users cannot log in", "priority": "high"}',
     description="Create ticket: Fix login page\\nPriority: high\\nDescription: Users cannot log in"
   )
 
@@ -159,7 +162,7 @@ Update Ticket
 
 Parameters:
   operation    (required)  "update_ticket"
-  params       (required)  ticket_id, team_id
+  params       (required)  ticket_id, board_id
                            optional: stage_id (move to different stage),
                            zone_id, priority, assignee_id, assignee_name,
                            due_date, customer_id, supplier_id, work_unit_id,
@@ -170,7 +173,7 @@ Examples:
 
   mcp__numa__numa_ops_tool(
     operation="update_ticket",
-    params='{"ticket_id": "ticket-uuid", "team_id": "team-uuid", "stage_id": "stage-done-uuid"}',
+    params='{"ticket_id": "ticket-uuid", "board_id": "board-uuid", "stage_id": "stage-done-uuid"}',
     description="Update ticket: move to Done stage"
   )
 
@@ -180,13 +183,13 @@ Delete Ticket
 
 Parameters:
   operation    (required)  "delete_ticket"
-  params       (required)  ticket_id, team_id
+  params       (required)  ticket_id, board_id
 
 Examples:
 
   mcp__numa__numa_ops_tool(
     operation="delete_ticket",
-    params='{"ticket_id": "ticket-uuid", "team_id": "team-uuid"}',
+    params='{"ticket_id": "ticket-uuid", "board_id": "board-uuid"}',
     description="Delete ticket"
   )
 
@@ -196,7 +199,7 @@ Add Comment
 
 Parameters:
   operation    (required)  "add_comment"
-  params       (required)  ticket_id, content; optional: team_id, display_id
+  params       (required)  ticket_id, content; optional: board_id, display_id
 
 Examples:
 
@@ -207,24 +210,24 @@ Examples:
   )
 
 
-List Teams (Boards)
+List Boards
 -------------------
 
   mcp__numa__numa_ops_tool(
-    operation="list_teams",
+    operation="list_boards",
     description="List all boards"
   )
 
 
-Get Team (Board)
+Get Board
 ----------------
 
 Returns the board with its zones and stages. Use this to get valid stage_id
 values for ticket creation.
 
   mcp__numa__numa_ops_tool(
-    operation="get_team",
-    params='{"team_id": "team-uuid"}',
+    operation="get_board",
+    params='{"board_id": "board-uuid"}',
     description="Get board details with stages"
   )
 
@@ -287,13 +290,13 @@ Get Metrics
 
 Parameters:
   operation    (required)  "get_metrics"
-  params       (required)  team_ids (comma-separated) OR team_id (single)
+  params       (required)  board_ids (comma-separated) OR board_id (single)
 
 Examples:
 
   mcp__numa__numa_ops_tool(
     operation="get_metrics",
-    params='{"team_ids": "team-uuid1,team-uuid2"}',
+    params='{"board_ids": "board-uuid1,board-uuid2"}',
     description="Get metrics for boards"
   )
 

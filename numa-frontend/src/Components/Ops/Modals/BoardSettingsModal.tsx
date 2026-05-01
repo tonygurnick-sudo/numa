@@ -417,7 +417,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     } catch (err) {
       const msg = String(err);
       if (msg.includes('409')) {
-        setError(t('boards.deleteTeamHasTickets'));
+        setError(t('boards.deleteBoardHasTickets'));
       } else {
         setError(t('errors.saveFailed', { message: msg }));
       }
@@ -663,7 +663,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
               disabled={deleting}
             >
               <i className="bi bi-trash me-1" />
-              {t('boards.deleteTeam')}
+              {t('boards.deleteBoard')}
             </Button>
           )}
           <Button variant="outline-secondary" onClick={onHide}>
@@ -677,9 +677,9 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
 
       <ConfirmModal
         show={showDeleteConfirm}
-        title={t('boards.deleteTeam')}
-        message={t('boards.deleteTeamConfirm', { name: team?.name ?? '' })}
-        confirmLabel={t('boards.deleteTeam')}
+        title={t('boards.deleteBoard')}
+        message={t('boards.deleteBoardConfirm', { name: team?.name ?? '' })}
+        confirmLabel={t('boards.deleteBoard')}
         variant="danger"
         onConfirm={handleDelete}
         onHide={() => setShowDeleteConfirm(false)}

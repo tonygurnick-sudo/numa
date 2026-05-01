@@ -49,6 +49,14 @@ export const dbToApi = <T>(value: T): T => {
     return value.map((item) => dbToApi(item)) as unknown as T;
   }
   if (typeof value === 'object') {
+    // Non-plain objects (Date, Buffer, typed arrays, Map, Set, custom class
+    // instances) have `typeof === 'object'` but no enumerable own keys we
+    // want to walk. Object.entries on a Date returns [], which would
+    // silently coerce a Date payload to `{}`. Pass them through untouched
+    // -- JSON.stringify handles Date natively (.toJSON), and the others
+    // shouldn't appear in DDB payloads but are harmless if they do.
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return value;
     const out: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
       const newKey = DB_TO_API_KEYS[key] ?? key;

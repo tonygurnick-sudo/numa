@@ -22,7 +22,7 @@ import {
 } from '../../../lib/ops-constants';
 import type { PresetZone } from '../../../lib/ops-constants';
 import type { ZoneType, StatusType } from '../../../lib/ops-schemas';
-import { dbToApi, translateTeamString } from './serialize';
+import { dbToApi, translateTeamString } from '../../../lib/ops-serialize';
 
 const client = withPRM(DynamoDBClient, {});
 
@@ -1566,14 +1566,19 @@ const handleTickets = async (
     const results: Record<string, unknown>[] = [];
 
     for (const tid of ticketIds as string[]) {
-      const teamId = String((changes as Record<string, unknown>).teamId ?? '');
+      const teamId = String((changes as Record<string, unknown>).boardId ?? '');
       const existing = await getItem(`TEAM#${teamId}`, `TICKET#${tid}`);
       if (!existing) {
         results.push({ ticketId: tid, error: 'not found' });
         continue;
       }
 
-      const changesObj = changes as Record<string, unknown>;
+      // Strip `boardId` from the spread so we don't write the API-shape key
+      // alongside the existing DB-shape `teamId` attribute on the item. The
+      // routing teamId above is what we actually use; the item's teamId is
+      // unchanged on a same-board edit.
+      const { boardId: _boardId, ...changesObj } = changes as Record<string, unknown>;
+      void _boardId;
 
       // Derive statusType from stage when stageId changes
       let derivedStatusType: string | undefined;
@@ -1714,7 +1719,7 @@ const handleTickets = async (
   // ── POST /ops/tickets — create ticket ───────────────────────────────────────
   if (method === 'POST' && segments.length === 0) {
     const {
-      teamId: rawTeamId,
+      boardId: rawTeamId,
       stageId: rawStageId,
       zoneId: rawZoneId,
       ticketTypeId,
@@ -1742,7 +1747,7 @@ const handleTickets = async (
 
     // Detect unknown parameters
     const knownCreateFields = new Set([
-      'teamId',
+      'boardId',
       'stageId',
       'zoneId',
       'ticketTypeId',

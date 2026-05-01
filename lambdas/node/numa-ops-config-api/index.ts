@@ -17,6 +17,7 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
+import { dbToApi, translateTeamString } from '../../../lib/ops-serialize';
 
 const client = withPRM(DynamoDBClient, {});
 const dynamo = DynamoDBDocumentClient.from(client, {
@@ -124,11 +125,13 @@ const jsonResponse = (
 ): { statusCode: number; headers: typeof HEADERS; body: string } => ({
   statusCode,
   headers: HEADERS,
-  body: JSON.stringify(payload),
+  // dbToApi recursively translates DB-shape keys (teamId, team, teams, etc.)
+  // to API-shape (boardId, board, boards). Single boundary for all ops APIs.
+  body: JSON.stringify(dbToApi(payload)),
 });
 
 const errorResponse = (statusCode: number, message: string): ReturnType<typeof jsonResponse> =>
-  jsonResponse(statusCode, { error: message });
+  jsonResponse(statusCode, { error: translateTeamString(message) });
 
 const parseJwt = (token: string): Record<string, unknown> => {
   try {
