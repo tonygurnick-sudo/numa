@@ -1028,6 +1028,9 @@ class TestBuildBinaryResult(unittest.TestCase):
         """
         env_no_bucket = {
             "PIPEDREAM_SECRET_ARN": self.env_vars["PIPEDREAM_SECRET_ARN"],
+            # Region is required for boto3 client construction; CI doesn't
+            # inherit one, so set it explicitly. Test isn't about region.
+            "AWS_DEFAULT_REGION": "us-east-1",
         }
         content = b"\x00" * (int(5.5 * 1024 * 1024))
 
