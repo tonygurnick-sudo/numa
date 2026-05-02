@@ -15,11 +15,21 @@ import pytest
 from tools import ops
 
 
-class FakeCache:
+class FakeCache(ops._LookupCache):
     """Stand-in for _LookupCache returning canned data for tests.
 
-    Any unused method falls back to empty results.
+    Subclasses the real cache (with dummy user context) so pyright is
+    satisfied; every public lookup method is overridden so the inherited
+    Lambda-invoking implementation is never reached.
     """
+
+    def __init__(self) -> None:
+        super().__init__(
+            user_sub="test-sub",
+            user_email="test@example.com",
+            user_name="Test User",
+            user_groups=[],
+        )
 
     def boards(self):
         return [
@@ -77,10 +87,10 @@ class FakeCache:
             return [{"id": "cust-acme", "companyName": "Acme Corp"}]
         return []
 
-    def suppliers_by_search(self, _term):
+    def suppliers_by_search(self, term):  # pylint: disable=unused-argument
         return []
 
-    def work_units(self, _board_id):
+    def work_units(self, board_id):  # pylint: disable=unused-argument
         return [{"id": "wu-sprint1", "name": "Sprint 1", "status": "active"}]
 
 
