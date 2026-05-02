@@ -518,8 +518,16 @@ export const updateCustomer = async (
   return customer;
 };
 
-export const deleteCustomer = async (numaDelete: NumaDelete, customerId: string): Promise<void> => {
-  await numaDelete(`${BASE_URL}/customers/${encodeURIComponent(customerId)}`);
+export const deleteCustomer = async (
+  numaDelete: NumaDelete,
+  customerId: string
+): Promise<{ deleted: boolean; unlinkedTicketCount: number }> => {
+  const response = await numaDelete(`${BASE_URL}/customers/${encodeURIComponent(customerId)}`);
+  const r = (response ?? {}) as { deleted?: unknown; unlinkedTicketCount?: unknown };
+  return {
+    deleted: r.deleted === true,
+    unlinkedTicketCount: typeof r.unlinkedTicketCount === 'number' ? r.unlinkedTicketCount : 0,
+  };
 };
 
 // ─── Customer Activities ───────────────────────────────────────────────────

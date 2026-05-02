@@ -32,6 +32,7 @@ import { CreateTicketModal } from './CreateTicketModal';
 import { CustomerRecordSectionBlock } from './CustomerRecordSectionBlock';
 import { TicketDetailModal } from './TicketDetailModal';
 import { ConfirmModal } from './ConfirmModal';
+import { extractApiError } from '../../../utils/apiErrors';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -300,14 +301,20 @@ export function CustomerDetailModal({
     if (!customerId) return;
     setDeleting(true);
     try {
-      await OpsService.deleteCustomer(numaDelete, customerId);
-      showToast({ message: t('crm.customerDeleted'), variant: 'success' });
+      const result = await OpsService.deleteCustomer(numaDelete, customerId);
+      const message =
+        result.unlinkedTicketCount > 0
+          ? t('crm.customerDeletedWithUnlinks', { count: result.unlinkedTicketCount })
+          : t('crm.customerDeleted');
+      showToast({ message, variant: 'success' });
       setShowDeleteConfirm(false);
       onUpdated?.();
       onHide();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showToast({ message: t('errors.saveFailed', { message }), variant: 'error' });
+      showToast({
+        message: t('errors.saveFailed', { message: extractApiError(err) }),
+        variant: 'error',
+      });
     } finally {
       setDeleting(false);
     }

@@ -269,6 +269,8 @@
     "deleteCustomer": "Delete customer",
     "deleteCustomerConfirm": "This will permanently delete \"{{name}}\" and cannot be undone. Type the customer name to confirm.",
     "customerDeleted": "Customer deleted.",
+    "customerDeletedWithUnlinks_one": "Customer deleted ({{count}} ticket unlinked).",
+    "customerDeletedWithUnlinks_other": "Customer deleted ({{count}} tickets unlinked).",
     "uploadLogo": "Upload company logo",
     "logo": "Logo",
     "openTickets": "Open Tickets",

@@ -247,9 +247,12 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
           resources: [this.opsCrmTable.arn, `${this.opsCrmTable.arn}/index/*`],
         },
         {
+          // Read GSI2 to find linked tickets, plus update/delete on the base
+          // table so customer-delete can unlink each ticket (clear customerId
+          // on the main item and delete its IDX_CUSTOMER sibling).
           effect: 'Allow',
-          actions: ['dynamodb:Query'],
-          resources: [`${this.opsTable.arn}/index/*`],
+          actions: ['dynamodb:Query', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+          resources: [this.opsTable.arn, `${this.opsTable.arn}/index/*`],
         },
         {
           effect: 'Allow',

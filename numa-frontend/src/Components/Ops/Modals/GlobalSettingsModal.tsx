@@ -21,6 +21,7 @@ import { CustomerRecordConfigBlock } from './CustomerRecordConfigBlock';
 import { SupplierDetailModal } from './SupplierDetailModal';
 import { DEFAULT_CUSTOMER_RECORD } from '../Shared/customerRecordFields';
 import { StaffAvatar } from '../Shared/StaffAvatar';
+import { extractApiError } from '../../../utils/apiErrors';
 import type {
   TicketType,
   StatusType,
@@ -524,7 +525,7 @@ export function GlobalSettingsModal({
         await OpsService.deleteCustomer(numaDelete, customerId);
         setCustomers((prev) => prev.filter((c) => c.id !== customerId));
       } catch (err) {
-        setError(t('errors.saveFailed', { message: String(err) }));
+        setError(t('errors.saveFailed', { message: extractApiError(err) }));
       }
     },
     [numaDelete, t]
@@ -537,7 +538,7 @@ export function GlobalSettingsModal({
         await OpsService.deleteSupplier(numaDelete, supplierId);
         setSuppliers((prev) => prev.filter((s) => s.id !== supplierId));
       } catch (err) {
-        setError(t('errors.saveFailed', { message: String(err) }));
+        setError(t('errors.saveFailed', { message: extractApiError(err) }));
       }
     },
     [numaDelete, t]
