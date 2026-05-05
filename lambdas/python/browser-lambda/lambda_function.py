@@ -12,6 +12,7 @@ import json
 import os
 import pathlib
 import ssl
+import time
 import urllib.parse
 from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, TypedDict
@@ -153,6 +154,9 @@ JS_SHELL_MARKERS = [
 
 # Playwright configuration
 PLAYWRIGHT_TIMEOUT_MS = 30_000
+PLAYWRIGHT_STABILISE_MAX_MS = 20_000
+PLAYWRIGHT_STABILISE_QUIET_MS = 1500
+PLAYWRIGHT_STABILISE_POLL_MS = 300
 PLAYWRIGHT_ARGS = [
     "--no-sandbox",
     "--disable-dev-shm-usage",
@@ -194,6 +198,15 @@ class ScrapedContent(TypedDict):
     content_type: str
     metadata: Dict[str, str]
     links: List[str]
+
+
+class FetchHttpError(Exception):
+    """Raised when page navigation returns a non-2xx HTTP status."""
+
+    def __init__(self, http_status: int, url: str):
+        self.http_status = http_status
+        self.url = url
+        super().__init__(f"HTTP {http_status} from {url}")
 
 
 def _url_matches_prefix(url: str, seed_prefix: Optional[str]) -> bool:
@@ -316,6 +329,51 @@ def _should_try_playwright(html: str, extracted_text: str) -> bool:
     return False
 
 
+async def _wait_for_content_stabilisation(page) -> None:
+    """Poll body text length until it stops growing, with a 20s ceiling.
+
+    Replaces a fixed post-goto sleep so static pages exit quickly while
+    SPAs that fetch content via XHR get however long they need (up to the
+    ceiling) for content to settle.
+    """
+    start = time.monotonic()
+    deadline = start + (PLAYWRIGHT_STABILISE_MAX_MS / 1000)
+    quiet_window = PLAYWRIGHT_STABILISE_QUIET_MS / 1000
+
+    last_size = 0
+    stable_since: Optional[float] = None
+
+    while time.monotonic() < deadline:
+        try:
+            current_size = await page.evaluate(
+                "document.body ? document.body.innerText.length : 0"
+            )
+        except Exception:
+            current_size = last_size
+
+        if current_size > 0 and current_size == last_size:
+            if stable_since is None:
+                stable_since = time.monotonic()
+            elif time.monotonic() - stable_since >= quiet_window:
+                logger.info(
+                    "Content stabilised",
+                    elapsed_ms=round((time.monotonic() - start) * 1000),
+                    final_size=current_size,
+                )
+                return
+        else:
+            stable_since = None
+            last_size = current_size
+
+        await page.wait_for_timeout(PLAYWRIGHT_STABILISE_POLL_MS)
+
+    logger.info(
+        "Content stabilisation hit ceiling",
+        elapsed_ms=round((time.monotonic() - start) * 1000),
+        final_size=last_size,
+    )
+
+
 async def fetch_page_playwright(
     url: str,
     limit_to_path: bool = True,
@@ -344,16 +402,18 @@ async def fetch_page_playwright(
                 wait_until="domcontentloaded",
                 timeout=PLAYWRIGHT_TIMEOUT_MS,
             )
-            # Wait briefly for JS to execute after DOM is ready
-            await page.wait_for_timeout(2000)
+            await _wait_for_content_stabilisation(page)
 
-            if not response or response.status != 200:
+            if response is None:
+                logger.warning("Playwright navigation returned no response", url=url)
+                return None
+            if response.status != 200:
                 logger.warning(
                     "Playwright non-200 status",
                     url=url,
-                    status=response.status if response else None,
+                    status=response.status,
                 )
-                return None
+                raise FetchHttpError(response.status, url)
 
             html = await page.content()
             # Strip <noscript> tags -- JS has already executed, noscript fallbacks are noise
@@ -385,6 +445,8 @@ async def fetch_page_playwright(
                 "links": links,
             }
 
+    except FetchHttpError:
+        raise
     except Exception as exc:
         logger.error(
             "Playwright fetch failed",
@@ -907,36 +969,55 @@ async def process_url(
 
     # Fetch page content -- Playwright-first or httpx-first with fallback
     scraped: Optional[ScrapedContent] = None
+    http_status_failure: Optional[int] = None
 
-    if force_playwright:
-        logger.info("Force Playwright mode", url=url)
-        scraped = await fetch_page_playwright(url, limit_to_path, seed_url_prefix)
-    else:
-        scraped = await fetch_page(url, limit_to_path, seed_url_prefix)
+    try:
+        if force_playwright:
+            logger.info("Force Playwright mode", url=url)
+            scraped = await fetch_page_playwright(url, limit_to_path, seed_url_prefix)
+        else:
+            scraped = await fetch_page(url, limit_to_path, seed_url_prefix)
 
-        # Check if the page would benefit from Playwright rendering
-        if scraped:
-            raw_html = scraped.pop("_raw_html", "")
-            content_text = scraped.get("content", "")
-            if _should_try_playwright(raw_html, content_text):
-                logger.info(
-                    "JS-rendered or JS-enhanced page detected, retrying with Playwright",
-                    url=url,
-                    word_count=len(content_text.split()),
-                )
-                playwright_result = await fetch_page_playwright(
-                    url, limit_to_path, seed_url_prefix
-                )
-                if playwright_result:
-                    scraped = playwright_result
+            # Check if the page would benefit from Playwright rendering
+            if scraped:
+                raw_html = scraped.pop("_raw_html", "")
+                content_text = scraped.get("content", "")
+                if _should_try_playwright(raw_html, content_text):
+                    logger.info(
+                        "JS-rendered or JS-enhanced page detected, retrying with Playwright",
+                        url=url,
+                        word_count=len(content_text.split()),
+                    )
+                    try:
+                        playwright_result = await fetch_page_playwright(
+                            url, limit_to_path, seed_url_prefix
+                        )
+                        if playwright_result:
+                            scraped = playwright_result
+                    except FetchHttpError as e:
+                        # Playwright fallback failed but httpx result is still valid
+                        logger.info(
+                            "Playwright fallback failed; keeping httpx result",
+                            url=url,
+                            http_status=e.http_status,
+                        )
+    except FetchHttpError as e:
+        http_status_failure = e.http_status
 
     if not scraped:
-        return {
+        failure: Dict[str, Any] = {
             "url": url,
             "status": "failed",
-            "reason": "Failed to fetch page content",
+            "reason": (
+                f"HTTP {http_status_failure} from origin"
+                if http_status_failure is not None
+                else "Failed to fetch page content"
+            ),
             "links_enqueued": 0,
         }
+        if http_status_failure is not None:
+            failure["http_status"] = http_status_failure
+        return failure
 
     content = scraped.get("content", "")
     title = scraped.get("title", "")

@@ -517,6 +517,27 @@ export function TicketDetailModal({
       );
   }, [ticketType, config, team]);
 
+  // ── Pasted-image-too-large -> auto-attach ─────────────────────────────
+  const handleLargeImagePaste = useCallback(
+    (file: File) => {
+      if (!ticket) return;
+      const targetTicketId = ticket.id;
+      void (async () => {
+        try {
+          await uploadAttachmentToTicket(numaPost, targetTicketId, file);
+          setAttachmentsRefreshKey((k) => k + 1);
+          showToast({ message: t('tickets.largeImagePastedAttached'), variant: 'info' });
+        } catch (err) {
+          showToast({
+            message: err instanceof Error ? err.message : t('errors.uploadFailed', 'Upload failed'),
+            variant: 'error',
+          });
+        }
+      })();
+    },
+    [numaPost, ticket, showToast, t]
+  );
+
   // ── Render: Loading state ─────────────────────────────────────────────
 
   if (!show) return <></>;
@@ -1198,27 +1219,6 @@ export function TicketDetailModal({
       </Modal.Header>
     );
   };
-
-  // ── Pasted-image-too-large -> auto-attach ─────────────────────────────
-  const handleLargeImagePaste = useCallback(
-    (file: File) => {
-      if (!ticket) return;
-      const ticketId = ticket.id;
-      void (async () => {
-        try {
-          await uploadAttachmentToTicket(numaPost, ticketId, file);
-          setAttachmentsRefreshKey((k) => k + 1);
-          showToast({ message: t('tickets.largeImagePastedAttached'), variant: 'info' });
-        } catch (err) {
-          showToast({
-            message: err instanceof Error ? err.message : t('errors.uploadFailed', 'Upload failed'),
-            variant: 'error',
-          });
-        }
-      })();
-    },
-    [numaPost, ticket, showToast, t]
-  );
 
   // ── Render: Main body ─────────────────────────────────────────────────
 

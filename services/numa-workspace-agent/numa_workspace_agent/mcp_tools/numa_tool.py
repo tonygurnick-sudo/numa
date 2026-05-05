@@ -176,6 +176,7 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
 FETCH_URL_FILE_THRESHOLD = 5000  # chars -- save to file if content exceeds this
 FETCH_URL_PREVIEW_LENGTH = 500  # chars -- inline preview when saving to file
 FETCH_URL_OUTPUT_DIR = Path("/workdir/outputs/web_fetch")
+MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MiB cap on direct PDF downloads
 
 
 def _save_fetch_url_to_file(result: dict[str, Any]) -> dict[str, Any]:
@@ -217,6 +218,76 @@ def _save_fetch_url_to_file(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_pdf_url(url: str) -> bool:
+    """Detect PDF URLs by suffix (ignoring query string and fragment)."""
+    return url.lower().split("?", 1)[0].split("#", 1)[0].endswith(".pdf")
+
+
+async def _handle_fetch_url_pdf(url: str) -> dict[str, Any]:
+    """Download a PDF directly to /workdir. Bypasses browser-lambda since
+    Chromium opens PDFs in its built-in viewer (no DOM to scrape)."""
+    from urllib.parse import urlparse
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(url)
+
+        if response.status_code != 200:
+            return _err(f"PDF download failed: HTTP {response.status_code}")
+
+        body = response.content
+        if len(body) > MAX_PDF_BYTES:
+            return _err(f"PDF too large: {len(body)} bytes (max {MAX_PDF_BYTES})")
+
+        content_type = response.headers.get("content-type", "").lower()
+        if "pdf" not in content_type and "octet-stream" not in content_type:
+            logger.warning(
+                "PDF URL returned non-PDF content-type",
+                url=url,
+                content_type=content_type,
+            )
+
+        parsed = urlparse(url)
+        safe_name = re.sub(r"[^\w\-.]", "_", f"{parsed.netloc}{parsed.path}".strip("/"))
+        if not safe_name:
+            safe_name = "document"
+        if not safe_name.lower().endswith(".pdf"):
+            safe_name = safe_name + ".pdf"
+        safe_name = safe_name[:120]
+
+        FETCH_URL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        file_path = FETCH_URL_OUTPUT_DIR / safe_name
+        file_path.write_bytes(body)
+
+        logger.info(
+            "Saved fetched PDF to file",
+            url=url,
+            path=str(file_path),
+            size=len(body),
+        )
+
+        return _ok(
+            json.dumps(
+                {
+                    "url": url,
+                    "file_path": str(file_path),
+                    "content_type": "application/pdf",
+                    "content_length": len(body),
+                    "status": "success",
+                    "hint": (
+                        f"PDF saved to {file_path}. Use the Read tool to " f"open it."
+                    ),
+                },
+                indent=2,
+            )
+        )
+    except Exception as e:
+        logger.error("PDF download failed", url=url, error=str(e))
+        return _err(f"PDF download failed: {e}")
+
+
 async def _handle_web_search(params: dict[str, Any]) -> dict[str, Any]:
     """Search the web or fetch a specific URL.
 
@@ -230,6 +301,10 @@ async def _handle_web_search(params: dict[str, Any]) -> dict[str, Any]:
         url = params.get("url")
         if not url:
             return _err("'url' is required for fetch_url operation.")
+
+        if _is_pdf_url(url):
+            return await _handle_fetch_url_pdf(url)
+
         tool_params: dict[str, Any] = {
             "operation": "fetch_url",
             "url": url,

@@ -19,11 +19,9 @@ import structlog
 
 from prm import client as prm_client
 
-logger = structlog.get_logger()
+from .approval import APPROVAL_POLL_INTERVAL_SECONDS, APPROVAL_TIMEOUT_SECONDS
 
-# Approval polling configuration (same as pipedream_integration.py)
-APPROVAL_POLL_INTERVAL_SECONDS = 5
-APPROVAL_TIMEOUT_SECONDS = 90
+logger = structlog.get_logger()
 
 # Table names from environment
 VAULT_SECRETS_TABLE = os.environ.get("VAULT_SECRETS_TABLE_NAME", "")
@@ -128,9 +126,33 @@ def _poll_approval(approval_id: str) -> str:
         raise ValueError("INTEGRATIONS_APPROVAL_TABLE_NAME is not configured")
 
     dynamodb = prm_client("dynamodb")
-    deadline = time.time() + APPROVAL_TIMEOUT_SECONDS
+
+    # Anchor the deadline to the DDB record's created_at (matches
+    # tools.approval.poll_approval; see comment there for the rationale).
+    initial = dynamodb.get_item(
+        TableName=INTEGRATIONS_APPROVAL_TABLE,
+        Key={"approval_id": {"S": approval_id}},
+    )
+    initial_item = initial.get("Item", {})
+    created_at_str = initial_item.get("created_at", {}).get("N")
+
+    if created_at_str:
+        deadline = max(int(created_at_str) + APPROVAL_TIMEOUT_SECONDS, time.time() + 30)
+    else:
+        deadline = time.time() + APPROVAL_TIMEOUT_SECONDS
+
+    initial_status = initial_item.get("status", {}).get("S", "pending")
+    if initial_status in ("approved", "denied"):
+        logger.info(
+            "Vault approval decision received",
+            approval_id=approval_id,
+            status=initial_status,
+        )
+        return initial_status
 
     while time.time() < deadline:
+        time.sleep(APPROVAL_POLL_INTERVAL_SECONDS)
+
         response = dynamodb.get_item(
             TableName=INTEGRATIONS_APPROVAL_TABLE,
             Key={"approval_id": {"S": approval_id}},
@@ -145,8 +167,6 @@ def _poll_approval(approval_id: str) -> str:
                 status=status,
             )
             return status
-
-        time.sleep(APPROVAL_POLL_INTERVAL_SECONDS)
 
     logger.warning(
         "Vault approval timed out",

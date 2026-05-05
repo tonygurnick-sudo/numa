@@ -32,6 +32,8 @@ import type { UserKB } from '../../Services/knowledgeBaseService';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 import type { S3FileInfo } from '../../Services/knowledgeBaseService';
 import { CreateFolderModal } from './CreateFolderModal';
+import { CreateSubfolderModal } from './CreateSubfolderModal';
+import { FolderContextMenu, type FolderContextAction, type FolderContextTarget } from './FolderContextMenu';
 import { FolderSettingsDrawer } from './FolderSettingsDrawer';
 
 interface UserFilesTabProps {
@@ -99,6 +101,24 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [settingsKb, setSettingsKb] = useState<UserKB | null>(null);
 
+  // Subfolder creation
+  const [subfolderTarget, setSubfolderTarget] = useState<{
+    kbId: string;
+    parentPath: string;
+    parentDisplayName: string;
+  } | null>(null);
+
+  // Folder right-click context menu
+  const [folderContextMenu, setFolderContextMenu] = useState<{
+    show: boolean;
+    position: { x: number; y: number };
+    target: FolderContextTarget;
+  } | null>(null);
+
+  // Top-level folder delete confirmation (via context menu)
+  const [topLevelDeleteConfirm, setTopLevelDeleteConfirm] = useState<UserKB | null>(null);
+  const [isDeletingTopLevel, setIsDeletingTopLevel] = useState(false);
+
   const [searchValue, setSearchValue] = useState('');
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -125,8 +145,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const [folderOptions, setFolderOptions] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
 
-  // Delete
-  const [deleteConfirm, setDeleteConfirm] = useState<{ kbId: string; keys: string[]; label: string } | null>(null);
+  // Delete (files or subfolders — discriminated by `kind`)
+  type DeleteConfirmState =
+    | { kind: 'files'; kbId: string; keys: string[]; label: string }
+    | { kind: 'subfolder'; kbId: string; path: string; label: string };
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Rename
@@ -844,12 +867,76 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     setShowUploadModal(true);
   }, []);
 
+  // ── Subfolder creation ──────────────────────────────────────
+
+  /** Path of the current location relative to the KB root (no trailing slash). Empty when at the KB root. */
+  const subfolderRelativePath = useCallback((kbId: string, folderId: string): string => {
+    const basePrefix = `documents/kb-${kbId}/`;
+    if (!folderId.startsWith(basePrefix)) return '';
+    return folderId.slice(basePrefix.length).replace(/\/$/, '');
+  }, []);
+
+  const openAddSubfolder = useCallback((kbId: string, parentPath: string, parentDisplayName: string) => {
+    setSubfolderTarget({ kbId, parentPath, parentDisplayName });
+  }, []);
+
+  const handleSubfolderCreated = useCallback(
+    (newPath: string) => {
+      const target = subfolderTarget;
+      setSubfolderTarget(null);
+      if (!target) return;
+
+      const basePrefix = `documents/kb-${target.kbId}/`;
+      const newFolderKey = `${basePrefix}${newPath}/`;
+
+      // Optimistically add the marker so the new folder shows up immediately.
+      setKbFileStates((prev) => {
+        const next = new Map(prev);
+        const s = prev.get(target.kbId);
+        if (s) {
+          if (!s.files.some((f) => f.Key === newFolderKey)) {
+            next.set(target.kbId, {
+              ...s,
+              files: [...s.files, { Key: newFolderKey, LastModified: new Date(), Size: 0 }],
+            });
+          }
+        }
+        return next;
+      });
+
+      fetchKbFiles(target.kbId);
+      fetchDeepKbFiles(target.kbId, true);
+      showToast({
+        message: t('createSubfolder.success', { defaultValue: 'Folder created' }),
+        variant: 'success',
+      });
+    },
+    [subfolderTarget, fetchKbFiles, fetchDeepKbFiles, showToast, t]
+  );
+
+  // ── Folder context menu ─────────────────────────────────────
+
+  const openFolderContextMenu = useCallback((e: React.MouseEvent, target: FolderContextTarget) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFolderContextMenu({
+      show: true,
+      position: { x: e.clientX, y: e.clientY },
+      target,
+    });
+  }, []);
+
+  const closeFolderContextMenu = useCallback(() => {
+    setFolderContextMenu(null);
+  }, []);
+
   // ── Delete handlers ─────────────────────────────────────────
 
   const confirmDeleteFiles = useCallback(
     (kbId: string, keys: string[], label?: string) => {
       const withMeta = keys.flatMap((k) => [k, `${k}.metadata.json`]);
       setDeleteConfirm({
+        kind: 'files',
         kbId,
         keys: withMeta,
         label: label ?? t('delete.confirm', { count: keys.length }),
@@ -860,18 +947,26 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   const confirmDeleteSubfolder = useCallback(
     (kbId: string, folderId: string, folderName: string) => {
-      const prefix = folderId.endsWith('/') ? folderId : `${folderId}/`;
+      const folderPrefix = folderId.endsWith('/') ? folderId : `${folderId}/`;
+      const basePrefix = `documents/kb-${kbId}/`;
+      if (!folderPrefix.startsWith(basePrefix)) return;
+      const path = folderPrefix.slice(basePrefix.length).replace(/\/$/, '');
+      if (!path) return;
       const state = kbFileStates.get(kbId);
-      if (!state) return;
-      const folderFileKeys = state.files
-        .filter((f) => f.Key.startsWith(prefix) && !f.Key.endsWith('/'))
-        .map((f) => f.Key);
-      if (folderFileKeys.length === 0) return;
-      const withMeta = folderFileKeys.flatMap((k) => [k, `${k}.metadata.json`]);
+      const childCount = state
+        ? state.files.filter((f) => f.Key.startsWith(folderPrefix) && !f.Key.endsWith('/')).length
+        : 0;
       setDeleteConfirm({
+        kind: 'subfolder',
         kbId,
-        keys: withMeta,
-        label: t('delete.confirmFolder', { name: folderName, count: folderFileKeys.length }),
+        path,
+        label:
+          childCount > 0
+            ? t('delete.confirmFolder', { name: folderName, count: childCount })
+            : t('delete.confirmEmptyFolder', {
+                name: folderName,
+                defaultValue: `Delete empty folder "${folderName}"?`,
+              }),
       });
     },
     [kbFileStates, t]
@@ -881,32 +976,57 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     if (!deleteConfirm) return;
     setIsDeleting(true);
     try {
-      const result = await knowledgeBaseService.deleteKBFiles(deleteConfirm.kbId, deleteConfirm.keys);
-      const realSucceeded = result.successful.filter((k) => !k.endsWith('.metadata.json')).length;
-      const realFailed = result.failed.filter((f) => !f.key.endsWith('.metadata.json')).length;
-      // Optimistically remove deleted files from state immediately.
-      const deletedSet = new Set(result.successful);
-      setKbFileStates((prev) => {
-        const next = new Map(prev);
-        const s = prev.get(deleteConfirm.kbId);
-        if (s) {
-          next.set(deleteConfirm.kbId, {
-            ...s,
-            files: s.files.filter((f) => !deletedSet.has(f.Key)),
-          });
-        }
-        return next;
-      });
-      if (realFailed > 0) {
-        showToast({
-          message: t('delete.partial', { succeeded: realSucceeded, failed: realFailed }),
-          variant: 'warning',
+      if (deleteConfirm.kind === 'subfolder') {
+        await knowledgeBaseService.deleteSubfolder(deleteConfirm.kbId, deleteConfirm.path, true);
+        // Optimistically drop everything under the prefix.
+        const folderPrefix = `documents/kb-${deleteConfirm.kbId}/${deleteConfirm.path}/`.replace(/\/{2,}/g, '/');
+        setKbFileStates((prev) => {
+          const next = new Map(prev);
+          const s = prev.get(deleteConfirm.kbId);
+          if (s) {
+            next.set(deleteConfirm.kbId, {
+              ...s,
+              files: s.files.filter((f) => !f.Key.startsWith(folderPrefix)),
+              expandedFolders: new Set([...s.expandedFolders].filter((id) => !id.startsWith(folderPrefix))),
+              loadedFolders: new Set([...s.loadedFolders].filter((id) => !id.startsWith(folderPrefix))),
+            });
+          }
+          return next;
         });
+        showToast({
+          message: t('delete.folderSuccess', { defaultValue: 'Folder deleted' }),
+          variant: 'success',
+        });
+        setSelectedKeys(new Set());
+        fetchKbFiles(deleteConfirm.kbId);
       } else {
-        showToast({ message: t('delete.success', { count: realSucceeded }), variant: 'success' });
+        const result = await knowledgeBaseService.deleteKBFiles(deleteConfirm.kbId, deleteConfirm.keys);
+        const realSucceeded = result.successful.filter((k) => !k.endsWith('.metadata.json')).length;
+        const realFailed = result.failed.filter((f) => !f.key.endsWith('.metadata.json')).length;
+        // Optimistically remove deleted files from state immediately.
+        const deletedSet = new Set(result.successful);
+        setKbFileStates((prev) => {
+          const next = new Map(prev);
+          const s = prev.get(deleteConfirm.kbId);
+          if (s) {
+            next.set(deleteConfirm.kbId, {
+              ...s,
+              files: s.files.filter((f) => !deletedSet.has(f.Key)),
+            });
+          }
+          return next;
+        });
+        if (realFailed > 0) {
+          showToast({
+            message: t('delete.partial', { succeeded: realSucceeded, failed: realFailed }),
+            variant: 'warning',
+          });
+        } else {
+          showToast({ message: t('delete.success', { count: realSucceeded }), variant: 'success' });
+        }
+        setSelectedKeys(new Set());
+        fetchKbFiles(deleteConfirm.kbId);
       }
-      setSelectedKeys(new Set());
-      fetchKbFiles(deleteConfirm.kbId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast({ message: t('delete.error', { error: msg }), variant: 'error' });
@@ -915,6 +1035,64 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       setDeleteConfirm(null);
     }
   }, [deleteConfirm, showToast, t, fetchKbFiles]);
+
+  // ── Folder context menu actions ─────────────────────────────
+
+  const handleContextMenuAction = useCallback(
+    (action: FolderContextAction) => {
+      const ctx = folderContextMenu;
+      if (!ctx) return;
+      const { target } = ctx;
+      if (target.kind === 'topLevel') {
+        const { kb } = target;
+        if (action === 'addSubfolder') {
+          openAddSubfolder(kb.kb_id, '', kb.kb_name);
+        } else if (action === 'upload') {
+          setUploadTargetKb(kb);
+          setShowUploadModal(true);
+        } else if (action === 'settings') {
+          setSettingsKb(kb);
+          setShowSettingsDrawer(true);
+        } else if (action === 'delete') {
+          if (kb.role === 'OWNER') setTopLevelDeleteConfirm(kb);
+        }
+      } else {
+        const { kbId, folderId, folderName } = target;
+        if (action === 'addSubfolder') {
+          const parentPath = subfolderRelativePath(kbId, folderId);
+          openAddSubfolder(kbId, parentPath, folderName);
+        } else if (action === 'delete') {
+          confirmDeleteSubfolder(kbId, folderId, folderName);
+        }
+      }
+    },
+    [folderContextMenu, openAddSubfolder, confirmDeleteSubfolder, subfolderRelativePath]
+  );
+
+  const executeTopLevelDelete = useCallback(async () => {
+    if (!topLevelDeleteConfirm) return;
+    setIsDeletingTopLevel(true);
+    try {
+      await knowledgeBaseService.deleteKB(topLevelDeleteConfirm.kb_id);
+      if (currentFolder?.kbId === topLevelDeleteConfirm.kb_id) setCurrentFolder(null);
+      setExpandedKbs((prev) => {
+        const n = new Set(prev);
+        n.delete(topLevelDeleteConfirm.kb_id);
+        return n;
+      });
+      showToast({
+        message: t('delete.folderSuccess', { defaultValue: 'Folder deleted' }),
+        variant: 'success',
+      });
+      refreshKBs();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({ message: t('delete.error', { error: msg }), variant: 'error' });
+    } finally {
+      setIsDeletingTopLevel(false);
+      setTopLevelDeleteConfirm(null);
+    }
+  }, [topLevelDeleteConfirm, currentFolder, refreshKBs, showToast, t]);
 
   // ── Rename handlers ────────────────────────────────────────
 
@@ -1295,19 +1473,58 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
             </button>
           )}
-          {(!isInsideFolder || canEditCurrent) && (
-            <button className="finder-btn" onClick={() => setShowCreateModal(true)}>
+          {/* New Folder / New Subfolder — branches on context: at root creates a top-level
+              shareable folder (KB), inside a folder creates a plain subfolder. */}
+          {!isInsideFolder ? (
+            <button
+              className="finder-btn finder-btn--primary finder-btn--labelled"
+              onClick={() => setShowCreateModal(true)}
+              title={t('actions.newFolder')}
+            >
               <i className="bi bi-folder-plus" />
+              <span className="finder-btn__label">{t('actions.newFolder')}</span>
             </button>
-          )}
+          ) : canEditCurrent && currentKb ? (
+            <button
+              className="finder-btn finder-btn--primary finder-btn--labelled"
+              onClick={() =>
+                openAddSubfolder(
+                  currentKb.kb_id,
+                  currentFolder!.subfolderPath.length > 0
+                    ? subfolderRelativePath(
+                        currentKb.kb_id,
+                        currentFolder!.subfolderPath[currentFolder!.subfolderPath.length - 1].id
+                      )
+                    : '',
+                  currentFolder!.subfolderPath.length > 0
+                    ? currentFolder!.subfolderPath[currentFolder!.subfolderPath.length - 1].name
+                    : currentKb.kb_name
+                )
+              }
+              title={t('actions.newSubfolder')}
+            >
+              <i className="bi bi-folder-plus" />
+              <span className="finder-btn__label">{t('actions.newSubfolder')}</span>
+            </button>
+          ) : null}
           {/* Upload button: at root level (uploads to root KB) or inside a folder */}
           {!isInsideFolder && rootKB ? (
-            <button className="finder-btn" onClick={(e) => openUploadForKb(rootKB, e)} title={t('rootFiles.upload')}>
+            <button
+              className="finder-btn finder-btn--labelled"
+              onClick={(e) => openUploadForKb(rootKB, e)}
+              title={t('actions.upload')}
+            >
               <i className="bi bi-upload" />
+              <span className="finder-btn__label">{t('actions.upload')}</span>
             </button>
           ) : isInsideFolder && canEditCurrent && currentKb ? (
-            <button className="finder-btn" onClick={(e) => openUploadForKb(currentKb, e)}>
+            <button
+              className="finder-btn finder-btn--labelled"
+              onClick={(e) => openUploadForKb(currentKb, e)}
+              title={t('actions.upload')}
+            >
               <i className="bi bi-upload" />
+              <span className="finder-btn__label">{t('actions.upload')}</span>
             </button>
           ) : null}
           <button
@@ -1430,6 +1647,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   .filter(Boolean)
                   .join(' ')}
                 onDoubleClick={() => navigateIntoKb(kb)}
+                onContextMenu={(e) => openFolderContextMenu(e, { kind: 'topLevel', kb })}
                 onDragOver={(e) => onTargetDragOver(e, row.id, !dropDisabled)}
                 onDragLeave={() => onTargetDragLeave(row.id)}
                 onDrop={(e) => (dropDisabled ? undefined : onDropOnKb(e, kb))}
@@ -1537,6 +1755,16 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               }}
               onDrop={(e) => {
                 if (isSubfolder && rowCanEdit) onDropOnSubfolder(e, kbId, row.id);
+              }}
+              onContextMenu={(e) => {
+                if (isSubfolder) {
+                  openFolderContextMenu(e, {
+                    kind: 'subfolder',
+                    kbId,
+                    folderId: row.id,
+                    folderName: row.displayName || row.name,
+                  });
+                }
               }}
               onClick={(e) => {
                 if (!isSubfolder && row.originalKey) handleFileClick(row.originalKey, e);
@@ -1663,6 +1891,76 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         onHide={() => setShowCreateModal(false)}
         onSuccess={handleFolderCreated}
       />
+
+      {subfolderTarget && (
+        <CreateSubfolderModal
+          show
+          kbId={subfolderTarget.kbId}
+          parentPath={subfolderTarget.parentPath}
+          parentDisplayName={subfolderTarget.parentDisplayName}
+          onHide={() => setSubfolderTarget(null)}
+          onSuccess={handleSubfolderCreated}
+        />
+      )}
+
+      {folderContextMenu && (
+        <FolderContextMenu
+          show={folderContextMenu.show}
+          position={folderContextMenu.position}
+          target={folderContextMenu.target}
+          canEdit={
+            folderContextMenu.target.kind === 'topLevel'
+              ? folderContextMenu.target.kb.role === 'OWNER' || folderContextMenu.target.kb.role === 'EDITOR'
+              : canEditKb(folderContextMenu.target.kbId)
+          }
+          canDeleteTopLevel={
+            folderContextMenu.target.kind === 'topLevel' ? folderContextMenu.target.kb.role === 'OWNER' : false
+          }
+          onClose={closeFolderContextMenu}
+          onAction={handleContextMenuAction}
+        />
+      )}
+
+      {/* Top-level folder delete confirmation (from context menu) */}
+      <Modal show={!!topLevelDeleteConfirm} onHide={() => setTopLevelDeleteConfirm(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {t('delete.topLevelTitle', {
+              name: topLevelDeleteConfirm?.kb_name ?? '',
+              defaultValue: `Delete "${topLevelDeleteConfirm?.kb_name ?? ''}"?`,
+            })}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-0">
+            {t('delete.topLevelMessage', {
+              defaultValue: 'This folder and everything inside it will be permanently deleted. This cannot be undone.',
+            })}
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setTopLevelDeleteConfirm(null)}
+            disabled={isDeletingTopLevel}
+          >
+            {t('rename.cancel')}
+          </button>
+          <button className="btn btn-danger btn-sm" onClick={executeTopLevelDelete} disabled={isDeletingTopLevel}>
+            {isDeletingTopLevel ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-1" />
+                {t('delete.inProgress')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-trash me-1" />
+                {t('delete.deleteFolderButton', { defaultValue: 'Delete folder' })}
+              </>
+            )}
+          </button>
+        </Modal.Footer>
+      </Modal>
 
       {settingsKb && (
         <FolderSettingsDrawer
@@ -1799,9 +2097,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             ) : (
               <>
                 <i className="bi bi-trash me-1" />
-                {t('delete.confirm', {
-                  count: deleteConfirm?.keys.filter((k) => !k.endsWith('.metadata.json')).length ?? 0,
-                })}
+                {deleteConfirm?.kind === 'subfolder'
+                  ? t('delete.deleteFolderButton', { defaultValue: 'Delete folder' })
+                  : t('delete.confirm', {
+                      count:
+                        deleteConfirm?.kind === 'files'
+                          ? deleteConfirm.keys.filter((k) => !k.endsWith('.metadata.json')).length
+                          : 0,
+                    })}
               </>
             )}
           </button>

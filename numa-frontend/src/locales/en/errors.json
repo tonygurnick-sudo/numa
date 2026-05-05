@@ -46,6 +46,8 @@
     "deleteFailed": "Failed to delete folder",
     "listFilesFailed": "Failed to list files in folder",
     "deleteFilesFailed": "Failed to delete files",
+    "createSubfolderFailed": "Failed to create subfolder",
+    "deleteSubfolderFailed": "Failed to delete subfolder",
     "stateFailed": "Failed to load folder status"
   },
   "branding": {

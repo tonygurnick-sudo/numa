@@ -175,8 +175,8 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                         "text": (
                             f"Approval timed out for: {action_key}. "
                             "This workspace has human-in-the-loop approval enabled for integration tools. "
-                            "An approval card was shown to the user but they did not respond within the "
-                            "90-second window. You can offer to try again if the user is ready to approve."
+                            "An approval card was shown to the user but they did not respond "
+                            "before the approval window expired. You can offer to try again if the user is ready to approve."
                         ),
                     }
                 ],
@@ -448,8 +448,8 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                         "text": (
                             f"Approval timed out for proxy request: {method} {upstream_url}. "
                             "This workspace has human-in-the-loop approval enabled for integration tools. "
-                            "An approval card was shown to the user but they did not respond within the "
-                            "90-second window. You can offer to try again if the user is ready to approve."
+                            "An approval card was shown to the user but they did not respond "
+                            "before the approval window expired. You can offer to try again if the user is ready to approve."
                         ),
                     }
                 ],

@@ -362,7 +362,7 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
             if status == "timeout":
                 return _ok(
                     f"Approval timed out for: {operation}. "
-                    "The user did not respond within 90 seconds. "
+                    "The user did not respond before the approval window expired. "
                     "You can offer to try again if the user is ready."
                 )
 

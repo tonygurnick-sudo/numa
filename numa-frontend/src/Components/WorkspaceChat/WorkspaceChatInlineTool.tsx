@@ -17,7 +17,10 @@ import type { WorkspaceChatInlineToolSegment } from '@/types/workspaceChatTypes'
 import { approveToolAction } from '../../Services/workspaceChatAgentService';
 import { ConnectorsService } from '../../Services/ConnectorsService';
 
-const APPROVAL_TIMEOUT_SECONDS = 90;
+// If you change this, also update APPROVAL_TIMEOUT_SECONDS in
+// `lambdas/python/workspace-chat-tools/tools/approval.py`. Three copies
+// (frontend, lambda, agent service) — must stay in sync.
+const APPROVAL_TIMEOUT_SECONDS = 180;
 
 /** Circular countdown timer SVG for the approval panel */
 function ApprovalCountdown({ secondsLeft }: { secondsLeft: number }) {

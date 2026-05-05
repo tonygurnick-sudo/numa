@@ -1748,7 +1748,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
 
     # Approval gate: for write operations that are not auto-approved,
     # create a DynamoDB approval record and poll until the user approves,
-    # denies, or the 90-second timeout expires.
+    # denies, or the approval window expires.
     if not auto_approved and request_id:
         try:
             action_key = f"ops-{operation.replace('_', '-')}"
@@ -1774,7 +1774,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
             if decision == "timeout":
                 return {
                     "status": "timeout",
-                    "message": "Approval timed out (90 seconds)",
+                    "message": "Approval timed out",
                     "approval_id": approval_id,
                 }
 

@@ -166,7 +166,7 @@ async def _handle_request_secret(params: dict[str, Any]) -> dict[str, Any]:
                         "type": "text",
                         "text": (
                             f"Approval timed out for secret '{secret_name}'. "
-                            "The user did not respond within the 90-second window. "
+                            "The user did not respond before the approval window expired. "
                             "You can offer to try again if the user is ready to approve."
                         ),
                     }
