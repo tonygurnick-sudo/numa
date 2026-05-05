@@ -310,9 +310,12 @@ export class PortalDeploymentsConstruct extends Construct {
       }).json,
     });
 
-    // 6) Base task definition (RegisterTaskDefinition in the state machine will pin the image tag)
+    // 6) Base task definition (RegisterTaskDefinition in the state machine pins both the
+    // repository and image tag from SFN input — the placeholder image below is never run).
+    // The SFN's RegisterTaskDefinition step constructs the real image URI from
+    // $.repository (e.g. numa-deploy or numa-deploy-dev) and $.imageTag.
     const defaultImage =
-      props.defaultImageUri || '826326270637.dkr.ecr.ap-southeast-2.amazonaws.com/numa-deploy:latest';
+      props.defaultImageUri || '826326270637.dkr.ecr.ap-southeast-2.amazonaws.com/numa-deploy:placeholder';
     const cpu = props.cpu || '2048';
     const memory = props.memory || '4096';
 
@@ -408,7 +411,11 @@ export class PortalDeploymentsConstruct extends Construct {
     });
 
     // 8) State machine definition (AWS SDK integration)
-    const baseRepo = defaultImage.split(':')[0];
+    // Extract the ECR registry URI (without /repo:tag) so the state machine can compose
+    // image URIs dynamically from $.repository + $.imageTag at runtime.
+    // e.g. "826326270637.dkr.ecr.ap-southeast-2.amazonaws.com/numa-deploy:placeholder"
+    //   -> "826326270637.dkr.ecr.ap-southeast-2.amazonaws.com"
+    const registryUri = defaultImage.split('/')[0];
     const definition = {
       Comment: 'Run client deploy via ECS task and record status',
       StartAt: 'InitRetryCount',
@@ -467,6 +474,7 @@ export class PortalDeploymentsConstruct extends Construct {
               deploymentId: { 'S.$': '$.deploymentId' },
               clientName: { 'S.$': '$.clientName' },
               imageTag: { 'S.$': '$.imageTag' },
+              repository: { 'S.$': '$.repository' },
               initiatedBy: { 'S.$': '$.initiatedBy' },
               sfnExecutionArn: { 'S.$': '$$.Execution.Id' },
               status: { S: 'failed' },
@@ -513,6 +521,7 @@ export class PortalDeploymentsConstruct extends Construct {
               deploymentId: { 'S.$': '$.deploymentId' },
               clientName: { 'S.$': '$.clientName' },
               imageTag: { 'S.$': '$.imageTag' },
+              repository: { 'S.$': '$.repository' },
               initiatedBy: { 'S.$': '$.initiatedBy' },
               sfnExecutionArn: { 'S.$': '$$.Execution.Id' },
               status: { S: 'running' },
@@ -694,7 +703,7 @@ export class PortalDeploymentsConstruct extends Construct {
               {
                 Name: 'deployer',
                 // Use {} placeholder for States.Format arguments
-                'Image.$': `States.Format('${baseRepo}:{}', $.imageTag)`,
+                'Image.$': `States.Format('${registryUri}/{}:{}', $.repository, $.imageTag)`,
                 Essential: true,
                 // Use yarn workspace exec to avoid AWS_PROFILE from npm script
                 EntryPoint: ['yarn'],
@@ -744,7 +753,7 @@ export class PortalDeploymentsConstruct extends Construct {
             ContainerDefinitions: [
               {
                 Name: 'deployer',
-                'Image.$': `States.Format('${baseRepo}:{}', $.imageTag)`,
+                'Image.$': `States.Format('${registryUri}/{}:{}', $.repository, $.imageTag)`,
                 Essential: true,
                 EntryPoint: ['yarn'],
                 'Command.$':
@@ -1570,6 +1579,7 @@ export class PortalDeploymentsConstruct extends Construct {
               startedAt: { 'S.$': '$.startedAt' },
               initiatedBy: { 'S.$': '$.initiatedBy' },
               imageTag: { 'S.$': '$.imageTag' },
+              repository: { 'S.$': '$.repository' },
               mode: { 'S.$': '$.mode' },
               entityType: { S: 'group' },
               groupRunId: { 'S.$': '$.groupRunId' },
@@ -1614,7 +1624,7 @@ export class PortalDeploymentsConstruct extends Construct {
             ContainerDefinitions: [
               {
                 Name: 'deployer',
-                'Image.$': `States.Format('${baseRepo}:{}', $.imageTag)`,
+                'Image.$': `States.Format('${registryUri}/{}:{}', $.repository, $.imageTag)`,
                 Essential: true,
                 EntryPoint: ['yarn'],
                 LogConfiguration: {
@@ -1639,6 +1649,7 @@ export class PortalDeploymentsConstruct extends Construct {
             'clients.$': '$.clients',
             'clientBatches.$': 'States.ArrayPartition($.clients, $.maxConcurrency)',
             'imageTag.$': '$.imageTag',
+            'repository.$': '$.repository',
             'initiatedBy.$': '$.initiatedBy',
             'mode.$': '$.mode',
             'startedAt.$': '$.startedAt',
@@ -1657,6 +1668,7 @@ export class PortalDeploymentsConstruct extends Construct {
             'groupRunId.$': '$.groupRunId',
             'groupName.$': '$.groupName',
             'imageTag.$': '$.imageTag',
+            'repository.$': '$.repository',
             'initiatedBy.$': '$.initiatedBy',
             'mode.$': '$.mode',
             'startedAt.$': '$.startedAt',
@@ -1677,6 +1689,7 @@ export class PortalDeploymentsConstruct extends Construct {
                   'groupRunId.$': '$.groupRunId',
                   'groupName.$': '$.groupName',
                   'imageTag.$': '$.imageTag',
+                  'repository.$': '$.repository',
                   'initiatedBy.$': '$.initiatedBy',
                   'mode.$': '$.mode',
                   'deploymentLabel.$': '$.deploymentLabel',
@@ -1693,6 +1706,7 @@ export class PortalDeploymentsConstruct extends Construct {
                         'groupRunId.$': '$.groupRunId',
                         'groupName.$': '$.groupName',
                         'imageTag.$': '$.imageTag',
+                        'repository.$': '$.repository',
                         'initiatedBy.$': '$.initiatedBy',
                         'mode.$': '$.mode',
                         'deploymentLabel.$': "States.Format('{} / {}', $.groupName, $.clientName)",
@@ -1713,6 +1727,7 @@ export class PortalDeploymentsConstruct extends Construct {
                           'groupName.$': '$.groupName',
                           'deploymentId.$': '$.deploymentId',
                           'imageTag.$': '$.imageTag',
+                          'repository.$': '$.repository',
                           'initiatedBy.$': '$.initiatedBy',
                           'mode.$': '$.mode',
                           'deploymentLabel.$': '$.deploymentLabel',

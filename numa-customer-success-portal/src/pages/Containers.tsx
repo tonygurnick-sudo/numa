@@ -1,13 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Card, Col, Form, InputGroup, Row, Table, Button, Modal, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Card, Col, Form, InputGroup, Row, Table, Button, Modal, Spinner, Nav } from 'react-bootstrap';
 import { BoxSeam, Search, Tag, Pencil } from 'react-bootstrap-icons';
 import { ECRImage } from '@/types';
-import { ecrService } from '@/services/ecrService';
-import { setImageMetadata } from '@/services/imageTagService';
+import { getEcrService } from '@/services/ecrService';
+import { setImageMetadata, type RepositoryName } from '@/services/imageTagService';
+
+type Channel = RepositoryName;
+
+const CHANNELS: { id: Channel; label: string; description: string; badgeBg: string }[] = [
+  {
+    id: 'numa-deploy',
+    label: 'Production',
+    description: 'Built automatically from main',
+    badgeBg: 'primary',
+  },
+  {
+    id: 'numa-deploy-dev',
+    label: 'Dev',
+    description: 'Built manually from dev or dev-image/* branches',
+    badgeBg: 'warning',
+  },
+];
 
 export default function Containers() {
-  const [images, setImages] = useState<ECRImage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [channel, setChannel] = useState<Channel>('numa-deploy');
+  const [imagesByChannel, setImagesByChannel] = useState<Record<Channel, ECRImage[]>>({
+    'numa-deploy': [],
+    'numa-deploy-dev': [],
+  });
+  const [loadingByChannel, setLoadingByChannel] = useState<Record<Channel, boolean>>({
+    'numa-deploy': true,
+    'numa-deploy-dev': true,
+  });
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [editingImage, setEditingImage] = useState<ECRImage | null>(null);
@@ -15,21 +39,27 @@ export default function Containers() {
   const [description, setDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  const loadChannel = async (target: Channel) => {
+    setLoadingByChannel((prev) => ({ ...prev, [target]: true }));
+    setError(null);
+    try {
+      const data = await getEcrService(target).getAllImages();
+      setImagesByChannel((prev) => ({ ...prev, [target]: data }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : `Failed to load ${target} images`);
+    } finally {
+      setLoadingByChannel((prev) => ({ ...prev, [target]: false }));
+    }
+  };
+
+  // Eagerly load both channels so tab switches feel instant
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await ecrService.getAllImages();
-        setImages(data);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load images');
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    loadChannel('numa-deploy');
+    loadChannel('numa-deploy-dev');
   }, []);
+
+  const images = imagesByChannel[channel];
+  const loading = loadingByChannel[channel];
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase().trim();
@@ -55,16 +85,15 @@ export default function Containers() {
     setIsSaving(true);
     try {
       await setImageMetadata({
+        repository: channel,
         imageTag: editingImage.tag,
         digest: editingImage.digest,
         customName: customName.trim() || undefined,
         description: description.trim() || undefined,
       });
 
-      // Clear cache and refresh images to show updated metadata
-      ecrService.clearCache();
-      const data = await ecrService.getAllImages();
-      setImages(data);
+      getEcrService(channel).clearCache();
+      await loadChannel(channel);
       setEditingImage(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save metadata');
@@ -81,6 +110,8 @@ export default function Containers() {
 
   const formatSize = (sizeMb: number) => (sizeMb > 1024 ? `${(sizeMb / 1024).toFixed(1)} GB` : `${sizeMb} MB`);
 
+  const activeChannel = CHANNELS.find((c) => c.id === channel)!;
+
   return (
     <div>
       <div className="d-flex align-items-center justify-content-between mb-3">
@@ -90,6 +121,20 @@ export default function Containers() {
         </h2>
         <Badge bg="secondary">{images.length}</Badge>
       </div>
+
+      <Nav variant="tabs" activeKey={channel} onSelect={(k) => k && setChannel(k as Channel)} className="mb-3">
+        {CHANNELS.map((c) => (
+          <Nav.Item key={c.id}>
+            <Nav.Link eventKey={c.id}>
+              <Badge bg={c.badgeBg} className="me-2">
+                {c.label}
+              </Badge>
+              {c.description}
+              <span className="ms-2 text-muted">({imagesByChannel[c.id].length})</span>
+            </Nav.Link>
+          </Nav.Item>
+        ))}
+      </Nav>
 
       {error && <Alert variant="danger">{error}</Alert>}
 
@@ -135,17 +180,7 @@ export default function Containers() {
                         </div>
                       )}
                       {!img.customName && (
-                        <Badge
-                          bg={
-                            img.tag === 'latest'
-                              ? 'primary'
-                              : img.tag.startsWith('v')
-                                ? 'success'
-                                : img.tag.includes('hotfix')
-                                  ? 'warning'
-                                  : 'secondary'
-                          }
-                        >
+                        <Badge bg={activeChannel.badgeBg}>
                           <Tag size={12} className="me-1" />
                           {img.tag}
                         </Badge>
@@ -178,7 +213,6 @@ export default function Containers() {
         </Card.Body>
       </Card>
 
-      {/* Edit Image Metadata Modal */}
       <Modal show={!!editingImage} onHide={handleCloseModal}>
         <Modal.Header closeButton>
           <Modal.Title>{editingImage?.customName ? 'Edit' : 'Add'} Image Metadata</Modal.Title>
@@ -187,6 +221,9 @@ export default function Containers() {
           {editingImage && (
             <>
               <div className="mb-3">
+                <Badge bg={activeChannel.badgeBg} className="me-2">
+                  {activeChannel.label}
+                </Badge>
                 <strong>Image Tag:</strong> {editingImage.tag}
               </div>
               <Form.Group className="mb-3">

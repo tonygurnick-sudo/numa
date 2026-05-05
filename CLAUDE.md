@@ -80,12 +80,14 @@ Skills are stored in `.claude/skills/` and contain detailed context for specific
 
 The `documentation/` folder contains detailed reference docs for specific domains. These are committed to the repo and complement the skills above. Read the relevant docs when working in these areas.
 
-| Folder                               | Contents                                                                                                             |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `documentation/connectors/`          | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration      |
-| `documentation/email-sending/`       | Centralized email sender: architecture, security model, templates, code examples, infra wiring, deployment           |
-| `documentation/extending-numa-chat/` | How to extend Numa chat with new tools: MCP groups, skills, Lambda delegation, HITL, frontend rendering, agent types |
-| `documentation/nolia/`               | Nolia architecture, pipeline details, rules generation, project notes                                                |
+| Folder                                | Contents                                                                                                             |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `documentation/connectors/`           | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration      |
+| `documentation/deployment-pipelines/` | End-to-end pipeline: GitLab CI → ECR (prod/dev channels) → Customer Success Portal → Step Functions/ECS → CDKTF      |
+| `documentation/email-sending/`        | Centralized email sender: architecture, security model, templates, code examples, infra wiring, deployment           |
+| `documentation/extending-numa-chat/`  | How to extend Numa chat with new tools: MCP groups, skills, Lambda delegation, HITL, frontend rendering, agent types |
+| `documentation/gitlab-runners/`       | Shared CI runners: AWS resources, autoscaler architecture, tokens, common ops, hotfix log                            |
+| `documentation/nolia/`                | Nolia architecture, pipeline details, rules generation, project notes                                                |
 
 ---
 

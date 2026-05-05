@@ -261,7 +261,7 @@ Secret not populated. Run Step 4.
 | ------------------------------------------------------------------ | ----------------------------------------------------------- |
 | `infra/constructs/data-sources/sharepoint-datasource-construct.ts` | CDKTF construct, filter options, field mappings             |
 | `infra/constructs/core-numa-infra-construct.ts`                    | Q Business app/index/retriever creation, data source wiring |
-| `documentation/sharepoint-connector-setup.md`                      | Full reference doc                                          |
+| `documentation/connectors/sharepoint-setup.md`                     | Full reference doc                                          |
 
 ## Existing Clients with SharePoint
 

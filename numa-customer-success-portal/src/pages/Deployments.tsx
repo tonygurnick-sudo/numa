@@ -23,7 +23,8 @@ import { clientService } from '@/services/clientService';
 import { ClientSelectGroup } from '@/components/ClientSelectGroup';
 import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector';
 import { parseClientNamesFromCSV } from '@/utils/csvUtils';
-import { ecrService } from '@/services/ecrService';
+import { getEcrService } from '@/services/ecrService';
+import type { RepositoryName } from '@/services/imageTagService';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   startDeployment,
@@ -49,10 +50,23 @@ import {
 import { getConfigValue } from '@/services/configService';
 import type { ECRImage, Client, DeploymentGroup } from '@/types';
 
+type Channel = RepositoryName;
+
+const CHANNEL_LABELS: Record<Channel, string> = {
+  'numa-deploy': 'Production',
+  'numa-deploy-dev': 'Dev',
+};
+
 export default function Deployments() {
   const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
-  const [images, setImages] = useState<ECRImage[]>([]);
+  const [channel, setChannel] = useState<Channel>('numa-deploy');
+  // Images keyed by channel so switching tabs is instant after the initial load.
+  const [imagesByChannel, setImagesByChannel] = useState<Record<Channel, ECRImage[]>>({
+    'numa-deploy': [],
+    'numa-deploy-dev': [],
+  });
+  const images = imagesByChannel[channel];
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<string>('');
@@ -68,6 +82,9 @@ export default function Deployments() {
   const [isSingleSubmitting, setIsSingleSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  // Foot-gun guard: typed-name confirmation when deploying a dev image to a
+  // non-dev client. Cleared whenever the modal opens.
+  const [devToProdAck, setDevToProdAck] = useState('');
   const [activeTab, setActiveTab] = useState<'history' | 'groups' | 'locks'>('history');
   const [lockActionId, setLockActionId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
@@ -113,13 +130,20 @@ export default function Deployments() {
       setLoading(true);
       setError(null);
       try {
-        const [cs, imgs] = await Promise.all([clientService.getAllClients(), ecrService.getAllImages()]);
+        // Load both channels in parallel so tab switches feel instant.
+        const [cs, prodImgs, devImgs] = await Promise.all([
+          clientService.getAllClients(),
+          getEcrService('numa-deploy').getAllImages(),
+          getEcrService('numa-deploy-dev')
+            .getAllImages()
+            .catch(() => [] as ECRImage[]),
+        ]);
 
         setClients(cs);
-        setImages(imgs);
+        setImagesByChannel({ 'numa-deploy': prodImgs, 'numa-deploy-dev': devImgs });
         if (cs[0]) setSelectedClient(cs[0].name);
-        const latest = imgs.find((i) => i.tag === 'latest') || imgs[0];
-        if (latest) setSelectedTag(latest.tag);
+        // Most-recent-by-pushedAt — :latest is no longer pushed.
+        if (prodImgs[0]) setSelectedTag(prodImgs[0].tag);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load data');
       } finally {
@@ -128,6 +152,16 @@ export default function Deployments() {
     };
     load();
   }, []);
+
+  // When the user switches channel, default the selected tag to the most recent
+  // image in that channel (if any) — saves a click in the common case.
+  useEffect(() => {
+    const list = imagesByChannel[channel];
+    if (list.length === 0) return;
+    if (!list.some((img) => img.tag === selectedTag)) {
+      setSelectedTag(list[0].tag);
+    }
+  }, [channel, imagesByChannel, selectedTag]);
 
   const sortedImages = useMemo(() => {
     return [...images].sort((a, b) => new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime());
@@ -259,9 +293,29 @@ export default function Deployments() {
   );
   const selectedGroupIsManaged = Boolean(selectedGroup?.managed);
   const selectedGroupClientCount = selectedGroup?.clients.length ?? 0;
+  // Foot-gun guard for groups: a dev image targeting a group that contains any
+  // non-dev client must be confirmed by typing the group name.
+  const groupHasProdClients = useMemo(() => {
+    if (!selectedGroup) return false;
+    return selectedGroup.clients.some((name) => {
+      const c = clients.find((cc) => cc.name === name);
+      return c ? !c.config.devInstance : false;
+    });
+  }, [selectedGroup, clients]);
+  const isDevImageToProdGroup = channel === 'numa-deploy-dev' && groupHasProdClients;
+  const [groupDevToProdAck, setGroupDevToProdAck] = useState('');
+  const groupDevToProdAckValid = !isDevImageToProdGroup || groupDevToProdAck === (selectedGroup?.groupName || '');
   const canGroupDeploy = useMemo(
-    () => Boolean(selectedGroup && groupSfnArn && selectedTag && !isGroupSubmitting && selectedGroupClientCount > 0),
-    [selectedGroup, groupSfnArn, selectedTag, isGroupSubmitting, selectedGroupClientCount]
+    () =>
+      Boolean(
+        selectedGroup &&
+        groupSfnArn &&
+        selectedTag &&
+        !isGroupSubmitting &&
+        selectedGroupClientCount > 0 &&
+        groupDevToProdAckValid
+      ),
+    [selectedGroup, groupSfnArn, selectedTag, isGroupSubmitting, selectedGroupClientCount, groupDevToProdAckValid]
   );
   const groupConfigMissing = !groupSfnArn || !groupsTable;
 
@@ -381,7 +435,14 @@ export default function Deployments() {
           <td className="py-3">
             <small className="text-muted">{record.initiatedBy?.split('@')[0] || ''}</small>
           </td>
-          <td className="py-3">{record.imageTag || '—'}</td>
+          <td className="py-3">
+            {record.repository === 'numa-deploy-dev' && (
+              <Badge bg="warning" className="me-2">
+                Dev
+              </Badge>
+            )}
+            {record.imageTag || '—'}
+          </td>
           <td className="py-3 text-muted">—</td>
           <td className="py-3">
             <div className="d-flex flex-column">
@@ -479,8 +540,18 @@ export default function Deployments() {
   };
 
   const handleDeployClick = () => {
+    setDevToProdAck('');
     setShowConfirmModal(true);
   };
+
+  // Foot-gun guard: dev images deploying to a client whose config does NOT
+  // mark it as a dev/demo instance. We require typing the client name to confirm.
+  const selectedClientObj = useMemo(() => clients.find((c) => c.name === selectedClient), [clients, selectedClient]);
+  const isDevImageToProdClient = useMemo(
+    () => channel === 'numa-deploy-dev' && selectedClientObj && !selectedClientObj.config.devInstance,
+    [channel, selectedClientObj]
+  );
+  const devToProdAckValid = !isDevImageToProdClient || devToProdAck === selectedClient;
 
   const handleConfirmDeploy = async () => {
     if (!user?.email) return;
@@ -491,6 +562,7 @@ export default function Deployments() {
       const { deploymentId } = await startDeployment({
         clientName: selectedClient,
         imageTag: selectedTag,
+        repository: channel,
         initiatedBy: user.email,
         deploymentLabel: deploymentLabel || undefined,
       });
@@ -531,6 +603,7 @@ export default function Deployments() {
       const { deploymentId } = await startDeployment({
         clientName: selectedClient,
         imageTag: selectedTag,
+        repository: channel,
         initiatedBy: user.email,
         deploymentLabel: deploymentLabel || undefined,
         mode: 'plan',
@@ -740,6 +813,7 @@ export default function Deployments() {
         groupName: selectedGroup.groupName,
         clients: selectedGroup.clients,
         imageTag: selectedTag,
+        repository: channel,
         initiatedBy: user.email,
         deploymentLabel: groupDeploymentLabel || selectedGroup.groupName,
         maxConcurrency: concurrencyValue,
@@ -787,28 +861,58 @@ export default function Deployments() {
       <Card>
         <Card.Header className="d-flex align-items-center justify-content-between flex-wrap gap-2">
           <h5 className="mb-0">Start New Deployment</h5>
-          <ButtonGroup>
-            <ToggleButton
-              id="deploy-mode-single"
-              type="radio"
-              variant={deployMode === 'single' ? 'primary' : 'outline-primary'}
-              value="single"
-              checked={deployMode === 'single'}
-              onChange={() => handleDeployModeChange('single')}
-            >
-              Single
-            </ToggleButton>
-            <ToggleButton
-              id="deploy-mode-group"
-              type="radio"
-              variant={deployMode === 'group' ? 'primary' : 'outline-primary'}
-              value="group"
-              checked={deployMode === 'group'}
-              onChange={() => handleDeployModeChange('group')}
-            >
-              Group
-            </ToggleButton>
-          </ButtonGroup>
+          <div className="d-flex align-items-center gap-3 flex-wrap">
+            <ButtonGroup aria-label="Image channel">
+              <ToggleButton
+                id="channel-prod"
+                type="radio"
+                variant={channel === 'numa-deploy' ? 'primary' : 'outline-primary'}
+                value="numa-deploy"
+                checked={channel === 'numa-deploy'}
+                onChange={() => setChannel('numa-deploy')}
+              >
+                Production
+                <Badge bg="light" text="dark" className="ms-2">
+                  {imagesByChannel['numa-deploy'].length}
+                </Badge>
+              </ToggleButton>
+              <ToggleButton
+                id="channel-dev"
+                type="radio"
+                variant={channel === 'numa-deploy-dev' ? 'warning' : 'outline-warning'}
+                value="numa-deploy-dev"
+                checked={channel === 'numa-deploy-dev'}
+                onChange={() => setChannel('numa-deploy-dev')}
+              >
+                Dev
+                <Badge bg="light" text="dark" className="ms-2">
+                  {imagesByChannel['numa-deploy-dev'].length}
+                </Badge>
+              </ToggleButton>
+            </ButtonGroup>
+            <ButtonGroup>
+              <ToggleButton
+                id="deploy-mode-single"
+                type="radio"
+                variant={deployMode === 'single' ? 'primary' : 'outline-primary'}
+                value="single"
+                checked={deployMode === 'single'}
+                onChange={() => handleDeployModeChange('single')}
+              >
+                Single
+              </ToggleButton>
+              <ToggleButton
+                id="deploy-mode-group"
+                type="radio"
+                variant={deployMode === 'group' ? 'primary' : 'outline-primary'}
+                value="group"
+                checked={deployMode === 'group'}
+                onChange={() => handleDeployModeChange('group')}
+              >
+                Group
+              </ToggleButton>
+            </ButtonGroup>
+          </div>
         </Card.Header>
         <Card.Body>
           {deployMode === 'single' ? (
@@ -833,13 +937,13 @@ export default function Deployments() {
                       onChange={(e) => setSelectedTag(e.target.value)}
                       disabled={loading || isSingleSubmitting}
                     >
-                      {sortedImages.map((i) => {
-                        const isLatest = i.tag === 'latest';
+                      {sortedImages.map((i, idx) => {
+                        const isMostRecent = idx === 0;
                         const displayName = i.customName || i.tag;
                         const meta: string[] = [];
                         if (i.gitCommit && i.gitCommit !== 'unknown') meta.push(i.gitCommit);
-                        if (i.gitBranch && i.gitBranch !== 'feature') meta.push(i.gitBranch);
-                        const label = `${isLatest ? displayName + ' ★' : displayName} — ${formatPushedAt(i.pushedAt)}${meta.length ? ' — ' + meta.join(' • ') : ''}`;
+                        if (i.gitBranch) meta.push(i.gitBranch);
+                        const label = `${isMostRecent ? displayName + ' ★' : displayName} — ${formatPushedAt(i.pushedAt)}${meta.length ? ' — ' + meta.join(' • ') : ''}`;
                         return (
                           <option key={i.digest + i.tag} value={i.tag}>
                             {label}
@@ -999,6 +1103,20 @@ export default function Deployments() {
                       This group updates automatically to include every non-development client stack plus{' '}
                       <code>arcanum-prod-trial</code>, <code>arcanum-prod-numa-demo</code>, and{' '}
                       <code>arcanum-council-trial</code>.
+                    </Alert>
+                  )}
+                  {isDevImageToProdGroup && (
+                    <Alert variant="danger" className="mb-3">
+                      <strong>You are deploying a Dev image to a group containing production clients.</strong> Dev
+                      images are built manually from non-main branches. To proceed, type the group name{' '}
+                      <code>{selectedGroup.groupName}</code> below to confirm.
+                      <Form.Control
+                        className="mt-2"
+                        type="text"
+                        placeholder={`Type "${selectedGroup.groupName}" to confirm`}
+                        value={groupDevToProdAck}
+                        onChange={(e) => setGroupDevToProdAck(e.target.value)}
+                      />
                     </Alert>
                   )}
                   <div className="mb-3">
@@ -1200,8 +1318,19 @@ export default function Deployments() {
                                 </td>
                                 <td className="py-3">
                                   {(() => {
-                                    const matchingImage = images.find((img) => img.tag === d.imageTag);
-                                    return matchingImage?.customName || d.imageTag || '';
+                                    const repo: Channel = d.repository || 'numa-deploy';
+                                    const matchingImage = imagesByChannel[repo].find((img) => img.tag === d.imageTag);
+                                    const display = matchingImage?.customName || d.imageTag || '';
+                                    return (
+                                      <>
+                                        {repo === 'numa-deploy-dev' && (
+                                          <Badge bg="warning" className="me-2">
+                                            Dev
+                                          </Badge>
+                                        )}
+                                        {display}
+                                      </>
+                                    );
                                   })()}
                                 </td>
                                 <td className="py-3">
@@ -1486,6 +1615,10 @@ export default function Deployments() {
               <strong>Client:</strong> {selectedClient}
             </div>
             <div>
+              <strong>Channel:</strong>{' '}
+              <Badge bg={channel === 'numa-deploy-dev' ? 'warning' : 'primary'}>{CHANNEL_LABELS[channel]}</Badge>
+            </div>
+            <div>
               <strong>Version:</strong>{' '}
               {(() => {
                 const matchingImage = images.find((img) => img.tag === selectedTag);
@@ -1498,6 +1631,21 @@ export default function Deployments() {
               </div>
             )}
           </div>
+          {isDevImageToProdClient && (
+            <Alert variant="danger" className="mt-3">
+              <strong>You are deploying a Dev image to a production client.</strong> This is unusual — Dev images are
+              built manually from non-main branches and have NOT been through the normal release flow. To proceed, type
+              the client name <code>{selectedClient}</code> below to confirm.
+              <Form.Control
+                className="mt-3"
+                type="text"
+                placeholder={`Type "${selectedClient}" to confirm`}
+                value={devToProdAck}
+                onChange={(e) => setDevToProdAck(e.target.value)}
+                autoFocus
+              />
+            </Alert>
+          )}
           <div className="mt-3">
             <small className="text-muted">
               This will trigger a deployment process that may take several minutes to complete.
@@ -1508,7 +1656,7 @@ export default function Deployments() {
           <Button variant="secondary" onClick={handleCancelDeploy}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleConfirmDeploy}>
+          <Button variant="primary" onClick={handleConfirmDeploy} disabled={!devToProdAckValid}>
             Confirm Deploy
           </Button>
         </Modal.Footer>
