@@ -65,18 +65,27 @@ export const handler: PreSignUpTriggerHandler = async (event) => {
 
     if (nativeUser) {
       const existingUser = nativeUser;
+      const existingUsername = existingUser.Username;
       const existingSub = existingUser.Attributes?.find((a) => a.Name === 'sub')?.Value;
 
-      if (existingSub) {
-        console.log(JSON.stringify({ _name: 'SSO_LINK_ATTEMPT', email, existingSub, provider: providerName }));
+      if (existingUsername) {
+        console.log(
+          JSON.stringify({ _name: 'SSO_LINK_ATTEMPT', email, existingUsername, existingSub, provider: providerName })
+        );
 
         try {
+          // For DestinationUser with ProviderName='Cognito', AWS expects the
+          // user's Username (not sub). With UsernameAttributes=['email'], the
+          // Username IS the email. Passing sub here triggers Cognito's
+          // "Deletion of username alias attribute is not allowed" error
+          // because it interprets the value as a new username and tries to
+          // mutate the existing one.
           await getCognito().send(
             new AdminLinkProviderForUserCommand({
               UserPoolId: event.userPoolId,
               DestinationUser: {
                 ProviderName: 'Cognito',
-                ProviderAttributeValue: existingSub,
+                ProviderAttributeValue: existingUsername,
               },
               SourceUser: {
                 ProviderName: providerName,
@@ -90,30 +99,48 @@ export const handler: PreSignUpTriggerHandler = async (event) => {
             JSON.stringify({
               _name: 'SSO_LINK_SUCCESS',
               email,
+              existingUsername,
               existingSub,
               provider: providerName,
               providerId: providerUserId,
             })
           );
         } catch (linkErr) {
-          // Fix #8: FAIL the sign-up — do NOT silently create a duplicate account
-          console.error(
-            JSON.stringify({
-              _name: 'SSO_LINK_FAILURE',
-              email,
-              existingSub,
-              provider: providerName,
-              error: (linkErr as Error).message,
-            })
-          );
-          throw new Error(
-            `Unable to link SSO identity to existing account for ${email}. Please contact your administrator.`
-          );
+          const errName = (linkErr as { name?: string }).name ?? '';
+          const errMsg = (linkErr as Error).message ?? '';
+          // Idempotent: if the identity is already linked to this destination
+          // user, treat as success — re-runs of SSO sign-in should not fail.
+          if (errName === 'AliasExistsException' || /already linked|already exists/i.test(errMsg)) {
+            console.log(
+              JSON.stringify({
+                _name: 'SSO_LINK_ALREADY',
+                email,
+                existingUsername,
+                existingSub,
+                provider: providerName,
+                providerId: providerUserId,
+              })
+            );
+          } else {
+            // Fix #8: FAIL the sign-up — do NOT silently create a duplicate account
+            console.error(
+              JSON.stringify({
+                _name: 'SSO_LINK_FAILURE',
+                email,
+                existingUsername,
+                existingSub,
+                provider: providerName,
+                error: errMsg,
+                errorName: errName,
+              })
+            );
+            throw new Error(
+              `Unable to link SSO identity to existing account for ${email}. Please contact your administrator.`
+            );
+          }
         }
       } else {
-        console.log(
-          JSON.stringify({ _name: 'SSO_LINK_SKIP', email, reason: 'existing user is federated or has no sub' })
-        );
+        console.log(JSON.stringify({ _name: 'SSO_LINK_SKIP', email, reason: 'existing user has no Username' }));
       }
     } else {
       console.log(JSON.stringify({ _name: 'SSO_JIT_PROVISION', email, provider: providerName }));
