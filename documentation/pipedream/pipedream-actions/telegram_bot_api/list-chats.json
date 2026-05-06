@@ -1,0 +1,40 @@
+{
+  "name": "List Chats",
+  "description": "List available Telegram chats. [See the docs](https://core.telegram.org/bots/api#getupdates) for more information",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "telegram_bot_api-list-chats",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "telegramBotApi",
+      "type": "app",
+      "app": "telegram_bot_api"
+    },
+    {
+      "name": "offset",
+      "type": "string",
+      "label": "Start offset (Update ID)",
+      "description": "Enter the update ID <1, last update ID> you want to list from. Note: you can use this field to set your pagination - map last update ID from the result and increase this value by one to get next page.",
+      "optional": true
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "label": "Limit",
+      "description": "Limits the number of updates to be retrieved <1-100>.",
+      "optional": true
+    },
+    {
+      "name": "autoPaging",
+      "type": "boolean",
+      "label": "Confirm processed requests by increasing the offset in the Telegram server [auto-paging]",
+      "description": "Check if to increasing the offset for the next request automatically. Caution: updates listed with `auto-paging` can be listed only once.",
+      "optional": true
+    }
+  ]
+}

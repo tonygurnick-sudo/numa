@@ -1,0 +1,58 @@
+{
+  "name": "List Files",
+  "description": "List files from a specific folder. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/list) for more information",
+  "component_type": "action",
+  "version": "0.1.19",
+  "key": "google_drive-list-files",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Parent Folder",
+      "description": "The ID of the parent folder which contains the file. If not specified, it will list files from the drive's top-level folder.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "fields",
+      "type": "string",
+      "label": "Fields",
+      "description": "The fields you want included in the response [(see the documentation for available fields)](https://developers.google.com/drive/api/reference/rest/v3/files). If not specified, the response includes a default set of fields specific to this method. For development you can use the special value `*` to return all fields, but you'll achieve greater performance by only selecting the fields you need.\n\n**eg:** `files(id,mimeType,name,webContentLink,webViewLink)`",
+      "optional": true
+    },
+    {
+      "name": "filterText",
+      "label": "Filter Text",
+      "description": "Filter by file name that contains a specific text",
+      "type": "string",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "trashed",
+      "label": "Trashed",
+      "type": "boolean",
+      "description": "If `true`, list **only** trashed files. If `false`, list **only** non-trashed files. Keep it empty to include both.",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "Create Label",
+  "description": "Creates a new label on the specified board. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-labels/#api-labels-post).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-create-label",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "idBoard",
+      "type": "string",
+      "label": "Board ID",
+      "description": "The ID of the board to create the label on.",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "Name for the label."
+    },
+    {
+      "name": "color",
+      "type": "string",
+      "label": "Color",
+      "description": "The color for the label. One of: yellow, purple, blue, red, green, orange, black, sky, pink, lime, null (null means no color, and the label will not show on the front of cards)",
+      "options": ["yellow", "purple", "blue", "red", "green", "orange", "black", "sky", "pink", "lime", "null"]
+    }
+  ]
+}

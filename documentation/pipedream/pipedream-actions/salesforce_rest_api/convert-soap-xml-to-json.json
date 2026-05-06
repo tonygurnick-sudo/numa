@@ -1,0 +1,47 @@
+{
+  "name": "Convert SOAP XML Object to JSON",
+  "description": "Converts a SOAP XML Object received from Salesforce to JSON",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "salesforce_rest_api-convert-soap-xml-to-json",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce_rest_api",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "infoBox",
+      "type": "alert",
+      "alertType": "info",
+      "content": "This action is useful in conjunction with Salesforce Flow Builder, and is primarily used if Instant triggers are not working for your use case.\n\\\n[See the documentation](https://pipedream.com/apps/salesforce-rest-api#troubleshooting) for more details."
+    },
+    {
+      "name": "xml",
+      "type": "string",
+      "label": "XML Soap Object",
+      "description": "The object received from Salesforce that will be converted."
+    },
+    {
+      "name": "extractNotificationOnly",
+      "type": "boolean",
+      "label": "Extract Notifications Only",
+      "description": "Whether to extract only the notification parts from the XML. Default: `true`.",
+      "optional": true,
+      "default": true
+    },
+    {
+      "name": "failOnError",
+      "type": "boolean",
+      "label": "Fail on Error",
+      "description": "Whether the action should fail if an error occurs when extracting notifications. Default: `false`.",
+      "optional": true,
+      "default": false
+    }
+  ]
+}

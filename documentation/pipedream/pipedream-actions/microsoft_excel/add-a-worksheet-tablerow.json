@@ -1,0 +1,55 @@
+{
+  "name": "Add a Worksheet Tablerow",
+  "description": "Adds rows to the end of specific table. [See the documentation](https://learn.microsoft.com/en-us/graph/api/tablerowcollection-add?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "microsoft_excel-add-a-worksheet-tablerow",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftExcel",
+      "type": "app",
+      "app": "microsoft_excel"
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder ID",
+      "description": "The ID of the folder where the item is located",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Sheet ID",
+      "description": "The ID of the spreadsheet you want to use",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "tableId",
+      "type": "string",
+      "label": "Table ID",
+      "description": "The ID of the table you want to use",
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "tableName",
+      "type": "string",
+      "label": "Table Name",
+      "description": "This is set in the **Table Design** tab of the ribbon.",
+      "hidden": true
+    },
+    {
+      "name": "values",
+      "type": "string",
+      "label": "Values",
+      "description": "A 2-dimensional array of unformatted values of the table row. [See the documentation to get the data format](https://learn.microsoft.com/en-us/graph/api/tablerowcollection-add?view=graph-rest-1.0&tabs=http)."
+    }
+  ]
+}

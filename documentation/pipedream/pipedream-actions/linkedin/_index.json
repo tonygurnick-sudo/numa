@@ -1,0 +1,226 @@
+[
+  {
+    "key": "linkedin-search-organization",
+    "name": "Search Organization",
+    "description": "Searches for an organization by vanity name or email domain. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/organizations/organization-lookup-api)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "linkedin-retrieve-comments-shares",
+    "name": "Retrieve Comments On Shares",
+    "description": "Retrieve comments on shares given the share urn. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/network-update-social-actions#retrieve-comments-on-shares)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "linkedin-retrieve-comments-on-comments",
+    "name": "Retrieves Comments on Comments",
+    "description": "Retrieves comments on comments, given the parent comment urn. [See the documentation](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/network-update-social-actions#retrieve-comments-on-comments)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "linkedin-get-profile-picture-fields",
+    "name": "Get Profile Picture Fields",
+    "description": "Gets the authenticated user's profile picture data including display image and metadata. [See the documentation](https://learn.microsoft.com/en-us/linkedin/shared/references/v2/profile/profile-picture)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "linkedin-get-organization-administrators",
+    "name": "Get Organization Administrators",
+    "description": "Gets the administrator members of a selected organization. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role?view=li-lms-2025-01&tabs=http#find-organization-administrators)",
+    "version": "0.3.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "linkedin-get-organization-access-control",
+    "name": "Gets Organization Access Control",
+    "description": "Gets a selected organization's access control information. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role?view=li-lms-2025-01&tabs=http#find-organization-access-control)",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "linkedin-get-org-member-access",
+    "name": "Get Member's Organization Access Control Information",
+    "description": "Gets the organization access control information of the current authenticated member. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role?view=li-lms-2025-01&tabs=http#find-a-members-organization-access-control-information)",
+    "version": "1.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "linkedin-get-multiple-member-profiles",
+    "name": "Get Multiple Member Profiles",
+    "description": "Gets multiple member profiles at once. [See the docs here](https://docs.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api#retrieve-other-members-profile)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "linkedin-get-member-profile",
+    "name": "Get Member Profile",
+    "description": "Gets another member's profile, given its person id. [See the docs here](https://docs.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api#retrieve-other-members-profile)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "linkedin-get-current-member-profile",
+    "name": "Get Current Member Profile",
+    "description": "Gets the profile of the current authenticated member. [See the docs here](https://docs.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api#retrieve-current-members-profile)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "linkedin-fetch-ad-account",
+    "name": "Fetch Ad Account",
+    "description": "Fetches an individual adAccount given its id. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/ads/account-structure/create-and-manage-accounts#fetch-ad-account)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "linkedin-delete-post",
+    "name": "Delete Post",
+    "description": "Removes a post from user's wall. [See the documentation](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/share-api?tabs=http#delete-shares) for more information",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "linkedin-create-text-post-user",
+    "name": "Create a Simple Post (User)",
+    "description": "Create post on LinkedIn using text, URL or article. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/posts-api?view=li-lms-2022-11&tabs=http#create-organic-posts) for more information",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "linkedin-create-text-post-organization",
+    "name": "Create a Simple Post (Organization)",
+    "description": "Create post on LinkedIn using text, URL or article. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/posts-api?view=li-lms-2022-11&tabs=http#create-organic-posts) for more information",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "linkedin-create-like-on-share",
+    "name": "Create Like On Share",
+    "description": "Creates a like on a share. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/network-update-social-actions#create-a-like-on-a-share)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "linkedin-create-image-post-user",
+    "name": "Create Image Post (User)",
+    "description": "Create an image post on LinkedIn. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/images-api?view=li-lms-2023-09&tabs=http#uploading-an-image)",
+    "version": "1.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "linkedin-create-image-post-organization",
+    "name": "Create Image Post (Organization)",
+    "description": "Create an image post on LinkedIn. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/images-api?view=li-lms-2023-09&tabs=http#uploading-an-image)",
+    "version": "1.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "linkedin-create-comment",
+    "name": "Create Comment",
+    "description": "Create a comment on a share or user generated content post. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/network-update-social-actions#create-comment)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "linkedin-get-member-organization-access-control",
+    "name": "Get Member's Organization Access Control Information",
+    "description": "Gets the organization access control information of the current authenticated member. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role?view=li-lms-2025-01&tabs=http#find-a-members-organization-access-control-information)",
+    "version": "1.0.1",
+    "annotations": {},
+    "prop_count": 4
+  }
+]

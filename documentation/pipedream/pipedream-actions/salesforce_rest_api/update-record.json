@@ -1,0 +1,43 @@
+{
+  "name": "Update Record",
+  "description": "Update fields of a record. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_update_fields.htm)",
+  "component_type": "action",
+  "version": "0.3.6",
+  "key": "salesforce_rest_api-update-record",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "sobjectType",
+      "type": "string",
+      "label": "SObject Type",
+      "description": "The type of object to update a record of.",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "recordId",
+      "type": "string",
+      "label": "Record ID",
+      "description": "The record to update.",
+      "remoteOptions": true
+    },
+    {
+      "name": "fieldsToUpdate",
+      "type": "string[]",
+      "label": "Fields to Update",
+      "description": "Select the field(s) you want to update for this record.",
+      "remoteOptions": true,
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "name": "Create tracking category",
+  "description": "Create a new tracking category [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories#put-trackingcategories).",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "xero_accounting_api-create-tracking-category",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the tracking category"
+    },
+    {
+      "name": "options",
+      "type": "string[]",
+      "label": "Options",
+      "description": "Options for the tracking category",
+      "optional": true
+    }
+  ]
+}

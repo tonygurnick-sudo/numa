@@ -1,0 +1,50 @@
+{
+  "name": "Add Organization",
+  "description": "Adds a new organization. See the Pipedrive API docs for Organizations [here](https://developers.pipedrive.com/docs/api/v1/Organizations#addOrganization)",
+  "component_type": "action",
+  "version": "0.1.19",
+  "key": "pipedrive-add-organization",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "Organization name"
+    },
+    {
+      "name": "ownerId",
+      "type": "integer",
+      "label": "Owner ID",
+      "description": "ID of the user who will be marked as the owner of this organization. When omitted, the authorized user ID will be used.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "visibleTo",
+      "type": "integer",
+      "label": "Visible To",
+      "description": "Visibility of the organization. If omitted, visibility will be set to the default visibility setting of this item type for the authorized user.",
+      "optional": true,
+      "options": [
+        {
+          "label": "Owner & followers (private)",
+          "value": 1
+        },
+        {
+          "label": "Entire company (shared)",
+          "value": 3
+        }
+      ]
+    }
+  ]
+}

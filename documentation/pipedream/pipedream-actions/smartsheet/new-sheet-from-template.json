@@ -1,0 +1,48 @@
+{
+  "name": "New Sheet From Template",
+  "description": "Creates a new sheet from a template. [See docs here](https://smartsheet.redoc.ly/tag/sheets#operation/create-sheet-in-sheets-folder)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "smartsheet-new-sheet-from-template",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "smartsheet",
+      "type": "app",
+      "app": "smartsheet"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "Name of the new sheet"
+    },
+    {
+      "name": "templateId",
+      "type": "integer",
+      "label": "Template",
+      "description": "Select a template",
+      "remoteOptions": true
+    },
+    {
+      "name": "workspaceId",
+      "type": "integer",
+      "label": "Workspace",
+      "description": "Select a workspace",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "folderId",
+      "type": "integer",
+      "label": "Folder",
+      "description": "Select a folder",
+      "optional": true,
+      "remoteOptions": true
+    }
+  ]
+}

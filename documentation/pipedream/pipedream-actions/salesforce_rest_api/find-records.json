@@ -1,0 +1,41 @@
+{
+  "name": "Find Records",
+  "description": "Retrieves selected fields for some or all records of a selected object. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_get_field_values.htm)",
+  "component_type": "action",
+  "version": "0.2.4",
+  "key": "salesforce_rest_api-find-records",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "sobjectType",
+      "type": "string",
+      "label": "SObject Type",
+      "description": "The type of object to obtain records of.",
+      "remoteOptions": true
+    },
+    {
+      "name": "fieldsToObtain",
+      "type": "string[]",
+      "label": "Fields to Obtain",
+      "description": "Select the field(s) to obtain for the selected record(s) (or all records).",
+      "remoteOptions": true
+    },
+    {
+      "name": "recordIds",
+      "type": "string[]",
+      "label": "Record ID(s)",
+      "description": "The record(s) to retrieve. If not specified, all records will be retrieved.",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

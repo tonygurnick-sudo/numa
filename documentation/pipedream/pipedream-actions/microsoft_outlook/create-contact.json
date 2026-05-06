@@ -1,0 +1,54 @@
+{
+  "name": "Create Contact",
+  "description": "Add a contact to the root Contacts folder, [See the documentation](https://docs.microsoft.com/en-us/graph/api/user-post-contacts)",
+  "component_type": "action",
+  "version": "0.0.21",
+  "key": "microsoft_outlook-create-contact",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    },
+    {
+      "name": "givenName",
+      "label": "Given name",
+      "description": "Given name of the contact",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "surname",
+      "label": "Surname",
+      "description": "Surname of the contact",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "emailAddresses",
+      "label": "Email adresses",
+      "description": "Email addresses",
+      "type": "string[]",
+      "optional": true
+    },
+    {
+      "name": "businessPhones",
+      "label": "Recipients",
+      "description": "Array of phone numbers",
+      "type": "string[]",
+      "optional": true
+    },
+    {
+      "name": "expand",
+      "label": "Expand",
+      "description": "Additional contact details, [See object definition](https://docs.microsoft.com/en-us/graph/api/resources/contact)",
+      "type": "object",
+      "optional": true
+    }
+  ]
+}

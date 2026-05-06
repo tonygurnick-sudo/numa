@@ -1,0 +1,62 @@
+{
+  "name": "Send Text Using Template",
+  "description": "Send a text message using a pre-defined template. Variables can be sent only as text. [See the docs.](https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages#message-templates)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "whatsapp_business-send-text-using-template",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "whatsapp",
+      "type": "app",
+      "app": "whatsapp_business"
+    },
+    {
+      "name": "phoneNumberId",
+      "type": "string",
+      "label": "Phone Number ID",
+      "description": "Phone number ID that will be used to send the message.",
+      "remoteOptions": true
+    },
+    {
+      "name": "recipientPhoneNumber",
+      "type": "string",
+      "label": "Recipient Phone Number",
+      "description": "Enter the recipient's phone number. For example, `15101234567`."
+    },
+    {
+      "name": "messageTemplate",
+      "type": "string",
+      "label": "Message Template",
+      "description": "Select the template you'd like to use.",
+      "remoteOptions": true,
+      "withLabel": true,
+      "reloadProps": true
+    },
+    {
+      "name": "headerVars",
+      "type": "string[]",
+      "label": "Header Variables",
+      "description": "Array of header variables for programmatic/AI-agent use. Takes precedence over individual header props if provided.",
+      "optional": true
+    },
+    {
+      "name": "bodyVars",
+      "type": "string[]",
+      "label": "Body Variables",
+      "description": "Array of body variables for programmatic/AI-agent use. Takes precedence over individual body props if provided.",
+      "optional": true
+    },
+    {
+      "name": "buttonVars",
+      "type": "string[]",
+      "label": "Button Variables",
+      "description": "Array of button variables for programmatic/AI-agent use. Takes precedence over individual button props if provided.",
+      "optional": true
+    }
+  ]
+}

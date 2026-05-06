@@ -1,0 +1,52 @@
+{
+  "name": "Create Key Event",
+  "description": "Creates a new key event. [See the documentation](https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1beta/properties.keyEvents/create)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "google_analytics-create-key-event",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "google_analytics"
+    },
+    {
+      "name": "parent",
+      "type": "string",
+      "label": "Property",
+      "description": "The resource name of the parent property where this Key Event will be created. Format: `properties/123`",
+      "remoteOptions": true
+    },
+    {
+      "name": "eventName",
+      "type": "string",
+      "label": "Event Name",
+      "description": "Immutable. The event name for this key event. Examples: `click`, `purchase`"
+    },
+    {
+      "name": "countingMethod",
+      "type": "string",
+      "label": "Counting Method",
+      "description": "The method by which Key Events will be counted across multiple events within a session.",
+      "options": [
+        {
+          "label": "Counting method not specified.",
+          "value": "COUNTING_METHOD_UNSPECIFIED"
+        },
+        {
+          "label": "Each Event instance is considered a Key Event.",
+          "value": "ONCE_PER_EVENT"
+        },
+        {
+          "label": "An Event instance is considered a Key Event at most once per session per user.",
+          "value": "ONCE_PER_SESSION"
+        }
+      ]
+    }
+  ]
+}

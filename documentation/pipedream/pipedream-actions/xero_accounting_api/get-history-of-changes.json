@@ -1,0 +1,53 @@
+{
+  "name": "Get History of Changes",
+  "description": "Gets the history of changes to a single existing document.",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-get-history-of-changes",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "endpoint",
+      "label": "Endpoint",
+      "type": "string",
+      "description": "The URL component, endpoint of the document type to get history changes. See [supported document types](https://developer.xero.com/documentation/api/history-and-notes#SupportedDocs)",
+      "options": [
+        "BankTransactions",
+        "BatchPayments",
+        "Contacts",
+        "CreditNotes",
+        "Invoices",
+        "Items",
+        "ManualJournals",
+        "Overpayments",
+        "Payments",
+        "Prepayments",
+        "PurchaseOrders",
+        "RepeatingInvoices",
+        "Quotes"
+      ]
+    },
+    {
+      "name": "guid",
+      "label": "GUID",
+      "type": "string",
+      "description": "Xero identifier of the document to get history changes of."
+    }
+  ]
+}

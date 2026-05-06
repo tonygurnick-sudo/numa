@@ -1,0 +1,35 @@
+{
+  "name": "Add Contact to List",
+  "description": "Adds a contact to a specific static list. [See the documentation](https://legacydocs.hubspot.com/docs/methods/lists/add_contact_to_list)",
+  "component_type": "action",
+  "version": "0.0.28",
+  "key": "hubspot-add-contact-to-list",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "list",
+      "type": "string",
+      "label": "List",
+      "description": "The list which the contact will be added to. Only static lists are shown here, as dynamic lists cannot be manually added to.",
+      "withLabel": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "contactEmail",
+      "type": "string",
+      "label": "Contact Email",
+      "description": "The email of the contact to be added to the list. Note - this needs to be a contact that already exists within HubSpot. You may need to add a Create or Update Contact step before this one. Then, use the email created in that step in this field.",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "name": "Create Campaign",
+  "description": "Creates a marketing campaign. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_campaign.htm)",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "salesforce_rest_api-create-campaign",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_campaign.htm) for more information on available fields."
+    },
+    {
+      "name": "dateInfo",
+      "type": "alert",
+      "alertType": "warning",
+      "content": "Date fields should be a [valid date string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date#date_time_string_format) or a Unix timestamp in milliseconds. Example values: `2022-01-15T18:30:00.000Z` or `1642271400000`."
+    },
+    {
+      "name": "Name",
+      "type": "string",
+      "label": "Name",
+      "description": "Name of the campaign. Max 80 characters."
+    },
+    {
+      "name": "Description",
+      "type": "string",
+      "label": "Description",
+      "description": "Description of the campaign. Limit: 32 KB. Only the first 255 characters display in reports.",
+      "optional": true
+    },
+    {
+      "name": "Status",
+      "type": "string",
+      "label": "Status",
+      "description": "Status of the campaign. Max 40 characters.",
+      "optional": true,
+      "options": ["Planned", "In Progress", "Completed", "Aborted"]
+    },
+    {
+      "name": "Type",
+      "type": "string",
+      "label": "Type",
+      "description": "Type of campaign. Max 40 characters.",
+      "optional": true,
+      "options": [
+        "Conference",
+        "Webinar",
+        "Trade Show",
+        "Public Relations",
+        "Partners",
+        "Referral Program",
+        "Advertisement",
+        "Banner Ads",
+        "Direct Mail",
+        "Email",
+        "Telemarketing",
+        "Other"
+      ]
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

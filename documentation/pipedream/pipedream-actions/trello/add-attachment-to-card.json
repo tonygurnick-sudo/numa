@@ -1,0 +1,71 @@
+{
+  "name": "Add Attachment To Card",
+  "description": "Adds a file attachment on a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-attachments-post)",
+  "component_type": "action",
+  "version": "1.0.5",
+  "key": "trello-add-attachment-to-card",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card",
+      "description": "The ID of the Card to add the Attachment to",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the attachment",
+      "optional": true
+    },
+    {
+      "name": "file",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "Provide either a file URL or a path to a file in the /tmp directory (for example, /tmp/myFile.pdf)."
+    },
+    {
+      "name": "mimeType",
+      "type": "string",
+      "label": "Mime Type",
+      "description": "Mime type of the attached file. Eg. `application/pdf`",
+      "remoteOptions": true
+    },
+    {
+      "name": "setCover",
+      "type": "boolean",
+      "label": "Set Cover?",
+      "description": "Determines whether to use the new attachment as a cover for the Card",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

@@ -1,0 +1,70 @@
+{
+  "name": "Create a Ticket",
+  "description": "Create a ticket. [See the documentation](https://developers.freshdesk.com/api/#create_ticket)",
+  "component_type": "action",
+  "version": "0.0.11",
+  "key": "freshdesk-create-ticket",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "companyId",
+      "type": "integer",
+      "label": "Company ID",
+      "description": "Select a company or provide a company ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "Select a contact or provide a contact's email",
+      "remoteOptions": true
+    },
+    {
+      "name": "priority",
+      "type": "integer",
+      "label": "Priority",
+      "description": "Priority of the ticket",
+      "remoteOptions": true,
+      "default": 1,
+      "optional": true
+    },
+    {
+      "name": "subject",
+      "type": "string",
+      "label": "Subject",
+      "description": "Subject of the ticket"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "HTML content of the ticket"
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Phone number",
+      "description": "Phone number of the requester. If no contact exists with this phone number on Freshdesk, it will be added as a new contact",
+      "optional": true
+    },
+    {
+      "name": "status",
+      "type": "integer",
+      "label": "Status",
+      "description": "Status of the ticket",
+      "remoteOptions": true,
+      "default": 2,
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "Kick User",
+  "description": "Remove a user from a conversation. [See the documentation](https://api.slack.com/methods/conversations.kick)",
+  "component_type": "action",
+  "version": "0.0.24",
+  "key": "slack-kick-user",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "conversation",
+      "type": "string",
+      "label": "Channel",
+      "description": "Select a public or private channel, or a user or group",
+      "remoteOptions": true
+    },
+    {
+      "name": "user",
+      "type": "string",
+      "label": "User",
+      "description": "Select a user",
+      "remoteOptions": true
+    }
+  ]
+}

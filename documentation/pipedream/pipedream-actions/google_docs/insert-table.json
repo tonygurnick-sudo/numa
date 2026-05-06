@@ -1,0 +1,55 @@
+{
+  "name": "Insert Table",
+  "description": "Insert a table into a document. [See the documentation](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/request#inserttablerequest)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "google_docs-insert-table",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDocs",
+      "type": "app",
+      "app": "google_docs"
+    },
+    {
+      "name": "docId",
+      "type": "string",
+      "label": "Document",
+      "description": "Search for and select a document. You can also use a custom expression to pass a value from a previous step (e.g., `{{steps.foo.$return_value.documentId}}`) or you can enter a static ID (e.g., `1KuEN7k8jVP3Qi0_svM5OO8oEuiLkq0csihobF67eat8`).",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "rows",
+      "type": "integer",
+      "label": "Rows",
+      "description": "The number of rows in the table"
+    },
+    {
+      "name": "columns",
+      "type": "integer",
+      "label": "Columns",
+      "description": "The number of columns in the table"
+    },
+    {
+      "name": "index",
+      "type": "integer",
+      "label": "Index",
+      "description": "The index to insert the table at",
+      "default": 1,
+      "optional": true
+    },
+    {
+      "name": "tabId",
+      "type": "string",
+      "label": "Tab ID",
+      "description": "The Tab ID",
+      "optional": true,
+      "remoteOptions": true
+    }
+  ]
+}

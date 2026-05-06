@@ -1,0 +1,53 @@
+{
+  "name": "Create a Company",
+  "description": "Create a company. [See the documentation](https://developers.freshdesk.com/api/#create_company)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "freshdesk-create-company",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "Name of the company"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "Description of the company",
+      "optional": true
+    },
+    {
+      "name": "note",
+      "type": "string",
+      "label": "Note",
+      "description": "Any specific note about the company",
+      "optional": true
+    },
+    {
+      "name": "industry",
+      "type": "string",
+      "label": "Industry",
+      "description": "The industry the company serves in",
+      "optional": true
+    },
+    {
+      "name": "domains",
+      "type": "string[]",
+      "label": "Domains",
+      "description": "Domains of the company. Email addresses of contacts that contain this domain will be associated with that company automatically. e.g. [\"supernova\",\"nova\"]",
+      "optional": true
+    }
+  ]
+}

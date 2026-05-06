@@ -1,0 +1,31 @@
+{
+  "name": "Batch Upsert Companies",
+  "description": "Upsert a batch of companies in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/objects/companies#post-%2Fcrm%2Fv3%2Fobjects%2Fcompanies%2Fbatch%2Fupsert)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "hubspot-batch-upsert-companies",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "infoAlert",
+      "type": "alert",
+      "alertType": "info",
+      "content": "Create or update companies identified by a unique property value as specified by the `idProperty` query parameter. `idProperty` query param refers to a property whose values are unique for the object. To manage properties in Hubspot, navigate to your Settings -> Data Management -> Properties."
+    },
+    {
+      "name": "inputs",
+      "type": "string[]",
+      "label": "Inputs (Companies)",
+      "description": "Provide a **list of companies** to be upserted. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/objects/companies#post-%2Fcrm%2Fv3%2Fobjects%2Fcompanies%2Fbatch%2Fupsert) for more information. Example: `[ { \"idProperty\": \"unique_property\", \"id\": \"123\", \"properties\": { \"name\": \"CompanyName\" } } ]`"
+    }
+  ]
+}

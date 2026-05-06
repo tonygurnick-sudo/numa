@@ -1,0 +1,55 @@
+{
+  "name": "Delete User",
+  "description": "Disassociates (unlinks) a user from the associated account or permanently deletes a user.",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "zoom-delete-user",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "user_id",
+      "type": "string",
+      "description": "The user ID or email address of the user."
+    },
+    {
+      "name": "action",
+      "type": "string",
+      "description": "Delete action options:<br>`disassociate` - Disassociate a user.<br>`delete`-  Permanently delete a user.<br>Note: To delete pending user in the account, use `disassociate",
+      "optional": true,
+      "options": ["disassociate", "delete"]
+    },
+    {
+      "name": "transfer_email",
+      "type": "string",
+      "description": "Transfer email.",
+      "optional": true
+    },
+    {
+      "name": "transfer_meeting",
+      "type": "boolean",
+      "description": "Transfer meeting.",
+      "optional": true
+    },
+    {
+      "name": "transfer_webinar",
+      "type": "boolean",
+      "description": "Transfer webinar.",
+      "optional": true
+    },
+    {
+      "name": "transfer_recording",
+      "type": "boolean",
+      "description": "Transfer recording.",
+      "optional": true
+    }
+  ]
+}

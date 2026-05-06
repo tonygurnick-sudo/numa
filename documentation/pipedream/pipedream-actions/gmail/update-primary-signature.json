@@ -1,0 +1,25 @@
+{
+  "name": "Update Signature for Primary Email Address",
+  "description": "Update the signature for the primary email address. [See the documentation](https://developers.google.com/gmail/api/reference/rest/v1/users.settings.sendAs/update)",
+  "component_type": "action",
+  "version": "0.0.14",
+  "key": "gmail-update-primary-signature",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "signature",
+      "type": "string",
+      "label": "Signature",
+      "description": "The new signature."
+    }
+  ]
+}

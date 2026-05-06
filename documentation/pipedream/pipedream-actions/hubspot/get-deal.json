@@ -1,0 +1,42 @@
+{
+  "name": "Get Deal",
+  "description": "Gets a deal. [See the documentation](https://developers.hubspot.com/docs/api/crm/deals#endpoint?spec=GET-/crm/v3/objects/deals/{dealId})",
+  "component_type": "action",
+  "version": "0.0.28",
+  "key": "hubspot-get-deal",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "objectId",
+      "type": "string",
+      "label": "Deal ID",
+      "description": "Hubspot's internal ID for the deal",
+      "useQuery": true,
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "info",
+      "type": "alert",
+      "alertType": "info",
+      "content": "",
+      "hidden": true
+    },
+    {
+      "name": "additionalProperties",
+      "type": "string[]",
+      "label": "Additional properties to retrieve",
+      "optional": true,
+      "remoteOptions": true
+    }
+  ]
+}

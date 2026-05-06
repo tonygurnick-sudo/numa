@@ -1,0 +1,42 @@
+{
+  "name": "Find a List",
+  "description": "Finds a list on a specific board by name. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-id-lists-get).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-find-list",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "Specify the board to search for lists",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "List Name",
+      "description": "Name of the list to find.",
+      "optional": false
+    },
+    {
+      "name": "listFilter",
+      "type": "string",
+      "label": "List Filter",
+      "description": "Type of list to search for",
+      "options": ["all", "closed", "none", "open"],
+      "default": "all"
+    }
+  ]
+}

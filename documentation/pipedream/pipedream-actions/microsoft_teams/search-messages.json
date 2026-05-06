@@ -1,0 +1,59 @@
+{
+  "name": "Search Messages",
+  "description": "Search for email or chat messages. [See the documentation](https://learn.microsoft.com/en-us/graph/api/search-query?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "microsoft_teams-search-messages",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftTeams",
+      "type": "app",
+      "app": "microsoft_teams",
+      "description": "**Personal accounts are not currently supported by Microsoft Teams.** Refer to Microsoft's documentation [here](https://learn.microsoft.com/en-us/graph/permissions-reference#remarks-7) to learn more."
+    },
+    {
+      "name": "entityType",
+      "type": "string",
+      "label": "Entity Type",
+      "description": "The type of entity to search for",
+      "options": [
+        {
+          "label": "Email Messages",
+          "value": "message"
+        },
+        {
+          "label": "Chat Messages",
+          "value": "chatMessage"
+        }
+      ]
+    },
+    {
+      "name": "queryString",
+      "type": "string",
+      "label": "Query String",
+      "description": "The query string to search for"
+    },
+    {
+      "name": "from",
+      "type": "integer",
+      "label": "From",
+      "description": "The index of the first result to return",
+      "default": 0,
+      "optional": true
+    },
+    {
+      "name": "size",
+      "type": "integer",
+      "label": "Size",
+      "description": "The number of results to return",
+      "default": 25,
+      "max": 25,
+      "optional": true
+    }
+  ]
+}

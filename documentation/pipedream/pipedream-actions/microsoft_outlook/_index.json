@@ -1,0 +1,194 @@
+[
+  {
+    "key": "microsoft_outlook-update-contact",
+    "name": "Update Contact",
+    "description": "Update an existing contact, [See the docs](https://docs.microsoft.com/en-us/graph/api/user-post-contacts)",
+    "version": "0.0.21",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "microsoft_outlook-send-email",
+    "name": "Send Email",
+    "description": "Send an email to one or multiple recipients, [See the docs](https://docs.microsoft.com/en-us/graph/api/user-sendmail)",
+    "version": "0.0.22",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "microsoft_outlook-reply-to-email",
+    "name": "Reply to Email",
+    "description": "Reply to an email in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/message-reply)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "microsoft_outlook-remove-label-from-email",
+    "name": "Remove Label from Email",
+    "description": "Removes a label/category from an email in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/message-update)",
+    "version": "0.0.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "microsoft_outlook-move-email-to-folder",
+    "name": "Move Email to Folder",
+    "description": "Moves an email to the specified folder in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/message-move)",
+    "version": "0.0.12",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "microsoft_outlook-list-labels",
+    "name": "List Labels",
+    "description": "Get all the labels/categories that have been defined for a user. [See the documentation](https://learn.microsoft.com/en-us/graph/api/outlookuser-list-mastercategories)",
+    "version": "0.0.14",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "microsoft_outlook-list-folders",
+    "name": "List Folders",
+    "description": "Retrieves a list of all folders in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-mailfolders)",
+    "version": "0.0.12",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "microsoft_outlook-list-contacts",
+    "name": "List Contacts",
+    "description": "Get a contact collection from the default contacts folder, [See the documentation](https://docs.microsoft.com/en-us/graph/api/user-list-contacts)",
+    "version": "0.0.21",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "microsoft_outlook-find-shared-folder-email",
+    "name": "Find Shared Folder Email",
+    "description": "Search for an email in a shared folder in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-messages)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "microsoft_outlook-find-email",
+    "name": "Find Email",
+    "description": "Search for an email in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-messages)",
+    "version": "0.0.15",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "microsoft_outlook-find-contacts",
+    "name": "Find Contacts",
+    "description": "Finds contacts with the given search string. [See the documentation](https://docs.microsoft.com/en-us/graph/api/user-list-contacts)",
+    "version": "0.0.21",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "microsoft_outlook-download-attachment",
+    "name": "Download Attachment",
+    "description": "Downloads an attachment to the /tmp directory. [See the documentation](https://learn.microsoft.com/en-us/graph/api/attachment-get?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "microsoft_outlook-create-draft-email",
+    "name": "Create Draft Email",
+    "description": "Create a draft email, [See the documentation](https://docs.microsoft.com/en-us/graph/api/user-post-messages)",
+    "version": "0.0.21",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "microsoft_outlook-create-contact",
+    "name": "Create Contact",
+    "description": "Add a contact to the root Contacts folder, [See the documentation](https://docs.microsoft.com/en-us/graph/api/user-post-contacts)",
+    "version": "0.0.21",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "microsoft_outlook-approve-workflow",
+    "name": "Approve Workflow",
+    "description": "Suspend the workflow until approved by email. [See the documentation](https://pipedream.com/docs/code/nodejs/rerun#flowsuspend)",
+    "version": "0.0.12",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "microsoft_outlook-add-label-to-email",
+    "name": "Add Label to Email",
+    "description": "Adds a label/category to an email in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/message-update)",
+    "version": "0.0.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  }
+]

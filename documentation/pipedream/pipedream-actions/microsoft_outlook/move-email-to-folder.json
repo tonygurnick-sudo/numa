@@ -1,0 +1,33 @@
+{
+  "name": "Move Email to Folder",
+  "description": "Moves an email to the specified folder in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/message-move)",
+  "component_type": "action",
+  "version": "0.0.12",
+  "key": "microsoft_outlook-move-email-to-folder",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    },
+    {
+      "name": "messageId",
+      "type": "string",
+      "label": "Message ID",
+      "description": "The identifier of the message to update",
+      "remoteOptions": true
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder ID",
+      "description": "The identifier of the folder to move the selected message to",
+      "remoteOptions": true
+    }
+  ]
+}

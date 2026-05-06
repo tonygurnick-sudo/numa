@@ -1,0 +1,36 @@
+{
+  "name": "Send Chat Message",
+  "description": "Send chat messages on Zoom to either an individual user who is in your contact list or to a  of which you are a member.",
+  "component_type": "action",
+  "version": "0.1.5",
+  "key": "zoom-send-chat-message",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "message",
+      "type": "string",
+      "description": "The message to be sent."
+    },
+    {
+      "name": "to_contact",
+      "type": "string",
+      "description": "The email address of the contact to whom you would like to send the message.",
+      "optional": true
+    },
+    {
+      "name": "to_channel",
+      "type": "string",
+      "description": "The Channel Id of the channel where you would like to send a message.",
+      "optional": true
+    }
+  ]
+}

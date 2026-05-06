@@ -111,13 +111,40 @@ export const EmailFilterSchema = z.object({
   value: z.string().max(500),
 });
 
-export const EventTriggerSchema = z.object({
+export const GmailEventTriggerSchema = z.object({
   source: z.literal('gmail'),
   event: z.literal('message.received'),
   filters: z.array(EmailFilterSchema).max(20).default([]),
   filter_logic: z.enum(['all', 'any']).optional().default('all'),
   include_email_context: z.boolean().optional().default(true),
 });
+
+// Pipedream-backed event trigger. Configuration (channel, keyword, etc.) is held
+// in `configured_props` and validated by Pipedream at deploy time. `deployed_trigger_id`
+// (dc_xxx) and `webhook_signing_key` are populated by the agent-schedules lambda after
+// it calls the Pipedream Connect deploy endpoint via the relay.
+//
+// `configured_prop_labels` is a snapshot of human-readable labels for prop values
+// (e.g. `{ conversations: { "C0AG75CUDRR": "codespace" } }`), captured at save-time
+// from the wizard's remote-options dropdown. We don't refetch labels at view-time —
+// detail pages and list cards read from this map and fall back to raw values for
+// legacy schedules where it's missing.
+export const PipedreamEventTriggerSchema = z.object({
+  source: z.literal('pipedream'),
+  app_slug: z.string().min(1),
+  component_id: z.string().min(1),
+  component_version: z.string().optional(),
+  configured_props: z.record(z.unknown()),
+  configured_prop_labels: z.record(z.record(z.string())).optional(),
+  deployed_trigger_id: z.string().optional(),
+  webhook_signing_key: z.string().optional(),
+  include_event_context: z.boolean().optional().default(true),
+});
+
+export const EventTriggerSchema = z.discriminatedUnion('source', [
+  GmailEventTriggerSchema,
+  PipedreamEventTriggerSchema,
+]);
 
 // Main schedule record schema
 export const ScheduleRecordSchema = z
@@ -397,6 +424,8 @@ export type UpdateSchedulePayload = z.infer<typeof UpdateSchedulePayloadSchema>;
 export type ScheduledRunConfig = z.infer<typeof ScheduledRunConfigSchema>;
 export type AgentSnapshot = z.infer<typeof AgentSnapshotSchema>;
 export type EmailFilter = z.infer<typeof EmailFilterSchema>;
+export type GmailEventTrigger = z.infer<typeof GmailEventTriggerSchema>;
+export type PipedreamEventTrigger = z.infer<typeof PipedreamEventTriggerSchema>;
 export type EventTrigger = z.infer<typeof EventTriggerSchema>;
 export type ApplicationScheduleRecord = z.infer<typeof ApplicationScheduleRecordSchema>;
 export type DataSyncScheduleRecord = z.infer<typeof DataSyncScheduleRecordSchema>;

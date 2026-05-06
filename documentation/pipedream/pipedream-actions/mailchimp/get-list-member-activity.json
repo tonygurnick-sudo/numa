@@ -1,0 +1,54 @@
+{
+  "name": "Get List Member Activities",
+  "description": "Get the last 50 events of a member's activity on a specific list. [See docs here](https://mailchimp.com/developer/marketing/api/list-activity/view-recent-activity-50/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-get-list-member-activity",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "subscriberHash",
+      "type": "string",
+      "label": "Subscriber hash",
+      "description": "The MD5 hash of the lowercase version of the list member's email address. This endpoint also accepts a list member's email address or contact_id."
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Fields",
+      "description": "A string list of fields to return. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "excludeFields",
+      "type": "string[]",
+      "label": "Exclude Fields",
+      "description": "A string list of fields to exclude_fields. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "action",
+      "type": "object",
+      "label": "Action",
+      "description": "A comma separated list of actions to return. Possible values: abuse, bounce, click, open, sent, unsub, or ecomm.",
+      "optional": true
+    }
+  ]
+}

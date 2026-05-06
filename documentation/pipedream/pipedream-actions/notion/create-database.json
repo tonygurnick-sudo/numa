@@ -1,0 +1,40 @@
+{
+  "name": "Create Database",
+  "description": "Create a database and its initial data source. [See the documentation](https://developers.notion.com/reference/database-create)",
+  "component_type": "action",
+  "version": "0.1.5",
+  "key": "notion-create-database",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "parent",
+      "type": "string",
+      "label": "Parent Page ID",
+      "description": "Select a parent page or provide a page ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "Title of database as it appears in Notion. An array of [rich text objects](https://developers.notion.com/reference/rich-text).",
+      "optional": true
+    },
+    {
+      "name": "properties",
+      "type": "object",
+      "label": "Properties",
+      "description": "Property schema of database. The keys are the names of properties as they appear in Notion and the values are [property schema objects](https://developers.notion.com/reference/property-schema-object)."
+    }
+  ]
+}

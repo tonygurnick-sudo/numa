@@ -1,0 +1,34 @@
+{
+  "name": "List Forms",
+  "description": "Retrieves a list of forms. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/forms#get-%2Fmarketing%2Fv3%2Fforms%2F)",
+  "component_type": "action",
+  "version": "0.0.11",
+  "key": "hubspot-list-forms",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "archived",
+      "type": "boolean",
+      "label": "Archived",
+      "description": "Whether to return only results that have been archived",
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

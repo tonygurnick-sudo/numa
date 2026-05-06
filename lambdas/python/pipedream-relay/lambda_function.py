@@ -212,6 +212,13 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
             "configure_props",
             "proxy_request",
             "batch_get_schemas",
+            # Trigger lifecycle — proxied through to Pipedream Connect Triggers API.
+            # No deny-list policy applies (these aren't action invocations).
+            "list_triggers",
+            "deploy_trigger",
+            "update_deployed_trigger",
+            "delete_deployed_trigger",
+            "list_deployed_triggers",
         ):
             if not proxy_lambda_arn:
                 logger.error("PIPEDREAM_PROXY_LAMBDA_ARN environment variable not set")

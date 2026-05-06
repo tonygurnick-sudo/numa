@@ -1,0 +1,182 @@
+[
+  {
+    "key": "apollo_io-update-opportunity",
+    "name": "Update Opportunity",
+    "description": "Updates a new opportunity in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#update-opportunity)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "apollo_io-update-contact",
+    "name": "Update Contact",
+    "description": "Updates an existing contact in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#update-a-contact)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "apollo_io-update-contact-stage",
+    "name": "Update Contact Stage",
+    "description": "Updates the stage of one or more contacts in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#update-contact-stage)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "apollo_io-update-account",
+    "name": "Update Account",
+    "description": "Updates an existing account in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#update-an-account)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "apollo_io-update-account-stage",
+    "name": "Update Account Stage",
+    "description": "Updates the stage of one or more accounts in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#update-account-stage)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "apollo_io-search-sequences",
+    "name": "Search For Sequences",
+    "description": "Search for sequences in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#search-for-sequences)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "apollo_io-search-contacts",
+    "name": "Search For Contacts",
+    "description": "Search for contacts in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#search-for-contacts)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "apollo_io-search-accounts",
+    "name": "Search For Accounts",
+    "description": "Search for accounts in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#search-for-accounts)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "apollo_io-people-enrichment",
+    "name": "People Enrichment",
+    "description": "Enriches a person's information, the more information you pass in, the more likely we can find a match. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#people-enrichment)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "apollo_io-get-opportunity",
+    "name": "Get Opportunity",
+    "description": "Gets a specific opportunity in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#view-opportunity)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "apollo_io-create-update-contact",
+    "name": "Create Or Update Contact",
+    "description": "Creates or updates a specific contact. If the contact email already exists, it's updated. Otherwise, a new contact is created. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#create-a-contact)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "apollo_io-create-opportunity",
+    "name": "Create Opportunity",
+    "description": "Creates a new opportunity in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#create-opportunity)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "apollo_io-create-contact",
+    "name": "Create Contact",
+    "description": "Creates a new contact in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#create-a-contact)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "apollo_io-create-account",
+    "name": "Create Account",
+    "description": "Creates a new account in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#create-an-account)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "apollo_io-add-contacts-to-sequence",
+    "name": "Add Contacts to Sequence",
+    "description": "Adds one or more contacts to a sequence in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#add-contacts-to-sequence)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  }
+]

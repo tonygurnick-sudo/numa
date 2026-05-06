@@ -1,0 +1,47 @@
+{
+  "name": "Update Account",
+  "description": "Updates an existing account in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#update-an-account)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "apollo_io-update-account",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "accountId",
+      "type": "string",
+      "label": "Account ID",
+      "description": "Identifier of the account for this contact",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the account",
+      "optional": true
+    },
+    {
+      "name": "domain",
+      "type": "string",
+      "label": "Domain",
+      "description": "The domain of the account you are adding",
+      "optional": true
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Phone",
+      "description": "The corporate phone for this account",
+      "optional": true
+    }
+  ]
+}

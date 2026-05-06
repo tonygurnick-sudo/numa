@@ -1,0 +1,19 @@
+{
+  "name": "List Knowledge Articles",
+  "description": "Lists all knowledge articles. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_knowledgearticle.htm)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "salesforce_rest_api-list-knowledge-articles",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    }
+  ]
+}

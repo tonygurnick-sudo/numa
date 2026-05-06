@@ -1,0 +1,39 @@
+{
+  "name": "Create Channel",
+  "description": "Create a new channel in Microsoft Teams. [See the docs here](https://docs.microsoft.com/en-us/graph/api/channel-post?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.12",
+  "key": "microsoft_teams-create-channel",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftTeams",
+      "type": "app",
+      "app": "microsoft_teams",
+      "description": "**Personal accounts are not currently supported by Microsoft Teams.** Refer to Microsoft's documentation [here](https://learn.microsoft.com/en-us/graph/permissions-reference#remarks-7) to learn more."
+    },
+    {
+      "name": "teamId",
+      "type": "string",
+      "label": "Team",
+      "description": "Microsoft Team",
+      "remoteOptions": true
+    },
+    {
+      "name": "displayName",
+      "type": "string",
+      "label": "Display Name",
+      "description": "Display name of the channel"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "Description of the channel"
+    }
+  ]
+}

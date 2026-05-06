@@ -1,0 +1,49 @@
+{
+  "name": "List Events",
+  "description": "Get a list of event objects in the user's mailbox. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-events)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "microsoft_outlook_calendar-list-events",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook_calendar"
+    },
+    {
+      "name": "filter",
+      "type": "string",
+      "label": "Filter",
+      "description": "Filters results. For example, `contains(subject, 'meet for lunch?')` will include events whose title contains \u2018meet for lunch?\u2019. [See documentation](https://learn.microsoft.com/en-us/graph/filter-query-parameter) for the full list of operations.",
+      "optional": true
+    },
+    {
+      "name": "orderBy",
+      "type": "string",
+      "label": "Order By",
+      "description": "Orders results. For example, `displayName desc` will sort the results by Display Name in decending order.",
+      "default": "createdDateTime desc",
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "optional": true
+    },
+    {
+      "name": "includeRecurring",
+      "type": "boolean",
+      "label": "Include Recurring",
+      "description": "Whether to include recurring events",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

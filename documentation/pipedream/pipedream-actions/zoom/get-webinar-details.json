@@ -1,0 +1,33 @@
+{
+  "name": "Get Webinar Details",
+  "description": "Gets details of a scheduled webinar. [See the docs here](https://marketplace.zoom.us/docs/api-reference/zoom-api/methods/#operation/webinar).",
+  "component_type": "action",
+  "version": "0.3.8",
+  "key": "zoom-get-webinar-details",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "webinarId",
+      "type": "string",
+      "label": "Webinar",
+      "description": "The webinar to get details for",
+      "remoteOptions": true
+    },
+    {
+      "name": "occurrenceId",
+      "type": "string",
+      "label": "Occurrence ID",
+      "description": "Unique Identifier that identifies an occurrence of a recurring webinar.  Recurring webinars can have a maximum of 50 occurrences.",
+      "optional": true
+    }
+  ]
+}

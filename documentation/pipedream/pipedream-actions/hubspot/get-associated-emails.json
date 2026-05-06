@@ -1,0 +1,51 @@
+{
+  "name": "Get Associated Emails",
+  "description": "Retrieves emails associated with a specific object (contact, company, or deal). [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/search)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "hubspot-get-associated-emails",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "objectType",
+      "type": "string",
+      "label": "Associated Object Type",
+      "description": "The type of the object the emails are associated with",
+      "remoteOptions": true
+    },
+    {
+      "name": "objectId",
+      "type": "string",
+      "label": "Object ID",
+      "description": "The ID of the object to get associated emails for",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "additionalProperties",
+      "type": "string[]",
+      "label": "Additional Properties",
+      "description": "Additional properties to retrieve for the emails",
+      "optional": true
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "label": "Limit",
+      "description": "Maximum number of emails to retrieve",
+      "optional": true,
+      "default": 20,
+      "min": 1,
+      "max": 100
+    }
+  ]
+}

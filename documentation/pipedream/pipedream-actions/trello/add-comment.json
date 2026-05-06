@@ -1,0 +1,41 @@
+{
+  "name": "Add Comment",
+  "description": "Create a new comment on a specific card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-actions-comments-post).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-add-comment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "boardId",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card ID",
+      "description": "The ID of the card.",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Comment",
+      "description": "The comment to add."
+    }
+  ]
+}

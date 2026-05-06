@@ -1,0 +1,59 @@
+{
+  "name": "Create History Note",
+  "description": "Creates a new note adding it to a document.",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-create-history-note",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "endpoint",
+      "label": "Endpoint",
+      "type": "string",
+      "description": "The URL component, endpoint of the document type to add the history note. See [supported document types](https://developer.xero.com/documentation/api/history-and-notes#SupportedDocs)",
+      "options": [
+        "BankTransactions",
+        "BatchPayments",
+        "Contacts",
+        "CreditNotes",
+        "Invoices",
+        "Items",
+        "ManualJournals",
+        "Overpayments",
+        "Payments",
+        "Prepayments",
+        "PurchaseOrders",
+        "RepeatingInvoices",
+        "Quotes"
+      ]
+    },
+    {
+      "name": "guid",
+      "label": "GUID",
+      "type": "string",
+      "description": "Xero identifier of the document to add a history note to."
+    },
+    {
+      "name": "details",
+      "type": "string",
+      "label": "Details",
+      "description": "The note to be recorded against a single document. Max Length 250 characters."
+    }
+  ]
+}

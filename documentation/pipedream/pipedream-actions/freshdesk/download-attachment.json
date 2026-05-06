@@ -1,0 +1,40 @@
+{
+  "name": "Download Attachment",
+  "description": "Download an attachment from a ticket. [See the documentation](https://developers.freshdesk.com/api/#view_a_ticket)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "freshdesk-download-attachment",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "ticketId",
+      "type": "integer",
+      "label": "Ticket ID",
+      "description": "Select a ticket or provide a ticket ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "attachmentId",
+      "type": "integer",
+      "label": "Attachment ID",
+      "description": "The ID of the attachment to download",
+      "remoteOptions": true
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "write",
+      "sync": true
+    }
+  ],
+  "stash": "required"
+}

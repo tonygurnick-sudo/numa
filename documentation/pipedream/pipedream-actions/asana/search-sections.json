@@ -1,0 +1,39 @@
+{
+  "name": "Search Sections",
+  "description": "Searches for a section by name within a particular project. [See the documentation](https://developers.asana.com/docs/get-sections-in-a-project)",
+  "component_type": "action",
+  "version": "0.2.11",
+  "key": "asana-search-sections",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "asana",
+      "type": "app",
+      "app": "asana"
+    },
+    {
+      "name": "workspace",
+      "label": "Workspace",
+      "description": "Gid of a workspace.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "project",
+      "label": "Project",
+      "description": "List of projects. This field uses the project GID.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "label": "Name",
+      "description": "The name of the section to search for.",
+      "type": "string"
+    }
+  ]
+}

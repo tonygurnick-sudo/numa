@@ -1,0 +1,26 @@
+{
+  "name": "Get Send As Alias",
+  "description": "Get a send as alias for the authenticated user. [See the documentation](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.settings.sendAs/get)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "gmail-get-send-as-alias",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "sendAsEmail",
+      "type": "string",
+      "label": "Send As Email",
+      "description": "The email address of the send as alias to get",
+      "remoteOptions": true
+    }
+  ]
+}

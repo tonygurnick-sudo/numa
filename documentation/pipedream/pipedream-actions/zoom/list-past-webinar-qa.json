@@ -1,0 +1,25 @@
+{
+  "name": "List Past Webinar Q&A",
+  "description": "The  feature for Webinars allows attendees to ask questions during the Webinar and for the panelists, co-hosts and host to answer their questions. Use this API to list Q&A of a specific Webinar.",
+  "component_type": "action",
+  "version": "0.1.7",
+  "key": "zoom-list-past-webinar-qa",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "webinarID",
+      "type": "string",
+      "label": "Webinar ID",
+      "description": "The Zoom Webinar ID of the webinar you'd like to update."
+    }
+  ]
+}

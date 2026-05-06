@@ -1,0 +1,81 @@
+{
+  "name": "Update Contact",
+  "description": "Updates a contact. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_contact.htm)",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "salesforce_rest_api-update-contact",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "contactId",
+      "type": "string",
+      "label": "Contact ID",
+      "description": "The Contact to update.",
+      "remoteOptions": true
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_contact.htm) for more information on available fields."
+    },
+    {
+      "name": "dateInfo",
+      "type": "alert",
+      "alertType": "warning",
+      "content": "Date fields should be a [valid date string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date#date_time_string_format) or a Unix timestamp in milliseconds. Example values: `2022-01-15T18:30:00.000Z` or `1642271400000`."
+    },
+    {
+      "name": "Description",
+      "type": "string",
+      "label": "Contact Description",
+      "description": "A description of the contact, up to 32 KB.",
+      "optional": true
+    },
+    {
+      "name": "Email",
+      "type": "string",
+      "label": "Email",
+      "description": "The contact's email address.",
+      "optional": true
+    },
+    {
+      "name": "FirstName",
+      "type": "string",
+      "label": "First Name",
+      "description": "The contact's first name, up to 40 characters.",
+      "optional": true
+    },
+    {
+      "name": "LastName",
+      "type": "string",
+      "label": "Last Name",
+      "description": "The contact's last name, up to 80 characters.",
+      "optional": true
+    },
+    {
+      "name": "Phone",
+      "type": "string",
+      "label": "Business Phone",
+      "description": "Phone number for the contact.",
+      "optional": true
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

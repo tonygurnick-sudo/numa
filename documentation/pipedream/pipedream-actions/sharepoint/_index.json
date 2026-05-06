@@ -1,0 +1,194 @@
+[
+  {
+    "key": "sharepoint-upload-file",
+    "name": "Upload File",
+    "description": "Upload a file to OneDrive. [See the documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content?view=odsp-graph-online)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "sharepoint-update-item",
+    "name": "Update Item",
+    "description": "Updates an existing item in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/listitem-update?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "sharepoint-select-files",
+    "name": "Select Files",
+    "description": "A file picker action that allows browsing and selecting one or more files from SharePoint. Returns the selected files' metadata including pre-authenticated download URLs. [See the documentation](https://learn.microsoft.com/en-us/graph/api/driveitem-get)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "sharepoint-search-sites",
+    "name": "Search Sites",
+    "description": "Search for sites in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/site-search?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "sharepoint-search-files",
+    "name": "Search Files",
+    "description": "Search for files in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/search-query?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "sharepoint-list-sites",
+    "name": "List Sites",
+    "description": "List all sites in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/site-list?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "sharepoint-list-files-in-folder",
+    "name": "List Files in Folder",
+    "description": "Retrieves a list of the files and/or folders directly within a folder. [See the documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_list_children)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "sharepoint-get-site",
+    "name": "Get Site",
+    "description": "Get a site in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/site-get?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "sharepoint-get-file-by-id",
+    "name": "Get File by ID",
+    "description": "Retrieves a file by ID. [See the documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "sharepoint-get-excel-table",
+    "name": "Get Excel Table",
+    "description": "Retrieve a table from an Excel spreadsheet stored in Sharepoint [See the documentation](https://learn.microsoft.com/en-us/graph/api/table-range?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "sharepoint-find-file-by-name",
+    "name": "Find File by Name",
+    "description": "Search for a file or folder by name. [See the documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_search)",
+    "version": "0.1.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "sharepoint-download-file",
+    "name": "Download File",
+    "description": "Download a Microsoft Sharepoint file to the /tmp directory. [See the documentation](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "sharepoint-create-list",
+    "name": "Create List",
+    "description": "Create a new list in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/list-create?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "sharepoint-create-link",
+    "name": "Create Link",
+    "description": "Create a sharing link for a DriveItem. [See the documentation](https://docs.microsoft.com/en-us/graph/api/driveitem-createlink?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "sharepoint-create-item",
+    "name": "Create Item",
+    "description": "Create a new item in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/listitem-create?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "sharepoint-create-folder",
+    "name": "Create Folder",
+    "description": "Create a new folder in SharePoint. [See the documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_post_children?view=odsp-graph-online)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  }
+]

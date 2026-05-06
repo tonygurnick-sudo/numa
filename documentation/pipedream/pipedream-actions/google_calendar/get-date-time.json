@@ -1,0 +1,19 @@
+{
+  "name": "Get Date Time",
+  "description": "Get current date and time for use in Google Calendar actions. Useful for agents that need datetime awareness and timezone context before calling other Google Calendar tools.",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "google_calendar-get-date-time",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleCalendar",
+      "type": "app",
+      "app": "google_calendar"
+    }
+  ]
+}

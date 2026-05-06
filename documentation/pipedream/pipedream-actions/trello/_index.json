@@ -1,0 +1,362 @@
+[
+  {
+    "key": "trello-update-card",
+    "name": "Update Card",
+    "description": "Updates a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-put).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 18
+  },
+  {
+    "key": "trello-search-members",
+    "name": "Search Members",
+    "description": "Search for Trello members. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-search/#api-search-members-get).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "trello-search-checklists",
+    "name": "Search Checklists",
+    "description": "Find a checklist on a particular board or card by name. [See the documentation here](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-id-checklists-get) and [here](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-checklists-get).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "trello-search-cards",
+    "name": "Search Cards",
+    "description": "Searches for cards matching the specified query. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-search/#api-search-get).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "trello-search-boards",
+    "name": "Search Boards",
+    "description": "Searches for boards matching the specified query. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-search/#api-search-get).",
+    "version": "0.3.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "trello-rename-list",
+    "name": "Rename List",
+    "description": "Renames an existing list. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/#api-lists-id-put).",
+    "version": "0.1.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-remove-label-from-card",
+    "name": "Remove Card Label",
+    "description": "Removes label from card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-idlabels-idlabel-delete).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-move-card-to-list",
+    "name": "Move Card to List",
+    "description": "Moves a card to the specified board/list pair. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-put).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-list-boards",
+    "name": "List Boards",
+    "description": "Lists the boards that the user is a member of. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-members/#api-members-id-boards-get)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "trello-get-member",
+    "name": "Get Member",
+    "description": "Gets a member by their ID. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-members/#api-members-id-get)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "trello-get-list",
+    "name": "Get List",
+    "description": "Get information about a List. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/#api-lists-id-get).",
+    "version": "0.1.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "trello-get-cards-on-board",
+    "name": "Get Cards On A Board",
+    "description": "Get all of the open Cards on a Board. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-id-cards-get).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "trello-get-cards-in-list",
+    "name": "Get Cards In A List",
+    "description": "List the cards in a list. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/#api-lists-id-cards-get).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "trello-get-card",
+    "name": "Get Card",
+    "description": "Gets a card by its ID. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-get).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-get-board",
+    "name": "Get Board",
+    "description": "Request a single board. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-id-get).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 15
+  },
+  {
+    "key": "trello-find-list",
+    "name": "Find a List",
+    "description": "Finds a list on a specific board by name. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-id-lists-get).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-find-labels",
+    "name": "Find a Label",
+    "description": "Finds a label on a specific board by name. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-id-labels-get)",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-delete-checklist",
+    "name": "Delete Checklist",
+    "description": "Deletes the specified checklist. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-checklists/#api-checklists-id-delete).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-create-list",
+    "name": "Create a List",
+    "description": "Creates a new list. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/#api-lists-post).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "trello-create-label",
+    "name": "Create Label",
+    "description": "Creates a new label on the specified board. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-labels/#api-labels-post).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-create-checklist-item",
+    "name": "Create a Checklist Item",
+    "description": "Creates a new checklist item in a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-checklists/#api-checklists-id-checkitems-post).",
+    "version": "0.3.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "trello-create-card",
+    "name": "Create Card",
+    "description": "Creates a new card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-post).",
+    "version": "1.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 19
+  },
+  {
+    "key": "trello-create-board",
+    "name": "Create a Board",
+    "description": "Create a new Trello board or copy from an existing one. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-post).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 17
+  },
+  {
+    "key": "trello-complete-checklist-item",
+    "name": "Complete a Checklist Item",
+    "description": "Completes an existing checklist item in a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-checkitem-idcheckitem-put).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "trello-archive-card",
+    "name": "Archive Card",
+    "description": "Archives a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-put).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "trello-add-member-to-card",
+    "name": "Add Member to Card",
+    "description": "Adds a member to the specified card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-idmembers-post).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-add-existing-label-to-card",
+    "name": "Add Existing Label to Card",
+    "description": "Adds an existing label to the specified card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-idlabels-post).",
+    "version": "0.1.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-add-comment",
+    "name": "Add Comment",
+    "description": "Create a new comment on a specific card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-actions-comments-post).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "trello-add-checklist",
+    "name": "Add Checklist",
+    "description": "Adds a new checklist to a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-checklists-post).",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "trello-add-attachment-to-card",
+    "name": "Add Attachment To Card",
+    "description": "Adds a file attachment on a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-attachments-post)",
+    "version": "1.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  }
+]

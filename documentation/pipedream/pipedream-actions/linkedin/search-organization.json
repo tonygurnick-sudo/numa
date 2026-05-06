@@ -1,0 +1,40 @@
+{
+  "name": "Search Organization",
+  "description": "Searches for an organization by vanity name or email domain. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/organizations/organization-lookup-api)",
+  "component_type": "action",
+  "version": "0.1.11",
+  "key": "linkedin-search-organization",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "searchBy",
+      "type": "string",
+      "label": "Search By",
+      "description": "You can look up the `id`, `name`, `localizedName`, `vanityName`, `localizedWebsite`, `logoV2`, and `location` of any organization using `vanityName` or `emailDomain`",
+      "options": ["vanityName", "emailDomain"]
+    },
+    {
+      "name": "searchTerm",
+      "type": "string",
+      "label": "Search Term",
+      "description": "Keyword to search for"
+    },
+    {
+      "name": "max",
+      "type": "integer",
+      "label": "Max",
+      "description": "Maximum number of results to return",
+      "optional": true,
+      "default": 50
+    }
+  ]
+}

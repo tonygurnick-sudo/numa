@@ -1,0 +1,50 @@
+[
+  {
+    "key": "whatsapp_business-send-text-using-template",
+    "name": "Send Text Using Template",
+    "description": "Send a text message using a pre-defined template. Variables can be sent only as text. [See the docs.](https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages#message-templates)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "whatsapp_business-send-voice-message",
+    "name": "Send Voice Message",
+    "description": "Sends a voice message. [See the documentation](https://developers.facebook.com/docs/whatsapp/cloud-api/messages/audio-messages)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "whatsapp_business-send-text-message",
+    "name": "Send Text Message",
+    "description": "Sends a text message. [See the docs.](https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "whatsapp_business-list-message-templates",
+    "name": "List Message Templates",
+    "description": "Lists message templates. [See the docs.](https://developers.facebook.com/docs/graph-api/reference/whats-app-business-account/message_templates)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  }
+]

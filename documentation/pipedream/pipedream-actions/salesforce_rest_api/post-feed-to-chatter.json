@@ -1,0 +1,39 @@
+{
+  "name": "Post a Message to Chatter Feed",
+  "description": "Post a feed item in Chatter. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.chatterapi.meta/chatterapi/quickreference_post_feed_item.htm)",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "salesforce_rest_api-post-feed-to-chatter",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "sobjectType",
+      "type": "string",
+      "label": "SObject Type",
+      "description": "The type of object to select a record from.",
+      "remoteOptions": true
+    },
+    {
+      "name": "subjectId",
+      "type": "string",
+      "label": "Record ID",
+      "description": "The record that will parent the feed item.",
+      "remoteOptions": true
+    },
+    {
+      "name": "messageSegments",
+      "label": "Message segments",
+      "description": "Each message segment can be a text string, which will be treated as a segment of `type: Text`, or a [message segment object](https://developer.salesforce.com/docs/atlas.en-us.chatterapi.meta/chatterapi/connect_requests_message_body_input.htm) such as `{ \"type\": \"Mention\", \"username\": \"john\" }`",
+      "type": "string[]"
+    }
+  ]
+}

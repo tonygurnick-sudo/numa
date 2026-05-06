@@ -1,0 +1,65 @@
+{
+  "name": "Get All Leads",
+  "description": "Get all leads from Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#getLeads)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "pipedrive-get-all-leads",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return. If not provided, all leads will be returned.",
+      "optional": true
+    },
+    {
+      "name": "ownerId",
+      "type": "integer",
+      "label": "Owner ID",
+      "description": "If supplied, only leads matching the given user will be returned. However, **Filter ID** takes precedence over **Owner ID** when supplied.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "personId",
+      "type": "integer",
+      "label": "Person ID",
+      "description": "If supplied, only leads matching the given person will be returned. However, **Filter ID** takes precedence over **Person ID** when supplied.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "organizationId",
+      "type": "integer",
+      "label": "Organization ID",
+      "description": "If supplied, only leads matching the given organization will be returned. However, **Filter ID** takes precedence over **Organization ID** when supplied.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "filterId",
+      "type": "integer",
+      "label": "Lead Filter ID",
+      "description": "The ID of the filter to use. Takes precedence over **Owner ID**, **Person ID**, and **Organization ID** when supplied.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "sort",
+      "type": "string",
+      "label": "Sort",
+      "description": "The field names and sorting mode separated by a comma (`field_name_1 ASC, field_name_2 DESC`). Only first-level field keys are supported (no nested keys). Valid fields: `id, title, owner_id, creator_id, was_seen, expected_close_date, next_activity_id, add_time, update_time`",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "name": "Update Task",
+  "description": "Updates a specific and existing task. [See the documentation](https://developers.asana.com/docs/update-a-task)",
+  "component_type": "action",
+  "version": "0.4.4",
+  "key": "asana-update-task",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "asana",
+      "type": "app",
+      "app": "asana"
+    },
+    {
+      "name": "workspace",
+      "label": "Workspace",
+      "description": "Gid of a workspace.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "project",
+      "label": "Project",
+      "description": "List of projects. This field uses the project GID.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "task_gid",
+      "label": "Task GID",
+      "description": "The ID of the task to update",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "label": "Name",
+      "description": "Name of the task. This is generally a short sentence fragment that fits on a line in the UI for maximum readability. However, it can be longer.",
+      "type": "string"
+    },
+    {
+      "name": "assignee",
+      "label": "Assignee",
+      "description": "Gid of a user.",
+      "type": "string",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "assignee_section",
+      "label": "Assignee Section",
+      "description": "The assignee section is a subdivision of a project that groups tasks together in the assignee's \"My Tasks\" list.",
+      "type": "string",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "completed",
+      "label": "Completed",
+      "description": "True if the task is currently marked complete, false if not.",
+      "type": "boolean",
+      "optional": true
+    },
+    {
+      "name": "due_at",
+      "label": "Due At",
+      "description": "The UTC date and time on which this task is due, or null if the task has no due time. This takes an ISO 8601 date string in UTC and should not be used together with due_on.",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "due_on",
+      "label": "Due On",
+      "description": "The localized date on which this task is due, or null if the task has no due date. This takes a date with YYYY-MM-DD format and should not be used together with due_at.",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "html_notes",
+      "label": "HTML Notes",
+      "description": "The notes of the text with formatting as HTML.",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "notes",
+      "label": "Notes",
+      "description": "Free-form textual information associated with the task (i.e. its description).",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "start_on",
+      "label": "Start On",
+      "description": "The day on which work begins for the task , or null if the task has no start date. This takes a date with YYYY-MM-DD format.",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "custom_fields",
+      "label": "Custom Fields",
+      "description": "An object where each key is a Custom Field gid and each value is an enum gid, string, or number: E.g. {\n        \"4578152156\": \"Not Started\",\n        \"5678904321\": \"On Hold\"\n      }",
+      "type": "string",
+      "optional": true
+    }
+  ]
+}

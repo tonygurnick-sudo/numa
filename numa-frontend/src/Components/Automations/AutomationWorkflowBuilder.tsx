@@ -7,8 +7,10 @@ import { useBranding } from '../../Providers/BrandingContext';
 import { WorkflowConnector } from './WorkflowConnector';
 import { WorkflowStepTrigger } from './WorkflowStepTrigger';
 import { WorkflowStepSchedule } from './WorkflowStepSchedule';
-import { EmailFilterBuilder } from './EmailFilterBuilder';
-import type { EventTrigger } from '../../types/agentSchedules';
+import { WorkflowStepEventTrigger, type EventSourceSelection } from './WorkflowStepEventTrigger';
+import type { EventTrigger, GmailEventTrigger } from '../../types/agentSchedules';
+import type { PipedreamTriggerDraft } from '../PipedreamTriggers/PipedreamTriggerConfigurator';
+import { PipedreamProxyService } from '../../Services/PipedreamProxyService';
 import { WorkflowStepAgent } from './WorkflowStepAgent';
 import { WorkflowStepPrompt } from './WorkflowStepPrompt';
 import { WorkflowStepReview } from './WorkflowStepReview';
@@ -171,6 +173,16 @@ export const AutomationWorkflowBuilder = ({
   const { t } = useTranslation('automations');
   const { user } = useAuth();
   const currentUserEmail = user?.decoded_tokens?.idToken?.email as string | undefined;
+  // Derived once — used by the Pipedream pickers to scope status/list calls.
+  const externalUserId = useMemo(() => {
+    try {
+      return PipedreamProxyService.deriveExternalUserId(
+        user as Parameters<typeof PipedreamProxyService.deriveExternalUserId>[0]
+      );
+    } catch {
+      return '';
+    }
+  }, [user]);
   const isEditing = !!editingAutomation;
 
   // Step state
@@ -178,12 +190,19 @@ export const AutomationWorkflowBuilder = ({
 
   // Trigger
   const [triggerType, setTriggerType] = useState<TriggerType>('schedule');
-  const [eventTrigger, setEventTrigger] = useState<EventTrigger>({
+  // Sub-state for event triggers: which source the user picked (Gmail or one
+  // of the curated Pipedream apps). Null = haven't picked yet (show source picker).
+  const [eventSource, setEventSource] = useState<EventSourceSelection | null>(null);
+  // Gmail-event state. Independent of pipedreamDraft so users can switch
+  // sources without losing in-flight config on either side.
+  const [eventTrigger, setEventTrigger] = useState<GmailEventTrigger>({
     source: 'gmail',
     event: 'message.received',
     filters: [],
     filter_logic: 'all',
   });
+  // Pipedream-event state.
+  const [pipedreamDraft, setPipedreamDraft] = useState<PipedreamTriggerDraft | null>(null);
 
   // Schedule
   const [frequency, setFrequency] = useState<FrequencyType>('daily');
@@ -235,11 +254,27 @@ export const AutomationWorkflowBuilder = ({
     if (editingAutomation) {
       if (editingAutomation.triggerType === 'event') {
         setTriggerType('event');
-        if (editingAutomation.trigger) setEventTrigger(editingAutomation.trigger);
+        if (editingAutomation.trigger?.source === 'gmail') {
+          setEventSource({ source_id: 'gmail' });
+          setEventTrigger(editingAutomation.trigger);
+        } else if (editingAutomation.trigger?.source === 'pipedream') {
+          setEventSource({
+            source_id: editingAutomation.trigger.app_slug,
+            pipedream_app_slug: editingAutomation.trigger.app_slug,
+          });
+          setPipedreamDraft({
+            app_slug: editingAutomation.trigger.app_slug,
+            component_id: editingAutomation.trigger.component_id,
+            configured_props: editingAutomation.trigger.configured_props,
+            configured_prop_labels: editingAutomation.trigger.configured_prop_labels,
+          });
+        }
       }
       setName(editingAutomation.label || '');
       setPrompt(editingAutomation.promptText || '');
-      setMaxRuns(editingAutomation.maxRuns || 0);
+      // Cap at 100 even when loading legacy schedules saved with higher /
+      // unlimited values, so the input never displays an out-of-range value.
+      setMaxRuns(Math.min(100, Math.max(1, editingAutomation.maxRuns || 100)));
       setEmailNotifications(editingAutomation.emailNotifications !== false);
       setNotificationEmails(
         editingAutomation.notificationEmails?.length
@@ -361,8 +396,17 @@ export const AutomationWorkflowBuilder = ({
           return triggerType === 'schedule' || triggerType === 'event';
         case 1:
           if (triggerType === 'event') {
-            // Require at least one filter, and every filter must have a non-empty value.
-            return eventTrigger.filters.length > 0 && eventTrigger.filters.every((f) => f.value.trim().length > 0);
+            // No source picked yet → block.
+            if (!eventSource) return false;
+            if (eventSource.source_id === 'gmail') {
+              return eventTrigger.filters.length > 0 && eventTrigger.filters.every((f) => f.value.trim().length > 0);
+            }
+            // Pipedream: a trigger must be picked + configured_props non-empty
+            // for the things the registry says are required. We let the
+            // backend assert required_props (it has the registry too); here
+            // we just ensure the user has selected a trigger and isn't
+            // sitting on an empty config form.
+            return Boolean(pipedreamDraft?.component_id);
           }
           return !!cronExpression;
         case 2:
@@ -373,7 +417,7 @@ export const AutomationWorkflowBuilder = ({
           return true;
       }
     },
-    [triggerType, cronExpression, selectedAgentId, name, eventTrigger]
+    [triggerType, cronExpression, selectedAgentId, name, eventTrigger, eventSource, pipedreamDraft]
   );
 
   const handleNext = useCallback(() => {
@@ -401,12 +445,28 @@ export const AutomationWorkflowBuilder = ({
     try {
       setSubmitting(true);
       setError(null);
+      // Build the trigger payload from whichever source the user picked.
+      // Gmail → existing GmailEventTrigger shape. Pipedream → registry-driven
+      // shape with app_slug + component_id + configured_props (deploy_trigger
+      // metadata like dc_xxx and signing key are populated server-side).
+      let triggerPayload: EventTrigger | undefined;
+      if (triggerType === 'event' && eventSource?.source_id === 'gmail') {
+        triggerPayload = eventTrigger;
+      } else if (triggerType === 'event' && eventSource?.pipedream_app_slug && pipedreamDraft) {
+        triggerPayload = {
+          source: 'pipedream',
+          app_slug: pipedreamDraft.app_slug,
+          component_id: pipedreamDraft.component_id,
+          configured_props: pipedreamDraft.configured_props,
+          configured_prop_labels: pipedreamDraft.configured_prop_labels,
+        };
+      }
       await onSave({
         agentId: selectedAgentId,
         agentTitle: selectedAgent?.title || '',
         promptText: prompt,
         triggerType: triggerType === 'event' ? 'event' : 'cron',
-        trigger: triggerType === 'event' ? eventTrigger : undefined,
+        trigger: triggerPayload,
         cronExpression: triggerType === 'event' ? undefined : cronExpression,
         timezone: triggerType === 'event' ? undefined : timezone,
         label: name.trim(),
@@ -435,7 +495,9 @@ export const AutomationWorkflowBuilder = ({
     name,
     prompt,
     triggerType,
+    eventSource,
     eventTrigger,
+    pipedreamDraft,
     cronExpression,
     timezone,
     maxRuns,
@@ -452,7 +514,17 @@ export const AutomationWorkflowBuilder = ({
         return <WorkflowStepTrigger selectedTrigger={triggerType} onSelect={setTriggerType} />;
       case 1:
         if (triggerType === 'event') {
-          return <EmailFilterBuilder trigger={eventTrigger} onChange={setEventTrigger} />;
+          return (
+            <WorkflowStepEventTrigger
+              source={eventSource}
+              onSourceChange={setEventSource}
+              externalUserId={externalUserId}
+              gmailTrigger={eventTrigger}
+              onGmailTriggerChange={setEventTrigger}
+              pipedreamDraft={pipedreamDraft}
+              onPipedreamDraftChange={setPipedreamDraft}
+            />
+          );
         }
         return (
           <WorkflowStepSchedule
@@ -525,7 +597,8 @@ export const AutomationWorkflowBuilder = ({
           <WorkflowStepReview
             triggerType={triggerType}
             cronExpression={cronExpression}
-            eventTrigger={triggerType === 'event' ? eventTrigger : undefined}
+            eventTrigger={triggerType === 'event' && eventSource?.source_id === 'gmail' ? eventTrigger : undefined}
+            pipedreamDraft={triggerType === 'event' && eventSource?.pipedream_app_slug ? pipedreamDraft : null}
             agent={selectedAgent}
             name={name}
             prompt={prompt}

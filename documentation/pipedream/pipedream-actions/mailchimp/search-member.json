@@ -1,0 +1,46 @@
+{
+  "name": "Search Members/Subscribers",
+  "description": "Searches for a subscriber. The search can be restricted to a specific list, or can be used to search across all lists in an account.\n   [See docs here](https://mailchimp.com/developer/marketing/api/search-members/)\n  ",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-search-member",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Fields",
+      "description": "A string list of fields to return. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "excludeFields",
+      "type": "string[]",
+      "label": "Exclude Fields",
+      "description": "A string list of fields to exclude_fields. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "query",
+      "label": "Query",
+      "type": "string",
+      "description": "The search query used to filter results. Query should be a valid email, or a string representing a contact's first or last name."
+    },
+    {
+      "name": "listId",
+      "label": "List ID",
+      "type": "string",
+      "description": "The unique ID for the list.",
+      "optional": true
+    }
+  ]
+}

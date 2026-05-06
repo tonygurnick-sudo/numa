@@ -1,0 +1,36 @@
+{
+  "name": "Update Signature for Email in Organization",
+  "description": "Update the signature for a specific email address in an organization.\n    A Google Cloud service account with delegated domain-wide authority is required for this action. [See the documentation](https://developers.google.com/gmail/api/reference/rest/v1/users.settings.sendAs/update)",
+  "component_type": "action",
+  "version": "0.0.14",
+  "key": "gmail-update-org-signature",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "googleCloud",
+      "type": "app",
+      "app": "google_cloud"
+    },
+    {
+      "name": "signature",
+      "type": "string",
+      "label": "Signature",
+      "description": "The new signature."
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "The email address that will have the signature updated. If updating the primary address, please use **Update Signature for Primary Email Address** action."
+    }
+  ]
+}

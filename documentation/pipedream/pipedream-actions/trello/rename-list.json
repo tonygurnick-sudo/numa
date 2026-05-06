@@ -1,0 +1,42 @@
+{
+  "name": "Rename List",
+  "description": "Renames an existing list. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/#api-lists-id-put).",
+  "component_type": "action",
+  "version": "0.1.5",
+  "key": "trello-rename-list",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List",
+      "description": "The ID of the List to rename",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The new name of the list",
+      "optional": false
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "name": "Add Multiple Attachments To Issue",
+  "description": "Adds multiple attachments to an issue. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-attachments/#api-rest-api-3-issue-issueidorkey-attachments-post)",
+  "component_type": "action",
+  "version": "1.0.9",
+  "key": "jira-add-multiple-attachments-to-issue",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "jira",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIdOrKey",
+      "type": "string",
+      "label": "Issue ID or Key",
+      "description": "The ID or key of an issue",
+      "remoteOptions": true
+    },
+    {
+      "name": "files",
+      "type": "string[]",
+      "label": "File Paths or URLs",
+      "description": "Provide either an array of file URLs or paths to files in the /tmp directory (for example, /tmp/myFile.pdf)."
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

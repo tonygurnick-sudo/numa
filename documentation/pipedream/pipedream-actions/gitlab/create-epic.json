@@ -1,0 +1,92 @@
+{
+  "name": "Create Epic",
+  "description": "Creates a new epic. [See the documentation](https://docs.gitlab.com/ee/api/epics.html#new-epic)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "gitlab-create-epic",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gitlab",
+      "type": "app",
+      "app": "gitlab"
+    },
+    {
+      "name": "groupId",
+      "type": "string",
+      "label": "Group ID",
+      "description": "Select a Group or use a custom Group ID. You must be an Owner of this group",
+      "remoteOptions": true
+    },
+    {
+      "name": "parent_id",
+      "type": "string",
+      "label": "Parent ID",
+      "description": "The internal ID of a project's epic. [This feature is restricted to Gitlab's Premium and Ultimate tiers.](https://docs.gitlab.com/ee/api/epics.html)",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "The title of the epic"
+    },
+    {
+      "name": "labels",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "The comma-separated list of labels",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "The description of the issue",
+      "optional": true
+    },
+    {
+      "name": "color",
+      "type": "string",
+      "label": "Color",
+      "description": "The color of the epic. Introduced in GitLab 14.8, behind a feature flag named `epic_highlight_color` (disabled by default)",
+      "optional": true
+    },
+    {
+      "name": "confidential",
+      "type": "boolean",
+      "label": "Confidential",
+      "description": "Whether the epic should be confidential",
+      "optional": true
+    },
+    {
+      "name": "created_at",
+      "type": "string",
+      "label": "Created at",
+      "description": "When the epic was created. Date time string, ISO 8601 formatted, for example `2016-03-11T03:45:40Z` . Requires administrator or project/group owner privileges (available in GitLab 13.5 and later)",
+      "optional": true
+    },
+    {
+      "name": "start_date_is_fixed",
+      "type": "boolean",
+      "label": "Start Date Is Fixed",
+      "description": "Whether start date should be sourced from start_date_fixed or from milestones (in GitLab 11.3 and later)",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "due_date_is_fixed",
+      "type": "boolean",
+      "label": "Due Date Is Fixed",
+      "description": "Whether due date should be sourced from due_date_fixed or from milestones (in GitLab 11.3 and later)",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

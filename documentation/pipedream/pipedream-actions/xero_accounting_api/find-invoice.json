@@ -1,0 +1,40 @@
+{
+  "name": "Find Invoice",
+  "description": "Finds an invoice by number or reference.[See the docs here](https://developer.xero.com/documentation/api/accounting/invoices/#get-invoices)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "xero_accounting_api-find-invoice",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "invoiceNumber",
+      "type": "string",
+      "optional": true,
+      "label": "Invoice number",
+      "description": "Unique alpha numeric code identifying invoice"
+    },
+    {
+      "name": "reference",
+      "type": "string",
+      "optional": true,
+      "label": "Reference",
+      "description": "ACCREC only - additional reference number"
+    }
+  ]
+}

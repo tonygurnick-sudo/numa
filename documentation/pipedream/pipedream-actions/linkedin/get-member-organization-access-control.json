@@ -1,0 +1,47 @@
+{
+  "name": "Get Member's Organization Access Control Information",
+  "description": "Gets the organization access control information of the current authenticated member. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role?view=li-lms-2025-01&tabs=http#find-a-members-organization-access-control-information)",
+  "component_type": "action",
+  "version": "1.0.1",
+  "key": "linkedin-get-member-organization-access-control",
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "role",
+      "type": "string",
+      "label": "Role",
+      "description": "Limit results to specific roles, such as ADMINISTRATOR or DIRECT_SPONSORED_CONTENT_POSTER.",
+      "optional": true,
+      "options": [
+        "ADMINISTRATOR",
+        "DIRECT_SPONSORED_CONTENT_POSTER",
+        "RECRUITING_POSTER",
+        "LEAD_CAPTURE_ADMINISTRATOR",
+        "LEAD_GEN_FORMS_MANAGER",
+        "ANALYST",
+        "CURATOR",
+        "CONTENT_ADMINISTRATOR"
+      ]
+    },
+    {
+      "name": "state",
+      "type": "string",
+      "label": "State",
+      "description": "Limit results to specific role states, such as APPROVED or REQUESTED.",
+      "optional": true,
+      "options": ["APPROVED", "REJECTED", "REQUESTED", "REVOKED"]
+    },
+    {
+      "name": "max",
+      "type": "integer",
+      "label": "Max",
+      "description": "Maximum number of results to return",
+      "optional": true,
+      "default": 50
+    }
+  ]
+}

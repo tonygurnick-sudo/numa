@@ -1,0 +1,63 @@
+{
+  "name": "Add Task To Section",
+  "description": "Add a task to a specific, existing section. This will remove the task from other sections of the project. [See the documentation](https://developers.asana.com/docs/add-task-to-section)",
+  "component_type": "action",
+  "version": "0.2.11",
+  "key": "asana-add-task-to-section",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "asana",
+      "type": "app",
+      "app": "asana"
+    },
+    {
+      "name": "workspace",
+      "label": "Workspace",
+      "description": "Gid of a workspace.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "project",
+      "label": "Project",
+      "description": "List of projects. This field uses the project GID.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "task",
+      "label": "Task",
+      "description": "The task to add to this section.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "section_gid",
+      "label": "Section GID",
+      "description": "The globally unique identifier for the section.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "insert_before",
+      "label": "Insert Before",
+      "description": "An existing task within this section before which the added task should be inserted. Cannot be provided together with insert_after.",
+      "type": "string",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "insert_after",
+      "label": "Insert After",
+      "description": "An existing task within this section after which the added task should be inserted. Cannot be provided together with insert_before.",
+      "type": "string",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "Gets Organization Access Control",
+  "description": "Gets a selected organization's access control information. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role?view=li-lms-2025-01&tabs=http#find-organization-access-control)",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "linkedin-get-organization-access-control",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "organizationId",
+      "type": "string",
+      "label": "Organization Id",
+      "description": "The ID of the organization for which the access control information is being retrieved",
+      "remoteOptions": true
+    },
+    {
+      "name": "max",
+      "type": "integer",
+      "label": "Max",
+      "description": "Maximum number of results to return",
+      "optional": true,
+      "default": 50
+    }
+  ]
+}

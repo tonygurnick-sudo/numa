@@ -1,0 +1,43 @@
+{
+  "name": "List Access Proposals",
+  "description": "List access proposals for a file or folder. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/accessproposals/list)",
+  "component_type": "action",
+  "version": "0.0.8",
+  "key": "google_drive-list-access-proposals",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileOrFolderId",
+      "type": "string",
+      "label": "File or Folder",
+      "description": "The file or folder in the drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

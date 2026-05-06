@@ -1,0 +1,210 @@
+{
+  "name": "Send Message (Advanced)",
+  "description": "Customize advanced setttings and send a message to a channel, group or user. See [postMessage](https://api.slack.com/methods/chat.postMessage) or [scheduleMessage](https://api.slack.com/methods/chat.scheduleMessage) docs here",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "slack-send-message-advanced",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "conversation",
+      "type": "string",
+      "label": "Channel",
+      "description": "Select a public or private channel, or a user or group",
+      "remoteOptions": true
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "description": "If you're using `blocks`, this is used as a fallback string to display in notifications. If you aren't, this is the main body text of the message. It can be formatted as plain text, or with mrkdwn."
+    },
+    {
+      "name": "mrkdwn",
+      "label": "Send text as Slack mrkdwn",
+      "type": "boolean",
+      "description": "`true` by default. Pass `false` to disable Slack markup parsing. [See docs here](https://api.slack.com/reference/surfaces/formatting)",
+      "default": true,
+      "optional": true
+    },
+    {
+      "name": "attachments",
+      "type": "string",
+      "label": "Attachments",
+      "description": "A JSON-based array of structured attachments, presented as a URL-encoded string (e.g., `[{\"pretext\": \"pre-hello\", \"text\": \"text-world\"}]`).",
+      "optional": true
+    },
+    {
+      "name": "parse",
+      "type": "string",
+      "label": "Parse",
+      "description": "Change how messages are treated. Defaults to none. By default, URLs will be hyperlinked. Set `parse` to `none` to remove the hyperlinks. The behavior of `parse` is different for text formatted with `mrkdwn`. By default, or when `parse` is set to `none`, `mrkdwn` formatting is implemented. To ignore `mrkdwn` formatting, set `parse` to full.",
+      "optional": true
+    },
+    {
+      "name": "link_names",
+      "type": "boolean",
+      "label": "Link Names",
+      "description": "Find and link channel names and usernames.",
+      "optional": true
+    },
+    {
+      "name": "as_user",
+      "type": "boolean",
+      "label": "Send as User",
+      "description": "Optionally pass `true` to post the message as the authenticated user, instead of as a bot. Defaults to `false`.",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "post_at",
+      "label": "Schedule message",
+      "description": "Messages can only be scheduled up to 120 days in advance, and cannot be scheduled for the past. The datetime should be in ISO 8601 format. (Example: `2014-01-01T00:00:00Z`)",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "include_sent_via_pipedream_flag",
+      "type": "boolean",
+      "optional": true,
+      "default": true,
+      "label": "Include link to Pipedream",
+      "description": "Defaults to `true`, includes a link to Pipedream at the end of your Slack message."
+    },
+    {
+      "name": "customizeBotSettings",
+      "type": "boolean",
+      "label": "Customize Bot Settings",
+      "description": "Customize the username and/or icon of the Bot",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "username",
+      "type": "string",
+      "label": "Bot Username",
+      "description": "Optionally customize your bot's user name (default is `Pipedream`). Must be used in conjunction with `Send as User` set to false, otherwise ignored.",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "icon_emoji",
+      "type": "string",
+      "label": "Icon (emoji)",
+      "description": "Optionally provide an emoji to use as the icon for this message. E.g., `:fire:` Overrides `icon_url`.  Must be used in conjunction with `Send as User` set to `false`, otherwise ignored.",
+      "optional": true,
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "icon_url",
+      "type": "string",
+      "label": "Icon (image URL)",
+      "description": "Optionally provide an image URL to use as the icon for this message. Must be used in conjunction with `Send as User` set to `false`, otherwise ignored.",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "replyToThread",
+      "type": "boolean",
+      "label": "Reply to Thread",
+      "description": "Reply to an existing thread",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "thread_ts",
+      "type": "string",
+      "label": "Message Timestamp",
+      "description": "Provide another message's `ts` value to make this message a reply (e.g., if triggering on new Slack messages, enter `{{event.ts}}`). Avoid using a reply's `ts` value; use its parent instead. e.g. `1403051575.000407`.",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "thread_broadcast",
+      "type": "boolean",
+      "label": "Send Channel Message",
+      "description": "If `true`, posts in the thread and channel. Used in conjunction with `Message Timestamp` and indicates whether reply should be made visible to everyone in the channel. Defaults to `false`.",
+      "default": false,
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "addMessageMetadata",
+      "type": "boolean",
+      "label": "Add Message Metadata",
+      "description": "Set the metadata event type and payload",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "metadata_event_type",
+      "type": "string",
+      "label": "Metadata Event Type",
+      "description": "The name of the metadata event. Example: `task_created`",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "metadata_event_payload",
+      "type": "string",
+      "label": "Metadata Event Payload",
+      "description": "The payload of the metadata event. Must be a JSON string. Example: `{ \"id\": \"11223\", \"title\": \"Redesign Homepage\"}`",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "configureUnfurlSettings",
+      "type": "boolean",
+      "label": "Configure Unfurl Settings",
+      "description": "Configure settings for unfurling links and media",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "unfurl_links",
+      "type": "boolean",
+      "label": "Unfurl Links",
+      "description": "Default to `false`. Pass `true` to enable unfurling of links.",
+      "default": false,
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "unfurl_media",
+      "type": "boolean",
+      "label": "Unfurl Media",
+      "description": "Defaults to `false`. Pass `true` to enable unfurling of media content.",
+      "default": false,
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "passArrayOrConfigure",
+      "type": "string",
+      "label": "Add Blocks - Reference Existing Blocks Array or Configure Manually?",
+      "description": "Would you like to reference an array of blocks from a previous step (for example, `{{steps.blocks.$return_value}}`), or configure them in this action?",
+      "options": [
+        {
+          "label": "Reference an array of blocks",
+          "value": "array"
+        },
+        {
+          "label": "Configure blocks individually (maximum 5 blocks)",
+          "value": "configure"
+        }
+      ],
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "name": "List Task Stories",
+  "description": "List stories (including comments) for a task. [See the documentation](https://developers.asana.com/reference/getstoriesfortask)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "asana-list-task-stories",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "asana",
+      "type": "app",
+      "app": "asana"
+    },
+    {
+      "name": "workspace",
+      "label": "Workspace",
+      "description": "Gid of a workspace.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "project",
+      "label": "Project",
+      "description": "List of projects. This field uses the project GID.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "taskId",
+      "label": "Task GID",
+      "description": "The ID of the task to retrieve stories for",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "commentsOnly",
+      "type": "boolean",
+      "label": "Comments Only",
+      "description": "Only return comments",
+      "optional": true
+    },
+    {
+      "name": "optFields",
+      "type": "string[]",
+      "label": "Opt Fields",
+      "description": "This endpoint returns a resource which excludes some properties by default. To include those optional properties, set this query parameter to a comma-separated list of the properties you wish to include. See the [documentation](https://developers.asana.com/reference/stories) for available fields.",
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

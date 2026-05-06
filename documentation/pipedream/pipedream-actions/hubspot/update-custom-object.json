@@ -1,0 +1,47 @@
+{
+  "name": "Update Custom Object",
+  "description": "Update a custom object in Hubspot. [See the documentation](https://developers.hubspot.com/beta-docs/guides/api/crm/objects/custom-objects#update-existing-custom-objects)",
+  "component_type": "action",
+  "version": "1.0.15",
+  "key": "hubspot-update-custom-object",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "customObjectType",
+      "type": "string",
+      "label": "Custom Object Type",
+      "description": "The type of custom object to create. This is the object's `fullyQualifiedName`, `objectTypeId`, or the short-hand custom object type name (aka `p_{object_name}`)",
+      "remoteOptions": true
+    },
+    {
+      "name": "objectId",
+      "type": "string",
+      "label": "Object ID",
+      "description": "The ID of the custom object",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "propertyGroups",
+      "type": "string[]",
+      "label": "Property Groups",
+      "reloadProps": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "objectProperties",
+      "type": "object",
+      "label": "Object Properties",
+      "description": "Enter the object properties to update as a JSON object"
+    }
+  ]
+}

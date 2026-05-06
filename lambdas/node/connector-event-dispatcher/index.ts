@@ -18,7 +18,9 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { withPRM } from '../../../lib/prm-node/prm';
+import { getExtractorForApp, type ExtractedEvent } from './extractors';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -37,6 +39,7 @@ const ddbDoc = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}), {
 });
 const secretsManager = withPRM(SecretsManagerClient, {});
 const lambdaClient = withPRM(LambdaClient, {});
+const s3Client = withPRM(S3Client, {});
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -46,6 +49,7 @@ const DATA_CONNECTORS_TABLE = process.env.DATA_CONNECTORS_TABLE_NAME ?? '';
 const SCHEDULES_TABLE = process.env.AGENT_SCHEDULES_TABLE_NAME ?? '';
 const RUNNER_FUNCTION_NAME = process.env.AGENT_SCHEDULE_RUNNER_FUNCTION_NAME ?? '';
 const CLIENT_NAME = process.env.CLIENT_NAME ?? '';
+const OUTPUTS_BUCKET = process.env.OUTPUTS_BUCKET_NAME ?? '';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -60,6 +64,21 @@ interface ConnectorEventDetail {
   payload_summary: {
     email_address?: string;
     history_id?: string;
+    // Slack-shaped fields populated by the Pipedream receiver's payload summarizer.
+    text?: string;
+    user?: string;
+    channel?: string;
+  };
+  // Pipedream-only fields (populated by pipedream-event-receiver). Optional
+  // because Gmail events use the email-shaped path_summary instead.
+  schedule_id?: string;
+  user_id?: string;
+  app_slug?: string;
+  component_id?: string;
+  refs?: {
+    s3_key?: string;
+    dynamodb_pk?: string;
+    dynamodb_sk?: string;
   };
 }
 
@@ -436,6 +455,145 @@ const invokeRunner = async (scheduleId: string, email: NormalizedEmail): Promise
   );
 };
 
+/**
+ * Pipedream-trigger runner invocation. The receiver lambda has already
+ * verified HMAC, looked up the schedule, and persisted the raw event to S3.
+ * Here we just normalise the payload via the per-app extractor and hand it
+ * to the runner with a consistent shape:
+ *
+ *   { type: 'EVENT', scheduleId, event: { source: 'pipedream', ...extracted } }
+ *
+ * The runner interpolates `{{ event.<field> }}` from `extracted.fields` (and
+ * supports `{{ event.raw.* }}` for power users).
+ */
+const invokeRunnerPipedream = async (
+  scheduleId: string,
+  appSlug: string,
+  componentId: string,
+  extracted: ExtractedEvent
+): Promise<void> => {
+  if (!RUNNER_FUNCTION_NAME) {
+    console.error(`${LOG_PREFIX} AGENT_SCHEDULE_RUNNER_FUNCTION_NAME not configured`);
+    return;
+  }
+  await lambdaClient.send(
+    new InvokeCommand({
+      FunctionName: RUNNER_FUNCTION_NAME,
+      InvocationType: 'Event',
+      Payload: Buffer.from(
+        JSON.stringify({
+          type: 'EVENT',
+          scheduleId,
+          tenantId: CLIENT_NAME,
+          event: {
+            source: 'pipedream',
+            app_slug: appSlug,
+            component_id: componentId,
+            dedup_key: extracted.dedup_key,
+            ...extracted.fields,
+            raw: extracted.raw,
+          },
+        })
+      ),
+    })
+  );
+};
+
+/**
+ * Read the full Pipedream-delivered payload from S3. The receiver lambda
+ * always writes it under `connector-events/pipedream/<app_slug>/<date>/<event_id>.json`.
+ */
+const fetchPipedreamPayloadFromS3 = async (s3Key: string): Promise<unknown> => {
+  if (!OUTPUTS_BUCKET) {
+    throw new Error('OUTPUTS_BUCKET_NAME not configured');
+  }
+  const result = await s3Client.send(new GetObjectCommand({ Bucket: OUTPUTS_BUCKET, Key: s3Key }));
+  const body = await result.Body?.transformToString('utf-8');
+  if (!body) {
+    throw new Error(`Empty S3 object at ${s3Key}`);
+  }
+  const wrapper = JSON.parse(body);
+  // The receiver wraps the raw payload as `decoded_payload`. Fall through
+  // to `raw_body` if for some reason decoded_payload didn't parse upstream.
+  if (wrapper.decoded_payload != null) return wrapper.decoded_payload;
+  if (typeof wrapper.raw_body === 'string') {
+    try {
+      return JSON.parse(wrapper.raw_body);
+    } catch {
+      return wrapper.raw_body;
+    }
+  }
+  return wrapper;
+};
+
+/**
+ * Pipedream branch of the dispatcher. Triggered by EventBridge events with
+ * Source=numa.connector.pipedream from the receiver lambda. Reads the full
+ * payload from S3, runs the per-app extractor, and invokes the runner.
+ */
+const handlePipedreamEvent = async (
+  detail: ConnectorEventDetail
+): Promise<{ success: boolean; dispatched?: number; error?: string }> => {
+  const scheduleId = detail.schedule_id;
+  const appSlug = detail.app_slug;
+  const componentId = detail.component_id;
+  const s3Key = detail.refs?.s3_key;
+
+  if (!scheduleId || !appSlug || !componentId || !s3Key) {
+    console.warn(
+      `${LOG_PREFIX} Pipedream event missing required fields`,
+      JSON.stringify({
+        has_schedule_id: !!scheduleId,
+        has_app_slug: !!appSlug,
+        has_component_id: !!componentId,
+        has_s3_key: !!s3Key,
+      })
+    );
+    return { success: false, error: 'Invalid Pipedream event detail' };
+  }
+
+  let payload: unknown;
+  try {
+    payload = await fetchPipedreamPayloadFromS3(s3Key);
+  } catch (err) {
+    console.error(`${LOG_PREFIX} Failed to load Pipedream payload from S3`, s3Key, err);
+    return { success: false, error: 'S3 fetch failed' };
+  }
+
+  const extractor = getExtractorForApp(appSlug);
+  // For curated apps without a per-app extractor, fall back to a passthrough
+  // that exposes only `event.raw.*`. Discourages relying on it; encourages
+  // shipping a real extractor per app. (Slack is the only one today.)
+  const extracted: ExtractedEvent = extractor
+    ? extractor(payload, componentId)
+    : {
+        app_slug: appSlug,
+        component_id: componentId,
+        dedup_key: detail.event_id,
+        fields: {},
+        raw: payload,
+      };
+
+  try {
+    await invokeRunnerPipedream(scheduleId, appSlug, componentId, extracted);
+  } catch (err) {
+    console.error(`${LOG_PREFIX} Failed to invoke runner for Pipedream event`, scheduleId, err);
+    return { success: false, error: 'Runner invocation failed' };
+  }
+
+  console.log(
+    `${LOG_PREFIX} Dispatched Pipedream event`,
+    JSON.stringify({
+      _name: 'PIPEDREAM_EVENT_DISPATCHED',
+      schedule_id: scheduleId,
+      app_slug: appSlug,
+      component_id: componentId,
+      dedup_key: extracted.dedup_key,
+    })
+  );
+  return { success: true, dispatched: 1 };
+};
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -454,6 +612,15 @@ export const handler: Handler = async (event: EventBridgeEvent) => {
   }
 
   const detail = event.detail;
+
+  // Pipedream branch: short-circuit before the Gmail-specific path. The
+  // receiver lambda has already done HMAC verification + schedule lookup +
+  // event persistence, so all we do here is normalize the payload via the
+  // per-app extractor and invoke the runner.
+  if (detail?.connector_id === 'pipedream') {
+    return handlePipedreamEvent(detail);
+  }
+
   if (detail?.connector_id !== 'gmail' || detail?.event_type !== 'new_email') {
     console.info(`${LOG_PREFIX} Ignoring non-gmail event`, detail?.connector_id, detail?.event_type);
     return { success: true, ignored: true };

@@ -1,0 +1,41 @@
+{
+  "name": "Create a Thread",
+  "description": "Create a thread to a ticket. [See the documentation](https://developers.freshdesk.com/api/#create_a_thread).",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "freshdesk-create-thread",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "description": "Type of the thread.",
+      "options": ["forward", "discussion"]
+    },
+    {
+      "name": "ticketId",
+      "type": "integer",
+      "label": "Parent ID",
+      "description": "The ID of the ticket to create the thread for.",
+      "remoteOptions": true
+    },
+    {
+      "name": "emailConfigId",
+      "type": "string",
+      "label": "Email Config ID",
+      "description": "The ID of the email config to use for the thread.",
+      "withLabel": true,
+      "remoteOptions": true
+    }
+  ]
+}

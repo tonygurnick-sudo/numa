@@ -1,0 +1,144 @@
+{
+  "name": "Add Activity",
+  "description": "Adds a new activity. Includes `more_activities_scheduled_in_context` property in response's `additional_data` which indicates whether there are more undone activities scheduled with the same deal, person or organization (depending on the supplied data). See the Pipedrive API docs for Activities [here](https://developers.pipedrive.com/docs/api/v1/#!/Activities). For info on [adding an activity in Pipedrive](https://developers.pipedrive.com/docs/api/v1/Activities#addActivity)",
+  "component_type": "action",
+  "version": "0.1.20",
+  "key": "pipedrive-add-activity",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "subject",
+      "type": "string",
+      "label": "Subject",
+      "description": "Subject of the activity"
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "description": "Type of the activity. This is in correlation with the `key_string` parameter of ActivityTypes.",
+      "remoteOptions": true
+    },
+    {
+      "name": "ownerId",
+      "type": "integer",
+      "label": "User ID",
+      "description": "ID of the user whom the activity will be assigned to. If omitted, the activity will be assigned to the authorized user.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "dealId",
+      "type": "string",
+      "label": "Deal ID",
+      "description": "ID of the deal this activity will be associated with",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "leadId",
+      "type": "string",
+      "label": "Lead ID",
+      "description": "ID of the lead this activity will be associated with",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "orgId",
+      "type": "integer",
+      "label": "Organization ID",
+      "description": "ID of the organization this activity will be associated with",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "projectId",
+      "type": "string",
+      "label": "Project ID",
+      "description": "ID of the project this activity will be associated with",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "dueDate",
+      "type": "string",
+      "label": "Due Date",
+      "description": "Due date of the activity. Format: `YYYY-MM-DD`",
+      "optional": true
+    },
+    {
+      "name": "dueTime",
+      "type": "string",
+      "label": "Due Time",
+      "description": "Due time of the activity in UTC. Format: `HH:MM`",
+      "optional": true
+    },
+    {
+      "name": "duration",
+      "type": "string",
+      "label": "Duration",
+      "description": "Duration of the activity. Format: `HH:MM`",
+      "optional": true
+    },
+    {
+      "name": "busy",
+      "type": "boolean",
+      "label": "Busy",
+      "description": "Set the activity as 'Busy' or 'Free'. If the flag is set to true, your customers will not be able to book that time slot through any Scheduler links",
+      "optional": true
+    },
+    {
+      "name": "done",
+      "type": "boolean",
+      "label": "Done",
+      "description": "Whether the activity is done or not.",
+      "optional": true
+    },
+    {
+      "name": "location",
+      "type": "object",
+      "label": "Location",
+      "description": "The address of the activity. Pipedrive will automatically check if the location matches a geo-location on Google maps.",
+      "optional": true
+    },
+    {
+      "name": "participants",
+      "type": "string[]",
+      "label": "Participants",
+      "description": "List of multiple persons (participants) this activity will be associated with. If omitted, single participant from `person_id` field is used. It requires a structure as follows: `[{\"person_id\":1,\"primary\":true}]`",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "attendees",
+      "type": "string[]",
+      "label": "Attendees",
+      "description": "Attendees of the activity. This can be either your existing Pipedrive contacts or an external email address. It requires a structure as follows: `[{\"email\":\"mail@example.org\"}]`",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "publicDescription",
+      "type": "string",
+      "label": "Public Description",
+      "description": "Additional details about the activity that will be synced to your external calendar. Unlike the note added to the activity, the description will be publicly visible to any guests added to the activity.",
+      "optional": true
+    },
+    {
+      "name": "note",
+      "type": "string",
+      "label": "Note",
+      "description": "Note of the activity (HTML format)",
+      "optional": true
+    }
+  ]
+}

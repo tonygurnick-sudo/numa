@@ -1,0 +1,53 @@
+{
+  "name": "Make API Call",
+  "description": "Makes an aribitrary call to Xero Accounting API.",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-make-an-api-call",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "requestMethod",
+      "label": "Request Method",
+      "type": "string",
+      "description": "Http method to use in the request.",
+      "options": ["get", "post", "put", "patch", "delete"]
+    },
+    {
+      "name": "relativeUrl",
+      "label": "Relative URL",
+      "type": "string",
+      "description": "A path relative to Xero Accounting API to send the request against."
+    },
+    {
+      "name": "queryString",
+      "label": "Query String",
+      "type": "string",
+      "description": "Query string of the request.",
+      "optional": true
+    },
+    {
+      "name": "requestBody",
+      "label": "Request Body",
+      "type": "object",
+      "description": "Body of the request.",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "Assign Ticket to Group",
+  "description": "Assign a Freshdesk ticket to a specific group [See the documentation](https://developers.freshdesk.com/api/#update_ticket).",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "freshdesk-assign-ticket-to-group",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "ticketId",
+      "type": "integer",
+      "label": "Ticket ID",
+      "description": "Select a ticket or provide a ticket ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "group_id",
+      "type": "integer",
+      "label": "Group",
+      "description": "Select a group to assign the ticket to.",
+      "remoteOptions": true
+    }
+  ]
+}

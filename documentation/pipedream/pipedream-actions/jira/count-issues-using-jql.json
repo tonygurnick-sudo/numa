@@ -1,0 +1,33 @@
+{
+  "name": "Count Issues Using JQL",
+  "description": "Provide an estimated count of the issues that match the JQL. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/#api-rest-api-3-search-approximate-count-post)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "jira-count-issues-using-jql",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "jql",
+      "type": "string",
+      "label": "JQL Query",
+      "description": "The JQL query to count issues. The JQL must be bounded. Example: `project = HSP`"
+    }
+  ]
+}

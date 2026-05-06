@@ -1,0 +1,33 @@
+{
+  "name": "Assign Ticket to Agent",
+  "description": "Assign a Freshdesk ticket to a specific agent. [See the documentation](https://developers.freshdesk.com/api/#update_ticket).",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "freshdesk-assign-ticket-to-agent",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "ticketId",
+      "type": "integer",
+      "label": "Ticket ID",
+      "description": "Select a ticket or provide a ticket ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "responder_id",
+      "type": "integer",
+      "label": "Agent",
+      "description": "Select an agent to assign the ticket to",
+      "remoteOptions": true
+    }
+  ]
+}

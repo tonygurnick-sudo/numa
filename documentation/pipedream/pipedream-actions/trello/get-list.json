@@ -1,0 +1,35 @@
+{
+  "name": "Get List",
+  "description": "Get information about a List. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/#api-lists-id-get).",
+  "component_type": "action",
+  "version": "0.1.5",
+  "key": "trello-get-list",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "boardId",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List ID",
+      "description": "The ID of the Trello list",
+      "optional": false,
+      "remoteOptions": true
+    }
+  ]
+}

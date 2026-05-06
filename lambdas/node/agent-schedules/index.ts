@@ -17,14 +17,28 @@ import {
   type ScheduleRecord,
   type CreateSchedulePayload,
   type UpdateSchedulePayload,
+  type EventTrigger,
 } from '../../../lib/scheduling-schemas';
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  deployPipedreamTrigger,
+  updatePipedreamTriggerProps,
+  setPipedreamTriggerActive,
+  deletePipedreamTrigger,
+  buildExternalUserId,
+  PipedreamTriggerError,
+  type PipedreamTrigger,
+} from './pipedream-trigger-lifecycle';
 
 const REGION = process.env.REGION ?? 'us-east-1';
 const CLIENT_NAME = process.env.CLIENT_NAME ?? 'numa-client';
 const TABLE_NAME = process.env.AGENT_SCHEDULES_TABLE_NAME ?? '';
 const EXECUTION_ROLE_ARN = process.env.AGENT_SCHEDULE_EXECUTION_ROLE_ARN ?? '';
 const RUNNER_ARN = process.env.AGENT_SCHEDULE_RUNNER_ARN ?? '';
+// Pipedream-trigger lifecycle env vars. Both are required for trigger
+// schedules; the rest of the lambda functions normally without them.
+const PIPEDREAM_RELAY_LAMBDA_ARN = process.env.PIPEDREAM_RELAY_LAMBDA_ARN ?? '';
+const PIPEDREAM_WEBHOOK_URL = process.env.PIPEDREAM_WEBHOOK_URL ?? '';
 
 const SCHEDULING_SETTINGS_TABLE = process.env.SCHEDULING_SETTINGS_TABLE_NAME ?? '';
 const PER_CLIENT_MIN = process.env.SCHEDULING_MIN_INTERVAL_MINUTES
@@ -162,6 +176,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return respond(404, { error: 'Not found' });
   } catch (error) {
     console.error('agent-schedules error', error);
+    if (error instanceof PipedreamTriggerError) {
+      // Surface clean Pipedream-trigger errors with their declared HTTP status
+      // and a stable code field the frontend can branch on.
+      return respond(error.httpStatus, { error: error.message, code: error.code });
+    }
     const message = error instanceof Error ? error.message : 'Internal Server Error';
     const statusCode = (error as { statusCode?: number }).statusCode ?? (message.startsWith('Invalid') ? 400 : 500);
     return respond(statusCode, { error: message });
@@ -339,6 +358,54 @@ const createSchedule = async (
 
   // Event-triggered schedules skip EventBridge Scheduler — they fire from connector-event-dispatcher
   if (isEventTrigger) {
+    // Pipedream-backed event triggers: deploy the trigger via the relay,
+    // persist the resulting dc_xxx + webhook_signing_key on the record. Gmail
+    // event triggers are passive (Pub/Sub watches handled elsewhere) and
+    // need no relay call.
+    if (validatedRecord.trigger?.source === 'pipedream') {
+      try {
+        const deployed = await deployPipedreamTrigger({
+          relayArn: PIPEDREAM_RELAY_LAMBDA_ARN,
+          webhookUrl: PIPEDREAM_WEBHOOK_URL,
+          externalUserId: buildExternalUserId(CLIENT_NAME, auth.sub),
+          trigger: validatedRecord.trigger as PipedreamTrigger,
+        });
+        // Persist the deploy result back onto the record. The receiver lambda
+        // looks up the schedule via the deployed-trigger-id-index GSI.
+        const newTrigger = {
+          ...validatedRecord.trigger,
+          deployed_trigger_id: deployed.deployed_trigger_id,
+          webhook_signing_key: deployed.webhook_signing_key,
+        };
+        await dynamo.send(
+          new UpdateCommand({
+            TableName: TABLE_NAME,
+            Key: { user_id: auth.sub, schedule_id: scheduleId },
+            UpdateExpression: 'SET #trigger = :trigger, deployed_trigger_id = :dc',
+            ExpressionAttributeNames: { '#trigger': 'trigger' },
+            ExpressionAttributeValues: {
+              ':trigger': newTrigger,
+              ':dc': deployed.deployed_trigger_id,
+            },
+          })
+        );
+        return {
+          scheduleId,
+          ...validatedRecord,
+          trigger: newTrigger,
+        };
+      } catch (error) {
+        console.error('Failed to deploy Pipedream trigger, rolling back schedule', error);
+        await dynamo.send(
+          new DeleteCommand({
+            TableName: TABLE_NAME,
+            Key: { user_id: auth.sub, schedule_id: scheduleId },
+          })
+        );
+        if (error instanceof PipedreamTriggerError) throw error;
+        throw new Error('Failed to deploy Pipedream trigger');
+      }
+    }
     return { scheduleId, ...validatedRecord };
   }
 
@@ -502,10 +569,30 @@ const updateSchedule = async (
     expressionValues[':notification_emails'] = validatedPayload.notificationEmails;
     setParts.push('#notification_emails = :notification_emails');
   }
-  // Persist trigger field updates for event triggers
+  // Persist trigger field updates for event triggers. CRITICAL: the wizard
+  // payload only contains user-editable fields (app_slug, component_id,
+  // configured_props, configured_prop_labels). Server-set lifecycle fields
+  // (deployed_trigger_id, webhook_signing_key) live on the existing record
+  // — we MUST merge them onto the new trigger before writing, otherwise
+  // every props edit silently wipes the signing key and the receiver
+  // starts orphaning all subsequent webhook deliveries with no way to
+  // recover (Pipedream doesn't expose the key after deploy).
   if (validatedPayload.trigger !== undefined) {
     expressionNames['#trigger'] = 'trigger';
-    expressionValues[':trigger'] = validatedPayload.trigger;
+    let nextTrigger: EventTrigger = validatedPayload.trigger;
+    if (validatedPayload.trigger.source === 'pipedream' && record.trigger?.source === 'pipedream') {
+      const existingPipedream = record.trigger as PipedreamTrigger;
+      nextTrigger = {
+        ...validatedPayload.trigger,
+        ...(existingPipedream.deployed_trigger_id
+          ? { deployed_trigger_id: existingPipedream.deployed_trigger_id }
+          : {}),
+        ...(existingPipedream.webhook_signing_key
+          ? { webhook_signing_key: existingPipedream.webhook_signing_key }
+          : {}),
+      };
+    }
+    expressionValues[':trigger'] = nextTrigger;
     setParts.push('#trigger = :trigger');
   }
   // Persist trigger_type changes and clean up stale fields
@@ -513,9 +600,13 @@ const updateSchedule = async (
     expressionNames['#trigger_type'] = 'trigger_type';
     expressionValues[':trigger_type'] = validatedPayload.triggerType;
     setParts.push('#trigger_type = :trigger_type');
-    // Clean up fields that don't apply to the new trigger type
+    // Clean up fields that don't apply to the new trigger type. `timezone`
+    // is a DynamoDB reserved keyword (Glue/Athena heritage) so it MUST be
+    // referenced via ExpressionAttributeNames in REMOVE expressions —
+    // unaliased usage 400s with a ValidationException at runtime.
     if (validatedPayload.triggerType === 'event') {
-      removeParts.push('cron_expression', 'timezone');
+      expressionNames['#timezone'] = 'timezone';
+      removeParts.push('cron_expression', '#timezone');
     } else if (validatedPayload.triggerType === 'cron') {
       expressionNames['#trigger_field'] = 'trigger';
       removeParts.push('#trigger_field');
@@ -547,7 +638,48 @@ const updateSchedule = async (
   );
 
   if (isEventTrigger) {
-    // Event-triggered schedules have no EventBridge entry — nothing to sync
+    // Event-triggered schedules have no EventBridge entry. Pipedream-backed
+    // ones do need their lifecycle synced with Pipedream though:
+    //   - status change → relay update_deployed_trigger(active=true|false)
+    //   - configured_props change → relay update_deployed_trigger(configured_props=...)
+    // Both preserve dc_xxx and webhook_signing_key (verified empirically).
+    const triggerSource = (validatedPayload.trigger?.source as string | undefined) ?? record.trigger?.source ?? 'gmail';
+    // record.trigger is a discriminated union (gmail | pipedream); the
+    // pipedream branch is the only one carrying deployed_trigger_id. Cast
+    // narrowly to avoid threading a TS type-guard through every caller.
+    const recordPipedreamTrigger =
+      record.trigger?.source === 'pipedream' ? (record.trigger as PipedreamTrigger) : undefined;
+    const deployedTriggerId = recordPipedreamTrigger?.deployed_trigger_id;
+    if (triggerSource === 'pipedream' && deployedTriggerId) {
+      const externalUserId = buildExternalUserId(CLIENT_NAME, auth.sub);
+
+      // Pause/resume mirror to Pipedream
+      if (validatedPayload.status === 'paused' && record.status !== 'paused') {
+        await setPipedreamTriggerActive({
+          relayArn: PIPEDREAM_RELAY_LAMBDA_ARN,
+          externalUserId,
+          deployedTriggerId,
+          active: false,
+        });
+      } else if (validatedPayload.status === 'active' && record.status === 'paused') {
+        await setPipedreamTriggerActive({
+          relayArn: PIPEDREAM_RELAY_LAMBDA_ARN,
+          externalUserId,
+          deployedTriggerId,
+          active: true,
+        });
+      }
+
+      // Props update mirror
+      if (validatedPayload.trigger && validatedPayload.trigger.source === 'pipedream') {
+        await updatePipedreamTriggerProps({
+          relayArn: PIPEDREAM_RELAY_LAMBDA_ARN,
+          externalUserId,
+          deployedTriggerId,
+          trigger: validatedPayload.trigger as PipedreamTrigger,
+        });
+      }
+    }
     return updatedRecord.Attributes;
   }
 
@@ -636,6 +768,38 @@ const deleteSchedule = async (auth: AuthContext, scheduleId: string): Promise<vo
       .catch((err) => {
         console.warn('Failed to delete scheduler entry', err);
       });
+  } else if (record.trigger?.source === 'pipedream') {
+    // Pipedream-trigger event schedule: delete the deployed trigger before
+    // soft-deleting the record so we don't leave an orphan firing into a
+    // schedule that the receiver will then drop. The proxy treats
+    // Pipedream-side 404 as success, so this is safe to retry on transient
+    // failure (we still soft-delete the record below regardless).
+    //
+    // Fallback to the top-level `deployed_trigger_id` attribute (which feeds
+    // the GSI and was preserved across the now-fixed update wipe-bug) if
+    // the in-trigger copy is missing. Records created/edited before that
+    // fix shipped won't have the in-trigger copy.
+    const pipedreamTrigger = record.trigger as PipedreamTrigger;
+    const dcId =
+      pipedreamTrigger.deployed_trigger_id ??
+      (typeof (record as { deployed_trigger_id?: unknown }).deployed_trigger_id === 'string'
+        ? (record as { deployed_trigger_id: string }).deployed_trigger_id
+        : undefined);
+    if (dcId) {
+      try {
+        await deletePipedreamTrigger({
+          relayArn: PIPEDREAM_RELAY_LAMBDA_ARN,
+          externalUserId: buildExternalUserId(CLIENT_NAME, auth.sub),
+          deployedTriggerId: dcId,
+        });
+      } catch (err) {
+        console.warn(
+          'Failed to delete Pipedream trigger; proceeding with schedule soft-delete. ' +
+            'A reconciliation worker will catch the orphan on next sweep.',
+          err
+        );
+      }
+    }
   }
 
   await dynamo.send(

@@ -1,0 +1,150 @@
+{
+  "name": "Update Card",
+  "description": "Updates a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-put).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-update-card",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "idBoard",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card",
+      "description": "Specify the card to update",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The new name for the card.",
+      "optional": true
+    },
+    {
+      "name": "desc",
+      "type": "string",
+      "label": "Description",
+      "description": "The new description for the card.",
+      "optional": true
+    },
+    {
+      "name": "closed",
+      "type": "boolean",
+      "label": "Archived",
+      "description": "Whether to archive the card",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "idMembers",
+      "type": "string[]",
+      "label": "Members",
+      "description": "Change the members that are assigned to the card",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "idAttachmentCover",
+      "type": "string",
+      "label": "Cover Attachment ID",
+      "description": "Assign an attachment id to be the cover image for the card",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "idList",
+      "type": "string",
+      "label": "List",
+      "description": "Move the card to a particular list",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "idLabels",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "Array of labelIDs to add to the card",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "pos",
+      "type": "string",
+      "label": "Position",
+      "description": "The position of the new card. `top`, `bottom`, or a positive float",
+      "options": ["top", "bottom"],
+      "optional": true
+    },
+    {
+      "name": "due",
+      "type": "string",
+      "label": "Due Date",
+      "description": "Card due date in ISO format",
+      "optional": true
+    },
+    {
+      "name": "dueComplete",
+      "type": "boolean",
+      "label": "Due Complete",
+      "description": "Whether the due date should be marked complete.",
+      "optional": true,
+      "default": false
+    },
+    {
+      "name": "subscribed",
+      "type": "boolean",
+      "label": "Subscribed",
+      "description": "Whether the member should be subscribed to the card.",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "address",
+      "type": "string",
+      "label": "Address",
+      "description": "For use with/by the Map Power-Up",
+      "optional": true
+    },
+    {
+      "name": "locationName",
+      "type": "string",
+      "label": "Location Name",
+      "description": "For use with/by the Map Power-Up",
+      "optional": true
+    },
+    {
+      "name": "coordinates",
+      "type": "string",
+      "label": "Coordinates",
+      "description": "Latitude, longitude coordinates. For use with/by the Map Power-Up. Should take the form `lat, long`.",
+      "optional": true
+    },
+    {
+      "name": "customFieldIds",
+      "type": "string[]",
+      "label": "Custom Field Ids",
+      "description": "An array of custom field Ids to create/update",
+      "optional": true,
+      "remoteOptions": true,
+      "reloadProps": true
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "Fetch Ad Account",
+  "description": "Fetches an individual adAccount given its id. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/ads/account-structure/create-and-manage-accounts#fetch-ad-account)",
+  "component_type": "action",
+  "version": "0.1.11",
+  "key": "linkedin-fetch-ad-account",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "adAccountId",
+      "type": "string",
+      "label": "Ad Account Id",
+      "description": "ID of the adAccount to fetch.",
+      "remoteOptions": true
+    }
+  ]
+}

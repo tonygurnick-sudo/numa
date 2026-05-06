@@ -1,0 +1,67 @@
+{
+  "name": "Create Status",
+  "description": "Creates a status to the given workspace. [See the documentation](https://developers.podio.com/doc/status/add-new-status-message-22336)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "podio-create-status",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "podio"
+    },
+    {
+      "name": "orgId",
+      "type": "string",
+      "label": "Organization ID",
+      "description": "An ID identifying the organization",
+      "remoteOptions": true
+    },
+    {
+      "name": "spaceId",
+      "type": "string",
+      "label": "Space ID",
+      "description": "An ID identifying the space",
+      "remoteOptions": true
+    },
+    {
+      "name": "alertInvite",
+      "type": "boolean",
+      "label": "Alert Invite",
+      "description": "True if any mentioned user should be automatically invited to the workspace if the user does not have access to the object and access cannot be granted to the object. Default value: `false`",
+      "optional": true
+    },
+    {
+      "name": "value",
+      "type": "string",
+      "label": "Value",
+      "description": "The actual status message"
+    },
+    {
+      "name": "embedId",
+      "type": "string",
+      "label": "Embed ID",
+      "description": "The id of an embedded link that has been created with the Add an embed operation in the Embed area",
+      "optional": true
+    },
+    {
+      "name": "embedUrl",
+      "type": "string",
+      "label": "Embed URL",
+      "description": "The url to be attached",
+      "optional": true
+    },
+    {
+      "name": "question",
+      "type": "string",
+      "label": "Question",
+      "description": "Any question to be attached. Must be a valid JSON object, e.g. `{\"text\": \"Some Question?\",\"options\": [\"option1\", \"option2\",...]}`",
+      "optional": true
+    }
+  ]
+}

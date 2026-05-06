@@ -1,0 +1,38 @@
+[
+  {
+    "key": "rentman-update-item",
+    "name": "Update Rentman Item",
+    "description": "Updates the details of an existing item based on its type. [See the documentation](https://api.rentman.net)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "rentman-find-item",
+    "name": "Find Item",
+    "description": "Searches for an item in the system using the item type as the filtering criteria. [See the documentation](https://api.rentman.net/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "rentman-create-item",
+    "name": "Create Item",
+    "description": "Creates a new item based on the specified type. [See the documentation](https://api.rentman.net)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  }
+]

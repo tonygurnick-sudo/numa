@@ -1,0 +1,42 @@
+{
+  "name": "List Webinar Participants Report",
+  "description": "Retrieves detailed report on each webinar attendee. You can get webinar participant reports for the last 6 months. [See the docs here](https://marketplace.zoom.us/docs/api-reference/zoom-api/methods/#operation/reportWebinarParticipants).",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "zoom-list-webinar-participants-report",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "webinarId",
+      "type": "string",
+      "label": "Webinar",
+      "description": "The webinar to get details for",
+      "remoteOptions": true
+    },
+    {
+      "name": "nextPageToken",
+      "type": "string",
+      "label": "Next Page Token",
+      "description": "Use the next page token to paginate through large result sets. A next page token is returned whenever the set of available results exceeds the current page size. This token's expiration period is 15 minutes. Example: `IAfJX3jsOLW7w3dokmFl84zOa0MAVGyMEB2`",
+      "optional": true
+    },
+    {
+      "name": "max",
+      "type": "integer",
+      "label": "Max Resources",
+      "description": "The maximum number of resources to retrieve.",
+      "optional": true,
+      "default": 300,
+      "min": 1
+    }
+  ]
+}

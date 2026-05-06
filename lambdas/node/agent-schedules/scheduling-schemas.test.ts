@@ -100,6 +100,80 @@ describe('Scheduling Schemas', () => {
     });
   });
 
+  describe('Pipedream event trigger validation', () => {
+    const baseEventRecord = {
+      user_id: 'user-123',
+      schedule_id: '550e8400-e29b-41d4-a716-446655440000',
+      tenant_id: 'numa-client',
+      conversation_id: 'conv-456',
+      prompt_text: 'Summarise: {{ event.text }}',
+      trigger_type: 'event' as const,
+      status: 'active' as const,
+      event_type: 'agent' as const,
+      agent_id: 'agent-123',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      schedule_name: 'numa-client-550e8400-e29b-41d4-a716-446655440000',
+    };
+
+    it('accepts a Pipedream-backed event trigger record', () => {
+      const record = {
+        ...baseEventRecord,
+        trigger: {
+          source: 'pipedream',
+          app_slug: 'slack',
+          component_id: 'slack-new-keyword-mention',
+          configured_props: {
+            slack: { authProvisionId: 'apn_V1h5BYW' },
+            keyword: 'numa',
+            ignoreBot: true,
+          },
+          deployed_trigger_id: 'dc_abc123',
+          webhook_signing_key: '9cdf159c6341e5e6eeee4fc59a2ba76180d9c86fe99814ddcf9dbcbd87d10605',
+        },
+      };
+      expect(() => validateScheduleRecord(record)).not.toThrow();
+    });
+
+    it('still accepts a Gmail-backed event trigger record', () => {
+      const record = {
+        ...baseEventRecord,
+        trigger: {
+          source: 'gmail',
+          event: 'message.received',
+          filters: [{ field: 'subject', op: 'contains', value: 'urgent' }],
+          filter_logic: 'all',
+        },
+      };
+      expect(() => validateScheduleRecord(record)).not.toThrow();
+    });
+
+    it('rejects a Pipedream trigger missing app_slug', () => {
+      const record = {
+        ...baseEventRecord,
+        trigger: {
+          source: 'pipedream',
+          component_id: 'slack-new-keyword-mention',
+          configured_props: {},
+        },
+      };
+      expect(() => validateScheduleRecord(record)).toThrow();
+    });
+
+    it('rejects an unknown source on the trigger', () => {
+      const record = {
+        ...baseEventRecord,
+        trigger: {
+          source: 'discord',
+          app_slug: 'discord',
+          component_id: 'discord-new-message',
+          configured_props: {},
+        },
+      };
+      expect(() => validateScheduleRecord(record)).toThrow();
+    });
+  });
+
   describe('estimateCronIntervalMinutes', () => {
     it('should estimate minute-step intervals', () => {
       expect(estimateCronIntervalMinutes('cron(0/5 * * * ? *)')).toBe(5);

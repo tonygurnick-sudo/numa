@@ -1,0 +1,47 @@
+{
+  "name": "Create Task from Template",
+  "description": "Creates a new task from a task template. [See the documentation](https://developers.asana.com/reference/instantiatetask)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "asana-create-task-from-template",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "asana",
+      "type": "app",
+      "app": "asana"
+    },
+    {
+      "name": "workspace",
+      "label": "Workspace",
+      "description": "Gid of a workspace.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "project",
+      "label": "Project",
+      "description": "List of projects. This field uses the project GID.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "taskTemplateId",
+      "type": "string",
+      "label": "Task Template",
+      "description": "The identifier of a task template",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the new task. If not provided, the name of the task template will be used.",
+      "optional": true
+    }
+  ]
+}

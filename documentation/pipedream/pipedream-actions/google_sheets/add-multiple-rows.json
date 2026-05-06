@@ -1,0 +1,70 @@
+{
+  "name": "Add Multiple Rows",
+  "description": "Add multiple rows of data to a Google Sheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append)",
+  "component_type": "action",
+  "version": "0.2.17",
+  "key": "google_sheets-add-multiple-rows",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "headersDisplay",
+      "type": "alert",
+      "alertType": "info",
+      "content": "",
+      "hidden": true
+    },
+    {
+      "name": "rows",
+      "type": "string",
+      "label": "Row Values",
+      "description": "Provide an array of arrays"
+    },
+    {
+      "name": "rowsDescription",
+      "type": "alert",
+      "alertType": "neutral",
+      "content": "Each nested array should represent a row, with each element of the nested array representing a cell/column value (e.g., passing `[[\"Foo\",1,2],[\"Bar\",3,4]]` will insert two rows of data with three columns each). The most common pattern is to reference an array of arrays exported by a previous step (e.g., `{{steps.foo.$return_value}}`). You may also enter or construct a string that will `JSON.parse()` to an array of arrays."
+    },
+    {
+      "name": "resetRowFormat",
+      "type": "boolean",
+      "label": "Reset Row Format",
+      "description": "Reset the formatting of the rows that were added (line style to none, background to white, foreground color to black, font size to 10, no bold, no italic, no strikethrough, horizontalAlignment to left). This is useful if you want to add rows to a formatted table in Google Sheets.",
+      "optional": true
+    }
+  ]
+}

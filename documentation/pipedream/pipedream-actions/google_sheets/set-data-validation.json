@@ -1,0 +1,85 @@
+{
+  "name": "Set Data Validation",
+  "description": "Add data validation rules to cells (dropdowns, checkboxes, date/number validation). [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#SetDataValidationRequest)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "google_sheets-set-data-validation",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "range",
+      "type": "string",
+      "label": "Range",
+      "description": "The range of cells to apply validation (e.g., `A1:A10`)"
+    },
+    {
+      "name": "validationType",
+      "type": "string",
+      "label": "Validation Type",
+      "description": "The type of data validation",
+      "options": [
+        "NUMBER_GREATER",
+        "NUMBER_GREATER_THAN_EQ",
+        "NUMBER_LESS_THAN_EQ",
+        "NUMBER_LESS",
+        "TEXT_CONTAINS",
+        "TEXT_NOT_CONTAINS",
+        "DATE_EQUAL_TO",
+        "ONE_OF_LIST",
+        "DATE_AFTER",
+        "DATE_ON_OR_AFTER",
+        "DATE_BEFORE",
+        "DATE_ON_OR_BEFORE",
+        "DATE_BETWEEN",
+        "TEXT_STARTS_WITH",
+        "TEXT_ENDS_WITH",
+        "TEXT_EQUAL_TO",
+        "TEXT_NOT_EQUAL_TO",
+        "CUSTOM_FORMULA",
+        "NUMBER_EQUAL_TO",
+        "NUMBER_NOT_EQUAL_TO",
+        "NUMBER_BETWEEN",
+        "NUMBER_NOT_BETWEEN"
+      ]
+    },
+    {
+      "name": "validationValues",
+      "type": "string[]",
+      "label": "Validation Values",
+      "description": "Values for validation (e.g., dropdown options)"
+    }
+  ]
+}

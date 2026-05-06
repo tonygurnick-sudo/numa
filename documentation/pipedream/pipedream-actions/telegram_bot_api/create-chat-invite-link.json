@@ -1,0 +1,53 @@
+{
+  "name": "Create Chat Invite Link",
+  "description": "Create an additional invite link for a chat, [See the docs](https://core.telegram.org/bots/api#createchatinvitelink) for more information",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "telegram_bot_api-create-chat-invite-link",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "telegramBotApi",
+      "type": "app",
+      "app": "telegram_bot_api"
+    },
+    {
+      "name": "chatId",
+      "type": "string",
+      "label": "Chat ID",
+      "description": "Enter the unique identifier for the target chat (e.g. `1035597319`) or username of the target public chat (in the format `@channelusername` or `@supergroupusername`). For example, if the group's public link is `t.me/mygroup`, the username is `@mygroup`."
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Invite link name",
+      "description": "Invite link name; 0-32 characters",
+      "optional": true
+    },
+    {
+      "name": "expire_date",
+      "type": "integer",
+      "label": "Invite link expire date",
+      "description": "Point in time (Unix timestamp) when the link will expire, in [unix time](https://en.wikipedia.org/wiki/Unix_time) (e.g. `1567780450`).",
+      "optional": true
+    },
+    {
+      "name": "member_limit",
+      "type": "integer",
+      "label": "Maximum number of users",
+      "description": "Maximum number of users that can be members of the chat simultaneously after joining the chat via this invite link; 1-99999",
+      "optional": true
+    },
+    {
+      "name": "creates_join_request",
+      "type": "boolean",
+      "label": "Creates join request",
+      "description": "True, if users joining the chat via the link need to be approved by chat administrators. If True, member_limit can't be specified",
+      "optional": true
+    }
+  ]
+}

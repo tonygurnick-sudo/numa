@@ -1,0 +1,50 @@
+{
+  "name": "List Group Members",
+  "description": "List all users in a User Group. [See the documentation](https://api.slack.com/methods/usergroups.users.list)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "slack-list-group-members",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "userGroup",
+      "type": "string",
+      "label": "User Group",
+      "description": "The encoded ID of the User Group.",
+      "remoteOptions": true
+    },
+    {
+      "name": "team",
+      "type": "string",
+      "label": "Team",
+      "description": "Encoded team id where the user group exists, required if org token is used.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "pageSize",
+      "type": "integer",
+      "label": "Page Size",
+      "description": "The number of results to include in a page. Default: 250",
+      "default": 250,
+      "optional": true
+    },
+    {
+      "name": "numPages",
+      "type": "integer",
+      "label": "Number of Pages",
+      "description": "The number of pages to retrieve. Default: 1",
+      "default": 1,
+      "optional": true
+    }
+  ]
+}

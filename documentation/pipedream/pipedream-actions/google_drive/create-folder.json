@@ -1,0 +1,51 @@
+{
+  "name": "Create Folder",
+  "description": "Create a new empty folder. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/create) for more information",
+  "component_type": "action",
+  "version": "0.1.16",
+  "key": "google_drive-create-folder",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "parentId",
+      "type": "string",
+      "label": "Parent Folder",
+      "description": "Select a folder in which to place the new folder. If not specified, the folder will be placed directly in the drive's top-level folder.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the new folder",
+      "optional": true
+    },
+    {
+      "name": "createIfUnique",
+      "type": "boolean",
+      "label": "Create Only If Filename Is Unique?",
+      "description": "If the folder already exists, **do not** create. This option defaults to `false` for backwards compatibility and to be consistent with default Google Drive behavior.",
+      "optional": true,
+      "default": false
+    }
+  ]
+}

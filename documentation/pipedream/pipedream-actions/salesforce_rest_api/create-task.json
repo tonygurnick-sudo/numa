@@ -1,0 +1,100 @@
+{
+  "name": "Create Task",
+  "description": "Creates a task. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_task.htm)",
+  "component_type": "action",
+  "version": "0.4.5",
+  "key": "salesforce_rest_api-create-task",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_task.htm) for more information on available fields."
+    },
+    {
+      "name": "dateInfo",
+      "type": "alert",
+      "alertType": "warning",
+      "content": "Date fields should be a [valid date string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date#date_time_string_format) or a Unix timestamp in milliseconds. Example values: `2022-01-15T18:30:00.000Z` or `1642271400000`."
+    },
+    {
+      "name": "IsRecurrence",
+      "type": "boolean",
+      "label": "Recurring",
+      "description": "Indicates whether the task is scheduled to repeat itself (`true`) or only occurs once (`false`).",
+      "optional": true
+    },
+    {
+      "name": "TaskSubtype",
+      "type": "string",
+      "label": "Task Subtype",
+      "description": "The subtype of the task.",
+      "optional": true,
+      "options": [
+        {
+          "label": "Task",
+          "value": "Task"
+        },
+        {
+          "label": "Email",
+          "value": "Email"
+        },
+        {
+          "label": "List Email",
+          "value": "ListEmail"
+        },
+        {
+          "label": "Cadence",
+          "value": "Cadence"
+        },
+        {
+          "label": "Call",
+          "value": "Call"
+        },
+        {
+          "label": "LinkedIn",
+          "value": "LinkedIn"
+        }
+      ]
+    },
+    {
+      "name": "ActivityDate",
+      "type": "string",
+      "label": "Due Date",
+      "description": "Represents the due date of the task.",
+      "optional": true
+    },
+    {
+      "name": "Description",
+      "type": "string",
+      "label": "Description",
+      "description": "A text description of the task.",
+      "optional": true
+    },
+    {
+      "name": "Priority",
+      "type": "string",
+      "label": "Priority",
+      "description": "Indicates the importance or urgency of a task, such as high or low.",
+      "options": ["High", "Normal", "Low"]
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "name": "Create Account",
+  "description": "Creates a Salesforce account. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_account.htm)",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "salesforce_rest_api-create-account",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_account.htm) for more information on available fields."
+    },
+    {
+      "name": "Name",
+      "type": "string",
+      "label": "Account Name",
+      "description": "Name of the account. Max 255 characters."
+    },
+    {
+      "name": "AccountNumber",
+      "type": "string",
+      "label": "Account Number",
+      "description": "Account number assigned to this account (not the unique, system-generated ID assigned during creation). Max 40 characters.",
+      "optional": true
+    },
+    {
+      "name": "Description",
+      "type": "string",
+      "label": "Description",
+      "description": "Text description of the account. Limited to 32,000 KB.",
+      "optional": true
+    },
+    {
+      "name": "Phone",
+      "type": "string",
+      "label": "Phone",
+      "description": "Phone number for this account. Max 40 characters.",
+      "optional": true
+    },
+    {
+      "name": "Website",
+      "type": "string",
+      "label": "Website",
+      "description": "The website of this account. Max 255 characters.",
+      "optional": true
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

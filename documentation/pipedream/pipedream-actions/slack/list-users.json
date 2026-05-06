@@ -1,0 +1,43 @@
+{
+  "name": "List Users",
+  "description": "Return a list of all users in a workspace. [See the documentation](https://api.slack.com/methods/users.list)",
+  "component_type": "action",
+  "version": "0.0.24",
+  "key": "slack-list-users",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "teamId",
+      "type": "string",
+      "label": "Team",
+      "description": "Select a team.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "pageSize",
+      "type": "integer",
+      "label": "Page Size",
+      "description": "The number of results to include in a page. Default: 250",
+      "default": 250,
+      "optional": true
+    },
+    {
+      "name": "numPages",
+      "type": "integer",
+      "label": "Number of Pages",
+      "description": "The number of pages to retrieve. Default: 1",
+      "default": 1,
+      "optional": true
+    }
+  ]
+}

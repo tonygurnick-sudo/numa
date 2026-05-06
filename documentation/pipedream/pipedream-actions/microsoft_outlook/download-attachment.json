@@ -1,0 +1,46 @@
+{
+  "name": "Download Attachment",
+  "description": "Downloads an attachment to the /tmp directory. [See the documentation](https://learn.microsoft.com/en-us/graph/api/attachment-get?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "microsoft_outlook-download-attachment",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    },
+    {
+      "name": "messageId",
+      "type": "string",
+      "label": "Message ID",
+      "description": "The identifier of the message containing the attachment to download",
+      "remoteOptions": true
+    },
+    {
+      "name": "attachmentId",
+      "type": "string",
+      "label": "Attachment ID",
+      "description": "The identifier of the attachment to download",
+      "remoteOptions": true
+    },
+    {
+      "name": "filename",
+      "type": "string",
+      "label": "Filename",
+      "description": "The filename to save the attachment as in the /tmp directory"
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "write",
+      "sync": true
+    }
+  ],
+  "stash": "required"
+}

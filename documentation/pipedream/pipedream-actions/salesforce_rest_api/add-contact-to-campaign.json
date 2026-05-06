@@ -1,0 +1,33 @@
+{
+  "name": "Add Contact to Campaign",
+  "description": "Adds an existing contact to an existing campaign. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.228.0.object_reference.meta/object_reference/sforce_api_objects_campaignmember.htm)",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "salesforce_rest_api-add-contact-to-campaign",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "campaignId",
+      "type": "string",
+      "label": "Campaign ID",
+      "description": "The Campaign to add a Contact to.",
+      "remoteOptions": true
+    },
+    {
+      "name": "contactId",
+      "type": "string",
+      "label": "Contact ID",
+      "description": "The Contact to add to the selected Campaign.",
+      "remoteOptions": true
+    }
+  ]
+}

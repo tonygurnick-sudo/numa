@@ -1,0 +1,60 @@
+{
+  "name": "Add Single Row",
+  "description": "Add a single row of data to Google Sheets. Optionally insert the row at a specific index (e.g., row 2 to insert after headers, shifting existing data down). [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append)",
+  "component_type": "action",
+  "version": "2.2.0",
+  "key": "google_sheets-add-single-row",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or enter a custom expression. When referencing a spreadsheet dynamically, you must provide a custom expression for the worksheet.",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "hasHeaders",
+      "type": "boolean",
+      "label": "Does the first row of the sheet have headers?",
+      "description": "If the first row of your document has headers, we'll retrieve them to make it easy to enter the value for each column. Note: When using a dynamic reference for the worksheet ID (e.g. `{{steps.foo.$return_value}}`), this setting is ignored.",
+      "reloadProps": true
+    },
+    {
+      "name": "rowIndex",
+      "type": "integer",
+      "label": "Row Index",
+      "description": "The row number where the new row should be inserted (e.g., `2` to insert after the header row, shifting existing data down). If not specified, the row will be appended to the end of the sheet. **Note:** Row numbers start at 1. If your sheet has headers, use `2` or higher to avoid overwriting them.",
+      "optional": true,
+      "min": 1
+    }
+  ]
+}

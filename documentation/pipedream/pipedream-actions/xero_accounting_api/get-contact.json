@@ -1,0 +1,33 @@
+{
+  "name": "Get Contact",
+  "description": "Gets details of a contact.",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-get-contact",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "contactIdentifier",
+      "type": "string",
+      "label": "Contact Identifier",
+      "description": "Xero identifier of the contact to get. Possible values: \n* **ContactID** - The Xero identifier for a contact e.g. 297c2dc5-cc47-4afd-8ec8-74990b8761e9\n* **ContactNumber** -  A custom identifier specified from another system e.g. a CRM system has a contact number of CUST100",
+      "remoteOptions": true
+    }
+  ]
+}

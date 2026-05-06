@@ -1,0 +1,36 @@
+{
+  "name": "List Worksheets",
+  "description": "Get a list of all worksheets in a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/get)",
+  "component_type": "action",
+  "version": "0.1.14",
+  "key": "google_sheets-list-worksheets",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "The drive to select a spreadsheet from. If you are connected with any [Google Shared Drives](https://support.google.com/a/users/answer/9310351), you can select it here.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "List worksheets in the specified spreadsheet",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

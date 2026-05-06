@@ -1,0 +1,175 @@
+{
+  "name": "Update Formatting",
+  "description": "Update the formatting of a cell in a spreadsheet. [See the documentation](https://developers.google.com/workspace/sheets/api/samples/formatting)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "google_sheets-update-formatting",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "The drive containing the worksheet to update. If you are connected with any [Google Shared Drives](https://support.google.com/a/users/answer/9310351), you can select it here.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "The spreadsheet containing the worksheet to update",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "range",
+      "type": "string",
+      "label": "Range",
+      "description": "The range of cells to update. E.g., `A1:A10`"
+    },
+    {
+      "name": "backgroundColorRedValue",
+      "type": "string",
+      "label": "Background Color Red Value",
+      "description": "The amount of red in the color as a value in the interval [0, 1]",
+      "optional": true
+    },
+    {
+      "name": "backgroundColorGreenValue",
+      "type": "string",
+      "label": "Background Color Green Value",
+      "description": "The amount of green in the color as a value in the interval [0, 1]",
+      "optional": true
+    },
+    {
+      "name": "backgroundColorBlueValue",
+      "type": "string",
+      "label": "Background Color Blue Value",
+      "description": "The amount of blue in the color as a value in the interval [0, 1]",
+      "optional": true
+    },
+    {
+      "name": "textColorRedValue",
+      "type": "string",
+      "label": "Text Color Red Value",
+      "description": "The amount of red in the color as a value in the interval [0, 1]",
+      "optional": true
+    },
+    {
+      "name": "textColorGreenValue",
+      "type": "string",
+      "label": "Text Color Green Value",
+      "description": "The amount of green in the color as a value in the interval [0, 1]",
+      "optional": true
+    },
+    {
+      "name": "textColorBlueValue",
+      "type": "string",
+      "label": "Text Color Blue Value",
+      "description": "The amount of blue in the color as a value in the interval [0, 1]",
+      "optional": true
+    },
+    {
+      "name": "fontSize",
+      "type": "integer",
+      "label": "Font Size",
+      "description": "The size of the font",
+      "optional": true
+    },
+    {
+      "name": "bold",
+      "type": "boolean",
+      "label": "Bold",
+      "description": "Whether the font should be bold",
+      "optional": true
+    },
+    {
+      "name": "italic",
+      "type": "boolean",
+      "label": "Italic",
+      "description": "Whether the font should be italic",
+      "optional": true
+    },
+    {
+      "name": "strikethrough",
+      "type": "boolean",
+      "label": "Strikethrough",
+      "description": "Whether the font should be strikethrough",
+      "optional": true
+    },
+    {
+      "name": "horizontalAlignment",
+      "type": "string",
+      "label": "Horizontal Alignment",
+      "description": "The horizontal alignment of the text",
+      "options": ["LEFT", "CENTER", "RIGHT"],
+      "optional": true
+    },
+    {
+      "name": "topBorderStyle",
+      "type": "string",
+      "label": "Top Border Style",
+      "description": "The style of the top border",
+      "options": ["DOTTED", "DASHED", "SOLID", "SOLID_MEDIUM", "SOLID_THICK", "NONE", "DOUBLE"],
+      "optional": true
+    },
+    {
+      "name": "bottomBorderStyle",
+      "type": "string",
+      "label": "Bottom Border Style",
+      "description": "The style of the bottom border",
+      "options": ["DOTTED", "DASHED", "SOLID", "SOLID_MEDIUM", "SOLID_THICK", "NONE", "DOUBLE"],
+      "optional": true
+    },
+    {
+      "name": "leftBorderStyle",
+      "type": "string",
+      "label": "Left Border Style",
+      "description": "The style of the left border",
+      "options": ["DOTTED", "DASHED", "SOLID", "SOLID_MEDIUM", "SOLID_THICK", "NONE", "DOUBLE"],
+      "optional": true
+    },
+    {
+      "name": "rightBorderStyle",
+      "type": "string",
+      "label": "Right Border Style",
+      "description": "The style of the right border",
+      "options": ["DOTTED", "DASHED", "SOLID", "SOLID_MEDIUM", "SOLID_THICK", "NONE", "DOUBLE"],
+      "optional": true
+    },
+    {
+      "name": "innerHorizontalBorderStyle",
+      "type": "string",
+      "label": "Inner Horizontal Border Style",
+      "description": "The style of the inner horizontal border",
+      "options": ["DOTTED", "DASHED", "SOLID", "SOLID_MEDIUM", "SOLID_THICK", "NONE", "DOUBLE"],
+      "optional": true
+    },
+    {
+      "name": "innerVerticalBorderStyle",
+      "type": "string",
+      "label": "Inner Vertical Border Style",
+      "description": "The style of the inner vertical border",
+      "options": ["DOTTED", "DASHED", "SOLID", "SOLID_MEDIUM", "SOLID_THICK", "NONE", "DOUBLE"],
+      "optional": true
+    }
+  ]
+}

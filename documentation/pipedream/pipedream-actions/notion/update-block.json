@@ -1,0 +1,37 @@
+{
+  "name": "Update Child Block",
+  "description": "Updates a child block object. [See the documentation](https://developers.notion.com/reference/update-a-block)",
+  "component_type": "action",
+  "version": "0.0.8",
+  "key": "notion-update-block",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "blockId",
+      "type": "string",
+      "label": "Block ID",
+      "description": "Block ID retrieved from the **Retrieve Page Content** action"
+    },
+    {
+      "name": "infoLabel",
+      "type": "alert",
+      "alertType": "info",
+      "content": "**Note:** The update replaces the entire value for a given field. If a field is omitted (ex: omitting checked when updating a to_do block), the value will not be changed."
+    },
+    {
+      "name": "content",
+      "type": "string",
+      "label": "Content",
+      "description": "The content of the block. **E.g. {\"code\": {\"rich_text\":[{\"type\":\"text\",\"text\":{\"content\":\"Updated content\"}}]}}** [See the documentation](https://developers.notion.com/reference/update-a-block)"
+    }
+  ]
+}

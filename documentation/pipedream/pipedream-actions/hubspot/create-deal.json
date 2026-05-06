@@ -1,0 +1,53 @@
+{
+  "name": "Create Deal",
+  "description": "Create a deal in Hubspot. [See the documentation](https://developers.hubspot.com/docs/api/crm/deals#endpoint?spec=POST-/crm/v3/objects/deals)",
+  "component_type": "action",
+  "version": "0.0.33",
+  "key": "hubspot-create-deal",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "propertyGroups",
+      "type": "string[]",
+      "label": "Property Groups",
+      "hidden": true,
+      "reloadProps": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "objectProperties",
+      "type": "object",
+      "label": "Object Properties",
+      "description": "Enter the object properties to create as a JSON object"
+    },
+    {
+      "name": "dealname",
+      "type": "string",
+      "label": "Deal Name",
+      "description": "Name of the deal"
+    },
+    {
+      "name": "pipeline",
+      "type": "string",
+      "label": "Pipeline",
+      "description": "Pipeline of the deal",
+      "remoteOptions": true
+    },
+    {
+      "name": "dealstage",
+      "type": "string",
+      "label": "Stages",
+      "description": "Stage of the deal",
+      "remoteOptions": true
+    }
+  ]
+}

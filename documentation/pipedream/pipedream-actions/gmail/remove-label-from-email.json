@@ -1,0 +1,34 @@
+{
+  "name": "Remove Label from Email",
+  "description": "Remove label(s) from an email message. [See the docs](https://developers.google.com/gmail/api/reference/rest/v1/users.messages/modify)",
+  "component_type": "action",
+  "version": "0.0.13",
+  "key": "gmail-remove-label-from-email",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "message",
+      "type": "string",
+      "label": "Message",
+      "description": "The identifier of a message",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "removeLabelIds",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "The labels to remove from the email",
+      "remoteOptions": true
+    }
+  ]
+}

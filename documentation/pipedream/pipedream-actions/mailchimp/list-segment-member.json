@@ -1,0 +1,58 @@
+{
+  "name": "List Segment Members",
+  "description": "Retrieves a list of all segment members. [See docs here](https://mailchimp.com/developer/marketing/api/list-segment-members/list-members-in-segment/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-list-segment-member",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "segmentId",
+      "type": "string",
+      "label": "Segment/Tag Id",
+      "description": "The unique ID of the segment or tag you'd like to watch for new subscribers",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Fields",
+      "description": "A string list of fields to return. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "excludeFields",
+      "type": "string[]",
+      "label": "Exclude Fields",
+      "description": "A string list of fields to exclude_fields. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "count",
+      "type": "integer",
+      "label": "Count",
+      "max": 1000,
+      "min": 1,
+      "default": 10,
+      "description": "The number of records to return."
+    }
+  ]
+}

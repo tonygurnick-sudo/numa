@@ -1,0 +1,27 @@
+{
+  "name": "Send a Campaign",
+  "description": "Sends a campaign draft to the audience signed up for the campaign. [See docs here](https://mailchimp.com/developer/marketing/api/campaigns/send-campaign/)",
+  "component_type": "action",
+  "version": "0.2.3",
+  "key": "mailchimp-send-campaign",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "campaignId",
+      "type": "string",
+      "label": "Campaign ID",
+      "description": "The unique ID of the campaign",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "name": "Insert Blob Data",
+  "description": "Inserts blob data in Salesforce standard objects. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.228.0.api_rest.meta/api_rest/dome_sobject_insert_update_blob.htm)",
+  "component_type": "action",
+  "version": "0.2.12",
+  "key": "salesforce_rest_api-insert-blob-data",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "entiyName",
+      "type": "string",
+      "label": "Entity Name",
+      "description": "Name of the entity to insert as part of the form-data sent along the Salesforce API as a request with multipart/form-data content type. I.e. entityDocument for Documents."
+    },
+    {
+      "name": "entityDocument",
+      "type": "string",
+      "label": "Entity Document",
+      "description": "Salesforce object entity to insert."
+    },
+    {
+      "name": "formContentName",
+      "type": "string",
+      "label": "Form Content Name",
+      "description": "Name of the binary content to insert as part of  the form-data sent along the Salesforce API as a request with multipart/form-data content type."
+    },
+    {
+      "name": "filename",
+      "type": "string",
+      "label": "Filename",
+      "description": "Filename of the blob data to insert."
+    },
+    {
+      "name": "contentType",
+      "type": "string",
+      "label": "Content Type",
+      "description": "Mime type of the content to insert."
+    },
+    {
+      "name": "attachmentBinarycontent",
+      "type": "string",
+      "label": "Attachment Binary Content",
+      "description": "Binary content of the blob data to insert."
+    },
+    {
+      "name": "sobjectName",
+      "type": "string",
+      "label": "SObject Type",
+      "description": "Salesforce standard object type to insert."
+    }
+  ]
+}

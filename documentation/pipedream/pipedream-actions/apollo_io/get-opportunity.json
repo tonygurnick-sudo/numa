@@ -1,0 +1,26 @@
+{
+  "name": "Get Opportunity",
+  "description": "Gets a specific opportunity in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#view-opportunity)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "apollo_io-get-opportunity",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "opportunityId",
+      "type": "string",
+      "label": "Opportunity ID",
+      "description": "The ID of the opportunity.",
+      "remoteOptions": true
+    }
+  ]
+}

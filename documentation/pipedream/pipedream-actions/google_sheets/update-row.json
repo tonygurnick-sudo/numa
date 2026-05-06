@@ -1,0 +1,60 @@
+{
+  "name": "Update Row",
+  "description": "Update a row in a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update)",
+  "component_type": "action",
+  "version": "0.1.18",
+  "key": "google_sheets-update-row",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "The drive containing the worksheet to update. If you are connected with any [Google Shared Drives](https://support.google.com/a/users/answer/9310351), you can select it here.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "The spreadsheet containing the worksheet to update",
+      "useQuery": true,
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or enter a custom expression. When referencing a spreadsheet dynamically, you must provide a custom expression for the worksheet.",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "hasHeaders",
+      "type": "boolean",
+      "label": "Does the first row of the sheet have headers?",
+      "description": "If the first row of your document has headers, we'll retrieve them to make it easy to enter the value for each column. Note: When using a dynamic reference for the worksheet ID (e.g. `{{steps.foo.$return_value}}`), this setting is ignored.",
+      "reloadProps": true
+    },
+    {
+      "name": "row",
+      "type": "integer",
+      "label": "Row Number",
+      "description": "Row Number",
+      "min": 1,
+      "reloadProps": true
+    }
+  ]
+}

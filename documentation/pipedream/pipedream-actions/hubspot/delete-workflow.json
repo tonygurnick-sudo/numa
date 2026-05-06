@@ -1,0 +1,26 @@
+{
+  "name": "Delete a Workflow",
+  "description": "Delete a workflow by ID. [See the documentation](https://developers.hubspot.com/docs/api-reference/legacy/create-manage-workflows-v3/delete-automation-v3-workflows-workflowId)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "hubspot-delete-workflow",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "workflowId",
+      "type": "string",
+      "label": "Workflow",
+      "description": "The ID of the workflow to delete",
+      "remoteOptions": true
+    }
+  ]
+}

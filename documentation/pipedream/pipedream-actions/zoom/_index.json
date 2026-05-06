@@ -1,0 +1,242 @@
+[
+  {
+    "key": "zoom-update-webinar",
+    "name": "Update Webinar",
+    "description": "Update a webinar's topic, start time, or other settings",
+    "version": "0.1.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "zoom-update-meeting",
+    "name": "Update Meeting",
+    "description": "Updates an existing Zoom meeting",
+    "version": "0.1.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "zoom-list-webinar-participants-report",
+    "name": "List Webinar Participants Report",
+    "description": "Retrieves detailed report on each webinar attendee. You can get webinar participant reports for the last 6 months. [See the docs here](https://marketplace.zoom.us/docs/api-reference/zoom-api/methods/#operation/reportWebinarParticipants).",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "zoom-list-user-call-logs",
+    "name": "List User's Call Logs",
+    "description": "Gets a user's Zoom phone call logs. [See the documentation](https://developers.zoom.us/docs/zoom-phone/apis/#operation/phoneUserCallLogs)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "zoom-list-past-webinar-qa",
+    "name": "List Past Webinar Q&A",
+    "description": "The  feature for Webinars allows attendees to ask questions during the Webinar and for the panelists, co-hosts and host to answer their questions. Use this API to list Q&A of a specific Webinar.",
+    "version": "0.1.7",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "zoom-list-past-meeting-participants",
+    "name": "List Past Meeting Participants",
+    "description": "Retrieve information on participants from a past meeting. [See the docs here](https://marketplace.zoom.us/docs/api-reference/zoom-api/methods/#operation/pastMeetingParticipants).",
+    "version": "0.2.8",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "zoom-list-meetings",
+    "name": "List Meetings",
+    "description": "List meetings for a user. [See the documentation](https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetings)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "zoom-list-call-recordings",
+    "name": "List Call Recordings",
+    "description": "Get your account's call recordings. [See the documentation](https://developers.zoom.us/docs/api/rest/reference/phone/methods/#operation/getPhoneRecordings)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "zoom-get-webinar-details",
+    "name": "Get Webinar Details",
+    "description": "Gets details of a scheduled webinar. [See the docs here](https://marketplace.zoom.us/docs/api-reference/zoom-api/methods/#operation/webinar).",
+    "version": "0.3.8",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "zoom-get-meeting-transcript",
+    "name": "Get Meeting Transcript",
+    "description": "Get the transcript of a meeting. [See the documentation](https://developers.zoom.us/docs/api/meetings/#tag/cloud-recording/get/meetings/{meetingId}/transcript)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "zoom-get-meeting-details",
+    "name": "Get Meeting Details",
+    "description": "Retrieves the details of a meeting.",
+    "version": "0.3.7",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "zoom-delete-meeting",
+    "name": "Delete Meeting",
+    "description": "Delete a meeting. [See the documentation](https://developers.zoom.us/docs/api/meetings/#tag/meetings/delete/meetings/{meetingId})",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "zoom-add-webinar-registrant",
+    "name": "Add Webinar Registrant",
+    "description": "Registers a participant for a webinar. [See the docs here](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarregistrantcreate).",
+    "version": "0.3.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 20
+  },
+  {
+    "key": "zoom-add-meeting-registrant",
+    "name": "Add Meeting Registrant",
+    "description": "Registers a participant or multiple participants for a meeting. [See the documentation](https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetingRegistrantCreate)",
+    "version": "0.3.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 21
+  },
+  {
+    "key": "zoom-view-user",
+    "name": "View User",
+    "description": "View your user information",
+    "version": "0.1.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "zoom-send-chat-message",
+    "name": "Send Chat Message",
+    "description": "Send chat messages on Zoom to either an individual user who is in your contact list or to a  of which you are a member.",
+    "version": "0.1.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "zoom-list-channels",
+    "name": "List Channels",
+    "description": "List a user's chat channels.",
+    "version": "0.1.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "zoom-delete-user",
+    "name": "Delete User",
+    "description": "Disassociates (unlinks) a user from the associated account or permanently deletes a user.",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "zoom-create-user",
+    "name": "Create User",
+    "description": "Creates a new user in your account.",
+    "version": "0.2.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "zoom-create-meeting",
+    "name": "Create Meeting",
+    "description": "Creates a meeting for a user. A maximum of 100 meetings can be created for a user in a day.",
+    "version": "0.1.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 11
+  }
+]

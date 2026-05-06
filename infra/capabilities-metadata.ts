@@ -66,6 +66,17 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: [],
   },
   {
+    flag: 'EVENT_TRIGGERS',
+    title: 'Event Triggers',
+    description:
+      'Event-triggered automations — fire agents on Slack messages, Gmail emails, and other external events. Disable to release Scheduling without releasing Triggers.',
+    icon: 'bi-lightning-charge',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['SCHEDULING'],
+  },
+  {
     flag: 'NUMA_OPS',
     title: 'Numa Ops',
     description: 'Work management and operational task tracking.',

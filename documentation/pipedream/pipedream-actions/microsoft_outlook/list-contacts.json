@@ -1,0 +1,34 @@
+{
+  "name": "List Contacts",
+  "description": "Get a contact collection from the default contacts folder, [See the documentation](https://docs.microsoft.com/en-us/graph/api/user-list-contacts)",
+  "component_type": "action",
+  "version": "0.0.21",
+  "key": "microsoft_outlook-list-contacts",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    },
+    {
+      "name": "filterAddress",
+      "label": "Email Address",
+      "description": "If this is given, only contacts with the given address will be retrieved.",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Get Member Profile",
+  "description": "Gets another member's profile, given its person id. [See the docs here](https://docs.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api#retrieve-other-members-profile)",
+  "component_type": "action",
+  "version": "0.1.11",
+  "key": "linkedin-get-member-profile",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "personId",
+      "type": "string",
+      "label": "Person Id",
+      "description": "Identifier of the person to retrieve"
+    }
+  ]
+}

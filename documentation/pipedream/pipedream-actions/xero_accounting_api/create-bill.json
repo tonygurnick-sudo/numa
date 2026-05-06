@@ -1,0 +1,74 @@
+{
+  "name": "Create Bill",
+  "description": "Creates a new bill (Accounts Payable)[See the docs here](https://developer.xero.com/documentation/api/accounting/invoices)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "xero_accounting_api-create-bill",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "invoiceNumber",
+      "type": "string",
+      "optional": true,
+      "label": "Invoice Number",
+      "description": "Unique alpha numeric code identifying invoice"
+    },
+    {
+      "name": "reference",
+      "type": "string",
+      "optional": true,
+      "label": "Reference",
+      "description": "ACCREC only - additional reference number"
+    },
+    {
+      "name": "contactId",
+      "type": "string",
+      "label": "Contact ID",
+      "description": "Unique identification of the contact",
+      "remoteOptions": true
+    },
+    {
+      "name": "lineItems",
+      "type": "string[]",
+      "label": "Line Items",
+      "description": "The LineItems collection can contain any number of individual LineItem sub-elements. At least one is required to create a complete Invoice. [Refer to Tax Type](https://developer.xero.com/documentation/api/accounting/types#report-tax-types), [Refer to Line Items](https://developer.xero.com/documentation/api/accounting/invoices#creating-updating-and-deleting-line-items-when-updating-invoices)\n\n**Example:** `[{\"Description\":\"Football\", \"Quantity\":\"20\", \"UnitAmount\":\"50000\", \"TaxType\":\"OUTPUT\" }]`"
+    },
+    {
+      "name": "date",
+      "type": "string",
+      "optional": true,
+      "label": "Invoice Date",
+      "description": "Date invoice was issued - YYYY-MM-DD"
+    },
+    {
+      "name": "dueDate",
+      "type": "string",
+      "optional": true,
+      "label": "Invoice Due Date",
+      "description": "Date invoice is due - YYYY-MM-DD"
+    },
+    {
+      "name": "currencyCode",
+      "type": "string",
+      "optional": true,
+      "label": "The Invoice Currency",
+      "description": "The currency that invoice has been raised in. Refer to [object documentation](https://www.xe.com/iso4217.php)"
+    }
+  ]
+}

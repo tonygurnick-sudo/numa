@@ -1,0 +1,35 @@
+{
+  "name": "Get Cards In A List",
+  "description": "List the cards in a list. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/#api-lists-id-cards-get).",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "trello-get-cards-in-list",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board ID",
+      "description": "The ID of the board containing the list",
+      "remoteOptions": true
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List ID",
+      "description": "The ID of the list to get cards from",
+      "optional": false,
+      "remoteOptions": true
+    }
+  ]
+}

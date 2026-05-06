@@ -4,12 +4,17 @@ import { Clock, Bot, Settings, Pencil, Zap, Mail } from 'lucide-react';
 import { describeCronExpression } from '../../utils/cronUtils';
 import { AgentAvatar } from '../Agents/AgentAvatar';
 import type { AgentSummary } from '../../types/agents';
-import type { EventTrigger } from '../../types/agentSchedules';
+import type { GmailEventTrigger } from '../../types/agentSchedules';
+import type { PipedreamTriggerDraft } from '../PipedreamTriggers/PipedreamTriggerConfigurator';
+import { summarizePipedreamTrigger } from '../PipedreamTriggers/pipedreamTriggerLabels';
 
 type WorkflowStepReviewProps = {
   triggerType: 'schedule' | 'event';
   cronExpression: string;
-  eventTrigger?: EventTrigger;
+  /** Gmail trigger, when the user picked Gmail in the source picker. */
+  eventTrigger?: GmailEventTrigger;
+  /** Pipedream trigger draft, when the user picked any registry app. */
+  pipedreamDraft?: PipedreamTriggerDraft | null;
   agent: AgentSummary | null;
   name: string;
   prompt: string;
@@ -23,6 +28,7 @@ export const WorkflowStepReview = ({
   triggerType,
   cronExpression,
   eventTrigger,
+  pipedreamDraft,
   agent,
   name,
   prompt,
@@ -35,6 +41,9 @@ export const WorkflowStepReview = ({
 
   const isEvent = triggerType === 'event';
   const scheduleDescription = cronExpression ? describeCronExpression(cronExpression) : '\u2014';
+  const pipedreamSummary = pipedreamDraft
+    ? summarizePipedreamTrigger(pipedreamDraft.app_slug, pipedreamDraft.component_id, t)
+    : null;
 
   return (
     <div className="workflow-step">
@@ -77,7 +86,39 @@ export const WorkflowStepReview = ({
               >
                 {isEvent ? t('review.eventLabel') : t('review.scheduleLabel')}
               </div>
-              {isEvent && eventTrigger ? (
+              {isEvent && pipedreamSummary && pipedreamDraft ? (
+                <div>
+                  <div className="fw-medium mb-1 d-flex align-items-center gap-2">
+                    {pipedreamSummary.iconSrc ? (
+                      <img src={pipedreamSummary.iconSrc} alt="" width={16} height={16} />
+                    ) : (
+                      <i className={pipedreamSummary.fallbackIcon} />
+                    )}
+                    {pipedreamSummary.combined}
+                  </div>
+                  {(() => {
+                    const forced = new Set(Object.keys(pipedreamSummary.trigger?.restraints.forced_props ?? {}));
+                    const visible = Object.entries(pipedreamDraft.configured_props).filter(
+                      ([k, v]) =>
+                        k !== pipedreamDraft.app_slug && // auth prop
+                        !forced.has(k) &&
+                        v != null &&
+                        v !== '' &&
+                        !(Array.isArray(v) && v.length === 0)
+                    );
+                    if (visible.length === 0) return null;
+                    return (
+                      <div className="d-flex flex-column gap-0 text-muted small mt-1">
+                        {visible.map(([k, v]) => (
+                          <div key={k} className="ps-2">
+                            <span className="fw-medium">{k}:</span> {typeof v === 'string' ? v : JSON.stringify(v)}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : isEvent && eventTrigger ? (
                 <div>
                   <div className="fw-medium mb-1">
                     {t('trigger.event.builder.sourceGmail')} — {t('list.triggerEmail').toLowerCase()}
@@ -163,8 +204,7 @@ export const WorkflowStepReview = ({
                   <span className="fw-medium">{t('review.promptLabel')}:</span> {prompt || t('review.noPrompt')}
                 </div>
                 <div>
-                  <span className="fw-medium">{t('review.maxRunsLabel')}:</span>{' '}
-                  {maxRuns > 0 ? maxRuns : t('review.unlimited')}
+                  <span className="fw-medium">{t('review.maxRunsLabel')}:</span> {maxRuns}
                 </div>
                 <div>
                   <span className="fw-medium">{t('review.emailLabel')}:</span>{' '}

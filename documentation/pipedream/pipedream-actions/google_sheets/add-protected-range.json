@@ -1,0 +1,78 @@
+{
+  "name": "Add Protected Range",
+  "description": "Add edit protection to cell range with permissions. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#AddProtectedRangeRequest)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "google_sheets-add-protected-range",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "protectedRangeId",
+      "type": "integer",
+      "label": "Protected Range ID",
+      "description": "The ID of the protected range (required for update and delete operations). This is a unique identifier assigned by Google Sheets",
+      "optional": true
+    },
+    {
+      "name": "range",
+      "type": "string",
+      "label": "Range",
+      "description": "The range of cells to protect (e.g., `A1:A10`). Required for add and update operations"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "A description of the protected range",
+      "optional": true
+    },
+    {
+      "name": "requestingUserCanEdit",
+      "type": "boolean",
+      "label": "Requesting User Can Edit",
+      "description": "If true, the user making this request can edit the protected range",
+      "optional": true,
+      "default": false
+    },
+    {
+      "name": "protectors",
+      "type": "string[]",
+      "label": "Protectors",
+      "description": "Email addresses of users/groups who can edit the protected range (e.g., user@example.com)",
+      "optional": true
+    }
+  ]
+}

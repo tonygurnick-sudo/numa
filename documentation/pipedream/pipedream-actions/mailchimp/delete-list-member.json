@@ -1,0 +1,35 @@
+{
+  "name": "Delete List Member",
+  "description": "Permanently deletes a member. [See docs here](https://mailchimp.com/developer/marketing/api/list-members/delete-list-member/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-delete-list-member",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "subscriberHash",
+      "type": "string",
+      "label": "Subscriber",
+      "description": "The MD5 hash of the lowercase version of the list member's email address.",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

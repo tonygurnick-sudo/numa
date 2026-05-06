@@ -1,0 +1,64 @@
+{
+  "name": "Update Rentman Item",
+  "description": "Updates the details of an existing item based on its type. [See the documentation](https://api.rentman.net)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "rentman-update-item",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "rentman",
+      "type": "app",
+      "app": "rentman"
+    },
+    {
+      "name": "itemType",
+      "type": "string",
+      "label": "Item Type",
+      "description": "The type of item",
+      "options": [
+        {
+          "label": "Appointment",
+          "value": "appointments"
+        },
+        {
+          "label": "Contact Person",
+          "value": "contactpersons"
+        },
+        {
+          "label": "Contact",
+          "value": "contacts"
+        },
+        {
+          "label": "Costs",
+          "value": "costs"
+        },
+        {
+          "label": "Availability",
+          "value": "crewavailability"
+        },
+        {
+          "label": "Payment",
+          "value": "payments"
+        },
+        {
+          "label": "Equipment Rental Request",
+          "value": "projectrequestequipment"
+        },
+        {
+          "label": "Rental Request",
+          "value": "projectrequests"
+        },
+        {
+          "label": "Stock Adjustment",
+          "value": "stockmovements"
+        }
+      ],
+      "reloadProps": true
+    }
+  ]
+}

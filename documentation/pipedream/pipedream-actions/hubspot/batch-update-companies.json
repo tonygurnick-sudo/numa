@@ -1,0 +1,25 @@
+{
+  "name": "Batch Update Companies",
+  "description": "Update a batch of companies in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/objects/companies#post-%2Fcrm%2Fv3%2Fobjects%2Fcompanies%2Fbatch%2Fupdate)",
+  "component_type": "action",
+  "version": "0.0.11",
+  "key": "hubspot-batch-update-companies",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "inputs",
+      "type": "string[]",
+      "label": "Inputs (Companies)",
+      "description": "Provide a **list of companies** to be updated. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/objects/companies#post-%2Fcrm%2Fv3%2Fobjects%2Fcompanies%2Fbatch%2Fupdate) for more information. Example: `[ { \"id\": \"123\", \"properties\": { \"name\": \"CompanyName\"} } ]`"
+    }
+  ]
+}

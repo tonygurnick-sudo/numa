@@ -1,0 +1,42 @@
+{
+  "name": "Remove Card Label",
+  "description": "Removes label from card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-idlabels-idlabel-delete).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-remove-label-from-card",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card",
+      "description": "The ID of the Card to remove the Label from",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "labelId",
+      "type": "string",
+      "label": "Label",
+      "description": "The ID of the Label to be removed from the card.",
+      "remoteOptions": true
+    }
+  ]
+}

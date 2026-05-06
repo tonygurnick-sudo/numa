@@ -1,0 +1,26 @@
+{
+  "name": "List User's Call Logs",
+  "description": "Gets a user's Zoom phone call logs. [See the documentation](https://developers.zoom.us/docs/zoom-phone/apis/#operation/phoneUserCallLogs)",
+  "component_type": "action",
+  "version": "0.0.8",
+  "key": "zoom-list-user-call-logs",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "userId",
+      "type": "string",
+      "label": "User Id",
+      "description": "The user ID or email address of the user.",
+      "remoteOptions": true
+    }
+  ]
+}

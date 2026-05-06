@@ -1,0 +1,98 @@
+{
+  "name": "Send a Video",
+  "description": "Sends a video file to your Telegram Desktop application. [See the docs](https://core.telegram.org/bots/api#sendvideo) for more information",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "telegram_bot_api-send-video",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "telegramBotApi",
+      "type": "app",
+      "app": "telegram_bot_api"
+    },
+    {
+      "name": "chatId",
+      "type": "string",
+      "label": "Chat ID",
+      "description": "Enter the unique identifier for the target chat (e.g. `1035597319`) or username of the target public chat (in the format `@channelusername` or `@supergroupusername`). For example, if the group's public link is `t.me/mygroup`, the username is `@mygroup`."
+    },
+    {
+      "name": "caption",
+      "type": "string",
+      "label": "Caption",
+      "description": "Enter the video caption.",
+      "optional": true
+    },
+    {
+      "name": "filename",
+      "type": "string",
+      "label": "File Name",
+      "description": "Enter a filename.",
+      "optional": true
+    },
+    {
+      "name": "video",
+      "type": "string",
+      "label": "Video",
+      "description": "File to send. Pass a file_id to send a file that exists on the Telegram servers, pass an HTTP URL for Telegram to get a file from the Internet, or pass the path to the file (e.g., `/tmp/myFile.ext`) to upload a new one using a file [downloaded to `/tmp`](https://pipedream.com/docs/workflows/steps/code/nodejs/working-with-files/#download-a-file-to-tmp). File must meet Telegram's [requirements](https://core.telegram.org/bots/api#sending-files) for MIME type and size."
+    },
+    {
+      "name": "contentType",
+      "type": "string",
+      "label": "Content Type",
+      "description": "Select or enter the MIME type of data.",
+      "optional": true,
+      "options": [
+        {
+          "label": "Video - MPEG",
+          "value": "video/mpeg"
+        },
+        {
+          "label": "Video - MP4",
+          "value": "video/mp4"
+        },
+        {
+          "label": "Video - WebM",
+          "value": "video/webm"
+        },
+        {
+          "label": "Video - OGG",
+          "value": "video/ogg"
+        }
+      ]
+    },
+    {
+      "name": "duration",
+      "type": "integer",
+      "label": "Duration",
+      "description": "Enter duration of sent video in seconds.",
+      "optional": true
+    },
+    {
+      "name": "width",
+      "type": "integer",
+      "label": "Width",
+      "description": "Enter the video width.",
+      "optional": true
+    },
+    {
+      "name": "height",
+      "type": "integer",
+      "label": "Height",
+      "description": "Enter the video height.",
+      "optional": true
+    },
+    {
+      "name": "reply_markup",
+      "type": "string",
+      "label": "Reply Markup",
+      "description": "Enter additional interface options that are a JSON-serialized object including an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), a [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove the reply keyboard or instructions to force a reply from the user, e.g. `{\"inline_keyboard\":[[{\"text\":\"Some button text 2\",\"url\":\"https://botpress.org\"}]]}` or `{\"keyboard\":[[\"Yes\",\"No\"],[\"Maybe\"]]}`. Note: keyboard cannot be used with channels. [See the docs](https://core.telegram.org/bots/api#inlinekeyboardmarkup) for more information.",
+      "optional": true
+    }
+  ]
+}

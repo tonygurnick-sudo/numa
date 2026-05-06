@@ -328,6 +328,326 @@ class TestLambdaFunction(unittest.TestCase):
         self.assertEqual(body["error"], "Pipedream API error")
 
 
+class TestTriggerOperationDispatch(unittest.TestCase):
+    """Handler-level dispatch tests for the four trigger lifecycle operations."""
+
+    def setUp(self) -> None:
+        self.mock_context = Mock()
+        self.mock_context.function_name = "pipedream-proxy"
+        self.mock_context.aws_request_id = "test-request-id-123"
+        self.env_vars = {
+            "SECURITY_MAPPING_TABLE": "pipedream-security-mapping",
+            "ALLOWED_ACCOUNTS_TABLE": "pipedream-allowed-accounts",
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:pipedream-credentials",
+            "SUPPORTED_INTEGRATIONS": '["slack", "gmail", "notion"]',
+            "ENVIRONMENT": "test",
+        }
+        self.valid_user = "arcanum_demo_user123"
+        self.valid_sts = "https://sts.us-east-1.amazonaws.com/?Action=GetCallerIdentity"
+
+    def _build_request(self, operation: str, parameters: dict) -> dict:
+        return {
+            "operation": operation,
+            "external_user_id": self.valid_user,
+            "sts_proof_url": self.valid_sts,
+            "parameters": parameters,
+        }
+
+    def _patch_security(self, mock_security_validator: Mock) -> None:
+        instance = Mock()
+        mock_security_validator.return_value = instance
+        instance.validate_request.return_value = {
+            "validated": True,
+            "caller_account_id": "123456789012",
+            "role_name": "arcanum-demo-test_pipedream-relay",
+        }
+
+    @patch("lambda_function.PipedreamOperations")
+    @patch("lambda_function.SecurityValidator")
+    def test_deploy_trigger_happy_path(
+        self, mock_security_validator: Mock, mock_pipedream_ops: Mock
+    ) -> None:
+        """Handler forwards deploy_trigger params to the operation method."""
+        self._patch_security(mock_security_validator)
+        ops_instance = Mock()
+        mock_pipedream_ops.return_value = ops_instance
+        ops_instance.deploy_trigger.return_value = {
+            "id": "dc_xxx",
+            "webhook_signing_key": "abc123",
+        }
+
+        event = self._build_request(
+            "deploy_trigger",
+            {
+                "component_id": "slack-new-keyword-mention",
+                "configured_props": {
+                    "slack": {"authProvisionId": "apn_V1h5BYW"},
+                    "keyword": "numa",
+                },
+                "webhook_url": "https://example.numa.arcanum.ai/api/webhooks/pipedream-events/sec",
+            },
+        )
+
+        with patch.dict(os.environ, self.env_vars):
+            response = lambda_function.handler(event, self.mock_context)
+
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertTrue(body["success"])
+        self.assertEqual(body["data"]["id"], "dc_xxx")
+        ops_instance.deploy_trigger.assert_called_once_with(
+            self.valid_user,
+            "slack-new-keyword-mention",
+            {
+                "slack": {"authProvisionId": "apn_V1h5BYW"},
+                "keyword": "numa",
+            },
+            "https://example.numa.arcanum.ai/api/webhooks/pipedream-events/sec",
+        )
+
+    @patch("lambda_function.PipedreamOperations")
+    @patch("lambda_function.SecurityValidator")
+    def test_deploy_trigger_missing_params(
+        self, mock_security_validator: Mock, _mock_pipedream_ops: Mock
+    ) -> None:
+        """Missing webhook_url or component_id is rejected as 400."""
+        self._patch_security(mock_security_validator)
+
+        event = self._build_request(
+            "deploy_trigger",
+            {"component_id": "slack-new-keyword-mention", "configured_props": {}},
+            # webhook_url missing
+        )
+        with patch.dict(os.environ, self.env_vars):
+            response = lambda_function.handler(event, self.mock_context)
+        self.assertEqual(response["statusCode"], 400)
+
+    @patch("lambda_function.PipedreamOperations")
+    @patch("lambda_function.SecurityValidator")
+    def test_update_deployed_trigger_active_only(
+        self, mock_security_validator: Mock, mock_pipedream_ops: Mock
+    ) -> None:
+        """Pause/resume path: only `active` is set, configured_props omitted."""
+        self._patch_security(mock_security_validator)
+        ops_instance = Mock()
+        mock_pipedream_ops.return_value = ops_instance
+        ops_instance.update_deployed_trigger.return_value = {
+            "id": "dc_xxx",
+            "active": False,
+        }
+
+        event = self._build_request(
+            "update_deployed_trigger",
+            {"deployed_trigger_id": "dc_xxx", "active": False},
+        )
+
+        with patch.dict(os.environ, self.env_vars):
+            response = lambda_function.handler(event, self.mock_context)
+
+        self.assertEqual(response["statusCode"], 200)
+        ops_instance.update_deployed_trigger.assert_called_once_with(
+            self.valid_user,
+            "dc_xxx",
+            configured_props=None,
+            active=False,
+        )
+
+    @patch("lambda_function.PipedreamOperations")
+    @patch("lambda_function.SecurityValidator")
+    def test_update_deployed_trigger_requires_one_field(
+        self, mock_security_validator: Mock, _mock_pipedream_ops: Mock
+    ) -> None:
+        """Update with neither configured_props nor active is rejected."""
+        self._patch_security(mock_security_validator)
+
+        event = self._build_request(
+            "update_deployed_trigger",
+            {"deployed_trigger_id": "dc_xxx"},
+        )
+        with patch.dict(os.environ, self.env_vars):
+            response = lambda_function.handler(event, self.mock_context)
+        self.assertEqual(response["statusCode"], 400)
+
+    @patch("lambda_function.PipedreamOperations")
+    @patch("lambda_function.SecurityValidator")
+    def test_delete_deployed_trigger_happy_path(
+        self, mock_security_validator: Mock, mock_pipedream_ops: Mock
+    ) -> None:
+        """Delete dispatches to the underlying operation."""
+        self._patch_security(mock_security_validator)
+        ops_instance = Mock()
+        mock_pipedream_ops.return_value = ops_instance
+        ops_instance.delete_deployed_trigger.return_value = {
+            "deleted": True,
+            "deployed_trigger_id": "dc_xxx",
+        }
+
+        event = self._build_request(
+            "delete_deployed_trigger", {"deployed_trigger_id": "dc_xxx"}
+        )
+
+        with patch.dict(os.environ, self.env_vars):
+            response = lambda_function.handler(event, self.mock_context)
+
+        self.assertEqual(response["statusCode"], 200)
+        ops_instance.delete_deployed_trigger.assert_called_once_with(
+            self.valid_user, "dc_xxx"
+        )
+
+    @patch("lambda_function.PipedreamOperations")
+    @patch("lambda_function.SecurityValidator")
+    def test_list_triggers_happy_path(
+        self, mock_security_validator: Mock, mock_pipedream_ops: Mock
+    ) -> None:
+        """list_triggers returns the wrapped trigger list."""
+        self._patch_security(mock_security_validator)
+        ops_instance = Mock()
+        mock_pipedream_ops.return_value = ops_instance
+        ops_instance.list_triggers.return_value = [
+            {"key": "slack-new-keyword-mention"},
+        ]
+
+        event = self._build_request("list_triggers", {"app_slug": "slack"})
+
+        with patch.dict(os.environ, self.env_vars):
+            response = lambda_function.handler(event, self.mock_context)
+
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertEqual(len(body["data"]["triggers"]), 1)
+        ops_instance.list_triggers.assert_called_once_with("slack")
+
+
+class TestTriggerOperationsMethods(unittest.TestCase):
+    """Method-level tests for the four PipedreamOperations trigger methods.
+
+    These verify the request shape (URL, headers, body) sent to Pipedream.
+    """
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:test",
+            "SUPPORTED_INTEGRATIONS": '["slack", "gmail"]',
+            "ENVIRONMENT": "test",
+        }
+        env_patcher = patch.dict(os.environ, self.env_vars)
+        env_patcher.start()
+        self.addCleanup(env_patcher.stop)
+        self.ops = PipedreamOperations()
+        self.creds = {
+            "client_id": "test-id",
+            "client_secret": "test-secret",
+            "project_id": "proj_test",
+            "environment": "production",
+        }
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="tok")
+    @patch.object(PipedreamOperations, "get_credentials")
+    @patch("pipedream_operations.requests.post")
+    def test_deploy_trigger_request_shape(
+        self, mock_post: Mock, mock_creds: Mock, _mock_token: Mock
+    ) -> None:
+        mock_creds.return_value = self.creds
+        mock_post.return_value = Mock(
+            status_code=200,
+            json=Mock(
+                return_value={"data": {"id": "dc_abc", "webhook_signing_key": "k"}}
+            ),
+            raise_for_status=Mock(),
+        )
+
+        result = self.ops.deploy_trigger(
+            external_user_id="acme_user1",
+            component_id="slack-new-keyword-mention",
+            configured_props={"keyword": "numa"},
+            webhook_url="https://example.com/hook",
+        )
+
+        mock_post.assert_called_once()
+        call_args = mock_post.call_args
+        self.assertIn("/v1/connect/proj_test/triggers/deploy", call_args[0][0])
+        self.assertEqual(call_args[1]["headers"]["x-pd-environment"], "production")
+        body = call_args[1]["json"]
+        self.assertEqual(body["id"], "slack-new-keyword-mention")
+        self.assertEqual(body["external_user_id"], "acme_user1")
+        self.assertEqual(body["webhook_url"], "https://example.com/hook")
+        self.assertEqual(body["configured_props"], {"keyword": "numa"})
+        self.assertEqual(result["id"], "dc_abc")
+        self.assertEqual(result["webhook_signing_key"], "k")
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="tok")
+    @patch.object(PipedreamOperations, "get_credentials")
+    @patch("pipedream_operations.requests.put")
+    def test_update_deployed_trigger_props_only(
+        self, mock_put: Mock, mock_creds: Mock, _mock_token: Mock
+    ) -> None:
+        mock_creds.return_value = self.creds
+        mock_put.return_value = Mock(
+            status_code=200,
+            json=Mock(return_value={"data": {"id": "dc_abc"}}),
+            raise_for_status=Mock(),
+        )
+
+        self.ops.update_deployed_trigger(
+            external_user_id="acme_user1",
+            deployed_trigger_id="dc_abc",
+            configured_props={"keyword": "newvalue"},
+        )
+
+        mock_put.assert_called_once()
+        call_args = mock_put.call_args
+        self.assertIn("/v1/connect/proj_test/deployed-triggers/dc_abc", call_args[0][0])
+        self.assertEqual(call_args[1]["params"], {"external_user_id": "acme_user1"})
+        body = call_args[1]["json"]
+        # active not sent when not specified
+        self.assertNotIn("active", body)
+        self.assertEqual(body["configured_props"], {"keyword": "newvalue"})
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="tok")
+    @patch.object(PipedreamOperations, "get_credentials")
+    def test_update_deployed_trigger_rejects_no_op(
+        self, mock_creds: Mock, _mock_token: Mock
+    ) -> None:
+        mock_creds.return_value = self.creds
+        with self.assertRaises(ValueError):
+            self.ops.update_deployed_trigger(
+                external_user_id="acme_user1", deployed_trigger_id="dc_abc"
+            )
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="tok")
+    @patch.object(PipedreamOperations, "get_credentials")
+    @patch("pipedream_operations.requests.delete")
+    def test_delete_deployed_trigger_204(
+        self, mock_delete: Mock, mock_creds: Mock, _mock_token: Mock
+    ) -> None:
+        mock_creds.return_value = self.creds
+        mock_delete.return_value = Mock(status_code=204, raise_for_status=Mock())
+
+        result = self.ops.delete_deployed_trigger(
+            external_user_id="acme_user1", deployed_trigger_id="dc_abc"
+        )
+
+        self.assertTrue(result["deleted"])
+        self.assertEqual(result["deployed_trigger_id"], "dc_abc")
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="tok")
+    @patch.object(PipedreamOperations, "get_credentials")
+    @patch("pipedream_operations.requests.delete")
+    def test_delete_deployed_trigger_404_treated_as_success(
+        self, mock_delete: Mock, mock_creds: Mock, _mock_token: Mock
+    ) -> None:
+        """404 means the trigger is already gone — desired end state."""
+        mock_creds.return_value = self.creds
+        mock_delete.return_value = Mock(status_code=404, raise_for_status=Mock())
+
+        result = self.ops.delete_deployed_trigger(
+            external_user_id="acme_user1", deployed_trigger_id="dc_abc"
+        )
+
+        self.assertTrue(result["deleted"])
+        self.assertTrue(result.get("already_gone"))
+
+
 class TestPipedreamOperations(unittest.TestCase):
     """Test cases for PipedreamOperations class."""
 

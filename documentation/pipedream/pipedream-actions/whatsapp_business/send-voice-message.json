@@ -1,0 +1,53 @@
+{
+  "name": "Send Voice Message",
+  "description": "Sends a voice message. [See the documentation](https://developers.facebook.com/docs/whatsapp/cloud-api/messages/audio-messages)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "whatsapp_business-send-voice-message",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "whatsapp",
+      "type": "app",
+      "app": "whatsapp_business"
+    },
+    {
+      "name": "phoneNumberId",
+      "type": "string",
+      "label": "Phone Number ID",
+      "description": "Phone number ID that will be used to send the message.",
+      "remoteOptions": true
+    },
+    {
+      "name": "recipientPhoneNumber",
+      "type": "string",
+      "label": "Recipient Phone Number",
+      "description": "Enter the recipient's phone number. For example, `15101234567`."
+    },
+    {
+      "name": "filePath",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "Provide either a file URL or a path to a file in the /tmp directory (for example, /tmp/myFile.pdf)."
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "description": "The mime-type of media file being uploaded",
+      "options": ["audio/aac", "audio/mp4", "audio/mpeg", "audio/amr", "audio/ogg", "audio/opus"]
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

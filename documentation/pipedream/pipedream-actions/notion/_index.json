@@ -1,0 +1,302 @@
+[
+  {
+    "key": "notion-update-page",
+    "name": "Update Page",
+    "description": "Update a page's property values. To append page content, use the *Append Block* action instead. [See the documentation](https://developers.notion.com/reference/patch-page)",
+    "version": "2.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "notion-update-database",
+    "name": "Update Data Source",
+    "description": "Update a data source. [See the documentation](https://developers.notion.com/reference/update-a-data-source)",
+    "version": "1.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "notion-update-block",
+    "name": "Update Child Block",
+    "description": "Updates a child block object. [See the documentation](https://developers.notion.com/reference/update-a-block)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "notion-send-file-upload",
+    "name": "Send File Upload",
+    "description": "Send a file upload. [See the documentation](https://developers.notion.com/reference/send-a-file-upload)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "notion-search",
+    "name": "Find Pages or Data Sources",
+    "description": "Searches for a page or data source. [See the documentation](https://developers.notion.com/reference/post-search)",
+    "version": "0.1.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "notion-retrieve-user",
+    "name": "Retrieve User",
+    "description": "Returns a user using the ID specified. [See the documentation](https://developers.notion.com/reference/get-user)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "notion-retrieve-page",
+    "name": "Retrieve Page Metadata",
+    "description": "Get details of a page. [See the documentation](https://developers.notion.com/reference/retrieve-a-page)",
+    "version": "0.0.14",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "notion-retrieve-page-property-item",
+    "name": "Retrieve Page Property Item",
+    "description": "Get a Property Item object for a selected page and property. [See the documentation](https://developers.notion.com/reference/retrieve-a-page-property)",
+    "version": "0.0.13",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "notion-retrieve-file-upload",
+    "name": "Retrieve File Upload",
+    "description": "Use this action to retrieve a file upload. [See the documentation](https://developers.notion.com/reference/retrieve-a-file-upload)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "notion-retrieve-database-schema",
+    "name": "Retrieve Data Source Schema",
+    "description": "Get the property schema of a data source in Notion. [See the documentation](https://developers.notion.com/reference/retrieve-a-data-source)",
+    "version": "1.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "notion-retrieve-database-content",
+    "name": "Retrieve Data Source Content",
+    "description": "Get all content of a data source. [See the documentation](https://developers.notion.com/reference/query-a-data-source)",
+    "version": "1.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "notion-retrieve-block",
+    "name": "Retrieve Page Content",
+    "description": "Get page content as block objects or markdown. Blocks can be text, lists, media, a page, among others. [See the documentation](https://developers.notion.com/reference/retrieve-a-block)",
+    "version": "0.2.8",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "notion-query-database",
+    "name": "Query Data Source",
+    "description": "Query a data source with a specified filter. [See the documentation](https://developers.notion.com/reference/query-a-data-source)",
+    "version": "1.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "notion-list-file-uploads",
+    "name": "List File Uploads",
+    "description": "Use this action to list file uploads. [See the documentation](https://developers.notion.com/reference/list-file-uploads)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "notion-list-all-users",
+    "name": "List All Users",
+    "description": "Returns all users in the workspace. [See the documentation](https://developers.notion.com/reference/get-users)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "notion-get-current-user",
+    "name": "Get Current User",
+    "description": "Retrieve the Notion identity tied to the current OAuth token, returning the full `users.retrieve` payload for `me` (person or bot). Includes the user ID, name, avatar URL, type (`person` vs `bot`), and workspace ownership metadata\u2014useful for confirming which workspace is connected, adapting downstream queries, or giving an LLM the context it needs about who is operating inside Notion. [See the documentation](https://developers.notion.com/reference/get-user).",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "notion-duplicate-page",
+    "name": "Duplicate Page",
+    "description": "Create a new page copied from an existing page block. [See the documentation](https://developers.notion.com/reference/post-page)",
+    "version": "0.0.23",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "notion-delete-block",
+    "name": "Delete Block",
+    "description": "Sets a Block object, including page blocks, to archived: true using the ID specified. [See the documentation](https://developers.notion.com/reference/delete-a-block)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "notion-create-page",
+    "name": "Create Page",
+    "description": "Create a page from a parent page. [See the documentation](https://developers.notion.com/reference/post-page)",
+    "version": "0.3.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "notion-create-page-from-database",
+    "name": "Create Page from Data Source",
+    "description": "Create a page from a data source. [See the documentation](https://developers.notion.com/reference/post-page)",
+    "version": "2.0.0",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "notion-create-file-upload",
+    "name": "Create File Upload",
+    "description": "Create a file upload. [See the documentation](https://developers.notion.com/reference/create-a-file-upload)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "notion-create-database",
+    "name": "Create Database",
+    "description": "Create a database and its initial data source. [See the documentation](https://developers.notion.com/reference/database-create)",
+    "version": "0.1.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "notion-create-comment",
+    "name": "Create Comment",
+    "description": "Create a comment in a page or existing discussion thread. [See the documentation](https://developers.notion.com/reference/create-a-comment)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "notion-complete-file-upload",
+    "name": "Complete File Upload",
+    "description": "Use this action to finalize a `mode=multi_part` file upload after all of the parts have been sent successfully. [See the documentation](https://developers.notion.com/reference/complete-a-file-upload)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "notion-append-block",
+    "name": "Append Block to Parent",
+    "description": "Append new and/or existing blocks to the specified parent. [See the documentation](https://developers.notion.com/reference/patch-block-children)",
+    "version": "0.4.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  }
+]

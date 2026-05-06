@@ -1,0 +1,88 @@
+{
+  "name": "Create Event",
+  "description": "Creates an event. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_event.htm)",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "salesforce_rest_api-create-event",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_event.htm) for more information on available fields."
+    },
+    {
+      "name": "dateInfo",
+      "type": "alert",
+      "alertType": "warning",
+      "content": "Date fields should be a [valid date string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date#date_time_string_format) or a Unix timestamp in milliseconds. Example values: `2022-01-15T18:30:00.000Z` or `1642271400000`."
+    },
+    {
+      "name": "AcceptedEventInviteeIds",
+      "type": "string[]",
+      "label": "Accepted Event Invitee IDs",
+      "description": "One or more Contact or Lead IDs who accepted this event.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "ActivityDate",
+      "type": "string",
+      "label": "Due Date / Time",
+      "description": "The date/time (`ActivityDateTime`) of the event, or only the date (`ActivityDate`) if it is an all-day event."
+    },
+    {
+      "name": "Description",
+      "type": "string",
+      "label": "Description",
+      "description": "A text description of the event. Limit: 32,000 characters.",
+      "optional": true
+    },
+    {
+      "name": "DurationInMinutes",
+      "type": "integer",
+      "label": "Duration (in minutes)",
+      "description": "The event length in minutes.",
+      "optional": true
+    },
+    {
+      "name": "EndDateTime",
+      "type": "string",
+      "label": "End Date / Time",
+      "description": "The date/time when the event ends.",
+      "optional": true
+    },
+    {
+      "name": "IsAllDayEvent",
+      "type": "boolean",
+      "label": "All-Day Event",
+      "description": "Whether the event is an all-day event.",
+      "optional": true
+    },
+    {
+      "name": "Location",
+      "type": "string",
+      "label": "Location",
+      "description": "The location of the event.",
+      "optional": true
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

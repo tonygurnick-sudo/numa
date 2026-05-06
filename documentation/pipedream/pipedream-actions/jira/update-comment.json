@@ -1,0 +1,90 @@
+{
+  "name": "Update Comment",
+  "description": "Updates a comment. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-comments/#api-rest-api-3-issue-issueidorkey-comment-id-put)",
+  "component_type": "action",
+  "version": "0.1.17",
+  "key": "jira-update-comment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "jira",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIdOrKey",
+      "type": "string",
+      "label": "Issue ID or Key",
+      "description": "The ID or key of an issue",
+      "remoteOptions": true
+    },
+    {
+      "name": "commentId",
+      "type": "string",
+      "label": "Comment ID",
+      "description": "The ID of the comment",
+      "remoteOptions": true
+    },
+    {
+      "name": "body",
+      "type": "object",
+      "label": "Body",
+      "description": "The comment text in [Atlassian Document Format](https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/), e.g. `{\"type\":\"doc\",\"version\":1,\"content\":[{\"content\":[{\"text\":\"This is a comment\",\"type\":\"text\"}],\"type\":\"paragraph\"}]}`. Will overwrite comment if both comment and body are provided",
+      "optional": true
+    },
+    {
+      "name": "comment",
+      "type": "string",
+      "label": "Comment",
+      "description": "The comment text",
+      "optional": true
+    },
+    {
+      "name": "visibility",
+      "type": "object",
+      "label": "Visibility",
+      "description": "The group or role to which this comment is visible, See `Visibility` section of [doc](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-comments/#api-rest-api-3-issue-issueidorkey-comment-id-put)",
+      "optional": true
+    },
+    {
+      "name": "properties",
+      "type": "string",
+      "label": "Properties",
+      "description": "Details of issue properties to be added or updated. Please provide an array of objects with keys and values.",
+      "optional": true
+    },
+    {
+      "name": "additionalProperties",
+      "type": "object",
+      "label": "Additional properties",
+      "description": "Extra properties of any type may be provided to this object",
+      "optional": true
+    },
+    {
+      "name": "notifyUsers",
+      "type": "boolean",
+      "label": "Notify Users",
+      "description": "Whether users are notified when a comment is updated",
+      "optional": true
+    },
+    {
+      "name": "expand",
+      "type": "string",
+      "label": "Expand",
+      "description": "Use expand to include additional information about comments in the response. This parameter accepts `renderedBody`, which returns the comment body rendered in HTML.",
+      "optional": true
+    }
+  ]
+}

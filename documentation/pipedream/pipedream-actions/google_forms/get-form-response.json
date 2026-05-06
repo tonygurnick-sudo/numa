@@ -1,0 +1,32 @@
+{
+  "name": "Get Form Response",
+  "description": "Get a response from a form. [See the documentation](https://developers.google.com/forms/api/reference/rest/v1/forms.responses/get)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "google_forms-get-form-response",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleForms",
+      "type": "app",
+      "app": "google_forms"
+    },
+    {
+      "name": "formId",
+      "type": "string",
+      "label": "Form ID",
+      "description": "Identifier of a Google Form"
+    },
+    {
+      "name": "formResponseId",
+      "type": "string",
+      "label": "Form Response",
+      "description": "The response ID within the form",
+      "remoteOptions": true
+    }
+  ]
+}

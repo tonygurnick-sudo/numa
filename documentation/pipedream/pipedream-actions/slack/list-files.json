@@ -1,0 +1,58 @@
+{
+  "name": "List Files",
+  "description": "Return a list of files within a team. [See the documentation](https://api.slack.com/methods/files.list)",
+  "component_type": "action",
+  "version": "0.0.52",
+  "key": "slack-list-files",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "conversation",
+      "type": "string",
+      "label": "Channel",
+      "description": "Select a public or private channel, or a user or group",
+      "remoteOptions": true
+    },
+    {
+      "name": "team_id",
+      "type": "string",
+      "label": "Team",
+      "description": "Select a team.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "user",
+      "type": "string",
+      "label": "User",
+      "description": "Select a user",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "pageSize",
+      "type": "integer",
+      "label": "Page Size",
+      "description": "The number of results to include in a page. Default: 250",
+      "default": 250,
+      "optional": true
+    },
+    {
+      "name": "numPages",
+      "type": "integer",
+      "label": "Number of Pages",
+      "description": "The number of pages to retrieve. Default: 1",
+      "default": 1,
+      "optional": true
+    }
+  ]
+}

@@ -759,6 +759,9 @@ export class CoreNumaInfra extends Construct {
         { name: 'event_type', type: 'S' },
         { name: 'agent_id', type: 'S' },
         { name: 'app_id', type: 'S' },
+        // Pipedream-trigger lookup: deployed_trigger_id (dc_xxx) is the only
+        // identifier the receiver lambda has on inbound webhook events.
+        { name: 'deployed_trigger_id', type: 'S' },
       ],
       globalSecondaryIndex: [
         {
@@ -781,6 +784,16 @@ export class CoreNumaInfra extends Construct {
           name: 'app-id-index',
           hashKey: 'app_id',
           projectionType: 'ALL',
+        },
+        {
+          // Used by pipedream-event-receiver to map x-pd-emitter-id → schedule.
+          // INCLUDE projection: just the fields needed for HMAC verify + the
+          // user/schedule identity check. Cheaper than ALL since the receiver
+          // doesn't need cron/agent/notification fields.
+          name: 'deployed-trigger-id-index',
+          hashKey: 'deployed_trigger_id',
+          projectionType: 'INCLUDE',
+          nonKeyAttributes: ['user_id', 'schedule_id', 'trigger', 'status'],
         },
       ],
       pointInTimeRecovery: {

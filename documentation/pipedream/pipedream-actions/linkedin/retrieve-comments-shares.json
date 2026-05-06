@@ -1,0 +1,33 @@
+{
+  "name": "Retrieve Comments On Shares",
+  "description": "Retrieve comments on shares given the share urn. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/network-update-social-actions#retrieve-comments-on-shares)",
+  "component_type": "action",
+  "version": "0.1.11",
+  "key": "linkedin-retrieve-comments-shares",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "entityUrn",
+      "type": "string",
+      "label": "Entity Urn",
+      "description": "Urn of the entity to retreive comments on."
+    },
+    {
+      "name": "max",
+      "type": "integer",
+      "label": "Max",
+      "description": "Maximum number of results to return",
+      "optional": true,
+      "default": 50
+    }
+  ]
+}

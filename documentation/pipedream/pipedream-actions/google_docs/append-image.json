@@ -1,0 +1,41 @@
+{
+  "name": "Append Image to Document",
+  "description": "Appends an image to the end of a document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/request#InsertInlineImageRequest)",
+  "component_type": "action",
+  "version": "0.0.11",
+  "key": "google_docs-append-image",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDocs",
+      "type": "app",
+      "app": "google_docs"
+    },
+    {
+      "name": "docId",
+      "type": "string",
+      "label": "Document",
+      "description": "Search for and select a document. You can also use a custom expression to pass a value from a previous step (e.g., `{{steps.foo.$return_value.documentId}}`) or you can enter a static ID (e.g., `1KuEN7k8jVP3Qi0_svM5OO8oEuiLkq0csihobF67eat8`).",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "imageUri",
+      "type": "string",
+      "label": "Image URL",
+      "description": "The URL of the image you want to insert into the doc"
+    },
+    {
+      "name": "appendAtBeginning",
+      "type": "boolean",
+      "label": "Append at Beginning",
+      "description": "Whether to append at the beginning (`true`) of the document or at the end (`false`). Defaults to `false`",
+      "default": false,
+      "optional": true
+    }
+  ]
+}

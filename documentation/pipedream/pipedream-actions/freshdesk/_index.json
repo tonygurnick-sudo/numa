@@ -1,0 +1,470 @@
+[
+  {
+    "key": "freshdesk-update-ticket",
+    "name": "Update a Ticket",
+    "description": "Update status, priority, subject, description, agent, group, etc.  [See the documentation](https://developers.freshdesk.com/api/#update_ticket).",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 13
+  },
+  {
+    "key": "freshdesk-update-ticket-field",
+    "name": "Update Ticket Field",
+    "description": "Update a ticket field in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#update_ticket_field)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 13
+  },
+  {
+    "key": "freshdesk-update-solution-article",
+    "name": "Update Solution Article",
+    "description": "Update a solution article in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_article_attributes)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "freshdesk-update-contact",
+    "name": "Update Contact",
+    "description": "Update a contact in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#update_contact)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "freshdesk-update-agent",
+    "name": "Update Agent",
+    "description": "Update an agent in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#update_agent)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 13
+  },
+  {
+    "key": "freshdesk-set-ticket-tags",
+    "name": "Set Ticket Tags",
+    "description": "Set tags on a ticket (replaces all existing tags). [See the documentation](https://developers.freshdesk.com/api/#update_ticket)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-set-ticket-status",
+    "name": "Set Ticket Status",
+    "description": "Update the status of a ticket in Freshdesk  [See the documentation](https://developers.freshdesk.com/api/#update_ticket).",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-set-ticket-priority",
+    "name": "Set Ticket Priority",
+    "description": "Update the priority of a ticket in Freshdesk  [See the documentation](https://developers.freshdesk.com/api/#update_ticket).",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-remove-ticket-tags",
+    "name": "Remove Ticket Tags",
+    "description": "Remove specific tags from a ticket. [See the documentation](https://developers.freshdesk.com/api/#update_ticket)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-list-ticket-fields",
+    "name": "List Ticket Fields",
+    "description": "List all ticket fields in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#list_all_ticket_fields)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "freshdesk-list-ticket-conversations",
+    "name": "List Conversations of a Ticket",
+    "description": "List all conversations for a ticket. [See the documentation](https://developers.freshdesk.com/api/#list_all_ticket_notes)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-list-solution-categories",
+    "name": "List Solution Categories",
+    "description": "List solution categories in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_category_attributes)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "freshdesk-list-folder-canned-responses",
+    "name": "List All Canned Responses In A Folder",
+    "description": "View all canned responses in a folder. [See the documentation](https://developers.freshdesk.com/api/#list_all_canned_responses_in_a_folder)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "freshdesk-list-folder-articles",
+    "name": "List Folder Articles",
+    "description": "List folder articles in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_article_attributes)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "freshdesk-list-category-folders",
+    "name": "List Category Folders",
+    "description": "List category folders in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_folder_attributes)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "freshdesk-list-all-tickets",
+    "name": "List Tickets",
+    "description": "Fetch up to 100 tickets according to the selected filters. [See the documentation](https://developers.freshdesk.com/api/#list_all_tickets)",
+    "version": "0.2.8",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-list-all-folders",
+    "name": "List All Folders",
+    "description": "View all the canned response folders. [See the documentation](https://developers.freshdesk.com/api/#list_all_canned_response_folders)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "freshdesk-list-agents",
+    "name": "List Agents",
+    "description": "List all agents in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#list_all_agents)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "freshdesk-get-ticket",
+    "name": "Get Ticket Details",
+    "description": "Get details of a Ticket. [See the documentation](https://developers.freshdesk.com/api/#view_a_ticket)",
+    "version": "0.1.9",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-get-solution-article",
+    "name": "Get Solution Article",
+    "description": "Get a solution article in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_article_attributes)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "freshdesk-get-folder-canned-responses",
+    "name": "Get Canned Responses In A Folder",
+    "description": "View all the details of canned responses in a folder. [See the documentation](https://developers.freshdesk.com/api/#get_details_of_canned_responses_in_a_folder)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-get-contact",
+    "name": "Get Contact",
+    "description": "Get a contact from Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#view_contact)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "freshdesk-get-canned-response",
+    "name": "Get Canned Response",
+    "description": "View a Canned Response. [See the documentation](https://developers.freshdesk.com/api/#view_a_canned_response)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-download-attachment",
+    "name": "Download Attachment",
+    "description": "Download an attachment from a ticket. [See the documentation](https://developers.freshdesk.com/api/#view_a_ticket)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "freshdesk-delete-solution-article",
+    "name": "Delete Solution Article",
+    "description": "Delete a solution article in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_article_attributes)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "freshdesk-create-ticket",
+    "name": "Create a Ticket",
+    "description": "Create a ticket. [See the documentation](https://developers.freshdesk.com/api/#create_ticket)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "freshdesk-create-ticket-field",
+    "name": "Create Ticket Field",
+    "description": "Create a ticket field in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#create_ticket_field)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 13
+  },
+  {
+    "key": "freshdesk-create-thread",
+    "name": "Create a Thread",
+    "description": "Create a thread to a ticket. [See the documentation](https://developers.freshdesk.com/api/#create_a_thread).",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "freshdesk-create-solution-article",
+    "name": "Create Solution Article",
+    "description": "Create a solution article in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_article_attributes)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "freshdesk-create-reply",
+    "name": "Create a Reply",
+    "description": "Create a reply to a ticket. [See the documentation](https://developers.freshdesk.com/api/#reply_ticket).",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "freshdesk-create-message-for-thread",
+    "name": "Create Message For Thread",
+    "description": "Create message for a thread. [See the documentation](https://developers.freshdesk.com/api/#create_message_for_thread).",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "freshdesk-create-contact",
+    "name": "Create a Contact",
+    "description": "Create a contact. [See the documentation](https://developers.freshdesk.com/api/#create_contact)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "freshdesk-create-company",
+    "name": "Create a Company",
+    "description": "Create a company. [See the documentation](https://developers.freshdesk.com/api/#create_company)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "freshdesk-create-agent",
+    "name": "Create Agent",
+    "description": "Create an agent in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#create_agent)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "freshdesk-close-ticket",
+    "name": "Close Ticket",
+    "description": "Set a Freshdesk ticket's status to 'Closed'. [See docs](https://developers.freshdesk.com/api/#update_a_ticket)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "freshdesk-assign-ticket-to-group",
+    "name": "Assign Ticket to Group",
+    "description": "Assign a Freshdesk ticket to a specific group [See the documentation](https://developers.freshdesk.com/api/#update_ticket).",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-assign-ticket-to-agent",
+    "name": "Assign Ticket to Agent",
+    "description": "Assign a Freshdesk ticket to a specific agent. [See the documentation](https://developers.freshdesk.com/api/#update_ticket).",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-add-ticket-tags",
+    "name": "Add Ticket Tags",
+    "description": "Add tags to a ticket (appends to existing tags). [See the documentation](https://developers.freshdesk.com/api/#update_ticket)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "freshdesk-add-note-to-ticket",
+    "name": "Add Note to Ticket",
+    "description": "Add a note or conversation to an existing ticket. [See the documentation](https://developers.freshdesk.com/api/#add_note_to_a_ticket).",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  }
+]

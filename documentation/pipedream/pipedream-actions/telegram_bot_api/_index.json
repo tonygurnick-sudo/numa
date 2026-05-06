@@ -1,0 +1,314 @@
+[
+  {
+    "key": "telegram_bot_api-unpin-message",
+    "name": "Unpin a Message",
+    "description": "Unpins a message. [See the docs](https://core.telegram.org/bots/api#unpinchatmessage) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "telegram_bot_api-set-chat-permissions",
+    "name": "Set Chat Permissions",
+    "description": "Set default chat permissions for all members. [See the docs](https://core.telegram.org/bots/api#setchatpermissions) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "telegram_bot_api-send-voice-message",
+    "name": "Send a Voice Message",
+    "description": "Sends a voice message. [See the docs](https://core.telegram.org/bots/api#sendvoice) for more information",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "telegram_bot_api-send-video",
+    "name": "Send a Video",
+    "description": "Sends a video file to your Telegram Desktop application. [See the docs](https://core.telegram.org/bots/api#sendvideo) for more information",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "telegram_bot_api-send-video-note",
+    "name": "Send a Video Note",
+    "description": "As of v.4.0, Telegram clients support rounded square mp4 videos of up to 1 minute long. Use this method to send video messages. [See the docs](https://core.telegram.org/bots/api#sendvideonote) for more information",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "telegram_bot_api-send-text-message-or-reply",
+    "name": "Send a Text Message or Reply",
+    "description": "Sends a text message or a reply to your Telegram Desktop application. [See the docs](https://core.telegram.org/bots/api#sendmessage) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "telegram_bot_api-send-sticker",
+    "name": "Send a Sticker",
+    "description": "Sends a .webp sticker to you Telegram Desktop application. [See the docs](https://core.telegram.org/bots/api#sendsticker) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "telegram_bot_api-send-photo",
+    "name": "Send a Photo",
+    "description": "Sends a photo to your Telegram Desktop application. [See the docs](https://core.telegram.org/bots/api#sendphoto) for more information",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "telegram_bot_api-send-media-by-url-or-id",
+    "name": "Send Media by URL or ID",
+    "description": "Sends a file (document, photo, video, audio, ...) by HTTP URL or by ID that exists on the Telegram servers. [See the docs](https://core.telegram.org/bots/api#inputmedia) for more information",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "telegram_bot_api-send-document-or-image",
+    "name": "Send a Document/Image",
+    "description": "Sends a document or an image to your Telegram Desktop application. [See the docs](https://core.telegram.org/bots/api#senddocument) for more information",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "telegram_bot_api-send-audio-file",
+    "name": "Send an Audio File",
+    "description": "Sends an audio file to your Telegram Desktop application. [See the docs](https://core.telegram.org/bots/api#sendaudio) for more information",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "telegram_bot_api-send-album",
+    "name": "Send an Album (Media Group)",
+    "description": "Sends a group of photos or videos as an album. [See the docs](https://core.telegram.org/bots/api#sendmediagroup) for more information",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "telegram_bot_api-restrict-chat-member",
+    "name": "Restrict a Chat Member",
+    "description": "Use this method to restrict a user in a supergroup. [See the docs](https://core.telegram.org/bots/api#restrictchatmember) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "telegram_bot_api-promote-chat-member",
+    "name": "Promote a Chat Member",
+    "description": "Use this method to promote or demote a user in a supergroup or a channel. [See the docs](https://core.telegram.org/bots/api#promotechatmember) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "telegram_bot_api-pin-message",
+    "name": "Pin a Message",
+    "description": "Pins a message. [See the docs](https://core.telegram.org/bots/api#pinchatmessage) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "telegram_bot_api-list-updates",
+    "name": "List Updates",
+    "description": "Retrieves a list of updates from the Telegram server. [See the docs](https://core.telegram.org/bots/api#getupdates) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "telegram_bot_api-list-chats",
+    "name": "List Chats",
+    "description": "List available Telegram chats. [See the docs](https://core.telegram.org/bots/api#getupdates) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "telegram_bot_api-list-administrators-in-chat",
+    "name": "List Administrators In Chat",
+    "description": "Use this module to get a list of administrators in a chat. [See the docs](https://core.telegram.org/bots/api#getchatadministrators) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "telegram_bot_api-kick-chat-member",
+    "name": "Kick a Chat Member",
+    "description": "Use this method to kick a user from a group, a supergroup or channel. [See the docs](https://core.telegram.org/bots/api#banchatmember) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "telegram_bot_api-get-num-members-in-chat",
+    "name": "Get the Number of Members in a Chat",
+    "description": "Use this module to get the number of members in a chat. [See the docs](https://core.telegram.org/bots/api#getchatmembercount) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "telegram_bot_api-forward-message",
+    "name": "Forward a Message",
+    "description": "Forwards messages of any kind. [See the docs](https://core.telegram.org/bots/api#forwardmessage) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "telegram_bot_api-export-chat-invite-link",
+    "name": "Export Chat Invite Link",
+    "description": "Generate a new primary invite link for a chat, [See the docs](https://core.telegram.org/bots/api#createchatinvitelink) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "telegram_bot_api-edit-text-message",
+    "name": "Edit a Text Message",
+    "description": "Edits text or game messages. [See the docs](https://core.telegram.org/bots/api#editmessagetext) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "telegram_bot_api-edit-media-message",
+    "name": "Edit a Media Message",
+    "description": "Edits photo or video messages. [See the docs](https://core.telegram.org/bots/api#editmessagemedia) for more information",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "telegram_bot_api-delete-message",
+    "name": "Delete a Message",
+    "description": "Deletes a message. [See the docs](https://core.telegram.org/bots/api#deletemessage) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "telegram_bot_api-create-chat-invite-link",
+    "name": "Create Chat Invite Link",
+    "description": "Create an additional invite link for a chat, [See the docs](https://core.telegram.org/bots/api#createchatinvitelink) for more information",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  }
+]

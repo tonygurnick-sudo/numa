@@ -1,0 +1,59 @@
+{
+  "name": "Create Image Post (User)",
+  "description": "Create an image post on LinkedIn. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/images-api?view=li-lms-2023-09&tabs=http#uploading-an-image)",
+  "component_type": "action",
+  "version": "1.0.6",
+  "key": "linkedin-create-image-post-user",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "file",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "The path or URL of the image file to post."
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "description": "Text to be posted on LinkedIn timeline"
+    },
+    {
+      "name": "visibility",
+      "type": "string",
+      "label": "Visibility",
+      "description": "Visibility restrictions on content",
+      "options": [
+        {
+          "label": "Only my connections",
+          "value": "CONNECTIONS"
+        },
+        {
+          "label": "Public",
+          "value": "PUBLIC"
+        },
+        {
+          "label": "Logged-in users only",
+          "value": "LOGGED_IN"
+        }
+      ]
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

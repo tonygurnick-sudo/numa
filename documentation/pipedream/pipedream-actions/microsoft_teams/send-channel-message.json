@@ -1,0 +1,49 @@
+{
+  "name": "Send Channel Message",
+  "description": "Send a message to a team&#39;s channel. [See the docs here](https://docs.microsoft.com/en-us/graph/api/channel-post-messages?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.12",
+  "key": "microsoft_teams-send-channel-message",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftTeams",
+      "type": "app",
+      "app": "microsoft_teams",
+      "description": "**Personal accounts are not currently supported by Microsoft Teams.** Refer to Microsoft's documentation [here](https://learn.microsoft.com/en-us/graph/permissions-reference#remarks-7) to learn more."
+    },
+    {
+      "name": "teamId",
+      "type": "string",
+      "label": "Team",
+      "description": "Microsoft Team",
+      "remoteOptions": true
+    },
+    {
+      "name": "channelId",
+      "type": "string",
+      "label": "Channel",
+      "description": "Team Channel",
+      "remoteOptions": true
+    },
+    {
+      "name": "message",
+      "type": "string",
+      "label": "Message",
+      "description": "Message to be sent"
+    },
+    {
+      "name": "contentType",
+      "type": "string",
+      "label": "Content Type",
+      "description": "Text message or HTML message",
+      "optional": true,
+      "default": "text",
+      "options": ["text", "html"]
+    }
+  ]
+}

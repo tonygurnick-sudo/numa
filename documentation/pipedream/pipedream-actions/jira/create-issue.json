@@ -1,0 +1,78 @@
+{
+  "name": "Create Issue",
+  "description": "Creates an issue or, where the option to create subtasks is enabled in Jira, a subtask. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-post)",
+  "component_type": "action",
+  "version": "0.1.28",
+  "key": "jira-create-issue",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "historyMetadata",
+      "type": "object",
+      "label": "History Metadata",
+      "description": "Additional issue history details",
+      "optional": true
+    },
+    {
+      "name": "properties",
+      "type": "string",
+      "label": "Properties",
+      "description": "Details of issue properties to be added or updated. Please provide an array of objects with keys and values.",
+      "optional": true
+    },
+    {
+      "name": "update",
+      "type": "object",
+      "label": "Update",
+      "description": "A Map containing the field name and a list of operations to perform on the issue screen field. Note that fields included here cannot be included in `fields`.",
+      "optional": true
+    },
+    {
+      "name": "additionalProperties",
+      "type": "object",
+      "label": "Additional properties",
+      "description": "Extra properties of any type may be provided to this object",
+      "optional": true
+    },
+    {
+      "name": "updateHistory",
+      "type": "boolean",
+      "label": "Update History",
+      "description": "Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira",
+      "optional": true
+    },
+    {
+      "name": "projectId",
+      "type": "string",
+      "label": "Project ID",
+      "description": "The project ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "issueTypeId",
+      "type": "string",
+      "label": "Issue Type",
+      "description": "An ID identifying the type of issue. [Check the API docs](https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-issue-post) to see available options",
+      "remoteOptions": true,
+      "reloadProps": true
+    }
+  ]
+}

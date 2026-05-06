@@ -1,0 +1,41 @@
+{
+  "name": "Update Row",
+  "description": "Updates a row in a sheet. [See docs here](https://smartsheet.redoc.ly/tag/rows#operation/update-rows)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "smartsheet-update-row",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "smartsheet",
+      "type": "app",
+      "app": "smartsheet"
+    },
+    {
+      "name": "sheetId",
+      "type": "integer",
+      "label": "Sheet",
+      "description": "Select a sheet",
+      "remoteOptions": true
+    },
+    {
+      "name": "rowId",
+      "type": "integer",
+      "label": "Row",
+      "description": "Identifier of a row in a sheet",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "cells",
+      "type": "string[]",
+      "label": "Cells",
+      "description": "Array of objects representing cell values. Use to manually update row when `sheetId` is entered as a custom expression. Example: `{{ [{\"columnId\": 7960873114331012,\"value\": \"New status\"}] }}`",
+      "optional": true
+    }
+  ]
+}

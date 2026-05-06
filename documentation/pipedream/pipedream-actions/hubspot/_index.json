@@ -1,0 +1,758 @@
+[
+  {
+    "key": "hubspot-update-page",
+    "name": "Update Page",
+    "description": "Update a page in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/pages#patch-%2Fcms%2Fv3%2Fpages%2Fsite-pages%2F%7Bobjectid%7D)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 17
+  },
+  {
+    "key": "hubspot-update-lead",
+    "name": "Update Lead",
+    "description": "Update a lead in Hubspot. [See the documentation](https://developers.hubspot.com/beta-docs/guides/api/crm/objects/leads#update-leads)",
+    "version": "0.0.21",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-update-landing-page",
+    "name": "Update Landing Page",
+    "description": "Update a landing page in HubSpot. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/pages#patch-%2Fcms%2Fv3%2Fpages%2Flanding-pages%2F%7Bobjectid%7D)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 18
+  },
+  {
+    "key": "hubspot-update-fields-on-the-form",
+    "name": "Update Fields on the Form",
+    "description": "Update some of the form definition components. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/forms#patch-%2Fmarketing%2Fv3%2Fforms%2F%7Bformid%7D)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 36
+  },
+  {
+    "key": "hubspot-update-deal",
+    "name": "Update Deal",
+    "description": "Update a deal in Hubspot. [See the documentation](https://developers.hubspot.com/beta-docs/guides/api/crm/objects/deals#update-deals)",
+    "version": "0.0.20",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-update-custom-object",
+    "name": "Update Custom Object",
+    "description": "Update a custom object in Hubspot. [See the documentation](https://developers.hubspot.com/beta-docs/guides/api/crm/objects/custom-objects#update-existing-custom-objects)",
+    "version": "1.0.15",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "hubspot-update-contact",
+    "name": "Update Contact",
+    "description": "Update a contact in Hubspot. [See the documentation](https://developers.hubspot.com/docs/api/crm/contacts#endpoint?spec=POST-/crm/v3/objects/contacts)",
+    "version": "0.0.30",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-update-company",
+    "name": "Update Company",
+    "description": "Update a company in Hubspot. [See the documentation](https://developers.hubspot.com/docs/api/crm/companies)",
+    "version": "0.0.29",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-send-message",
+    "name": "Send Message",
+    "description": "Sends a message to a thread. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-message/post-conversations-v3-conversations-threads-threadId-messages)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "hubspot-search-crm",
+    "name": "Search CRM",
+    "description": "Search companies, contacts, deals, feedback submissions, products, tickets, line-items, quotes, leads, or custom objects. [See the documentation](https://developers.hubspot.com/docs/api/crm/search)",
+    "version": "1.1.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "hubspot-retrieve-workflows",
+    "name": "Retrieve Workflows",
+    "description": "Retrieve a list of all workflows. [See the documentation](https://developers.hubspot.com/docs/api-reference/legacy/create-manage-workflows-v3/get-automation-v3-workflows)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "hubspot-retrieve-workflow-emails",
+    "name": "Retrieve Workflow Emails",
+    "description": "Retrieve emails sent by a workflow by ID. [See the documentation](https://developers.hubspot.com/docs/api-reference/automation-automation-v4-v4/email-campaigns/get-automation-v4-flows-email-campaigns)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "hubspot-retrieve-workflow-details",
+    "name": "Retrieve Workflow Details",
+    "description": "Retrieve detailed information about a specific workflow. [See the documentation](https://developers.hubspot.com/docs/api-reference/legacy/create-manage-workflows-v3/get-automation-v3-workflows-workflowId)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-retrieve-migrated-workflow-mappings",
+    "name": "Retrieve Migrated Workflow Mappings",
+    "description": "Retrieve the IDs of v3 workflows that have been migrated to the v4 API. [See the documentation](https://developers.hubspot.com/docs/api-reference/automation-automation-v4-v4/workflow-id-mappings/post-automation-v4-workflow-id-mappings-batch-read)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-list-threads",
+    "name": "List Threads",
+    "description": "Retrieves a list of threads. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-thread/get-conversations-v3-conversations-threads)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "hubspot-list-templates",
+    "name": "List Templates",
+    "description": "Retrieves a list of templates. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/templates)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-list-pages",
+    "name": "List Pages",
+    "description": "Retrieves a list of site pages. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/pages)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "hubspot-list-messages",
+    "name": "List Messages",
+    "description": "Retrieves a list of messages in a thread. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-message/get-conversations-v3-conversations-threads-threadId-messages)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "hubspot-list-marketing-events",
+    "name": "List Marketing Events",
+    "description": "Retrieves a list of marketing events. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/marketing-events#get-%2Fmarketing%2Fv3%2Fmarketing-events%2F)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-list-marketing-emails",
+    "name": "List Marketing Emails",
+    "description": "Retrieves a list of marketing emails. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#get-%2Fmarketing%2Fv3%2Femails%2F)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "hubspot-list-inboxes",
+    "name": "List Inboxes",
+    "description": "Retrieves a list of inboxes. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-inbox/get-conversations-v3-conversations-inboxes)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-list-forms",
+    "name": "List Forms",
+    "description": "Retrieves a list of forms. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/forms#get-%2Fmarketing%2Fv3%2Fforms%2F)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-list-channels",
+    "name": "List Channels",
+    "description": "Retrieves a list of channels. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-channel/get-conversations-v3-conversations-channels)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-list-campaigns",
+    "name": "List Campaigns",
+    "description": "Retrieves a list of campaigns. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/campaigns#get-%2Fmarketing%2Fv3%2Fcampaigns%2F)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-list-blog-posts",
+    "name": "List Blog Posts",
+    "description": "Retrieves a list of blog posts. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/blogs/blog-posts)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "hubspot-get-subscription-preferences",
+    "name": "Get Subscription Preferences",
+    "description": "Retrieves the subscription preferences for a contact. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/subscriptions#get-%2Fcommunication-preferences%2Fv4%2Fstatuses%2F%7Bsubscriberidstring%7D)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-get-meeting",
+    "name": "Get Meeting",
+    "description": "Retrieves a specific meeting by its ID. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/engagements/meetings#get-%2Fcrm%2Fv3%2Fobjects%2Fmeetings%2F%7Bmeetingid%7D)",
+    "version": "0.0.13",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-get-inbox",
+    "name": "Get Inbox",
+    "description": "Retrieves a single inbox by its ID. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-inbox/get-conversations-v3-conversations-inboxes-inboxId)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-get-file-public-url",
+    "name": "Get File Public URL",
+    "description": "Get a publicly available URL for a file that was uploaded using a Hubspot form. [See the documentation](https://developers.hubspot.com/docs/api/files/files#endpoint?spec=GET-/files/v3/files/{fileId}/signed-url)",
+    "version": "0.0.28",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-get-deal",
+    "name": "Get Deal",
+    "description": "Gets a deal. [See the documentation](https://developers.hubspot.com/docs/api/crm/deals#endpoint?spec=GET-/crm/v3/objects/deals/{dealId})",
+    "version": "0.0.28",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-get-contact",
+    "name": "Get Contact",
+    "description": "Gets a contact. [See the documentation](https://developers.hubspot.com/docs/api/crm/contacts#endpoint?spec=GET-/crm/v3/objects/contacts/{contactId})",
+    "version": "0.0.28",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-get-company",
+    "name": "Get Company",
+    "description": "Gets a company. [See the documentation](https://developers.hubspot.com/docs/api/crm/companies#endpoint?spec=GET-/crm/v3/objects/companies/{companyId})",
+    "version": "0.0.28",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-get-channel",
+    "name": "Get Channel",
+    "description": "Retrieves a single channel by its ID. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-channel/get-conversations-v3-conversations-channels-channelId)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-get-associated-meetings",
+    "name": "Get Associated Meetings",
+    "description": "Retrieves meetings associated with a specific object (contact, company, or deal) with optional time filtering. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/associations/association-details#get-%2Fcrm%2Fv4%2Fobjects%2F%7Bobjecttype%7D%2F%7Bobjectid%7D%2Fassociations%2F%7Btoobjecttype%7D)",
+    "version": "0.0.13",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "hubspot-get-associated-emails",
+    "name": "Get Associated Emails",
+    "description": "Retrieves emails associated with a specific object (contact, company, or deal). [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/search)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "hubspot-enroll-contact-into-workflow",
+    "name": "Enroll Contact Into Workflow",
+    "description": "Add a contact to a workflow. Note: The Workflows API currently only supports contact-based workflows and is only available for Marketing Hub Enterprise accounts. [See the documentation](https://legacydocs.hubspot.com/docs/methods/workflows/add_contact)",
+    "version": "0.0.28",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-delete-workflow",
+    "name": "Delete a Workflow",
+    "description": "Delete a workflow by ID. [See the documentation](https://developers.hubspot.com/docs/api-reference/legacy/create-manage-workflows-v3/delete-automation-v3-workflows-workflowId)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-create-workflow",
+    "name": "Create a New Workflow",
+    "description": "Create a new workflow. [See the documentation](https://developers.hubspot.com/docs/api-reference/legacy/create-manage-workflows-v3/post-automation-v3-workflows)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-create-ticket",
+    "name": "Create Ticket",
+    "description": "Create a ticket in Hubspot. [See the documentation](https://developers.hubspot.com/docs/api/crm/tickets)",
+    "version": "0.0.24",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "hubspot-create-task",
+    "name": "Create Task",
+    "description": "Create a new task. [See the documentation](https://developers.hubspot.com/docs/api/crm/engagements)",
+    "version": "0.0.13",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "hubspot-create-page",
+    "name": "Create Page",
+    "description": "Create a page in HubSpot. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/pages#post-%2Fcms%2Fv3%2Fpages%2Fsite-pages)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 16
+  },
+  {
+    "key": "hubspot-create-or-update-contact",
+    "name": "Create or Update Contact",
+    "description": "Create or update a contact in Hubspot. [See the documentation](https://developers.hubspot.com/docs/api/crm/contacts#endpoint?spec=POST-/crm/v3/objects/contacts)",
+    "version": "0.0.31",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-create-note",
+    "name": "Create Note",
+    "description": "Create a new note. [See the documentation](https://developers.hubspot.com/docs/api/crm/engagements)",
+    "version": "0.0.12",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-create-meeting",
+    "name": "Create Meeting",
+    "description": "Creates a new meeting with optional associations to other objects. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/engagements/meetings#post-%2Fcrm%2Fv3%2Fobjects%2Fmeetings)",
+    "version": "0.0.13",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "hubspot-create-lead",
+    "name": "Create Lead",
+    "description": "Create a lead in Hubspot. [See the documentation](https://developers.hubspot.com/beta-docs/guides/api/crm/objects/leads#create-leads)",
+    "version": "0.0.21",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-create-landing-page",
+    "name": "Create Landing Page",
+    "description": "Create a landing page in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/pages#post-%2Fcms%2Fv3%2Fpages%2Flanding-pages)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 17
+  },
+  {
+    "key": "hubspot-create-form",
+    "name": "Create Form",
+    "description": "Create a form in HubSpot. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/forms#post-%2Fmarketing%2Fv3%2Fforms%2F)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 35
+  },
+  {
+    "key": "hubspot-create-engagement",
+    "name": "Create Engagement",
+    "description": "Create a new engagement for a contact. [See the documentation](https://developers.hubspot.com/docs/api/crm/engagements)",
+    "version": "0.0.31",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "hubspot-create-email",
+    "name": "Create Marketing Email",
+    "description": "Create a marketing email in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#post-%2Fmarketing%2Fv3%2Femails%2F)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 19
+  },
+  {
+    "key": "hubspot-create-deal",
+    "name": "Create Deal",
+    "description": "Create a deal in Hubspot. [See the documentation](https://developers.hubspot.com/docs/api/crm/deals#endpoint?spec=POST-/crm/v3/objects/deals)",
+    "version": "0.0.33",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "hubspot-create-custom-object",
+    "name": "Create Custom Object",
+    "description": "Create a new custom object in Hubspot. [See the documentation](https://developers.hubspot.com/beta-docs/guides/api/crm/objects/custom-objects#create-a-custom-object)",
+    "version": "1.0.15",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-create-contact-workflow",
+    "name": "Create Contact Workflow",
+    "description": "Create a contact workflow in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/automation/create-manage-workflows#post-%2Fautomation%2Fv4%2Fflows)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 19
+  },
+  {
+    "key": "hubspot-create-company",
+    "name": "Create Company",
+    "description": "Create a company in Hubspot. [See the documentation](https://developers.hubspot.com/docs/api/crm/companies#endpoint?spec=POST-/crm/v3/objects/companies)",
+    "version": "0.0.33",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-create-communication",
+    "name": "Create Communication",
+    "description": "Create a WhatsApp, LinkedIn, or SMS message. [See the documentation](https://developers.hubspot.com/beta-docs/reference/api/crm/engagements/communications/v3#post-%2Fcrm%2Fv3%2Fobjects%2Fcommunications)",
+    "version": "0.0.21",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "hubspot-create-associations",
+    "name": "Create Associations",
+    "description": "Create associations between objects. [See the documentation](https://developers.hubspot.com/docs/api/crm/associations#endpoint?spec=POST-/crm/v3/associations/{fromObjectType}/{toObjectType}/batch/create)",
+    "version": "1.0.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "hubspot-clone-site-page",
+    "name": "Clone Site Page",
+    "description": "Clone a site page in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/pages#post-%2Fcms%2Fv3%2Fpages%2Fsite-pages%2Fclone)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-clone-email",
+    "name": "Clone Marketing Email",
+    "description": "Clone a marketing email in HubSpot. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#post-%2Fmarketing%2Fv3%2Femails%2Fclone)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "hubspot-batch-upsert-companies",
+    "name": "Batch Upsert Companies",
+    "description": "Upsert a batch of companies in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/objects/companies#post-%2Fcrm%2Fv3%2Fobjects%2Fcompanies%2Fbatch%2Fupsert)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-batch-update-companies",
+    "name": "Batch Update Companies",
+    "description": "Update a batch of companies in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/objects/companies#post-%2Fcrm%2Fv3%2Fobjects%2Fcompanies%2Fbatch%2Fupdate)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-batch-create-or-update-contact",
+    "name": "Batch Create or Update Contact",
+    "description": "Create or update a batch of contacts by its ID or email. [See the documentation](https://developers.hubspot.com/docs/api/crm/contacts)",
+    "version": "0.0.25",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-batch-create-companies",
+    "name": "Batch Create Companies",
+    "description": "Create a batch of companies in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/objects/companies#post-%2Fcrm%2Fv3%2Fobjects%2Fcompanies%2Fbatch%2Fcreate)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "hubspot-add-contact-to-list",
+    "name": "Add Contact to List",
+    "description": "Adds a contact to a specific static list. [See the documentation](https://legacydocs.hubspot.com/docs/methods/lists/add_contact_to_list)",
+    "version": "0.0.28",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "hubspot-add-comment",
+    "name": "Add Comment",
+    "description": "Adds a comment to a thread. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-message/post-conversations-v3-conversations-threads-threadId-messages)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  }
+]

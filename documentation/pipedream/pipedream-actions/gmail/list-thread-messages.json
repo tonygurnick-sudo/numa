@@ -1,0 +1,26 @@
+{
+  "name": "List Thread Messages",
+  "description": "List messages in a thread. [See the docs](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/get)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "gmail-list-thread-messages",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "threadId",
+      "type": "string",
+      "label": "Thread ID",
+      "description": "Identifier of the thread to list messages from",
+      "remoteOptions": true
+    }
+  ]
+}

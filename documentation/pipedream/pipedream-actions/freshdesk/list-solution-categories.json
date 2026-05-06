@@ -1,0 +1,19 @@
+{
+  "name": "List Solution Categories",
+  "description": "List solution categories in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_category_attributes)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "freshdesk-list-solution-categories",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    }
+  ]
+}

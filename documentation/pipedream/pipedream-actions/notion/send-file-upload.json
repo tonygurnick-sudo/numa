@@ -1,0 +1,39 @@
+{
+  "name": "Send File Upload",
+  "description": "Send a file upload. [See the documentation](https://developers.notion.com/reference/send-a-file-upload)",
+  "component_type": "action",
+  "version": "0.0.8",
+  "key": "notion-send-file-upload",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "fileUploadId",
+      "type": "string",
+      "label": "File Upload ID",
+      "description": "The ID of the file upload to send.",
+      "remoteOptions": true
+    },
+    {
+      "name": "file",
+      "type": "string",
+      "label": "Image File Path or URL",
+      "description": "The image to process. Provide either a file URL or a path to a file in the `/tmp` directory (for example, `/tmp/myImage.jpg`)."
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true
+    }
+  ],
+  "stash": "required"
+}

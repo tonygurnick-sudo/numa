@@ -34,6 +34,12 @@ SUPPORTED_OPERATIONS = [
     "configure_props",
     "proxy_request",
     "batch_get_schemas",
+    # Trigger lifecycle (Pipedream Connect Triggers API)
+    "list_triggers",
+    "deploy_trigger",
+    "update_deployed_trigger",
+    "delete_deployed_trigger",
+    "list_deployed_triggers",
 ]
 
 
@@ -237,6 +243,66 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                     400, "batch_get_schemas requires app_slugs parameter"
                 )
             result = _batch_get_schemas(app_slugs)
+
+        elif operation == "list_triggers":
+            app_slug = parameters.get("app_slug")
+            if not app_slug:
+                return _error_response(
+                    400, "list_triggers operation requires app_slug parameter"
+                )
+            result = {"triggers": pipedream_ops.list_triggers(app_slug)}
+
+        elif operation == "deploy_trigger":
+            component_id = parameters.get("component_id")
+            configured_props = parameters.get("configured_props")
+            webhook_url = parameters.get("webhook_url")
+            if not component_id or not webhook_url or configured_props is None:
+                return _error_response(
+                    400,
+                    "deploy_trigger requires component_id, configured_props, and webhook_url",
+                )
+            result = pipedream_ops.deploy_trigger(
+                external_user_id, component_id, configured_props, webhook_url
+            )
+
+        elif operation == "update_deployed_trigger":
+            deployed_trigger_id = parameters.get("deployed_trigger_id")
+            configured_props = parameters.get("configured_props")  # optional
+            active = parameters.get("active")  # optional
+            if not deployed_trigger_id:
+                return _error_response(
+                    400,
+                    "update_deployed_trigger requires deployed_trigger_id",
+                )
+            if configured_props is None and active is None:
+                return _error_response(
+                    400,
+                    "update_deployed_trigger requires at least one of configured_props or active",
+                )
+            result = pipedream_ops.update_deployed_trigger(
+                external_user_id,
+                deployed_trigger_id,
+                configured_props=configured_props,
+                active=active,
+            )
+
+        elif operation == "delete_deployed_trigger":
+            deployed_trigger_id = parameters.get("deployed_trigger_id")
+            if not deployed_trigger_id:
+                return _error_response(
+                    400,
+                    "delete_deployed_trigger requires deployed_trigger_id",
+                )
+            result = pipedream_ops.delete_deployed_trigger(
+                external_user_id, deployed_trigger_id
+            )
+
+        elif operation == "list_deployed_triggers":
+            result = {
+                "deployed_triggers": pipedream_ops.list_deployed_triggers(
+                    external_user_id
+                )
+            }
 
         else:
             return _error_response(

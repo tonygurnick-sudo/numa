@@ -1,0 +1,35 @@
+{
+  "name": "Archive Card",
+  "description": "Archives a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-put).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-archive-card",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card",
+      "description": "The ID of the Card to archive",
+      "optional": false,
+      "remoteOptions": true
+    }
+  ]
+}

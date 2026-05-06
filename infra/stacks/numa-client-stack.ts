@@ -663,6 +663,7 @@ export class NumaClientStack extends TerraformStack {
       cognitoUserPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
       recoveryBucketName: disasterRecovery?.recoveryBucketName,
       recoveryBucketArn: disasterRecovery?.recoveryBucketArn,
+      pipedreamRelayLambdaArn: core.pipedreamRelayLambdaArn,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
@@ -861,6 +862,7 @@ export class NumaClientStack extends TerraformStack {
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
+        EVENT_TRIGGERS: clientConfig.eventTriggers ?? false,
         SCHEDULING_MIN_INTERVAL_MINUTES: clientConfig.schedulingMinIntervalMinutes ?? null,
         GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: props.globalSchedulingMinIntervalMinutes ?? null,
         KNOWLEDGE_BASES: true,
@@ -1279,6 +1281,21 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         scheduling: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable event-triggered automations (the "When something
+         * happens" path of the Automations builder). Independent of `scheduling`
+         * (which gates the route entirely) and `pipedreamIntegrations` (which
+         * gates Pipedream-backed sources within the trigger picker).
+         *
+         * Frontend-only gating today — does NOT alter infra (no constructs
+         * are created/skipped based on this flag). The agent-schedules lambda,
+         * pipedream-event-receiver, dispatcher, and runner are always present.
+         * The flag just hides the "When something happens" tile in the wizard.
+         *
+         * @default false
+         */
+        eventTriggers: z.boolean().optional().default(false),
 
         /**
          * Per-client minimum scheduling interval override (minutes).

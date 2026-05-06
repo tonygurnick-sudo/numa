@@ -1,0 +1,31 @@
+{
+  "name": "List Channels",
+  "description": "List a user's chat channels.",
+  "component_type": "action",
+  "version": "0.1.5",
+  "key": "zoom-list-channels",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "page_size",
+      "type": "integer",
+      "description": "The number of records returned from a single API call.",
+      "optional": true
+    },
+    {
+      "name": "next_page_token",
+      "type": "string",
+      "description": "The next page token is used to paginate through large result sets. The expiration period for this token is 15 minutes.",
+      "optional": true
+    }
+  ]
+}

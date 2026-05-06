@@ -1,0 +1,351 @@
+{
+  "name": "Get Board",
+  "description": "Request a single board. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-id-get).",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "trello-get-board",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "boardId",
+      "type": "string",
+      "label": "Board ID",
+      "description": "The ID of the board to retrieve",
+      "remoteOptions": true
+    },
+    {
+      "name": "actions",
+      "type": "string[]",
+      "label": "Actions",
+      "description": "This is a nested resource. Specify what actions to include in the response. Default is `all`.",
+      "optional": true,
+      "options": [
+        {
+          "label": "Accept Enterprise Join Request",
+          "value": "acceptEnterpriseJoinRequest"
+        },
+        {
+          "label": "Add Attachment To Card",
+          "value": "addAttachmentToCard"
+        },
+        {
+          "label": "Add Checklist To Card",
+          "value": "addChecklistToCard"
+        },
+        {
+          "label": "Add Member To Board",
+          "value": "addMemberToBoard"
+        },
+        {
+          "label": "Add Member To Card",
+          "value": "addMemberToCard"
+        },
+        {
+          "label": "Add Member To Organization",
+          "value": "addMemberToOrganization"
+        },
+        {
+          "label": "Add Organization To Enterprise",
+          "value": "addOrganizationToEnterprise"
+        },
+        {
+          "label": "Add To Enterprise Plugin Whitelist",
+          "value": "addToEnterprisePluginWhitelist"
+        },
+        {
+          "label": "Add To Organization Board",
+          "value": "addToOrganizationBoard"
+        },
+        {
+          "label": "Comment Card",
+          "value": "commentCard"
+        },
+        {
+          "label": "Convert To Card From Check Item",
+          "value": "convertToCardFromCheckItem"
+        },
+        {
+          "label": "Copy Board",
+          "value": "copyBoard"
+        },
+        {
+          "label": "Copy Card",
+          "value": "copyCard"
+        },
+        {
+          "label": "Copy Comment Card",
+          "value": "copyCommentCard"
+        },
+        {
+          "label": "Create Board",
+          "value": "createBoard"
+        },
+        {
+          "label": "Create Card",
+          "value": "createCard"
+        },
+        {
+          "label": "Create List",
+          "value": "createList"
+        },
+        {
+          "label": "Create Organization",
+          "value": "createOrganization"
+        },
+        {
+          "label": "Delete Board Invitation",
+          "value": "deleteBoardInvitation"
+        },
+        {
+          "label": "Delete Card",
+          "value": "deleteCard"
+        },
+        {
+          "label": "Delete Organization Invitation",
+          "value": "deleteOrganizationInvitation"
+        },
+        {
+          "label": "Disable Enterprise Plugin Whitelist",
+          "value": "disableEnterprisePluginWhitelist"
+        },
+        {
+          "label": "Disable Plugin",
+          "value": "disablePlugin"
+        },
+        {
+          "label": "Disable Power Up",
+          "value": "disablePowerUp"
+        },
+        {
+          "label": "Email Card",
+          "value": "emailCard"
+        },
+        {
+          "label": "Enable Enterprise Plugin Whitelist",
+          "value": "enableEnterprisePluginWhitelist"
+        },
+        {
+          "label": "Enable Plugin",
+          "value": "enablePlugin"
+        },
+        {
+          "label": "Enable Power Up",
+          "value": "enablePowerUp"
+        },
+        {
+          "label": "Make Admin Of Board",
+          "value": "makeAdminOfBoard"
+        },
+        {
+          "label": "Make Normal Member Of Board",
+          "value": "makeNormalMemberOfBoard"
+        },
+        {
+          "label": "Make Normal Member Of Organization",
+          "value": "makeNormalMemberOfOrganization"
+        },
+        {
+          "label": "Make Observer Of Board",
+          "value": "makeObserverOfBoard"
+        },
+        {
+          "label": "Member Joined Trello",
+          "value": "memberJoinedTrello"
+        },
+        {
+          "label": "Move Card From Board",
+          "value": "moveCardFromBoard"
+        },
+        {
+          "label": "Move Card To Board",
+          "value": "moveCardToBoard"
+        },
+        {
+          "label": "Move List From Board",
+          "value": "moveListFromBoard"
+        },
+        {
+          "label": "Move List To Board",
+          "value": "moveListToBoard"
+        },
+        {
+          "label": "Remove Checklist From Card",
+          "value": "removeChecklistFromCard"
+        },
+        {
+          "label": "Remove From Enterprise Plugin Whitelist",
+          "value": "removeFromEnterprisePluginWhitelist"
+        },
+        {
+          "label": "Remove From Organization Board",
+          "value": "removeFromOrganizationBoard"
+        },
+        {
+          "label": "Remove Member From Card",
+          "value": "removeMemberFromCard"
+        },
+        {
+          "label": "Remove Organization From Enterprise",
+          "value": "removeOrganizationFromEnterprise"
+        },
+        {
+          "label": "Unconfirmed Board Invitation",
+          "value": "unconfirmedBoardInvitation"
+        },
+        {
+          "label": "Unconfirmed Organization Invitation",
+          "value": "unconfirmedOrganizationInvitation"
+        },
+        {
+          "label": "Update Board",
+          "value": "updateBoard"
+        },
+        {
+          "label": "Update Card",
+          "value": "updateCard"
+        },
+        {
+          "label": "Update Check Item State On Card",
+          "value": "updateCheckItemStateOnCard"
+        },
+        {
+          "label": "Update Checklist",
+          "value": "updateChecklist"
+        },
+        {
+          "label": "Update List",
+          "value": "updateList"
+        },
+        {
+          "label": "Update Member",
+          "value": "updateMember"
+        },
+        {
+          "label": "Update Organization",
+          "value": "updateOrganization"
+        }
+      ]
+    },
+    {
+      "name": "boardStars",
+      "type": "string",
+      "label": "Board Stars",
+      "description": "Valid values are one of: `mine` or `none`. Default is `none`.",
+      "options": ["mine", "none"],
+      "optional": true
+    },
+    {
+      "name": "cardPluginData",
+      "type": "boolean",
+      "label": "Card Plugin Data",
+      "description": "Use with the cards param to include card pluginData with the response. Default is `none`.",
+      "optional": true
+    },
+    {
+      "name": "customFields",
+      "type": "boolean",
+      "label": "Custom Fields",
+      "description": "This is a nested resource. Include custom fields in the response.",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Fields",
+      "description": "The fields of the board to be included in the response. Valid values: all or a comma-separated list of specific fields.",
+      "options": [
+        "all",
+        "closed",
+        "dateLastActivity",
+        "dateLastView",
+        "desc",
+        "descData",
+        "idOrganization",
+        "invitations",
+        "invited",
+        "labelNames",
+        "memberships",
+        "name",
+        "pinned",
+        "powerUps",
+        "prefs",
+        "shortLink",
+        "shortUrl",
+        "starred",
+        "subscribed",
+        "url"
+      ],
+      "optional": true
+    },
+    {
+      "name": "labels",
+      "type": "string",
+      "label": "Labels",
+      "description": "This is a nested resource. Specify what labels to include in the response. One of: `all` or `none`",
+      "optional": true,
+      "options": ["all", "none"]
+    },
+    {
+      "name": "lists",
+      "type": "string",
+      "label": "Lists",
+      "description": "This is a nested resource. Specify what lists to include in the response.",
+      "optional": true,
+      "options": ["all", "closed", "none", "open"]
+    },
+    {
+      "name": "members",
+      "type": "string",
+      "label": "Members",
+      "description": "This is a nested resource. Specify what members to include in the response.",
+      "optional": true,
+      "options": ["none", "normal", "admins", "owners", "all"]
+    },
+    {
+      "name": "pluginData",
+      "type": "boolean",
+      "label": "Plugin Data",
+      "description": "Determines whether the pluginData for this board should be returned.",
+      "optional": true
+    },
+    {
+      "name": "organization",
+      "type": "boolean",
+      "label": "Organization",
+      "description": "This is a nested resource. Include organization information in the response.",
+      "optional": true
+    },
+    {
+      "name": "organizationPluginData",
+      "type": "boolean",
+      "label": "Organization Plugin Data",
+      "description": "Use with the organization param to include organization pluginData with the response",
+      "optional": true
+    },
+    {
+      "name": "myPrefs",
+      "type": "boolean",
+      "label": "My Preferences",
+      "description": "Include the user's preferences for this board in the response.",
+      "optional": true
+    },
+    {
+      "name": "tags",
+      "type": "boolean",
+      "label": "Tags",
+      "description": "Also known as collections, tags, refer to the collection(s) that a Board belongs to.",
+      "optional": true
+    }
+  ]
+}

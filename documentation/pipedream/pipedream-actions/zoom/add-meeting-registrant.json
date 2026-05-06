@@ -1,0 +1,158 @@
+{
+  "name": "Add Meeting Registrant",
+  "description": "Registers a participant or multiple participants for a meeting. [See the documentation](https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetingRegistrantCreate)",
+  "component_type": "action",
+  "version": "0.3.8",
+  "key": "zoom-add-meeting-registrant",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "meetingId",
+      "type": "string",
+      "label": "Meeting ID",
+      "description": "The meeting ID to get details for.",
+      "remoteOptions": true,
+      "optional": false
+    },
+    {
+      "name": "occurrenceIds",
+      "type": "string",
+      "label": "Occurrence IDs",
+      "description": "Occurrence IDs. You can find these with the meeting get API. Multiple values separated by comma.",
+      "optional": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "A valid email address of the registrant."
+    },
+    {
+      "name": "firstName",
+      "type": "string",
+      "label": "First Name",
+      "description": "Registrant's first name."
+    },
+    {
+      "name": "lastName",
+      "type": "string",
+      "label": "Last Name",
+      "description": "Registrant's last name."
+    },
+    {
+      "name": "address",
+      "type": "string",
+      "label": "Address",
+      "description": "Registrant's address.",
+      "optional": true
+    },
+    {
+      "name": "city",
+      "type": "string",
+      "label": "City",
+      "description": "Registrant's city.",
+      "optional": true
+    },
+    {
+      "name": "country",
+      "type": "string",
+      "label": "Country",
+      "description": "Registrant's country.",
+      "optional": true
+    },
+    {
+      "name": "zip",
+      "type": "string",
+      "label": "Zip/Postal Code",
+      "description": "Registrant's Zip/Postal code.",
+      "optional": true
+    },
+    {
+      "name": "state",
+      "type": "string",
+      "label": "State/Province",
+      "description": "Registrant's State/Province.",
+      "optional": true
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Phone",
+      "description": "Registrant's Phone number.",
+      "optional": true
+    },
+    {
+      "name": "industry",
+      "type": "string",
+      "label": "Industry",
+      "description": "Registrant's industry.",
+      "optional": true
+    },
+    {
+      "name": "org",
+      "type": "string",
+      "label": "Organization",
+      "description": "Registrant's Organization.",
+      "optional": true
+    },
+    {
+      "name": "jobTitle",
+      "type": "string",
+      "label": "Job Title",
+      "description": "Registrant's job title.",
+      "optional": true
+    },
+    {
+      "name": "purchasingTimeFrame",
+      "type": "string",
+      "label": "Purchasing Time Frame",
+      "description": "This field can be included to gauge interest of webinar attendees towards buying your product or service.",
+      "optional": true
+    },
+    {
+      "name": "roleInPurchaseProcess",
+      "type": "string",
+      "label": "Role in Purchase Process",
+      "description": "Role in Purchase Process.",
+      "optional": true
+    },
+    {
+      "name": "noOfEmployees",
+      "type": "string",
+      "label": "Number of Employees",
+      "description": "Number of Employees.",
+      "optional": true
+    },
+    {
+      "name": "comments",
+      "type": "string",
+      "label": "Comments",
+      "description": "A field that allows registrants to provide any questions or comments that they might have.",
+      "optional": true
+    },
+    {
+      "name": "customQuestions",
+      "type": "string",
+      "label": "Custom Questions",
+      "description": "Custom questions.",
+      "optional": true
+    },
+    {
+      "name": "registrants",
+      "type": "object",
+      "label": "Registrants",
+      "description": "Use this field to enter multiple registrants at once. Will override the single registrant fields if provided. Each registrant should be an object with at least the following properties: email, first_name, last_name. Example:\n      `[\n        {\n          \"email\": \"test@example.com\",\n          \"first_name\": \"John\",\n          \"last_name\": \"Doe\"\n        }\n      ]`",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

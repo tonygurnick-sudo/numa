@@ -1,0 +1,27 @@
+{
+  "name": "List Past Meeting Participants",
+  "description": "Retrieve information on participants from a past meeting. [See the docs here](https://marketplace.zoom.us/docs/api-reference/zoom-api/methods/#operation/pastMeetingParticipants).",
+  "component_type": "action",
+  "version": "0.2.8",
+  "key": "zoom-list-past-meeting-participants",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "meetingId",
+      "type": "string",
+      "label": "Meeting ID",
+      "description": "The meeting ID to get details for.",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

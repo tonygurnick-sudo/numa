@@ -1,0 +1,19 @@
+{
+  "name": "List Labels",
+  "description": "List all the existing labels in the connected account. [See the docs](https://developers.google.com/gmail/api/reference/rest/v1/users.labels/list)",
+  "component_type": "action",
+  "version": "0.0.11",
+  "key": "gmail-list-labels",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    }
+  ]
+}

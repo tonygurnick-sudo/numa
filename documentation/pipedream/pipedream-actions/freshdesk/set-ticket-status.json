@@ -1,0 +1,33 @@
+{
+  "name": "Set Ticket Status",
+  "description": "Update the status of a ticket in Freshdesk  [See the documentation](https://developers.freshdesk.com/api/#update_ticket).",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "freshdesk-set-ticket-status",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "ticketId",
+      "type": "integer",
+      "label": "Ticket ID",
+      "description": "Select a ticket or provide a ticket ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "ticketStatus",
+      "type": "integer",
+      "label": "Status",
+      "description": "Status of the ticket",
+      "remoteOptions": true
+    }
+  ]
+}

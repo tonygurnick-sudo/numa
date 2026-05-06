@@ -1,0 +1,49 @@
+{
+  "name": "Delete Meeting",
+  "description": "Delete a meeting. [See the documentation](https://developers.zoom.us/docs/api/meetings/#tag/meetings/delete/meetings/{meetingId})",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "zoom-delete-meeting",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "meetingId",
+      "type": "string",
+      "label": "Meeting ID",
+      "description": "The ID of the meeting to delete",
+      "remoteOptions": true,
+      "optional": false
+    },
+    {
+      "name": "occurrenceId",
+      "type": "string",
+      "label": "Occurrence ID",
+      "description": "If you select a value for this param, only that instance will be deleted. Otherwise, the entire meeting series will be deleted.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "scheduleForReminder",
+      "type": "boolean",
+      "label": "Schedule for Reminder",
+      "description": "If `true`, notify host and alternative host about the meeting cancellation via email. If `false`, do not send any email notification.",
+      "optional": true
+    },
+    {
+      "name": "cancelMeetingReminder",
+      "type": "boolean",
+      "label": "Cancel Meeting Reminder",
+      "description": "If `true`, notify registrants about the meeting cancellation via email. If `false`, do not send any email notification to meeting registrants.",
+      "optional": true
+    }
+  ]
+}

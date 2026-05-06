@@ -1,0 +1,39 @@
+{
+  "name": "Approve Workflow",
+  "description": "Suspend the workflow until approved by a Slack message. [See the documentation](https://pipedream.com/docs/code/nodejs/rerun#flowsuspend)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "slack-approve-workflow",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "channelType",
+      "type": "string",
+      "label": "Channel Type",
+      "description": "The type of channel to send to. User/Direct Message (im), Group (mpim), Private Channel or Public Channel",
+      "remoteOptions": true
+    },
+    {
+      "name": "conversation",
+      "type": "string",
+      "label": "Channel",
+      "description": "Select a public or private channel, or a user or group",
+      "remoteOptions": true
+    },
+    {
+      "name": "message",
+      "type": "string",
+      "label": "Message",
+      "description": "Text to include with the Approve and Cancel Buttons"
+    }
+  ]
+}

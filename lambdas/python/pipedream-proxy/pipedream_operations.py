@@ -800,6 +800,383 @@ class PipedreamOperations:
         )
         return all_actions
 
+    def list_triggers(self, app_slug: str) -> List[Dict[str, Any]]:
+        """List all available trigger components for an app.
+
+        Mirrors `list_actions` but with `component_type=trigger`. Returns the full
+        component metadata including configurable_props so the frontend's dynamic
+        prop renderer can render the configuration form without a second call.
+
+        Args:
+            app_slug: The Pipedream app slug, e.g. "slack".
+
+        Returns:
+            List of component objects (key, name, description, configurable_props,
+            annotations, etc.). Filtered down further by the agent-schedules lambda
+            against the curated PIPEDREAM_TRIGGER_APPS allowlist.
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
+
+        all_triggers: List[Dict[str, Any]] = []
+        after_cursor: Optional[str] = None
+        limit = 100
+
+        while True:
+            params: Dict[str, Any] = {
+                "app": app_slug,
+                "component_type": "trigger",
+                "limit": limit,
+            }
+            if after_cursor:
+                params["after"] = after_cursor
+
+            try:
+                response = requests.get(
+                    f"https://api.pipedream.com/v1/connect/{project_id}/components",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "x-pd-environment": environment,
+                    },
+                    params=params,
+                    timeout=30,
+                )
+                response.raise_for_status()
+                data = response.json()
+            except Exception as e:
+                logger.error(
+                    "Failed to list triggers",
+                    error=str(e),
+                    app_slug=app_slug,
+                    exc_info=True,
+                )
+                raise Exception(
+                    f"Failed to list triggers for {app_slug}: {str(e)}"
+                ) from e
+
+            triggers = data.get("data", [])
+            all_triggers.extend(triggers)
+
+            page_info = data.get("page_info", {})
+            if page_info.get("count", 0) < limit:
+                break
+            after_cursor = page_info.get("end_cursor")
+            if not after_cursor:
+                break
+
+        logger.info(
+            "Listed triggers",
+            _name="LIST_TRIGGERS",
+            app_slug=app_slug,
+            count=len(all_triggers),
+        )
+        return all_triggers
+
+    def deploy_trigger(
+        self,
+        external_user_id: str,
+        component_id: str,
+        configured_props: Dict[str, Any],
+        webhook_url: str,
+    ) -> Dict[str, Any]:
+        """Deploy a Pipedream trigger component for an external user.
+
+        The deploy response includes:
+          - id (dc_xxx) — the deployed-trigger handle used for update/delete
+          - webhook_signing_key (64-char hex) — HMAC key the receiver uses to verify
+            inbound deliveries; persisted on the schedule record by the caller
+          - configurable_props / configured_props — echo of the deploy config
+
+        IMPORTANT: validation that the (app_slug, component_id) pair is in the
+        Numa-curated allowlist happens at the caller (agent-schedules lambda).
+        This proxy method assumes inputs are already vetted.
+
+        See: dev-notes/research/integrations/pipedream-docs/connect-api/deploy-trigger.md
+
+        Args:
+            external_user_id: The external user ID owning the trigger.
+            component_id: The Pipedream component key, e.g. "slack-new-keyword-mention".
+            configured_props: User-supplied prop values (channel, keyword, etc.) plus
+                the auth prop ({slack: {authProvisionId: "apn_xxx"}}). The caller
+                pre-resolves authProvisionId.
+            webhook_url: Public HTTPS URL Pipedream will POST events to. Must be
+                under our control — the receiver lambda's API Gateway endpoint.
+
+        Returns:
+            The full deployed-component object from Pipedream, including
+            webhook_signing_key.
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
+
+        body: Dict[str, Any] = {
+            "id": component_id,
+            "external_user_id": external_user_id,
+            "configured_props": configured_props,
+            "webhook_url": webhook_url,
+        }
+
+        try:
+            response = requests.post(
+                f"https://api.pipedream.com/v1/connect/{project_id}/triggers/deploy",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "x-pd-environment": environment,
+                    "Content-Type": "application/json",
+                },
+                json=body,
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json().get("data", {})
+        except Exception as e:
+            logger.error(
+                "Failed to deploy trigger",
+                _name="DEPLOY_TRIGGER_FAILED",
+                error=str(e),
+                component_id=component_id,
+                external_user_id=external_user_id,
+                exc_info=True,
+            )
+            raise Exception(f"Failed to deploy trigger {component_id}: {str(e)}") from e
+
+        logger.info(
+            "Deployed trigger",
+            _name="DEPLOY_TRIGGER",
+            component_id=component_id,
+            external_user_id=external_user_id,
+            deployed_trigger_id=data.get("id"),
+            has_signing_key=bool(data.get("webhook_signing_key")),
+        )
+        return data
+
+    def update_deployed_trigger(
+        self,
+        external_user_id: str,
+        deployed_trigger_id: str,
+        configured_props: Optional[Dict[str, Any]] = None,
+        active: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Update a deployed trigger in place.
+
+        Pipedream's PUT preserves the deployed_trigger_id and webhook_signing_key
+        across updates (verified empirically — see dev-notes/tasks/pipedream-triggers/
+        results/key_stability_summary.json). Both prop changes and active=true/false
+        flow through this single endpoint.
+
+        IMPORTANT: configured_props is REPLACED, not merged. Callers must send the
+        full new configuration each time.
+
+        Args:
+            external_user_id: The external user ID owning the trigger.
+            deployed_trigger_id: dc_xxx returned at deploy time.
+            configured_props: Full replacement props blob, or None to leave unchanged.
+            active: True to enable, False to pause, None to leave unchanged.
+
+        Returns:
+            The updated deployed-component object. Note: webhook_signing_key is NOT
+            included in the response body — it's only returned on initial deploy.
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
+
+        body: Dict[str, Any] = {}
+        if configured_props is not None:
+            body["configured_props"] = configured_props
+        if active is not None:
+            body["active"] = active
+
+        if not body:
+            raise ValueError(
+                "update_deployed_trigger requires at least one of "
+                "configured_props or active"
+            )
+
+        try:
+            response = requests.put(
+                f"https://api.pipedream.com/v1/connect/{project_id}/deployed-triggers/{deployed_trigger_id}",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "x-pd-environment": environment,
+                    "Content-Type": "application/json",
+                },
+                params={"external_user_id": external_user_id},
+                json=body,
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json().get("data", {})
+        except Exception as e:
+            logger.error(
+                "Failed to update deployed trigger",
+                _name="UPDATE_TRIGGER_FAILED",
+                error=str(e),
+                deployed_trigger_id=deployed_trigger_id,
+                external_user_id=external_user_id,
+                exc_info=True,
+            )
+            raise Exception(
+                f"Failed to update deployed trigger {deployed_trigger_id}: {str(e)}"
+            ) from e
+
+        logger.info(
+            "Updated deployed trigger",
+            _name="UPDATE_TRIGGER",
+            deployed_trigger_id=deployed_trigger_id,
+            external_user_id=external_user_id,
+            updated_active=active,
+            updated_props=configured_props is not None,
+        )
+        return data
+
+    def delete_deployed_trigger(
+        self,
+        external_user_id: str,
+        deployed_trigger_id: str,
+    ) -> Dict[str, Any]:
+        """Delete a deployed trigger.
+
+        Pipedream returns 204 No Content on success. We treat 404 as success too —
+        the trigger is already gone, which is the desired end state. Any other
+        error is propagated.
+
+        Args:
+            external_user_id: The external user ID owning the trigger.
+            deployed_trigger_id: dc_xxx to remove.
+
+        Returns:
+            {"deleted": true, "deployed_trigger_id": "dc_xxx"} on success.
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
+
+        try:
+            response = requests.delete(
+                f"https://api.pipedream.com/v1/connect/{project_id}/deployed-triggers/{deployed_trigger_id}",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "x-pd-environment": environment,
+                },
+                params={"external_user_id": external_user_id},
+                timeout=30,
+            )
+            if response.status_code == 404:
+                # Already gone — desired end state. Don't surface as error.
+                logger.info(
+                    "Delete deployed trigger: already gone (404)",
+                    _name="DELETE_TRIGGER_ALREADY_GONE",
+                    deployed_trigger_id=deployed_trigger_id,
+                    external_user_id=external_user_id,
+                )
+                return {
+                    "deleted": True,
+                    "deployed_trigger_id": deployed_trigger_id,
+                    "already_gone": True,
+                }
+            response.raise_for_status()
+        except Exception as e:
+            logger.error(
+                "Failed to delete deployed trigger",
+                _name="DELETE_TRIGGER_FAILED",
+                error=str(e),
+                deployed_trigger_id=deployed_trigger_id,
+                external_user_id=external_user_id,
+                exc_info=True,
+            )
+            raise Exception(
+                f"Failed to delete deployed trigger {deployed_trigger_id}: {str(e)}"
+            ) from e
+
+        logger.info(
+            "Deleted deployed trigger",
+            _name="DELETE_TRIGGER",
+            deployed_trigger_id=deployed_trigger_id,
+            external_user_id=external_user_id,
+        )
+        return {
+            "deleted": True,
+            "deployed_trigger_id": deployed_trigger_id,
+        }
+
+    def list_deployed_triggers(self, external_user_id: str) -> List[Dict[str, Any]]:
+        """List all deployed triggers for an external user.
+
+        Used by the daily reconciliation worker to detect orphans (deployed
+        triggers in Pipedream with no matching schedule in our DB).
+
+        Args:
+            external_user_id: The external user ID to scope the listing.
+
+        Returns:
+            List of deployed-component objects.
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
+
+        all_triggers: List[Dict[str, Any]] = []
+        after_cursor: Optional[str] = None
+        limit = 100
+
+        while True:
+            params: Dict[str, Any] = {
+                "external_user_id": external_user_id,
+                "limit": limit,
+            }
+            if after_cursor:
+                params["after"] = after_cursor
+
+            try:
+                response = requests.get(
+                    f"https://api.pipedream.com/v1/connect/{project_id}/deployed-triggers",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "x-pd-environment": environment,
+                    },
+                    params=params,
+                    timeout=30,
+                )
+                response.raise_for_status()
+                data = response.json()
+            except Exception as e:
+                logger.error(
+                    "Failed to list deployed triggers",
+                    _name="LIST_DEPLOYED_TRIGGERS_FAILED",
+                    error=str(e),
+                    external_user_id=external_user_id,
+                    exc_info=True,
+                )
+                raise Exception(
+                    f"Failed to list deployed triggers for {external_user_id}: {str(e)}"
+                ) from e
+
+            triggers = data.get("data", [])
+            all_triggers.extend(triggers)
+
+            page_info = data.get("page_info", {})
+            if page_info.get("count", 0) < limit:
+                break
+            after_cursor = page_info.get("end_cursor")
+            if not after_cursor:
+                break
+
+        logger.info(
+            "Listed deployed triggers",
+            _name="LIST_DEPLOYED_TRIGGERS",
+            external_user_id=external_user_id,
+            count=len(all_triggers),
+        )
+        return all_triggers
+
     def run_action(
         self,
         external_user_id: str,

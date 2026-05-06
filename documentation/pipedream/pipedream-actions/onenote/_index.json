@@ -1,0 +1,38 @@
+[
+  {
+    "key": "onenote-create-section",
+    "name": "Create Section",
+    "description": "Creates a section. [See the documentation](https://learn.microsoft.com/en-us/graph/api/notebook-post-sections?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "onenote-create-page",
+    "name": "Create Page",
+    "description": "Creates a page. [See the documentation](https://learn.microsoft.com/en-us/graph/api/section-post-pages?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "onenote-create-notebook",
+    "name": "Create Notebook",
+    "description": "Creates a notebook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/onenote-post-notebooks?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  }
+]

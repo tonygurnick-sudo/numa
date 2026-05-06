@@ -1,0 +1,29 @@
+{
+  "name": "Get Member",
+  "description": "Gets a member by their ID. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-members/#api-members-id-get)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "trello-get-member",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "trello",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "memberId",
+      "type": "string",
+      "label": "Member ID",
+      "description": "The ID of the member to retrieve. Leave blank to use the authenticated user. Type in the search field to get members to select from.",
+      "optional": true,
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

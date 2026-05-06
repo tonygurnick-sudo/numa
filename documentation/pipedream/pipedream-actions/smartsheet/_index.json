@@ -1,0 +1,38 @@
+[
+  {
+    "key": "smartsheet-update-row",
+    "name": "Update Row",
+    "description": "Updates a row in a sheet. [See docs here](https://smartsheet.redoc.ly/tag/rows#operation/update-rows)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "smartsheet-new-sheet-from-template",
+    "name": "New Sheet From Template",
+    "description": "Creates a new sheet from a template. [See docs here](https://smartsheet.redoc.ly/tag/sheets#operation/create-sheet-in-sheets-folder)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "smartsheet-add-row-to-sheet",
+    "name": "Add Row to Sheet",
+    "description": "Adds a row to a sheet. [See docs here](https://smartsheet.redoc.ly/tag/rows#operation/rows-addToSheet)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  }
+]

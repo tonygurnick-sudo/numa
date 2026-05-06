@@ -1,0 +1,47 @@
+{
+  "name": "Find Item",
+  "description": "Filters items for the given app. [See the documentation](https://developers.podio.com/doc/items/filter-items-4496747)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "podio-find-item",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "podio"
+    },
+    {
+      "name": "orgId",
+      "type": "string",
+      "label": "Organization ID",
+      "description": "An ID identifying the organization",
+      "remoteOptions": true
+    },
+    {
+      "name": "spaceId",
+      "type": "string",
+      "label": "Space ID",
+      "description": "An ID identifying the space",
+      "remoteOptions": true
+    },
+    {
+      "name": "appId",
+      "type": "string",
+      "label": "App ID",
+      "description": "An ID identifying the application",
+      "remoteOptions": true
+    },
+    {
+      "name": "filters",
+      "type": "string",
+      "label": "Filters",
+      "description": "The filters to apply. Must be a valid JSON object. If not given all items will be returned. e.g. `{\"title\": \"Title of the item\"}`",
+      "optional": true
+    }
+  ]
+}

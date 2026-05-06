@@ -1,0 +1,50 @@
+{
+  "name": "Run Report",
+  "description": "Return report metrics based on a start and end date. [See the documentation](https://developers.google.com/analytics/devguides/reporting/core/v4/rest?hl=en)",
+  "component_type": "action",
+  "version": "0.1.2",
+  "key": "google_analytics-run-report",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "analytics",
+      "type": "app",
+      "app": "google_analytics"
+    },
+    {
+      "name": "viewId",
+      "type": "string",
+      "label": "View Id",
+      "description": "ID of the view to monitor. Can be found on your Google Analytics Dashboard -> Admin -> View Setting"
+    },
+    {
+      "name": "startDate",
+      "type": "string",
+      "label": "Start Date",
+      "description": "Start date in YYYY-MM-DD format"
+    },
+    {
+      "name": "endDate",
+      "type": "string",
+      "label": "End Date",
+      "description": "End date in YYYY-MM-DD format"
+    },
+    {
+      "name": "metrics",
+      "type": "string[]",
+      "label": "Metrics",
+      "description": "Metrics attributes for your data. Explore the available metrics and dimensions [here](https://ga-dev-tools.web.app/dimensions-metrics-explorer/)"
+    },
+    {
+      "name": "dimensions",
+      "type": "string[]",
+      "label": "Dimensions",
+      "description": "Dimension attributes for your data. Explore the available metrics and dimensions [here](https://ga-dev-tools.web.app/dimensions-metrics-explorer/)",
+      "optional": true
+    }
+  ]
+}

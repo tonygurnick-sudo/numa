@@ -1,0 +1,40 @@
+{
+  "name": "Delete Solution Article",
+  "description": "Delete a solution article in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_article_attributes)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "freshdesk-delete-solution-article",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "categoryId",
+      "type": "integer",
+      "label": "Category ID",
+      "description": "The ID of a category",
+      "remoteOptions": true
+    },
+    {
+      "name": "folderId",
+      "type": "integer",
+      "label": "Folder ID",
+      "description": "The ID of a folder",
+      "remoteOptions": true
+    },
+    {
+      "name": "articleId",
+      "type": "integer",
+      "label": "Article ID",
+      "description": "The ID of an article",
+      "remoteOptions": true
+    }
+  ]
+}

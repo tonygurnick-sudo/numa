@@ -1,0 +1,61 @@
+{
+  "name": "Update Contact",
+  "description": "Update an existing contact, [See the docs](https://docs.microsoft.com/en-us/graph/api/user-post-contacts)",
+  "component_type": "action",
+  "version": "0.0.21",
+  "key": "microsoft_outlook-update-contact",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    },
+    {
+      "name": "contact",
+      "label": "Contact",
+      "description": "The contact to be updated",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "givenName",
+      "label": "Given name",
+      "description": "Given name of the contact",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "surname",
+      "label": "Surname",
+      "description": "Surname of the contact",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "emailAddresses",
+      "label": "Email adresses",
+      "description": "Email addresses",
+      "type": "string[]",
+      "optional": true
+    },
+    {
+      "name": "businessPhones",
+      "label": "Recipients",
+      "description": "Array of phone numbers",
+      "type": "string[]",
+      "optional": true
+    },
+    {
+      "name": "expand",
+      "label": "Expand",
+      "description": "Additional contact details, [See object definition](https://docs.microsoft.com/en-us/graph/api/resources/contact)",
+      "type": "object",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "name": "Create Link",
+  "description": "Create a sharing link for a DriveItem. [See the documentation](https://docs.microsoft.com/en-us/graph/api/driveitem-createlink?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "sharepoint-create-link",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "siteId",
+      "type": "string",
+      "label": "Site",
+      "description": "Identifier of a site",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "driveId",
+      "type": "string",
+      "label": "Drive ID",
+      "description": "Identifier of a drive within a site",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File ID",
+      "description": "The file to download. You can either search for the file here or provide a custom *File ID*.",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "description": "The type of sharing link to create. Either `view`, `edit`, or `embed`.",
+      "options": [
+        {
+          "label": "Create a read-only link to the DriveItem",
+          "value": "view"
+        },
+        {
+          "label": "Create a read-write link to the DriveItem",
+          "value": "edit"
+        },
+        {
+          "label": "Create an embeddable link to the DriveItem. Only available for files in OneDrive personal.",
+          "value": "embed"
+        }
+      ]
+    },
+    {
+      "name": "scope",
+      "type": "string",
+      "label": "Scope",
+      "description": "The scope of link to create. Either `anonymous` or `organization`.",
+      "options": [
+        {
+          "label": "Anyone with the link has access, without needing to sign in",
+          "value": "anonymous"
+        },
+        {
+          "label": "Anyone signed into your organization can use the link. Only available in OneDrive for Business and SharePoint.",
+          "value": "organization"
+        }
+      ],
+      "optional": true
+    }
+  ]
+}

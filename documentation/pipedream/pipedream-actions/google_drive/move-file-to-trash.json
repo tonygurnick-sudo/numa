@@ -1,0 +1,41 @@
+{
+  "name": "Move File to Trash",
+  "description": "Move a file or folder to trash. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/update) for more information",
+  "component_type": "action",
+  "version": "0.1.15",
+  "key": "google_drive-move-file-to-trash",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "infoAlert",
+      "type": "alert",
+      "alertType": "info",
+      "content": "If you want to **permanently** delete a file instead, use the **[Move File to Trash](https://pipedream.com/apps/google-drive/actions/delete-file)** action."
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File or Folder",
+      "description": "The file or folder to move to trash",
+      "remoteOptions": true
+    }
+  ]
+}

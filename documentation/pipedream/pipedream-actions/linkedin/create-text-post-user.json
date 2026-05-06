@@ -1,0 +1,52 @@
+{
+  "name": "Create a Simple Post (User)",
+  "description": "Create post on LinkedIn using text, URL or article. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/posts-api?view=li-lms-2022-11&tabs=http#create-organic-posts) for more information",
+  "component_type": "action",
+  "version": "0.0.11",
+  "key": "linkedin-create-text-post-user",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "visibility",
+      "type": "string",
+      "label": "Visibility",
+      "description": "Visibility restrictions on content",
+      "options": [
+        {
+          "label": "Only my connections",
+          "value": "CONNECTIONS"
+        },
+        {
+          "label": "Public",
+          "value": "PUBLIC"
+        },
+        {
+          "label": "Logged-in users only",
+          "value": "LOGGED_IN"
+        }
+      ]
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "description": "Text to be posted on LinkedIn timeline"
+    },
+    {
+      "name": "article",
+      "type": "string",
+      "label": "Article URL",
+      "description": "The URL of an article to share",
+      "optional": true
+    }
+  ]
+}

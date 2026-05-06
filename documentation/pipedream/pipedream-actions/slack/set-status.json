@@ -1,0 +1,40 @@
+{
+  "name": "Set Status",
+  "description": "Set the current status for a user. [See the documentation](https://api.slack.com/methods/users.profile.set)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "slack-set-status",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "statusText",
+      "type": "string",
+      "label": "Status Text",
+      "description": "The displayed text"
+    },
+    {
+      "name": "statusEmoji",
+      "type": "string",
+      "label": "Status Emoji",
+      "description": "The emoji to display with the status",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "statusExpiration",
+      "type": "string",
+      "label": "Status Expiration",
+      "description": "The datetime of when the status will expire in ISO 8601 format. (Example: `2014-01-01T00:00:00Z`)",
+      "optional": true
+    }
+  ]
+}

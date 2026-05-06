@@ -70,6 +70,7 @@
     "numaOps": true,
     "workspaceChatModelSelection": true,
     "scheduling": true,
+    "eventTriggers": true,
     "v2Apps": true,
     "developerMode":true,
     "dataConnectorsEnabled": true,

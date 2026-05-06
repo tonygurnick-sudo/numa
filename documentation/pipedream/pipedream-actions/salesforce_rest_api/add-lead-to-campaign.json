@@ -1,0 +1,33 @@
+{
+  "name": "Add Lead to Campaign",
+  "description": "Adds an existing lead to an existing campaign. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.228.0.object_reference.meta/object_reference/sforce_api_objects_campaignmember.htm)",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "salesforce_rest_api-add-lead-to-campaign",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "campaignId",
+      "type": "string",
+      "label": "Campaign ID",
+      "description": "The Campaign to add a Lead to.",
+      "remoteOptions": true
+    },
+    {
+      "name": "leadId",
+      "type": "string",
+      "label": "Lead ID",
+      "description": "The Lead to add to the selected Campaign.",
+      "remoteOptions": true
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "name": "Search People",
+  "description": "Retrieve a collection of person objects ordered by their relevance to the user, based on communication and collaboration patterns and business relationships. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-people)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "microsoft_outlook_calendar-search-people",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook_calendar"
+    },
+    {
+      "name": "search",
+      "type": "string",
+      "label": "Search Query",
+      "description": "Search for people by name or alias (e.g., 'Jane Smith'). Supports fuzzy matching. Note: Only works for the signed-in user's relevant people.",
+      "optional": true
+    },
+    {
+      "name": "filter",
+      "type": "string",
+      "label": "Filter",
+      "description": "Filter people using [OData syntax](https://learn.microsoft.com/en-us/azure/search/search-query-odata-syntax-reference). Limits response to people matching specified criteria. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-people)",
+      "optional": true
+    },
+    {
+      "name": "orderBy",
+      "type": "string",
+      "label": "Order By",
+      "description": "Changes the sort order of results. For example, `displayName` or `displayName desc`. Default ordering is by relevance to the user.",
+      "optional": true
+    },
+    {
+      "name": "select",
+      "type": "string",
+      "label": "Select",
+      "description": "Comma-separated list of [properties](https://learn.microsoft.com/en-us/graph/api/resources/person?view=graph-rest-1.0#properties) to include in the response. Recommended for performance optimization.",
+      "optional": true
+    },
+    {
+      "name": "skip",
+      "type": "integer",
+      "label": "Skip",
+      "description": "Skip the first N results. Note: Not supported with `$search`.",
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of people to return per page",
+      "optional": true
+    }
+  ]
+}

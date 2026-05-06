@@ -1,0 +1,48 @@
+{
+  "name": "Update Data Source",
+  "description": "Update a data source. [See the documentation](https://developers.notion.com/reference/update-a-data-source)",
+  "component_type": "action",
+  "version": "1.0.5",
+  "key": "notion-update-database",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "dataSourceId",
+      "type": "string",
+      "label": "Data Source ID",
+      "description": "Select a data source or provide a data source ID",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "Title of the data source as it appears in Notion. An array of [rich text objects](https://developers.notion.com/reference/rich-text).",
+      "optional": true
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "An array of [rich text objects](https://developers.notion.com/reference/rich-text) that represents the description of the data source that is displayed in the Notion UI. If omitted, then the data source description remains unchanged.",
+      "optional": true
+    },
+    {
+      "name": "properties",
+      "type": "object",
+      "label": "Properties",
+      "description": "The properties of a data source to be changed in the request, in the form of a JSON object. If updating an existing property, then the keys are the names or IDs of the properties as they appear in Notion, and the values are [property schema objects](https://developers.notion.com/reference/property-schema-object). If adding a new property, then the key is the name of the new data source property and the value is a [property schema object](https://developers.notion.com/reference/property-schema-object).",
+      "optional": true
+    }
+  ]
+}

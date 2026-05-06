@@ -1,0 +1,19 @@
+{
+  "name": "List Labels",
+  "description": "Get all the labels/categories that have been defined for a user. [See the documentation](https://learn.microsoft.com/en-us/graph/api/outlookuser-list-mastercategories)",
+  "component_type": "action",
+  "version": "0.0.14",
+  "key": "microsoft_outlook-list-labels",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    }
+  ]
+}

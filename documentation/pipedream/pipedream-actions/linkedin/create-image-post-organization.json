@@ -1,0 +1,46 @@
+{
+  "name": "Create Image Post (Organization)",
+  "description": "Create an image post on LinkedIn. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/images-api?view=li-lms-2023-09&tabs=http#uploading-an-image)",
+  "component_type": "action",
+  "version": "1.0.6",
+  "key": "linkedin-create-image-post-organization",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "organizationId",
+      "type": "string",
+      "label": "Organization Id",
+      "description": "ID of the organization that will author the post",
+      "remoteOptions": true
+    },
+    {
+      "name": "file",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "The path or URL to the image file."
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "description": "Text to be posted on LinkedIn timeline"
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

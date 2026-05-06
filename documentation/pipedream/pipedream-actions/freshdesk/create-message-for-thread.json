@@ -1,0 +1,47 @@
+{
+  "name": "Create Message For Thread",
+  "description": "Create message for a thread. [See the documentation](https://developers.freshdesk.com/api/#create_message_for_thread).",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "freshdesk-create-message-for-thread",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "ticketId",
+      "type": "integer",
+      "label": "Ticket ID",
+      "description": "ID of the ticket to create the message for.",
+      "remoteOptions": true
+    },
+    {
+      "name": "threadId",
+      "type": "string",
+      "label": "Thread ID",
+      "description": "ID of the thread to create the message for.",
+      "remoteOptions": true
+    },
+    {
+      "name": "body",
+      "type": "string",
+      "label": "Body",
+      "description": "Content of the note in HTML format.",
+      "optional": true
+    },
+    {
+      "name": "participants",
+      "type": "string[]",
+      "label": "Participants",
+      "description": "List of the participants to be added to the message.",
+      "optional": true
+    }
+  ]
+}

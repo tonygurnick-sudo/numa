@@ -4,11 +4,11 @@ import { Form, Button, ButtonGroup, Alert, Spinner } from 'react-bootstrap';
 import { Plus, Trash2, Mail } from 'lucide-react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { DataConnectorsService } from '../../Services/DataConnectorsService';
-import type { EmailFilter, EmailFilterField, EmailFilterOp, EventTrigger } from '../../types/agentSchedules';
+import type { EmailFilter, EmailFilterField, EmailFilterOp, GmailEventTrigger } from '../../types/agentSchedules';
 
 type EmailFilterBuilderProps = {
-  trigger: EventTrigger;
-  onChange: (trigger: EventTrigger) => void;
+  trigger: GmailEventTrigger;
+  onChange: (trigger: GmailEventTrigger) => void;
 };
 
 const FIELDS: EmailFilterField[] = ['sender', 'subject', 'to', 'body', 'has_attachment'];

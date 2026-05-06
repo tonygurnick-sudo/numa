@@ -1,0 +1,34 @@
+{
+  "name": "Get Tab Content",
+  "description": "Get the content of a tab in a document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/get)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "google_docs-get-tab-content",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDocs",
+      "type": "app",
+      "app": "google_docs"
+    },
+    {
+      "name": "docId",
+      "type": "string",
+      "label": "Document",
+      "description": "Search for and select a document. You can also use a custom expression to pass a value from a previous step (e.g., `{{steps.foo.$return_value.documentId}}`) or you can enter a static ID (e.g., `1KuEN7k8jVP3Qi0_svM5OO8oEuiLkq0csihobF67eat8`).",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "tabIds",
+      "type": "string[]",
+      "label": "Tab IDs",
+      "description": "Return content for the specified tabs",
+      "remoteOptions": true
+    }
+  ]
+}

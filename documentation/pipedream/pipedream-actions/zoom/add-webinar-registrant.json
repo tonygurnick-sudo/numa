@@ -1,0 +1,149 @@
+{
+  "name": "Add Webinar Registrant",
+  "description": "Registers a participant for a webinar. [See the docs here](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarregistrantcreate).",
+  "component_type": "action",
+  "version": "0.3.8",
+  "key": "zoom-add-webinar-registrant",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "webinarId",
+      "type": "string",
+      "label": "Webinar",
+      "description": "The webinar to get details for",
+      "remoteOptions": true
+    },
+    {
+      "name": "occurrenceIds",
+      "type": "string",
+      "label": "Occurrence IDs",
+      "description": "Occurrence IDs. You can find these with the meeting get API. Multiple values separated by comma.",
+      "optional": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "A valid email address of the registrant."
+    },
+    {
+      "name": "firstName",
+      "type": "string",
+      "label": "First Name",
+      "description": "Registrant's first name."
+    },
+    {
+      "name": "lastName",
+      "type": "string",
+      "label": "Last Name",
+      "description": "Registrant's last name."
+    },
+    {
+      "name": "address",
+      "type": "string",
+      "label": "Address",
+      "description": "Registrant's address.",
+      "optional": true
+    },
+    {
+      "name": "city",
+      "type": "string",
+      "label": "City",
+      "description": "Registrant's city.",
+      "optional": true
+    },
+    {
+      "name": "country",
+      "type": "string",
+      "label": "Country",
+      "description": "Registrant's country.",
+      "optional": true
+    },
+    {
+      "name": "zip",
+      "type": "string",
+      "label": "Zip/Postal Code",
+      "description": "Registrant's Zip/Postal code.",
+      "optional": true
+    },
+    {
+      "name": "state",
+      "type": "string",
+      "label": "State/Province",
+      "description": "Registrant's State/Province.",
+      "optional": true
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Phone",
+      "description": "Registrant's Phone number.",
+      "optional": true
+    },
+    {
+      "name": "industry",
+      "type": "string",
+      "label": "Industry",
+      "description": "Registrant's industry.",
+      "optional": true
+    },
+    {
+      "name": "org",
+      "type": "string",
+      "label": "Organization",
+      "description": "Registrant's Organization.",
+      "optional": true
+    },
+    {
+      "name": "jobTitle",
+      "type": "string",
+      "label": "Job Title",
+      "description": "Registrant's job title.",
+      "optional": true
+    },
+    {
+      "name": "purchasingTimeFrame",
+      "type": "string",
+      "label": "Purchasing Time Frame",
+      "description": "This field can be included to gauge interest of webinar attendees towards buying your product or service.",
+      "optional": true
+    },
+    {
+      "name": "roleInPurchaseProcess",
+      "type": "string",
+      "label": "Role in Purchase Process",
+      "description": "Role in Purchase Process.",
+      "optional": true
+    },
+    {
+      "name": "noOfEmployees",
+      "type": "string",
+      "label": "Number of Employees",
+      "description": "Number of Employees.",
+      "optional": true
+    },
+    {
+      "name": "comments",
+      "type": "string",
+      "label": "Comments",
+      "description": "A field that allows registrants to provide any questions or comments that they might have.",
+      "optional": true
+    },
+    {
+      "name": "customQuestions",
+      "type": "string",
+      "label": "Custom Questions",
+      "description": "Custom questions.",
+      "optional": true
+    }
+  ]
+}

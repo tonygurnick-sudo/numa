@@ -1,0 +1,88 @@
+{
+  "name": "Promote a Chat Member",
+  "description": "Use this method to promote or demote a user in a supergroup or a channel. [See the docs](https://core.telegram.org/bots/api#promotechatmember) for more information",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "telegram_bot_api-promote-chat-member",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "telegramBotApi",
+      "type": "app",
+      "app": "telegram_bot_api"
+    },
+    {
+      "name": "chatId",
+      "type": "string",
+      "label": "Chat ID",
+      "description": "Enter the unique identifier for the target chat (e.g. `1035597319`) or username of the target public chat (in the format `@channelusername` or `@supergroupusername`). For example, if the group's public link is `t.me/mygroup`, the username is `@mygroup`."
+    },
+    {
+      "name": "userId",
+      "type": "string",
+      "label": "User ID",
+      "description": "Enter the unique identifier of the target user.",
+      "optional": true
+    },
+    {
+      "name": "can_change_info",
+      "type": "boolean",
+      "label": "Set if the Administrator Can Change Info",
+      "description": "Pass True, if the administrator can change chat title, photo and other settings.",
+      "optional": true
+    },
+    {
+      "name": "can_post_messages",
+      "type": "boolean",
+      "label": "Set if the Administrator Can Create Channel Posts",
+      "description": "Pass True, if the administrator can create channel posts [channels only].",
+      "optional": true
+    },
+    {
+      "name": "can_edit_messages",
+      "type": "boolean",
+      "label": "Set if the Administrator Can Edit Messages",
+      "description": "Pass True, if the administrator can edit messages of other users and can pin messages [channels only].",
+      "optional": true
+    },
+    {
+      "name": "can_delete_messages",
+      "type": "boolean",
+      "label": "Set if the Administrator Can Delete Messages",
+      "description": "Pass True, if the administrator can delete messages of other users [channels only].",
+      "optional": true
+    },
+    {
+      "name": "can_invite_users",
+      "type": "boolean",
+      "label": "Set if the Administrator Can Invite Users",
+      "description": "Pass True, if the administrator can invite new users to the chat.",
+      "optional": true
+    },
+    {
+      "name": "can_restrict_members",
+      "type": "boolean",
+      "label": "Set if the Administrator Can Restrict Members",
+      "description": "Pass True, if the administrator can restrict, ban or unban chat members.",
+      "optional": true
+    },
+    {
+      "name": "can_pin_messages",
+      "type": "boolean",
+      "label": "Set if the Administrator Can Pin Messages",
+      "description": "Pass True, if the administrator can pin messages [supergroups only].",
+      "optional": true
+    },
+    {
+      "name": "can_promote_members",
+      "type": "boolean",
+      "label": "Set if the Administrator Can Promote Members",
+      "description": "Pass True, if the administrator can add new administrators with a subset of their own privileges or demote administrators that they have promoted, directly or indirectly (promoted by administrators that were appointed by them).",
+      "optional": true
+    }
+  ]
+}

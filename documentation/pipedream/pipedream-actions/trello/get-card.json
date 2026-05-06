@@ -1,0 +1,43 @@
+{
+  "name": "Get Card",
+  "description": "Gets a card by its ID. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-get).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-get-card",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card",
+      "description": "The ID of the card to get details of",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "customFieldItems",
+      "type": "boolean",
+      "label": "Custom Field Items",
+      "description": "Whether to include the customFieldItems",
+      "default": false,
+      "optional": true
+    }
+  ]
+}

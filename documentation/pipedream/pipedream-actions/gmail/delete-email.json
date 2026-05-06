@@ -1,0 +1,27 @@
+{
+  "name": "Delete Email",
+  "description": "Moves the specified message to the trash. [See the documentation](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/trash)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "gmail-delete-email",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "messageId",
+      "type": "string",
+      "label": "Message ID",
+      "description": "The ID of the message to delete",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

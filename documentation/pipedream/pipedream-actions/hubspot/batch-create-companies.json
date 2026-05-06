@@ -1,0 +1,25 @@
+{
+  "name": "Batch Create Companies",
+  "description": "Create a batch of companies in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/objects/companies#post-%2Fcrm%2Fv3%2Fobjects%2Fcompanies%2Fbatch%2Fcreate)",
+  "component_type": "action",
+  "version": "0.0.11",
+  "key": "hubspot-batch-create-companies",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "inputs",
+      "type": "string[]",
+      "label": "Inputs (Companies)",
+      "description": "Provide a **list of companies** to be created. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/objects/companies#post-%2Fcrm%2Fv3%2Fobjects%2Fcompanies%2Fbatch%2Fcreate) for more information. Example: `[ { \"properties\": { \"name\": \"CompanyName\"} } ]`"
+    }
+  ]
+}

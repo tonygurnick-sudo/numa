@@ -1,0 +1,34 @@
+{
+  "name": "Enroll Contact Into Workflow",
+  "description": "Add a contact to a workflow. Note: The Workflows API currently only supports contact-based workflows and is only available for Marketing Hub Enterprise accounts. [See the documentation](https://legacydocs.hubspot.com/docs/methods/workflows/add_contact)",
+  "component_type": "action",
+  "version": "0.0.28",
+  "key": "hubspot-enroll-contact-into-workflow",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "workflow",
+      "type": "string",
+      "label": "Workflow",
+      "description": "The ID of the workflow you wish to see metadata for.",
+      "remoteOptions": true
+    },
+    {
+      "name": "contactEmail",
+      "type": "string",
+      "label": "Contact Email",
+      "description": "The email of the contact to be added to the list. Note - this needs to be a contact that already exists within HubSpot. You may need to add a Create or Update Contact step before this one. Then, use the email created in that step in this field.",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

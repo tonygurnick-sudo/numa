@@ -1,0 +1,49 @@
+{
+  "name": "Download Attachment",
+  "description": "Download an attachment by attachmentId to the /tmp directory. [See the documentation](https://developers.google.com/gmail/api/reference/rest/v1/users.messages.attachments/get)",
+  "component_type": "action",
+  "version": "0.0.15",
+  "key": "gmail-download-attachment",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "messageId",
+      "type": "string",
+      "label": "Message",
+      "description": "The identifier of a message",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "attachmentId",
+      "type": "string",
+      "label": "Attachment",
+      "description": "Identifier of the attachment to download",
+      "remoteOptions": true,
+      "withLabel": true
+    },
+    {
+      "name": "filename",
+      "type": "string",
+      "label": "Filename",
+      "description": "Name of the new file. Example: `test.jpg`",
+      "optional": true
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "write",
+      "sync": true
+    }
+  ],
+  "stash": "required"
+}

@@ -1,0 +1,429 @@
+{
+  "name": "Update Fields on the Form",
+  "description": "Update some of the form definition components. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/forms#patch-%2Fmarketing%2Fv3%2Fforms%2F%7Bformid%7D)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "hubspot-update-fields-on-the-form",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "formId",
+      "type": "string",
+      "label": "Form ID",
+      "description": "The ID of the form to update.",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the form.",
+      "optional": true
+    },
+    {
+      "name": "archived",
+      "type": "boolean",
+      "label": "Archived",
+      "description": "Whether the form is archived.",
+      "optional": true
+    },
+    {
+      "name": "fieldGroups",
+      "type": "string[]",
+      "label": "Field Groups",
+      "description": "A list for objects of group type and fields. **Format: `[{ \"groupType\": \"default_group\", \"richTextType\": \"text\", \"fields\": [ { \"objectTypeId\": \"0-1\", \"name\": \"email\", \"label\": \"Email\", \"required\": true, \"hidden\": false, \"fieldType\": \"email\", \"validation\": { \"blockedEmailDomains\": [], \"useDefaultBlockList\": false }}]}]`** [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/forms#post-%2Fmarketing%2Fv3%2Fforms%2F) for more information.",
+      "optional": true
+    },
+    {
+      "name": "createNewContactForNewEmail",
+      "type": "boolean",
+      "label": "Create New Contact for New Email",
+      "description": "Whether to create a new contact when a form is submitted with an email address that doesn't match any in your existing contacts records.",
+      "optional": true
+    },
+    {
+      "name": "editable",
+      "type": "boolean",
+      "label": "Editable",
+      "description": "Whether the form can be edited.",
+      "optional": true
+    },
+    {
+      "name": "allowLinkToResetKnownValues",
+      "type": "boolean",
+      "label": "Allow Link to Reset Known Values",
+      "description": "Whether to add a reset link to the form. This removes any pre-populated content on the form and creates a new contact on submission.",
+      "optional": true
+    },
+    {
+      "name": "lifecycleStages",
+      "type": "string[]",
+      "label": "Lifecycle Stages",
+      "description": "A list of objects of lifecycle stages. **Format: `[{ \"objectTypeId\": \"0-1\", \"value\": \"subscriber\" }]`** [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/forms#post-%2Fmarketing%2Fv3%2Fforms%2F) for more information.",
+      "optional": true,
+      "default": []
+    },
+    {
+      "name": "postSubmitActionType",
+      "type": "string",
+      "label": "Post Submit Action Type",
+      "description": "The action to take after submit. The default action is displaying a thank you message.",
+      "options": ["thank_you", "redirect_url"],
+      "optional": true
+    },
+    {
+      "name": "postSubmitActionValue",
+      "type": "string",
+      "label": "Post Submit Action Value",
+      "description": "The thank you text or the page to redirect to.",
+      "optional": true
+    },
+    {
+      "name": "language",
+      "type": "string",
+      "label": "Language",
+      "description": "The language of the form.",
+      "options": [
+        {
+          "label": "Afrikaans",
+          "value": "af"
+        },
+        {
+          "label": "Arabic (Egypt)",
+          "value": "ar-eg"
+        },
+        {
+          "label": "Bulgarian",
+          "value": "bg"
+        },
+        {
+          "label": "Bengali",
+          "value": "bn"
+        },
+        {
+          "label": "Czech",
+          "value": "cs"
+        },
+        {
+          "label": "Danish",
+          "value": "da"
+        },
+        {
+          "label": "Greek",
+          "value": "el"
+        },
+        {
+          "label": "English",
+          "value": "en"
+        },
+        {
+          "label": "Spanish",
+          "value": "es"
+        },
+        {
+          "label": "Spanish (Mexico)",
+          "value": "es-mx"
+        },
+        {
+          "label": "Finnish",
+          "value": "fi"
+        },
+        {
+          "label": "French",
+          "value": "fr"
+        },
+        {
+          "label": "French (Canada)",
+          "value": "fr-ca"
+        },
+        {
+          "label": "Hebrew (Israel)",
+          "value": "he-il"
+        },
+        {
+          "label": "Croatian",
+          "value": "hr"
+        },
+        {
+          "label": "Hungarian",
+          "value": "hu"
+        },
+        {
+          "label": "Indonesian",
+          "value": "id"
+        },
+        {
+          "label": "Italian",
+          "value": "it"
+        },
+        {
+          "label": "Japanese",
+          "value": "ja"
+        },
+        {
+          "label": "Korean",
+          "value": "ko"
+        },
+        {
+          "label": "Lithuanian",
+          "value": "lt"
+        },
+        {
+          "label": "Malay",
+          "value": "ms"
+        },
+        {
+          "label": "Dutch",
+          "value": "nl"
+        },
+        {
+          "label": "Norwegian (Norway)",
+          "value": "no-no"
+        },
+        {
+          "label": "Polish",
+          "value": "pl"
+        },
+        {
+          "label": "Portuguese",
+          "value": "pt"
+        },
+        {
+          "label": "Portuguese (Brazil)",
+          "value": "pt-br"
+        },
+        {
+          "label": "Romanian",
+          "value": "ro"
+        },
+        {
+          "label": "Russian",
+          "value": "ru"
+        },
+        {
+          "label": "Slovak",
+          "value": "sk"
+        },
+        {
+          "label": "Slovenian",
+          "value": "sl"
+        },
+        {
+          "label": "Swedish",
+          "value": "sv"
+        },
+        {
+          "label": "Thai",
+          "value": "th"
+        },
+        {
+          "label": "Tagalog",
+          "value": "tl"
+        },
+        {
+          "label": "Ukrainian",
+          "value": "uk"
+        },
+        {
+          "label": "Vietnamese",
+          "value": "vi"
+        },
+        {
+          "label": "Chinese (China)",
+          "value": "zh-cn"
+        },
+        {
+          "label": "Chinese (Hong Kong)",
+          "value": "zh-hk"
+        },
+        {
+          "label": "Chinese (Taiwan)",
+          "value": "zh-tw"
+        }
+      ],
+      "optional": true
+    },
+    {
+      "name": "prePopulateKnownValues",
+      "type": "boolean",
+      "label": "Pre-populate Known Values",
+      "description": "Whether contact fields should pre-populate with known information when a contact returns to your site.",
+      "optional": true
+    },
+    {
+      "name": "cloneable",
+      "type": "boolean",
+      "label": "Cloneable",
+      "description": "Whether the form can be cloned.",
+      "optional": true
+    },
+    {
+      "name": "notifyContactOwner",
+      "type": "boolean",
+      "label": "Notify Contact Owner",
+      "description": "Whether to send a notification email to the contact owner when a submission is received.",
+      "optional": true
+    },
+    {
+      "name": "recaptchaEnabled",
+      "type": "boolean",
+      "label": "Recaptcha Enabled",
+      "description": "Whether CAPTCHA (spam prevention) is enabled.",
+      "optional": true
+    },
+    {
+      "name": "archivable",
+      "type": "boolean",
+      "label": "Archivable",
+      "description": "Whether the form can be archived.",
+      "optional": true
+    },
+    {
+      "name": "notifyRecipients",
+      "type": "string[]",
+      "label": "Contact Email",
+      "description": "Note - this needs to be a contact that already exists within HubSpot. You may need to add a Create or Update Contact step before this one. Then, use the email created in that step in this field.",
+      "useQuery": true,
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "renderRawHtml",
+      "type": "boolean",
+      "label": "Render Raw HTML",
+      "description": "Whether the form will render as raw HTML as opposed to inside an iFrame.",
+      "optional": true
+    },
+    {
+      "name": "cssClass",
+      "type": "string",
+      "label": "CSS Class",
+      "description": "The CSS class of the form.",
+      "optional": true
+    },
+    {
+      "name": "theme",
+      "type": "string",
+      "label": "Theme",
+      "description": "The theme used for styling the input fields. This will not apply if the form is added to a HubSpot CMS page`.",
+      "options": ["default_style", "canvas", "linear", "round", "sharp", "legacy"],
+      "optional": true
+    },
+    {
+      "name": "submitButtonText",
+      "type": "string",
+      "label": "Submit Button Text",
+      "description": "The text displayed on the form submit button.",
+      "optional": true
+    },
+    {
+      "name": "labelTextSize",
+      "type": "string",
+      "label": "Label Text Size",
+      "description": "The size of the label text.",
+      "optional": true
+    },
+    {
+      "name": "legalConsentTextColor",
+      "type": "string",
+      "label": "Legal Consent Text Color",
+      "description": "The color of the legal consent text.",
+      "optional": true
+    },
+    {
+      "name": "fontFamily",
+      "type": "string",
+      "label": "Font Family",
+      "description": "The font family of the form.",
+      "optional": true
+    },
+    {
+      "name": "legalConsentTextSize",
+      "type": "string",
+      "label": "Legal Consent Text Size",
+      "description": "The size of the legal consent text.",
+      "optional": true
+    },
+    {
+      "name": "backgroundWidth",
+      "type": "string",
+      "label": "Background Width",
+      "description": "The width of the background.",
+      "optional": true
+    },
+    {
+      "name": "helpTextSize",
+      "type": "string",
+      "label": "Help Text Size",
+      "description": "The size of the help text.",
+      "optional": true
+    },
+    {
+      "name": "submitFontColor",
+      "type": "string",
+      "label": "Submit Font Color",
+      "description": "The color of the submit font.",
+      "optional": true
+    },
+    {
+      "name": "labelTextColor",
+      "type": "string",
+      "label": "Label Text Color",
+      "description": "The color of the label text.",
+      "optional": true
+    },
+    {
+      "name": "submitAlignment",
+      "type": "string",
+      "label": "Submit Alignment",
+      "description": "The alignment of the submit button.",
+      "options": ["left", "center", "right"],
+      "optional": true
+    },
+    {
+      "name": "submitSize",
+      "type": "string",
+      "label": "Submit Size",
+      "description": "The size of the submit button.",
+      "optional": true
+    },
+    {
+      "name": "helpTextColor",
+      "type": "string",
+      "label": "Help Text Color",
+      "description": "The color of the help text.",
+      "optional": true
+    },
+    {
+      "name": "submitColor",
+      "type": "string",
+      "label": "Submit Color",
+      "description": "The color of the submit button.",
+      "optional": true
+    },
+    {
+      "name": "legalConsentOptionsType",
+      "type": "string",
+      "label": "Legal Consent Options Type",
+      "description": "The type of legal consent options.",
+      "options": ["none", "legitimate_interest", "explicit_consent_process", "implicit_consent_process"],
+      "optional": true
+    },
+    {
+      "name": "legalConsentOptionsObject",
+      "type": "object",
+      "label": "Legal Consent Options Object",
+      "description": "The object of legal consent options. **Format: `{\"subscriptionTypeIds\": [1,2,3], \"lawfulBasis\": \"lead\", \"privacy\": \"string\"}`** [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/forms#post-%2Fmarketing%2Fv3%2Fforms%2F) for more information.",
+      "optional": true
+    }
+  ]
+}

@@ -336,6 +336,15 @@
     "remove": "Remove {{value}}",
     "selected": "Selected"
   },
+  "searchableMultiSelect": {
+    "placeholder": "Search…",
+    "loading": "Loading…",
+    "empty": "No matches.",
+    "selectedCount_one": "{{count}} selected",
+    "selectedCount_other": "{{count}} selected",
+    "clearAll": "Clear all",
+    "remove": "Remove {{label}}"
+  },
   "collapsibleTagRow": {
     "more": "more",
     "less": "show less"

@@ -1,0 +1,85 @@
+{
+  "name": "Search Lists",
+  "description": "Searches for lists. [See docs here](https://mailchimp.com/developer/marketing/api/lists/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-search-lists",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "beforeDateCreated",
+      "type": "string",
+      "label": "Before date created",
+      "description": "Restrict response to lists created before the set date. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.",
+      "optional": true
+    },
+    {
+      "name": "sinceDateCreated",
+      "type": "string",
+      "label": "Since date created",
+      "description": "Restrict results to lists created after the set date. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.",
+      "optional": true
+    },
+    {
+      "name": "beforeCampaignLastSent",
+      "type": "string",
+      "label": "Before campaign last sent",
+      "description": "Restrict results to lists created before the last campaign send date. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.",
+      "optional": true
+    },
+    {
+      "name": "sinceCampaignLastSent",
+      "type": "string",
+      "label": "Since campaign last sent",
+      "description": "Restrict results to lists created after the last campaign send date. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.",
+      "optional": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "Restrict results to lists that include a specific subscriber's email address.",
+      "optional": true
+    },
+    {
+      "name": "sortField",
+      "type": "string",
+      "label": "Sort field",
+      "description": "Returns files sorted by the specified field. Possible value: \"date_created\"",
+      "default": "date_created",
+      "optional": true
+    },
+    {
+      "name": "sortDir",
+      "type": "string",
+      "label": "Sort direction",
+      "description": "Determines the order direction for sorted results. Possible values: ASC or DESC.",
+      "optional": true,
+      "options": ["ASC", "DESC"],
+      "default": "DESC"
+    },
+    {
+      "name": "hasEcommerceStore",
+      "type": "boolean",
+      "label": "Has ecommerce store?",
+      "description": "The unique ID for the list",
+      "optional": true
+    },
+    {
+      "name": "includeTotalContacts",
+      "type": "boolean",
+      "label": "Include total contacts",
+      "description": "Return the total_contacts field in the stats response, which contains an approximate count of all contacts in any state.",
+      "optional": true
+    }
+  ]
+}

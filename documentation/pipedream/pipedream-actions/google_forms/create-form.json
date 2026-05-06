@@ -1,0 +1,32 @@
+{
+  "name": "Create Form",
+  "description": "Creates a new Google Form. [See the documentation](https://developers.google.com/forms/api/reference/rest/v1/forms/create)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "google_forms-create-form",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleForms",
+      "type": "app",
+      "app": "google_forms"
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "The title of the form which is visible to responders"
+    },
+    {
+      "name": "documentTitle",
+      "type": "string",
+      "label": "Document Title",
+      "description": "The title of the document which is visible in Drive",
+      "optional": true
+    }
+  ]
+}

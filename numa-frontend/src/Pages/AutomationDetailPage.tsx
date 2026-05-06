@@ -35,6 +35,11 @@ import { listObjectsInFolder, fetchFileFromS3, downloadFileFromS3 } from '../uti
 import { jwtDecode } from 'jwt-decode';
 import type { AgentSchedule } from '../types/agentSchedules';
 import type { AgentSummary } from '../types/agents';
+import {
+  summarizePipedreamConfiguredProps,
+  summarizePipedreamTrigger,
+} from '../Components/PipedreamTriggers/pipedreamTriggerLabels';
+import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import type { RunHistoryItem, ScheduledRunLog } from '../types/scheduledRuns';
 
 const toMillis = (ts: number): number => (ts > 1e12 ? ts : ts * 1000);
@@ -68,19 +73,88 @@ const extractUserIdFromS3Key = (s3Key?: string): string | null => {
   return match?.[1] ?? null;
 };
 
+/**
+ * Renders the configured props of a Pipedream trigger as definition-list rows
+ * inside the existing trigger-details Card. Skips the auth prop (auto-injected
+ * server-side) and any forced_props (Numa-controlled, not user-visible).
+ *
+ * Uses i18n-driven prop labels (see `pipedreamTriggers.triggers.<id>.props.<name>.label`)
+ * and the trigger's `configured_prop_labels` snapshot to render channel/user
+ * names instead of raw IDs.
+ */
+const PipedreamPropsDetail: React.FC<{
+  trigger: {
+    component_id: string;
+    configured_props: Record<string, unknown>;
+    configured_prop_labels?: Record<string, Record<string, string>>;
+    app_slug: string;
+  };
+  forcedPropNames: readonly string[];
+}> = ({ trigger, forcedPropNames }) => {
+  const { t } = useTranslation('automations');
+  const rows = summarizePipedreamConfiguredProps({
+    componentId: trigger.component_id,
+    appSlug: trigger.app_slug,
+    configuredProps: trigger.configured_props,
+    configuredPropLabels: trigger.configured_prop_labels,
+    forcedPropNames,
+    t,
+  });
+  if (rows.length === 0) return null;
+  return (
+    <>
+      <dt className="col-sm-4 text-muted small">{t('pipedreamTriggers.detail.configuredProps')}</dt>
+      <dd className="col-sm-8">
+        <dl className="row mb-0">
+          {rows.map((r) => (
+            <React.Fragment key={r.propName}>
+              <dt className="col-sm-5 text-muted small">{r.label}</dt>
+              <dd className="col-sm-7 small mb-1">{r.value}</dd>
+            </React.Fragment>
+          ))}
+        </dl>
+      </dd>
+    </>
+  );
+};
+
+/**
+ * Banner shown above the workflow diagram when the underlying Pipedream
+ * account for a Pipedream-trigger automation has gone unhealthy. Surfaces
+ * a "Reconnect on Integrations" CTA — the trigger keeps existing on the
+ * Pipedream side but won't fire until the OAuth grant is reauthorised.
+ */
+const PipedreamUnhealthyBanner: React.FC<{ appSlug: string }> = ({ appSlug }) => {
+  const { t } = useTranslation('automations');
+  return (
+    <Alert variant="warning" className="d-flex align-items-center justify-content-between">
+      <div>
+        <strong>{t('pipedreamTriggers.detail.unhealthyTitle', { app: appSlug })}</strong>
+        <div className="small mb-0">{t('pipedreamTriggers.detail.unhealthyBody')}</div>
+      </div>
+      <a href="/integrations" className="btn btn-sm btn-outline-warning">
+        {t('pipedreamTriggers.detail.reconnectCta')}
+      </a>
+    </Alert>
+  );
+};
+
 export const AutomationDetailPage: React.FC = () => {
   const { automationId } = useParams<{ automationId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation('automations');
   const { t: tAgents } = useTranslation('agents');
   const { numaGet, numaPut, numaDelete, numaPost } = useNumaRequest();
-  const { getCredentials, region: authRegion, getAccessToken } = useAuth();
+  const { getCredentials, region: authRegion, getAccessToken, user, lambdaClient } = useAuth();
   const { branding } = useBranding();
   const brandPrimaryColor = branding.resolvedAssets?.primaryColor || branding.primaryColor || '#6366f1';
   const brandPrimaryContrast = branding.resolvedAssets?.primaryContrast || branding.primaryContrast || '#ffffff';
 
   const [automation, setAutomation] = useState<AgentSchedule | null>(null);
   const [agent, setAgent] = useState<AgentSummary | null>(null);
+  // Pipedream-only: track whether the underlying app account is unhealthy so
+  // the banner can prompt a reconnect. Stays null until we know.
+  const [pipedreamHealthState, setPipedreamHealthState] = useState<'unknown' | 'healthy' | 'unhealthy'>('unknown');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -285,6 +359,44 @@ export const AutomationDetailPage: React.FC = () => {
   );
 
   const isEventTrigger = automation?.triggerType === 'event';
+  // Narrowed views per source. Each branch's render block uses the matching one.
+  const gmailTrigger = automation?.trigger?.source === 'gmail' ? automation.trigger : undefined;
+  const pipedreamTrigger = automation?.trigger?.source === 'pipedream' ? automation.trigger : undefined;
+  const pipedreamSummary = pipedreamTrigger
+    ? summarizePipedreamTrigger(pipedreamTrigger.app_slug, pipedreamTrigger.component_id, t)
+    : null;
+
+  // Health check for Pipedream-trigger automations. Runs once on load and
+  // surfaces a reconnect banner when the underlying account is missing or
+  // marked unhealthy by Pipedream.
+  useEffect(() => {
+    if (!pipedreamTrigger) {
+      setPipedreamHealthState('unknown');
+      return;
+    }
+    let cancelled = false;
+    let externalUserId = '';
+    try {
+      externalUserId = PipedreamProxyService.deriveExternalUserId(
+        user as Parameters<typeof PipedreamProxyService.deriveExternalUserId>[0]
+      );
+    } catch {
+      return;
+    }
+    PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId)
+      .then((status) => {
+        if (cancelled) return;
+        const conn = status.connections.find((c) => c.app_name === pipedreamTrigger.app_slug);
+        const healthy = conn?.status === 'connected' && conn.healthy !== false;
+        setPipedreamHealthState(healthy ? 'healthy' : 'unhealthy');
+      })
+      .catch(() => {
+        if (!cancelled) setPipedreamHealthState('unknown');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pipedreamTrigger, user, lambdaClient]);
   const scheduleDescription = automation && !isEventTrigger ? describeCronExpression(automation.cronExpression) : '';
   const nextRuns = useMemo(() => {
     if (!automation || isEventTrigger || automation.status !== 'active' || !automation.cronExpression) return [];
@@ -375,26 +487,31 @@ export const AutomationDetailPage: React.FC = () => {
         <Row className="mb-4">
           <Col>
             <div className="d-flex gap-2 flex-wrap">
-              <Button
-                size="sm"
-                style={{
-                  backgroundColor: brandPrimaryColor,
-                  borderColor: brandPrimaryColor,
-                  color: brandPrimaryContrast,
-                }}
-                onClick={handleRunNow}
-                disabled={actionLoading === 'run'}
-              >
-                {actionLoading === 'run' ? (
-                  <>
-                    <Spinner animation="border" size="sm" className="me-1" /> {t('actions.running')}
-                  </>
-                ) : (
-                  <>
-                    <Play size={14} className="me-1" /> {t('actions.runNow')}
-                  </>
-                )}
-              </Button>
+              {/* Run Now is meaningless for event triggers — they need a real
+                  event payload to do anything useful. Hide it for events
+                  rather than wire up a synthetic-payload tester UX. */}
+              {automation.triggerType !== 'event' && (
+                <Button
+                  size="sm"
+                  style={{
+                    backgroundColor: brandPrimaryColor,
+                    borderColor: brandPrimaryColor,
+                    color: brandPrimaryContrast,
+                  }}
+                  onClick={handleRunNow}
+                  disabled={actionLoading === 'run'}
+                >
+                  {actionLoading === 'run' ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-1" /> {t('actions.running')}
+                    </>
+                  ) : (
+                    <>
+                      <Play size={14} className="me-1" /> {t('actions.runNow')}
+                    </>
+                  )}
+                </Button>
+              )}
               <Button
                 variant="outline-secondary"
                 size="sm"
@@ -420,6 +537,14 @@ export const AutomationDetailPage: React.FC = () => {
           </Col>
         </Row>
 
+        {pipedreamTrigger && pipedreamHealthState === 'unhealthy' && (
+          <Row className="mb-3">
+            <Col>
+              <PipedreamUnhealthyBanner appSlug={pipedreamTrigger.app_slug} />
+            </Col>
+          </Row>
+        )}
+
         {/* Workflow Diagram */}
         <Row className="mb-4">
           <Col>
@@ -436,11 +561,27 @@ export const AutomationDetailPage: React.FC = () => {
                     </div>
                     {isEventTrigger ? (
                       <>
-                        <div className="workflow-diagram-node__detail">{t('list.triggerEmail')}</div>
-                        {automation.trigger?.filters && automation.trigger.filters.length > 0 && (
-                          <div className="workflow-diagram-node__sub">
-                            {t('list.filterCount', { count: automation.trigger.filters.length })}
-                          </div>
+                        {pipedreamSummary ? (
+                          <>
+                            <div className="workflow-diagram-node__detail d-flex align-items-center gap-1 justify-content-center">
+                              {pipedreamSummary.iconSrc ? (
+                                <img src={pipedreamSummary.iconSrc} alt="" width={14} height={14} />
+                              ) : (
+                                <i className={`${pipedreamSummary.fallbackIcon} small`} />
+                              )}
+                              {pipedreamSummary.appLabel}
+                            </div>
+                            <div className="workflow-diagram-node__sub">{pipedreamSummary.triggerLabel}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="workflow-diagram-node__detail">{t('list.triggerEmail')}</div>
+                            {automation.trigger?.source === 'gmail' && automation.trigger.filters.length > 0 && (
+                              <div className="workflow-diagram-node__sub">
+                                {t('list.filterCount', { count: automation.trigger.filters.length })}
+                              </div>
+                            )}
+                          </>
                         )}
                       </>
                     ) : (
@@ -532,17 +673,35 @@ export const AutomationDetailPage: React.FC = () => {
                     <>
                       <dt className="col-sm-4 text-muted small">{t('detail.overview.source')}</dt>
                       <dd className="col-sm-8">
-                        <div className="d-flex align-items-center gap-1">
-                          <Mail size={14} />
-                          {t('trigger.event.builder.sourceGmail')}
-                        </div>
+                        {pipedreamSummary ? (
+                          <div className="d-flex align-items-center gap-2">
+                            {pipedreamSummary.iconSrc ? (
+                              <img src={pipedreamSummary.iconSrc} alt="" width={16} height={16} />
+                            ) : (
+                              <i className={pipedreamSummary.fallbackIcon} />
+                            )}
+                            <span>{pipedreamSummary.combined}</span>
+                          </div>
+                        ) : (
+                          <div className="d-flex align-items-center gap-1">
+                            <Mail size={14} />
+                            {t('trigger.event.builder.sourceGmail')}
+                          </div>
+                        )}
                       </dd>
+
+                      {pipedreamTrigger && pipedreamSummary?.trigger ? (
+                        <PipedreamPropsDetail
+                          trigger={pipedreamTrigger}
+                          forcedPropNames={Object.keys(pipedreamSummary.trigger.restraints.forced_props)}
+                        />
+                      ) : null}
 
                       <dt className="col-sm-4 text-muted small">{t('detail.overview.filters')}</dt>
                       <dd className="col-sm-8">
-                        {automation.trigger?.filters && automation.trigger.filters.length > 0 ? (
+                        {gmailTrigger && gmailTrigger.filters.length > 0 ? (
                           <div className="d-flex flex-column gap-1">
-                            {automation.trigger.filters.map((f, i) => (
+                            {gmailTrigger.filters.map((f, i) => (
                               <div key={i} className="small">
                                 {t(`trigger.event.builder.fields.${f.field}`)} {t(`trigger.event.builder.ops.${f.op}`)}{' '}
                                 &quot;{f.value}&quot;
@@ -554,11 +713,11 @@ export const AutomationDetailPage: React.FC = () => {
                         )}
                       </dd>
 
-                      {automation.trigger?.filters && automation.trigger.filters.length > 1 && (
+                      {gmailTrigger && gmailTrigger.filters.length > 1 && (
                         <>
                           <dt className="col-sm-4 text-muted small">{t('detail.overview.filterLogic')}</dt>
                           <dd className="col-sm-8">
-                            {automation.trigger.filter_logic === 'any'
+                            {gmailTrigger.filter_logic === 'any'
                               ? t('trigger.event.builder.matchAny')
                               : t('trigger.event.builder.matchAll')}
                           </dd>
@@ -567,7 +726,7 @@ export const AutomationDetailPage: React.FC = () => {
 
                       <dt className="col-sm-4 text-muted small">{t('detail.overview.emailContext')}</dt>
                       <dd className="col-sm-8">
-                        {automation.trigger?.include_email_context !== false
+                        {gmailTrigger?.include_email_context !== false
                           ? t('detail.overview.emailEnabled')
                           : t('detail.overview.emailDisabled')}
                       </dd>

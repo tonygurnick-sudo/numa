@@ -1,0 +1,41 @@
+{
+  "name": "Add Or Remove Members Tags",
+  "description": "Add or remove member tags. [See docs here](https://mailchimp.com/developer/marketing/api/list-member-tags/add-or-remove-member-tags/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-add-remove-member-tags",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "subscriberHash",
+      "type": "string",
+      "label": "Subscriber",
+      "description": "The MD5 hash of the lowercase version of the list member's email address.",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "tags",
+      "type": "string[]",
+      "label": "Tags",
+      "description": "Stringified object list of tags assigned to the list member.. name, or status (Possible status values: \"inactive\" or \"active\") properties allowed.\n        Example:\n        `{\n            \"name\":\"\",\n            \"status\":\"active\",\n        }`"
+    }
+  ]
+}

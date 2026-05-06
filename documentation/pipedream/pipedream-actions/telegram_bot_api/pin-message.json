@@ -1,0 +1,38 @@
+{
+  "name": "Pin a Message",
+  "description": "Pins a message. [See the docs](https://core.telegram.org/bots/api#pinchatmessage) for more information",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "telegram_bot_api-pin-message",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "telegramBotApi",
+      "type": "app",
+      "app": "telegram_bot_api"
+    },
+    {
+      "name": "chatId",
+      "type": "string",
+      "label": "Chat ID",
+      "description": "Enter the unique identifier for the target chat (e.g. `1035597319`) or username of the target public chat (in the format `@channelusername` or `@supergroupusername`). For example, if the group's public link is `t.me/mygroup`, the username is `@mygroup`."
+    },
+    {
+      "name": "messageId",
+      "type": "string",
+      "label": "Message ID",
+      "description": "Enter the message ID."
+    },
+    {
+      "name": "disable_notification",
+      "type": "boolean",
+      "label": "Disable Notifications",
+      "description": "Choose if to send the message silently. iOS users will not receive a notification, Android users will receive a notification with no sound.",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "Approve Workflow",
+  "description": "Suspend the workflow until approved by email. [See the documentation](https://pipedream.com/docs/code/nodejs/rerun#flowsuspend)",
+  "component_type": "action",
+  "version": "0.0.12",
+  "key": "microsoft_outlook-approve-workflow",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    },
+    {
+      "name": "recipients",
+      "label": "Recipients",
+      "description": "Array of email addresses",
+      "type": "string[]",
+      "optional": false,
+      "default": []
+    },
+    {
+      "name": "subject",
+      "label": "Subject",
+      "description": "Subject of the email",
+      "type": "string",
+      "optional": false
+    }
+  ]
+}

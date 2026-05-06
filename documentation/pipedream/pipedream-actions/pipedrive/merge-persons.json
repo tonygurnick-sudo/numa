@@ -1,0 +1,35 @@
+{
+  "name": "Merge Persons",
+  "description": "Merge two persons in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Persons#mergePersons)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "pipedrive-merge-persons",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "personId",
+      "type": "integer",
+      "label": "Person ID",
+      "description": "The ID of the person to merge",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "targetPersonId",
+      "type": "integer",
+      "label": "Target Person ID",
+      "description": "The ID of the person that will not be overwritten. This person's data will be prioritized in case of conflict with the other person.",
+      "optional": false,
+      "remoteOptions": true
+    }
+  ]
+}

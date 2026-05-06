@@ -1,0 +1,33 @@
+{
+  "name": "Find Contacts",
+  "description": "Finds contacts with the given search string. [See the documentation](https://docs.microsoft.com/en-us/graph/api/user-list-contacts)",
+  "component_type": "action",
+  "version": "0.0.21",
+  "key": "microsoft_outlook-find-contacts",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    },
+    {
+      "name": "searchString",
+      "label": "Search string",
+      "description": "Provide email address, given name, surname or display name (case sensitive)",
+      "type": "string"
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

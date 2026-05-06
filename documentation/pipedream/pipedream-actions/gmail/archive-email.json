@@ -1,0 +1,27 @@
+{
+  "name": "Archive Email",
+  "description": "Archive an email message. [See the documentation](https://developers.google.com/gmail/api/reference/rest/v1/users.messages/modify)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "gmail-archive-email",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "message",
+      "type": "string",
+      "label": "Message",
+      "description": "The identifier of a message",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

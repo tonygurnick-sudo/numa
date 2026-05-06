@@ -1,0 +1,33 @@
+{
+  "name": "Set Ticket Tags",
+  "description": "Set tags on a ticket (replaces all existing tags). [See the documentation](https://developers.freshdesk.com/api/#update_ticket)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "freshdesk-set-ticket-tags",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "ticketId",
+      "type": "integer",
+      "label": "Ticket ID",
+      "description": "Select a ticket or provide a ticket ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "ticketTags",
+      "type": "string[]",
+      "label": "Tags",
+      "description": "Array of tags to set on the ticket. This will replace all existing tags.",
+      "optional": true
+    }
+  ]
+}

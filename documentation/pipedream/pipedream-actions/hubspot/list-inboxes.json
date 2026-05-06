@@ -1,0 +1,40 @@
+{
+  "name": "List Inboxes",
+  "description": "Retrieves a list of inboxes. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-inbox/get-conversations-v3-conversations-inboxes)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "hubspot-list-inboxes",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "after",
+      "type": "string",
+      "label": "After",
+      "description": "The paging cursor token of the last successfully read resource will be returned as the paging.next.after JSON property of a paged response containing more results.",
+      "optional": true
+    },
+    {
+      "name": "archived",
+      "type": "boolean",
+      "label": "Archived",
+      "description": "Whether to include archived inboxes in the response",
+      "optional": true
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "label": "Limit",
+      "description": "The maximum number of results to display per page",
+      "optional": true
+    }
+  ]
+}

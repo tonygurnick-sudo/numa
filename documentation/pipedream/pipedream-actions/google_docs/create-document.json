@@ -1,0 +1,47 @@
+{
+  "name": "Create a New Document",
+  "description": "Create a new document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/create)",
+  "component_type": "action",
+  "version": "0.2.1",
+  "key": "google_docs-create-document",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDocs",
+      "type": "app",
+      "app": "google_docs"
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "Title of the new document"
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "description": "Enter static text (e.g., `hello world`) or a reference to a string exported by a previous step (e.g., `{{steps.foo.$return_value}}`).",
+      "optional": true
+    },
+    {
+      "name": "useMarkdown",
+      "type": "boolean",
+      "label": "Use Markdown Format",
+      "description": "Enable markdown formatting support. When enabled, the text will be parsed as markdown and converted to Google Docs formatting (headings, bold, italic, lists, etc.)",
+      "optional": true
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder",
+      "description": "The folder in the drive",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

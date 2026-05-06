@@ -1,0 +1,26 @@
+{
+  "name": "Complete File Upload",
+  "description": "Use this action to finalize a `mode=multi_part` file upload after all of the parts have been sent successfully. [See the documentation](https://developers.notion.com/reference/complete-a-file-upload)",
+  "component_type": "action",
+  "version": "0.0.8",
+  "key": "notion-complete-file-upload",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "fileUploadId",
+      "type": "string",
+      "label": "File Upload ID",
+      "description": "The ID of the file upload to send.",
+      "remoteOptions": true
+    }
+  ]
+}

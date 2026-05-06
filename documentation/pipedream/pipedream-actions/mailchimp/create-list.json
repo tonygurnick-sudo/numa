@@ -1,0 +1,85 @@
+{
+  "name": "Create List",
+  "description": "Creates a new list. [See docs here](https://mailchimp.com/developer/marketing/api/lists/add-list/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-create-list",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the list."
+    },
+    {
+      "name": "contactCompany",
+      "type": "string",
+      "label": "Contact company",
+      "description": "The company name for the list."
+    },
+    {
+      "name": "contactAddress1",
+      "type": "string",
+      "label": "Contact address1",
+      "description": "The street address for the list contact."
+    },
+    {
+      "name": "contactCity",
+      "type": "string",
+      "label": "Contact city",
+      "description": "The city for the list contact."
+    },
+    {
+      "name": "contactCountry",
+      "type": "string",
+      "label": "Contact country",
+      "description": "A two-character ISO3166 country code. Defaults to US if invalid."
+    },
+    {
+      "name": "permissionReminder",
+      "type": "string",
+      "label": "Permission reminder",
+      "description": "The [permission reminder](https://mailchimp.com/help/edit-the-permission-reminder/) for the list. e.g You signed up for updates on our website"
+    },
+    {
+      "name": "campaignDefaultsFromName",
+      "type": "string",
+      "label": "From name",
+      "description": "The default from name for campaigns sent to this list."
+    },
+    {
+      "name": "campaignDefaultsFromEmail",
+      "type": "string",
+      "label": "From email",
+      "description": "The default from email for campaigns sent to this list."
+    },
+    {
+      "name": "campaignDefaultsSubject",
+      "type": "string",
+      "label": "Subject",
+      "description": "The default subject line for campaigns sent to this list."
+    },
+    {
+      "name": "campaignDefaultsLanguage",
+      "type": "string",
+      "label": "Language",
+      "description": "The default language for this lists's forms."
+    },
+    {
+      "name": "emailTypeOption",
+      "type": "boolean",
+      "label": "Email type option",
+      "description": "Whether the list supports [multiple formats for emails](https://mailchimp.com/help/change-audience-name-defaults/).\n        When set to true, subscribers can choose whether they want to receive HTML or plain-text emails. \n        When set to false, subscribers will receive HTML emails, with a plain-text alternative backup."
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "Get Meeting",
+  "description": "Retrieves a specific meeting by its ID. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/engagements/meetings#get-%2Fcrm%2Fv3%2Fobjects%2Fmeetings%2F%7Bmeetingid%7D)",
+  "component_type": "action",
+  "version": "0.0.13",
+  "key": "hubspot-get-meeting",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "objectId",
+      "type": "string",
+      "label": "Meeting ID",
+      "description": "Hubspot's internal ID for the meeting",
+      "useQuery": true,
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "info",
+      "type": "alert",
+      "alertType": "info",
+      "content": "",
+      "hidden": true
+    },
+    {
+      "name": "additionalProperties",
+      "type": "string[]",
+      "label": "Additional properties to retrieve",
+      "optional": true,
+      "remoteOptions": true
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "name": "Update tracking category option",
+  "description": "Update a tracking category by ID [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories#post-trackingcategories).",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "xero_accounting_api-update-tracking-category-option",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "trackingCategoryId",
+      "type": "string",
+      "label": "Tracking Category ID",
+      "description": "Unique identification of the tracking category",
+      "remoteOptions": true
+    },
+    {
+      "name": "trackingOptionId",
+      "type": "string",
+      "label": "Tracking Option ID",
+      "description": "Unique identification of the tracking option",
+      "remoteOptions": true
+    },
+    {
+      "name": "optionName",
+      "type": "string",
+      "label": "Option name",
+      "description": "The name of the tracking category option"
+    },
+    {
+      "name": "status",
+      "type": "string",
+      "label": "Status",
+      "description": "The status of the tracking category option",
+      "options": ["ACTIVE", "ARCHIVED"],
+      "optional": true
+    }
+  ]
+}

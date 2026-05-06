@@ -1,0 +1,42 @@
+{
+  "name": "List Commits",
+  "description": "List commits in a repository branch. [See the documentation](https://docs.gitlab.com/ee/api/commits.html#list-repository-commits)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "gitlab-list-commits",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gitlab",
+      "type": "app",
+      "app": "gitlab"
+    },
+    {
+      "name": "projectId",
+      "type": "integer",
+      "label": "Project ID",
+      "description": "The project ID, as displayed in the main project page",
+      "remoteOptions": true
+    },
+    {
+      "name": "refName",
+      "type": "string",
+      "label": "Branch Name",
+      "description": "The name of the branch",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "max",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "Max number of results to return. Default value is `100`",
+      "optional": true,
+      "default": 100
+    }
+  ]
+}

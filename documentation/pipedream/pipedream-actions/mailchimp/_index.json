@@ -1,0 +1,314 @@
+[
+  {
+    "key": "mailchimp-update-list",
+    "name": "Update List",
+    "description": "Updates an existing list. [See docs here](https://mailchimp.com/developer/marketing/api/lists/update-lists/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 16
+  },
+  {
+    "key": "mailchimp-update-campaign",
+    "name": "Update Campaign",
+    "description": "Update a campaign. [See docs here](https://mailchimp.com/developer/marketing/api/campaigns/update-campaign-settings/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 35
+  },
+  {
+    "key": "mailchimp-unsubscribe-email",
+    "name": "Unsubscribe Email",
+    "description": "Unsubscribe an email address from an audience. [See docs here](https://mailchimp.com/developer/marketing/api/list-members/archive-list-member/)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "mailchimp-send-campaign",
+    "name": "Send a Campaign",
+    "description": "Sends a campaign draft to the audience signed up for the campaign. [See docs here](https://mailchimp.com/developer/marketing/api/campaigns/send-campaign/)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "mailchimp-search-member",
+    "name": "Search Members/Subscribers",
+    "description": "Searches for a subscriber. The search can be restricted to a specific list, or can be used to search across all lists in an account.\n   [See docs here](https://mailchimp.com/developer/marketing/api/search-members/)\n  ",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "mailchimp-search-lists",
+    "name": "Search Lists",
+    "description": "Searches for lists. [See docs here](https://mailchimp.com/developer/marketing/api/lists/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "mailchimp-search-campaign",
+    "name": "Search Campaigns",
+    "description": "Searches for the campaigns. [See docs here](https://mailchimp.com/developer/marketing/api/search-campaigns/search-campaigns/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "mailchimp-remove-segment-member",
+    "name": "Remove Member From A Segment",
+    "description": "Removes a member from the specified static segment. [See docs here](https://mailchimp.com/developer/marketing/api/list-segment-members/remove-list-member-from-segment/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "mailchimp-list-segment-member",
+    "name": "List Segment Members",
+    "description": "Retrieves a list of all segment members. [See docs here](https://mailchimp.com/developer/marketing/api/list-segment-members/list-members-in-segment/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "mailchimp-get-list",
+    "name": "Get List",
+    "description": "Searches for lists. [See docs here](https://mailchimp.com/developer/marketing/api/lists/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "mailchimp-get-list-member-tags",
+    "name": "Get List Member Tags",
+    "description": "Retrieves a list of all member tags. [See docs here](https://mailchimp.com/developer/marketing/api/list-member-tags/list-member-tags/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "mailchimp-get-list-member-activity",
+    "name": "Get List Member Activities",
+    "description": "Get the last 50 events of a member's activity on a specific list. [See docs here](https://mailchimp.com/developer/marketing/api/list-activity/view-recent-activity-50/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "mailchimp-get-list-activities",
+    "name": "Get List Activities",
+    "description": "Retrieves up to the previous 180 days of daily detailed aggregated activity stats for a list. [See docs here](https://mailchimp.com/developer/marketing/api/list-activity/list-recent-activity/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "mailchimp-get-campaign",
+    "name": "Get Campaign",
+    "description": "Gets metadata of a specific campaign. [See docs here](https://mailchimp.com/developer/marketing/api/campaigns/get-campaign-info/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "mailchimp-get-a-campaign-report",
+    "name": "Get A Campaign Report",
+    "description": "Gets a campaign report. [See docs here](https://mailchimp.com/developer/marketing/api/campaign-advice/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "mailchimp-edit-campaign-template-content",
+    "name": "Edit A Campaign Template Content",
+    "description": "Edits a defined content area of a custom HTML template. [See docs here](https://mailchimp.com/developer/marketing/api/campaign-content/set-campaign-content/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "mailchimp-delete-list",
+    "name": "Delete List",
+    "description": "Deletes an existing list. [See docs here](https://mailchimp.com/developer/marketing/api/lists)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "mailchimp-delete-list-member",
+    "name": "Delete List Member",
+    "description": "Permanently deletes a member. [See docs here](https://mailchimp.com/developer/marketing/api/list-members/delete-list-member/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "mailchimp-delete-campaign",
+    "name": "Delete Campaign",
+    "description": "Delete a specific campaign. [See docs here](https://mailchimp.com/developer/marketing/api/campaigns/delete-campaign/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "mailchimp-create-list",
+    "name": "Create List",
+    "description": "Creates a new list. [See docs here](https://mailchimp.com/developer/marketing/api/lists/add-list/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "mailchimp-create-campaign",
+    "name": "Create Campaign",
+    "description": "Creates a new campaign draft. [See docs here](https://mailchimp.com/developer/marketing/api/campaigns/add-campaign/)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 35
+  },
+  {
+    "key": "mailchimp-add-subscriber-to-tag",
+    "name": "Add Subscriber To Tag",
+    "description": "Adds an email address to a tag within an audience. [See docs here](https://mailchimp.com/developer/marketing/api/list-member-tags/add-or-remove-member-tags/)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "mailchimp-add-segment-member",
+    "name": "Add Member To Segment",
+    "description": "Adds a new member to a static segment. [See docs here](https://mailchimp.com/developer/marketing/api/list-segment-members/add-member-to-segment/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "mailchimp-add-remove-member-tags",
+    "name": "Add Or Remove Members Tags",
+    "description": "Add or remove member tags. [See docs here](https://mailchimp.com/developer/marketing/api/list-member-tags/add-or-remove-member-tags/)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "mailchimp-add-or-update-subscriber",
+    "name": "Add or Update Subscriber",
+    "description": "Adds a new subscriber to an audience or updates existing subscriber. [See docs here](https://mailchimp.com/developer/marketing/api/list-members/add-or-update-list-member/)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 20
+  },
+  {
+    "key": "mailchimp-add-note-to-subscriber",
+    "name": "Add Note to Subscriber",
+    "description": "Adds a new note to an existing subscriber. [See docs here](https://mailchimp.com/developer/marketing/api/list-member-notes/add-member-note/)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  }
+]

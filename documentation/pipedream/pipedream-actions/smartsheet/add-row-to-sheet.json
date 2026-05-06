@@ -1,0 +1,42 @@
+{
+  "name": "Add Row to Sheet",
+  "description": "Adds a row to a sheet. [See docs here](https://smartsheet.redoc.ly/tag/rows#operation/rows-addToSheet)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "smartsheet-add-row-to-sheet",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "smartsheet",
+      "type": "app",
+      "app": "smartsheet"
+    },
+    {
+      "name": "sheetId",
+      "type": "integer",
+      "label": "Sheet",
+      "description": "Select a sheet",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "toTop",
+      "type": "boolean",
+      "label": "To Top",
+      "description": "Set to `true` to add new row to the top of the sheet",
+      "optional": true,
+      "default": false
+    },
+    {
+      "name": "cells",
+      "type": "string[]",
+      "label": "Cells",
+      "description": "Array of objects representing cell values. Use to manually create row when `sheetId` is entered as a custom expression. Example: `{{ [{\"columnId\": 7960873114331012,\"value\": \"New status\"}] }}`",
+      "optional": true
+    }
+  ]
+}

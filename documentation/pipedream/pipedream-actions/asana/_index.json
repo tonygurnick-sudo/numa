@@ -1,0 +1,182 @@
+[
+  {
+    "key": "asana-create-project",
+    "name": "Create Project",
+    "description": "Create a new project in a workspace or team. [See the documentation](https://developers.asana.com/docs/create-a-project)",
+    "version": "0.10.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 18
+  },
+  {
+    "key": "asana-update-task",
+    "name": "Update Task",
+    "description": "Updates a specific and existing task. [See the documentation](https://developers.asana.com/docs/update-a-task)",
+    "version": "0.4.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 14
+  },
+  {
+    "key": "asana-search-user-projects",
+    "name": "Get list of user projects",
+    "description": "Return list of projects given the user and workspace gid. [See the documentation](https://developers.asana.com/docs/get-multiple-projects)",
+    "version": "0.5.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "asana-search-tasks",
+    "name": "Search Tasks",
+    "description": "Searches for a Task by name within a Project. [See the documentation](https://developers.asana.com/docs/get-multiple-tasks)",
+    "version": "0.3.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "asana-search-sections",
+    "name": "Search Sections",
+    "description": "Searches for a section by name within a particular project. [See the documentation](https://developers.asana.com/docs/get-sections-in-a-project)",
+    "version": "0.2.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "asana-search-projects",
+    "name": "Search Projects",
+    "description": "Finds an existing project. [See the documentation](https://developers.asana.com/docs/get-multiple-projects)",
+    "version": "0.2.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "asana-list-task-stories",
+    "name": "List Task Stories",
+    "description": "List stories (including comments) for a task. [See the documentation](https://developers.asana.com/reference/getstoriesfortask)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "asana-get-tasks-from-task-list",
+    "name": "Get Tasks From Task List",
+    "description": "Returns the compact list of tasks in a user\u2019s My Tasks list. [See the documentation](https://developers.asana.com/reference/gettasksforusertasklist)",
+    "version": "0.0.9",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "asana-find-task-by-id",
+    "name": "Find Task by ID",
+    "description": "Searches for a task by id. Returns the complete task record for a single task. [See the documentation](https://developers.asana.com/docs/get-a-task)",
+    "version": "0.2.11",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "asana-delete-task",
+    "name": "Delete Task",
+    "description": "Deletes a specific and existing task. [See the documentation](https://developers.asana.com/docs/delete-a-task)",
+    "version": "0.0.12",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "asana-create-task",
+    "name": "Create Task",
+    "description": "Creates a new task. [See the documentation](https://developers.asana.com/docs/create-a-task)",
+    "version": "0.4.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 16
+  },
+  {
+    "key": "asana-create-task-from-template",
+    "name": "Create Task from Template",
+    "description": "Creates a new task from a task template. [See the documentation](https://developers.asana.com/reference/instantiatetask)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "asana-create-task-comment",
+    "name": "Create Task Comment",
+    "description": "Adds a comment to a task. [See the documentation](https://developers.asana.com/docs/create-a-story-on-a-task)",
+    "version": "0.2.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "asana-create-subtask",
+    "name": "Create Subtask",
+    "description": "Creates a new subtask and adds it to the parent task. [See the documentation](https://developers.asana.com/docs/create-a-subtask)",
+    "version": "0.4.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 15
+  },
+  {
+    "key": "asana-add-task-to-section",
+    "name": "Add Task To Section",
+    "description": "Add a task to a specific, existing section. This will remove the task from other sections of the project. [See the documentation](https://developers.asana.com/docs/add-task-to-section)",
+    "version": "0.2.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 7
+  }
+]

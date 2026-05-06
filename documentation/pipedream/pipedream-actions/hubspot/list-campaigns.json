@@ -1,0 +1,35 @@
+{
+  "name": "List Campaigns",
+  "description": "Retrieves a list of campaigns. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/campaigns#get-%2Fmarketing%2Fv3%2Fcampaigns%2F)",
+  "component_type": "action",
+  "version": "0.0.11",
+  "key": "hubspot-list-campaigns",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "sort",
+      "type": "string",
+      "label": "Sort",
+      "description": "The field by which to sort the results. An optional '-' before the property name can denote descending order",
+      "options": ["hs_name", "-hs_name", "createdAt", "-createdAt", "updatedAt", "-updatedAt"],
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "Remove Label from Email",
+  "description": "Removes a label/category from an email in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/message-update)",
+  "component_type": "action",
+  "version": "0.0.14",
+  "key": "microsoft_outlook-remove-label-from-email",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    },
+    {
+      "name": "messageId",
+      "type": "string",
+      "label": "Message ID",
+      "description": "The identifier of the message to update",
+      "remoteOptions": true
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "label": "Label",
+      "description": "The name of the label/category to remove",
+      "remoteOptions": true
+    }
+  ]
+}

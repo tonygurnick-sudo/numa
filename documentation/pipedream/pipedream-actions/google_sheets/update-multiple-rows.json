@@ -1,0 +1,69 @@
+{
+  "name": "Update Multiple Rows",
+  "description": "Update multiple rows in a spreadsheet defined by a range. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update)",
+  "component_type": "action",
+  "version": "0.1.16",
+  "key": "google_sheets-update-multiple-rows",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "The drive containing the worksheet to update. If you are connected with any [Google Shared Drives](https://support.google.com/a/users/answer/9310351), you can select it here.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "The spreadsheet containing the worksheet to update",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "headersDisplay",
+      "type": "alert",
+      "alertType": "info",
+      "content": "",
+      "hidden": true
+    },
+    {
+      "name": "range",
+      "type": "string",
+      "label": "Range",
+      "description": "The A1 notation of the values to retrieve. E.g., `A1:E5`"
+    },
+    {
+      "name": "rows",
+      "type": "string",
+      "label": "Row Values",
+      "description": "Provide an array of arrays"
+    },
+    {
+      "name": "rowsDescription",
+      "type": "alert",
+      "alertType": "neutral",
+      "content": "Each nested array should represent a row, with each element of the nested array representing a cell/column value (e.g., passing `[[\"Foo\",1,2],[\"Bar\",3,4]]` will insert two rows of data with three columns each). The most common pattern is to reference an array of arrays exported by a previous step (e.g., `{{steps.foo.$return_value}}`). You may also enter or construct a string that will `JSON.parse()` to an array of arrays."
+    }
+  ]
+}
