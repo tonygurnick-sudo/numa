@@ -7,6 +7,17 @@ import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCom
 import { withPRM } from '../../../lib/prm-node/prm';
 import { NotificationService } from '../../../lib/notification-service';
 import { v4 as uuidv4 } from 'uuid';
+import { Agent, fetch as undiciFetch } from 'undici';
+
+// Long-poll dispatcher for the workspace-agent sync invocation. Node's built-in
+// fetch (undici) defaults `headersTimeout` to 300s, so any agent run > 5 min
+// dies with HeadersTimeoutError before the response body even arrives. We give
+// it nearly the full Lambda budget instead.
+const workspaceAgentDispatcher = new Agent({
+  headersTimeout: 840_000,
+  bodyTimeout: 840_000,
+  connectTimeout: 30_000,
+});
 
 const REGION = process.env.REGION ?? 'us-east-1';
 const CHAT_HISTORY_TABLE = process.env.CHAT_HISTORY_TABLE_NAME ?? '';
@@ -1433,7 +1444,7 @@ const invokeWorkspaceAgent = async ({
     todayString: buildTodayString(),
   };
 
-  const response = await fetch(`${WORKSPACE_AGENT_PROXY_URL}/api/workspace-chat-agent/invocations`, {
+  const response = await undiciFetch(`${WORKSPACE_AGENT_PROXY_URL}/api/workspace-chat-agent/invocations`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1444,6 +1455,7 @@ const invokeWorkspaceAgent = async ({
     },
     body: JSON.stringify(requestBody),
     signal: AbortSignal.timeout(840_000), // 14 min — just under the 15 min Lambda timeout
+    dispatcher: workspaceAgentDispatcher,
   });
 
   if (!response.ok) {
