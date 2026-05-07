@@ -1,0 +1,35 @@
+{
+  "name": "List Messages in Chat",
+  "description": "Get the list of messages in a chat. [See the documentation](https://learn.microsoft.com/en-us/graph/api/chat-list-messages?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "microsoft_teams-list-messages-in-chat",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftTeams",
+      "type": "app",
+      "app": "microsoft_teams",
+      "description": "**Personal accounts are not currently supported by Microsoft Teams.** Refer to Microsoft's documentation [here](https://learn.microsoft.com/en-us/graph/permissions-reference#remarks-7) to learn more."
+    },
+    {
+      "name": "chatId",
+      "type": "string",
+      "label": "Chat",
+      "description": "Select a chat (type to search by participant names)",
+      "remoteOptions": true,
+      "useQuery": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "optional": true
+    }
+  ]
+}

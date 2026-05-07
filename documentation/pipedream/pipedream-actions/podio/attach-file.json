@@ -1,0 +1,38 @@
+{
+  "name": "Attach File",
+  "description": "Attaches an uploaded file to the given object. [See the documentation](https://developers.podio.com/doc/files/attach-file-22518)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "podio-attach-file",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "podio"
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File ID",
+      "description": "The file to attach to an object."
+    },
+    {
+      "name": "objectType",
+      "type": "string",
+      "label": "Object Type",
+      "description": "The type of object the file should be attached to.",
+      "options": ["status", "item", "comment", "space", "task"]
+    },
+    {
+      "name": "objectId",
+      "type": "string",
+      "label": "Object ID",
+      "description": "The id of the object the file should be attached to."
+    }
+  ]
+}

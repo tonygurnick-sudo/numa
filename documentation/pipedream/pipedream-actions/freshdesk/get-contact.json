@@ -1,0 +1,26 @@
+{
+  "name": "Get Contact",
+  "description": "Get a contact from Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#view_contact)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "freshdesk-get-contact",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "contactId",
+      "type": "string",
+      "label": "Contact ID",
+      "description": "The ID of a contact",
+      "remoteOptions": true
+    }
+  ]
+}

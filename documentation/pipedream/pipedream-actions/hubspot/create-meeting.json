@@ -1,0 +1,50 @@
+{
+  "name": "Create Meeting",
+  "description": "Creates a new meeting with optional associations to other objects. [See the documentation](https://developers.hubspot.com/docs/reference/api/crm/engagements/meetings#post-%2Fcrm%2Fv3%2Fobjects%2Fmeetings)",
+  "component_type": "action",
+  "version": "0.0.13",
+  "key": "hubspot-create-meeting",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot",
+      "reloadProps": true
+    },
+    {
+      "name": "toObjectType",
+      "type": "string",
+      "label": "Associated Object Type",
+      "description": "Type of object the meeting is being associated with",
+      "remoteOptions": true
+    },
+    {
+      "name": "toObjectId",
+      "type": "string",
+      "label": "Associated Object",
+      "description": "ID of object the meeting is being associated with",
+      "useQuery": true,
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "associationType",
+      "type": "integer",
+      "label": "Association Type",
+      "description": "A unique identifier to indicate the association type between the meeting and the other object",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "objectProperties",
+      "type": "object",
+      "label": "Meeting Properties",
+      "description": "Enter the meeting properties as a JSON object. Required properties: hs_meeting_title, hs_meeting_body, hs_meeting_start_time, hs_meeting_end_time. Optional: hs_meeting_status"
+    }
+  ]
+}

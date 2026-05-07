@@ -1,0 +1,71 @@
+{
+  "name": "Create Attachment",
+  "description": "Creates an Attachment on a parent object. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_attachment.htm)",
+  "component_type": "action",
+  "version": "0.5.5",
+  "key": "salesforce_rest_api-create-attachment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_attachment.htm) for more information on available fields."
+    },
+    {
+      "name": "Name",
+      "type": "string",
+      "label": "File Name",
+      "description": "Name of the attached file. Max 255 characters."
+    },
+    {
+      "name": "filePathOrContent",
+      "type": "string",
+      "label": "File Path, URL or Content",
+      "description": "The file to attach. Provide either a file URL, a path to a file in the `/tmp` directory (for example, `/tmp/myFile.txt`), or base64-encoded file data."
+    },
+    {
+      "name": "ContentType",
+      "type": "string",
+      "label": "Content Type",
+      "description": "The content type (MIME type) of the attachment. For example, `image/png`."
+    },
+    {
+      "name": "ParentId",
+      "type": "string",
+      "label": "Parent ID",
+      "description": "ID of the parent object of the attachment. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.228.0.object_reference.meta/object_reference/sforce_api_objects_attachment.htm) for supported objects."
+    },
+    {
+      "name": "Description",
+      "type": "string",
+      "label": "Description",
+      "description": "Description of the attachment. Max 500 characters.",
+      "optional": true
+    },
+    {
+      "name": "IsPrivate",
+      "type": "boolean",
+      "label": "Private",
+      "description": "Whether this record is viewable only by the owner and administrators (true) or viewable by all otherwise-allowed users (false).",
+      "optional": true
+    },
+    {
+      "name": "OwnerId",
+      "type": "string",
+      "label": "Owner ID",
+      "description": "ID of the user who owns the attachment.",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

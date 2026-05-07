@@ -1,0 +1,125 @@
+{
+  "name": "Create Agent",
+  "description": "Create an agent in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#create_agent)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "freshdesk-create-agent",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "Email address of the Agent."
+    },
+    {
+      "name": "ticketScope",
+      "type": "integer",
+      "label": "Ticket Scope",
+      "description": "Ticket permission of the agent. Current logged in agent can't update his/her ticket_scope",
+      "options": [
+        {
+          "label": "Global Access",
+          "value": 1
+        },
+        {
+          "label": "Group Access",
+          "value": 2
+        },
+        {
+          "label": "Restricted Access",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "occasional",
+      "type": "boolean",
+      "label": "Occasional",
+      "description": "Set to true if this is an occasional agent (true => occasional, false => full-time)",
+      "optional": true
+    },
+    {
+      "name": "signature",
+      "type": "string",
+      "label": "Signature",
+      "description": "Signature of the agent in HTML format",
+      "optional": true
+    },
+    {
+      "name": "skillIds",
+      "type": "string[]",
+      "label": "Skill IDs",
+      "description": "Array of skill IDs",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "groupIds",
+      "type": "string[]",
+      "label": "Group IDs",
+      "description": "Array of group IDs",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "roleIds",
+      "type": "string[]",
+      "label": "Role IDs",
+      "description": "Array of role IDs",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "agentType",
+      "type": "integer",
+      "label": "Agent Type",
+      "description": "Type of the agent",
+      "options": [
+        {
+          "label": "Support Agent",
+          "value": 1
+        },
+        {
+          "label": "Field Agent",
+          "value": 2
+        },
+        {
+          "label": "Collaborator",
+          "value": 3
+        }
+      ],
+      "optional": true
+    },
+    {
+      "name": "language",
+      "type": "string",
+      "label": "Language",
+      "description": "\tLanguage of the Agent. Default language is `en`",
+      "optional": true
+    },
+    {
+      "name": "timeZone",
+      "type": "string",
+      "label": "Time Zone",
+      "description": "Time zone of the agent. Default value is time zone of the domain.",
+      "optional": true
+    },
+    {
+      "name": "focusMode",
+      "type": "boolean",
+      "label": "Focus Mode",
+      "description": "Focus mode of the agent. Default value is `true`",
+      "optional": true
+    }
+  ]
+}

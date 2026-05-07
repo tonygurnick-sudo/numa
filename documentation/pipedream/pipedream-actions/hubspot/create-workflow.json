@@ -1,0 +1,52 @@
+{
+  "name": "Create a New Workflow",
+  "description": "Create a new workflow. [See the documentation](https://developers.hubspot.com/docs/api-reference/legacy/create-manage-workflows-v3/post-automation-v3-workflows)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "hubspot-create-workflow",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Workflow Name",
+      "description": "The name of the workflow to create"
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "description": "The type of workflow to create",
+      "options": [
+        {
+          "label": "Drip Delay",
+          "value": "DRIP_DELAY"
+        },
+        {
+          "label": "Static Anchor",
+          "value": "STATIC_ANCHOR"
+        },
+        {
+          "label": "Property Anchor",
+          "value": "PROPERTY_ANCHOR"
+        }
+      ]
+    },
+    {
+      "name": "actions",
+      "type": "string[]",
+      "label": "Actions",
+      "description": "A list of objects representing the workflow actions. [See the documentation](https://developers.hubspot.com/docs/api-reference/automation-automation-v4-v4/guide#action-types) for more information.",
+      "optional": true
+    }
+  ]
+}

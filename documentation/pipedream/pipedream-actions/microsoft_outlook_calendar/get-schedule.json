@@ -1,0 +1,51 @@
+{
+  "name": "Get Free/Busy Schedule",
+  "description": "Get the free/busy availability information for a collection of users, distributions lists, or resources (rooms or equipment) for a specified time period. [See the documentation](https://learn.microsoft.com/en-us/graph/api/calendar-getschedule)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "microsoft_outlook_calendar-get-schedule",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook_calendar"
+    },
+    {
+      "name": "schedules",
+      "type": "string[]",
+      "label": "Schedules",
+      "description": "A list of emails of users, distribution lists, or resources. For example: `[ \"adelev@contoso.com\" , \"meganb@contoso.com\" ]`"
+    },
+    {
+      "name": "start",
+      "label": "Start",
+      "description": "Start date-time (yyyy-MM-ddThh:mm:ss) e.g. '2022-04-15T11:20:00'",
+      "type": "string"
+    },
+    {
+      "name": "end",
+      "label": "End",
+      "description": "End date-time (yyyy-MM-ddThh:mm:ss) e.g. '2022-04-15T13:30:00'",
+      "type": "string"
+    },
+    {
+      "name": "timeZone",
+      "label": "Time Zone",
+      "description": "Time zone of the event in supported time zones, [See the docs](https://docs.microsoft.com/en-us/graph/api/outlookuser-supportedtimezones)",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "availabilityViewInterval",
+      "type": "integer",
+      "label": "Availability View Interval",
+      "description": "Represents the duration of a time slot in minutes in an availabilityView in the response. The default is 30 minutes, minimum is 5, maximum is 1440.",
+      "optional": true
+    }
+  ]
+}

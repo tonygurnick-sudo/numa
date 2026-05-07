@@ -1,0 +1,26 @@
+{
+  "name": "List All Canned Responses In A Folder",
+  "description": "View all canned responses in a folder. [See the documentation](https://developers.freshdesk.com/api/#list_all_canned_responses_in_a_folder)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "freshdesk-list-folder-canned-responses",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "cannedResponseFolderId",
+      "type": "integer",
+      "label": "Canned Response Folder ID",
+      "description": "The ID of a canned response folder",
+      "remoteOptions": true
+    }
+  ]
+}

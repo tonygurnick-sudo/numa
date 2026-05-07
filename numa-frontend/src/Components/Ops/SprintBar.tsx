@@ -18,12 +18,12 @@ const SprintBar = () => {
   const { numaDelete } = useNumaRequest();
   const confirm = useConfirm();
   const {
-    teamData,
+    boardData,
     workUnits,
     tickets,
     selectedWorkUnitId,
     selectWorkUnit,
-    refreshTeam,
+    refreshBoard,
     refreshTickets,
     refreshWorkUnits,
     setActiveZone,
@@ -37,7 +37,7 @@ const SprintBar = () => {
   const [successAction, setSuccessAction] = useState<'started' | 'completed'>('started');
   const [successWorkUnit, setSuccessWorkUnit] = useState<WorkUnit | null>(null);
 
-  const zones = teamData?.zones ?? [];
+  const zones = boardData?.zones ?? [];
 
   // ── Derived counts ──────────────────────────────────────────────────────
   const backlogZoneIds = useMemo(
@@ -96,7 +96,7 @@ const SprintBar = () => {
     }
   };
 
-  const teamId = teamData?.team?.id ?? '';
+  const boardId = boardData?.board?.id ?? '';
 
   // ── Determine action button state ───────────────────────────────────────
   const hasActiveWu = workUnits.some((wu) => wu.status === 'active');
@@ -119,15 +119,15 @@ const SprintBar = () => {
 
   // ── Default name for the next sprint ──────────────────────────────────
   const defaultSprintName = useMemo(() => {
-    const label = teamData?.team?.workUnitSeries?.label ?? 'Sprint';
+    const label = boardData?.board?.workUnitSeries?.label ?? 'Sprint';
     return `${label} ${workUnits.length + 1}`;
-  }, [teamData?.team?.workUnitSeries?.label, workUnits.length]);
+  }, [boardData?.board?.workUnitSeries?.label, workUnits.length]);
 
   // ── Delete Sprint handler ───────────────────────────────────────────────
   const [deleting, setDeleting] = useState(false);
   const handleDeleteSprint = useCallback(
     async (wu: WorkUnit) => {
-      if (!teamId || deleting) return;
+      if (!boardId || deleting) return;
       const ok = await confirm({
         message: t('sprints.deleteSprintConfirm', { name: wu.name }),
         confirmLabel: tCommon('confirm.delete'),
@@ -136,7 +136,7 @@ const SprintBar = () => {
       if (!ok) return;
       setDeleting(true);
       try {
-        await OpsService.deleteWorkUnit(numaDelete, teamId, wu.id);
+        await OpsService.deleteWorkUnit(numaDelete, boardId, wu.id);
         selectWorkUnit(null);
         await Promise.all([refreshWorkUnits(), refreshTickets()]);
       } catch (err) {
@@ -145,7 +145,7 @@ const SprintBar = () => {
         setDeleting(false);
       }
     },
-    [teamId, deleting, numaDelete, selectWorkUnit, refreshWorkUnits, refreshTickets, t, tCommon, confirm]
+    [boardId, deleting, numaDelete, selectWorkUnit, refreshWorkUnits, refreshTickets, t, tCommon, confirm]
   );
 
   return (
@@ -288,7 +288,7 @@ const SprintBar = () => {
       {/* ── Work Unit Modals ──────────────────────────────────────────── */}
       <CreateWorkUnitModal
         show={showCreate}
-        teamId={teamId}
+        boardId={boardId}
         defaultName={defaultSprintName}
         onHide={() => setShowCreate(false)}
         onCreated={async () => {
@@ -299,7 +299,7 @@ const SprintBar = () => {
       <StartWorkUnitModal
         show={showStart}
         workUnits={workUnits}
-        teamId={teamId}
+        boardId={boardId}
         tickets={tickets}
         zones={zones}
         onHide={() => setShowStart(false)}
@@ -313,7 +313,7 @@ const SprintBar = () => {
           }
           // Refresh team to pick up the new sprint zone, then navigate to it
           const beforeZoneIds = new Set(zones.map((z) => z.id));
-          const updated = await refreshTeam();
+          const updated = await refreshBoard();
           if (updated) {
             const newZone = updated.zones.find((z) => !beforeZoneIds.has(z.id));
             if (newZone) setActiveZone(newZone.id);
@@ -326,7 +326,7 @@ const SprintBar = () => {
           show={showComplete}
           workUnit={activeWorkUnit}
           workUnits={workUnits}
-          teamId={teamId}
+          boardId={boardId}
           incompleteCount={incompleteCount}
           completedCount={completedCount}
           onHide={() => setShowComplete(false)}
@@ -336,7 +336,7 @@ const SprintBar = () => {
             setSuccessAction('completed');
             setShowSuccess(true);
             selectWorkUnit(null);
-            await refreshTeam();
+            await refreshBoard();
             await Promise.all([refreshTickets(), refreshWorkUnits()]);
           }}
         />

@@ -1,0 +1,198 @@
+{
+  "name": "Clone Marketing Email",
+  "description": "Clone a marketing email in HubSpot. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#post-%2Fmarketing%2Fv3%2Femails%2Fclone)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "hubspot-clone-email",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "emailId",
+      "type": "string",
+      "label": "Marketing Email ID",
+      "description": "The ID of the marketing email to clone.",
+      "remoteOptions": true
+    },
+    {
+      "name": "cloneName",
+      "type": "string",
+      "label": "Clone Name",
+      "description": "The name to assign to the cloned email",
+      "optional": true
+    },
+    {
+      "name": "language",
+      "type": "string",
+      "label": "Language",
+      "description": "The language code for the cloned email",
+      "options": [
+        {
+          "label": "Afrikaans",
+          "value": "af"
+        },
+        {
+          "label": "Arabic (Egypt)",
+          "value": "ar-eg"
+        },
+        {
+          "label": "Bulgarian",
+          "value": "bg"
+        },
+        {
+          "label": "Bengali",
+          "value": "bn"
+        },
+        {
+          "label": "Czech",
+          "value": "cs"
+        },
+        {
+          "label": "Danish",
+          "value": "da"
+        },
+        {
+          "label": "Greek",
+          "value": "el"
+        },
+        {
+          "label": "English",
+          "value": "en"
+        },
+        {
+          "label": "Spanish",
+          "value": "es"
+        },
+        {
+          "label": "Spanish (Mexico)",
+          "value": "es-mx"
+        },
+        {
+          "label": "Finnish",
+          "value": "fi"
+        },
+        {
+          "label": "French",
+          "value": "fr"
+        },
+        {
+          "label": "French (Canada)",
+          "value": "fr-ca"
+        },
+        {
+          "label": "Hebrew (Israel)",
+          "value": "he-il"
+        },
+        {
+          "label": "Croatian",
+          "value": "hr"
+        },
+        {
+          "label": "Hungarian",
+          "value": "hu"
+        },
+        {
+          "label": "Indonesian",
+          "value": "id"
+        },
+        {
+          "label": "Italian",
+          "value": "it"
+        },
+        {
+          "label": "Japanese",
+          "value": "ja"
+        },
+        {
+          "label": "Korean",
+          "value": "ko"
+        },
+        {
+          "label": "Lithuanian",
+          "value": "lt"
+        },
+        {
+          "label": "Malay",
+          "value": "ms"
+        },
+        {
+          "label": "Dutch",
+          "value": "nl"
+        },
+        {
+          "label": "Norwegian (Norway)",
+          "value": "no-no"
+        },
+        {
+          "label": "Polish",
+          "value": "pl"
+        },
+        {
+          "label": "Portuguese",
+          "value": "pt"
+        },
+        {
+          "label": "Portuguese (Brazil)",
+          "value": "pt-br"
+        },
+        {
+          "label": "Romanian",
+          "value": "ro"
+        },
+        {
+          "label": "Russian",
+          "value": "ru"
+        },
+        {
+          "label": "Slovak",
+          "value": "sk"
+        },
+        {
+          "label": "Slovenian",
+          "value": "sl"
+        },
+        {
+          "label": "Swedish",
+          "value": "sv"
+        },
+        {
+          "label": "Thai",
+          "value": "th"
+        },
+        {
+          "label": "Tagalog",
+          "value": "tl"
+        },
+        {
+          "label": "Ukrainian",
+          "value": "uk"
+        },
+        {
+          "label": "Vietnamese",
+          "value": "vi"
+        },
+        {
+          "label": "Chinese (China)",
+          "value": "zh-cn"
+        },
+        {
+          "label": "Chinese (Hong Kong)",
+          "value": "zh-hk"
+        },
+        {
+          "label": "Chinese (Taiwan)",
+          "value": "zh-tw"
+        }
+      ],
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "List Comments",
+  "description": "List all comments on a file. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/comments/list)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "google_drive-list-comments",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": false,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File",
+      "description": "The file to list comments for.",
+      "remoteOptions": true
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+[
+  {
+    "key": "microsoft_outlook_calendar-update-recurring-event-instance",
+    "name": "Update Recurring Event Instance",
+    "description": "Update an individual instance of a recurring event in the user's default calendar. [See the documentation](https://learn.microsoft.com/en-us/graph/api/event-update?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 15
+  },
+  {
+    "key": "microsoft_outlook_calendar-update-calendar-event",
+    "name": "Update Calendar Event",
+    "description": "Update an event in the user's default calendar. [See the documentation](https://learn.microsoft.com/en-us/graph/api/event-update?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "microsoft_outlook_calendar-search-people",
+    "name": "Search People",
+    "description": "Retrieve a collection of person objects ordered by their relevance to the user, based on communication and collaboration patterns and business relationships. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-people)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "microsoft_outlook_calendar-search-contacts",
+    "name": "Search Contacts",
+    "description": "Search for contacts by name from your saved contacts list and retrieve their email addresses. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-contacts)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "microsoft_outlook_calendar-list-events",
+    "name": "List Events",
+    "description": "Get a list of event objects in the user's mailbox. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-events)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "microsoft_outlook_calendar-get-schedule",
+    "name": "Get Free/Busy Schedule",
+    "description": "Get the free/busy availability information for a collection of users, distributions lists, or resources (rooms or equipment) for a specified time period. [See the documentation](https://learn.microsoft.com/en-us/graph/api/calendar-getschedule)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "microsoft_outlook_calendar-delete-recurring-event-instance",
+    "name": "Delete Recurring Event Instance",
+    "description": "Delete an individual instance of a recurring event in the user's default calendar. [See the documentation](https://learn.microsoft.com/en-us/graph/api/event-delete?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "microsoft_outlook_calendar-delete-calendar-event",
+    "name": "Delete Calendar Event",
+    "description": "Delete an event in the user's default calendar. [See the documentation](https://learn.microsoft.com/en-us/graph/api/event-delete?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "microsoft_outlook_calendar-create-calendar-event",
+    "name": "Create Calendar Event",
+    "description": "Create an event in the user's default calendar. [See the documentation](https://docs.microsoft.com/en-us/graph/api/user-post-events)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 11
+  }
+]

@@ -336,6 +336,15 @@
     "remove": "Remove {{value}}",
     "selected": "Selected"
   },
+  "searchableMultiSelect": {
+    "placeholder": "Search…",
+    "loading": "Loading…",
+    "empty": "No matches.",
+    "selectedCount_one": "{{count}} selected",
+    "selectedCount_other": "{{count}} selected",
+    "clearAll": "Clear all",
+    "remove": "Remove {{label}}"
+  },
   "collapsibleTagRow": {
     "more": "more",
     "less": "show less"
@@ -669,7 +678,7 @@
     },
     "numaOps": {
       "noTickets": "No tickets found",
-      "noTeams": "No teams found",
+      "noBoards": "No boards found",
       "noCustomers": "No customers found",
       "noSuppliers": "No suppliers found",
       "noProjects": "No projects found",

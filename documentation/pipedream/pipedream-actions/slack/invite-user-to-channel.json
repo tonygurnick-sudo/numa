@@ -1,0 +1,33 @@
+{
+  "name": "Invite User to Channel",
+  "description": "Invite a user to an existing channel. [See the documentation](https://api.slack.com/methods/conversations.invite)",
+  "component_type": "action",
+  "version": "0.0.24",
+  "key": "slack-invite-user-to-channel",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "conversation",
+      "type": "string",
+      "label": "Channel",
+      "description": "Select a public or private channel, or a user or group",
+      "remoteOptions": true
+    },
+    {
+      "name": "user",
+      "type": "string",
+      "label": "User",
+      "description": "Select a user",
+      "remoteOptions": true
+    }
+  ]
+}

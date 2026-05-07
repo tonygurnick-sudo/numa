@@ -11,7 +11,7 @@ import type { WorkUnit, Ticket, WorkZone } from '../../../types/ops';
 
 interface CreateWorkUnitModalProps {
   show: boolean;
-  teamId: string;
+  boardId: string;
   defaultName: string;
   onHide: () => void;
   onCreated: () => void;
@@ -19,7 +19,7 @@ interface CreateWorkUnitModalProps {
 
 export function CreateWorkUnitModal({
   show,
-  teamId,
+  boardId,
   defaultName,
   onHide,
   onCreated,
@@ -44,7 +44,7 @@ export function CreateWorkUnitModal({
     try {
       setSaving(true);
       setError(null);
-      await OpsService.createWorkUnit(numaPost, teamId, {
+      await OpsService.createWorkUnit(numaPost, boardId, {
         name: name.trim(),
         status: 'planning',
         goal: goal.trim() || null,
@@ -55,7 +55,7 @@ export function CreateWorkUnitModal({
     } finally {
       setSaving(false);
     }
-  }, [name, goal, teamId, numaPost, onCreated, t]);
+  }, [name, goal, boardId, numaPost, onCreated, t]);
 
   return (
     <Modal show={show} onHide={onHide} onShow={handleShow} centered>
@@ -117,7 +117,7 @@ export function CreateWorkUnitModal({
 interface StartWorkUnitModalProps {
   show: boolean;
   workUnits: WorkUnit[];
-  teamId: string;
+  boardId: string;
   tickets: Ticket[];
   zones: WorkZone[];
   preselectedId?: string | null;
@@ -128,7 +128,7 @@ interface StartWorkUnitModalProps {
 export function StartWorkUnitModal({
   show,
   workUnits,
-  teamId,
+  boardId,
   tickets,
   zones,
   preselectedId,
@@ -216,7 +216,7 @@ export function StartWorkUnitModal({
       setSaving(true);
       setError(null);
       // Update name (if changed) and set dates + status
-      await OpsService.updateWorkUnit(numaPut, teamId, selectedId, {
+      await OpsService.updateWorkUnit(numaPut, boardId, selectedId, {
         status: 'active',
         name: sprintName.trim() || selectedUnit?.name,
         startDate,
@@ -231,7 +231,7 @@ export function StartWorkUnitModal({
     } finally {
       setSaving(false);
     }
-  }, [selectedId, sprintName, selectedUnit, startDate, endDate, teamId, numaPut, onStarted, t]);
+  }, [selectedId, sprintName, selectedUnit, startDate, endDate, boardId, numaPut, onStarted, t]);
 
   return (
     <Modal show={show} onHide={onHide} centered>
@@ -321,7 +321,7 @@ interface CompleteWorkUnitModalProps {
   show: boolean;
   workUnit: WorkUnit | null;
   workUnits: WorkUnit[];
-  teamId: string;
+  boardId: string;
   incompleteCount: number;
   completedCount: number;
   onHide: () => void;
@@ -332,7 +332,7 @@ export function CompleteWorkUnitModal({
   show,
   workUnit,
   workUnits,
-  teamId,
+  boardId,
   incompleteCount,
   completedCount,
   onHide,
@@ -362,14 +362,14 @@ export function CompleteWorkUnitModal({
         payload.rolloverToWorkUnitId = selectedTargetId;
       }
 
-      await OpsService.updateWorkUnit(numaPut, teamId, workUnit.id, payload);
+      await OpsService.updateWorkUnit(numaPut, boardId, workUnit.id, payload);
       onCompleted();
     } catch (err) {
       setError(t('errors.saveFailed', { message: String(err) }));
     } finally {
       setSaving(false);
     }
-  }, [workUnit, teamId, rolloverChoice, selectedTargetId, numaPut, onCompleted, t]);
+  }, [workUnit, boardId, rolloverChoice, selectedTargetId, numaPut, onCompleted, t]);
 
   if (!workUnit) return <></>;
 

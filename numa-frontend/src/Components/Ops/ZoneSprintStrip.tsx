@@ -10,9 +10,9 @@ import { useOps } from './OpsContext';
  */
 const ZoneSprintStrip = () => {
   const { t } = useTranslation('ops');
-  const { teamData, tickets, activeZoneId, setActiveZone } = useOps();
+  const { boardData, tickets, activeZoneId, setActiveZone } = useOps();
 
-  const zones = teamData?.zones ?? [];
+  const zones = boardData?.zones ?? [];
 
   // ── Zone ticket counts + completion stats ───────────────────────────
   const zoneStats = useMemo(() => {

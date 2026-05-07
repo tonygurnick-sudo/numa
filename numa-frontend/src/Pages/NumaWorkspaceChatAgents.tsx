@@ -66,6 +66,8 @@ import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/Workspac
 import { WorkspaceChatAgentsPanel } from '../Components/WorkspaceChat/WorkspaceChatAgentsPanel';
 import { useWorkspaceChatSettingsPanel } from '../hooks/useWorkspaceChatSettingsPanel';
 import { PendingFilesBar } from '../Components/Chat/PendingFilesBar';
+import { ChatSuggestionPills } from '../Components/Chat/ChatSuggestionPills';
+import { useChatSuggestions } from '../hooks/useChatSuggestions';
 import { deleteWorkspaceChatUploads, uploadWorkspaceChatFileDirect } from '../Services/workspaceChatAgentService';
 import {
   loadStagedItems,
@@ -83,6 +85,7 @@ import type {
   UploadingFile,
   WorkspaceChatUploadResponse,
   WorkspaceChatModelId,
+  WorkspaceChatMessage,
 } from '../types/workspaceChatTypes';
 import { DEFAULT_WORKSPACE_MODEL } from '../types/workspaceChatTypes';
 
@@ -234,6 +237,13 @@ const NumaWorkspaceChatAgents = () => {
     return () => {
       if (inputDraftTimerRef.current) clearTimeout(inputDraftTimerRef.current);
     };
+  }, [inputMessage]);
+
+  // Dismiss suggestion pills when user starts typing beyond a few characters
+  useEffect(() => {
+    if (inputMessage.length > 3) {
+      chatSuggestions.dismiss();
+    }
   }, [inputMessage]);
 
   // Clear first-message banner once the assistant starts streaming any content (text, thinking, tool calls, etc.)
@@ -1475,6 +1485,57 @@ const NumaWorkspaceChatAgents = () => {
     [bedrockRuntimeClient, numaChatDynamoUtils, sub, REGION]
   );
 
+  // Memoised enabled-tools list for chat suggestions (mirrors configureAgentCall logic)
+  const suggestionEnabledTools = useMemo(
+    () =>
+      getEnabledTools(
+        autoToolsEnabled,
+        webSearchEnabled,
+        false,
+        agentsFeatureEnabled ? createAgentEnabled : false,
+        enabledKBIds,
+        true,
+        memoriesEnabled,
+        numaOpsFeatureEnabled ? numaOpsEnabled : false
+      ),
+    [
+      autoToolsEnabled,
+      webSearchEnabled,
+      createAgentEnabled,
+      agentsFeatureEnabled,
+      enabledKBIds,
+      memoriesEnabled,
+      numaOpsFeatureEnabled,
+      numaOpsEnabled,
+    ]
+  );
+
+  const connectedDataConnectorIdsForSuggestions = useMemo(
+    () => connectedDataConnectors.map((c) => c.id),
+    [connectedDataConnectors]
+  );
+
+  const chatSuggestions = useChatSuggestions({
+    enabled: getFlag('CHAT_SUGGESTIONS') && (userChatSettings.chatSuggestionsEnabled ?? true),
+    bedrockClient: bedrockRuntimeClient,
+    region: REGION,
+    messages: messages as unknown as WorkspaceChatMessage[],
+    enabledTools: suggestionEnabledTools,
+    enabledConnections: enabledConnections,
+    connectedDataConnectorIds: connectedDataConnectorIdsForSuggestions,
+    language: userChatSettings.language,
+    debugMode: showCostTotal,
+  });
+
+  // Combined stream-complete handler: auto-naming + suggestion arming
+  const handleStreamComplete = useCallback(
+    (streamConversationId: string) => {
+      handleAutoNaming(streamConversationId);
+      chatSuggestions.arm(streamConversationId);
+    },
+    [handleAutoNaming, chatSuggestions]
+  );
+
   // Workspace chat streaming hook - handles SDK events, tool tracking, document extraction
   const {
     streamChat,
@@ -1498,7 +1559,7 @@ const NumaWorkspaceChatAgents = () => {
     hasUserStartedNewChat,
     resetUserNewChatFlag,
     setIsInitializing,
-    onStreamComplete: handleAutoNaming,
+    onStreamComplete: handleStreamComplete,
     getCredentials,
     refreshSessionFiles: settingsPanel.refreshFiles,
     onNotifyCompletion: notifyCompletion,
@@ -1975,6 +2036,7 @@ const NumaWorkspaceChatAgents = () => {
     resetInactivityTimer();
     // Hide suggestions on first interaction
     hideSuggestions();
+    chatSuggestions.dismiss();
     // Clear pre-minted state - user is now sending a message, transition to active chat
     if (isPreMintedConversation) {
       setIsPreMintedConversation(false);
@@ -2989,6 +3051,21 @@ const NumaWorkspaceChatAgents = () => {
                             onCancelUpload={handleCancelUpload}
                           />
                         )}
+                        <ChatSuggestionPills
+                          suggestions={chatSuggestions.suggestions}
+                          onPick={(text) => {
+                            const syntheticEvent = { preventDefault: () => {} };
+                            handleSubmit(syntheticEvent, text);
+                          }}
+                          debugInfo={
+                            showCostTotal
+                              ? {
+                                  lastUsage: chatSuggestions.lastUsage,
+                                  sessionCostUsd: chatSuggestions.sessionCostUsd,
+                                }
+                              : null
+                          }
+                        />
                         <ChatInput
                           inputMessage={inputMessage}
                           setInputMessage={setInputMessage}

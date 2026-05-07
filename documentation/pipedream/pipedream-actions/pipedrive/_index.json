@@ -1,0 +1,230 @@
+[
+  {
+    "key": "pipedrive-update-person",
+    "name": "Update Person",
+    "description": "Updates an existing person in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Persons#updatePerson)",
+    "version": "0.0.12",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "pipedrive-update-lead",
+    "name": "Update Lead",
+    "description": "Updates a lead in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#updateLead)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "pipedrive-update-deal",
+    "name": "Update Deal",
+    "description": "Updates the properties of a deal. See the Pipedrive API docs for Deals [here](https://developers.pipedrive.com/docs/api/v1/Deals#updateDeal)",
+    "version": "0.1.21",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 15
+  },
+  {
+    "key": "pipedrive-search-persons",
+    "name": "Search persons",
+    "description": "Searches all Persons by `name`, `email`, `phone`, `notes` and/or custom fields. This endpoint is a wrapper of `/v1/itemSearch` with a narrower OAuth scope. Found Persons can be filtered by Organization ID. See the Pipedrive API docs [here](https://developers.pipedrive.com/docs/api/v1/Persons#searchPersons)",
+    "version": "0.1.20",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "pipedrive-search-notes",
+    "name": "Search Notes",
+    "description": "Search for notes in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Notes#getNotes)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 18
+  },
+  {
+    "key": "pipedrive-search-leads",
+    "name": "Search Leads",
+    "description": "Search for leads by name or email. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#searchLeads)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "pipedrive-remove-duplicate-notes",
+    "name": "Remove Duplicate Notes",
+    "description": "Remove duplicate notes from an object in Pipedrive. See the documentation for [getting notes](https://developers.pipedrive.com/docs/api/v1/Notes#getNotes) and [deleting notes](https://developers.pipedrive.com/docs/api/v1/Notes#deleteNote)",
+    "version": "0.0.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "pipedrive-merge-persons",
+    "name": "Merge Persons",
+    "description": "Merge two persons in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Persons#mergePersons)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "pipedrive-merge-deals",
+    "name": "Merge Deals",
+    "description": "Merge two deals in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Deals#mergeDeals)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "pipedrive-get-person-details",
+    "name": "Get person details",
+    "description": "Get details of a person by their ID. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Persons#getPerson)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "pipedrive-get-lead-by-id",
+    "name": "Get Lead by ID",
+    "description": "Get a lead by its ID. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#getLead)",
+    "version": "0.0.7",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "pipedrive-get-all-leads",
+    "name": "Get All Leads",
+    "description": "Get all leads from Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#getLeads)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "pipedrive-add-person",
+    "name": "Add Person",
+    "description": "Adds a new person. See the Pipedrive API docs for People [here](https://developers.pipedrive.com/docs/api/v1/Persons#addPerson)",
+    "version": "0.1.20",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "pipedrive-add-organization",
+    "name": "Add Organization",
+    "description": "Adds a new organization. See the Pipedrive API docs for Organizations [here](https://developers.pipedrive.com/docs/api/v1/Organizations#addOrganization)",
+    "version": "0.1.19",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "pipedrive-add-note",
+    "name": "Add Note",
+    "description": "Adds a new note. For info on [adding an note in Pipedrive](https://developers.pipedrive.com/docs/api/v1/Notes#addNote)",
+    "version": "0.0.17",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "pipedrive-add-lead",
+    "name": "Add Lead",
+    "description": "Create a new lead in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#addLead)",
+    "version": "0.0.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "pipedrive-add-labels",
+    "name": "Add Labels",
+    "description": "Adds labels to a lead, person, deal, or organization in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#updateLead)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "pipedrive-add-deal",
+    "name": "Add Deal",
+    "description": "Adds a new deal. See the Pipedrive API docs for Deals [here](https://developers.pipedrive.com/docs/api/v1/Deals#addDeal)",
+    "version": "0.1.21",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 23
+  },
+  {
+    "key": "pipedrive-add-activity",
+    "name": "Add Activity",
+    "description": "Adds a new activity. Includes `more_activities_scheduled_in_context` property in response's `additional_data` which indicates whether there are more undone activities scheduled with the same deal, person or organization (depending on the supplied data). See the Pipedrive API docs for Activities [here](https://developers.pipedrive.com/docs/api/v1/#!/Activities). For info on [adding an activity in Pipedrive](https://developers.pipedrive.com/docs/api/v1/Activities#addActivity)",
+    "version": "0.1.20",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 18
+  }
+]

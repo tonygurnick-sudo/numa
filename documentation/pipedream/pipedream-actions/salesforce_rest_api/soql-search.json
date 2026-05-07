@@ -1,0 +1,37 @@
+{
+  "name": "SOQL Query (Object Query)",
+  "description": "Executes a [Salesforce Object Query Language (SOQL)](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_select_examples.htm) query-based, SQL-like search.",
+  "component_type": "action",
+  "version": "0.2.13",
+  "key": "salesforce_rest_api-soql-search",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "You can find helpful information on SOQL and SOSL in [the Salesforce documentation](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_sosl_intro.htm)."
+    },
+    {
+      "name": "exampleInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "Example query: `SELECT Id, Name, BillingCity FROM Account`"
+    },
+    {
+      "name": "query",
+      "type": "string",
+      "label": "SOQL Query",
+      "description": "A SOQL search query. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_select_examples.htm) for examples and more information."
+    }
+  ]
+}

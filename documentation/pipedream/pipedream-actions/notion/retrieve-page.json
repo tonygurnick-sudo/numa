@@ -1,0 +1,33 @@
+{
+  "name": "Retrieve Page Metadata",
+  "description": "Get details of a page. [See the documentation](https://developers.notion.com/reference/retrieve-a-page)",
+  "component_type": "action",
+  "version": "0.0.14",
+  "key": "notion-retrieve-page",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "infoLabel",
+      "type": "alert",
+      "alertType": "info",
+      "content": "If you need to retrieve page content or block objects, use the **Retrieve Page Content** action instead."
+    },
+    {
+      "name": "pageId",
+      "type": "string",
+      "label": "Page ID",
+      "description": "Search for a page or provide a page ID",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

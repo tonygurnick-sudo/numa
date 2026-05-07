@@ -25,6 +25,8 @@ import structlog
 
 from prm import client as prm_client
 
+from .approval import APPROVAL_POLL_INTERVAL_SECONDS, APPROVAL_TIMEOUT_SECONDS
+
 # Import consolidated vault functions from same Lambda
 try:
     # Add parent directory to path to import modules from Lambda root
@@ -51,10 +53,6 @@ except ImportError as e:
     CONSOLIDATED_VAULT_AVAILABLE = False
 
 logger = structlog.get_logger()
-
-# Approval polling configuration
-APPROVAL_POLL_INTERVAL_SECONDS = 5
-APPROVAL_TIMEOUT_SECONDS = 90
 
 # Table names from environment
 VAULT_AUDIT_LOG_TABLE = os.environ.get("VAULT_AUDIT_LOG_TABLE_NAME", "")
@@ -178,9 +176,32 @@ def _wait_for_approval(approval_id: str) -> bool:
         return False
 
     logger.info("Waiting for approval", approval_id=approval_id)
-    start_time = time.time()
 
-    while time.time() - start_time < APPROVAL_TIMEOUT_SECONDS:
+    # Anchor the deadline to the DDB record's created_at (matches
+    # tools.approval.poll_approval; see comment there for the rationale).
+    deadline = time.time() + APPROVAL_TIMEOUT_SECONDS  # fallback
+    if INTEGRATIONS_APPROVAL_TABLE:
+        try:
+            dynamodb = prm_client("dynamodb")
+            initial = dynamodb.get_item(
+                TableName=INTEGRATIONS_APPROVAL_TABLE,
+                Key={"approval_id": {"S": approval_id}},
+            )
+            created_at_str = initial.get("Item", {}).get("created_at", {}).get("N")
+            if created_at_str:
+                deadline = max(
+                    int(created_at_str) + APPROVAL_TIMEOUT_SECONDS,
+                    time.time() + 30,
+                )
+        except Exception as e:
+            logger.warning(
+                "Could not read created_at for approval deadline anchor; "
+                "falling back to wall-clock deadline",
+                approval_id=approval_id,
+                error=str(e),
+            )
+
+    while time.time() < deadline:
         status = _poll_approval_status(approval_id)
 
         if status == "approved":

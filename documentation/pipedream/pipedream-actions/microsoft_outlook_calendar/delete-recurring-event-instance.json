@@ -1,0 +1,45 @@
+{
+  "name": "Delete Recurring Event Instance",
+  "description": "Delete an individual instance of a recurring event in the user's default calendar. [See the documentation](https://learn.microsoft.com/en-us/graph/api/event-delete?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "microsoft_outlook_calendar-delete-recurring-event-instance",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook_calendar"
+    },
+    {
+      "name": "recurringEventId",
+      "label": "Recurring Event ID",
+      "description": "The ID of the recurring event series",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "startDateTime",
+      "type": "string",
+      "label": "Start Date Time",
+      "description": "The start of the time range to find instances, in ISO 8601 format (e.g., `2024-01-01T00:00:00Z`)"
+    },
+    {
+      "name": "endDateTime",
+      "type": "string",
+      "label": "End Date Time",
+      "description": "The end of the time range to find instances, in ISO 8601 format (e.g., `2024-12-31T23:59:59Z`)"
+    },
+    {
+      "name": "instanceId",
+      "label": "Instance ID",
+      "description": "The ID of the specific occurrence of the recurring event",
+      "type": "string",
+      "remoteOptions": true
+    }
+  ]
+}

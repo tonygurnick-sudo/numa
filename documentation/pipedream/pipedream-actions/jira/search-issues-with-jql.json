@@ -1,0 +1,109 @@
+{
+  "name": "Search Issues with JQL",
+  "description": "Search for issues using JQL (Jira Query Language). [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/#api-rest-api-3-search-jql-get)",
+  "component_type": "action",
+  "version": "0.1.5",
+  "key": "jira-search-issues-with-jql",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "jira",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "jql",
+      "type": "string",
+      "label": "JQL Query",
+      "description": "The JQL query to search for issues. [See the documentation for syntax and examples](https://support.atlassian.com/jira-software-cloud/docs/what-is-advanced-search-in-jira-cloud/)"
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "Maximum number of issues to return (default: 50)",
+      "optional": true,
+      "default": 50,
+      "min": 1,
+      "max": 5000
+    },
+    {
+      "name": "fields",
+      "type": "string",
+      "label": "Fields",
+      "description": "Comma-separated list of fields to return for each issue",
+      "default": "*all",
+      "optional": true
+    },
+    {
+      "name": "expand",
+      "type": "string[]",
+      "label": "Expand",
+      "description": "Use expand to include additional information about the issues in the response",
+      "optional": true,
+      "options": [
+        {
+          "label": "Returns field values rendered in HTML format",
+          "value": "renderedFields"
+        },
+        {
+          "label": "Returns the display name of each field",
+          "value": "names"
+        },
+        {
+          "label": "Returns the schema describing a field type",
+          "value": "schema"
+        },
+        {
+          "label": "Returns all possible transitions for the issue",
+          "value": "transitions"
+        },
+        {
+          "label": "Returns information about how each field can be edited",
+          "value": "editmeta"
+        },
+        {
+          "label": "Returns a list of recent updates to an issue, sorted by date, starting from the most recent",
+          "value": "changelog"
+        },
+        {
+          "label": "Returns a JSON array for each version of a field's value, with the highest number representing the most recent version",
+          "value": "versionedRepresentations"
+        }
+      ]
+    },
+    {
+      "name": "properties",
+      "type": "string",
+      "label": "Properties",
+      "description": "A list of up to 5 issue properties to include in the results. This parameter accepts a comma-separated list.",
+      "optional": true
+    },
+    {
+      "name": "fieldsByKeys",
+      "type": "boolean",
+      "label": "Fields by Keys",
+      "description": "Reference fields by their key (rather than ID). The default is `false`.",
+      "optional": true
+    },
+    {
+      "name": "failFast",
+      "type": "boolean",
+      "label": "Fail Fast",
+      "description": "Fail this request early if we can't retrieve all field data",
+      "optional": true
+    }
+  ]
+}

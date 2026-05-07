@@ -1,0 +1,41 @@
+{
+  "name": "Add Member To Segment",
+  "description": "Adds a new member to a static segment. [See docs here](https://mailchimp.com/developer/marketing/api/list-segment-members/add-member-to-segment/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-add-segment-member",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "segmentId",
+      "type": "string",
+      "label": "Segment ID",
+      "description": "The unique ID of the segment",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "emailAddress",
+      "type": "string",
+      "label": "Email address",
+      "description": "Email address for a subscriber."
+    }
+  ]
+}

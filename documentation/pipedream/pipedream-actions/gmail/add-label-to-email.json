@@ -1,0 +1,34 @@
+{
+  "name": "Add Label to Email",
+  "description": "Add label(s) to an email message. [See the docs](https://developers.google.com/gmail/api/reference/rest/v1/users.messages/modify)",
+  "component_type": "action",
+  "version": "0.0.15",
+  "key": "gmail-add-label-to-email",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "message",
+      "type": "string",
+      "label": "Message",
+      "description": "The identifier of a message",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "addLabelIds",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "Labels are used to categorize messages and threads within the user's mailbox",
+      "remoteOptions": true
+    }
+  ]
+}

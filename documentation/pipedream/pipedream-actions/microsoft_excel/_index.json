@@ -1,0 +1,98 @@
+[
+  {
+    "key": "microsoft_excel-update-worksheet-tablerow",
+    "name": "Update Worksheet Tablerow",
+    "description": "Update the properties of tablerow object. `(Only for work or school account)` [See the documentation](https://learn.microsoft.com/en-us/graph/api/tablerow-update?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "microsoft_excel-update-cell",
+    "name": "Update Cell",
+    "description": "Update the value of a specific cell in an Excel worksheet. [See the documentation](https://learn.microsoft.com/en-us/graph/api/range-update?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "microsoft_excel-get-table-rows",
+    "name": "Get Table Rows",
+    "description": "Retrieve rows from a specified table in an Excel worksheet. [See the documentation](https://learn.microsoft.com/en-us/graph/api/tablerow-list?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "microsoft_excel-get-spreadsheet",
+    "name": "Get Spreadsheet",
+    "description": "Get the values of a specified Excel worksheet. [See the documentation](https://learn.microsoft.com/en-us/graph/api/range-get?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "microsoft_excel-get-columns",
+    "name": "Get Columns",
+    "description": "Get the values of the specified columns in an Excel worksheet. [See the documentation](https://learn.microsoft.com/en-us/graph/api/range-get?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "microsoft_excel-find-row",
+    "name": "Find Row",
+    "description": "Find a row by column and value in an Excel worksheet. [See the documentation](https://learn.microsoft.com/en-us/graph/api/range-get?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "microsoft_excel-add-row",
+    "name": "Add Row",
+    "description": "Insert a new row into a specified Excel worksheet. [See the documentation](https://learn.microsoft.com/en-us/graph/api/range-insert?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "microsoft_excel-add-a-worksheet-tablerow",
+    "name": "Add a Worksheet Tablerow",
+    "description": "Adds rows to the end of specific table. [See the documentation](https://learn.microsoft.com/en-us/graph/api/tablerowcollection-add?view=graph-rest-1.0&tabs=http)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  }
+]

@@ -9,9 +9,12 @@ import * as OpsService from '../../../Services/OpsService';
 import { FilePreviewPanel } from '../../FilePreviewPanel';
 import type { FilePreview } from '../../../hooks/useFilePreviewProcessor';
 import type { CommentAttachment } from '../../../types/ops';
+import { uploadAttachmentToTicket } from './attachmentUploader';
 
 interface AttachmentsSectionProps {
   ticketId: string;
+  /** Bump to force a reload of attachments (e.g. after an external upload). */
+  refreshKey?: number;
 }
 
 interface DisplayAttachment extends CommentAttachment {
@@ -79,7 +82,7 @@ function isPreviewable(filename: string): boolean {
  *       (configured in infra/constructs/cognito-groups-construct.ts).
  * Download: presigned GET URL.
  */
-export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React.JSX.Element {
+export function AttachmentsSection({ ticketId, refreshKey = 0 }: AttachmentsSectionProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaPost, numaGet } = useNumaRequest();
   const { getCredentials, region: authRegion } = useAuth();
@@ -138,7 +141,7 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
     return () => {
       cancelled = true;
     };
-  }, [numaGet, ticketId]);
+  }, [numaGet, ticketId, refreshKey]);
 
   // ── Upload ────────────────────────────────────────────────────────────────
 
@@ -147,38 +150,18 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
       setUploading(true);
       setError(null);
       try {
-        const { uploadUrl, s3Key } = await OpsService.getPresignedUrl(numaPost, {
-          context: 'ticket',
-          contextId: ticketId,
-          fileName: file.name,
-          contentType: file.type || 'application/octet-stream',
-        });
-
-        const uploadResponse = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: file,
-          headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        });
-        if (!uploadResponse.ok) throw new Error(`Upload failed: ${uploadResponse.status}`);
-
-        await OpsService.createComment(numaPost, ticketId, {
-          content: `📎 Attached: ${file.name}`,
-          attachments: [{ name: file.name, s3Key, size: file.size, mimeType: file.type || 'application/octet-stream' }],
-        });
+        const attachment = await uploadAttachmentToTicket(numaPost, ticketId, file);
 
         let downloadUrl: string | undefined;
         try {
-          downloadUrl = await OpsService.getPresignedDownloadUrl(numaGet, s3Key);
+          downloadUrl = await OpsService.getPresignedDownloadUrl(numaGet, attachment.s3Key);
         } catch {
           /* non-fatal */
         }
 
         setFiles((prev) => [
           {
-            name: file.name,
-            s3Key,
-            size: file.size,
-            mimeType: file.type,
+            ...attachment,
             uploadedAt: new Date().toISOString(),
             downloadUrl,
           },

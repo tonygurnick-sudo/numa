@@ -1,0 +1,51 @@
+{
+  "name": "Create Spreadsheet",
+  "description": "Create a blank spreadsheet or duplicate an existing spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/create)",
+  "component_type": "action",
+  "version": "0.1.16",
+  "key": "google_sheets-create-spreadsheet",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "The drive to create the new spreadsheet in. If you are connected with any [Google Shared Drives](https://support.google.com/a/users/answer/9310351), you can select it here.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "The title of the new spreadsheet"
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder",
+      "description": "The folder you want to save the file to",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "The Google spreadsheet to copy",
+      "useQuery": true,
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "name": "Create Case",
+  "description": "Creates a Case, which represents a customer issue or problem. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_case.htm)",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "salesforce_rest_api-create-case",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_case.htm) for more information on available fields."
+    },
+    {
+      "name": "dateInfo",
+      "type": "alert",
+      "alertType": "warning",
+      "content": "Date fields should be a [valid date string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date#date_time_string_format) or a Unix timestamp in milliseconds. Example values: `2022-01-15T18:30:00.000Z` or `1642271400000`."
+    },
+    {
+      "name": "Description",
+      "type": "string",
+      "label": "Description",
+      "description": "A text description of the case. Limit: 32 KB.",
+      "optional": true
+    },
+    {
+      "name": "Status",
+      "type": "string",
+      "label": "Status",
+      "description": "The status of the case.",
+      "optional": true,
+      "options": ["New", "Working", "Escalated", "Closed"]
+    },
+    {
+      "name": "SuppliedEmail",
+      "type": "string",
+      "label": "Email",
+      "description": "The email address associated with the case.",
+      "optional": true
+    },
+    {
+      "name": "SuppliedName",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the case.",
+      "optional": true
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

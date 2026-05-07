@@ -1,0 +1,33 @@
+{
+  "name": "Get Issue",
+  "description": "Gets a single issue from repository. [See the documentation](https://docs.gitlab.com/ee/api/issues.html#single-project-issue)",
+  "component_type": "action",
+  "version": "0.2.3",
+  "key": "gitlab-get-issue",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gitlab",
+      "type": "app",
+      "app": "gitlab"
+    },
+    {
+      "name": "projectId",
+      "type": "integer",
+      "label": "Project ID",
+      "description": "The project ID, as displayed in the main project page",
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIid",
+      "type": "string",
+      "label": "Issue Internal ID",
+      "description": "The internal ID of a project's issue ",
+      "remoteOptions": true
+    }
+  ]
+}

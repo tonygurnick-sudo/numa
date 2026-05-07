@@ -44,6 +44,8 @@ mcp__numa__numa_tool(
 
 **Returns:** `url`, `title`, `content` (full markdown), `content_type`, `status`
 
+**PDFs:** If the URL is a PDF, fetch_url downloads it directly to the workspace and returns a `file_path` instead of `content`. Read the PDF using the `Read` tool on that path.
+
 ## Recommended Workflow
 
 1. Use **search** to find relevant URLs with previews

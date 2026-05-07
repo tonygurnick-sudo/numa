@@ -1,0 +1,19 @@
+{
+  "name": "View User",
+  "description": "View your user information",
+  "component_type": "action",
+  "version": "0.1.5",
+  "key": "zoom-view-user",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    }
+  ]
+}

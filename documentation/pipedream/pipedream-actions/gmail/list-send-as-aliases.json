@@ -1,0 +1,19 @@
+{
+  "name": "List Send As Aliases",
+  "description": "List all send as aliases for the authenticated user. [See the documentation](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.settings.sendAs/list)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "gmail-list-send-as-aliases",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    }
+  ]
+}

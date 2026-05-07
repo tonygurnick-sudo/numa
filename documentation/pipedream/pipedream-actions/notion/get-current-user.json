@@ -1,0 +1,19 @@
+{
+  "name": "Get Current User",
+  "description": "Retrieve the Notion identity tied to the current OAuth token, returning the full `users.retrieve` payload for `me` (person or bot). Includes the user ID, name, avatar URL, type (`person` vs `bot`), and workspace ownership metadata\u2014useful for confirming which workspace is connected, adapting downstream queries, or giving an LLM the context it needs about who is operating inside Notion. [See the documentation](https://developers.notion.com/reference/get-user).",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "notion-get-current-user",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    }
+  ]
+}

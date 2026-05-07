@@ -1,0 +1,33 @@
+{
+  "name": "Search for Shared Drives",
+  "description": "Search for shared drives with query options. [See the documentation](https://developers.google.com/drive/api/v3/search-shareddrives) for more information",
+  "component_type": "action",
+  "version": "0.1.16",
+  "key": "google_drive-search-shared-drives",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "q",
+      "type": "string",
+      "label": "Search Query",
+      "description": "The [shared drives](https://support.google.com/a/users/answer/9310351) search query. See [query terms](https://developers.google.com/drive/api/v3/ref-search-terms#drive_properties) for a list of shard drive-specific query terms."
+    },
+    {
+      "name": "useDomainAdminAccess",
+      "type": "boolean",
+      "label": "Use Domain Admin Access",
+      "description": "Issue the request as a domain administrator",
+      "optional": true,
+      "default": false
+    }
+  ]
+}

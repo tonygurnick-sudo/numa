@@ -1,0 +1,76 @@
+{
+  "name": "Create or update contact ",
+  "description": "Creates a new contact or updates a contact if a contact already exists. [See the docs here](https://developer.xero.com/documentation/api/accounting/contacts)",
+  "component_type": "action",
+  "version": "0.1.2",
+  "key": "xero_accounting_api-create-update-contact",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "contactID",
+      "type": "string",
+      "label": "Contact ID",
+      "description": "ID of the contact that requires update.",
+      "optional": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Contact name",
+      "description": "Full name of contact/organization.",
+      "optional": true
+    },
+    {
+      "name": "firstName",
+      "type": "string",
+      "label": "First name",
+      "description": "First name of contact person .",
+      "optional": true
+    },
+    {
+      "name": "lastName",
+      "type": "string",
+      "label": "Last name",
+      "description": "Last name of contact person.",
+      "optional": true
+    },
+    {
+      "name": "emailAddress",
+      "type": "string",
+      "label": "Email address",
+      "description": "Email address of contact person.",
+      "optional": true
+    },
+    {
+      "name": "accountNumber",
+      "type": "string",
+      "label": "Account number",
+      "description": "User defined account number..",
+      "optional": true
+    },
+    {
+      "name": "contactStatus",
+      "type": "string",
+      "label": "Contact status",
+      "description": "See https://developer.xero.com/documentation/api/accounting/types#contacts",
+      "options": ["ACTIVE", "ARCHIVED", "GDPRREQUEST"],
+      "default": "ACTIVE"
+    }
+  ]
+}

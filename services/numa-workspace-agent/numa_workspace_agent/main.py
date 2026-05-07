@@ -11,6 +11,7 @@ Session ID = conv-{conversation_id} (set by the proxy Lambda).
 
 import asyncio
 import base64
+import errno
 import json
 import os
 import shutil
@@ -18,6 +19,7 @@ import subprocess
 import time
 import unicodedata
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -70,6 +72,7 @@ from .s3_workspace import (
 from .sdk_config import CLIENT_NAME, LOCAL_ROOT
 from .sdk_runner import (
     check_sdk_available,
+    format_sse_event,
     get_run,
     has_active_run,
     request_stop,
@@ -878,6 +881,72 @@ async def _handle_run_status(
 # =============================================================================
 
 
+def _build_workspace_error_payload(e: OSError) -> dict[str, Any]:
+    """Build a structured error payload for an OS-level workspace error.
+
+    Adds a friendly, actionable prefix when the disk is full (ENOSPC = 28).
+    AgentCore container disk is fixed and not configurable, so users hit this
+    on conversations that have accumulated large files across turns.
+    """
+    is_disk_full = getattr(e, "errno", None) == errno.ENOSPC
+    if is_disk_full:
+        message = (
+            f"Workspace storage is full ({e}). "
+            "Free space by deleting files in the workspace settings panel "
+            "(uploads/outputs tabs), or start a new conversation."
+        )
+    else:
+        message = f"Workspace I/O error: {e}"
+    return {
+        "type": "error",
+        "error": message,
+        "error_type": type(e).__name__,
+        "errno": getattr(e, "errno", None),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _workspace_setup_error_response(
+    e: OSError, *, body: dict[str, Any], agent_type_config: Any
+) -> Response:
+    """Return a structured response for an OSError during workspace setup.
+
+    Always returns HTTP 200 so AgentCore doesn't wrap it as a generic
+    RuntimeClientError 500. The frontend's existing SSE error handler
+    renders the `error` field cleanly.
+    """
+    payload = _build_workspace_error_payload(e)
+    logger.error(
+        "Workspace setup failed",
+        _name="WORKSPACE_SETUP_ERROR",
+        phase="request",
+        errno=payload.get("errno"),
+        error=str(e),
+    )
+
+    # Mirror the same response-mode resolution used by the chat dispatch
+    # below so the client gets back a shape it knows how to parse.
+    action = body.get("action", "chat")
+    request_mode = body.get("responseMode")
+    type_default = getattr(agent_type_config, "response_mode", "stream")
+    if request_mode:
+        effective_mode = request_mode
+    elif type_default != "stream":
+        effective_mode = type_default
+    else:
+        effective_mode = "stream"
+
+    if action == "chat" and effective_mode == "stream":
+
+        async def _single_error_stream():
+            yield format_sse_event(payload)
+
+        return StreamingResponse(_single_error_stream(), media_type="text/event-stream")
+
+    # Sync / fire-and-forget / non-chat actions get JSON
+    return JSONResponse(content={"status": "error", **payload})
+
+
 @app.post("/invocations")
 async def invocations(request: Request):
     """
@@ -1029,19 +1098,26 @@ async def invocations(request: Request):
             errors=len(sync_result["errors"]),
         )
 
-    # Ensure directories exist
-    ensure_directories()
-
-    # Selective tool copy: only copy tool scripts the agent type needs
-    # This runs on every request but is fast (just a directory listing + diff)
+    # Ensure directories exist + copy enabled tool scripts.
+    # If the workspace filesystem is full or otherwise unwritable, surface the
+    # OS error as a structured response (HTTP 200) rather than letting it
+    # propagate as an uncaught exception → AgentCore RuntimeClientError 500.
+    # The most common case is ENOSPC after a conversation processed multi-GB
+    # files; the user has no recourse from a raw RuntimeClientError 500.
     from .workspace import setup_agent_tools
 
-    setup_agent_tools(
-        enabled_numa_tools=agent_type_config.enabled_numa_tools,
-        tools_source_dirs=agent_type_config.tools_source_dirs,
-        tool_file_map=TOOL_FILE_MAP,
-        always_copy=ALWAYS_COPY,
-    )
+    try:
+        ensure_directories()
+        setup_agent_tools(
+            enabled_numa_tools=agent_type_config.enabled_numa_tools,
+            tools_source_dirs=agent_type_config.tools_source_dirs,
+            tool_file_map=TOOL_FILE_MAP,
+            always_copy=ALWAYS_COPY,
+        )
+    except OSError as e:
+        return _workspace_setup_error_response(
+            e, body=body, agent_type_config=agent_type_config
+        )
 
     # Store checksums before request for change detection
     _checksums_cache = get_local_checksums(conversation_id)

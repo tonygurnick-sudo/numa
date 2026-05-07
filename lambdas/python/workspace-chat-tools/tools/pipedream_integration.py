@@ -26,10 +26,6 @@ from .approval import create_approval_request, poll_approval
 
 logger = structlog.get_logger()
 
-# Approval polling configuration (kept for _execute_with_idempotency)
-APPROVAL_POLL_INTERVAL_SECONDS = 5
-APPROVAL_TIMEOUT_SECONDS = 90
-
 # DynamoDB table names from environment
 INTEGRATIONS_APPROVAL_TABLE = os.environ.get("INTEGRATIONS_APPROVAL_TABLE_NAME", "")
 PIPEDREAM_RELAY_LAMBDA_ARN = os.environ.get("PIPEDREAM_RELAY_LAMBDA_ARN", "")
@@ -460,7 +456,7 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
         if decision == "timeout":
             return {
                 "status": "timeout",
-                "message": "Approval timed out (2 minutes)",
+                "message": "Approval timed out",
                 "approval_id": approval_id,
             }
     else:
@@ -625,7 +621,7 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
         if decision == "timeout":
             return {
                 "status": "timeout",
-                "message": "Approval timed out (2 minutes)",
+                "message": "Approval timed out",
                 "approval_id": approval_id,
             }
     else:

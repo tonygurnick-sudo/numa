@@ -160,6 +160,8 @@
     "selectTypeHint": "Choose the type of work to get started",
     "attachments": "Attachments",
     "attachmentHint": "Drop files here \u2014 or attach from the ticket detail after creating",
+    "largeImagePastedAttached": "Image was too large to embed. Added as an attachment instead.",
+    "largeImagePastedQueued": "Image was too large to embed. It will be attached after the ticket is created.",
     "activity": "Activity",
     "addComment": "Add a comment",
     "commentPlaceholder": "Add an initial comment or note\u2026",
@@ -264,6 +266,11 @@
     "lastContactYearsAgo": "{{count}} years ago",
     "lastContactFooter": "Last Contact",
     "updateFailed": "Failed to save changes. Please try again.",
+    "deleteCustomer": "Delete customer",
+    "deleteCustomerConfirm": "This will permanently delete \"{{name}}\" and cannot be undone. Type the customer name to confirm.",
+    "customerDeleted": "Customer deleted.",
+    "customerDeletedWithUnlinks_one": "Customer deleted ({{count}} ticket unlinked).",
+    "customerDeletedWithUnlinks_other": "Customer deleted ({{count}} tickets unlinked).",
     "uploadLogo": "Upload company logo",
     "logo": "Logo",
     "openTickets": "Open Tickets",
@@ -522,42 +529,11 @@
     "owner": "Owner",
     "deleteBoard": "Delete Board",
     "deleteBoardConfirm": "Are you sure you want to delete \"{{name}}\"? This will remove all zones, stages, and configuration for this board. This action cannot be undone.",
-    "deleteBoardHasTickets": "This board has active tickets and cannot be deleted. Archive or move all tickets first."
-  },
-  "teams": {
-    "create": "New Board",
-    "name": "Board Name",
-    "color": "Board Color",
-    "preset": "Preset",
-    "enableWorkUnits": "Enable Work Units",
-    "enableWorkUnitsHelp": "When enabled, you get Backlog and Board zones plus iterations.",
-    "workUnitLabel": "What to call them",
-    "patternStart": "Starting Number",
-    "ticketTypesHelp": "Choose which ticket types can be used on this board.",
-    "ticketTypesAllSelected": "All types are selected by default. Uncheck any you don't need.",
-    "addCustomType": "Add Custom Type",
-    "newTypeName": "Type Name",
-    "newTypePrefix": "Prefix (2-6 chars)",
-    "workflowPreviewHelp": "Here's what your board will look like. You can customise this later in Board Settings.",
-    "newStageName": "Stage name...",
-    "workflowCustomiseLater": "Customise zones and stages in Board Settings after creation.",
-    "accessControlHelp": "Control who can see and work on this board's tickets.",
-    "allUsers": "All NUMA Users",
-    "specificUsers": "Specific Users Only",
-    "selectMembers": "Select board members",
-    "step1": "Name & Color",
-    "step2": "Ticket Types",
-    "step3": "Your Workflow",
-    "step4": "Access Control",
-    "settings": "Board Settings",
-    "owner": "Owner",
+    "deleteBoardHasTickets": "This board has active tickets and cannot be deleted. Archive or move all tickets first.",
     "boardOwners": "Board Owners",
     "boardOwnersHelp": "Owners can manage board settings, workflow, and access control. The board creator is always an owner.",
     "boardCreator": "Board Creator",
-    "addOwnerPlaceholder": "Add a co-owner...",
-    "deleteTeam": "Delete Board",
-    "deleteTeamConfirm": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
-    "deleteTeamHasTickets": "Cannot delete a board that still has tickets. Move or delete all tickets first."
+    "addOwnerPlaceholder": "Add a co-owner..."
   },
   "page": {
     "headerPlaceholder": "OpsHeader placeholder",
@@ -610,7 +586,9 @@
     "conflict": "Conflict detected \u2014 please refresh",
     "notFound": "Not found",
     "deleteFailed": "Failed to delete ticket",
-    "archiveFailed": "Failed to archive ticket"
+    "archiveFailed": "Failed to archive ticket",
+    "uploadFailed": "Upload failed",
+    "pendingAttachmentsFailed": "Some pasted images couldn't be attached: {{files}}. You can re-attach them from the ticket detail view."
   },
   "empty": {
     "noTickets": "No tickets yet. Create your first ticket to get started.",
@@ -894,7 +872,7 @@
     "fieldCount": "{{count}} fields",
     "fieldCount_one": "{{count}} field"
   },
-  "teamSettings": {
+  "boardSettings": {
     "visible": "Visible",
     "groupBy": "Group By"
   },

@@ -1,0 +1,56 @@
+{
+  "name": "Find Forms",
+  "description": "List Google Form documents or search for a Form by name. [See the documentation](https://developers.google.com/drive/api/v3/search-files) for more information",
+  "component_type": "action",
+  "version": "0.0.16",
+  "key": "google_drive-find-forms",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Parent Folder",
+      "description": "The ID of the parent folder which contains the file. If not specified, it will list files from the drive's top-level folder.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "queryAlert",
+      "type": "alert",
+      "alertType": "info",
+      "content": "If no query or search name is specified, all forms in the selected drive/folder will be returned."
+    },
+    {
+      "name": "nameSearchTerm",
+      "type": "string",
+      "label": "Search Name",
+      "description": "Search for a file by name (equivalent to the query `name contains [value]`).",
+      "optional": true
+    },
+    {
+      "name": "searchQuery",
+      "type": "string",
+      "label": "Search Query",
+      "description": "Search for a file with a query. [See the documentation](https://developers.google.com/drive/api/guides/ref-search-terms) for more information. If specified, `Search Name` and `Parent Folder` will be ignored.",
+      "optional": true
+    }
+  ]
+}

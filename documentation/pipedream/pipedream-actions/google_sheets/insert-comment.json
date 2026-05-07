@@ -1,0 +1,42 @@
+{
+  "name": "Insert Comment",
+  "description": "Insert a comment into a spreadsheet. [See the documentation](https://developers.google.com/drive/api/v3/reference/comments/create)",
+  "component_type": "action",
+  "version": "0.1.15",
+  "key": "google_sheets-insert-comment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "content",
+      "type": "string",
+      "label": "Comment",
+      "description": "The comment to add to the spreadsheet."
+    }
+  ]
+}

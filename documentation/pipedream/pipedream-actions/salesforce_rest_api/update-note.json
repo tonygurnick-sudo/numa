@@ -1,0 +1,76 @@
+{
+  "name": "Update Note",
+  "description": "Updates a classic Salesforce note, which can contain up to 32 KB of text and is associated with a parent record. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_note.htm)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "salesforce_rest_api-update-note",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "noteId",
+      "type": "string",
+      "label": "Note ID",
+      "description": "The ID of the note to update.",
+      "remoteOptions": true
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_note.htm) for more information on available fields."
+    },
+    {
+      "name": "Body",
+      "type": "string",
+      "label": "Body",
+      "description": "Body of the note. Limited to 32 KB.",
+      "optional": true
+    },
+    {
+      "name": "IsPrivate",
+      "type": "boolean",
+      "label": "Private",
+      "description": "If true, only the note owner or a user with the \u201cModify All Data\u201d permission can view the note or query it via the API.",
+      "optional": true
+    },
+    {
+      "name": "OwnerId",
+      "type": "string",
+      "label": "Owner ID",
+      "description": "ID of the user who owns the note.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "ParentId",
+      "type": "string",
+      "label": "Parent ID",
+      "description": "ID of the object associated with the note. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_note.htm) for which objects can be referenced.",
+      "optional": true
+    },
+    {
+      "name": "Title",
+      "type": "string",
+      "label": "Title",
+      "description": "Title of the note.",
+      "optional": true
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

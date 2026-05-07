@@ -1,0 +1,40 @@
+{
+  "name": "Get Record by ID",
+  "description": "Retrieves a record by its ID. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_get_field_values.htm)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "salesforce_rest_api-get-record-by-id",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "sobjectType",
+      "type": "string",
+      "label": "SObject Type",
+      "description": "The type of object to retrieve a record of",
+      "remoteOptions": true
+    },
+    {
+      "name": "recordId",
+      "type": "string",
+      "label": "Record ID",
+      "description": "The ID of the record to retrieve",
+      "remoteOptions": true
+    },
+    {
+      "name": "fieldsToObtain",
+      "type": "string[]",
+      "label": "Fields to Obtain",
+      "description": "Select the field(s) to obtain for the selected record(s) (or all records).",
+      "remoteOptions": true
+    }
+  ]
+}

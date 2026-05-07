@@ -1,0 +1,54 @@
+{
+  "name": "Select Files",
+  "description": "A file picker action that allows browsing and selecting one or more files from SharePoint. Returns the selected files' metadata including pre-authenticated download URLs. [See the documentation](https://learn.microsoft.com/en-us/graph/api/driveitem-get)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "sharepoint-select-files",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "siteId",
+      "type": "string",
+      "label": "Site",
+      "description": "Identifier of a site",
+      "useQuery": true,
+      "remoteOptions": true,
+      "withLabel": true
+    },
+    {
+      "name": "driveId",
+      "type": "string",
+      "label": "Drive ID",
+      "description": "Identifier of a drive within a site",
+      "remoteOptions": true,
+      "withLabel": true
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder",
+      "description": "The folder to browse. Leave empty to browse the root of the drive.",
+      "optional": true,
+      "useQuery": true,
+      "remoteOptions": true,
+      "withLabel": true
+    },
+    {
+      "name": "fileOrFolderIds",
+      "type": "string[]",
+      "label": "Files or Folders",
+      "description": "Select one or more files, or select a folder and click 'Refresh Fields' to browse into it",
+      "remoteOptions": true,
+      "withLabel": true
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "name": "Create a Checklist Item",
+  "description": "Creates a new checklist item in a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-checklists/#api-checklists-id-checkitems-post).",
+  "component_type": "action",
+  "version": "0.3.3",
+  "key": "trello-create-checklist-item",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "card",
+      "type": "string",
+      "label": "Card",
+      "description": "The ID of the Card that the checklist item should be added to",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "checklistId",
+      "type": "string",
+      "label": "Checklist ID",
+      "description": "ID of a checklist.",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the new check item on the checklist. Should be a string of length 1 to 16384."
+    },
+    {
+      "name": "pos",
+      "type": "string",
+      "label": "Position",
+      "description": "The position of the checklist on the card. One of: top, bottom, or a positive number.",
+      "options": ["top", "bottom"],
+      "optional": true
+    },
+    {
+      "name": "checked",
+      "type": "boolean",
+      "label": "Checked",
+      "description": "Determines whether the check item is already checked when created.",
+      "optional": true
+    },
+    {
+      "name": "due",
+      "type": "string",
+      "label": "Due Date",
+      "description": "A due date for the checkitem. **Format: YYYY-MM-DDThh:mm:ss.sssZ**",
+      "optional": true
+    },
+    {
+      "name": "dueReminder",
+      "type": "string",
+      "label": "Due Reminder",
+      "description": "A dueReminder for the due date on the checkitem",
+      "options": [
+        {
+          "label": "no reminder",
+          "value": "-1"
+        },
+        {
+          "label": "At delivery time",
+          "value": "0"
+        },
+        {
+          "label": "5 minutes before",
+          "value": "5"
+        },
+        {
+          "label": "10 minutes before",
+          "value": "10"
+        },
+        {
+          "label": "15 minutes before",
+          "value": "15"
+        },
+        {
+          "label": "1 hour before",
+          "value": "60"
+        },
+        {
+          "label": "2 hours before",
+          "value": "120"
+        },
+        {
+          "label": "1 day before",
+          "value": "1440"
+        },
+        {
+          "label": "2 days before",
+          "value": "2880"
+        }
+      ],
+      "optional": true
+    },
+    {
+      "name": "idMember",
+      "type": "string",
+      "label": "Id Member",
+      "description": "An ID of a member resource",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

@@ -129,20 +129,24 @@ export const WorkflowStepPrompt = ({
           <Form.Text muted>{t('prompt.instructions.help')}</Form.Text>
         </div>
 
-        {/* Max runs */}
+        {/* Max runs — capped at 100 for the internal-only rollout. Productionising
+            this (raising the cap, per-customer overrides) is tracked separately. */}
         <div>
           <Form.Label>{t('prompt.maxRuns.label')}</Form.Label>
           <div className="d-flex align-items-center gap-3">
             <Form.Control
               type="number"
-              min={0}
-              max={10000}
-              value={maxRuns}
-              onChange={(e) => onMaxRunsChange(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              min={1}
+              max={100}
+              value={maxRuns || 100}
+              onChange={(e) => {
+                const parsed = parseInt(e.target.value, 10);
+                if (Number.isNaN(parsed)) return;
+                onMaxRunsChange(Math.min(100, Math.max(1, parsed)));
+              }}
               disabled={submitting}
               style={{ width: 120 }}
             />
-            <span className="text-muted small">{maxRuns === 0 ? t('prompt.maxRuns.unlimited') : ''}</span>
           </div>
           <Form.Text muted>{t('prompt.maxRuns.help')}</Form.Text>
         </div>

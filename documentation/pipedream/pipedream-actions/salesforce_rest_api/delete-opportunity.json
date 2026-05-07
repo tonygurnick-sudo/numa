@@ -1,0 +1,26 @@
+{
+  "name": "Delete Opportunity",
+  "description": "Deletes an opportunity. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.228.0.api_rest.meta/api_rest/dome_delete_record.htm)",
+  "component_type": "action",
+  "version": "0.3.4",
+  "key": "salesforce_rest_api-delete-opportunity",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "recordId",
+      "type": "string",
+      "label": "Opportunity ID",
+      "description": "ID of the opportunity to delete.",
+      "remoteOptions": true
+    }
+  ]
+}

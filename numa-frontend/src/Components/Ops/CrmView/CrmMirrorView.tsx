@@ -40,7 +40,6 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type FilterType = 'all' | 'active_tickets' | 'at_risk' | 'prospects';
 type ViewMode = 'board' | 'list';
 
 type CrmColumnDef = {
@@ -61,7 +60,6 @@ type CrmSavedViewConfig = {
   visibleColumnKeys: string[];
   sortColumn: string;
   sortDirection: SortDirection;
-  quickFilter: FilterType;
   quickStageFilter: string[];
   quickTerritoryFilter: string[];
   quickOwnerFilter: string[];
@@ -201,7 +199,6 @@ const CrmMirrorView = (): React.JSX.Element => {
   // ── State ──────────────────────────────────────────────────────────────────
   const [customers, setCustomers] = useState<Customer[]>(() => getCached<Customer[]>('customers') ?? []);
   const [loading, setLoading] = useState(() => !getCached('customers'));
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -270,7 +267,6 @@ const CrmMirrorView = (): React.JSX.Element => {
       visibleColumnKeys,
       sortColumn,
       sortDirection,
-      quickFilter: activeFilter,
       quickStageFilter,
       quickTerritoryFilter,
       quickOwnerFilter,
@@ -281,7 +277,6 @@ const CrmMirrorView = (): React.JSX.Element => {
       visibleColumnKeys,
       sortColumn,
       sortDirection,
-      activeFilter,
       quickStageFilter,
       quickTerritoryFilter,
       quickOwnerFilter,
@@ -336,7 +331,6 @@ const CrmMirrorView = (): React.JSX.Element => {
     if (cfg.visibleColumnKeys) setVisibleColumnKeys(cfg.visibleColumnKeys);
     if (cfg.sortColumn) setSortColumn(cfg.sortColumn);
     if (cfg.sortDirection) setSortDirection(cfg.sortDirection);
-    if (cfg.quickFilter) setActiveFilter(cfg.quickFilter);
     if (cfg.quickStageFilter) setQuickStageFilter(cfg.quickStageFilter);
     if (cfg.quickTerritoryFilter) setQuickTerritoryFilter(cfg.quickTerritoryFilter);
     if (cfg.quickOwnerFilter) setQuickOwnerFilter(cfg.quickOwnerFilter);
@@ -656,23 +650,6 @@ const CrmMirrorView = (): React.JSX.Element => {
   const filteredCustomers = useMemo(() => {
     let result = customers;
 
-    // Quick filter (pills)
-    switch (activeFilter) {
-      case 'active_tickets':
-        result = result.filter((c) => c.openTicketCount > 0);
-        break;
-      case 'at_risk':
-        result = result.filter((c) =>
-          c.flags.some((f) => f.toLowerCase().includes('at_risk') || f.toLowerCase().includes('at-risk'))
-        );
-        break;
-      case 'prospects':
-        if (stages.length > 0) result = result.filter((c) => c.lifecycleStage === stages[0].id);
-        break;
-      default:
-        break;
-    }
-
     // Quick dropdown filters
     if (quickStageFilter.length > 0) {
       result = result.filter((c) => quickStageFilter.includes(c.lifecycleStage));
@@ -723,9 +700,7 @@ const CrmMirrorView = (): React.JSX.Element => {
     return result;
   }, [
     customers,
-    activeFilter,
     debouncedSearch,
-    stages,
     quickStageFilter,
     quickTerritoryFilter,
     quickOwnerFilter,
@@ -736,18 +711,6 @@ const CrmMirrorView = (): React.JSX.Element => {
     sortDirection,
     viewMode,
   ]);
-
-  const filterCounts = useMemo(
-    () => ({
-      all: customers.length,
-      active_tickets: customers.filter((c) => c.openTicketCount > 0).length,
-      at_risk: customers.filter((c) =>
-        c.flags.some((f) => f.toLowerCase().includes('at_risk') || f.toLowerCase().includes('at-risk'))
-      ).length,
-      prospects: stages.length > 0 ? customers.filter((c) => c.lifecycleStage === stages[0].id).length : 0,
-    }),
-    [customers, stages]
-  );
 
   // ── Quick filter options ──────────────────────────────────────────────────
   const stageOptions = useMemo(() => stages.map((s) => ({ value: s.id, label: s.name })), [stages]);
@@ -990,13 +953,6 @@ const CrmMirrorView = (): React.JSX.Element => {
     return <div className="text-center text-muted py-5">{t('empty.noCustomers')}</div>;
   }
 
-  const filters: { key: FilterType; label: string; count: number }[] = [
-    { key: 'all', label: t('crm.allCustomers'), count: filterCounts.all },
-    { key: 'active_tickets', label: t('crm.withActiveTickets'), count: filterCounts.active_tickets },
-    { key: 'at_risk', label: t('crm.atRisk'), count: filterCounts.at_risk },
-    { key: 'prospects', label: t('crm.prospects'), count: filterCounts.prospects },
-  ];
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
@@ -1014,48 +970,6 @@ const CrmMirrorView = (): React.JSX.Element => {
             onChange={(e) => setSearch(e.target.value)}
             style={{ maxWidth: 210, borderRadius: 8 }}
           />
-
-          <div className="d-flex flex-wrap gap-1">
-            {filters.map(({ key, label, count }) => {
-              const isActive = activeFilter === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setActiveFilter(key)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    padding: '4px 12px',
-                    borderRadius: 100,
-                    border: isActive ? 'none' : '1px solid #e5e7eb',
-                    background: isActive ? '#4f46e5' : '#fff',
-                    color: isActive ? '#fff' : '#6b7280',
-                    fontSize: '0.8rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.12s',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {label}
-                  <span
-                    style={{
-                      backgroundColor: isActive ? 'rgba(255,255,255,0.25)' : '#f3f4f6',
-                      color: isActive ? '#fff' : '#6b7280',
-                      borderRadius: 10,
-                      padding: '0 6px',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
 
           <div className="flex-grow-1" />
 
@@ -1217,7 +1131,18 @@ const CrmMirrorView = (): React.JSX.Element => {
         )}
         <div className="flex-grow-1 d-flex flex-column overflow-hidden px-3 pb-3 pt-3">
           {viewMode === 'list' ? (
-            <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden', backgroundColor: '#fff' }}>
+            <div
+              style={{
+                borderRadius: 10,
+                border: '1px solid #e5e7eb',
+                overflow: 'hidden',
+                backgroundColor: '#fff',
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
               {/* Header row with FilterDropdown per column */}
               <div
                 className="d-flex align-items-center px-3 py-2"
@@ -1230,6 +1155,7 @@ const CrmMirrorView = (): React.JSX.Element => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
                   gap: 8,
+                  flexShrink: 0,
                 }}
               >
                 {visibleColumns.map((col) => (
@@ -1251,59 +1177,61 @@ const CrmMirrorView = (): React.JSX.Element => {
                 ))}
               </div>
 
-              {/* Data rows */}
-              {filteredCustomers.length === 0 ? (
-                <div className="text-center py-5">
-                  <i className="bi bi-people fs-1 d-block mb-2" style={{ color: '#d1d5db' }} />
-                  <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>{t('empty.noCustomers')}</span>
-                </div>
-              ) : (
-                filteredCustomers.map((customer) => (
-                  <div
-                    key={customer.id}
-                    className="d-flex align-items-center px-3 py-2"
-                    style={{
-                      borderBottom: '1px solid #f3f4f6',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.1s',
-                      gap: 8,
-                    }}
-                    onClick={() => handleCustomerClick(customer)}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = '#f9fafb';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') handleCustomerClick(customer);
-                    }}
-                  >
-                    {visibleColumns.map((col) => (
-                      <div
-                        key={col.key}
-                        style={{
-                          flex: col.flex ?? '1 1 0',
-                          minWidth: 0,
-                          paddingRight: 4,
-                          fontSize: '0.82rem',
-                          color: '#374151',
-                        }}
-                      >
-                        {col.render ? (
-                          col.render(customer)
-                        ) : (
-                          <span className="text-truncate d-block" title={String(col.accessor(customer) ?? '')}>
-                            {String(col.accessor(customer) ?? '') || <span className="text-muted">-</span>}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+              {/* Data rows (scrollable) */}
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                {filteredCustomers.length === 0 ? (
+                  <div className="text-center py-5">
+                    <i className="bi bi-people fs-1 d-block mb-2" style={{ color: '#d1d5db' }} />
+                    <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>{t('empty.noCustomers')}</span>
                   </div>
-                ))
-              )}
+                ) : (
+                  filteredCustomers.map((customer) => (
+                    <div
+                      key={customer.id}
+                      className="d-flex align-items-center px-3 py-2"
+                      style={{
+                        borderBottom: '1px solid #f3f4f6',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.1s',
+                        gap: 8,
+                      }}
+                      onClick={() => handleCustomerClick(customer)}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLElement).style.backgroundColor = '#f9fafb';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') handleCustomerClick(customer);
+                      }}
+                    >
+                      {visibleColumns.map((col) => (
+                        <div
+                          key={col.key}
+                          style={{
+                            flex: col.flex ?? '1 1 0',
+                            minWidth: 0,
+                            paddingRight: 4,
+                            fontSize: '0.82rem',
+                            color: '#374151',
+                          }}
+                        >
+                          {col.render ? (
+                            col.render(customer)
+                          ) : (
+                            <span className="text-truncate d-block" title={String(col.accessor(customer) ?? '')}>
+                              {String(col.accessor(customer) ?? '') || <span className="text-muted">-</span>}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           ) : filteredCustomers.length === 0 ? (
             <div className="text-center py-5">
@@ -1319,16 +1247,18 @@ const CrmMirrorView = (): React.JSX.Element => {
               onDragEnd={(e) => void handleDragEnd(e)}
             >
               <div className="kanban-columns flex-grow-1" style={{ minHeight: 300 }}>
-                {stages.map((stage) => (
-                  <DroppableColumn
-                    key={stage.id}
-                    stage={stage}
-                    customers={customersByStage.get(stage.id) ?? []}
-                    crmConfig={crmConfig}
-                    staff={config?.staff}
-                    onCustomerClick={handleCustomerClick}
-                  />
-                ))}
+                {(quickStageFilter.length > 0 ? stages.filter((s) => quickStageFilter.includes(s.id)) : stages).map(
+                  (stage) => (
+                    <DroppableColumn
+                      key={stage.id}
+                      stage={stage}
+                      customers={customersByStage.get(stage.id) ?? []}
+                      crmConfig={crmConfig}
+                      staff={config?.staff}
+                      onCustomerClick={handleCustomerClick}
+                    />
+                  )
+                )}
               </div>
 
               <DragOverlay>

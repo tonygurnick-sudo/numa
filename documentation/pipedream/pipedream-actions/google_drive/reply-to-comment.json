@@ -1,0 +1,48 @@
+{
+  "name": "Reply to Comment",
+  "description": "Add a reply to an existing comment. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/replies/create)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "google_drive-reply-to-comment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": false,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File",
+      "description": "The file containing the comment to reply to.",
+      "remoteOptions": true
+    },
+    {
+      "name": "commentId",
+      "type": "string",
+      "label": "Comment ID",
+      "description": "The ID of the comment to reply to.",
+      "remoteOptions": true
+    },
+    {
+      "name": "content",
+      "type": "string",
+      "label": "Reply Content",
+      "description": "The text content of the reply to add"
+    }
+  ]
+}

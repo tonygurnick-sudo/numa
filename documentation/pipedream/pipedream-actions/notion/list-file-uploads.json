@@ -1,0 +1,19 @@
+{
+  "name": "List File Uploads",
+  "description": "Use this action to list file uploads. [See the documentation](https://developers.notion.com/reference/list-file-uploads)",
+  "component_type": "action",
+  "version": "0.0.8",
+  "key": "notion-list-file-uploads",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    }
+  ]
+}

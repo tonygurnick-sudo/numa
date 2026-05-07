@@ -28,6 +28,10 @@ import ResizableSplitView from '../ResizableSplitView';
 import { FilePreviewPanel } from '../FilePreviewPanel';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 import type { S3FileInfo, ListKBFilesResponse } from '../../Services/knowledgeBaseService';
+import { CreateSubfolderModal } from './CreateSubfolderModal';
+import { FolderContextMenu, type FolderContextAction, type FolderContextTarget } from './FolderContextMenu';
+
+const COMPANY_KB_PREFIX = 'documents/company/';
 
 interface CompanyFilesTabProps {
   onActionChange?: (actions: React.ReactNode) => void;
@@ -124,7 +128,23 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const [loadingFolders, setLoadingFolders] = useState(false);
 
   // Delete
-  const [deleteConfirm, setDeleteConfirm] = useState<{ keys: string[]; label: string } | null>(null);
+  type DeleteConfirmState =
+    | { kind: 'files'; keys: string[]; label: string }
+    | { kind: 'subfolder'; path: string; label: string };
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null);
+
+  // Subfolder creation
+  const [subfolderTarget, setSubfolderTarget] = useState<{
+    parentPath: string;
+    parentDisplayName: string;
+  } | null>(null);
+
+  // Folder right-click context menu
+  const [folderContextMenu, setFolderContextMenu] = useState<{
+    show: boolean;
+    position: { x: number; y: number };
+    target: FolderContextTarget;
+  } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Rename
@@ -385,6 +405,21 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
       setIsMoving(true);
       try {
         const result = await knowledgeBaseService.moveKBFiles('company', toMove, 'company', destPath);
+        // Optimistically rewrite source -> dest keys so the moved entries
+        // jump folders immediately. Without this, the old keys linger until
+        // the refetch completes and `fetchFiles` doesn't drop them — they
+        // sit in `prev.files` and get kept by the preserve-deep-entries
+        // branch since they're absent from the new shallow listing.
+        const mapping = new Map(result.successful.map((s) => [s.sourceKey, s.destKey]));
+        if (mapping.size > 0) {
+          setFileState((prev) => ({
+            ...prev,
+            files: prev.files.map((f) => {
+              const dest = mapping.get(f.Key);
+              return dest ? { ...f, Key: dest } : f;
+            }),
+          }));
+        }
         if (result.failed.length > 0) {
           showToast({
             message: t('move.partial', { succeeded: result.successful.length, failed: result.failed.length }),
@@ -600,6 +635,7 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
       // Include .metadata.json sidecars in the delete set.
       const withMeta = keys.flatMap((k) => [k, `${k}.metadata.json`]);
       setDeleteConfirm({
+        kind: 'files',
         keys: withMeta,
         label: label ?? t('delete.confirm', { count: keys.length }),
       });
@@ -609,15 +645,21 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
 
   const confirmDeleteSubfolder = useCallback(
     (folderId: string, folderName: string) => {
-      const prefix = folderId.endsWith('/') ? folderId : `${folderId}/`;
-      const folderFileKeys = fileState.files
-        .filter((f) => f.Key.startsWith(prefix) && !f.Key.endsWith('/'))
-        .map((f) => f.Key);
-      if (folderFileKeys.length === 0) return;
-      const withMeta = folderFileKeys.flatMap((k) => [k, `${k}.metadata.json`]);
+      const folderPrefix = folderId.endsWith('/') ? folderId : `${folderId}/`;
+      if (!folderPrefix.startsWith(COMPANY_KB_PREFIX)) return;
+      const path = folderPrefix.slice(COMPANY_KB_PREFIX.length).replace(/\/$/, '');
+      if (!path) return;
+      const childCount = fileState.files.filter((f) => f.Key.startsWith(folderPrefix) && !f.Key.endsWith('/')).length;
       setDeleteConfirm({
-        keys: withMeta,
-        label: t('delete.confirmFolder', { name: folderName, count: folderFileKeys.length }),
+        kind: 'subfolder',
+        path,
+        label:
+          childCount > 0
+            ? t('delete.confirmFolder', { name: folderName, count: childCount })
+            : t('delete.confirmEmptyFolder', {
+                name: folderName,
+                defaultValue: `Delete empty folder "${folderName}"?`,
+              }),
       });
     },
     [fileState.files, t]
@@ -627,25 +669,42 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     if (!deleteConfirm) return;
     setIsDeleting(true);
     try {
-      const result = await knowledgeBaseService.deleteKBFiles('company', deleteConfirm.keys);
-      const realSucceeded = result.successful.filter((k) => !k.endsWith('.metadata.json')).length;
-      const realFailed = result.failed.filter((f) => !f.key.endsWith('.metadata.json')).length;
-      // Optimistically remove deleted files from state immediately.
-      const deletedSet = new Set(result.successful);
-      setFileState((prev) => ({
-        ...prev,
-        files: prev.files.filter((f) => !deletedSet.has(f.Key)),
-      }));
-      if (realFailed > 0) {
+      if (deleteConfirm.kind === 'subfolder') {
+        await knowledgeBaseService.deleteSubfolder('company', deleteConfirm.path, true);
+        const folderPrefix = `${COMPANY_KB_PREFIX}${deleteConfirm.path}/`;
+        setFileState((prev) => ({
+          ...prev,
+          files: prev.files.filter((f) => !f.Key.startsWith(folderPrefix)),
+          expandedFolders: new Set([...prev.expandedFolders].filter((id) => !id.startsWith(folderPrefix))),
+          loadedFolders: new Set([...prev.loadedFolders].filter((id) => !id.startsWith(folderPrefix))),
+        }));
         showToast({
-          message: t('delete.partial', { succeeded: realSucceeded, failed: realFailed }),
-          variant: 'warning',
+          message: t('delete.folderSuccess', { defaultValue: 'Folder deleted' }),
+          variant: 'success',
         });
+        setSelectedKeys(new Set());
+        fetchFiles();
       } else {
-        showToast({ message: t('delete.success', { count: realSucceeded }), variant: 'success' });
+        const result = await knowledgeBaseService.deleteKBFiles('company', deleteConfirm.keys);
+        const realSucceeded = result.successful.filter((k) => !k.endsWith('.metadata.json')).length;
+        const realFailed = result.failed.filter((f) => !f.key.endsWith('.metadata.json')).length;
+        // Optimistically remove deleted files from state immediately.
+        const deletedSet = new Set(result.successful);
+        setFileState((prev) => ({
+          ...prev,
+          files: prev.files.filter((f) => !deletedSet.has(f.Key)),
+        }));
+        if (realFailed > 0) {
+          showToast({
+            message: t('delete.partial', { succeeded: realSucceeded, failed: realFailed }),
+            variant: 'warning',
+          });
+        } else {
+          showToast({ message: t('delete.success', { count: realSucceeded }), variant: 'success' });
+        }
+        setSelectedKeys(new Set());
+        fetchFiles();
       }
-      setSelectedKeys(new Set());
-      fetchFiles();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast({ message: t('delete.error', { error: msg }), variant: 'error' });
@@ -654,6 +713,66 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
       setDeleteConfirm(null);
     }
   }, [deleteConfirm, showToast, t, fetchFiles]);
+
+  // ── Subfolder + context menu ─────────────────────────────────
+
+  const subfolderRelativePath = useCallback((folderId: string): string => {
+    if (!folderId.startsWith(COMPANY_KB_PREFIX)) return '';
+    return folderId.slice(COMPANY_KB_PREFIX.length).replace(/\/$/, '');
+  }, []);
+
+  const openAddSubfolder = useCallback((parentPath: string, parentDisplayName: string) => {
+    setSubfolderTarget({ parentPath, parentDisplayName });
+  }, []);
+
+  const handleSubfolderCreated = useCallback(
+    (newPath: string) => {
+      setSubfolderTarget(null);
+      const newFolderKey = `${COMPANY_KB_PREFIX}${newPath}/`;
+      setFileState((prev) => {
+        if (prev.files.some((f) => f.Key === newFolderKey)) return prev;
+        return {
+          ...prev,
+          files: [...prev.files, { Key: newFolderKey, LastModified: new Date(), Size: 0 }],
+        };
+      });
+      fetchFiles();
+      fetchDeepFiles(true);
+      showToast({
+        message: t('createSubfolder.success', { defaultValue: 'Folder created' }),
+        variant: 'success',
+      });
+    },
+    [fetchFiles, fetchDeepFiles, showToast, t]
+  );
+
+  const openFolderContextMenu = useCallback((e: React.MouseEvent, target: FolderContextTarget) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFolderContextMenu({
+      show: true,
+      position: { x: e.clientX, y: e.clientY },
+      target,
+    });
+  }, []);
+
+  const closeFolderContextMenu = useCallback(() => {
+    setFolderContextMenu(null);
+  }, []);
+
+  const handleContextMenuAction = useCallback(
+    (action: FolderContextAction) => {
+      const ctx = folderContextMenu;
+      if (!ctx || ctx.target.kind !== 'subfolder') return;
+      const { folderId, folderName } = ctx.target;
+      if (action === 'addSubfolder') {
+        openAddSubfolder(subfolderRelativePath(folderId), folderName);
+      } else if (action === 'delete') {
+        confirmDeleteSubfolder(folderId, folderName);
+      }
+    },
+    [folderContextMenu, openAddSubfolder, subfolderRelativePath, confirmDeleteSubfolder]
+  );
 
   // ── Rename handlers ────────────────────────────────────────
 
@@ -848,8 +967,29 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
             </button>
           )}
           {canAdd && (
-            <button className="finder-btn" onClick={() => setShowUploadModal(true)}>
+            <button
+              className="finder-btn finder-btn--primary finder-btn--labelled"
+              onClick={() => {
+                const parentPath = currentFolderId ? subfolderRelativePath(currentFolderId) : '';
+                const parentDisplayName = currentFolderId ? currentFolderName : t('tabs.companyFiles');
+                openAddSubfolder(parentPath, parentDisplayName);
+              }}
+              title={currentFolderId ? t('actions.newSubfolder') : t('actions.newFolder')}
+            >
+              <i className="bi bi-folder-plus" />
+              <span className="finder-btn__label">
+                {currentFolderId ? t('actions.newSubfolder') : t('actions.newFolder')}
+              </span>
+            </button>
+          )}
+          {canAdd && (
+            <button
+              className="finder-btn finder-btn--labelled"
+              onClick={() => setShowUploadModal(true)}
+              title={t('actions.upload')}
+            >
               <i className="bi bi-upload" />
+              <span className="finder-btn__label">{t('actions.upload')}</span>
             </button>
           )}
           <button
@@ -959,6 +1099,16 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                 }}
                 onDrop={(e) => {
                   if (isFolder && canAdd) onDropOnSubfolder(e, row.id);
+                }}
+                onContextMenu={(e) => {
+                  if (isFolder) {
+                    openFolderContextMenu(e, {
+                      kind: 'subfolder',
+                      kbId: 'company',
+                      folderId: row.id,
+                      folderName: row.displayName || row.name,
+                    });
+                  }
                 }}
                 onClick={(e) => {
                   if (!isFolder && row.originalKey) handleFileClick(row.originalKey, e);
@@ -1182,14 +1332,44 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
             ) : (
               <>
                 <i className="bi bi-trash me-1" />
-                {t('delete.confirm', {
-                  count: deleteConfirm?.keys.filter((k) => !k.endsWith('.metadata.json')).length ?? 0,
-                })}
+                {deleteConfirm?.kind === 'subfolder'
+                  ? t('delete.deleteFolderButton', { defaultValue: 'Delete folder' })
+                  : t('delete.confirm', {
+                      count:
+                        deleteConfirm?.kind === 'files'
+                          ? deleteConfirm.keys.filter((k) => !k.endsWith('.metadata.json')).length
+                          : 0,
+                    })}
               </>
             )}
           </button>
         </Modal.Footer>
       </Modal>
+
+      {/* Subfolder creation modal */}
+      {subfolderTarget && (
+        <CreateSubfolderModal
+          show
+          kbId="company"
+          parentPath={subfolderTarget.parentPath}
+          parentDisplayName={subfolderTarget.parentDisplayName}
+          onHide={() => setSubfolderTarget(null)}
+          onSuccess={handleSubfolderCreated}
+        />
+      )}
+
+      {/* Folder right-click context menu */}
+      {folderContextMenu && (
+        <FolderContextMenu
+          show={folderContextMenu.show}
+          position={folderContextMenu.position}
+          target={folderContextMenu.target}
+          canEdit={canAdd}
+          canDeleteTopLevel={false}
+          onClose={closeFolderContextMenu}
+          onAction={handleContextMenuAction}
+        />
+      )}
 
       {/* Rename modal */}
       <Modal show={!!renameTarget} onHide={() => setRenameTarget(null)} centered>

@@ -460,7 +460,7 @@ export function TicketsFieldsTab({
                       className="fw-bold text-muted text-uppercase"
                       style={{ fontSize: '0.7rem', letterSpacing: '0.5px', width: 50, textAlign: 'center' }}
                     >
-                      {t('teamSettings.visible')}
+                      {t('boardSettings.visible')}
                     </small>
                     <small
                       className="fw-bold text-muted text-uppercase"

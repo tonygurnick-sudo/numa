@@ -1,0 +1,76 @@
+{
+  "name": "Create Jira Version in Project",
+  "description": "Creates a project version. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-project-versions/#api-rest-api-3-version-post)",
+  "component_type": "action",
+  "version": "0.1.17",
+  "key": "jira-create-version",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "jira",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "projectID",
+      "type": "string",
+      "label": "Project ID",
+      "description": "The project ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Version Name",
+      "description": "The unique name of the version. The maximum length is 255 characters."
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "The description of the version",
+      "optional": true
+    },
+    {
+      "name": "archived",
+      "type": "boolean",
+      "label": "Archived",
+      "description": "Indicates that the version is archived",
+      "optional": true
+    },
+    {
+      "name": "startDate",
+      "type": "string",
+      "label": "Start Date",
+      "description": "The start date of the version. Expressed in ISO 8601 format (yyyy-mm-dd).",
+      "optional": true
+    },
+    {
+      "name": "releaseDate",
+      "type": "string",
+      "label": "Release Date",
+      "description": "The release date of the version. Expressed in ISO 8601 format (yyyy-mm-dd).",
+      "optional": true
+    },
+    {
+      "name": "expand",
+      "type": "string",
+      "label": "Expand",
+      "description": "Use expand to include additional information about the version in the response. This parameter accepts a comma-separated list. Expand options include:\n`operations` Returns the list of operations available for this version.\n`issuesstatus` Returns the count of issues in this version for each of the status categories `to do`, `in progress`, `done`, and `unmapped`.",
+      "optional": true
+    }
+  ]
+}

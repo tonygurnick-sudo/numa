@@ -12,13 +12,35 @@ export type ScheduledRunConfig = {
 export type EmailFilterField = 'sender' | 'subject' | 'to' | 'body' | 'has_attachment';
 export type EmailFilterOp = 'contains' | 'equals' | 'not_contains' | 'matches';
 export type EmailFilter = { field: EmailFilterField; op: EmailFilterOp; value: string };
-export type EventTrigger = {
+
+export type GmailEventTrigger = {
   source: 'gmail';
   event: 'message.received';
   filters: EmailFilter[];
   filter_logic?: 'all' | 'any';
   include_email_context?: boolean;
 };
+
+// Pipedream-backed event trigger. The `configured_props` blob is opaque to Numa —
+// validated against Pipedream's component schema at deploy time. `deployed_trigger_id`
+// (dc_xxx) and `webhook_signing_key` are populated server-side after the deploy call.
+//
+// `configured_prop_labels` is a snapshot of human-readable labels for prop values
+// captured at save-time from the wizard (e.g. channel ID → channel name). Optional
+// for backwards compatibility — legacy schedules render raw values.
+export type PipedreamEventTrigger = {
+  source: 'pipedream';
+  app_slug: string;
+  component_id: string;
+  component_version?: string;
+  configured_props: Record<string, unknown>;
+  configured_prop_labels?: Record<string, Record<string, string>>;
+  deployed_trigger_id?: string;
+  webhook_signing_key?: string;
+  include_event_context?: boolean;
+};
+
+export type EventTrigger = GmailEventTrigger | PipedreamEventTrigger;
 
 export type AgentSchedule = {
   scheduleId: string;

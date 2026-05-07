@@ -1,0 +1,43 @@
+{
+  "name": "Move File",
+  "description": "Move a file from one folder to another. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/update) for more information",
+  "component_type": "action",
+  "version": "0.1.15",
+  "key": "google_drive-move-file",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File",
+      "description": "The file to move",
+      "remoteOptions": true
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder",
+      "description": "The folder you want to move the file to",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

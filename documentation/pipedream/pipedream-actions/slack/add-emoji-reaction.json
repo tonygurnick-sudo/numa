@@ -1,0 +1,40 @@
+{
+  "name": "Add Emoji Reaction",
+  "description": "Add an emoji reaction to a message. [See the documentation](https://api.slack.com/methods/reactions.add)",
+  "component_type": "action",
+  "version": "0.0.16",
+  "key": "slack-add-emoji-reaction",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "conversation",
+      "type": "string",
+      "label": "Channel",
+      "description": "Channel where the message to add reaction to was posted.",
+      "remoteOptions": true
+    },
+    {
+      "name": "timestamp",
+      "type": "string",
+      "label": "Message Timestamp",
+      "description": "Timestamp of the message to add reaction to. e.g. `1403051575.000407`."
+    },
+    {
+      "name": "icon_emoji",
+      "type": "string",
+      "label": "Icon (emoji)",
+      "description": "Provide an emoji to use as the icon for this reaction. E.g. `fire`",
+      "optional": false,
+      "remoteOptions": true
+    }
+  ]
+}

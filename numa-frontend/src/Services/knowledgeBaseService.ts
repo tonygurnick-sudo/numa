@@ -482,6 +482,66 @@ class KnowledgeBaseService {
   }
 
   /**
+   * Create an empty subfolder inside a KB (S3 prefix marker).
+   * Backend writes a zero-byte object at `<kb prefix>/<path>/`.
+   * Returns 409 if the folder (or anything under it) already exists.
+   */
+  async createSubfolder(kbId: string, path: string): Promise<{ path: string; key: string }> {
+    try {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/folders`), {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ path }),
+      });
+
+      const result = await this.parseJsonResponse<{ path: string; key: string }>(
+        response,
+        i18n.t('errors:knowledgeBase.createSubfolderFailed', { defaultValue: 'Failed to create subfolder' })
+      );
+
+      clearSwrCache(`kbFiles_${kbId}`);
+      clearSwrCache(`kbFilesDeep_${kbId}`);
+
+      return result;
+    } catch (error) {
+      console.error('Error creating subfolder:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a subfolder. With `recursive=false` only deletes the empty marker
+   * (returns 409 if non-empty). With `recursive=true` deletes every object
+   * under the prefix.
+   */
+  async deleteSubfolder(
+    kbId: string,
+    path: string,
+    recursive: boolean
+  ): Promise<{ path: string; deletedCount: number }> {
+    try {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/folders`), {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ path, recursive }),
+      });
+
+      const result = await this.parseJsonResponse<{ path: string; deletedCount: number }>(
+        response,
+        i18n.t('errors:knowledgeBase.deleteSubfolderFailed', { defaultValue: 'Failed to delete subfolder' })
+      );
+
+      clearSwrCache(`kbFiles_${kbId}`);
+      clearSwrCache(`kbFilesDeep_${kbId}`);
+
+      return result;
+    } catch (error) {
+      console.error('Error deleting subfolder:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get KB state including documents, sync status, and ingestion jobs
    * This replaces the frontend AWS SDK calls for KB state
    */

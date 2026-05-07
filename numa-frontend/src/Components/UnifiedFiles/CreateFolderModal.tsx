@@ -222,7 +222,8 @@ export function CreateFolderModal({ show, onHide, onSuccess }: CreateFolderModal
 
           {/* Notes */}
           <div className="create-folder-modal__notes">
-            <strong>{t('createFolder.noteTitle')}</strong>
+            <strong>{t('createFolder.aboutTitle')}</strong>
+            <p className="mb-2">{t('createFolder.aboutBody')}</p>
             <ul>
               <li>{t('createFolder.notes.creator')}</li>
               <li>{t('createFolder.notes.personal')}</li>

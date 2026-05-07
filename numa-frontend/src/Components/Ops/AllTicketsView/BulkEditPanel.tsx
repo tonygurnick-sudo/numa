@@ -29,7 +29,7 @@ export function BulkEditPanel({
   onApplied,
 }: BulkEditPanelProps): React.JSX.Element | null {
   const { t } = useTranslation('ops');
-  const { config, teamData, workUnits } = useOps();
+  const { config, boardData, workUnits } = useOps();
   const { numaPost, numaDelete } = useNumaRequest();
 
   // ── Local state ───────────────────────────────────────────────────────────
@@ -44,10 +44,10 @@ export function BulkEditPanel({
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
-  const zones = teamData?.zones ?? [];
-  const stages = teamData?.stages ?? [];
+  const zones = boardData?.zones ?? [];
+  const stages = boardData?.stages ?? [];
   const staff = config?.staff?.filter((s) => s.isActive) ?? [];
-  const hasWorkUnits = !!teamData?.team?.workUnitSeries?.enabled;
+  const hasWorkUnits = !!boardData?.board?.workUnitSeries?.enabled;
 
   const hasChanges = useMemo(
     () => stageId !== KEEP_AS_IS || assigneeId !== KEEP_AS_IS || priority !== KEEP_AS_IS || workUnitId !== KEEP_AS_IS,
@@ -65,8 +65,8 @@ export function BulkEditPanel({
       setApplying(true);
 
       const changes: Record<string, string | null | undefined> = {};
-      const teamId = teamData?.team?.id;
-      if (teamId) changes.teamId = teamId;
+      const boardId = boardData?.board?.id;
+      if (boardId) changes.boardId = boardId;
       if (stageId !== KEEP_AS_IS) {
         changes.stageId = stageId;
         const stage = stages.find((s) => s.id === stageId);
@@ -99,8 +99,8 @@ export function BulkEditPanel({
     setShowDeleteConfirm(false);
     try {
       setApplying(true);
-      const teamId = teamData?.team?.id;
-      await Promise.all(ticketIds.map((id) => OpsService.deleteTicket(numaDelete, id, teamId)));
+      const boardId = boardData?.board?.id;
+      await Promise.all(ticketIds.map((id) => OpsService.deleteTicket(numaDelete, id, boardId)));
       resetFields();
       onApplied();
     } catch (err) {
@@ -108,7 +108,7 @@ export function BulkEditPanel({
     } finally {
       setApplying(false);
     }
-  }, [ticketIds, numaDelete, onApplied, teamData]);
+  }, [ticketIds, numaDelete, onApplied, boardData]);
 
   const resetFields = () => {
     setStageId(KEEP_AS_IS);

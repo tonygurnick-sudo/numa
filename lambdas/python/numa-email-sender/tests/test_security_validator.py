@@ -126,11 +126,13 @@ class TestAccountValidation:
             self.validator = EmailSecurityValidator()
 
     def test_accepts_known_account(self):
-        self.mock_table.scan.return_value = {
-            "Items": [{"clientName": "nd-labs", "clientAccountId": "123456789012"}]
-        }
+        self.mock_table.scan.return_value = {"Items": [{"clientName": "racetech"}]}
         # Should not raise
         self.validator._validate_account_in_client_config("123456789012")
+        # Confirm the scan walks into the nested config map, not the top level.
+        scan_kwargs = self.mock_table.scan.call_args.kwargs
+        assert scan_kwargs["FilterExpression"] == "config.clientAccountId = :acct_id"
+        assert scan_kwargs["ExpressionAttributeValues"] == {":acct_id": "123456789012"}
 
     def test_rejects_unknown_account(self):
         self.mock_table.scan.return_value = {"Items": []}

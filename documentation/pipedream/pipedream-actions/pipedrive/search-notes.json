@@ -1,0 +1,147 @@
+{
+  "name": "Search Notes",
+  "description": "Search for notes in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Notes#getNotes)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "pipedrive-search-notes",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "searchTerm",
+      "type": "string",
+      "label": "Search Term",
+      "description": "The term to search for in the note content",
+      "optional": true
+    },
+    {
+      "name": "leadId",
+      "type": "string",
+      "label": "Lead ID",
+      "description": "The ID of the lead that the note is attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "dealId",
+      "type": "string",
+      "label": "Deal ID",
+      "description": "The ID of the deal that the note is attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "personId",
+      "type": "integer",
+      "label": "Person ID",
+      "description": "The ID of the person that the note is attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "organizationId",
+      "type": "integer",
+      "label": "Organization ID",
+      "description": "The ID of the organization that the note is attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "userId",
+      "type": "integer",
+      "label": "User ID",
+      "description": "The ID of the user that the note is attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "projectId",
+      "type": "string",
+      "label": "Project ID",
+      "description": "The ID of the project that the note is attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "sortField",
+      "type": "string",
+      "label": "Sort Field",
+      "description": "The field name to sort by",
+      "options": ["id", "user_id", "deal_id", "org_id", "person_id", "content", "add_time", "update_time"],
+      "optional": true
+    },
+    {
+      "name": "sortDirection",
+      "type": "string",
+      "label": "Sort Direction",
+      "description": "The direction to sort the results in",
+      "options": ["ASC", "DESC"],
+      "default": "DESC",
+      "optional": true
+    },
+    {
+      "name": "startDate",
+      "type": "string",
+      "label": "Start Date",
+      "description": "The date in format of YYYY-MM-DD from which notes to fetch",
+      "optional": true
+    },
+    {
+      "name": "endDate",
+      "type": "string",
+      "label": "End Date",
+      "description": "The date in format of YYYY-MM-DD until which notes to fetch to",
+      "optional": true
+    },
+    {
+      "name": "pinnedToLeadFlag",
+      "type": "boolean",
+      "label": "Pinned to Lead Flag",
+      "description": "If `true`, the results are filtered by note to lead pinning state",
+      "optional": true
+    },
+    {
+      "name": "pinnedToDealFlag",
+      "type": "boolean",
+      "label": "Pinned to Deal Flag",
+      "description": "If `true`, the results are filtered by note to deal pinning state",
+      "optional": true
+    },
+    {
+      "name": "pinnedToOrganizationFlag",
+      "type": "boolean",
+      "label": "Pinned to Organization Flag",
+      "description": "If `true`, the results are filtered by note to organization pinning state",
+      "optional": true
+    },
+    {
+      "name": "pinnedToPersonFlag",
+      "type": "boolean",
+      "label": "Pinned to Person Flag",
+      "description": "If `true`, the results are filtered by note to person pinning state",
+      "optional": true
+    },
+    {
+      "name": "pinnedToProjectFlag",
+      "type": "boolean",
+      "label": "Pinned to Project Flag",
+      "description": "If `true`, the results are filtered by note to project pinning state",
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "optional": true
+    }
+  ]
+}

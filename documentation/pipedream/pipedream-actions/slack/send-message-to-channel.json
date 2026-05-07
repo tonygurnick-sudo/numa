@@ -1,0 +1,171 @@
+{
+  "name": "Send Message to Channel",
+  "description": "Send a message to a public or private channel. [See the documentation](https://api.slack.com/methods/chat.postMessage)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "slack-send-message-to-channel",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "conversation",
+      "type": "string",
+      "label": "Channel",
+      "description": "Select a public or private channel",
+      "remoteOptions": true
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "description": "Text of the message to send (see Slack's [formatting docs](https://api.slack.com/reference/surfaces/formatting)). This field is usually necessary, unless you're providing only attachments instead."
+    },
+    {
+      "name": "mrkdwn",
+      "label": "Send text as Slack mrkdwn",
+      "type": "boolean",
+      "description": "`true` by default. Pass `false` to disable Slack markup parsing. [See docs here](https://api.slack.com/reference/surfaces/formatting)",
+      "default": true,
+      "optional": true
+    },
+    {
+      "name": "as_user",
+      "type": "boolean",
+      "label": "Send as User",
+      "description": "Optionally pass `true` to post the message as the authenticated user, instead of as a bot. Defaults to `false`.",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "post_at",
+      "label": "Schedule message",
+      "description": "Messages can only be scheduled up to 120 days in advance, and cannot be scheduled for the past. The datetime should be in ISO 8601 format. (Example: `2014-01-01T00:00:00Z`)",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "include_sent_via_pipedream_flag",
+      "type": "boolean",
+      "optional": true,
+      "default": true,
+      "label": "Include link to Pipedream",
+      "description": "Defaults to `true`, includes a link to Pipedream at the end of your Slack message."
+    },
+    {
+      "name": "customizeBotSettings",
+      "type": "boolean",
+      "label": "Customize Bot Settings",
+      "description": "Customize the username and/or icon of the Bot",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "username",
+      "type": "string",
+      "label": "Bot Username",
+      "description": "Optionally customize your bot's user name (default is `Pipedream`). Must be used in conjunction with `Send as User` set to false, otherwise ignored.",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "icon_emoji",
+      "type": "string",
+      "label": "Icon (emoji)",
+      "description": "Optionally provide an emoji to use as the icon for this message. E.g., `:fire:` Overrides `icon_url`.  Must be used in conjunction with `Send as User` set to `false`, otherwise ignored.",
+      "optional": true,
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "icon_url",
+      "type": "string",
+      "label": "Icon (image URL)",
+      "description": "Optionally provide an image URL to use as the icon for this message. Must be used in conjunction with `Send as User` set to `false`, otherwise ignored.",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "replyToThread",
+      "type": "boolean",
+      "label": "Reply to Thread",
+      "description": "Reply to an existing thread",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "thread_ts",
+      "type": "string",
+      "label": "Message Timestamp",
+      "description": "Provide another message's `ts` value to make this message a reply (e.g., if triggering on new Slack messages, enter `{{event.ts}}`). Avoid using a reply's `ts` value; use its parent instead. e.g. `1403051575.000407`.",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "thread_broadcast",
+      "type": "boolean",
+      "label": "Send Channel Message",
+      "description": "If `true`, posts in the thread and channel. Used in conjunction with `Message Timestamp` and indicates whether reply should be made visible to everyone in the channel. Defaults to `false`.",
+      "default": false,
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "addMessageMetadata",
+      "type": "boolean",
+      "label": "Add Message Metadata",
+      "description": "Set the metadata event type and payload",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "metadata_event_type",
+      "type": "string",
+      "label": "Metadata Event Type",
+      "description": "The name of the metadata event. Example: `task_created`",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "metadata_event_payload",
+      "type": "string",
+      "label": "Metadata Event Payload",
+      "description": "The payload of the metadata event. Must be a JSON string. Example: `{ \"id\": \"11223\", \"title\": \"Redesign Homepage\"}`",
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "configureUnfurlSettings",
+      "type": "boolean",
+      "label": "Configure Unfurl Settings",
+      "description": "Configure settings for unfurling links and media",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "unfurl_links",
+      "type": "boolean",
+      "label": "Unfurl Links",
+      "description": "Default to `false`. Pass `true` to enable unfurling of links.",
+      "default": false,
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "unfurl_media",
+      "type": "boolean",
+      "label": "Unfurl Media",
+      "description": "Defaults to `false`. Pass `true` to enable unfurling of media content.",
+      "default": false,
+      "optional": true,
+      "hidden": true
+    }
+  ]
+}

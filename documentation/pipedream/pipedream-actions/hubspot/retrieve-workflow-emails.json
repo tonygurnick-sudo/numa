@@ -1,0 +1,48 @@
+{
+  "name": "Retrieve Workflow Emails",
+  "description": "Retrieve emails sent by a workflow by ID. [See the documentation](https://developers.hubspot.com/docs/api-reference/automation-automation-v4-v4/email-campaigns/get-automation-v4-flows-email-campaigns)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "hubspot-retrieve-workflow-emails",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "workflowId",
+      "type": "string",
+      "label": "Workflow",
+      "description": "The ID of the workflow you wish to see metadata for.",
+      "remoteOptions": true
+    },
+    {
+      "name": "after",
+      "type": "string",
+      "label": "After",
+      "description": "The paging cursor token of the last successfully read resource will be returned as the `paging.next.after` JSON property of a paged response containing more results.",
+      "optional": true
+    },
+    {
+      "name": "before",
+      "type": "string",
+      "label": "Before",
+      "description": "The paging cursor token of the last successfully read resource will be returned as the `paging.next.before` JSON property of a paged response containing more results.",
+      "optional": true
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "label": "Limit",
+      "description": "The maximum number of results to display per page.",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

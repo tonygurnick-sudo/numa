@@ -1,0 +1,25 @@
+{
+  "name": "Search For Sequences",
+  "description": "Search for sequences in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#search-for-sequences)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "apollo_io-search-sequences",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "search",
+      "type": "string",
+      "label": "Search",
+      "description": "The sequence's name"
+    }
+  ]
+}

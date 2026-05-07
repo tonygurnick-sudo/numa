@@ -1641,9 +1641,9 @@
    Ops Header — Refined Design
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Team Selector Dropdown ─────────────────────────────────────────────── */
+/* ── Board Selector Dropdown ────────────────────────────────────────────── */
 
-.ops-team-selector .dropdown-toggle {
+.ops-board-selector .dropdown-toggle {
   background: #fff !important;
   border: 1px solid #d1d5db !important;
   border-radius: var(--ops-radius) !important;
@@ -1654,13 +1654,13 @@
   box-shadow: none !important;
 }
 
-.ops-team-selector .dropdown-toggle:hover,
-.ops-team-selector .dropdown-toggle:focus {
+.ops-board-selector .dropdown-toggle:hover,
+.ops-board-selector .dropdown-toggle:focus {
   border-color: #9ca3af !important;
   background: #fafafa !important;
 }
 
-.ops-team-selector .dropdown-toggle::after {
+.ops-board-selector .dropdown-toggle::after {
   margin-left: 10px;
   opacity: 0.4;
 }

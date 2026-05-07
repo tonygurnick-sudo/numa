@@ -118,10 +118,12 @@ export const AutomationTableRow = ({
               <Pencil size={14} className="me-2" />
               {t('actions.edit')}
             </Dropdown.Item>
-            <Dropdown.Item onClick={() => onRunNow(automation)} disabled={isRunning}>
-              <Play size={14} className="me-2" />
-              {isRunning ? t('actions.running') : t('actions.runNow')}
-            </Dropdown.Item>
+            {automation.triggerType !== 'event' && (
+              <Dropdown.Item onClick={() => onRunNow(automation)} disabled={isRunning}>
+                <Play size={14} className="me-2" />
+                {isRunning ? t('actions.running') : t('actions.runNow')}
+              </Dropdown.Item>
+            )}
             <Dropdown.Divider />
             <Dropdown.Item className="text-danger" onClick={() => onDelete(automation)}>
               <Trash2 size={14} className="me-2" />

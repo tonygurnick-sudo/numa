@@ -1,0 +1,26 @@
+{
+  "name": "Delete Calendar Event",
+  "description": "Delete an event in the user's default calendar. [See the documentation](https://learn.microsoft.com/en-us/graph/api/event-delete?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "microsoft_outlook_calendar-delete-calendar-event",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook_calendar"
+    },
+    {
+      "name": "eventId",
+      "label": "Event ID",
+      "description": "The event ID",
+      "type": "string",
+      "remoteOptions": true
+    }
+  ]
+}

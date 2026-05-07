@@ -1,0 +1,43 @@
+{
+  "name": "Remove Member From A Segment",
+  "description": "Removes a member from the specified static segment. [See docs here](https://mailchimp.com/developer/marketing/api/list-segment-members/remove-list-member-from-segment/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-remove-segment-member",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "segmentId",
+      "type": "string",
+      "label": "Segment/Tag Id",
+      "description": "The unique ID of the segment or tag you'd like to watch for new subscribers",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "subscriberHash",
+      "type": "string",
+      "label": "Subscriber",
+      "description": "The MD5 hash of the lowercase version of the list member's email address.",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Create Notebook",
+  "description": "Creates a notebook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/onenote-post-notebooks?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "onenote-create-notebook",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "onenote"
+    },
+    {
+      "name": "displayName",
+      "type": "string",
+      "label": "Display name",
+      "description": "Display name for the notebook"
+    }
+  ]
+}

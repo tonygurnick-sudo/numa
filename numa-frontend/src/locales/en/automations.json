@@ -112,9 +112,9 @@
       "edit": "Modify your automation settings."
     },
     "steps": {
-      "trigger": "Trigger",
+      "trigger": "Automation",
       "schedule": "Schedule",
-      "event": "Event",
+      "event": "Trigger",
       "agent": "Agent",
       "prompt": "Details",
       "review": "Review"
@@ -147,7 +147,7 @@
       "title": "When something happens",
       "description": "Run your agent when an event occurs, like a new email arrives.",
       "comingSoon": "Coming soon",
-      "connectorsDisabled": "Event triggers require Data Connectors to be enabled for your account.",
+      "triggersDisabled": "Event triggers aren't enabled for your account yet. Contact your admin to turn them on.",
       "gmailNotConnected": "Connect your Gmail account in Data Connectors to use email triggers.",
       "checkingGmail": "Checking Gmail connection...",
       "builder": {
@@ -211,8 +211,7 @@
     },
     "maxRuns": {
       "label": "Maximum runs",
-      "help": "The automation will pause after reaching this limit. Set to 0 for unlimited.",
-      "unlimited": "Unlimited"
+      "help": "The automation will pause once it has run this many times. Maximum 100."
     },
     "emailNotifications": {
       "label": "Send email notifications when this automation runs",
@@ -239,7 +238,6 @@
     "timezoneLabel": "Timezone",
     "emailLabel": "Email notifications",
     "noPrompt": "No additional instructions",
-    "unlimited": "Unlimited",
     "enabled": "Enabled",
     "disabled": "Disabled",
     "edit": "Edit"
@@ -313,5 +311,115 @@
     "paused": "Automation paused",
     "resumed": "Automation resumed",
     "runStarted": "Automation run started"
+  },
+  "eventSources": {
+    "sourceLabel": "Source",
+    "mechanism": {
+      "native": "Native",
+      "pipedream": "Pipedream",
+      "both": "Native + Pipedream"
+    },
+    "unavailable": {
+      "lockAria": "Unavailable",
+      "pipedreamDisabled": "Pipedream integrations are disabled for this workspace. Contact your admin to enable them."
+    },
+    "gmail": {
+      "label": "Gmail",
+      "description": "Trigger on new emails, with optional filters on sender, subject, body, or attachments."
+    },
+    "slack": {
+      "label": "Slack",
+      "description": "Trigger on keyword mentions, @-mentions, new messages, or reactions in your channels."
+    }
+  },
+  "pipedreamTriggers": {
+    "propRenderer": {
+      "choose": "Choose…",
+      "loading": "Loading options…",
+      "commaSeparated": "comma-separated values",
+      "toggleLabel": "Enabled",
+      "unsupportedType": "Field type \"{{type}}\" is not yet supported in this builder."
+    },
+    "appPicker": {
+      "loading": "Checking your connected apps…",
+      "connectCta": "Connect on Integrations",
+      "connected": "Connected",
+      "unhealthy": "Reconnect needed"
+    },
+    "configurator": {
+      "loading": "Loading available triggers…",
+      "noTriggersAvailable": "No triggers are configured for this app yet.",
+      "unknownApp": "This app isn't in the curated trigger registry.",
+      "triggerLabel": "What kind of event?",
+      "configureLabel": "Configure",
+      "recommended": "Recommended"
+    },
+    "eventTrigger": {
+      "pickSource": "Pick where the event comes from.",
+      "chooseSource": "Choose a source",
+      "changeSource": "Change source"
+    },
+    "detail": {
+      "configuredProps": "Configuration",
+      "unhealthyTitle": "{{app}} needs to be reconnected",
+      "unhealthyBody": "This automation's underlying connection isn't healthy — events won't fire until you reconnect the app.",
+      "reconnectCta": "Reconnect on Integrations"
+    },
+    "apps": {
+      "slack": {
+        "label": "Slack",
+        "description": "Trigger on keyword mentions, @-mentions, new messages, or reactions in your channels."
+      }
+    },
+    "triggers": {
+      "slack-new-keyword-mention": {
+        "label": "When a keyword is mentioned",
+        "description": "Fires when a message in your selected channels contains a keyword (e.g. \"@Numa\").",
+        "props": {
+          "conversations": {
+            "label": "Channels",
+            "description": "Channels to monitor. Only messages in these channels are watched."
+          },
+          "keyword": {
+            "label": "Keyword",
+            "description": "Fires when a message contains this exact keyword (case-insensitive). Use a unique word like \"@Numa\" so you don't trigger on every casual mention."
+          }
+        }
+      },
+      "slack-new-user-mention": {
+        "label": "When a user is @-mentioned",
+        "description": "Fires when a specific user is @-mentioned in your selected channels.",
+        "props": {
+          "conversations": {
+            "label": "Channels",
+            "description": "Channels to monitor for @-mentions of the selected user."
+          },
+          "user": {
+            "label": "User to watch",
+            "description": "Fires when this user is @-mentioned in any of the selected channels."
+          }
+        }
+      },
+      "slack-new-message-in-channels": {
+        "label": "When a message is posted",
+        "description": "Fires on every new message in the channels you pick. High volume — use carefully.",
+        "props": {
+          "conversations": {
+            "label": "Channels",
+            "description": "Channels to monitor. Every message in these channels will fire the automation."
+          }
+        }
+      },
+      "slack-new-reaction-added": {
+        "label": "When a reaction is added",
+        "description": "Fires when a member reacts to a message in selected channels.",
+        "props": {
+          "conversations": {
+            "label": "Channels",
+            "description": "Channels to monitor for new reactions."
+          }
+        }
+      }
+    }
   }
 }

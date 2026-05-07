@@ -1,0 +1,85 @@
+{
+  "name": "Search Cards",
+  "description": "Searches for cards matching the specified query. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-search/#api-search-get).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-search-cards",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "query",
+      "type": "string",
+      "label": "Query",
+      "description": "The search query with a length of 1 to 16384 characters"
+    },
+    {
+      "name": "idBoards",
+      "type": "string[]",
+      "label": "Boards",
+      "description": "The IDs of boards to search for cards in",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "partial",
+      "type": "boolean",
+      "label": "Partial Search?",
+      "description": "Specifying partial to be true means that Trello will search for content that starts with any of the words in `query`. When searching for an object titled \"My Development Status Report\", by default a solution is to search for \"Development\". If partial is enabled, a search for \"dev\" is possible, however, a search for \"velopment\" is not possible.",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "cardFields",
+      "type": "string[]",
+      "label": "Cards Fields",
+      "description": "`all` or a list of card [fields](https://developer.atlassian.com/cloud/trello/guides/rest-api/object-definitions/#card-object) to be returned in the results",
+      "options": [
+        "all",
+        "badges",
+        "checkItemStates",
+        "closed",
+        "dateLastActivity",
+        "desc",
+        "descData",
+        "due",
+        "email",
+        "idAttachmentCover",
+        "idBoard",
+        "idChecklists",
+        "idLabels",
+        "idList",
+        "idMembers",
+        "idMembersVoted",
+        "idShort",
+        "labels",
+        "manualCoverAttachment",
+        "name",
+        "pos",
+        "shortLink",
+        "shortUrl",
+        "subscribed",
+        "url"
+      ],
+      "default": ["all"],
+      "optional": true
+    },
+    {
+      "name": "cardsLimit",
+      "type": "integer",
+      "label": "Cards Limit",
+      "description": "The maximum number of cards to return.",
+      "default": 10,
+      "optional": true
+    }
+  ]
+}

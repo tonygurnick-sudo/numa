@@ -1,0 +1,32 @@
+{
+  "name": "Get Invoice",
+  "description": "Gets details of an invoice.",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-get-invoice",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "invoiceId",
+      "label": "Invoice ID",
+      "description": "The ID of the invoice to get.",
+      "type": "string"
+    }
+  ]
+}

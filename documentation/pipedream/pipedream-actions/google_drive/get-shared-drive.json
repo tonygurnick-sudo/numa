@@ -1,0 +1,35 @@
+{
+  "name": "Get Shared Drive",
+  "description": "Get metadata for one or all shared drives. [See the documentation](https://developers.google.com/drive/api/v3/reference/drives/get) for more information",
+  "component_type": "action",
+  "version": "0.1.15",
+  "key": "google_drive-get-shared-drive",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Shared Drive",
+      "description": "Select a [Shared Drive](https://support.google.com/a/users/answer/9310351) or leave blank to retrieve all available shared drives.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "useDomainAdminAccess",
+      "type": "boolean",
+      "label": "Use Domain Admin Access",
+      "description": "Issue the request as a domain administrator",
+      "optional": true,
+      "default": false
+    }
+  ]
+}

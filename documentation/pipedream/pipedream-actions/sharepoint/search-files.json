@@ -1,0 +1,63 @@
+{
+  "name": "Search Files",
+  "description": "Search for files in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/search-query?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "sharepoint-search-files",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "queryString",
+      "type": "string",
+      "label": "Query String",
+      "description": "The search query containing the search terms"
+    },
+    {
+      "name": "queryTemplate",
+      "type": "string",
+      "label": "Query Template",
+      "description": "Provides a way to decorate the query string. Supports both KQL and query variables. Example: `({searchTerms}) AuthorOWSUSER:Adventure` [See the documentation](https://learn.microsoft.com/en-us/graph/search-concept-query-template) for more information.",
+      "optional": true
+    },
+    {
+      "name": "select",
+      "type": "string",
+      "label": "Select",
+      "description": "A comma-separated list of properties to return in the response",
+      "optional": true
+    },
+    {
+      "name": "size",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "optional": true,
+      "default": 100,
+      "max": 500
+    },
+    {
+      "name": "sortField",
+      "type": "string",
+      "label": "Sort Field",
+      "description": "The field to sort the results by",
+      "default": "lastModifiedDateTime",
+      "optional": true
+    },
+    {
+      "name": "descending",
+      "type": "boolean",
+      "label": "Descending",
+      "description": "Whether to sort the results in descending order",
+      "optional": true
+    }
+  ]
+}

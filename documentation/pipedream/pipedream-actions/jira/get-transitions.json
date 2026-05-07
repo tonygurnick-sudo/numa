@@ -1,0 +1,70 @@
+{
+  "name": "Get Transitions",
+  "description": "Gets either all transitions or a transition that can be performed by the user on an issue, based on the issue's status. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-issueidorkey-transitions-get)",
+  "component_type": "action",
+  "version": "0.1.17",
+  "key": "jira-get-transitions",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "jira",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIdOrKey",
+      "type": "string",
+      "label": "Issue ID or Key",
+      "description": "The ID or key of an issue",
+      "remoteOptions": true
+    },
+    {
+      "name": "transitionId",
+      "type": "string",
+      "label": "Transition ID",
+      "description": "The ID of the transition",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "skipRemoteOnlyCondition",
+      "type": "boolean",
+      "label": "Skip Remote Only Condition",
+      "description": "Whether transitions with the condition *Hide From User Condition* are included in the response",
+      "optional": true
+    },
+    {
+      "name": "includeUnavailableTransitions",
+      "type": "boolean",
+      "label": "Include Unavailable Transitions",
+      "description": "Whether details of transitions that fail a condition are included in the response",
+      "optional": true
+    },
+    {
+      "name": "sortByOpsBarAndStatus",
+      "type": "boolean",
+      "label": "Sort by Ops Bar and Status",
+      "description": "Whether the transitions are sorted by ops-bar sequence value first then category order (Todo, In Progress, Done) or only by ops-bar sequence value",
+      "optional": true
+    },
+    {
+      "name": "expand",
+      "type": "string",
+      "label": "Expand",
+      "description": "Use expand to include additional information about transitions in the response. This parameter accepts `transitions.fields`, which returns information about the fields in the transition screen for each transition. Fields hidden from the screen are not returned. Use this information to populate the fields and update fields in [Transition issue](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-issueidorkey-transitions-post).",
+      "optional": true
+    }
+  ]
+}

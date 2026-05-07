@@ -17,6 +17,7 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
+import { dbToApi, translateTeamString } from '../../../lib/ops-serialize';
 
 const client = withPRM(DynamoDBClient, {});
 const dynamo = DynamoDBDocumentClient.from(client, {
@@ -124,11 +125,13 @@ const jsonResponse = (
 ): { statusCode: number; headers: typeof HEADERS; body: string } => ({
   statusCode,
   headers: HEADERS,
-  body: JSON.stringify(payload),
+  // dbToApi recursively translates DB-shape keys (teamId, team, teams, etc.)
+  // to API-shape (boardId, board, boards). Single boundary for all ops APIs.
+  body: JSON.stringify(dbToApi(payload)),
 });
 
 const errorResponse = (statusCode: number, message: string): ReturnType<typeof jsonResponse> =>
-  jsonResponse(statusCode, { error: message });
+  jsonResponse(statusCode, { error: translateTeamString(message) });
 
 const parseJwt = (token: string): Record<string, unknown> => {
   try {
@@ -913,23 +916,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     switch (entity) {
       case 'ticket-types':
-        return handleTicketTypes(method, entitySegments, body, auth);
+        return await handleTicketTypes(method, entitySegments, body, auth);
       case 'statuses':
-        return handleStatuses(method, entitySegments, body, auth);
+        return await handleStatuses(method, entitySegments, body, auth);
       case 'fields':
-        return handleFields(method, entitySegments, body, auth);
+        return await handleFields(method, entitySegments, body, auth);
       case 'staff':
         // POST /ops/config/staff/sync — Cognito staff sync
         if (method === 'POST' && entitySegments[0] === 'sync') {
-          return handleStaffSync(event, auth);
+          return await handleStaffSync(event, auth);
         }
-        return handleStaff(method, entitySegments, body, auth);
+        return await handleStaff(method, entitySegments, body, auth);
       case 'projects':
-        return handleProjects(method, entitySegments, body, auth);
+        return await handleProjects(method, entitySegments, body, auth);
       case 'crm-settings':
-        return handleCrmSettings(method, body, auth);
+        return await handleCrmSettings(method, body, auth);
       case 'supplier-settings':
-        return handleSupplierSettings(method, body, auth);
+        return await handleSupplierSettings(method, body, auth);
       default:
         return errorResponse(404, 'Route not found');
     }

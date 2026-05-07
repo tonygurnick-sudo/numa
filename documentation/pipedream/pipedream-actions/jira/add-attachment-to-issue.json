@@ -1,0 +1,48 @@
+{
+  "name": "Add Attachment To Issue",
+  "description": "Adds an attachment to an issue. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-attachments/#api-rest-api-3-issue-issueidorkey-attachments-post)",
+  "component_type": "action",
+  "version": "1.0.9",
+  "key": "jira-add-attachment-to-issue",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "jira",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIdOrKey",
+      "type": "string",
+      "label": "Issue ID or Key",
+      "description": "The ID or key of an issue",
+      "remoteOptions": true
+    },
+    {
+      "name": "file",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "Provide either a file URL or a path to a file in the /tmp directory (for example, /tmp/myFile.pdf)."
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

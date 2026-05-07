@@ -1,0 +1,26 @@
+{
+  "name": "Retrieve Data Source Schema",
+  "description": "Get the property schema of a data source in Notion. [See the documentation](https://developers.notion.com/reference/retrieve-a-data-source)",
+  "component_type": "action",
+  "version": "1.0.2",
+  "key": "notion-retrieve-database-schema",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "dataSourceId",
+      "type": "string",
+      "label": "Data Source ID",
+      "description": "Select a data source or provide a data source ID",
+      "remoteOptions": true
+    }
+  ]
+}

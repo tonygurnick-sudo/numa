@@ -1,0 +1,40 @@
+{
+  "name": "Search Sites",
+  "description": "Search for sites in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/site-search?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "sharepoint-search-sites",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "query",
+      "type": "string",
+      "label": "Query",
+      "description": "The query to search for"
+    },
+    {
+      "name": "select",
+      "type": "string",
+      "label": "Select",
+      "description": "A comma-separated list of properties to return in the response",
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "optional": true,
+      "default": 100
+    }
+  ]
+}

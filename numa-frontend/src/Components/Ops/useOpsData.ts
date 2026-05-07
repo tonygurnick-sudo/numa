@@ -1,22 +1,52 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import * as OpsService from '../../Services/OpsService';
-import type { OpsConfigResponse, TeamSummary, TeamResponse, Ticket, WorkUnit, StaffProfile } from '../../types/ops';
-import { getCached, setCache } from '../../utils/opsCache';
+import type { OpsConfigResponse, BoardSummary, BoardResponse, Ticket, WorkUnit, StaffProfile } from '../../types/ops';
+import { getCached, setCache, LS_ACTIVE_BOARD, LS_ACTIVE_BOARD_LEGACY } from '../../utils/opsCache';
 
 // ─── localStorage Keys ──────────────────────────────────────────────────────
 
-const LS_ACTIVE_TEAM = 'numa_ops_active_team';
 const LS_ACTIVE_ZONE = 'numa_ops_active_zone';
 const LS_BOARD_VIEW_MODE = 'numa_ops_board_view_mode';
 const LS_TOP_VIEW = 'numa_ops_top_view';
 const LS_SELECTED_WORK_UNIT = 'numa_ops_selected_work_unit';
 const LS_MY_WORK_FILTER = 'numa_ops_my_work_filter';
 
+// ── One-shot localStorage migration ────────────────────────────────────────
+// The team→board rename moved a few keys around. Run once on module load so
+// subsequent reads get the new key name even if the user had the old one set.
+// Removed in a later cleanup commit.
+(() => {
+  try {
+    const legacyActive = localStorage.getItem(LS_ACTIVE_BOARD_LEGACY);
+    const newActive = localStorage.getItem(LS_ACTIVE_BOARD);
+    if (legacyActive && !newActive) {
+      localStorage.setItem(LS_ACTIVE_BOARD, legacyActive);
+    }
+    if (legacyActive) localStorage.removeItem(LS_ACTIVE_BOARD_LEGACY);
+
+    // The selected-work-unit blob used to be { teamId, wuId }; rewrite it to
+    // { boardId, wuId } so the parser in this module finds it on first paint.
+    const swu = localStorage.getItem(LS_SELECTED_WORK_UNIT);
+    if (swu) {
+      try {
+        const parsed = JSON.parse(swu) as { teamId?: string; boardId?: string; wuId?: string };
+        if (parsed?.teamId && !parsed.boardId) {
+          localStorage.setItem(LS_SELECTED_WORK_UNIT, JSON.stringify({ boardId: parsed.teamId, wuId: parsed.wuId }));
+        }
+      } catch {
+        /* ignore — corrupt JSON, leave alone */
+      }
+    }
+  } catch {
+    /* localStorage unavailable */
+  }
+})();
+
 // ─── View Types ─────────────────────────────────────────────────────────────
 
 export type OpsTopView = 'home' | 'board' | 'allTickets' | 'customers' | 'suppliers' | 'projects' | 'roadmap';
-export type BoardViewMode = 'allTeams' | 'singleTeam';
+export type BoardViewMode = 'allBoards' | 'singleBoard';
 
 // ─── Return Shape ───────────────────────────────────────────────────────────
 
@@ -25,14 +55,14 @@ export type OpsDataState = {
   config: OpsConfigResponse | null;
   configLoading: boolean;
 
-  // Teams
-  teams: TeamSummary[];
-  teamsLoading: boolean;
-  selectedTeamId: string | null;
+  // Boards
+  boards: BoardSummary[];
+  boardsLoading: boolean;
+  selectedBoardId: string | null;
 
-  // Active Team Data
-  teamData: TeamResponse | null;
-  teamLoading: boolean;
+  // Active Board Data
+  boardData: BoardResponse | null;
+  boardLoading: boolean;
 
   // Tickets
   tickets: Ticket[];
@@ -51,7 +81,7 @@ export type OpsDataState = {
   myWorkFilter: boolean;
 
   // Actions
-  selectTeam: (teamId: string) => void;
+  selectBoard: (boardId: string) => void;
   setTopView: (view: OpsTopView) => void;
   setPendingSprintFilter: (filter: string[] | null) => void;
   setMyWorkFilter: (enabled: boolean) => void;
@@ -59,10 +89,10 @@ export type OpsDataState = {
   setActiveZone: (zoneId: string | null) => void;
   selectWorkUnit: (wuId: string | null) => void;
   setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>;
-  refreshTeam: () => Promise<TeamResponse | null>;
+  refreshBoard: () => Promise<BoardResponse | null>;
   refreshTickets: () => Promise<void>;
   refreshWorkUnits: () => Promise<void>;
-  refreshTeams: () => Promise<void>;
+  refreshBoards: () => Promise<void>;
   refreshStaff: () => Promise<void>;
   refreshConfig: () => Promise<void>;
   refreshCrmData: () => void;
@@ -73,11 +103,11 @@ export type OpsDataState = {
 /**
  * useOpsData manages the full lifecycle of Ops page data:
  *
- * 1. On mount: loads config + teams list.
- * 2. Reads localStorage for last-used team and board view mode.
- *    If saved team is valid, selects it. Otherwise defaults to first team.
- * 3. When selectedTeamId changes: loads team data, tickets, and work units.
- * 4. Persists team selection and view mode to localStorage.
+ * 1. On mount: loads config + boards list.
+ * 2. Reads localStorage for last-used board and board view mode.
+ *    If saved board is valid, selects it. Otherwise defaults to first board.
+ * 3. When selectedBoardId changes: loads board data, tickets, and work units.
+ * 4. Persists board selection and view mode to localStorage.
  */
 // Staff sync is triggered on-demand (when settings modals open), not on a timer.
 
@@ -88,11 +118,11 @@ export const useOpsData = (): OpsDataState => {
   // Read cached data so the UI renders instantly; API fetches still happen
   // in the background and overwrite with fresh data.
 
-  const [initialTeamId] = useState<string | null>(() => {
+  const [initialBoardId] = useState<string | null>(() => {
     try {
-      const saved = localStorage.getItem(LS_ACTIVE_TEAM);
-      const cachedTeams = getCached<TeamSummary[]>('teams');
-      if (saved && cachedTeams?.some((t) => t.id === saved)) return saved;
+      const saved = localStorage.getItem(LS_ACTIVE_BOARD);
+      const cachedBoards = getCached<BoardSummary[]>('boards');
+      if (saved && cachedBoards?.some((t) => t.id === saved)) return saved;
       return null;
     } catch {
       return null;
@@ -103,33 +133,33 @@ export const useOpsData = (): OpsDataState => {
   const [config, setConfig] = useState<OpsConfigResponse | null>(() => getCached('config'));
   const [configLoading, setConfigLoading] = useState(() => !getCached('config'));
 
-  // ── Teams ───────────────────────────────────────────────────────────────
-  const [teams, setTeams] = useState<TeamSummary[]>(() => getCached<TeamSummary[]>('teams') ?? []);
-  const [teamsLoading, setTeamsLoading] = useState(() => !getCached('teams'));
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(initialTeamId);
+  // ── Boards ──────────────────────────────────────────────────────────────
+  const [boards, setBoards] = useState<BoardSummary[]>(() => getCached<BoardSummary[]>('boards') ?? []);
+  const [boardsLoading, setBoardsLoading] = useState(() => !getCached('boards'));
+  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(initialBoardId);
 
-  // ── Team Data ───────────────────────────────────────────────────────────
-  const [teamData, setTeamData] = useState<TeamResponse | null>(() =>
-    initialTeamId ? getCached<TeamResponse>(`team_${initialTeamId}`) : null
+  // ── Board Data ──────────────────────────────────────────────────────────
+  const [boardData, setBoardData] = useState<BoardResponse | null>(() =>
+    initialBoardId ? getCached<BoardResponse>(`board_${initialBoardId}`) : null
   );
-  const [teamLoading, setTeamLoading] = useState(false);
+  const [boardLoading, setBoardLoading] = useState(false);
 
   // ── Tickets ─────────────────────────────────────────────────────────────
   const [tickets, setTickets] = useState<Ticket[]>(
-    () => (initialTeamId ? getCached<Ticket[]>(`tickets_${initialTeamId}`) : null) ?? []
+    () => (initialBoardId ? getCached<Ticket[]>(`tickets_${initialBoardId}`) : null) ?? []
   );
   const [ticketsLoading, setTicketsLoading] = useState(false);
 
   // ── Work Units ──────────────────────────────────────────────────────────
   const [workUnits, setWorkUnits] = useState<WorkUnit[]>(
-    () => (initialTeamId ? getCached<WorkUnit[]>(`workUnits_${initialTeamId}`) : null) ?? []
+    () => (initialBoardId ? getCached<WorkUnit[]>(`workUnits_${initialBoardId}`) : null) ?? []
   );
   const [selectedWorkUnitId, setSelectedWorkUnitId] = useState<string | null>(() => {
     try {
       const saved = localStorage.getItem(LS_SELECTED_WORK_UNIT);
       if (saved) {
-        const parsed = JSON.parse(saved) as { teamId: string; wuId: string };
-        if (parsed.teamId === initialTeamId && parsed.wuId) return parsed.wuId;
+        const parsed = JSON.parse(saved) as { boardId: string; wuId: string };
+        if (parsed.boardId === initialBoardId && parsed.wuId) return parsed.wuId;
       }
     } catch {
       /* ignore */
@@ -152,9 +182,11 @@ export const useOpsData = (): OpsDataState => {
   const [boardViewMode, setBoardViewModeState] = useState<BoardViewMode>(() => {
     try {
       const saved = localStorage.getItem(LS_BOARD_VIEW_MODE);
-      return saved === 'singleTeam' ? 'singleTeam' : 'allTeams';
+      // Migrate old singleTeam/allTeams values to singleBoard/allBoards.
+      if (saved === 'singleBoard' || saved === 'singleTeam') return 'singleBoard';
+      return 'allBoards';
     } catch {
-      return 'allTeams';
+      return 'allBoards';
     }
   });
   const [activeZoneId, setActiveZoneId] = useState<string | null>(() => {
@@ -178,9 +210,9 @@ export const useOpsData = (): OpsDataState => {
   const initialLoadDone = useRef(false);
 
   // ── localStorage Persistence ──────────────────────────────────────────
-  const persistTeam = useCallback((teamId: string) => {
+  const persistBoard = useCallback((boardId: string) => {
     try {
-      localStorage.setItem(LS_ACTIVE_TEAM, teamId);
+      localStorage.setItem(LS_ACTIVE_BOARD, boardId);
     } catch {
       /* quota or private mode */
     }
@@ -209,47 +241,47 @@ export const useOpsData = (): OpsDataState => {
     }
   }, [numaGet]);
 
-  const loadTeams = useCallback(async (): Promise<TeamSummary[]> => {
+  const loadBoards = useCallback(async (): Promise<BoardSummary[]> => {
     try {
-      setTeamsLoading(true);
-      const data = await OpsService.listTeams(numaGet);
-      setTeams(data);
-      setCache('teams', data);
+      setBoardsLoading(true);
+      const data = await OpsService.listBoards(numaGet);
+      setBoards(data);
+      setCache('boards', data);
       return data;
     } catch (err) {
-      console.error('[useOpsData] Failed to load teams:', err);
+      console.error('[useOpsData] Failed to load boards:', err);
       return [];
     } finally {
-      setTeamsLoading(false);
+      setBoardsLoading(false);
     }
   }, [numaGet]);
 
-  const loadTeamData = useCallback(
-    async (teamId: string): Promise<TeamResponse | null> => {
+  const loadBoardData = useCallback(
+    async (boardId: string): Promise<BoardResponse | null> => {
       try {
-        setTeamLoading(true);
-        const data = await OpsService.getTeam(numaGet, teamId);
-        setTeamData(data);
-        setCache(`team_${teamId}`, data);
+        setBoardLoading(true);
+        const data = await OpsService.getBoard(numaGet, boardId);
+        setBoardData(data);
+        setCache(`board_${boardId}`, data);
         return data;
       } catch (err) {
-        console.error('[useOpsData] Failed to load team:', err);
-        setTeamData(null);
+        console.error('[useOpsData] Failed to load board:', err);
+        setBoardData(null);
         return null;
       } finally {
-        setTeamLoading(false);
+        setBoardLoading(false);
       }
     },
     [numaGet]
   );
 
   const loadTickets = useCallback(
-    async (teamId: string) => {
+    async (boardId: string) => {
       try {
         setTicketsLoading(true);
-        const response = await OpsService.listTickets(numaGet, { teamId });
+        const response = await OpsService.listTickets(numaGet, { boardId });
         setTickets(response.tickets);
-        setCache(`tickets_${teamId}`, response.tickets);
+        setCache(`tickets_${boardId}`, response.tickets);
       } catch (err) {
         console.error('[useOpsData] Failed to load tickets:', err);
         setTickets([]);
@@ -261,11 +293,11 @@ export const useOpsData = (): OpsDataState => {
   );
 
   const loadWorkUnits = useCallback(
-    async (teamId: string) => {
+    async (boardId: string) => {
       try {
-        const data = await OpsService.listWorkUnits(numaGet, teamId);
+        const data = await OpsService.listWorkUnits(numaGet, boardId);
         setWorkUnits(data);
-        setCache(`workUnits_${teamId}`, data);
+        setCache(`workUnits_${boardId}`, data);
       } catch (err) {
         console.error('[useOpsData] Failed to load work units:', err);
         setWorkUnits([]);
@@ -282,22 +314,22 @@ export const useOpsData = (): OpsDataState => {
     const bootstrap = async () => {
       if (initialLoadDone.current) return;
 
-      // Load config and teams in parallel
-      const [, loadedTeams] = await Promise.all([loadConfig(), loadTeams()]);
+      // Load config and boards in parallel
+      const [, loadedBoards] = await Promise.all([loadConfig(), loadBoards()]);
       if (cancelled) return;
 
-      // Read persisted team selection from localStorage
-      const savedTeamId = localStorage.getItem(LS_ACTIVE_TEAM);
+      // Read persisted board selection from localStorage
+      const savedBoardId = localStorage.getItem(LS_ACTIVE_BOARD);
 
-      // Validate that the saved team still exists
-      const teamIsValid = savedTeamId && loadedTeams.some((t) => t.id === savedTeamId);
+      // Validate that the saved board still exists
+      const boardIsValid = savedBoardId && loadedBoards.some((t) => t.id === savedBoardId);
 
-      if (teamIsValid) {
-        setSelectedTeamId(savedTeamId);
-      } else if (loadedTeams.length > 0) {
-        // Auto-select the first team
-        setSelectedTeamId(loadedTeams[0].id);
-        persistTeam(loadedTeams[0].id);
+      if (boardIsValid) {
+        setSelectedBoardId(savedBoardId);
+      } else if (loadedBoards.length > 0) {
+        // Auto-select the first board
+        setSelectedBoardId(loadedBoards[0].id);
+        persistBoard(loadedBoards[0].id);
       }
 
       initialLoadDone.current = true;
@@ -308,7 +340,7 @@ export const useOpsData = (): OpsDataState => {
     return () => {
       cancelled = true;
     };
-  }, [loadConfig, loadTeams, persistTeam]);
+  }, [loadConfig, loadBoards, persistBoard]);
 
   // ── On-demand Staff Sync ────────────────────────────────────────────
   // Called by settings modals when they open to ensure fresh staff data.
@@ -331,32 +363,32 @@ export const useOpsData = (): OpsDataState => {
     }
   }, [numaPost]);
 
-  // ── React to Team Selection Changes ──────────────────────────────────
+  // ── React to Board Selection Changes ──────────────────────────────────
 
   useEffect(() => {
-    if (!selectedTeamId) {
-      setTeamData(null);
+    if (!selectedBoardId) {
+      setBoardData(null);
       setTickets([]);
       setWorkUnits([]);
       setSelectedWorkUnitId(null);
       return;
     }
 
-    // Show cached team data instantly while fresh data loads
-    const cachedTeam = getCached<TeamResponse>(`team_${selectedTeamId}`);
-    if (cachedTeam) setTeamData(cachedTeam);
-    const cachedTickets = getCached<Ticket[]>(`tickets_${selectedTeamId}`);
+    // Show cached board data instantly while fresh data loads
+    const cachedBoard = getCached<BoardResponse>(`board_${selectedBoardId}`);
+    if (cachedBoard) setBoardData(cachedBoard);
+    const cachedTickets = getCached<Ticket[]>(`tickets_${selectedBoardId}`);
     if (cachedTickets) setTickets(cachedTickets);
-    const cachedWorkUnits = getCached<WorkUnit[]>(`workUnits_${selectedTeamId}`);
+    const cachedWorkUnits = getCached<WorkUnit[]>(`workUnits_${selectedBoardId}`);
     if (cachedWorkUnits) setWorkUnits(cachedWorkUnits);
 
     // Load fresh data in the background
-    loadTeamData(selectedTeamId);
-    loadTickets(selectedTeamId);
-    loadWorkUnits(selectedTeamId);
-    // Reset work unit selection when team changes
+    loadBoardData(selectedBoardId);
+    loadTickets(selectedBoardId);
+    loadWorkUnits(selectedBoardId);
+    // Reset work unit selection when board changes
     setSelectedWorkUnitId(null);
-  }, [selectedTeamId, loadTeamData, loadTickets, loadWorkUnits]);
+  }, [selectedBoardId, loadBoardData, loadTickets, loadWorkUnits]);
 
   // ── Auto-select zone when zones change ──────────────────────────────────
   //
@@ -365,7 +397,7 @@ export const useOpsData = (): OpsDataState => {
   // and sprint-complete (zone may be removed) seamlessly.
 
   useEffect(() => {
-    const zones = teamData?.zones ?? [];
+    const zones = boardData?.zones ?? [];
     if (zones.length === 0) {
       if (activeZoneId !== null) setActiveZoneId(null);
       return;
@@ -374,20 +406,20 @@ export const useOpsData = (): OpsDataState => {
     if (!currentValid) {
       setActiveZoneId(zones[0].id);
     }
-  }, [teamData?.zones, activeZoneId]);
+  }, [boardData?.zones, activeZoneId]);
 
   // ── Actions ───────────────────────────────────────────────────────────
 
-  const selectTeam = useCallback(
-    (teamId: string) => {
-      setSelectedTeamId(teamId);
-      persistTeam(teamId);
-      // Restore saved sprint filter for the new team, or clear it
+  const selectBoard = useCallback(
+    (boardId: string) => {
+      setSelectedBoardId(boardId);
+      persistBoard(boardId);
+      // Restore saved sprint filter for the new board, or clear it
       try {
         const saved = localStorage.getItem(LS_SELECTED_WORK_UNIT);
         if (saved) {
-          const parsed = JSON.parse(saved) as { teamId: string; wuId: string };
-          setSelectedWorkUnitId(parsed.teamId === teamId ? parsed.wuId : null);
+          const parsed = JSON.parse(saved) as { boardId: string; wuId: string };
+          setSelectedWorkUnitId(parsed.boardId === boardId ? parsed.wuId : null);
         } else {
           setSelectedWorkUnitId(null);
         }
@@ -395,7 +427,7 @@ export const useOpsData = (): OpsDataState => {
         setSelectedWorkUnitId(null);
       }
     },
-    [persistTeam]
+    [persistBoard]
   );
 
   const setTopView = useCallback((view: OpsTopView) => {
@@ -429,8 +461,8 @@ export const useOpsData = (): OpsDataState => {
     (wuId: string | null) => {
       setSelectedWorkUnitId(wuId);
       try {
-        if (wuId && selectedTeamId) {
-          localStorage.setItem(LS_SELECTED_WORK_UNIT, JSON.stringify({ teamId: selectedTeamId, wuId }));
+        if (wuId && selectedBoardId) {
+          localStorage.setItem(LS_SELECTED_WORK_UNIT, JSON.stringify({ boardId: selectedBoardId, wuId }));
         } else {
           localStorage.removeItem(LS_SELECTED_WORK_UNIT);
         }
@@ -438,31 +470,31 @@ export const useOpsData = (): OpsDataState => {
         /* quota or private mode */
       }
     },
-    [selectedTeamId]
+    [selectedBoardId]
   );
 
   const refreshWorkUnits = useCallback(async () => {
-    if (selectedTeamId) {
-      await loadWorkUnits(selectedTeamId);
+    if (selectedBoardId) {
+      await loadWorkUnits(selectedBoardId);
     }
-  }, [selectedTeamId, loadWorkUnits]);
+  }, [selectedBoardId, loadWorkUnits]);
 
-  const refreshTeam = useCallback(async (): Promise<TeamResponse | null> => {
-    if (selectedTeamId) {
-      return loadTeamData(selectedTeamId);
+  const refreshBoard = useCallback(async (): Promise<BoardResponse | null> => {
+    if (selectedBoardId) {
+      return loadBoardData(selectedBoardId);
     }
     return null;
-  }, [selectedTeamId, loadTeamData]);
+  }, [selectedBoardId, loadBoardData]);
 
   const refreshTickets = useCallback(async () => {
-    if (selectedTeamId) {
-      await loadTickets(selectedTeamId);
+    if (selectedBoardId) {
+      await loadTickets(selectedBoardId);
     }
-  }, [selectedTeamId, loadTickets]);
+  }, [selectedBoardId, loadTickets]);
 
-  const refreshTeams = useCallback(async () => {
-    await loadTeams();
-  }, [loadTeams]);
+  const refreshBoards = useCallback(async () => {
+    await loadBoards();
+  }, [loadBoards]);
 
   const refreshConfig = useCallback(async () => {
     await loadConfig();
@@ -488,12 +520,12 @@ export const useOpsData = (): OpsDataState => {
     config,
     configLoading,
 
-    teams,
-    teamsLoading,
-    selectedTeamId,
+    boards,
+    boardsLoading,
+    selectedBoardId,
 
-    teamData,
-    teamLoading,
+    boardData,
+    boardLoading,
     tickets,
     setTickets,
     ticketsLoading,
@@ -508,17 +540,17 @@ export const useOpsData = (): OpsDataState => {
     pendingSprintFilter,
     myWorkFilter,
 
-    selectTeam,
+    selectBoard,
     setTopView,
     setPendingSprintFilter,
     setMyWorkFilter,
     setBoardViewMode,
     setActiveZone,
     selectWorkUnit,
-    refreshTeam,
+    refreshBoard,
     refreshTickets,
     refreshWorkUnits,
-    refreshTeams,
+    refreshBoards,
     refreshConfig,
     refreshStaff,
     refreshCrmData,

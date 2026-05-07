@@ -1,0 +1,466 @@
+[
+  {
+    "key": "xero_accounting_api-xero-create-sales-invoice",
+    "name": "Create Sales Invoice",
+    "description": "Creates a new sales invoice. [See the documentation](https://developer.xero.com/documentation/api/invoices#post)",
+    "version": "0.3.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 17
+  },
+  {
+    "key": "xero_accounting_api-xero-create-purchase-bill",
+    "name": "Create Purchase Bill",
+    "description": "Creates a new purchase bill.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 17
+  },
+  {
+    "key": "xero_accounting_api-xero-accounting-update-contact",
+    "name": "Update Contact",
+    "description": "Updates a contact given its identifier.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 30
+  },
+  {
+    "key": "xero_accounting_api-xero-accounting-create-or-update-contact",
+    "name": "Create or Update Contact",
+    "description": "Creates a new contact or updates if the contact exists.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 30
+  },
+  {
+    "key": "xero_accounting_api-xero-accounting-create-employee",
+    "name": "Create Employee",
+    "description": "Creates a new employee.",
+    "version": "0.3.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "xero_accounting_api-upload-file",
+    "name": "Upload File",
+    "description": "Uploads a file to the specified document. [See the documentation](https://developer.xero.com/documentation/api/accounting/invoices#upload-attachment)",
+    "version": "1.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "xero_accounting_api-update-tracking-category",
+    "name": "Update tracking category",
+    "description": "Update a tracking category by ID [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories#post-trackingcategories).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "xero_accounting_api-update-tracking-category-option",
+    "name": "Update tracking category option",
+    "description": "Update a tracking category by ID [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories#post-trackingcategories).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "xero_accounting_api-make-an-api-call",
+    "name": "Make API Call",
+    "description": "Makes an aribitrary call to Xero Accounting API.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "xero_accounting_api-list-tracking-categories",
+    "name": "List tracking categories",
+    "description": "Lists information from tracking categories [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "xero_accounting_api-list-manual-journals",
+    "name": "List Manual Journals",
+    "description": "Lists information from manual journals in the given tenant id as per filter parameters.",
+    "version": "0.2.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "xero_accounting_api-list-invoices",
+    "name": "List Invoices",
+    "description": "Lists information from invoices in the given tenant id as per filter parameters.",
+    "version": "0.3.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "xero_accounting_api-list-credit-notes",
+    "name": "List Credit Notes",
+    "description": "Lists information from credit notes in the given tenant id as per filter parameters.",
+    "version": "0.2.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "xero_accounting_api-list-contacts",
+    "name": "List Contacts",
+    "description": "Lists information from contacts in the given tenant id as per filter parameters.",
+    "version": "0.2.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "xero_accounting_api-get-tracking-category",
+    "name": "Get tracking category",
+    "description": "Get information from a tracking category by ID [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories#get-trackingcategories).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "xero_accounting_api-get-tenant-connections",
+    "name": "Get Tenant Connections",
+    "description": "Gets the tenants connections the user is authorized to access",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "xero_accounting_api-get-item",
+    "name": "Get Item",
+    "description": "Gets details of an item.",
+    "version": "0.2.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "xero_accounting_api-get-invoice",
+    "name": "Get Invoice",
+    "description": "Gets details of an invoice.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "xero_accounting_api-get-invoice-online-url",
+    "name": "Get Sales Invoice Online URL",
+    "description": "Retrieves the online sales invoice URL.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "xero_accounting_api-get-history-of-changes",
+    "name": "Get History of Changes",
+    "description": "Gets the history of changes to a single existing document.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "xero_accounting_api-get-contact",
+    "name": "Get Contact",
+    "description": "Gets details of a contact.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "xero_accounting_api-get-bank-summary",
+    "name": "Get Bank Summary",
+    "description": "Gets the balances and cash movements for each bank account.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "xero_accounting_api-get-bank-statements-report",
+    "name": "Bank Statements Report",
+    "description": "Gets bank statements for the specified bank account.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "xero_accounting_api-find-or-create-contact",
+    "name": "Find or Create Contact",
+    "description": "Finds a contact by name or email address. Optionally, create one if none are found. [See the docs here](https://developer.xero.com/documentation/api/accounting/contacts/#get-contacts)",
+    "version": "0.1.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "xero_accounting_api-find-invoice",
+    "name": "Find Invoice",
+    "description": "Finds an invoice by number or reference.[See the docs here](https://developer.xero.com/documentation/api/accounting/invoices/#get-invoices)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "xero_accounting_api-email-an-invoice",
+    "name": "Email an Invoice",
+    "description": "Triggers the email of a sales invoice out of Xero.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "xero_accounting_api-download-invoice",
+    "name": "Download Invoice",
+    "description": "Downloads an invoice as pdf file. File will be placed at the action's associated workflow temporary folder.",
+    "version": "0.2.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "xero_accounting_api-delete-tracking-category",
+    "name": "Delete tracking category",
+    "description": "Delete a tracking category by ID [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories#delete-trackingcategories).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "xero_accounting_api-delete-tracking-category-option",
+    "name": "Delete tracking category option",
+    "description": "Delete a tracking category option by ID [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories#delete-trackingcategories).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "xero_accounting_api-create-update-contact",
+    "name": "Create or update contact ",
+    "description": "Creates a new contact or updates a contact if a contact already exists. [See the docs here](https://developer.xero.com/documentation/api/accounting/contacts)",
+    "version": "0.1.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "xero_accounting_api-create-tracking-category",
+    "name": "Create tracking category",
+    "description": "Create a new tracking category [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories#put-trackingcategories).",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "xero_accounting_api-create-payment",
+    "name": "Create Payment",
+    "description": "Creates a new payment",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 16
+  },
+  {
+    "key": "xero_accounting_api-create-item",
+    "name": "Create Item",
+    "description": "Creates a new item.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 12
+  },
+  {
+    "key": "xero_accounting_api-create-history-note",
+    "name": "Create History Note",
+    "description": "Creates a new note adding it to a document.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "xero_accounting_api-create-credit-note",
+    "name": "Create Credit Note",
+    "description": "Creates a new credit note.",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 16
+  },
+  {
+    "key": "xero_accounting_api-create-bill",
+    "name": "Create Bill",
+    "description": "Creates a new bill (Accounts Payable)[See the docs here](https://developer.xero.com/documentation/api/accounting/invoices)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "xero_accounting_api-create-bank-transaction",
+    "name": "Create Bank Transaction",
+    "description": "Create a new bank transaction [See the documentation](https://developer.xero.com/documentation/api/accounting/banktransactions#put-banktransactions)",
+    "version": "0.1.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 16
+  },
+  {
+    "key": "xero_accounting_api-add-line-item-to-invoice",
+    "name": "Add Items to Existing Sales Invoice",
+    "description": "Adds line items to an existing sales invoice. [See the docs here](https://developer.xero.com/documentation/api/accounting/invoices#post-invoices)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "xero_accounting_api-find-contact",
+    "name": "Find contact.  Optionally, create one if none are found",
+    "description": "Finds a contact by name or account number. Optionally, create one if none are found. [See the docs here](https://developer.xero.com/documentation/api/accounting/contacts/#get-contacts)",
+    "version": "0.0.2",
+    "annotations": {},
+    "prop_count": 5
+  }
+]

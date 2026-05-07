@@ -1,0 +1,55 @@
+{
+  "name": "Get Comment By ID",
+  "description": "Get comment by ID on a specific file. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/comments/get) for more information",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "google_drive-get-comment",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileIdTip",
+      "type": "alert",
+      "alertType": "info",
+      "content": "You can use actions such as **Find File** or **List Files** to obtain a file ID, and use its value here."
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File",
+      "description": "The file to obtain info for. You can select a file or use a file ID from a previous step.",
+      "remoteOptions": true
+    },
+    {
+      "name": "commentId",
+      "type": "string",
+      "label": "Comment ID",
+      "description": "The comment to get info for. You can select a comment or use a comment ID from a previous step.",
+      "remoteOptions": true
+    },
+    {
+      "name": "includeDeleted",
+      "type": "boolean",
+      "label": "Include Deleted",
+      "description": "Whether to include deleted comments.",
+      "optional": true
+    }
+  ]
+}

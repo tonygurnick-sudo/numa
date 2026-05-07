@@ -1,0 +1,61 @@
+{
+  "name": "Search Content",
+  "description": "Searches for files, folders, web links, and shared files across the users content or across the entire enterprise. [See the documentation](https://developer.box.com/reference/get-search/).",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "box-search-content",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "box"
+    },
+    {
+      "name": "searchType",
+      "type": "string",
+      "label": "Type",
+      "description": "Limits the search results to any items of this type. By default the API returns items that match any of these types.",
+      "optional": true,
+      "options": [
+        {
+          "label": "Files",
+          "value": "file"
+        },
+        {
+          "label": "Folders",
+          "value": "folder"
+        },
+        {
+          "label": "Web Links",
+          "value": "web_link"
+        }
+      ]
+    },
+    {
+      "name": "query",
+      "type": "string",
+      "label": "Query",
+      "description": "The string to search for. This query is matched against item names, descriptions, text content of files, and various other fields of the different item types. [Please see the docs](https://developer.box.com/reference/get-search/#param-query)",
+      "optional": true
+    },
+    {
+      "name": "mdfilters",
+      "type": "string",
+      "label": "Metadata Filters",
+      "description": "A list of metadata templates to filter the search results by. e.g. `[{\"scope\":\"enterprise\",\"templateKey\":\"contract\",\"filters\":{\"category\":\"online\"}}]`. [Please see the docs](https://developer.box.com/reference/resources/metadata-filter/)",
+      "optional": true
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Fields",
+      "description": "A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response, e.g. `id,type,name`",
+      "optional": true
+    }
+  ]
+}

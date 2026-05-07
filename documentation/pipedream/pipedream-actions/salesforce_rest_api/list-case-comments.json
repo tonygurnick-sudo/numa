@@ -1,0 +1,26 @@
+{
+  "name": "List Case Comments",
+  "description": "Lists all comments for a case. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_get_field_values.htm)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "salesforce_rest_api-list-case-comments",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "caseId",
+      "type": "string",
+      "label": "Record ID",
+      "description": "The ID of the record of the selected object type.",
+      "remoteOptions": true
+    }
+  ]
+}

@@ -63,7 +63,7 @@
     "loading": "Loading analytics...",
     "error": "Failed to load analytics",
     "noData": "No analytics data available",
-    "backToDashboard": "Back to Dashboard",
+    "backToFiles": "Back to Files",
     "viewShare": "View Share",
     "overallSummary": "Overall Summary",
     "questionsSummary": "Questions Summary",

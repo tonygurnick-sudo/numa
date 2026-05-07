@@ -35,6 +35,14 @@ const OAuthCallback: React.FC = () => {
         const error = searchParams.get('error');
         const errorDescription = searchParams.get('error_description');
 
+        // Re-entry without any params (refresh, back-nav, popup that didn't auto-close).
+        // The OAuth flow already completed on the previous mount and the URL was stripped.
+        // Redirect silently instead of showing a misleading "Missing required OAuth parameters".
+        if (!code && !returnedState && !error) {
+          navigate('/numa-files?tab=remote', { replace: true });
+          return;
+        }
+
         // Clean auth code from URL immediately to prevent leakage in logs/history
         if (provider) {
           window.history.replaceState({}, '', '/oauth/callback/' + provider);
@@ -140,7 +148,7 @@ const OAuthCallback: React.FC = () => {
 
           // Redirect to Files page after a short delay
           setTimeout(() => {
-            navigate('/files?tab=remote', { replace: true });
+            navigate('/numa-files?tab=remote', { replace: true });
           }, 2000);
         } else {
           throw new Error(data.message || t('oauthCallback.connectionFailed'));
@@ -230,7 +238,7 @@ const OAuthCallback: React.FC = () => {
                   <div className="mt-3">
                     <button
                       className="btn btn-primary btn-sm"
-                      onClick={() => navigate('/files?tab=remote', { replace: true })}
+                      onClick={() => navigate('/numa-files?tab=remote', { replace: true })}
                     >
                       {t('oauthCallback.returnToFiles')}
                     </button>

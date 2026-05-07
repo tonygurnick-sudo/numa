@@ -1,0 +1,91 @@
+{
+  "name": "Update Contact",
+  "description": "Updates an existing contact in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#update-a-contact)",
+  "component_type": "action",
+  "version": "0.0.8",
+  "key": "apollo_io-update-contact",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "contactId",
+      "type": "string",
+      "label": "Contact ID",
+      "description": "Identifier of the contact to update",
+      "remoteOptions": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "Email address of the contact",
+      "optional": true
+    },
+    {
+      "name": "firstName",
+      "type": "string",
+      "label": "First Name",
+      "description": "First name of the contact",
+      "optional": true
+    },
+    {
+      "name": "lastName",
+      "type": "string",
+      "label": "Last Name",
+      "description": "Last name of the contact",
+      "optional": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "The title this contact",
+      "optional": true
+    },
+    {
+      "name": "accountId",
+      "type": "string",
+      "label": "Account ID",
+      "description": "Identifier of the account for this contact",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "websiteUrl",
+      "type": "string",
+      "label": "Website URL",
+      "description": "The organization website Apollo can use to enrich data for you. DO NOT pass in personal social media URLs such as \"http://www.linkedin.com/profile_url\", or your data will be incorrectly enriched. This argument will be ignored if you pass in a valid email.",
+      "optional": true
+    },
+    {
+      "name": "labelNames",
+      "type": "string[]",
+      "label": "Label Names",
+      "description": "A list of names to tag this contact. You can select the labels from the list or create new ones using a custom expression, i.e., `[\"label1\", \"label2\"]`",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "address",
+      "type": "string",
+      "label": "Address",
+      "description": "The address string for this contact, Apollo will intelligently infer the city, state, country, and time zone from your address",
+      "optional": true
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Phone",
+      "description": "The direct dial phone for this contact",
+      "optional": true
+    }
+  ]
+}

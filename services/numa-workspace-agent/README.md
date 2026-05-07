@@ -368,7 +368,7 @@ Three tools are registered via the Claude Agent SDK `@tool` decorator in `mcp_to
 Actions with side effects (`run_action`, `proxy_request`) require user approval before execution:
 
 - An approval card is shown in the frontend UI with a description of the action
-- The user has **90 seconds** to approve or deny
+- The user has **3 minutes** to approve or deny
 - Approval state is tracked in DynamoDB (`integrations-approval-{account}` table)
 - **Auto-approval mode**: Custom agents can set `approval_mode: "auto"` to skip the approval step (`NUMA_APPROVAL_MODE=auto`)
 

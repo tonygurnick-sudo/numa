@@ -1,0 +1,47 @@
+{
+  "name": "Create Comment",
+  "description": "Create a comment in a page or existing discussion thread. [See the documentation](https://developers.notion.com/reference/create-a-comment)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "notion-create-comment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "infoLabel",
+      "type": "alert",
+      "alertType": "info",
+      "content": "Provide either a Page ID or a Discussion ID to create the comment under."
+    },
+    {
+      "name": "pageId",
+      "type": "string",
+      "label": "Page ID",
+      "description": "Search for a page or provide a page ID",
+      "useQuery": true,
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "discussionId",
+      "type": "string",
+      "label": "Discussion ID",
+      "description": "The ID of a discussion thread. [See the documentation](https://developers.notion.com/docs/working-with-comments#retrieving-a-discussion-id) for more information",
+      "optional": true
+    },
+    {
+      "name": "comment",
+      "type": "string",
+      "label": "Comment",
+      "description": "The comment text"
+    }
+  ]
+}

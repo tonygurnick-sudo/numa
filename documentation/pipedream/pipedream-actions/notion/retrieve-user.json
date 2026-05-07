@@ -1,0 +1,26 @@
+{
+  "name": "Retrieve User",
+  "description": "Returns a user using the ID specified. [See the documentation](https://developers.notion.com/reference/get-user)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "notion-retrieve-user",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "userId",
+      "type": "string",
+      "label": "User ID",
+      "description": "Select a user, or provide a user ID",
+      "remoteOptions": true
+    }
+  ]
+}

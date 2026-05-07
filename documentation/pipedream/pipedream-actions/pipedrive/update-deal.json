@@ -1,0 +1,134 @@
+{
+  "name": "Update Deal",
+  "description": "Updates the properties of a deal. See the Pipedrive API docs for Deals [here](https://developers.pipedrive.com/docs/api/v1/Deals#updateDeal)",
+  "component_type": "action",
+  "version": "0.1.21",
+  "key": "pipedrive-update-deal",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "dealId",
+      "type": "string",
+      "label": "Deal ID",
+      "description": "ID of the deal",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "Deal title",
+      "optional": true
+    },
+    {
+      "name": "ownerId",
+      "type": "integer",
+      "label": "User ID",
+      "description": "ID of the user who will be marked as the owner of this deal. If omitted, the authorized user ID will be used.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "personId",
+      "type": "integer",
+      "label": "Person ID",
+      "description": "ID of the person this deal will be associated with",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "orgId",
+      "type": "integer",
+      "label": "Organization ID",
+      "description": "ID of the organization this deal will be associated with",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "pipelineId",
+      "type": "integer",
+      "label": "Pipeline ID",
+      "description": "ID of the pipeline this activity will be associated with",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "stageId",
+      "type": "integer",
+      "label": "Stage ID",
+      "description": "ID of the stage this deal will be placed in a pipeline (note that you can't supply the ID of the pipeline as this will be assigned automatically based on `stage_id`). If omitted, the deal will be placed in the first stage of the default pipeline. Get the `stage_id` from [here](https://developers.pipedrive.com/docs/api/v1/#!/Stages/get_stages).",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "value",
+      "type": "string",
+      "label": "Value",
+      "description": "Value of the deal. If omitted, value will be set to 0.",
+      "optional": true
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "label": "Currency",
+      "description": "Currency of the deal. Accepts a 3-character currency code. If omitted, currency will be set to the default currency of the authorized user.",
+      "optional": true
+    },
+    {
+      "name": "status",
+      "type": "string",
+      "label": "Status",
+      "description": "open = Open, won = Won, lost = Lost, deleted = Deleted. If omitted, status will be set to open.",
+      "optional": true,
+      "options": ["open", "won", "lost", "deleted"]
+    },
+    {
+      "name": "probability",
+      "type": "integer",
+      "label": "Probability",
+      "description": "Deal success probability percentage. Used/shown only when `deal_probability` for the pipeline of the deal is enabled.",
+      "optional": true
+    },
+    {
+      "name": "lostReason",
+      "type": "string",
+      "label": "Lost Reason",
+      "description": "Optional message about why the deal was lost (to be used when status=lost)",
+      "optional": true
+    },
+    {
+      "name": "visibleTo",
+      "type": "integer",
+      "label": "Visible To",
+      "description": "Visibility of the deal. If omitted, visibility will be set to the default visibility setting of this item type for the authorized user.",
+      "optional": true,
+      "options": [
+        {
+          "label": "Owner & followers (private)",
+          "value": 1
+        },
+        {
+          "label": "Entire company (shared)",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "note",
+      "type": "string",
+      "label": "Note",
+      "description": "A note to add to the deal",
+      "optional": true
+    }
+  ]
+}

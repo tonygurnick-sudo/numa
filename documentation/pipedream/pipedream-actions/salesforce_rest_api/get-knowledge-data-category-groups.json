@@ -1,0 +1,39 @@
+{
+  "name": "Get Knowledge Data Category Groups",
+  "description": "Fetch data category groups visible to the current user. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.knowledge_dev.meta/knowledge_dev/resources_knowledge_support_dcgroups.htm)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "salesforce_rest_api-get-knowledge-data-category-groups",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "info",
+      "type": "alert",
+      "alertType": "info",
+      "content": "Please keep in mind that Salesforce Knowledge is available for an additional cost in: Professional Enterprise, Performance, and Developer Editions. For more information, contact your Salesforce representative. [See the documentation](https://help.salesforce.com/s/articleView?id=service.knowledge_map.htm&type=5)"
+    },
+    {
+      "name": "language",
+      "type": "string",
+      "label": "Language",
+      "description": "The language code. Defaults to `en-US`.",
+      "optional": true
+    },
+    {
+      "name": "topCategoriesOnly",
+      "type": "boolean",
+      "label": "Top Categories Only",
+      "description": "Return only top-level categories if `true`, entire tree if `false`.",
+      "optional": true
+    }
+  ]
+}

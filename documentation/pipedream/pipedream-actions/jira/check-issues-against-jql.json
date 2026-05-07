@@ -1,0 +1,40 @@
+{
+  "name": "Check Issues Against JQL",
+  "description": "Checks whether one or more issues would be returned by one or more JQL queries. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/#api-rest-api-3-jql-match-post)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "jira-check-issues-against-jql",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIds",
+      "type": "string[]",
+      "label": "Issue IDs",
+      "description": "A list of issue IDs to check against the JQL queries. Example: `[\"10001\", \"10042\"]`",
+      "remoteOptions": true
+    },
+    {
+      "name": "jqls",
+      "type": "string[]",
+      "label": "JQL Queries",
+      "description": "A list of JQL query strings to check the issues against. Example: `[\"project = FOO\", \"issuetype = Bug\"]`"
+    }
+  ]
+}

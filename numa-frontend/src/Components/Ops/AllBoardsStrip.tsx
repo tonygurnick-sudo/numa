@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useOps } from './OpsContext';
 import * as OpsService from '../../Services/OpsService';
-import type { TeamSummary, TeamResponse } from '../../types/ops';
+import type { BoardSummary, BoardResponse } from '../../types/ops';
 import { getCached, setCache } from '../../utils/opsCache';
 
 /**
@@ -11,29 +11,29 @@ import { getCached, setCache } from '../../utils/opsCache';
  *
  * Fetches zone data for every board so all board boxes can display zone
  * pills (matching Ian's design). The selected board uses the context's
- * `teamData` directly; other boards are fetched on mount and cached.
+ * `boardData` directly; other boards are fetched on mount and cached.
  */
 interface AllBoardsStripProps {
   canManage?: boolean;
   currentUserSub?: string;
-  onOpenTeamSettings?: (teamId: string) => void;
+  onOpenBoardSettings?: (boardId: string) => void;
 }
 
-const AllBoardsStrip = ({ canManage, currentUserSub, onOpenTeamSettings }: AllBoardsStripProps) => {
+const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllBoardsStripProps) => {
   const { t } = useTranslation('ops');
   const { numaGet } = useNumaRequest();
-  const { teams, selectedTeamId, selectTeam, teamData, activeZoneId, setActiveZone } = useOps();
+  const { boards, selectedBoardId, selectBoard, boardData, activeZoneId, setActiveZone } = useOps();
 
-  // Cache of team data for non-selected teams: teamId → TeamResponse
+  // Cache of team data for non-selected teams: boardId → BoardResponse
   // Initialized from localStorage so zone names render instantly on remount.
-  const [teamDataCache, setTeamDataCache] = useState<Map<string, TeamResponse>>(() => {
-    const cached = getCached<Record<string, TeamResponse>>('allTeamsZones');
+  const [boardDataCache, setBoardDataCache] = useState<Map<string, BoardResponse>>(() => {
+    const cached = getCached<Record<string, BoardResponse>>('allBoardsZones');
     return cached ? new Map(Object.entries(cached)) : new Map();
   });
   const fetchedRef = useRef<Set<string>>(
     new Set(
       (() => {
-        const cached = getCached<Record<string, TeamResponse>>('allTeamsZones');
+        const cached = getCached<Record<string, BoardResponse>>('allBoardsZones');
         return cached ? Object.keys(cached) : [];
       })()
     )
@@ -44,14 +44,14 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenTeamSettings }: AllBo
     let cancelled = false;
 
     const fetchMissing = async () => {
-      const toFetch = teams.filter((tm) => tm.id !== selectedTeamId && !fetchedRef.current.has(tm.id));
+      const toFetch = boards.filter((tm) => tm.id !== selectedBoardId && !fetchedRef.current.has(tm.id));
       if (toFetch.length === 0) return;
 
-      const results = await Promise.allSettled(toFetch.map((tm) => OpsService.getTeam(numaGet, tm.id)));
+      const results = await Promise.allSettled(toFetch.map((tm) => OpsService.getBoard(numaGet, tm.id)));
 
       if (cancelled) return;
 
-      setTeamDataCache((prev) => {
+      setBoardDataCache((prev) => {
         const next = new Map(prev);
         toFetch.forEach((tm, i) => {
           const result = results[i];
@@ -61,11 +61,11 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenTeamSettings }: AllBo
           }
         });
         // Persist to localStorage for instant rendering on remount
-        const obj: Record<string, TeamResponse> = {};
+        const obj: Record<string, BoardResponse> = {};
         next.forEach((v, k) => {
           obj[k] = v;
         });
-        setCache('allTeamsZones', obj);
+        setCache('allBoardsZones', obj);
         return next;
       });
     };
@@ -75,49 +75,49 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenTeamSettings }: AllBo
     return () => {
       cancelled = true;
     };
-  }, [teams, selectedTeamId, numaGet]);
+  }, [boards, selectedBoardId, numaGet]);
 
   // Helper: get zones for a team (use context data for selected, cache for others)
-  const getZonesForTeam = useCallback(
-    (teamId: string) => {
-      if (teamId === selectedTeamId && teamData) {
-        return teamData.zones;
+  const getZonesForBoard = useCallback(
+    (boardId: string) => {
+      if (boardId === selectedBoardId && boardData) {
+        return boardData.zones;
       }
-      return teamDataCache.get(teamId)?.zones ?? [];
+      return boardDataCache.get(boardId)?.zones ?? [];
     },
-    [selectedTeamId, teamData, teamDataCache]
+    [selectedBoardId, boardData, boardDataCache]
   );
 
   // Helper: get active work unit name for a team
   const getActiveSprintName = useCallback(
-    (teamId: string): string | null => {
-      const data = teamId === selectedTeamId && teamData ? teamData : teamDataCache.get(teamId);
-      if (!data?.team?.workUnitSeries?.enabled || !data.activeWorkUnit) return null;
+    (boardId: string): string | null => {
+      const data = boardId === selectedBoardId && boardData ? boardData : boardDataCache.get(boardId);
+      if (!data?.board?.workUnitSeries?.enabled || !data.activeWorkUnit) return null;
       return data.activeWorkUnit.name ?? null;
     },
-    [selectedTeamId, teamData, teamDataCache]
+    [selectedBoardId, boardData, boardDataCache]
   );
 
   // Handle clicking a zone pill inside a team box
   const handleSelectZone = useCallback(
-    (teamId: string, zoneId: string) => {
-      if (teamId !== selectedTeamId) {
-        selectTeam(teamId);
+    (boardId: string, zoneId: string) => {
+      if (boardId !== selectedBoardId) {
+        selectBoard(boardId);
       }
       setActiveZone(zoneId);
     },
-    [selectedTeamId, selectTeam, setActiveZone]
+    [selectedBoardId, selectBoard, setActiveZone]
   );
 
   // Handle clicking a team name
-  const handleSelectTeam = useCallback(
-    (teamId: string) => {
-      selectTeam(teamId);
+  const handleSelectBoard = useCallback(
+    (boardId: string) => {
+      selectBoard(boardId);
     },
-    [selectTeam]
+    [selectBoard]
   );
 
-  if (teams.length === 0) {
+  if (boards.length === 0) {
     return (
       <div className="d-flex align-items-center gap-3 flex-grow-1">
         <span className="text-muted" style={{ fontSize: '0.85rem' }}>
@@ -132,9 +132,9 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenTeamSettings }: AllBo
       className="d-flex align-items-stretch gap-3 flex-grow-1 ops-hide-scrollbar pb-2 pb-md-0 px-3 px-md-0"
       style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
     >
-      {teams.map((team) => {
-        const isSelected = team.id === selectedTeamId;
-        const zones = getZonesForTeam(team.id);
+      {boards.map((team) => {
+        const isSelected = team.id === selectedBoardId;
+        const zones = getZonesForBoard(team.id);
         const activeSprintName = getActiveSprintName(team.id);
 
         return (
@@ -145,14 +145,14 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenTeamSettings }: AllBo
             zones={zones}
             activeZoneId={isSelected ? activeZoneId : null}
             activeSprintName={activeSprintName}
-            onSelectTeam={() => handleSelectTeam(team.id)}
+            onSelectBoard={() => handleSelectBoard(team.id)}
             onSelectZone={(zoneId) => handleSelectZone(team.id, zoneId)}
             onOpenSettings={
               (canManage ||
                 (currentUserSub &&
                   (team.createdBy === currentUserSub || team.accessControl?.owners?.includes(currentUserSub)))) &&
-              onOpenTeamSettings
-                ? () => onOpenTeamSettings(team.id)
+              onOpenBoardSettings
+                ? () => onOpenBoardSettings(team.id)
                 : undefined
             }
           />
@@ -165,12 +165,12 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenTeamSettings }: AllBo
 // ─── Board Box ──────────────────────────────────────────────────────────────
 
 interface BoardBoxProps {
-  team: TeamSummary;
+  team: BoardSummary;
   isSelected: boolean;
   zones: { id: string; name: string; zoneType: string }[];
   activeZoneId: string | null;
   activeSprintName: string | null;
-  onSelectTeam: () => void;
+  onSelectBoard: () => void;
   onSelectZone: (zoneId: string) => void;
   onOpenSettings?: () => void;
 }
@@ -181,7 +181,7 @@ const BoardBox = ({
   zones,
   activeZoneId,
   activeSprintName,
-  onSelectTeam,
+  onSelectBoard,
   onSelectZone,
   onOpenSettings,
 }: BoardBoxProps) => {
@@ -200,13 +200,13 @@ const BoardBox = ({
         borderRadius: '12px',
         transition: 'all 0.2s ease',
       }}
-      onClick={onSelectTeam}
+      onClick={onSelectBoard}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onSelectTeam();
+          onSelectBoard();
         }
       }}
     >

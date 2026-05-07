@@ -3,15 +3,15 @@ import { Modal, Button, Form, Spinner, Alert } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { Ticket, TeamSummary, WorkZone, WorkStage } from '../../../types/ops';
+import type { Ticket, BoardSummary, WorkZone, WorkStage } from '../../../types/ops';
 
 interface MoveTicketModalProps {
   show: boolean;
   onHide: () => void;
   onMoved: (updatedTicket: Ticket) => void;
   ticket: Ticket;
-  currentTeamName: string;
-  availableTeams: TeamSummary[];
+  currentBoardName: string;
+  availableBoards: BoardSummary[];
 }
 
 export function MoveTicketModal({
@@ -19,13 +19,13 @@ export function MoveTicketModal({
   onHide,
   onMoved,
   ticket,
-  currentTeamName,
-  availableTeams,
+  currentBoardName,
+  availableBoards,
 }: MoveTicketModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPut } = useNumaRequest();
 
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const [targetZones, setTargetZones] = useState<WorkZone[]>([]);
   const [targetStages, setTargetStages] = useState<WorkStage[]>([]);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export function MoveTicketModal({
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!show) {
-      setSelectedTeamId(null);
+      setSelectedBoardId(null);
       setTargetZones([]);
       setTargetStages([]);
       setSelectedStageId(null);
@@ -48,7 +48,7 @@ export function MoveTicketModal({
 
   // Fetch target board stages when board is selected
   useEffect(() => {
-    if (!selectedTeamId) {
+    if (!selectedBoardId) {
       setTargetZones([]);
       setTargetStages([]);
       setSelectedStageId(null);
@@ -62,7 +62,7 @@ export function MoveTicketModal({
 
     void (async () => {
       try {
-        const data = await OpsService.getTeam(numaGet, selectedTeamId);
+        const data = await OpsService.getBoard(numaGet, selectedBoardId);
         if (cancelled) return;
 
         const zones = data.zones.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -85,21 +85,21 @@ export function MoveTicketModal({
     return () => {
       cancelled = true;
     };
-  }, [selectedTeamId, numaGet, t]);
+  }, [selectedBoardId, numaGet, t]);
 
-  const selectedTeamName = availableTeams.find((t) => t.id === selectedTeamId)?.name ?? '';
+  const selectedBoardName = availableBoards.find((t) => t.id === selectedBoardId)?.name ?? '';
   const selectedStage = targetStages.find((s) => s.id === selectedStageId);
 
   const handleMove = useCallback(async () => {
-    if (!selectedTeamId || !selectedStageId || !selectedStage) return;
+    if (!selectedBoardId || !selectedStageId || !selectedStage) return;
 
     setMoving(true);
     setError(null);
 
     try {
       const updated = await OpsService.updateTicket(numaPut, ticket.id, {
-        currentTeamId: ticket.teamId,
-        teamId: selectedTeamId,
+        currentBoardId: ticket.boardId,
+        boardId: selectedBoardId,
         stageId: selectedStageId,
         zoneId: selectedStage.zoneId,
         statusType: selectedStage.statusType,
@@ -112,9 +112,9 @@ export function MoveTicketModal({
     } finally {
       setMoving(false);
     }
-  }, [selectedTeamId, selectedStageId, selectedStage, numaPut, ticket.id, ticket.version, onMoved, t]);
+  }, [selectedBoardId, selectedStageId, selectedStage, numaPut, ticket.id, ticket.version, onMoved, t]);
 
-  const canConfirm = selectedTeamId && selectedStageId && !loadingStages && !moving;
+  const canConfirm = selectedBoardId && selectedStageId && !loadingStages && !moving;
 
   return (
     <Modal show={show} onHide={onHide} centered>
@@ -125,22 +125,22 @@ export function MoveTicketModal({
       <Modal.Body>
         <Form.Group className="mb-3">
           <Form.Label className="text-muted small mb-1">{t('moveToBoard.currentBoard')}</Form.Label>
-          <div className="fw-semibold">{currentTeamName}</div>
+          <div className="fw-semibold">{currentBoardName}</div>
         </Form.Group>
 
         <Form.Group className="mb-3">
           <Form.Label>{t('moveToBoard.targetBoard')}</Form.Label>
-          <Form.Select value={selectedTeamId ?? ''} onChange={(e) => setSelectedTeamId(e.target.value || null)}>
+          <Form.Select value={selectedBoardId ?? ''} onChange={(e) => setSelectedBoardId(e.target.value || null)}>
             <option value="">{t('moveToBoard.selectBoard')}</option>
-            {availableTeams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
+            {availableBoards.map((board) => (
+              <option key={board.id} value={board.id}>
+                {board.name}
               </option>
             ))}
           </Form.Select>
         </Form.Group>
 
-        {selectedTeamId && (
+        {selectedBoardId && (
           <Form.Group className="mb-3">
             <Form.Label>
               {t('moveToBoard.targetStage')}
@@ -169,14 +169,14 @@ export function MoveTicketModal({
           </Form.Group>
         )}
 
-        {selectedTeamId && selectedStageId && selectedStage && !loadingStages && (
+        {selectedBoardId && selectedStageId && selectedStage && !loadingStages && (
           <div
             className="small text-muted border rounded p-2"
             style={{ backgroundColor: '#f8f9fa' }}
             dangerouslySetInnerHTML={{
               __html: t('moveToBoard.confirmMessage', {
-                currentBoard: currentTeamName,
-                targetBoard: selectedTeamName,
+                currentBoard: currentBoardName,
+                targetBoard: selectedBoardName,
                 stageName: selectedStage.name,
                 interpolation: { escapeValue: false },
               }),

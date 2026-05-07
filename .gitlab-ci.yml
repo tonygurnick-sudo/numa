@@ -54,6 +54,14 @@ default:
   if-deployable:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
+    - if: $CI_COMMIT_BRANCH =~ /^dev-image\//
+  if-dev-image-buildable:
+    - if: $CI_COMMIT_BRANCH == "dev"
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH =~ /^dev-image\//
+      when: manual
+      allow_failure: true
 
 # Always-run sentinel on MR pipelines so GitLab never sees zero jobs.
 # Without this, docs-only MRs (e.g. changes under services/**/*.md) fail with
@@ -128,6 +136,7 @@ pre-commit:
         - lambdas/node/numa-ops-crm-api
         - lambdas/node/numa-users-api
         - lambdas/node/openapi-docs-server
+        - lambdas/node/pipedream-event-receiver
         - lambdas/node/portal-deploy-assume-role
         - lambdas/node/portal-nextgen-broker
         - lambdas/node/q-business-chat-control-configurer
@@ -559,8 +568,14 @@ browser-lambda-package:
       - infra/assets/artifacts/browser-lambda/image.tar
     expire_in: 7 days
 
-# Publish the artifact ZIP to deployer S3 (main only)
-build-deployment-container:
+# Build + push the deployment container image. Two jobs share this base:
+# - build-deployment-container (auto on main, pushes to numa-deploy)
+# - build-deployment-container-dev (manual on dev / dev-image/* branches, pushes to numa-deploy-dev)
+#
+# Only :${SHA} is pushed. We do NOT push :latest — the portal lists images by
+# pushedAt and surfaces them by SHA, and a moving :latest tag breaks renamed
+# image metadata in the portal (metadata is keyed by tag).
+.build-deployment-container-base:
   stage: image-build
   timeout: 30 minutes # Docker build + ECR push — P90 is ~12min
   image: registry.gitlab.com/arcanumai/ci/all-inclusive # don't need a lot of this, but it gets us started
@@ -574,7 +589,6 @@ build-deployment-container:
   # workspace-agent-package, and browser-lambda-package.
   variables:
     BUILD_DIR: .
-    ECR_REPO: ${ECR_BASE}/numa-deploy
   before_script:
     - !reference [.yarn, setup-private-auth]
     - !reference [.node_job, before_script]
@@ -596,15 +610,29 @@ build-deployment-container:
     - export AWS_ROLE=${AWS_CLIENT_ROLE_ARN}
     - !reference [.common-steps, aws-assume-role]
     - export ECR_REGION=${ECR_REGION:-ap-southeast-2}
-    - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:latest
     - docker tag deploy:${CI_COMMIT_SHORT_SHA} ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
     # Login should target the ECR registry domain (not the repo path)
     - ECR_REGISTRY=$(echo "${ECR_REPO}" | cut -d/ -f1)
     - aws ecr get-login-password --region "${ECR_REGION}" | docker login -u AWS --password-stdin "${ECR_REGISTRY}"
-    - docker push ${ECR_REPO}:latest
     - docker push ${ECR_REPO}:${CI_COMMIT_SHORT_SHA}
+
+build-deployment-container:
+  extends: .build-deployment-container-base
+  variables:
+    ECR_REPO: ${ECR_BASE}/numa-deploy
   rules:
     - !reference [.rules, if-main]
+
+# Manual dev image build. Pushes to numa-deploy-dev so the portal can deploy
+# either prod or dev images independently. Two ways to trigger:
+# - merge to dev: button appears on the post-merge dev pipeline
+# - push to a dev-image/* prefixed branch: button appears on that branch's pipeline
+build-deployment-container-dev:
+  extends: .build-deployment-container-base
+  variables:
+    ECR_REPO: ${ECR_BASE}/numa-deploy-dev
+  rules:
+    - !reference [.rules, if-dev-image-buildable]
 
 .deploy-infra:
   extends: .node-job-infra-overrides

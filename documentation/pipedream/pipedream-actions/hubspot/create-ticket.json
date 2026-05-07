@@ -1,0 +1,53 @@
+{
+  "name": "Create Ticket",
+  "description": "Create a ticket in Hubspot. [See the documentation](https://developers.hubspot.com/docs/api/crm/tickets)",
+  "component_type": "action",
+  "version": "0.0.24",
+  "key": "hubspot-create-ticket",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "propertyGroups",
+      "type": "string[]",
+      "label": "Property Groups",
+      "hidden": true,
+      "reloadProps": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "objectProperties",
+      "type": "object",
+      "label": "Object Properties",
+      "description": "Enter the object properties to create as a JSON object"
+    },
+    {
+      "name": "subject",
+      "type": "string",
+      "label": "Ticket Name",
+      "description": "The name of the ticket"
+    },
+    {
+      "name": "hs_pipeline",
+      "type": "string",
+      "label": "Pipeline",
+      "description": "The pipeline of the ticket",
+      "remoteOptions": true
+    },
+    {
+      "name": "hs_pipeline_stage",
+      "type": "string",
+      "label": "Ticket Stage",
+      "description": "The stage of the ticket",
+      "remoteOptions": true
+    }
+  ]
+}

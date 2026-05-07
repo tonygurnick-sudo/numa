@@ -1,0 +1,48 @@
+{
+  "name": "Create Custom Field Options (Context)",
+  "description": "Create a context for custom field options. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-custom-field-options/#api-rest-api-3-field-fieldid-context-contextid-option-post).",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "jira-create-custom-field-options-context",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "fieldId",
+      "type": "string",
+      "label": "Field ID",
+      "description": "The ID of the field",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "contextId",
+      "type": "string",
+      "label": "Context ID",
+      "description": "The ID of the context",
+      "remoteOptions": true
+    },
+    {
+      "name": "options",
+      "type": "string[]",
+      "label": "Options",
+      "description": "Options to create. Each option should be a JSON object with the following structure as an example: `{ \"value\": \"Manhattan\", \"optionId\": \"1000\", \"disabled\": true }` where the only required field is `value`."
+    }
+  ]
+}

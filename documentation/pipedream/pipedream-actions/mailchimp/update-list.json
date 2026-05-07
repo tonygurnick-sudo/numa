@@ -1,0 +1,113 @@
+{
+  "name": "Update List",
+  "description": "Updates an existing list. [See docs here](https://mailchimp.com/developer/marketing/api/lists/update-lists/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-update-list",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the list."
+    },
+    {
+      "name": "contactCompany",
+      "type": "string",
+      "label": "Contact company",
+      "description": "The company name for the list."
+    },
+    {
+      "name": "contactAddress1",
+      "type": "string",
+      "label": "Contact address1",
+      "description": "The street address for the list contact."
+    },
+    {
+      "name": "contactCity",
+      "type": "string",
+      "label": "Contact city",
+      "description": "The city for the list contact."
+    },
+    {
+      "name": "contactState",
+      "type": "string",
+      "label": "Contact state",
+      "description": "The state for the list contact."
+    },
+    {
+      "name": "contactCountry",
+      "type": "string",
+      "label": "Contact country",
+      "description": "A two-character ISO3166 country code. Defaults to US if invalid."
+    },
+    {
+      "name": "contactPhone",
+      "type": "string",
+      "label": "Contact phone",
+      "description": "The phone number for the list contact.",
+      "optional": true
+    },
+    {
+      "name": "contactZip",
+      "type": "string",
+      "label": "Contact zip code",
+      "description": "The postal or zip code for the list contact.",
+      "optional": true
+    },
+    {
+      "name": "permissionReminder",
+      "type": "string",
+      "label": "Permission reminder",
+      "description": "The [permission reminder](https://mailchimp.com/help/edit-the-permission-reminder/) for the list."
+    },
+    {
+      "name": "campaignDefaultsFromName",
+      "type": "string",
+      "label": "From name",
+      "description": "The default from name for campaigns sent to this list."
+    },
+    {
+      "name": "campaignDefaultsFromEmail",
+      "type": "string",
+      "label": "From email",
+      "description": "The default from email for campaigns sent to this list."
+    },
+    {
+      "name": "campaignDefaultsSubject",
+      "type": "string",
+      "label": "Subject",
+      "description": "The default subject line for campaigns sent to this list."
+    },
+    {
+      "name": "campaignDefaultsLanguage",
+      "type": "string",
+      "label": "Language",
+      "description": "The default language for this lists's forms."
+    },
+    {
+      "name": "emailTypeOption",
+      "type": "boolean",
+      "label": "Email type option",
+      "description": "Whether the list supports [multiple formats for emails](https://mailchimp.com/help/change-audience-name-defaults/)."
+    }
+  ]
+}

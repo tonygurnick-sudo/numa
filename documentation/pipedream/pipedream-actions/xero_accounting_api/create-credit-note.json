@@ -1,0 +1,127 @@
+{
+  "name": "Create Credit Note",
+  "description": "Creates a new credit note.",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-create-credit-note",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "contactId",
+      "type": "string",
+      "label": "Contact ID",
+      "description": "ID of the contact associated to the credit note",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "contactName",
+      "type": "string",
+      "label": "Contact Name",
+      "description": "Name of the contact associated to the credit note. If there is no contact matching this name, a new contact is created.",
+      "optional": true
+    },
+    {
+      "name": "contactNumber",
+      "type": "string",
+      "label": "Contact Number",
+      "description": "Number of the contact associated to the credit note. If there is no contact matching this name, a new contact is created.",
+      "optional": true
+    },
+    {
+      "name": "type",
+      "label": "Type",
+      "type": "string",
+      "description": "See [Credit Note Types](https://developer.xero.com/documentation/api/types#CreditNoteTypes)",
+      "options": ["ACCPAYCREDIT", "ACCRECCREDIT"]
+    },
+    {
+      "name": "date",
+      "type": "string",
+      "label": "Date",
+      "description": "The date the credit note is issued YYYY-MM-DD. If the Date element is not specified then it will default to the current date based on the timezone setting of the organisation",
+      "optional": true
+    },
+    {
+      "name": "status",
+      "type": "string",
+      "label": "Status",
+      "description": "See [Credit Note Status Codes](https://developer.xero.com/documentation/api/types#CreditNoteStatuses)",
+      "optional": true,
+      "options": ["DRAFT", "SUBMITTED", "DELETED", "AUTHORISED", "PAID", "VOIDED"]
+    },
+    {
+      "name": "lineAmountTypes",
+      "label": "Line Amount Types",
+      "type": "string",
+      "description": "See [Invoice Line Amount Types](https://developer.xero.com/documentation/api/Types#LineAmountTypes)",
+      "optional": true,
+      "options": ["Exclusive", "Inclusive", "NoTax"]
+    },
+    {
+      "name": "lineItems",
+      "label": "Line Items",
+      "type": "object",
+      "description": "See [Invoice Line Items](https://developer.xero.com/documentation/api/Invoices#LineItems)",
+      "optional": true
+    },
+    {
+      "name": "currencyCode",
+      "label": "Currency Code",
+      "type": "string",
+      "description": "Currency used for the Credit Note",
+      "optional": true
+    },
+    {
+      "name": "creditNoteNumber",
+      "label": "Credit Note Number",
+      "type": "string",
+      "description": "[ACCRECCREDIT](https://developer.xero.com/documentation/api/types#CreditNoteTypes) - Unique alpha numeric code identifying credit note ( *when missing will auto-generate from your Organisation Invoice Settings*)\n[ACCPAYCREDIT](https://developer.xero.com/documentation/api/types#CreditNoteTypes) - non-unique alpha numeric code identifying credit note. This value will also display as Reference in the UI.",
+      "optional": true
+    },
+    {
+      "name": "reference",
+      "label": "Reference",
+      "type": "string",
+      "description": "ACCRECCREDIT only - additional reference number",
+      "optional": true
+    },
+    {
+      "name": "sentToContact",
+      "label": "Sent to Contact",
+      "type": "boolean",
+      "description": "Boolean to indicate if a credit note has been sent to a contact via the Xero app (currently read only)",
+      "optional": true
+    },
+    {
+      "name": "currencyRate",
+      "label": "Currency Rate",
+      "type": "string",
+      "description": "The currency rate for a multicurrency invoice. If no rate is specified, the [XE.com day rate](http://help.xero.com/#CurrencySettings$Rates) is used",
+      "optional": true
+    },
+    {
+      "name": "brandingThemeId",
+      "label": "Branding Theme ID",
+      "type": "string",
+      "description": "See [BrandingThemes](https://developer.xero.com/documentation/api/branding-themes)",
+      "optional": true
+    }
+  ]
+}

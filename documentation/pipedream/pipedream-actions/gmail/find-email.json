@@ -1,0 +1,65 @@
+{
+  "name": "Find Email",
+  "description": "Find an email using Google's Search Engine. [See the docs](https://developers.google.com/gmail/api/reference/rest/v1/users.messages/list)",
+  "component_type": "action",
+  "version": "0.1.9",
+  "key": "gmail-find-email",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "q",
+      "type": "string",
+      "label": "Search Query",
+      "description": "Apply a search filter using Gmail's [standard search operators](https://support.google.com/mail/answer/7190)",
+      "optional": true
+    },
+    {
+      "name": "withTextPayload",
+      "type": "boolean",
+      "label": "Return payload as plaintext",
+      "description": "Convert the payload response into a single text field. **This reduces the size of the payload and makes it easier for LLMs work with.**",
+      "default": false
+    },
+    {
+      "name": "metadataOnly",
+      "type": "boolean",
+      "label": "Metadata Only",
+      "description": "Only return metadata for the messages. This reduces the size of the payload and makes it easier for LLMs work with.",
+      "optional": true,
+      "default": false
+    },
+    {
+      "name": "labels",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "Only return messages with labels that match all of the specified labels.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "includeSpamTrash",
+      "type": "boolean",
+      "label": "Include Spam and Trash?",
+      "description": "Include messages from `SPAM` and `TRASH` in the results. Defaults to `false`.",
+      "optional": true,
+      "default": false
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "Maximum number of messages to return. Defaults to `20`.",
+      "default": 20,
+      "optional": true
+    }
+  ]
+}

@@ -549,6 +549,26 @@ def _handle_fetch_url(params: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         result = _invoke_browser_lambda(url, force_playwright=force_playwright)
+        # browser-lambda returns status="failed" for non-200 origin responses,
+        # status="error" for SSRF blocks etc. Surface those instead of pretending success.
+        if result.get("status") != "success":
+            error_response: Dict[str, Any] = {
+                "url": url,
+                "title": "",
+                "content": "",
+                "status": "error",
+                "error": result.get("reason") or "fetch failed",
+            }
+            if "http_status" in result:
+                error_response["http_status"] = result["http_status"]
+            logger.warning(
+                "fetch_url returned non-success",
+                url=url,
+                origin_status=result.get("status"),
+                http_status=result.get("http_status"),
+                reason=result.get("reason"),
+            )
+            return error_response
         return {
             "url": result.get("url", url),
             "title": result.get("title", ""),

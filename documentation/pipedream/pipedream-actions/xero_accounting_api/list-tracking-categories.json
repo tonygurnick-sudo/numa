@@ -1,0 +1,26 @@
+{
+  "name": "List tracking categories",
+  "description": "Lists information from tracking categories [See the documentation](https://developer.xero.com/documentation/api/accounting/trackingcategories).",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "xero_accounting_api-list-tracking-categories",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    }
+  ]
+}

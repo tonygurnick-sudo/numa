@@ -1,0 +1,42 @@
+{
+  "name": "Add Watcher To Issue",
+  "description": "Adds a user as a watcher of an issue by passing the account ID of the user, For example, `5b10ac8d82e05b22cc7d4ef5`, If no user is specified the calling user is added. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-watchers/#api-rest-api-3-issue-issueidorkey-watchers-post)",
+  "component_type": "action",
+  "version": "0.0.16",
+  "key": "jira-add-watcher-to-issue",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "jira",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIdOrKey",
+      "type": "string",
+      "label": "Issue ID or Key",
+      "description": "The ID or key of an issue",
+      "remoteOptions": true
+    },
+    {
+      "name": "accountId",
+      "type": "string",
+      "label": "Assignee ID",
+      "description": "The account ID of the user, which uniquely identifies the user across all Atlassian products, For example, `5b10ac8d82e05b22cc7d4ef5`",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

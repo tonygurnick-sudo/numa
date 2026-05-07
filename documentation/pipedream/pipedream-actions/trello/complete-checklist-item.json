@@ -1,0 +1,49 @@
+{
+  "name": "Complete a Checklist Item",
+  "description": "Completes an existing checklist item in a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-checkitem-idcheckitem-put).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-complete-checklist-item",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card ID",
+      "description": "The ID of the card.",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "checklistId",
+      "type": "string",
+      "label": "Checklist",
+      "description": "The ID of a checklist to copy into the new checklist",
+      "remoteOptions": true
+    },
+    {
+      "name": "checklistItemId",
+      "type": "string",
+      "label": "Checklist Item ID",
+      "description": "The ID of the checklist item.",
+      "remoteOptions": true
+    }
+  ]
+}

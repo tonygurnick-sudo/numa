@@ -1,0 +1,49 @@
+{
+  "name": "Create a List",
+  "description": "Creates a new list. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/#api-lists-post).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-create-list",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "idBoard",
+      "type": "string",
+      "label": "Board ID",
+      "description": "The long ID of the board the list should be created on.",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "Name for the list."
+    },
+    {
+      "name": "idListSource",
+      "type": "string",
+      "label": "List Source ID",
+      "description": "ID of the list to copy into the new list.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "pos",
+      "type": "string",
+      "label": "Position",
+      "description": "Position of the list. `top`, `bottom`, or a positive floating point number",
+      "options": ["top", "bottom"],
+      "optional": true
+    }
+  ]
+}

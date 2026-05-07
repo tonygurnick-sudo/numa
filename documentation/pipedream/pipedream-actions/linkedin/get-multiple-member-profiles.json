@@ -1,0 +1,25 @@
+{
+  "name": "Get Multiple Member Profiles",
+  "description": "Gets multiple member profiles at once. [See the docs here](https://docs.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api#retrieve-other-members-profile)",
+  "component_type": "action",
+  "version": "0.1.11",
+  "key": "linkedin-get-multiple-member-profiles",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "peopleIds",
+      "type": "string[]",
+      "label": "People Ids",
+      "description": "Identifiers of the members to retrieve"
+    }
+  ]
+}

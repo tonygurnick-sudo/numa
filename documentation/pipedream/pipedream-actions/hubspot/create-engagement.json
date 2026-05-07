@@ -1,0 +1,80 @@
+{
+  "name": "Create Engagement",
+  "description": "Create a new engagement for a contact. [See the documentation](https://developers.hubspot.com/docs/api/crm/engagements)",
+  "component_type": "action",
+  "version": "0.0.31",
+  "key": "hubspot-create-engagement",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot",
+      "reloadProps": true
+    },
+    {
+      "name": "engagementType",
+      "type": "string",
+      "label": "Engagement Type",
+      "description": "The type of engagement to create",
+      "reloadProps": true,
+      "options": [
+        {
+          "label": "Note",
+          "value": "notes"
+        },
+        {
+          "label": "Task",
+          "value": "tasks"
+        },
+        {
+          "label": "Meeting",
+          "value": "meetings"
+        },
+        {
+          "label": "Email",
+          "value": "emails"
+        },
+        {
+          "label": "Call",
+          "value": "calls"
+        }
+      ]
+    },
+    {
+      "name": "toObjectType",
+      "type": "string",
+      "label": "Associated Object Type",
+      "description": "Type of object the engagement is being associated with",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "toObjectId",
+      "type": "string",
+      "label": "Associated Object",
+      "description": "ID of object the engagement is being associated with",
+      "useQuery": true,
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "associationType",
+      "type": "integer",
+      "label": "Association Type",
+      "description": "A unique identifier to indicate the association type between the task and the other object",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "objectProperties",
+      "type": "object",
+      "label": "Object Properties",
+      "description": "Enter the `engagement` properties as a JSON object"
+    }
+  ]
+}

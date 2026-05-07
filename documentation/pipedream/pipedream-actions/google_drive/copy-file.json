@@ -1,0 +1,35 @@
+{
+  "name": "Copy File",
+  "description": "Create a copy of the specified file. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/copy) for more information",
+  "component_type": "action",
+  "version": "0.1.15",
+  "key": "google_drive-copy-file",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File",
+      "description": "The file to copy",
+      "remoteOptions": true
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "Retrieve Page Property Item",
+  "description": "Get a Property Item object for a selected page and property. [See the documentation](https://developers.notion.com/reference/retrieve-a-page-property)",
+  "component_type": "action",
+  "version": "0.0.13",
+  "key": "notion-retrieve-page-property-item",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "pageId",
+      "type": "string",
+      "label": "Page ID",
+      "description": "Search for a page or provide a page ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "propertyId",
+      "type": "string",
+      "label": "Property ID",
+      "description": "Select a page property or provide a property ID",
+      "remoteOptions": true
+    }
+  ]
+}

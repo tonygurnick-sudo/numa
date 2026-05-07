@@ -1,0 +1,33 @@
+{
+  "name": "Delete Record",
+  "description": "Deletes an existing record in an object. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_retrieve_delete.htm)",
+  "component_type": "action",
+  "version": "0.2.4",
+  "key": "salesforce_rest_api-delete-record",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "sobjectType",
+      "type": "string",
+      "label": "SObject Type",
+      "description": "The type of object to delete a record of.",
+      "remoteOptions": true
+    },
+    {
+      "name": "recordId",
+      "type": "string",
+      "label": "Record ID",
+      "description": "The record to delete.",
+      "remoteOptions": true
+    }
+  ]
+}

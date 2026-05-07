@@ -6,6 +6,8 @@ import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import { RichTextEditor } from '../Shared/RichTextEditor';
+import { uploadAttachmentToTicket } from '../Shared/attachmentUploader';
+import { useToast } from '../../../Providers/ToastContext';
 import { DynamicField } from '../Shared/DynamicField';
 import { SidebarDropdown } from '../Shared/SidebarDropdown';
 import type { DropdownOption } from '../Shared/SidebarDropdown';
@@ -113,7 +115,8 @@ export function CreateTicketModal({
   const { t } = useTranslation('ops');
   const { numaPost, numaGet } = useNumaRequest();
   const { user } = useAuth();
-  const { config, teamData, workUnits, refreshTickets, refreshCrmData } = useOps();
+  const { config, boardData, workUnits, refreshTickets, refreshCrmData } = useOps();
+  const { showToast } = useToast();
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [selectedTypeId, setSelectedTypeId] = useState<string>('');
@@ -122,6 +125,10 @@ export function CreateTicketModal({
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
   const [initialComment, setInitialComment] = useState('');
   const [tagsInput, setTagsInput] = useState('');
+
+  // Pasted images that exceeded the inline-embed threshold; uploaded as
+  // attachments on the new ticket after creation.
+  const [pendingPastedAttachments, setPendingPastedAttachments] = useState<File[]>([]);
 
   // Zone/stage — auto-resolved from team defaults
   const [zoneId, setZoneId] = useState<string>('');
@@ -160,18 +167,18 @@ export function CreateTicketModal({
   // ── Derived values ────────────────────────────────────────────────────────
 
   const allowedTypes: TicketType[] = useMemo(() => {
-    if (!config || !teamData?.team) return [];
-    const restricted = teamData.team.allowedTicketTypes;
+    if (!config || !boardData?.board) return [];
+    const restricted = boardData.board.allowedTicketTypes;
     if (!restricted || restricted.length === 0) {
       return [...config.ticketTypes].sort((a, b) => a.order - b.order);
     }
     const allowed = new Set(restricted);
     return config.ticketTypes.filter((tt) => allowed.has(tt.id)).sort((a, b) => a.order - b.order);
-  }, [config, teamData]);
+  }, [config, boardData]);
 
   // Separate into Core vs Additional types based on the Board's preset
   const { coreTypes, additionalTypes } = useMemo(() => {
-    const preset = getPreset(teamData?.team?.preset);
+    const preset = getPreset(boardData?.board?.preset);
     const suggestedPrefixes = new Set(preset.suggestedTicketTypes?.map((st) => st.prefix) || []);
 
     const core: TicketType[] = [];
@@ -191,28 +198,31 @@ export function CreateTicketModal({
     }
 
     return { coreTypes: core, additionalTypes: additional };
-  }, [allowedTypes, teamData?.team?.preset]);
+  }, [allowedTypes, boardData?.board?.preset]);
 
   const selectedType: TicketType | undefined = useMemo(
     () => allowedTypes.find((tt) => tt.id === selectedTypeId),
     [allowedTypes, selectedTypeId]
   );
 
-  const zones = useMemo(() => teamData?.zones ?? [], [teamData]);
+  const zones = useMemo(() => boardData?.zones ?? [], [boardData]);
 
   const filteredStages = useMemo(() => {
-    if (!teamData || !zoneId) return [];
-    return teamData.stages.filter((s) => s.zoneId === zoneId).sort((a, b) => a.order - b.order);
-  }, [teamData, zoneId]);
+    if (!boardData || !zoneId) return [];
+    return boardData.stages.filter((s) => s.zoneId === zoneId).sort((a, b) => a.order - b.order);
+  }, [boardData, zoneId]);
 
-  const fieldOverrides: Record<string, FieldOverride> = useMemo(() => teamData?.team?.fieldOverrides ?? {}, [teamData]);
+  const fieldOverrides: Record<string, FieldOverride> = useMemo(
+    () => boardData?.board?.fieldOverrides ?? {},
+    [boardData]
+  );
 
   /**
    * Dynamic fields for the right panel: ticket type's defaultFields minus
    * system fields (name, description) which are rendered separately on left.
    * Filtered by team field overrides.
    */
-  const hasWorkUnits = teamData?.team?.workUnitSeries?.enabled === true;
+  const hasWorkUnits = boardData?.board?.workUnitSeries?.enabled === true;
 
   const dynamicFields: FieldDefinition[] = useMemo(() => {
     if (!selectedType || !config) return [];
@@ -246,18 +256,19 @@ export function CreateTicketModal({
     });
     setInitialComment('');
     setTagsInput('');
+    setPendingPastedAttachments([]);
     setError(null);
     setValidated(false);
-    const defaultZone = prefilledZoneId ?? teamData?.team?.defaultZoneId ?? '';
+    const defaultZone = prefilledZoneId ?? boardData?.board?.defaultZoneId ?? '';
     setZoneId(defaultZone);
-    if (defaultZone && teamData) {
-      const first = teamData.stages.filter((s) => s.zoneId === defaultZone).sort((a, b) => a.order - b.order)[0];
+    if (defaultZone && boardData) {
+      const first = boardData.stages.filter((s) => s.zoneId === defaultZone).sort((a, b) => a.order - b.order)[0];
       setStageId(first?.id ?? '');
     } else {
       setStageId('');
     }
   }, [
-    teamData,
+    boardData,
     prefilledCustomerId,
     prefilledSupplierId,
     prefilledProjectId,
@@ -291,13 +302,28 @@ export function CreateTicketModal({
     setCustomFields((prev) => ({ ...prev, [fieldId]: value }));
   }, []);
 
+  // Pasted image too large to embed inline. Defer it as an attachment that
+  // we upload after the ticket is created (the presigned upload + comment
+  // path needs a real ticketId).
+  const handleLargeImagePaste = useCallback(
+    (file: File) => {
+      setPendingPastedAttachments((prev) => [...prev, file]);
+      showToast({ message: t('tickets.largeImagePastedQueued'), variant: 'info' });
+    },
+    [showToast, t]
+  );
+
+  const removePendingAttachment = useCallback((index: number) => {
+    setPendingPastedAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   // ── Submission ────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setValidated(true);
     if (!e.currentTarget.checkValidity()) return;
-    if (!teamData || !selectedTypeId || !title.trim()) return;
+    if (!boardData || !selectedTypeId || !title.trim()) return;
 
     setSaving(true);
     setError(null);
@@ -332,7 +358,7 @@ export function CreateTicketModal({
       const activeStaff = config?.staff ?? [];
 
       const ticket = await OpsService.createTicket(numaPost, {
-        teamId: teamData.team.id,
+        boardId: boardData.board.id,
         ticketTypeId: selectedTypeId,
         title: title.trim(),
         description: description.trim() || undefined,
@@ -371,6 +397,26 @@ export function CreateTicketModal({
           await OpsService.createComment(numaPost, ticket.id, { content: initialComment.trim() });
         } catch {
           // Non-fatal — ticket was created successfully
+        }
+      }
+
+      // Upload any images that were too large to embed inline as ticket
+      // attachments. Failures here are non-fatal: the ticket exists and the
+      // user can re-attach manually from the detail view.
+      if (pendingPastedAttachments.length > 0) {
+        const failures: string[] = [];
+        for (const file of pendingPastedAttachments) {
+          try {
+            await uploadAttachmentToTicket(numaPost, ticket.id, file);
+          } catch {
+            failures.push(file.name);
+          }
+        }
+        if (failures.length > 0) {
+          showToast({
+            message: t('errors.pendingAttachmentsFailed', { files: failures.join(', ') }),
+            variant: 'error',
+          });
         }
       }
 
@@ -599,6 +645,7 @@ export function CreateTicketModal({
                   value={description}
                   onChange={(html) => setDescription(html)}
                   onSave={(html) => setDescription(html)}
+                  onLargeImagePaste={handleLargeImagePaste}
                   placeholder={t('common.description') + '\u2026'}
                   minHeight={140}
                 />
@@ -610,20 +657,56 @@ export function CreateTicketModal({
                   <i className="bi bi-paperclip me-2" />
                   {t('tickets.attachments')}
                 </div>
-                <div
-                  style={{
-                    border: '2px dashed #e5e7eb',
-                    borderRadius: 8,
-                    padding: '18px',
-                    textAlign: 'center',
-                    color: '#9ca3af',
-                    fontSize: '0.85rem',
-                    cursor: 'default',
-                  }}
-                >
-                  <i className="bi bi-paperclip me-1" />
-                  {t('tickets.attachmentHint', 'Drop files here or use the detail view to attach')}
-                </div>
+                {pendingPastedAttachments.length > 0 ? (
+                  <div className="d-flex flex-wrap gap-2">
+                    {pendingPastedAttachments.map((file, i) => (
+                      <span
+                        key={`${file.name}-${i}`}
+                        className="d-inline-flex align-items-center gap-2"
+                        style={{
+                          background: '#eef2ff',
+                          color: '#4338ca',
+                          borderRadius: 999,
+                          padding: '4px 10px',
+                          fontSize: '0.8rem',
+                        }}
+                        title={`${file.name} \u2014 ${(file.size / 1024).toFixed(0)} KB`}
+                      >
+                        <i className="bi bi-image" />
+                        {file.name}
+                        <button
+                          type="button"
+                          aria-label={t('common.remove', 'Remove')}
+                          onClick={() => removePendingAttachment(i)}
+                          style={{
+                            background: 'transparent',
+                            border: 0,
+                            color: '#4338ca',
+                            padding: 0,
+                            lineHeight: 1,
+                          }}
+                        >
+                          <i className="bi bi-x-lg" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      border: '2px dashed #e5e7eb',
+                      borderRadius: 8,
+                      padding: '18px',
+                      textAlign: 'center',
+                      color: '#9ca3af',
+                      fontSize: '0.85rem',
+                      cursor: 'default',
+                    }}
+                  >
+                    <i className="bi bi-paperclip me-1" />
+                    {t('tickets.attachmentHint', 'Drop files here or use the detail view to attach')}
+                  </div>
+                )}
               </Form.Group>
 
               {/* Initial comment */}
@@ -656,7 +739,7 @@ export function CreateTicketModal({
                     value={stageId}
                     onChange={(e) => {
                       const newStageId = e.target.value;
-                      const allStages = teamData?.stages ?? [];
+                      const allStages = boardData?.stages ?? [];
                       const stage = allStages.find((s) => s.id === newStageId);
                       setStageId(newStageId);
                       if (stage) setZoneId(stage.zoneId);
@@ -664,7 +747,7 @@ export function CreateTicketModal({
                   >
                     {zones.map((zone) => (
                       <optgroup key={zone.id} label={zone.name}>
-                        {(teamData?.stages ?? [])
+                        {(boardData?.stages ?? [])
                           .filter((s) => s.zoneId === zone.id)
                           .sort((a, b) => a.order - b.order)
                           .map((s) => (
@@ -800,7 +883,8 @@ export function CreateTicketModal({
                         { value: '', label: t('common.none') },
                         ...(config?.projects ?? [])
                           .filter(
-                            (p) => p.isActive && (!p.boardIds?.length || p.boardIds.includes(teamData?.team?.id ?? ''))
+                            (p) =>
+                              p.isActive && (!p.boardIds?.length || p.boardIds.includes(boardData?.board?.id ?? ''))
                           )
                           .map(
                             (p): DropdownOption => ({

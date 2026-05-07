@@ -1,0 +1,35 @@
+{
+  "name": "Unsubscribe Email",
+  "description": "Unsubscribe an email address from an audience. [See docs here](https://mailchimp.com/developer/marketing/api/list-members/archive-list-member/)",
+  "component_type": "action",
+  "version": "0.2.3",
+  "key": "mailchimp-unsubscribe-email",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "subscriberHash",
+      "type": "string",
+      "label": "Subscriber",
+      "description": "The MD5 hash of the lowercase version of the list member's email address.",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

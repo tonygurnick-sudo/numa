@@ -1,0 +1,40 @@
+{
+  "name": "Update Contact",
+  "description": "Update a contact in Hubspot. [See the documentation](https://developers.hubspot.com/docs/api/crm/contacts#endpoint?spec=POST-/crm/v3/objects/contacts)",
+  "component_type": "action",
+  "version": "0.0.30",
+  "key": "hubspot-update-contact",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "objectId",
+      "type": "string",
+      "label": "Object ID",
+      "description": "Hubspot's internal ID for the contact",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "propertyGroups",
+      "type": "string[]",
+      "label": "Property Groups",
+      "reloadProps": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "objectProperties",
+      "type": "object",
+      "label": "Object Properties",
+      "description": "Enter the object properties to update as a JSON object"
+    }
+  ]
+}

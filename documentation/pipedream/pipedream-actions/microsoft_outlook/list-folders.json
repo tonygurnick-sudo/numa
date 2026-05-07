@@ -1,0 +1,27 @@
+{
+  "name": "List Folders",
+  "description": "Retrieves a list of all folders in Microsoft Outlook. [See the documentation](https://learn.microsoft.com/en-us/graph/api/user-list-mailfolders)",
+  "component_type": "action",
+  "version": "0.0.12",
+  "key": "microsoft_outlook-list-folders",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftOutlook",
+      "type": "app",
+      "app": "microsoft_outlook"
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

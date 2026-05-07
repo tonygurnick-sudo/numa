@@ -1,0 +1,19 @@
+{
+  "name": "Get Current Member Profile",
+  "description": "Gets the profile of the current authenticated member. [See the docs here](https://docs.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api#retrieve-current-members-profile)",
+  "component_type": "action",
+  "version": "0.1.11",
+  "key": "linkedin-get-current-member-profile",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    }
+  ]
+}

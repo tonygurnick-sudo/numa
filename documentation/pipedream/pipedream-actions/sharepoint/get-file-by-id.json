@@ -1,0 +1,49 @@
+{
+  "name": "Get File by ID",
+  "description": "Retrieves a file by ID. [See the documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "sharepoint-get-file-by-id",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "siteId",
+      "type": "string",
+      "label": "Site",
+      "description": "Identifier of a site",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "driveId",
+      "type": "string",
+      "label": "Drive ID",
+      "description": "Identifier of a drive within a site",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File ID",
+      "description": "The file to retrieve. You can either search for the file here or provide a custom *File ID*.",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "select",
+      "type": "string",
+      "label": "Select",
+      "description": "A comma-separated list of properties to return in the response",
+      "optional": true
+    }
+  ]
+}

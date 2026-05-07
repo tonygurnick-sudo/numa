@@ -36,7 +36,7 @@ Deployments architecture additions:
 
 - Step Functions state machine `NumaPortalDeployment` orchestrates each deploy
 - DynamoDB table `numa-portal-deployments` stores history and status (GSI `clientName-index`)
-- ECS Fargate task runs the `numa-deploy` container and executes `cdktf deploy numa-<client>`
+- ECS Fargate task runs the deployment container — pulled from one of two ECR repos (`numa-deploy` for prod, `numa-deploy-dev` for dev) — and executes `cdktf deploy numa-<client>`
 - Node Lambda `portal-deploy-assume-backend` returns temporary credentials for the Terraform backend (S3 state + DynamoDB lock) in the root account
 - One-time auto-retry: if the first run fails in a 25–35 minute window (token expiry heuristic), the state machine retries once; attempts are recorded and shown in the portal (1/2 → 2/2)
 
@@ -78,27 +78,45 @@ How it’s used:
 Portal authenticated users receive the IAM role and policy created by the construct:
 
 - Read client configs: `dynamodb:{GetItem,Query,Scan}` on `numa-client-config`
-- Read images: `ecr:{DescribeImages,ListImages}` on `arn:aws:ecr:ap-southeast-2:826326270637:repository/numa-deploy`
+- Read images: `ecr:{DescribeImages,ListImages}` on both `arn:aws:ecr:ap-southeast-2:826326270637:repository/numa-deploy` (prod channel) and `arn:aws:ecr:ap-southeast-2:826326270637:repository/numa-deploy-dev` (dev channel)
 - User management: `cognito-idp:{AdminCreateUser,ListUsers,AdminDeleteUser,AdminGetUser,AdminSetUserPassword,DescribeUserPool}` on the portal User Pool
 - STS assume role: `sts:AssumeRole` on `arn:aws:iam::*:role/ArcanumAIAccess` (restricted by region)
 
-Cross‑account ECR access requires a repository resource policy in the images account. Example (update Principal to your deployer account):
+Cross‑account ECR access requires a repository resource policy on each ECR repo in the images account. The same shape is used for both `numa-deploy` (prod) and `numa-deploy-dev` (dev). The committed source-of-truth for the dev repo lives at `tools/aws/numa-deploy-dev-repo-policy.json`. Both policies allow:
+
+- `customer-success-portal-authenticated-role` to `DescribeImages`/`ListImages` (so the portal Containers and Deployments tabs can list images per channel)
+- `numa-portal-deploy-task-exec` to pull layers (so the Fargate deploy task can run the chosen image)
 
 ```json
 {
-  "Version": "2008-10-17",
+  "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "AllowPortalRead",
+      "Sid": "AllowPortalListDescribe",
       "Effect": "Allow",
-      "Principal": {
-        "AWS": ["arn:aws:iam::207567759910:role/customer-success-portal-authenticated-role"]
-      },
+      "Principal": { "AWS": "arn:aws:iam::207567759910:role/customer-success-portal-authenticated-role" },
       "Action": ["ecr:DescribeImages", "ecr:ListImages"]
+    },
+    {
+      "Sid": "AllowPortalDeployPull",
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::207567759910:role/numa-portal-deploy-task-exec" },
+      "Action": ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
     }
   ]
 }
 ```
+
+### Image channels (prod vs dev)
+
+Two ECR repos in the images account back the portal's two-tab UX:
+
+| Channel | ECR repo          | Built by                                                                             | Tagging                   |
+| ------- | ----------------- | ------------------------------------------------------------------------------------ | ------------------------- |
+| Prod    | `numa-deploy`     | Auto-built from `main` (`build-deployment-container` job in `.gitlab-ci.yml`)        | `:${CI_COMMIT_SHORT_SHA}` |
+| Dev     | `numa-deploy-dev` | Manual button on `dev` and `dev-image/*` branches (`build-deployment-container-dev`) | `:${CI_COMMIT_SHORT_SHA}` |
+
+Neither channel pushes a moving `:latest` tag. The portal lists images by `pushedAt` and the user picks an explicit SHA. Custom names per image are stored in DynamoDB `numa-portal-image-metadata` keyed by `${repository}#${imageTag}` so prod and dev images keep separate name spaces. Deploying a Dev image to a client whose config lacks `devInstance: true` requires typing the client name to confirm.
 
 Client accounts must have an `ArcanumAIAccess` role that the portal can assume. Tools will fail for a client if that role is absent or trust/permissions are missing.
 

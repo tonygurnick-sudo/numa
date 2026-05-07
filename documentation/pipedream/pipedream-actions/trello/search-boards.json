@@ -1,0 +1,80 @@
+{
+  "name": "Search Boards",
+  "description": "Searches for boards matching the specified query. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-search/#api-search-get).",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "trello-search-boards",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "query",
+      "type": "string",
+      "label": "Query",
+      "description": "The search query with a length of 1 to 16384 characters"
+    },
+    {
+      "name": "idOrganizations",
+      "type": "string[]",
+      "label": "Organization IDs",
+      "description": "Specify the organizations to search for boards in",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "partial",
+      "type": "boolean",
+      "label": "Partial Search?",
+      "description": "Specifying partial to be true means that Trello will search for content that starts with any of the words in `query`. When searching for an object titled \"My Development Status Report\", by default a solution is to search for \"Development\". If partial is enabled, a search for \"dev\" is possible, however, a search for \"velopment\" is not possible.",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "boardFields",
+      "type": "string[]",
+      "label": "Boards Fields",
+      "description": "`all` or a list of board [fields](https://developer.atlassian.com/cloud/trello/guides/rest-api/object-definitions/#board-object) to be returned in the results",
+      "options": [
+        "all",
+        "closed",
+        "dateLastActivity",
+        "dateLastView",
+        "desc",
+        "descData",
+        "idOrganization",
+        "invitations",
+        "invited",
+        "labelNames",
+        "memberships",
+        "name",
+        "pinned",
+        "powerUps",
+        "prefs",
+        "shortLink",
+        "shortUrl",
+        "starred",
+        "subscribed",
+        "url"
+      ],
+      "default": ["name", "idOrganization"],
+      "optional": true
+    },
+    {
+      "name": "boardsLimit",
+      "type": "integer",
+      "label": "Boards Limit",
+      "description": "The maximum number of boards to return.",
+      "default": 10,
+      "optional": true
+    }
+  ]
+}

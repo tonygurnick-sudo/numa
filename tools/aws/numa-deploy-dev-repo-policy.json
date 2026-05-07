@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowPortalListDescribe",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::207567759910:role/customer-success-portal-authenticated-role"
+      },
+      "Action": ["ecr:DescribeImages", "ecr:ListImages"]
+    },
+    {
+      "Sid": "AllowPortalDeployPull",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::207567759910:role/numa-portal-deploy-task-exec"
+      },
+      "Action": ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    }
+  ]
+}

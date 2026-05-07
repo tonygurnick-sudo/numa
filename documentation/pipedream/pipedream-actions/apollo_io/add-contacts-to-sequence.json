@@ -1,0 +1,61 @@
+{
+  "name": "Add Contacts to Sequence",
+  "description": "Adds one or more contacts to a sequence in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#add-contacts-to-sequence)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "apollo_io-add-contacts-to-sequence",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "sequenceId",
+      "type": "string",
+      "label": "Sequence ID",
+      "description": "Identifier of a sequence",
+      "remoteOptions": true
+    },
+    {
+      "name": "contactIds",
+      "type": "string[]",
+      "label": "Contact IDs",
+      "description": "Identifiers of the contacts to add to sequence",
+      "remoteOptions": true
+    },
+    {
+      "name": "emailAccountId",
+      "type": "string",
+      "label": "Email Account ID",
+      "description": "Identifier of the email account to send email from",
+      "remoteOptions": true
+    },
+    {
+      "name": "sequenceNoEmail",
+      "type": "boolean",
+      "label": "Sequence No Email",
+      "description": "  Whether to still sequence the contact if he/she does not have an email address",
+      "optional": true
+    },
+    {
+      "name": "sequenceActiveInOtherCampaigns",
+      "type": "boolean",
+      "label": "Sequence Active in Other Campaigns",
+      "description": "Whether to still sequence the contact if he/she is active or paused in another sequence",
+      "optional": true
+    },
+    {
+      "name": "sequenceFinishedInOtherCampaigns",
+      "type": "boolean",
+      "label": "Sequence Finished in Other Campaigns",
+      "description": "Whether to still sequence the contact if he/she already finished another sequence",
+      "optional": true
+    }
+  ]
+}

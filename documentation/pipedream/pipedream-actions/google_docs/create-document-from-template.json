@@ -1,0 +1,73 @@
+{
+  "name": "Create New Document From Template",
+  "description": "Create a new Google Docs file from a template. Optionally include placeholders in the template document that will get replaced from this action. [See documentation](https://www.npmjs.com/package/google-docs-mustaches)",
+  "component_type": "action",
+  "version": "0.0.8",
+  "key": "google_docs-create-document-from-template",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_docs"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "templateId",
+      "type": "string",
+      "label": "Template",
+      "description": "Select the template document you'd like to use as the template, or use a custom expression to reference a document ID from a previous step. Template documents should contain placeholders in the format `{{xyz}}`.",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "destinationDrive",
+      "type": "string",
+      "label": "Destination Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder",
+      "description": "Select the folder of the newly created Google Doc and/or PDF, or use a custom expression to reference a folder ID from a previous step.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "Name of the file you want to create (eg. `myFile` will create a Google Doc called `myFile` and a pdf called `myFile.pdf`)",
+      "optional": false
+    },
+    {
+      "name": "mode",
+      "type": "string[]",
+      "label": "Mode",
+      "description": "Specify if you want to create a Google Doc, PDF or both.",
+      "options": ["Google Doc", "Pdf"]
+    },
+    {
+      "name": "replaceValues",
+      "type": "object",
+      "label": "Replace text placeholders",
+      "description": "Replace text placeholders in the document. Use the format `{{xyz}}` in the document but exclude the curly braces in the key. (eg. `{{myPlaceholder}}` in the document will be replaced by the value of the key `myPlaceholder` in the action."
+    }
+  ]
+}

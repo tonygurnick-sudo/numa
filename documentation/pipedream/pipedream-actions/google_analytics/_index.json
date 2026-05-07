@@ -1,0 +1,50 @@
+[
+  {
+    "key": "google_analytics-run-report",
+    "name": "Run Report",
+    "description": "Return report metrics based on a start and end date. [See the documentation](https://developers.google.com/analytics/devguides/reporting/core/v4/rest?hl=en)",
+    "version": "0.1.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_analytics-run-report-in-ga4",
+    "name": "Run Report in GA4",
+    "description": "Returns a customized report of your Google Analytics event data. Reports contain statistics derived from data collected by the Google Analytics tracking code. [See the documentation](https://developers.google.com/analytics/devguides/reporting/data/v1/rest/v1beta/properties/runReport)",
+    "version": "0.1.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "google_analytics-create-key-event",
+    "name": "Create Key Event",
+    "description": "Creates a new key event. [See the documentation](https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1beta/properties.keyEvents/create)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_analytics-create-ga4-property",
+    "name": "Create GA4 Property",
+    "description": "Creates a new GA4 property. [See the documentation](https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1beta/properties/create)",
+    "version": "0.1.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  }
+]

@@ -1,0 +1,50 @@
+{
+  "name": "Get Values in Range",
+  "description": "Get all values or values from a range of cells using A1 notation. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/get)",
+  "component_type": "action",
+  "version": "0.1.16",
+  "key": "google_sheets-get-values-in-range",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "range",
+      "type": "string",
+      "label": "Range",
+      "description": "The A1 notation of the values to retrieve. E.g., `A1:E5`",
+      "optional": true
+    }
+  ]
+}

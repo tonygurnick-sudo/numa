@@ -30,11 +30,11 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
   const { t } = useTranslation('ops');
   const { user } = useAuth();
   const { numaPut, numaDelete } = useNumaRequest();
-  const { config, teamData, tickets, refreshStaff } = useOps();
+  const { config, boardData, tickets, refreshStaff } = useOps();
 
-  const team = teamData?.team ?? null;
-  const existingZones = teamData?.zones ?? [];
-  const existingStages = teamData?.stages ?? [];
+  const team = boardData?.board ?? null;
+  const existingZones = boardData?.zones ?? [];
+  const existingStages = boardData?.stages ?? [];
 
   // ── General tab state ────────────────────────────────────────────────────
   const [name, setName] = useState('');
@@ -341,7 +341,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
       const isAllSelected = allowedTicketTypes.length === config.ticketTypes.length;
 
       // Save team settings
-      await OpsService.updateTeam(numaPut, team.id, {
+      await OpsService.updateBoard(numaPut, team.id, {
         name,
         color,
         announcement: announcement || null,
@@ -362,8 +362,8 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
       }
 
       // Save workflow (zones + stages)
-      await OpsService.updateTeamZones(numaPut, team.id, zones);
-      await OpsService.updateTeamStages(numaPut, team.id, stages);
+      await OpsService.updateBoardZones(numaPut, team.id, zones);
+      await OpsService.updateBoardStages(numaPut, team.id, stages);
 
       setIsDirty(false);
       onSaved();
@@ -410,14 +410,14 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     try {
       setDeleting(true);
       setError(null);
-      await OpsService.deleteTeam(numaDelete, team.id);
+      await OpsService.deleteBoard(numaDelete, team.id);
       setShowDeleteConfirm(false);
       onHide();
       onDeleted?.();
     } catch (err) {
       const msg = String(err);
       if (msg.includes('409')) {
-        setError(t('teams.deleteTeamHasTickets'));
+        setError(t('boards.deleteBoardHasTickets'));
       } else {
         setError(t('errors.saveFailed', { message: msg }));
       }
@@ -435,7 +435,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     <>
       <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered>
         <Modal.Header closeButton>
-          <Modal.Title>{t('teams.settings')}</Modal.Title>
+          <Modal.Title>{t('boards.settings')}</Modal.Title>
         </Modal.Header>
 
         <Modal.Body style={{ minHeight: 480 }}>
@@ -529,7 +529,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                   stages={stages}
                   setStages={setStagesDirty}
                   tickets={tickets}
-                  teamId={team.id}
+                  boardId={team.id}
                   defaultZoneId={defaultZoneId}
                   setDefaultZoneId={setDefaultZoneIdDirty}
                   defaultStageId={defaultStageId}
@@ -539,8 +539,8 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
 
               <Tab.Pane eventKey="access" style={{ minHeight: 320 }}>
                 {/* ── Board Owners ──────────────────────────────────────── */}
-                <h6 className="mb-2">{t('teams.boardOwners')}</h6>
-                <p className="text-muted small mb-3">{t('teams.boardOwnersHelp')}</p>
+                <h6 className="mb-2">{t('boards.boardOwners')}</h6>
+                <p className="text-muted small mb-3">{t('boards.boardOwnersHelp')}</p>
 
                 {/* Board creator — always shown, cannot be removed */}
                 {team.createdBy &&
@@ -555,7 +555,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                         <StaffAvatar staff={creator} size={24} />
                         <span className="small fw-medium">{creator.name || creator.email}</span>
                         <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>
-                          {t('teams.boardCreator')}
+                          {t('boards.boardCreator')}
                         </Badge>
                       </div>
                     ) : null;
@@ -577,7 +577,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                           <StaffAvatar staff={staff} size={24} />
                           <span className="small fw-medium">{staff.name || staff.email}</span>
                           <Badge bg="primary" className="ms-1" style={{ fontSize: '0.65rem' }}>
-                            {t('teams.owner')}
+                            {t('boards.owner')}
                           </Badge>
                           {isOwner && (
                             <button
@@ -606,7 +606,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                       }}
                       excludeIds={[...(team.createdBy ? [team.createdBy] : []), ...ownerIds]}
                       mode="multi"
-                      placeholder={t('teams.addOwnerPlaceholder')}
+                      placeholder={t('boards.addOwnerPlaceholder')}
                     />
                   </div>
                 )}
@@ -615,13 +615,13 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
 
                 {/* ── Access Control ────────────────────────────────────── */}
                 <h6 className="mb-2">{t('settings.accessControl')}</h6>
-                <p className="text-muted small mb-3">{t('teams.accessControlHelp')}</p>
+                <p className="text-muted small mb-3">{t('boards.accessControlHelp')}</p>
 
                 <Form.Check
                   type="radio"
                   id="settings-access-all"
                   name="settings-access"
-                  label={t('teams.allUsers')}
+                  label={t('boards.allUsers')}
                   checked={accessMode === 'all'}
                   onChange={() => setAccessModeDirty('all')}
                   className="mb-2"
@@ -630,14 +630,14 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                   type="radio"
                   id="settings-access-specific"
                   name="settings-access"
-                  label={t('teams.specificUsers')}
+                  label={t('boards.specificUsers')}
                   checked={accessMode === 'specific'}
                   onChange={() => setAccessModeDirty('specific')}
                   className="mb-3"
                 />
                 {accessMode === 'specific' && config.staff && (
                   <div className="ps-4">
-                    <Form.Label className="small text-muted">{t('teams.selectMembers')}</Form.Label>
+                    <Form.Label className="small text-muted">{t('boards.selectMembers')}</Form.Label>
                     <UserPicker
                       staff={config.staff}
                       selectedIds={accessUserIds.filter((id) => id !== team.createdBy && !ownerIds.includes(id))}
@@ -663,7 +663,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
               disabled={deleting}
             >
               <i className="bi bi-trash me-1" />
-              {t('teams.deleteTeam')}
+              {t('boards.deleteBoard')}
             </Button>
           )}
           <Button variant="outline-secondary" onClick={onHide}>
@@ -677,9 +677,9 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
 
       <ConfirmModal
         show={showDeleteConfirm}
-        title={t('teams.deleteTeam')}
-        message={t('teams.deleteTeamConfirm', { name: team?.name ?? '' })}
-        confirmLabel={t('teams.deleteTeam')}
+        title={t('boards.deleteBoard')}
+        message={t('boards.deleteBoardConfirm', { name: team?.name ?? '' })}
+        confirmLabel={t('boards.deleteBoard')}
         variant="danger"
         onConfirm={handleDelete}
         onHide={() => setShowDeleteConfirm(false)}

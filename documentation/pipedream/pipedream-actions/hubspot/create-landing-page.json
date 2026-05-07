@@ -1,0 +1,290 @@
+{
+  "name": "Create Landing Page",
+  "description": "Create a landing page in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/pages#post-%2Fcms%2Fv3%2Fpages%2Flanding-pages)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "hubspot-create-landing-page",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "pageName",
+      "type": "string",
+      "label": "Page Name",
+      "description": "The name of the page."
+    },
+    {
+      "name": "landingFolderId",
+      "type": "string",
+      "label": "Folder ID",
+      "description": "The ID of the folder to create the landing page in.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "language",
+      "type": "string",
+      "label": "Language",
+      "description": "The language of the page.",
+      "options": [
+        {
+          "label": "Afrikaans",
+          "value": "af"
+        },
+        {
+          "label": "Arabic (Egypt)",
+          "value": "ar-eg"
+        },
+        {
+          "label": "Bulgarian",
+          "value": "bg"
+        },
+        {
+          "label": "Bengali",
+          "value": "bn"
+        },
+        {
+          "label": "Czech",
+          "value": "cs"
+        },
+        {
+          "label": "Danish",
+          "value": "da"
+        },
+        {
+          "label": "Greek",
+          "value": "el"
+        },
+        {
+          "label": "English",
+          "value": "en"
+        },
+        {
+          "label": "Spanish",
+          "value": "es"
+        },
+        {
+          "label": "Spanish (Mexico)",
+          "value": "es-mx"
+        },
+        {
+          "label": "Finnish",
+          "value": "fi"
+        },
+        {
+          "label": "French",
+          "value": "fr"
+        },
+        {
+          "label": "French (Canada)",
+          "value": "fr-ca"
+        },
+        {
+          "label": "Hebrew (Israel)",
+          "value": "he-il"
+        },
+        {
+          "label": "Croatian",
+          "value": "hr"
+        },
+        {
+          "label": "Hungarian",
+          "value": "hu"
+        },
+        {
+          "label": "Indonesian",
+          "value": "id"
+        },
+        {
+          "label": "Italian",
+          "value": "it"
+        },
+        {
+          "label": "Japanese",
+          "value": "ja"
+        },
+        {
+          "label": "Korean",
+          "value": "ko"
+        },
+        {
+          "label": "Lithuanian",
+          "value": "lt"
+        },
+        {
+          "label": "Malay",
+          "value": "ms"
+        },
+        {
+          "label": "Dutch",
+          "value": "nl"
+        },
+        {
+          "label": "Norwegian (Norway)",
+          "value": "no-no"
+        },
+        {
+          "label": "Polish",
+          "value": "pl"
+        },
+        {
+          "label": "Portuguese",
+          "value": "pt"
+        },
+        {
+          "label": "Portuguese (Brazil)",
+          "value": "pt-br"
+        },
+        {
+          "label": "Romanian",
+          "value": "ro"
+        },
+        {
+          "label": "Russian",
+          "value": "ru"
+        },
+        {
+          "label": "Slovak",
+          "value": "sk"
+        },
+        {
+          "label": "Slovenian",
+          "value": "sl"
+        },
+        {
+          "label": "Swedish",
+          "value": "sv"
+        },
+        {
+          "label": "Thai",
+          "value": "th"
+        },
+        {
+          "label": "Tagalog",
+          "value": "tl"
+        },
+        {
+          "label": "Ukrainian",
+          "value": "uk"
+        },
+        {
+          "label": "Vietnamese",
+          "value": "vi"
+        },
+        {
+          "label": "Chinese (China)",
+          "value": "zh-cn"
+        },
+        {
+          "label": "Chinese (Hong Kong)",
+          "value": "zh-hk"
+        },
+        {
+          "label": "Chinese (Taiwan)",
+          "value": "zh-tw"
+        }
+      ],
+      "optional": true
+    },
+    {
+      "name": "enableLayoutStylesheets",
+      "type": "boolean",
+      "label": "Enable Layout Stylesheets",
+      "description": "Whether to enable layout stylesheets.",
+      "optional": true
+    },
+    {
+      "name": "metaDescription",
+      "type": "string",
+      "label": "Meta Description",
+      "description": "The meta description of the page.",
+      "optional": true
+    },
+    {
+      "name": "attachedStylesheets",
+      "type": "string[]",
+      "label": "Attached Stylesheets",
+      "description": "The stylesheets attached to the page.",
+      "optional": true
+    },
+    {
+      "name": "password",
+      "type": "string",
+      "label": "Password",
+      "description": "The password of the page.",
+      "optional": true
+    },
+    {
+      "name": "publishImmediately",
+      "type": "boolean",
+      "label": "Publish Immediately",
+      "description": "Whether to publish the page immediately.",
+      "optional": true
+    },
+    {
+      "name": "htmlTitle",
+      "type": "string",
+      "label": "HTML Title",
+      "description": "The HTML title of the page.",
+      "optional": true
+    },
+    {
+      "name": "translations",
+      "type": "object",
+      "label": "Translations",
+      "description": "The translations of the page.",
+      "optional": true
+    },
+    {
+      "name": "layoutSections",
+      "type": "object",
+      "label": "Layout Sections",
+      "description": "The layout sections of the page.",
+      "optional": true
+    },
+    {
+      "name": "footerHtml",
+      "type": "string",
+      "label": "Footer HTML",
+      "description": "The footer HTML of the page.",
+      "optional": true
+    },
+    {
+      "name": "headHtml",
+      "type": "string",
+      "label": "Head HTML",
+      "description": "The head HTML of the page.",
+      "optional": true
+    },
+    {
+      "name": "templatePath",
+      "type": "string",
+      "label": "Template Path",
+      "description": "The template path of the page.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "widgetContainers",
+      "type": "object",
+      "label": "Widget Containers",
+      "description": "A data structure containing the data for all the modules inside the containers for this page",
+      "optional": true
+    },
+    {
+      "name": "widgets",
+      "type": "object",
+      "label": "Widgets",
+      "description": "A data structure containing the data for all the modules for this page",
+      "optional": true
+    }
+  ]
+}

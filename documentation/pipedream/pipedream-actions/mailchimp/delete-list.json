@@ -1,0 +1,27 @@
+{
+  "name": "Delete List",
+  "description": "Deletes an existing list. [See docs here](https://mailchimp.com/developer/marketing/api/lists)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-delete-list",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

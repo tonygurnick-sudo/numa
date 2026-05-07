@@ -1,0 +1,27 @@
+{
+  "name": "Get Meeting Transcript",
+  "description": "Get the transcript of a meeting. [See the documentation](https://developers.zoom.us/docs/api/meetings/#tag/cloud-recording/get/meetings/{meetingId}/transcript)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "zoom-get-meeting-transcript",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "meetingId",
+      "type": "string",
+      "label": "Meeting ID",
+      "description": "The meeting ID to get the transcript for",
+      "remoteOptions": true,
+      "optional": false
+    }
+  ]
+}

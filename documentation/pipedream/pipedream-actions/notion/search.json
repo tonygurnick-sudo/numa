@@ -1,0 +1,58 @@
+{
+  "name": "Find Pages or Data Sources",
+  "description": "Searches for a page or data source. [See the documentation](https://developers.notion.com/reference/post-search)",
+  "component_type": "action",
+  "version": "0.1.2",
+  "key": "notion-search",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Query (Title)",
+      "description": "The object title to search for"
+    },
+    {
+      "name": "sortDirection",
+      "type": "string",
+      "label": "Sort Direction",
+      "description": "The direction to sort by",
+      "optional": true,
+      "options": ["ascending", "descending"]
+    },
+    {
+      "name": "pageSize",
+      "type": "integer",
+      "label": "Page Size",
+      "description": "The number of items from the full list desired in the response (max 100)",
+      "default": 100,
+      "min": 1,
+      "max": 100,
+      "optional": true
+    },
+    {
+      "name": "startCursor",
+      "type": "string",
+      "label": "Start Cursor (page_id)",
+      "description": "Leave blank to retrieve the first page of results. Otherwise, the response will be the page of results starting after the provided cursor",
+      "optional": true
+    },
+    {
+      "name": "filter",
+      "type": "string",
+      "label": "Page or Data Source",
+      "description": "Whether to search for pages or data sources.",
+      "optional": true,
+      "options": ["page", "data_source"]
+    }
+  ]
+}

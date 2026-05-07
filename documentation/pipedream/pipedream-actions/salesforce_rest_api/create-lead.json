@@ -1,0 +1,80 @@
+{
+  "name": "Create Lead",
+  "description": "Creates a lead. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_lead.htm)",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "salesforce_rest_api-create-lead",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_lead.htm) for more information on available fields."
+    },
+    {
+      "name": "IsConverted",
+      "type": "boolean",
+      "label": "Converted",
+      "description": "Indicates whether the lead has been converted",
+      "optional": true
+    },
+    {
+      "name": "Company",
+      "type": "string",
+      "label": "Company",
+      "description": "The lead's company."
+    },
+    {
+      "name": "Description",
+      "type": "string",
+      "label": "Description",
+      "description": "The lead's description.",
+      "optional": true
+    },
+    {
+      "name": "Email",
+      "type": "string",
+      "label": "Email",
+      "description": "The lead's email address.",
+      "optional": true
+    },
+    {
+      "name": "FirstName",
+      "type": "string",
+      "label": "First Name",
+      "description": "The lead's first name.",
+      "optional": true
+    },
+    {
+      "name": "LastName",
+      "type": "string",
+      "label": "Last Name",
+      "description": "The lead's last name."
+    },
+    {
+      "name": "Phone",
+      "type": "string",
+      "label": "Phone",
+      "description": "The lead's phone number.",
+      "optional": true
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

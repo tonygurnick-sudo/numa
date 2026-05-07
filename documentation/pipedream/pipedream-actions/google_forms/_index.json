@@ -1,0 +1,74 @@
+[
+  {
+    "key": "google_forms-update-form-title",
+    "name": "Update Form Title",
+    "description": "Updates the title of a Google Form. [See the documentation](https://developers.google.com/forms/api/reference/rest/v1/forms/batchUpdate)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_forms-list-form-responses",
+    "name": "List Form Responses",
+    "description": "List a form's responses. [See the documentation](https://developers.google.com/forms/api/reference/rest/v1/forms.responses/list)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "google_forms-get-form",
+    "name": "Get Form",
+    "description": "Get information about a Google Form. [See the documentation](https://developers.google.com/forms/api/reference/rest/v1/forms/get)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "google_forms-get-form-response",
+    "name": "Get Form Response",
+    "description": "Get a response from a form. [See the documentation](https://developers.google.com/forms/api/reference/rest/v1/forms.responses/get)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_forms-create-text-question",
+    "name": "Create Text Question",
+    "description": "Creates a new text question in a Google Form. [See the documentation](https://developers.google.com/forms/api/reference/rest/v1/forms/batchUpdate)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_forms-create-form",
+    "name": "Create Form",
+    "description": "Creates a new Google Form. [See the documentation](https://developers.google.com/forms/api/reference/rest/v1/forms/create)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  }
+]

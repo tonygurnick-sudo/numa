@@ -1,0 +1,39 @@
+{
+  "name": "Download Invoice",
+  "description": "Downloads an invoice as pdf file. File will be placed at the action's associated workflow temporary folder.",
+  "component_type": "action",
+  "version": "0.2.4",
+  "key": "xero_accounting_api-download-invoice",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "invoiceId",
+      "label": "Invoice ID",
+      "type": "string",
+      "description": "Xero generated unique identifier for the invoice to download."
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "write",
+      "sync": true
+    }
+  ],
+  "stash": "required"
+}

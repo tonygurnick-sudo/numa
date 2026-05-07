@@ -1,0 +1,55 @@
+{
+  "name": "Download File",
+  "description": "Download a Microsoft Sharepoint file to the /tmp directory. [See the documentation](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "sharepoint-download-file",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "siteId",
+      "type": "string",
+      "label": "Site",
+      "description": "Identifier of a site",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "driveId",
+      "type": "string",
+      "label": "Drive ID",
+      "description": "Identifier of a drive within a site",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File ID",
+      "description": "The file to download. You can either search for the file here or provide a custom *File ID*.",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "filename",
+      "type": "string",
+      "label": "Filename",
+      "description": "The filename to save the downloaded file as in the `/tmp` directory"
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "write",
+      "sync": true
+    }
+  ],
+  "stash": "required"
+}

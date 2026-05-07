@@ -1,0 +1,116 @@
+{
+  "name": "Update Issue",
+  "description": "Updates an issue. A transition may be applied and issue properties updated as part of the edit. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-issueidorkey-put)",
+  "component_type": "action",
+  "version": "0.2.21",
+  "key": "jira-update-issue",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "historyMetadata",
+      "type": "object",
+      "label": "History Metadata",
+      "description": "Additional issue history details",
+      "optional": true
+    },
+    {
+      "name": "properties",
+      "type": "string",
+      "label": "Properties",
+      "description": "Details of issue properties to be added or updated. Please provide an array of objects with keys and values.",
+      "optional": true
+    },
+    {
+      "name": "update",
+      "type": "object",
+      "label": "Update",
+      "description": "A Map containing the field name and a list of operations to perform on the issue screen field. Note that fields included here cannot be included in `fields`.",
+      "optional": true
+    },
+    {
+      "name": "additionalProperties",
+      "type": "object",
+      "label": "Additional properties",
+      "description": "Extra properties of any type may be provided to this object",
+      "optional": true
+    },
+    {
+      "name": "projectId",
+      "type": "string",
+      "label": "Project ID",
+      "description": "The project ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIdOrKey",
+      "type": "string",
+      "label": "Issue ID or Key",
+      "description": "The ID or key of an issue",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "issueTypeId",
+      "type": "string",
+      "label": "Issue Type",
+      "description": "An ID identifying the type of issue. [Check the API docs](https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-issue-post) to see available options",
+      "remoteOptions": true,
+      "reloadProps": true,
+      "optional": true
+    },
+    {
+      "name": "notifyUsers",
+      "type": "boolean",
+      "label": "Notify Users",
+      "description": "Whether a notification email about the issue update is sent to all watchers. To disable the notification, administer Jira or administer project permissions are required. If the user doesn't have the necessary permission the request is ignored.",
+      "optional": true
+    },
+    {
+      "name": "overrideScreenSecurity",
+      "type": "boolean",
+      "label": "Override Screen Security",
+      "description": "Whether screen security should be overridden to enable hidden fields to be edited. Available to Connect app users with admin permissions.",
+      "optional": true
+    },
+    {
+      "name": "overrideEditableFlag",
+      "type": "boolean",
+      "label": "Override Editable Flag",
+      "description": "Whether screen security should be overridden to enable uneditable fields to be edited. Available to Connect app users with admin permissions.",
+      "optional": true
+    },
+    {
+      "name": "transitionId",
+      "type": "string",
+      "label": "Transition ID",
+      "description": "The ID of the issue transition. Retrieving options requires a static `issueIdOrKey`. Required when specifying a transition to undertake.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "transitionLooped",
+      "type": "boolean",
+      "label": "Transition Looped",
+      "description": "Whether the transition is looped",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "List Channels",
+  "description": "Lists all channels in a Microsoft Team. [See the docs here](https://docs.microsoft.com/en-us/graph/api/channel-list?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.12",
+  "key": "microsoft_teams-list-channels",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftTeams",
+      "type": "app",
+      "app": "microsoft_teams",
+      "description": "**Personal accounts are not currently supported by Microsoft Teams.** Refer to Microsoft's documentation [here](https://learn.microsoft.com/en-us/graph/permissions-reference#remarks-7) to learn more."
+    },
+    {
+      "name": "teamId",
+      "type": "string",
+      "label": "Team",
+      "description": "Microsoft Team",
+      "remoteOptions": true
+    }
+  ]
+}

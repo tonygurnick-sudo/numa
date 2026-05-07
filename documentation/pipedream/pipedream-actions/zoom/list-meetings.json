@@ -1,0 +1,102 @@
+{
+  "name": "List Meetings",
+  "description": "List meetings for a user. [See the documentation](https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetings)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "zoom-list-meetings",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "userId",
+      "type": "string",
+      "label": "User ID",
+      "description": "The user ID or email address of the user to list meetings for",
+      "remoteOptions": true
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "description": "The type of meetings to list. Defaults to `scheduled`",
+      "optional": true,
+      "options": [
+        {
+          "value": "scheduled",
+          "label": "All valid previous (unexpired) meetings, live meetings, and upcoming scheduled meetings"
+        },
+        {
+          "value": "live",
+          "label": "All ongoing meetings"
+        },
+        {
+          "value": "upcoming",
+          "label": "All upcoming meetings, including live meetings"
+        },
+        {
+          "value": "previous_meetings",
+          "label": "All the previous meetings"
+        }
+      ]
+    },
+    {
+      "name": "from",
+      "type": "string",
+      "label": "From",
+      "description": "The start date and time of the meetings to list. Example: `2023-01-01`",
+      "optional": true
+    },
+    {
+      "name": "to",
+      "type": "string",
+      "label": "To",
+      "description": "The end date and time of the meetings to list. Example: `2023-01-01`",
+      "optional": true
+    },
+    {
+      "name": "timezone",
+      "type": "string",
+      "label": "Timezone",
+      "description": "The timezone to use for the `from` and `to` dates. Example: `America/New_York`",
+      "optional": true
+    },
+    {
+      "name": "titleSearch",
+      "type": "string",
+      "label": "Title Search",
+      "description": "The title of the meetings to search for",
+      "optional": true
+    },
+    {
+      "name": "createdAfter",
+      "type": "string",
+      "label": "Created After",
+      "description": "The date and time to filter meetings created after. Example: `2023-01-01`",
+      "optional": true
+    },
+    {
+      "name": "createdBefore",
+      "type": "string",
+      "label": "Created Before",
+      "description": "The date and time to filter meetings created before. Example: `2023-01-01`",
+      "optional": true
+    },
+    {
+      "name": "max",
+      "type": "integer",
+      "label": "Max Resources",
+      "description": "The maximum number of resources to retrieve.",
+      "optional": true,
+      "default": 300,
+      "min": 1
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "Get Profile Picture Fields",
+  "description": "Gets the authenticated user's profile picture data including display image and metadata. [See the documentation](https://learn.microsoft.com/en-us/linkedin/shared/references/v2/profile/profile-picture)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "linkedin-get-profile-picture-fields",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "includeOriginalImage",
+      "type": "boolean",
+      "label": "Include Original Image",
+      "description": "Whether to include the original image data in the response (requires special permissions)",
+      "optional": true,
+      "default": false
+    }
+  ]
+}

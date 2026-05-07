@@ -1,0 +1,77 @@
+{
+  "name": "Search persons",
+  "description": "Searches all Persons by `name`, `email`, `phone`, `notes` and/or custom fields. This endpoint is a wrapper of `/v1/itemSearch` with a narrower OAuth scope. Found Persons can be filtered by Organization ID. See the Pipedrive API docs [here](https://developers.pipedrive.com/docs/api/v1/Persons#searchPersons)",
+  "component_type": "action",
+  "version": "0.1.20",
+  "key": "pipedrive-search-persons",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "term",
+      "type": "string",
+      "label": "Search Term",
+      "description": "The search term to look for. Minimum 2 characters (or 1 if using exact_match)."
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Search Fields",
+      "description": "An array containing fields to perform the search from. Defaults to all of them.",
+      "optional": true,
+      "options": ["custom_fields", "email", "notes", "phone", "name"]
+    },
+    {
+      "name": "exactMatch",
+      "type": "boolean",
+      "label": "Exact Match",
+      "description": "When enabled, only full exact matches against the given term are returned. It is not case sensitive.",
+      "optional": true
+    },
+    {
+      "name": "organizationId",
+      "type": "integer",
+      "label": "Organization ID",
+      "description": "Will filter Deals by the provided Organization ID. The upper limit of found Deals associated with the Organization is 2000.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "includeFields",
+      "type": "string",
+      "label": "Include Fields",
+      "description": "Supports including optional fields in the results which are not provided by default.",
+      "optional": true,
+      "options": ["person.picture"]
+    },
+    {
+      "name": "start",
+      "type": "integer",
+      "label": "Pagination Start",
+      "description": "Pagination start. Note that the pagination is based on main results and does not include related items when using `search_for_related_items` parameter.",
+      "optional": true
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "label": "Limit",
+      "description": "Items shown per page",
+      "optional": true
+    },
+    {
+      "name": "includeAllCustomFields",
+      "type": "boolean",
+      "label": "Include All Custom Fields",
+      "description": "When enabled, all custom fields will be included in the results",
+      "optional": true
+    }
+  ]
+}

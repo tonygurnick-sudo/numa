@@ -1,0 +1,35 @@
+{
+  "name": "Retrieve Event Details",
+  "description": "Retrieve event details from Google Calendar. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Events.html#get)",
+  "component_type": "action",
+  "version": "0.1.10",
+  "key": "google_calendar-get-event",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleCalendar",
+      "type": "app",
+      "app": "google_calendar"
+    },
+    {
+      "name": "calendarId",
+      "label": "Calendar ID",
+      "type": "string",
+      "description": "Optionally select the calendar, defaults to the primary calendar for the logged-in user",
+      "default": "primary",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "eventId",
+      "label": "Event ID",
+      "type": "string",
+      "description": "Select an event from Google Calendar.",
+      "remoteOptions": true
+    }
+  ]
+}

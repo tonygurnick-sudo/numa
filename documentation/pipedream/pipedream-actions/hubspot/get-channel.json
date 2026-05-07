@@ -1,0 +1,26 @@
+{
+  "name": "Get Channel",
+  "description": "Retrieves a single channel by its ID. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-channel/get-conversations-v3-conversations-channels-channelId)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "hubspot-get-channel",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "channelId",
+      "type": "string",
+      "label": "Channel ID",
+      "description": "The ID of a channel",
+      "remoteOptions": true
+    }
+  ]
+}

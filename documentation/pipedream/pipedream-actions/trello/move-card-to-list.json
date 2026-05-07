@@ -1,0 +1,43 @@
+{
+  "name": "Move Card to List",
+  "description": "Moves a card to the specified board/list pair. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-put).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-move-card-to-list",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card",
+      "description": "The ID of the card to move",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "idList",
+      "type": "string",
+      "label": "List",
+      "description": "The ID of the list that the card should be moved to.",
+      "optional": false,
+      "remoteOptions": true
+    }
+  ]
+}

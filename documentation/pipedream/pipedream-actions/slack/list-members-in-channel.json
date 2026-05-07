@@ -1,0 +1,49 @@
+{
+  "name": "List Members in Channel",
+  "description": "Retrieve members of a channel. [See the documentation](https://api.slack.com/methods/conversations.members)",
+  "component_type": "action",
+  "version": "0.0.24",
+  "key": "slack-list-members-in-channel",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "conversation",
+      "type": "string",
+      "label": "Channel",
+      "description": "Select a public or private channel, or a user or group",
+      "remoteOptions": true
+    },
+    {
+      "name": "returnUsernames",
+      "type": "boolean",
+      "label": "Return Usernames",
+      "description": "Optionally, return usernames in addition to IDs",
+      "optional": true
+    },
+    {
+      "name": "pageSize",
+      "type": "integer",
+      "label": "Page Size",
+      "description": "The number of results to include in a page. Default: 250",
+      "default": 250,
+      "optional": true
+    },
+    {
+      "name": "numPages",
+      "type": "integer",
+      "label": "Number of Pages",
+      "description": "The number of pages to retrieve. Default: 1",
+      "default": 1,
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "name": "Add Checklist",
+  "description": "Adds a new checklist to a card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-checklists-post).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-add-checklist",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "boardId",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card ID",
+      "description": "The ID of the card.",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Checklist Name",
+      "description": "The name of the checklist.",
+      "optional": true
+    },
+    {
+      "name": "idChecklistSource",
+      "type": "string",
+      "label": "Copy from Checklist",
+      "description": "The ID of a checklist to copy into the new checklist",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "pos",
+      "type": "string",
+      "label": "Position",
+      "description": "The position of the checklist on the card. One of: top, bottom, or a positive number.",
+      "options": ["top", "bottom"],
+      "optional": true
+    }
+  ]
+}

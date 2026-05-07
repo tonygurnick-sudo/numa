@@ -1,0 +1,42 @@
+{
+  "name": "Create Item",
+  "description": "Create a new item in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/listitem-create?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "sharepoint-create-item",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "siteId",
+      "type": "string",
+      "label": "Site",
+      "description": "Identifier of a site",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List",
+      "description": "Identifier of a list",
+      "remoteOptions": true
+    },
+    {
+      "name": "columnNames",
+      "type": "string[]",
+      "label": "Columns",
+      "description": "Array of column names",
+      "remoteOptions": true,
+      "reloadProps": true
+    }
+  ]
+}

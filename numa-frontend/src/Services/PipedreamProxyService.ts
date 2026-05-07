@@ -2,12 +2,15 @@ import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import type {
   ApiResponse,
   AwsLambdaClient,
+  ConfigurePropData,
   ConnectTokenData,
   ConnectTokenResult,
   IntegrationStatusData,
   IntegrationStatusResult,
+  ListTriggersData,
   PipedreamLambdaHttpResponse,
   PipedreamProxyRequest,
+  PipedreamRemoteOption,
   AuthUserMinimal,
   DisconnectIntegrationData,
 } from '../types/pipedream';
@@ -242,6 +245,132 @@ export class PipedreamProxyService {
 
     if (!response.success) {
       throw new Error(response.error || i18n.t('errors:pipedream.disconnectFailed'));
+    }
+    return response.data;
+  }
+
+  /**
+   * List Pipedream trigger components for an app, including their full
+   * `configurable_props` schema. Used by the Automations Builder to power
+   * the trigger picker + DynamicPropRenderer.
+   *
+   * Cached in-memory for the session — Pipedream component schemas change
+   * infrequently and re-fetching on every wizard step is wasteful.
+   */
+  static _triggersCache: Map<string, { data: ListTriggersData; expiresAt: number }> = new Map();
+
+  static async listTriggers(
+    lambdaClient: AwsLambdaClient,
+    externalUserId: string,
+    appSlug: string,
+    options: { ttlMs?: number; forceRefresh?: boolean } = {}
+  ): Promise<ListTriggersData> {
+    const { ttlMs = 5 * 60_000, forceRefresh = false } = options;
+    const cacheKey = `${externalUserId}::${appSlug}`;
+    const now = Date.now();
+    if (!forceRefresh) {
+      const cached = this._triggersCache.get(cacheKey);
+      if (cached && cached.expiresAt > now) {
+        return cached.data;
+      }
+    }
+    const payload: PipedreamProxyRequest = {
+      operation: 'list_triggers',
+      external_user_id: externalUserId,
+      parameters: { app_slug: appSlug },
+    };
+    const response = await this.invokePipedreamProxy<ListTriggersData>(lambdaClient, payload);
+    if (!response.success) {
+      throw new Error(response.error || i18n.t('errors:pipedream.listTriggersFailed'));
+    }
+    this._triggersCache.set(cacheKey, { data: response.data, expiresAt: now + ttlMs });
+    return response.data;
+  }
+
+  /**
+   * Load remote dropdown options for a single configurable prop. The same
+   * `/components/configure` endpoint Pipedream uses for actions also handles
+   * triggers — the proxy doesn't distinguish.
+   *
+   * The component_key parameter accepts EITHER the trigger key (e.g.
+   * `slack-new-keyword-mention`) OR the action key. Pipedream resolves it
+   * either way.
+   */
+  static async configureProp(
+    lambdaClient: AwsLambdaClient,
+    externalUserId: string,
+    args: {
+      componentKey: string;
+      propName: string;
+      configuredProps: Record<string, unknown>;
+      query?: string;
+    }
+  ): Promise<PipedreamRemoteOption[]> {
+    const payload: PipedreamProxyRequest = {
+      operation: 'configure_props',
+      external_user_id: externalUserId,
+      parameters: {
+        // The proxy method's variable is named action_key but the Pipedream
+        // endpoint is generic — same name on both sides.
+        action_key: args.componentKey,
+        prop_name: args.propName,
+        configured_props: args.configuredProps,
+        ...(args.query ? { query: args.query } : {}),
+      },
+    };
+    const response = await this.invokePipedreamProxy<ConfigurePropData>(lambdaClient, payload);
+    if (!response.success) {
+      throw new Error(response.error || i18n.t('errors:pipedream.configurePropFailed'));
+    }
+    // Pipedream returns either `options` ({label, value} pairs) or
+    // `stringOptions` (flat strings — used when the value IS the label,
+    // e.g. Slack `iconEmoji`). Some legacy paths nested either under `.data`.
+    // Try options first, fall back to stringOptions, normalised to the
+    // unified shape so the renderer doesn't need to know the difference.
+    const options = response.data?.options ?? response.data?.data?.options;
+    if (options && options.length > 0) return options;
+    const stringOptions = response.data?.stringOptions ?? response.data?.data?.stringOptions;
+    if (stringOptions && stringOptions.length > 0) {
+      return stringOptions.map((s) => ({ label: s, value: s }));
+    }
+    return [];
+  }
+
+  /**
+   * Make an authenticated request to a third-party API via Pipedream's
+   * Connect Proxy. The proxy injects the user's OAuth token automatically —
+   * the caller never sees credentials.
+   *
+   * Use this for read-only metadata enrichment (e.g. fetching Slack's emoji
+   * list to render real workspace emoji icons in trigger configuration).
+   * Write operations from the workspace agent go through a different path
+   * with HITL approval; this is intended for the wizard.
+   */
+  static async proxyRequest<T = unknown>(
+    lambdaClient: AwsLambdaClient,
+    externalUserId: string,
+    args: {
+      accountId: string;
+      method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+      upstreamUrl: string;
+      body?: unknown;
+      headers?: Record<string, string>;
+    }
+  ): Promise<T> {
+    const payload: PipedreamProxyRequest = {
+      operation: 'proxy_request',
+      external_user_id: externalUserId,
+      parameters: {
+        account_id: args.accountId,
+        method: args.method ?? 'GET',
+        upstream_url: args.upstreamUrl,
+        ...(args.body !== undefined ? { body: args.body } : {}),
+        ...(args.headers ? { headers: args.headers } : {}),
+      },
+    };
+    const response = await this.invokePipedreamProxy<T>(lambdaClient, payload);
+    if (!response.success) {
+      throw new Error(response.error || i18n.t('errors:pipedream.proxyRequestFailed'));
     }
     return response.data;
   }

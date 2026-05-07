@@ -91,6 +91,9 @@ Output Format
   content_type   — "text/markdown"
   status         — "success" or "error"
 
+  PDF URLs: download directly to /workdir and return file_path instead of
+  content. Use the Read tool on file_path to read the PDF.
+
 
 When to Use
 -----------

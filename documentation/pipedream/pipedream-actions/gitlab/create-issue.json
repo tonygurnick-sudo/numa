@@ -1,0 +1,55 @@
+{
+  "name": "Create issue",
+  "description": "Creates a new issue. [See the documentation](https://docs.gitlab.com/ee/api/issues.html#new-issue)",
+  "component_type": "action",
+  "version": "0.2.3",
+  "key": "gitlab-create-issue",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gitlab",
+      "type": "app",
+      "app": "gitlab"
+    },
+    {
+      "name": "projectId",
+      "type": "integer",
+      "label": "Project ID",
+      "description": "The project ID, as displayed in the main project page",
+      "remoteOptions": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "The title of the issue"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "The description of the issue",
+      "optional": true
+    },
+    {
+      "name": "labels",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "Comma-separated label names for the issue",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "assigneeIds",
+      "type": "string[]",
+      "label": "Assignee IDs",
+      "description": "The users to assign issue to",
+      "optional": true,
+      "remoteOptions": true
+    }
+  ]
+}

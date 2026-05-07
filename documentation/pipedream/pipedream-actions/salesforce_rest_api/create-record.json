@@ -1,0 +1,27 @@
+{
+  "name": "Create Record",
+  "description": "Create a record of a given object. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_sobject_create.htm)",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "salesforce_rest_api-create-record",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "objectType",
+      "type": "string",
+      "label": "SObject Type",
+      "description": "The type of object to create a record of",
+      "remoteOptions": true,
+      "reloadProps": true
+    }
+  ]
+}

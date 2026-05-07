@@ -1,0 +1,182 @@
+[
+  {
+    "key": "google_calendar-update-following-instances",
+    "name": "Update Following Event Instances",
+    "description": "Update all instances of a recurring event following a specific instance. This creates a new recurring event starting from the selected instance. [See the documentation](https://developers.google.com/calendar/api/guides/recurringevents#modifying_all_following_instances)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 17
+  },
+  {
+    "key": "google_calendar-update-event",
+    "name": "Update Event",
+    "description": "Update an event from Google Calendar. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Events.html#update)",
+    "version": "0.0.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 15
+  },
+  {
+    "key": "google_calendar-update-event-instance",
+    "name": "Update Event Instance",
+    "description": "Update a specific instance of a recurring event. Changes apply only to the selected instance. [See the documentation](https://developers.google.com/calendar/api/v3/reference/events/update)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 13
+  },
+  {
+    "key": "google_calendar-create-event",
+    "name": "Create Event",
+    "description": "Create an event in a Google Calendar. [See the documentation](https://developers.google.com/calendar/api/v3/reference/events/insert)",
+    "version": "1.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 14
+  },
+  {
+    "key": "google_calendar-list-events",
+    "name": "List Events",
+    "description": "Retrieve a list of event from the Google Calendar. [See the documentation](https://developers.google.com/calendar/api/v3/reference/events/list)",
+    "version": "0.0.12",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 17
+  },
+  {
+    "key": "google_calendar-query-free-busy-calendars",
+    "name": "Retrieve Free/Busy Calendar Details",
+    "description": "Retrieve free/busy calendar details from Google Calendar. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Freebusy.html#query)",
+    "version": "0.2.0",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_calendar-list-event-instances",
+    "name": "List Event Instances",
+    "description": "Retrieve instances of a recurring event. [See the documentation](https://developers.google.com/calendar/api/v3/reference/events/instances)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "google_calendar-quick-add-event",
+    "name": "Add Quick Event",
+    "description": "Create a quick event to the Google Calendar. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Events.html#quickAdd)",
+    "version": "0.1.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_calendar-add-attendees-to-event",
+    "name": "Add Attendees To Event",
+    "description": "Add attendees to an existing event. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Events.html#update)",
+    "version": "0.0.6",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_calendar-get-date-time",
+    "name": "Get Date Time",
+    "description": "Get current date and time for use in Google Calendar actions. Useful for agents that need datetime awareness and timezone context before calling other Google Calendar tools.",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "google_calendar-list-calendars",
+    "name": "List Calendars",
+    "description": "Retrieve a list of calendars from Google Calendar. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Calendarlist.html#list)",
+    "version": "0.1.10",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "google_calendar-get-event",
+    "name": "Retrieve Event Details",
+    "description": "Retrieve event details from Google Calendar. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Events.html#get)",
+    "version": "0.1.10",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_calendar-get-current-user",
+    "name": "Get Current User",
+    "description": "Retrieve information about the authenticated Google Calendar account, including the primary calendar (summary, timezone, ACL flags), a list of accessible calendars, user-level settings (timezone, locale, week start), and the color palette that controls events and calendars. Ideal for confirming which calendar account is in use, customizing downstream scheduling, or equipping LLMs with the user\u2019s context (timezones, available calendars) prior to creating or updating events. [See the documentation](https://developers.google.com/calendar/api/v3/reference/calendars/get).",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "google_calendar-get-calendar",
+    "name": "Retrieve Calendar Details",
+    "description": "Retrieve calendar details of a Google Calendar. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Calendars.html#get)",
+    "version": "0.1.10",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "google_calendar-delete-event",
+    "name": "Delete an Event",
+    "description": "Delete an event from a Google Calendar. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Events.html#delete)",
+    "version": "0.1.9",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 3
+  }
+]

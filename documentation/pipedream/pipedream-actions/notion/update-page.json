@@ -1,0 +1,66 @@
+{
+  "name": "Update Page",
+  "description": "Update a page's property values. To append page content, use the *Append Block* action instead. [See the documentation](https://developers.notion.com/reference/patch-page)",
+  "component_type": "action",
+  "version": "2.0.5",
+  "key": "notion-update-page",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "infoLabel",
+      "type": "alert",
+      "alertType": "info",
+      "content": "Properties that are not set will remain unchanged."
+    },
+    {
+      "name": "parentDataSource",
+      "type": "string",
+      "label": "Parent Data Source ID",
+      "description": "Select the data source that contains the page to update. If you instead provide a data source ID in a custom expression, you will also have to provide the page's ID in a custom expression",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "pageId",
+      "type": "string",
+      "label": "Page ID",
+      "description": "Search for a page from the data source or provide a page ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "archived",
+      "type": "boolean",
+      "label": "Archive Page",
+      "description": "Set to `true` to archive (delete) a page. Set to `false` to  un-archive (restore) a page",
+      "optional": true
+    },
+    {
+      "name": "metaTypes",
+      "type": "string[]",
+      "label": "Meta Types",
+      "description": "Select one or more page attributes (such as icon and cover)",
+      "options": ["icon", "cover"],
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "propertyTypes",
+      "type": "string[]",
+      "label": "Property Types",
+      "description": "Select one or more page properties",
+      "optional": true,
+      "remoteOptions": true,
+      "reloadProps": true
+    }
+  ]
+}

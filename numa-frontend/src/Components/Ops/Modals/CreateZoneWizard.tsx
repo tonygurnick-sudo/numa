@@ -34,10 +34,10 @@ const DEFAULT_STAGES: Record<ZoneType, { name: string; statusType: StatusType }[
 export function CreateZoneWizard({ show, onHide, onCreated }: CreateZoneWizardProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaPut } = useNumaRequest();
-  const { teamData } = useOps();
+  const { boardData } = useOps();
 
-  const team = teamData?.team ?? null;
-  const existingZones = teamData?.zones ?? [];
+  const team = boardData?.board ?? null;
+  const existingZones = boardData?.zones ?? [];
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [zoneName, setZoneName] = useState('');
@@ -99,14 +99,14 @@ export function CreateZoneWizard({ show, onHide, onCreated }: CreateZoneWizardPr
       const allZones: Partial<WorkZone>[] = [...existingZones.map((z) => ({ ...z })), newZone];
 
       // Save zones — backend will create the new one and return all
-      const savedZones = await OpsService.updateTeamZones(numaPut, team.id, allZones);
+      const savedZones = await OpsService.updateBoardZones(numaPut, team.id, allZones);
 
       // Find the newly created zone to attach stages
       const createdZone = savedZones.find((z) => z.name === zoneName.trim() && z.zoneType === zoneType);
 
       if (createdZone) {
         // Get existing stages and add new ones for the new zone
-        const existingStages = teamData?.stages ?? [];
+        const existingStages = boardData?.stages ?? [];
         const newStages = stages.map((s, idx) => ({
           zoneId: createdZone.id,
           name: s.name,
@@ -114,7 +114,7 @@ export function CreateZoneWizard({ show, onHide, onCreated }: CreateZoneWizardPr
           order: (idx + 1) * 1000,
         }));
 
-        await OpsService.updateTeamStages(numaPut, team.id, [...existingStages.map((s) => ({ ...s })), ...newStages]);
+        await OpsService.updateBoardStages(numaPut, team.id, [...existingStages.map((s) => ({ ...s })), ...newStages]);
       }
 
       onCreated();
@@ -123,7 +123,7 @@ export function CreateZoneWizard({ show, onHide, onCreated }: CreateZoneWizardPr
     } finally {
       setSaving(false);
     }
-  }, [team, teamData, existingZones, zoneName, zoneType, stages, numaPut, onCreated, t]);
+  }, [team, boardData, existingZones, zoneName, zoneType, stages, numaPut, onCreated, t]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -190,7 +190,7 @@ export function CreateZoneWizard({ show, onHide, onCreated }: CreateZoneWizardPr
           <div className="d-flex gap-2 mt-2">
             <Form.Control
               size="sm"
-              placeholder={t('teams.newStageName')}
+              placeholder={t('boards.newStageName')}
               value={newStageName}
               onChange={(e) => setNewStageName(e.target.value)}
             />

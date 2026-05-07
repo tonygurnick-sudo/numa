@@ -663,6 +663,7 @@ export class NumaClientStack extends TerraformStack {
       cognitoUserPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
       recoveryBucketName: disasterRecovery?.recoveryBucketName,
       recoveryBucketArn: disasterRecovery?.recoveryBucketArn,
+      pipedreamRelayLambdaArn: core.pipedreamRelayLambdaArn,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
@@ -861,6 +862,7 @@ export class NumaClientStack extends TerraformStack {
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
+        EVENT_TRIGGERS: clientConfig.eventTriggers ?? false,
         SCHEDULING_MIN_INTERVAL_MINUTES: clientConfig.schedulingMinIntervalMinutes ?? null,
         GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: props.globalSchedulingMinIntervalMinutes ?? null,
         KNOWLEDGE_BASES: true,
@@ -873,6 +875,7 @@ export class NumaClientStack extends TerraformStack {
         NUMA_SHARING: clientConfig.numaSharing ?? false,
         WORKSPACE_CHAT_MODEL_SELECTION:
           (clientConfig.numaWorkspaceChat ?? false) ? (clientConfig.workspaceChatModelSelection ?? false) : false,
+        CHAT_SUGGESTIONS: (clientConfig.numaWorkspaceChat ?? false) ? (clientConfig.chatSuggestions ?? true) : false,
         OAUTH_AVAILABLE: true, // Always available - infrastructure always deployed, admin flags control UI access only
         OAUTH_INTEGRATIONS_ENABLED: clientConfig.oauthIntegrationsEnabled ?? false, // Controls UI access to OAuth setup
         // Per-provider flags removed — providers are now configured dynamically via COMPANY vault secrets.
@@ -1280,6 +1283,21 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         scheduling: z.boolean().optional().default(false),
 
         /**
+         * Whether to enable event-triggered automations (the "When something
+         * happens" path of the Automations builder). Independent of `scheduling`
+         * (which gates the route entirely) and `pipedreamIntegrations` (which
+         * gates Pipedream-backed sources within the trigger picker).
+         *
+         * Frontend-only gating today — does NOT alter infra (no constructs
+         * are created/skipped based on this flag). The agent-schedules lambda,
+         * pipedream-event-receiver, dispatcher, and runner are always present.
+         * The flag just hides the "When something happens" tile in the wizard.
+         *
+         * @default false
+         */
+        eventTriggers: z.boolean().optional().default(false),
+
+        /**
          * Per-client minimum scheduling interval override (minutes).
          * When set, users in this client account cannot schedule agents more
          * frequently than this value. Overrides the global default.
@@ -1318,6 +1336,21 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         workspaceChatModelSelection: z.boolean().optional().default(false),
+
+        /**
+         * Whether the suggested-next-message capability is *available* for
+         * this client. When true, admins can toggle it on/off per client via
+         * the Capabilities tab; when false, the capability is hard-disabled
+         * regardless of admin settings.
+         *
+         * Default true so admins can flip it on for their client without a
+         * config change. The capability is OFF by default at the runtime
+         * layer (see DEFAULT_DISABLED_FLAGS in adminCapabilityGating.ts) —
+         * admins must explicitly enable it via the Capabilities tab.
+         *
+         * @default true
+         */
+        chatSuggestions: z.boolean().optional().default(true),
 
         /**
          * Whether to enable Numa Ops (work management, kanban boards, CRM, supplier management).

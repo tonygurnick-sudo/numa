@@ -1,0 +1,104 @@
+{
+  "name": "Add Note",
+  "description": "Adds a new note. For info on [adding an note in Pipedrive](https://developers.pipedrive.com/docs/api/v1/Notes#addNote)",
+  "component_type": "action",
+  "version": "0.0.17",
+  "key": "pipedrive-add-note",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "content",
+      "type": "string",
+      "label": "Content",
+      "description": "The content of the note in HTML format. Subject to sanitization on the back-end."
+    },
+    {
+      "name": "leadId",
+      "type": "string",
+      "label": "Lead ID",
+      "description": "The ID of the lead the note will be attached to. This property is required unless one of (deal_id/person_id/org_id) is specified.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "dealId",
+      "type": "string",
+      "label": "Deal ID",
+      "description": "The ID of the deal the note will be attached to. This property is required unless one of (lead_id/person_id/org_id) is specified.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "personId",
+      "type": "integer",
+      "label": "Person ID",
+      "description": "The ID of the person this note will be attached to. This property is required unless one of (deal_id/lead_id/org_id) is specified.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "organizationId",
+      "type": "integer",
+      "label": "Organization ID",
+      "description": "The ID of the organization this note will be attached to. This property is required unless one of (deal_id/lead_id/person_id) is specified.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "userId",
+      "type": "integer",
+      "label": "User ID",
+      "description": "The ID of the user who will be marked as the author of the note. Only an admin can change the author.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "addTime",
+      "type": "string",
+      "label": "Add Time",
+      "description": "The creation date and time of the deal. Requires admin user API token. Format: `YYYY-MM-DDTHH:MM:SSZ`",
+      "optional": true
+    },
+    {
+      "name": "pinnedToDealFlag",
+      "type": "boolean",
+      "label": "Pinned To Deal Flag",
+      "description": "If set, the results are filtered by note to deal pinning state (deal_id is also required)",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "pinnedToLeadFlag",
+      "type": "boolean",
+      "label": "Pinned To Lead Flag",
+      "description": "If set, the results are filtered by note to lead pinning state (lead_id is also required)",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "pinnedToOrgFlag",
+      "type": "boolean",
+      "label": "Pinned To Organization Flag",
+      "description": "If set, the results are filtered by note to organization pinning state (org_id is also required)",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "pinnedToPersonFlag",
+      "type": "boolean",
+      "label": "Pinned To Person Flag",
+      "description": "If set, the results are filtered by note to person pinning state (person_id is also required)",
+      "default": false,
+      "optional": true
+    }
+  ]
+}

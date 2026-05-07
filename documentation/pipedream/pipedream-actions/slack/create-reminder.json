@@ -1,0 +1,47 @@
+{
+  "name": "Create Reminder",
+  "description": "Create a reminder. [See the documentation](https://api.slack.com/methods/reminders.add)",
+  "component_type": "action",
+  "version": "0.0.25",
+  "key": "slack-create-reminder",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "description": "Text of the message to send (see Slack's [formatting docs](https://api.slack.com/reference/surfaces/formatting)). This field is usually necessary, unless you're providing only attachments instead."
+    },
+    {
+      "name": "timestamp",
+      "type": "string",
+      "label": "Timestamp",
+      "description": "When this reminder should happen: the Unix timestamp (up to five years from now), the number of seconds until the reminder (if within 24 hours), or a natural language description (Ex. in 15 minutes, or every Thursday)"
+    },
+    {
+      "name": "team_id",
+      "type": "string",
+      "label": "Team",
+      "description": "Select a team.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "user",
+      "type": "string",
+      "label": "User",
+      "description": "Select a user",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

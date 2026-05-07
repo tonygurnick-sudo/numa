@@ -1,0 +1,74 @@
+{
+  "name": "Remove Duplicate Notes",
+  "description": "Remove duplicate notes from an object in Pipedrive. See the documentation for [getting notes](https://developers.pipedrive.com/docs/api/v1/Notes#getNotes) and [deleting notes](https://developers.pipedrive.com/docs/api/v1/Notes#deleteNote)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "pipedrive-remove-duplicate-notes",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "leadId",
+      "type": "string",
+      "label": "Lead ID",
+      "description": "The ID of the lead that the notes are attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "dealId",
+      "type": "string",
+      "label": "Deal ID",
+      "description": "The ID of the deal that the notes are attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "personId",
+      "type": "integer",
+      "label": "Person ID",
+      "description": "The ID of the person that the notes are attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "organizationId",
+      "type": "integer",
+      "label": "Organization ID",
+      "description": "The ID of the organization that the notes are attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "userId",
+      "type": "integer",
+      "label": "User ID",
+      "description": "The ID of the user that the notes are attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "projectId",
+      "type": "string",
+      "label": "Project ID",
+      "description": "The ID of the project that the notes are attached to",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "keyword",
+      "type": "string",
+      "label": "Keyword",
+      "description": "Only remove duplicate notes that contain the specified keyword(s)",
+      "optional": true
+    }
+  ]
+}

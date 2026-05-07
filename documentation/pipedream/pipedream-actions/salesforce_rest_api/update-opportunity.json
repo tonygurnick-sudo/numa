@@ -1,0 +1,86 @@
+{
+  "name": "Update Opportunity",
+  "description": "Updates an opportunity. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_opportunity.htm)",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "salesforce_rest_api-update-opportunity",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "opportunityId",
+      "type": "string",
+      "label": "Opportunity ID",
+      "description": "The Opportunity to update.",
+      "remoteOptions": true
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_opportunity.htm) for more information on available fields."
+    },
+    {
+      "name": "dateInfo",
+      "type": "alert",
+      "alertType": "warning",
+      "content": "Date fields should be a [valid date string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date#date_time_string_format) or a Unix timestamp in milliseconds. Example values: `2022-01-15T18:30:00.000Z` or `1642271400000`."
+    },
+    {
+      "name": "CloseDate",
+      "type": "string",
+      "label": "Close Date",
+      "description": "Date when the opportunity is expected to close.",
+      "optional": true
+    },
+    {
+      "name": "Description",
+      "type": "string",
+      "label": "Description",
+      "description": "Text description of the opportunity. Limit: 32,000 characters.",
+      "optional": true
+    },
+    {
+      "name": "Name",
+      "type": "string",
+      "label": "Name",
+      "description": "A name for this opportunity. Limit: 120 characters",
+      "optional": true
+    },
+    {
+      "name": "StageName",
+      "type": "string",
+      "label": "Stage Name",
+      "description": "Current stage of this record. This controls several other fields on an opportunity.",
+      "options": [
+        "Prospecting",
+        "Qualification",
+        "Needs Analysis",
+        "Value Proposition",
+        "Id. Decision Makers",
+        "Perception Analysis",
+        "Proposal/Price Quote",
+        "Negotiation/Review",
+        "Closed Won",
+        "Closed Lost"
+      ],
+      "optional": true
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

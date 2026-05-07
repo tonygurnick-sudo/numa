@@ -1,0 +1,49 @@
+{
+  "name": "Download File",
+  "description": "Downloads a file from Box to your workflow's `/tmp` directory. [See the documentation](https://developer.box.com/reference/get-files-id-content/)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "box-download-file",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "box"
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder",
+      "description": "Folder containing the file to download",
+      "optional": false,
+      "default": "0",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File",
+      "description": "The file to download",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileName",
+      "type": "string",
+      "label": "File Name",
+      "description": "The name of the new downloaded file",
+      "optional": false
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "write",
+      "sync": true
+    }
+  ],
+  "stash": "required"
+}

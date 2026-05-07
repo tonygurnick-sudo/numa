@@ -16,6 +16,7 @@ import { getConfigValue } from './configService';
 import type { PortalConfig } from './configService';
 import type { DeploymentGroup } from '@/types';
 import { clientService } from './clientService';
+import type { RepositoryName } from './imageTagService';
 
 const AUTO_GROUP_NAME = 'All Production Clients';
 const AUTO_GROUP_DESCRIPTION = 'Automatically includes all non-dev client stacks plus key trial environments.';
@@ -46,6 +47,7 @@ function getAwsCredentialsProvider() {
 export interface StartDeploymentInput {
   clientName: string;
   imageTag: string;
+  repository: RepositoryName; // numa-deploy (prod) or numa-deploy-dev
   initiatedBy: string;
   deploymentId?: string; // optional client-generated id to correlate
   deploymentLabel?: string; // optional custom label for deployment
@@ -69,6 +71,7 @@ export async function startDeployment(
   const payload = {
     clientName: input.clientName,
     imageTag: input.imageTag,
+    repository: input.repository,
     initiatedBy: input.initiatedBy,
     startedAt: nowIso,
     deploymentId,
@@ -102,6 +105,7 @@ export async function startGroupDeployment(input: StartGroupDeploymentInput): Pr
     groupName: input.groupName,
     clients: input.clients,
     imageTag: input.imageTag,
+    repository: input.repository,
     initiatedBy: input.initiatedBy,
     startedAt,
     mode: input.mode || 'deploy',
@@ -119,6 +123,7 @@ export interface DeploymentRecord {
   deploymentId: string;
   clientName: string;
   imageTag?: string;
+  repository?: RepositoryName; // missing on legacy rows; treat as 'numa-deploy'
   initiatedBy?: string;
   status?: string;
   startedAt?: string;
@@ -157,6 +162,7 @@ export interface StartGroupDeploymentInput {
   groupName: string;
   clients: string[];
   imageTag: string;
+  repository: RepositoryName;
   initiatedBy: string;
   mode?: 'deploy' | 'plan';
   maxConcurrency?: number;

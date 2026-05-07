@@ -1,0 +1,45 @@
+{
+  "name": "Create Note",
+  "description": "Create a new note. [See the documentation](https://developers.hubspot.com/docs/api/crm/engagements)",
+  "component_type": "action",
+  "version": "0.0.12",
+  "key": "hubspot-create-note",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot",
+      "reloadProps": true
+    },
+    {
+      "name": "toObjectType",
+      "type": "string",
+      "label": "Associated Object Type",
+      "description": "Type of object the note is being associated with",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "toObjectId",
+      "type": "string",
+      "label": "Associated Object",
+      "description": "ID of object the note is being associated with",
+      "useQuery": true,
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "associationType",
+      "type": "integer",
+      "label": "Association Type",
+      "description": "A unique identifier to indicate the association type between the note and the other object",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

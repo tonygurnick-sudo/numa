@@ -1,0 +1,46 @@
+{
+  "name": "Create Account",
+  "description": "Creates a new account in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#create-an-account)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "apollo_io-create-account",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the account"
+    },
+    {
+      "name": "domain",
+      "type": "string",
+      "label": "Domain",
+      "description": "The domain of the account you are adding",
+      "optional": true
+    },
+    {
+      "name": "address",
+      "type": "string",
+      "label": "Address",
+      "description": "The address string for this account, Apollo will intelligently infer the city, state, country, and time zone from your address",
+      "optional": true
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Phone",
+      "description": "The corporate phone for this account",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "name": "Update Worksheet Tablerow",
+  "description": "Update the properties of tablerow object. `(Only for work or school account)` [See the documentation](https://learn.microsoft.com/en-us/graph/api/tablerow-update?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "microsoft_excel-update-worksheet-tablerow",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftExcel",
+      "type": "app",
+      "app": "microsoft_excel"
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder ID",
+      "description": "The ID of the folder where the item is located",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Sheet ID",
+      "description": "The ID of the spreadsheet you want to use",
+      "remoteOptions": true
+    },
+    {
+      "name": "tableId",
+      "type": "string",
+      "label": "Table ID",
+      "description": "The ID of the table you want to use",
+      "remoteOptions": true
+    },
+    {
+      "name": "rowId",
+      "type": "string",
+      "label": "Row ID",
+      "description": "The ID of the row you want to use",
+      "remoteOptions": true
+    },
+    {
+      "name": "values",
+      "type": "string",
+      "label": "Values",
+      "description": "An array of values for the updated row. Each item in the array represents one cell. E.g. `[1, 2, 3]`"
+    }
+  ]
+}

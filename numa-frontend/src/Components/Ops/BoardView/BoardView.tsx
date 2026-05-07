@@ -108,7 +108,7 @@ const BoardView = () => {
   const { numaPost, numaPut, numaDelete } = useNumaRequest();
   const { user } = useAuth();
   const {
-    teamData,
+    boardData,
     tickets,
     setTickets,
     ticketsLoading,
@@ -144,9 +144,9 @@ const BoardView = () => {
   // ── CreateTicketModal state ────────────────────────────────────
   const [createModal, setCreateModal] = useState<{ show: boolean; zoneId?: string }>({ show: false });
 
-  const team = teamData?.team ?? null;
-  const zones = teamData?.zones ?? [];
-  const stages = teamData?.stages ?? [];
+  const team = boardData?.board ?? null;
+  const zones = boardData?.zones ?? [];
+  const stages = boardData?.stages ?? [];
   const hasWorkUnitSeries = Boolean(team?.workUnitSeries?.enabled);
 
   // ── Board members for toolbar avatar filter ──
@@ -286,7 +286,7 @@ const BoardView = () => {
         await Promise.all(
           unsortedTickets.map((tk) =>
             OpsService.updateTicket(numaPut, tk.id, {
-              teamId: tk.teamId,
+              boardId: tk.boardId,
               workUnitId,
               version: tk.version,
             })
@@ -484,7 +484,7 @@ const BoardView = () => {
 
       try {
         const updated = await OpsService.updateTicket(numaPut, ticketId, {
-          teamId: ticket.teamId,
+          boardId: ticket.boardId,
           stageId: newStageId,
           zoneId: newZoneId,
           order: newOrder,
@@ -532,7 +532,7 @@ const BoardView = () => {
       if (!ticket) return;
       try {
         await OpsService.updateTicket(numaPut, ticketId, {
-          teamId: ticket.teamId,
+          boardId: ticket.boardId,
           assigneeId,
           version,
         });
@@ -555,7 +555,7 @@ const BoardView = () => {
           case 'assignToMe':
             if (user?.decoded_tokens?.idToken?.sub) {
               await OpsService.updateTicket(numaPut, ticket.id, {
-                teamId: ticket.teamId,
+                boardId: ticket.boardId,
                 assigneeId: user.decoded_tokens.idToken.sub,
                 version: ticket.version,
               });
@@ -564,7 +564,7 @@ const BoardView = () => {
             break;
           case 'assignTo':
             await OpsService.updateTicket(numaPut, ticket.id, {
-              teamId: ticket.teamId,
+              boardId: ticket.boardId,
               assigneeId: payload as string,
               version: ticket.version,
             });
@@ -574,7 +574,7 @@ const BoardView = () => {
             const newStageId = payload as string;
             const targetStage = stages.find((s) => s.id === newStageId);
             await OpsService.updateTicket(numaPut, ticket.id, {
-              teamId: ticket.teamId,
+              boardId: ticket.boardId,
               stageId: newStageId,
               zoneId: targetStage?.zoneId,
               version: ticket.version,
@@ -607,7 +607,7 @@ const BoardView = () => {
             const withoutCurrent = columnTickets.filter((tk) => tk.id !== ticket.id);
             const newOrder = calculateNewOrder(withoutCurrent, targetIdx);
             await OpsService.updateTicket(numaPut, ticket.id, {
-              teamId: ticket.teamId,
+              boardId: ticket.boardId,
               order: newOrder,
               version: ticket.version,
             });
@@ -615,11 +615,11 @@ const BoardView = () => {
             break;
           }
           case 'archive':
-            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.teamId);
+            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.boardId);
             await refreshTickets();
             break;
           case 'delete':
-            await OpsService.deleteTicket(numaDelete, ticket.id, ticket.teamId);
+            await OpsService.deleteTicket(numaDelete, ticket.id, ticket.boardId);
             await refreshTickets();
             break;
         }
@@ -646,7 +646,7 @@ const BoardView = () => {
 
       try {
         await OpsService.createTicket(numaPost, {
-          teamId: team.id,
+          boardId: team.id,
           ticketTypeId: resolvedTypeId,
           title,
           stageId,

@@ -7,6 +7,17 @@ import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCom
 import { withPRM } from '../../../lib/prm-node/prm';
 import { NotificationService } from '../../../lib/notification-service';
 import { v4 as uuidv4 } from 'uuid';
+import { Agent, fetch as undiciFetch } from 'undici';
+
+// Long-poll dispatcher for the workspace-agent sync invocation. Node's built-in
+// fetch (undici) defaults `headersTimeout` to 300s, so any agent run > 5 min
+// dies with HeadersTimeoutError before the response body even arrives. We give
+// it nearly the full Lambda budget instead.
+const workspaceAgentDispatcher = new Agent({
+  headersTimeout: 840_000,
+  bodyTimeout: 840_000,
+  connectTimeout: 30_000,
+});
 
 const REGION = process.env.REGION ?? 'us-east-1';
 const CHAT_HISTORY_TABLE = process.env.CHAT_HISTORY_TABLE_NAME ?? '';
@@ -269,6 +280,14 @@ type RunnerEvent = {
       has_attachment?: boolean;
       received_at?: string;
     };
+    // Pipedream-trigger fields. Shape: dispatcher's invokeRunnerPipedream
+    // spreads the per-app extractor's `fields` into the event object plus
+    // adds `app_slug`, `component_id`, `dedup_key`, and `raw`.
+    app_slug?: string;
+    component_id?: string;
+    dedup_key?: string;
+    raw?: unknown;
+    [key: string]: unknown;
   };
 };
 
@@ -277,6 +296,44 @@ const interpolateEmailVars = (template: string, email: NonNullable<RunnerEvent['
   return template.replace(/\{\{\s*email\.(\w+)\s*\}\}/g, (_, key: string) => {
     const value = (email as Record<string, unknown>)[key];
     return value == null ? '' : String(value);
+  });
+};
+
+/**
+ * Resolve a dotted-path lookup against an arbitrary object. Used for
+ * `{{ event.<a>.<b>.<c> }}` interpolation against Pipedream events. Falls
+ * back to '' on any missing intermediate.
+ *
+ * Exported for unit testing.
+ */
+export const resolveDottedPath = (root: unknown, path: string): unknown => {
+  const parts = path.split('.');
+  let cur: unknown = root;
+  for (const p of parts) {
+    if (cur == null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[p];
+  }
+  return cur;
+};
+
+/**
+ * Interpolate `{{ event.<dotted.path> }}` substitutions against a Pipedream
+ * trigger event. Strings get inserted as-is; objects/arrays get JSON-encoded;
+ * undefined / null become '' (so absent fields don't show up as "undefined").
+ *
+ * Exported for unit testing.
+ */
+export const interpolateEventVars = (template: string, evt: NonNullable<RunnerEvent['event']>): string => {
+  return template.replace(/\{\{\s*event\.([\w.]+)\s*\}\}/g, (_, dottedPath: string) => {
+    const value = resolveDottedPath(evt, dottedPath);
+    if (value == null) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '';
+    }
   });
 };
 
@@ -550,7 +607,7 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
     }
 
     let interpolatedPrompt = schedule.prompt_text;
-    if (event.type === 'EVENT' && event.event?.email) {
+    if (event.type === 'EVENT' && event.event?.source === 'gmail' && event.event.email) {
       interpolatedPrompt = interpolateEmailVars(schedule.prompt_text, event.event.email);
 
       // Auto-inject the email content as context unless explicitly disabled on the trigger
@@ -568,6 +625,35 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
           `Has attachments: ${e.has_attachment ? 'yes' : 'no'}\n\n` +
           `${e.body ?? ''}\n` +
           `</email_context>\n\n`;
+        interpolatedPrompt = contextBlock + interpolatedPrompt;
+      }
+    } else if (event.type === 'EVENT' && event.event?.source === 'pipedream') {
+      // Pipedream trigger: substitute {{ event.<dotted.path> }} from the event
+      // object (which the dispatcher built from the per-app extractor + raw payload).
+      interpolatedPrompt = interpolateEventVars(schedule.prompt_text, event.event);
+
+      // Auto-inject a generic event context block unless the schedule's trigger
+      // explicitly opted out via `include_event_context: false`.
+      const trigger = (schedule as ScheduleRecord & { trigger?: { include_event_context?: boolean } }).trigger;
+      const includeContext = trigger?.include_event_context !== false;
+      if (includeContext) {
+        const evt = event.event;
+        // Render the canonical fields the per-app extractor surfaced. Skip
+        // the structural keys (source, app_slug, component_id, dedup_key, raw)
+        // — they're metadata, not content. JSON-encode complex values.
+        const HIDDEN = new Set(['source', 'app_slug', 'component_id', 'dedup_key', 'raw']);
+        const lines: string[] = [];
+        for (const [k, v] of Object.entries(evt)) {
+          if (HIDDEN.has(k) || v == null) continue;
+          const rendered = typeof v === 'string' ? v : JSON.stringify(v);
+          lines.push(`${k}: ${rendered}`);
+        }
+        const contextBlock =
+          `<event_context>\n` +
+          `Source: pipedream/${evt.app_slug ?? ''}\n` +
+          `Trigger: ${evt.component_id ?? ''}\n` +
+          (lines.length ? `\n${lines.join('\n')}\n` : '') +
+          `</event_context>\n\n`;
         interpolatedPrompt = contextBlock + interpolatedPrompt;
       }
     }
@@ -1358,7 +1444,7 @@ const invokeWorkspaceAgent = async ({
     todayString: buildTodayString(),
   };
 
-  const response = await fetch(`${WORKSPACE_AGENT_PROXY_URL}/api/workspace-chat-agent/invocations`, {
+  const response = await undiciFetch(`${WORKSPACE_AGENT_PROXY_URL}/api/workspace-chat-agent/invocations`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1369,6 +1455,7 @@ const invokeWorkspaceAgent = async ({
     },
     body: JSON.stringify(requestBody),
     signal: AbortSignal.timeout(840_000), // 14 min — just under the 15 min Lambda timeout
+    dispatcher: workspaceAgentDispatcher,
   });
 
   if (!response.ok) {

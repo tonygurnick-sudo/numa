@@ -1,0 +1,141 @@
+{
+  "name": "Create a Board",
+  "description": "Create a new Trello board or copy from an existing one. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-post).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-create-board",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The new name for the board. 1 to 16384 characters long."
+    },
+    {
+      "name": "defaultLabels",
+      "type": "boolean",
+      "label": "Default Labels",
+      "description": "Determines whether to use the default set of labels.",
+      "optional": true
+    },
+    {
+      "name": "defaultLists",
+      "type": "boolean",
+      "label": "Default Lists",
+      "description": "Determines whether to add the default set of lists to a board (To Do, Doing, Done). It is ignored if idBoardSource is provided.",
+      "optional": true
+    },
+    {
+      "name": "desc",
+      "type": "string",
+      "label": "Description",
+      "description": "A new description for the board, 0 to 16384 characters long",
+      "optional": true
+    },
+    {
+      "name": "idOrganization",
+      "type": "string",
+      "label": "Organization ID",
+      "description": "The id or name of the team the board should belong to.",
+      "remoteOptions": true,
+      "optional": false
+    },
+    {
+      "name": "idBoardSource",
+      "type": "string",
+      "label": "Board Source ID",
+      "description": "The id of a board to copy into the new board.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "keepFromSource",
+      "type": "string",
+      "label": "Keep From Source",
+      "description": "To keep cards from the original board pass in the value `cards`.",
+      "optional": true,
+      "options": ["none", "cards"]
+    },
+    {
+      "name": "powerUps",
+      "type": "string",
+      "label": "Power-Ups",
+      "description": "The Power-Ups that should be enabled on the new board. One of: `all`, `calendar`, `cardAging`, `recap`, `voting`.",
+      "optional": true,
+      "options": ["all", "calendar", "cardAging", "recap", "voting"]
+    },
+    {
+      "name": "prefsPermissionLevel",
+      "type": "string",
+      "description": "The permissions level of the board. One of: org, private, public.",
+      "label": "Prefs Permission Level",
+      "optional": true,
+      "options": ["org", "private", "public"]
+    },
+    {
+      "name": "prefsVoting",
+      "type": "string",
+      "label": "Prefs Voting",
+      "description": "Who can vote on this board. One of disabled, members, observers, org, public.",
+      "optional": true,
+      "options": ["disabled", "members", "observers", "org", "public"]
+    },
+    {
+      "name": "prefsComments",
+      "type": "string",
+      "label": "Prefs Comments",
+      "description": "Who can comment on cards on this board. One of: disabled, members, observers, org, public.",
+      "optional": true,
+      "options": ["disabled", "members", "observers", "org", "public"]
+    },
+    {
+      "name": "prefsInvitations",
+      "type": "string",
+      "label": "Prefs Invitations",
+      "description": "Determines what types of members can invite users to join. One of: admins, members.",
+      "optional": true,
+      "options": ["admins", "members"]
+    },
+    {
+      "name": "prefsSelfJoin",
+      "type": "boolean",
+      "label": "Prefs Self Join",
+      "description": "Determines whether users can join the boards themselves or whether they have to be invited.",
+      "optional": true
+    },
+    {
+      "name": "prefsCardCovers",
+      "type": "boolean",
+      "label": "Prefs Card Covers",
+      "description": "Determines whether card covers are enabled.",
+      "optional": true
+    },
+    {
+      "name": "prefsBackground",
+      "type": "string",
+      "label": "Prefs Background",
+      "description": "The id of a custom background or one of: `blue`, `orange`, `green`, `red`, `purple`, `pink`, `lime`, `sky`, `grey`.",
+      "optional": true,
+      "options": ["blue", "orange", "green", "red", "purple", "pink", "lime", "sky", "grey"]
+    },
+    {
+      "name": "prefsCardAging",
+      "type": "string",
+      "label": "Prefs Card Aging",
+      "description": "Determines the type of card aging that should take place on the board if card aging is enabled. One of: pirate, regular.",
+      "optional": true,
+      "options": ["pirate", "regular"]
+    }
+  ]
+}

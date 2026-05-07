@@ -1,0 +1,39 @@
+{
+  "name": "Kick a Chat Member",
+  "description": "Use this method to kick a user from a group, a supergroup or channel. [See the docs](https://core.telegram.org/bots/api#banchatmember) for more information",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "telegram_bot_api-kick-chat-member",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "telegramBotApi",
+      "type": "app",
+      "app": "telegram_bot_api"
+    },
+    {
+      "name": "chatId",
+      "type": "string",
+      "label": "Chat ID",
+      "description": "Enter the unique identifier for the target chat (e.g. `1035597319`) or username of the target public chat (in the format `@channelusername` or `@supergroupusername`). For example, if the group's public link is `t.me/mygroup`, the username is `@mygroup`."
+    },
+    {
+      "name": "userId",
+      "type": "string",
+      "label": "User ID",
+      "description": "Enter the unique identifier of the target user.",
+      "optional": true
+    },
+    {
+      "name": "until_date",
+      "type": "string",
+      "label": "Until Date",
+      "description": "Enter the date when the user will be unbanned, in [unix time](https://en.wikipedia.org/wiki/Unix_time) (e.g. `1567780450`).",
+      "optional": true
+    }
+  ]
+}

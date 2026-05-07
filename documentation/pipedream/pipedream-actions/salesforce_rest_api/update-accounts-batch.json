@@ -1,0 +1,32 @@
+{
+  "name": "Update Accounts (Batch)",
+  "description": "Update multiple Accounts in Salesforce using Bulk API 2.0. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api_asynch.meta/api_asynch/datafiles_understanding_bulk2_ingest.htm)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "salesforce_rest_api-update-accounts-batch",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "csvFilePath",
+      "type": "string",
+      "label": "CSV File Path Or URL",
+      "description": "The path to the CSV file to process. Provide a path to a file in the `/tmp` directory (for example, `/tmp/data.csv`). If a URL is provided, the file will be downloaded to the `/tmp` directory. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api_asynch.meta/api_asynch/datafiles_prepare_data.htm)"
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true
+    }
+  ],
+  "stash": "required"
+}

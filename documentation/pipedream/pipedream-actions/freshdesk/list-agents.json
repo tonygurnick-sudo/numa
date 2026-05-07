@@ -1,0 +1,56 @@
+{
+  "name": "List Agents",
+  "description": "List all agents in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#list_all_agents)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "freshdesk-list-agents",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "Filter results by email address",
+      "optional": true
+    },
+    {
+      "name": "mobile",
+      "type": "string",
+      "label": "Mobile",
+      "description": "Filter results by mobile number",
+      "optional": true
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Phone",
+      "description": "Filter results by phone number",
+      "optional": true
+    },
+    {
+      "name": "state",
+      "type": "string",
+      "label": "State",
+      "description": "Filter results by state",
+      "options": ["fulltime", "occasional"],
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

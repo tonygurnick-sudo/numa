@@ -1,0 +1,51 @@
+{
+  "name": "Create Comment",
+  "description": "Create a comment on a share or user generated content post. [See the docs here](https://docs.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/network-update-social-actions#create-comment)",
+  "component_type": "action",
+  "version": "0.1.11",
+  "key": "linkedin-create-comment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "urnToComment",
+      "type": "string",
+      "label": "Urn to comment",
+      "description": "The share or user generated content post where the comment will be made."
+    },
+    {
+      "name": "actor",
+      "type": "string",
+      "label": "Actor",
+      "description": "Entity which is authoring the comment, must be a person or an organization URN."
+    },
+    {
+      "name": "message",
+      "type": "string",
+      "label": "Message",
+      "description": "Text of the comment. May contain attributes such as links to people and organizations."
+    },
+    {
+      "name": "content",
+      "type": "any",
+      "label": "Content",
+      "description": "Array of a media content entities.",
+      "optional": true
+    },
+    {
+      "name": "parentComment",
+      "type": "string",
+      "label": "Parent Comment",
+      "description": "For nested comments, this is the urn of the parent comment. This is not available for first-level comments.",
+      "optional": true
+    }
+  ]
+}

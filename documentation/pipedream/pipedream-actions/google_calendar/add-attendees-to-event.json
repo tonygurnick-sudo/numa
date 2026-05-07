@@ -1,0 +1,49 @@
+{
+  "name": "Add Attendees To Event",
+  "description": "Add attendees to an existing event. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Events.html#update)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "google_calendar-add-attendees-to-event",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleCalendar",
+      "type": "app",
+      "app": "google_calendar"
+    },
+    {
+      "name": "calendarId",
+      "label": "Calendar ID",
+      "type": "string",
+      "description": "Optionally select the calendar, defaults to the primary calendar for the logged-in user",
+      "default": "primary",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "eventId",
+      "label": "Event ID",
+      "type": "string",
+      "description": "Select an event from Google Calendar.",
+      "remoteOptions": true
+    },
+    {
+      "name": "attendees",
+      "label": "Attendees",
+      "type": "string",
+      "description": "Enter either an array or a comma separated list of email addresses of attendees"
+    },
+    {
+      "name": "sendUpdates",
+      "label": "Send Updates",
+      "type": "string",
+      "description": "Configure whether to send notifications about the event",
+      "optional": true,
+      "options": ["all", "externalOnly", "none"]
+    }
+  ]
+}

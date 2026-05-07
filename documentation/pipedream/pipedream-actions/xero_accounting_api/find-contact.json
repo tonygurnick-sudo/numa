@@ -1,0 +1,43 @@
+{
+  "name": "Find contact.  Optionally, create one if none are found",
+  "description": "Finds a contact by name or account number. Optionally, create one if none are found. [See the docs here](https://developer.xero.com/documentation/api/accounting/contacts/#get-contacts)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "xero_accounting_api-find-contact",
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Id of the organization tenant to use on the Xero Accounting API. See [Get Tenant Connections](https://pipedream.com/@sergio/xero-accounting-api-get-tenant-connections-p_OKCzOgn/edit) for a workflow example on how to pull this data.",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Contact name",
+      "description": "Full name of contact/organization ",
+      "optional": true
+    },
+    {
+      "name": "accountNumber",
+      "type": "string",
+      "label": "Account number",
+      "description": "Account number of Contact.",
+      "optional": true
+    },
+    {
+      "name": "createContactIfNotFound",
+      "description": "Create a new contact if not found?.",
+      "label": "Create a new contact if not found",
+      "type": "string",
+      "options": ["Yes", "No"],
+      "reloadProps": true
+    }
+  ]
+}

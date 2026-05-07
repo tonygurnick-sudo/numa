@@ -45,15 +45,15 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
   const rawNavLogo = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || DefaultLogo;
   const navLogo = useBrandingAsset(rawNavLogo, DefaultLogo);
   const {
-    teams,
-    selectedTeamId,
+    boards,
+    selectedBoardId,
     topView,
     setTopView,
     boardViewMode,
     setBoardViewMode,
-    selectTeam,
-    refreshTeam,
-    refreshTeams,
+    selectBoard,
+    refreshBoard,
+    refreshBoards,
     refreshConfig,
     myWorkFilter,
     setMyWorkFilter,
@@ -71,11 +71,11 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
 
   const canManage = Boolean(user?.features?.includes('manageUsers'));
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
-  const selectedTeam = teams.find((tm) => tm.id === selectedTeamId);
+  const selectedBoard = boards.find((tm) => tm.id === selectedBoardId);
   const isTeamOwner = Boolean(
     currentUserSub &&
-    selectedTeam &&
-    (selectedTeam.createdBy === currentUserSub || selectedTeam.accessControl?.owners?.includes(currentUserSub))
+    selectedBoard &&
+    (selectedBoard.createdBy === currentUserSub || selectedBoard.accessControl?.owners?.includes(currentUserSub))
   );
 
   return (
@@ -171,21 +171,21 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
             style={{ minHeight: 54, padding: '10px 0' }}
           >
             {/* Board / All Boards selector */}
-            {teams.length > 0 && (
+            {boards.length > 0 && (
               <div className="d-flex align-items-center gap-3 flex-shrink-0">
                 <BoardSelector
-                  currentBoard={teams.find((tm) => tm.id === selectedTeamId) ?? null}
-                  boards={teams}
-                  isAllBoards={boardViewMode === 'allTeams'}
-                  onSelectBoard={(teamId) => {
-                    selectTeam(teamId);
-                    setBoardViewMode('singleTeam');
+                  currentBoard={boards.find((tm) => tm.id === selectedBoardId) ?? null}
+                  boards={boards}
+                  isAllBoards={boardViewMode === 'allBoards'}
+                  onSelectBoard={(boardId) => {
+                    selectBoard(boardId);
+                    setBoardViewMode('singleBoard');
                   }}
-                  onSelectAllBoards={() => setBoardViewMode('allTeams')}
+                  onSelectAllBoards={() => setBoardViewMode('allBoards')}
                   onCreateBoard={() => setShowCreateTeam(true)}
                 />
                 {/* Board settings — next to board name in single-board mode */}
-                {boardViewMode === 'singleTeam' && selectedTeamId && (canManage || isTeamOwner) && (
+                {boardViewMode === 'singleBoard' && selectedBoardId && (canManage || isTeamOwner) && (
                   <button
                     type="button"
                     className="btn btn-link text-muted p-0"
@@ -201,14 +201,14 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
               </div>
             )}
 
-            {boardViewMode === 'singleTeam' ? (
+            {boardViewMode === 'singleBoard' ? (
               <ZoneSprintStrip />
             ) : (
               <AllBoardsStrip
                 canManage={canManage}
                 currentUserSub={currentUserSub}
-                onOpenTeamSettings={(teamId) => {
-                  selectTeam(teamId);
+                onOpenBoardSettings={(boardId) => {
+                  selectBoard(boardId);
                   setShowBoardSettings(true);
                 }}
               />
@@ -278,8 +278,8 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
         onHide={() => setShowBoardSettings(false)}
         onSaved={async () => {
           setShowBoardSettings(false);
-          await refreshTeam();
-          refreshTeams();
+          await refreshBoard();
+          refreshBoards();
         }}
       />
       <GlobalSettingsModal
@@ -296,8 +296,8 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
         onCreated={async (team) => {
           setShowCreateTeam(false);
           await refreshConfig();
-          refreshTeams();
-          selectTeam(team.id);
+          refreshBoards();
+          selectBoard(team.id);
         }}
       />
     </>

@@ -47,7 +47,16 @@ const s3ConfigSchema = z
   })
   .optional();
 
-// Complete Client Configuration Schema (matching infrastructure schema)
+const oauthProviderSchema = z.object({
+  enabled: z.boolean(),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  scopes: z.array(z.string()),
+});
+
+// Complete Client Configuration Schema (matching infrastructure schema in
+// infra/stacks/numa-client-stack.ts and infra/constructs/core-numa-infra-construct.ts).
+// Keep in sync — JSON upload validates with .strict() and rejects unknown fields.
 export const clientConfigSchema = z.object({
   // Core required fields
   clientAccountId: z.string(),
@@ -66,6 +75,7 @@ export const clientConfigSchema = z.object({
   // Development settings
   devInstance: z.boolean().optional(), // default: false
   customDomain: z.string().optional(),
+  emailDomain: z.string().optional(),
 
   // Q Business settings
   qBusinessRegion: z.string().optional(), // default: 'us-east-1'
@@ -75,12 +85,17 @@ export const clientConfigSchema = z.object({
   allApps: z.boolean().optional(), // default: false
   allProdApps: z.boolean().optional(), // default: false
   apps: z.record(baseAppConfigSchema).optional(), // default: {}
+  jobHistory: z.boolean().optional(), // default: true (when allApps is enabled)
 
   // Knowledge base settings
   preferredKnowledgeBase: z.enum(['q', 'bedrock', 'none']).optional(),
+  vectorStorageType: z.enum(['rds', 's3vectors']).optional(), // default: 's3vectors'
   embeddingModel: z.string().optional(), // default: 'amazon.titan-embed-text-v2:0'
   bedrockParserModel: z.string().optional(), // default: 'amazon.nova-lite-v1:0'
   visionModelType: z.enum(['haiku', 'nova-pro']).optional(), // default: 'haiku'
+  knowledgeBases: z.boolean().optional(), // default: true
+  recordsKBEnabled: z.boolean().optional(),
+  contentSearchEnabled: z.boolean().optional(),
 
   // Communication settings
   senderEmail: z.string().optional(),
@@ -100,9 +115,29 @@ export const clientConfigSchema = z.object({
   schedulingMinIntervalMinutes: z.number().int().min(5).optional(), // per-client min interval override
   workspaceChatModelSelection: z.boolean().optional(), // default: false
   numaOps: z.boolean().optional(), // default: false
+  numaDropZones: z.boolean().optional(), // default: false
+  numaSharing: z.boolean().optional(), // default: false
+  developerMode: z.boolean().optional(), // default: false
+  secretsVaultEnabled: z.boolean().optional(), // default: false
+  oauthIntegrationsEnabled: z.boolean().optional(), // default: false
+  oauthProviders: z.record(z.string(), oauthProviderSchema).optional(),
+  ssoEnabled: z.boolean().optional(), // default: true
+  ssoEnterprise: z.boolean().optional(), // default: false
+  chatSuggestions: z.boolean().optional(), // default: true (capability availability)
+  siteWideSearch: z.boolean().optional(), // default: false
+  racetechDataFeed: z.boolean().optional(), // default: false
+  disasterRecovery: z.boolean().optional(), // default: false
+  enableOpenApiDocs: z.boolean().optional(), // default: false
   v2Apps: z.boolean().optional(), // default: false
   publicDemo: z.boolean().optional(), // default: false
-  publicDemoDailyLimitUsd: z.number().optional(), // default: 50
+  publicDemoDailyLimitUsd: z.number().optional(), // default: 10
+
+  // Whitelabel / multi-frontend
+  additionalCognitoClientIds: z.string().optional(),
+  additionalOrigins: z.array(z.string()).optional(),
+
+  // Cognito group → feature mapping
+  groups: z.record(z.string(), z.array(z.string())).optional(),
 
   // Data source configurations
   webCrawlerConfigs: z.array(webCrawlerConfigSchema).optional(),
@@ -166,6 +201,7 @@ export const getDefaultClientConfigValues = () => ({
   apps: {},
   qBusinessRegion: 'us-east-1',
   preferredKnowledgeBase: 'bedrock' as const,
+  vectorStorageType: 's3vectors' as const,
   embeddingModel: 'amazon.titan-embed-text-v2:0',
   bedrockParserModel: 'amazon.nova-lite-v1:0',
   visionModelType: 'haiku' as const,
@@ -179,9 +215,16 @@ export const getDefaultClientConfigValues = () => ({
   scheduling: false,
   workspaceChatModelSelection: false,
   numaOps: false,
+  numaDropZones: false,
+  numaSharing: false,
+  developerMode: false,
+  secretsVaultEnabled: false,
+  oauthIntegrationsEnabled: false,
+  ssoEnabled: true,
+  ssoEnterprise: false,
   v2Apps: false,
   publicDemo: false,
-  publicDemoDailyLimitUsd: 50,
+  publicDemoDailyLimitUsd: 10,
   mfa: false,
 });
 
@@ -220,6 +263,13 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     schedulingMinIntervalMinutes: 'Scheduling Min Interval (minutes)',
     v2Apps: 'V2 Apps',
     mfa: 'Multi-Factor Authentication (MFA)',
+    numaDropZones: 'Drop Zones',
+    numaSharing: 'Sharing',
+    ssoEnabled: 'SSO Self-Service',
+    ssoEnterprise: 'SSO Enterprise (SCIM/OIDC)',
+    developerMode: 'Developer Mode',
+    secretsVaultEnabled: 'Secrets Vault',
+    oauthIntegrationsEnabled: 'OAuth Cloud Storage',
   };
 
   return fieldNames[key] || key;

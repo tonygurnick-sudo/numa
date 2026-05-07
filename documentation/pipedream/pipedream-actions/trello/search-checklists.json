@@ -1,0 +1,79 @@
+{
+  "name": "Search Checklists",
+  "description": "Find a checklist on a particular board or card by name. [See the documentation here](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/#api-boards-id-checklists-get) and [here](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-id-checklists-get).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-search-checklists",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "description": "Whether to search boards or cards for the checklist.",
+      "options": ["board", "card"],
+      "reloadProps": true
+    },
+    {
+      "name": "boardId",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "cardId",
+      "type": "string",
+      "label": "Card ID",
+      "description": "The ID of the card",
+      "optional": true,
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "query",
+      "type": "string",
+      "label": "Query",
+      "description": "The query to search for"
+    },
+    {
+      "name": "checkItems",
+      "type": "string",
+      "label": "Check Items",
+      "description": "Whether to display checklist items in the result. Select `all` or `none`.",
+      "optional": true,
+      "options": ["all", "none"],
+      "reloadProps": true,
+      "hidden": true
+    },
+    {
+      "name": "checkItemFields",
+      "type": "string[]",
+      "label": "CheckItem Fields",
+      "description": "Fields to include in the results. `all` or a list of: `name`, `nameData`, `pos`, `state`, `type`",
+      "options": ["all", "name", "nameData", "pos", "state", "type"],
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Fields",
+      "description": "Fields to include in the results. `all` or a list of: `idBoard`, `idCard`, `name`, `pos`. Eg: `idBoard,idCard,name,pos`. Eg: `all`.",
+      "options": ["all", "idBoard", "idCard", "name", "pos"],
+      "optional": true,
+      "hidden": true
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "Get person details",
+  "description": "Get details of a person by their ID. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Persons#getPerson)",
+  "component_type": "action",
+  "version": "0.0.8",
+  "key": "pipedrive-get-person-details",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "personId",
+      "type": "integer",
+      "label": "Person ID",
+      "description": "The ID of the person to get details for.",
+      "optional": false,
+      "remoteOptions": true
+    }
+  ]
+}

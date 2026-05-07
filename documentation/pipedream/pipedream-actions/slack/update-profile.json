@@ -1,0 +1,76 @@
+{
+  "name": "Update Profile",
+  "description": "Update basic profile field such as name or title. [See the documentation](https://api.slack.com/methods/users.profile.set)",
+  "component_type": "action",
+  "version": "0.0.24",
+  "key": "slack-update-profile",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "displayName",
+      "type": "string",
+      "label": "Display Name",
+      "description": "The display name the user has chosen to identify themselves by in their workspace profile",
+      "optional": true
+    },
+    {
+      "name": "firstName",
+      "type": "string",
+      "label": "First Name",
+      "description": "The user's first name",
+      "optional": true
+    },
+    {
+      "name": "lastName",
+      "type": "string",
+      "label": "Last Name",
+      "description": "The user's last name",
+      "optional": true
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Phone",
+      "description": "The user's phone number, in any format",
+      "optional": true
+    },
+    {
+      "name": "pronouns",
+      "type": "string",
+      "label": "Pronouns",
+      "description": "The user's pronouns",
+      "optional": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "The user's title",
+      "optional": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "The user's email address. You cannot update your own email using this method. This field can only be changed by admins for users on paid teams.",
+      "optional": true
+    },
+    {
+      "name": "user",
+      "type": "string",
+      "label": "User",
+      "description": "ID of user to change. This argument may only be specified by admins on paid teams.",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

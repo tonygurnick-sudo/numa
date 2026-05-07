@@ -1,21 +1,21 @@
 ---
 name: ops
-description: Manage Numa Ops boards — create and search tickets, manage teams (called "boards" in the UI), customers, suppliers, and projects. Supports full CRUD operations with user-scoped access control.
+description: Manage Numa Ops boards -- create and search tickets, manage boards, customers, suppliers, and projects. Supports full CRUD operations with user-scoped access control.
 ---
 
 # Numa Ops Skill
 
-Manage work items on the Numa Ops kanban boards. Create tickets, search and filter, manage teams, track customers and suppliers, and more.
+Manage work items on the Numa Ops kanban boards. Create tickets, search and filter, manage boards, track customers and suppliers, and more.
 
-> **Parameter convention:** All parameters use camelCase (matching the JSON API convention), e.g. `teamId`, `stageId`, `ticketTypeId`. snake_case is accepted as a fallback but camelCase is preferred.
+> **Parameter convention:** All parameters use camelCase (matching the JSON API convention), e.g. `boardId`, `stageId`, `ticketTypeId`. snake_case is accepted as a fallback but camelCase is preferred.
 
-> **Naming note:** The UI calls them "Boards" but the API uses "teams" / `teamId`. When talking to users, say "board". When calling the API, use `teamId`.
+> **Use names, not IDs.** Pass human-readable names (e.g. `stageName: "Funnel"`, `customerName: "Acme Corp"`, `assigneeName: "Tom Wiltshire"`) and the bridge will resolve them to IDs automatically. You only need to call `get_board` / `get_config` / `list_*` first if you need to _show_ the data to the user, or if a name lookup fails and you need to disambiguate. **Never invent IDs** -- if you don't already know the ID, pass the name and let the bridge resolve it. See [Name-based parameters](#name-based-parameters) below.
 
 ## Available MCP Tool
 
-| Tool                       | Purpose                                                                       | Approval            |
-| -------------------------- | ----------------------------------------------------------------------------- | ------------------- |
-| `mcp__numa__numa_ops_tool` | Perform any Numa Ops operation (tickets, teams, customers, suppliers, config) | Required for writes |
+| Tool                       | Purpose                                                                        | Approval            |
+| -------------------------- | ------------------------------------------------------------------------------ | ------------------- |
+| `mcp__numa__numa_ops_tool` | Perform any Numa Ops operation (tickets, boards, customers, suppliers, config) | Required for writes |
 
 ---
 
@@ -26,10 +26,39 @@ The `numa_ops_tool` accepts an `operation` string and a `params` JSON string. Th
 ```
 mcp__numa__numa_ops_tool(
     operation="list_tickets",
-    params='{"teamId": "team-abc123"}',
+    params='{"boardName": "Engineering"}',
     description="List all tickets for the Engineering board"
 )
 ```
+
+You can pass either an ID (`boardId`) or the human-readable name (`boardName`) -- the bridge resolves names to IDs automatically.
+
+---
+
+## Name-based parameters
+
+Anywhere an operation accepts an entity ID, you can pass the entity's name instead and the bridge will resolve it for you. This is the preferred way to call ops operations -- skip the get*board / get_config / list*\* dance unless you actually need to display the data to the user.
+
+| Pass this name                                | Resolves to                             | Notes                                                                                                                                                                                                                        |
+| --------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boardName`                                   | `boardId`                               | Case-insensitive match against the user's accessible boards.                                                                                                                                                                 |
+| `stageName`                                   | `stageId`                               | Requires `boardId` or `boardName`. Add `zoneName` if the same stage name appears in multiple zones.                                                                                                                          |
+| `zoneName`                                    | `zoneId`                                | Requires `boardId` or `boardName`.                                                                                                                                                                                           |
+| `workUnitName` / `sprintName`                 | `workUnitId`                            | Requires `boardId` or `boardName`. Active sprint wins on tie.                                                                                                                                                                |
+| `projectName`                                 | `projectId`                             | Case-insensitive match.                                                                                                                                                                                                      |
+| `ticketTypeName`                              | `ticketTypeId`                          | Matches name (e.g. "Bug") or prefix (e.g. "BUG").                                                                                                                                                                            |
+| `assigneeName` / `reporterName` / `ownerName` | `assigneeId` / `reporterId` / `ownerId` | Matches the staff member's full name; falls back to substring match against name and email.                                                                                                                                  |
+| `customerName`                                | `customerId`                            | Used to _link_ a ticket / activity to a customer. (For `create_customer` / `update_customer` itself, use `companyName` -- that's the actual field for the customer's name.)                                                  |
+| `supplierName`                                | `supplierId`                            | Same pattern as `customerName`.                                                                                                                                                                                              |
+| `lifecycleStageName`                          | `lifecycleStage` (customer)             | Used on customers and on `list_customers` filters.                                                                                                                                                                           |
+| `supplierLifecycleStageName`                  | `lifecycleStage` (supplier)             | Use this on supplier operations to disambiguate from the customer config. (For `list_suppliers`, `update_supplier`, etc., a plain `lifecycleStageName` will also work -- the bridge knows the operation is supplier-scoped.) |
+
+**Rules:**
+
+- **ID wins.** If you pass both an ID and a name (e.g. `stageId` and `stageName`), the ID is used and the name is ignored.
+- **Errors are surfaced cleanly.** If a name doesn't match (or matches multiple entities), the bridge returns a structured error listing the available options. Pass that information back to the user and ask for clarification.
+- **Display names are canonicalized.** When you pass `assigneeName: "tom"` and the bridge resolves to "Tom Wiltshire", the canonical name is what gets stored on the ticket. You don't need to look up the canonical spelling first.
+- **bulk_update_tickets:** name-based fields work inside the `changes` dict too.
 
 ---
 
@@ -69,35 +98,35 @@ mcp__numa__numa_ops_tool(
 
 #### create_project
 
-| Parameter     | Type     | Required | Description                                             |
-| ------------- | -------- | -------- | ------------------------------------------------------- |
-| `name`        | string   | Yes      | Project name                                            |
-| `description` | string   | No       | Brief project description                               |
-| `color`       | string   | No       | Hex color code                                          |
-| `status`      | string   | No       | Status: active, planned, on_hold, complete              |
-| `ownerId`     | string   | No       | Owner user sub (from get_config staff)                  |
-| `ownerName`   | string   | No       | Owner display name                                      |
-| `goals`       | string   | No       | Project goals/objectives (HTML rich text)               |
-| `startDate`   | string   | No       | Project start date (ISO format, e.g. 2026-04-01)        |
-| `endDate`     | string   | No       | Project end date (ISO format)                           |
-| `boardIds`    | string[] | No       | Board/team IDs this project is visible on (empty = all) |
+| Parameter     | Type     | Required | Description                                        |
+| ------------- | -------- | -------- | -------------------------------------------------- |
+| `name`        | string   | Yes      | Project name                                       |
+| `description` | string   | No       | Brief project description                          |
+| `color`       | string   | No       | Hex color code                                     |
+| `status`      | string   | No       | Status: active, planned, on_hold, complete         |
+| `ownerId`     | string   | No       | Owner user sub (from get_config staff)             |
+| `ownerName`   | string   | No       | Owner display name                                 |
+| `goals`       | string   | No       | Project goals/objectives (HTML rich text)          |
+| `startDate`   | string   | No       | Project start date (ISO format, e.g. 2026-04-01)   |
+| `endDate`     | string   | No       | Project end date (ISO format)                      |
+| `boardIds`    | string[] | No       | Board IDs this project is visible on (empty = all) |
 
 #### update_project
 
-| Parameter     | Type     | Required | Description                                             |
-| ------------- | -------- | -------- | ------------------------------------------------------- |
-| `projectId`   | string   | Yes      | Project ID                                              |
-| `name`        | string   | No       | New project name                                        |
-| `description` | string   | No       | New description                                         |
-| `color`       | string   | No       | New color                                               |
-| `isActive`    | boolean  | No       | Set false to deactivate, true to restore                |
-| `status`      | string   | No       | Status: active, planned, on_hold, complete              |
-| `ownerId`     | string   | No       | Owner user sub                                          |
-| `ownerName`   | string   | No       | Owner display name                                      |
-| `goals`       | string   | No       | Project goals/objectives (HTML rich text)               |
-| `startDate`   | string   | No       | Project start date (ISO format)                         |
-| `endDate`     | string   | No       | Project end date (ISO format)                           |
-| `boardIds`    | string[] | No       | Board/team IDs this project is visible on (empty = all) |
+| Parameter     | Type     | Required | Description                                        |
+| ------------- | -------- | -------- | -------------------------------------------------- |
+| `projectId`   | string   | Yes      | Project ID                                         |
+| `name`        | string   | No       | New project name                                   |
+| `description` | string   | No       | New description                                    |
+| `color`       | string   | No       | New color                                          |
+| `isActive`    | boolean  | No       | Set false to deactivate, true to restore           |
+| `status`      | string   | No       | Status: active, planned, on_hold, complete         |
+| `ownerId`     | string   | No       | Owner user sub                                     |
+| `ownerName`   | string   | No       | Owner display name                                 |
+| `goals`       | string   | No       | Project goals/objectives (HTML rich text)          |
+| `startDate`   | string   | No       | Project start date (ISO format)                    |
+| `endDate`     | string   | No       | Project end date (ISO format)                      |
+| `boardIds`    | string[] | No       | Board IDs this project is visible on (empty = all) |
 
 #### delete_project
 
@@ -109,30 +138,30 @@ Admin-only operation. Permanently deletes a project.
 
 ---
 
-### Teams (Boards)
+### Boards
 
 | Operation       | Description                                   | Approval |
 | --------------- | --------------------------------------------- | -------- |
-| `list_teams`    | List all boards the user can access           | No       |
-| `get_team`      | Get a single board by ID                      | No       |
-| `create_team`   | Create a new board                            | Yes      |
-| `update_team`   | Update an existing board (owner-only)         | Yes      |
+| `list_boards`   | List all boards the user can access           | No       |
+| `get_board`     | Get a single board by ID                      | No       |
+| `create_board`  | Create a new board                            | Yes      |
+| `update_board`  | Update an existing board (owner-only)         | Yes      |
 | `update_zones`  | Update zones on a board (owner-only)          | Yes      |
 | `update_stages` | Update stages/columns on a board (owner-only) | Yes      |
 
-#### list_teams
+#### list_boards
 
 No parameters required. Returns all boards accessible to the current user.
 
-#### get_team
+#### get_board
 
 Returns the board with its zones and stages. Use this to get valid `stageId` values for ticket creation.
 
 | Parameter | Type   | Required | Description |
 | --------- | ------ | -------- | ----------- |
-| `teamId`  | string | Yes      | Board ID    |
+| `boardId` | string | Yes      | Board ID    |
 
-#### create_team
+#### create_board
 
 | Parameter            | Type   | Required | Description                                                                                          |
 | -------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------- |
@@ -148,13 +177,13 @@ Returns the board with its zones and stages. Use this to get valid `stageId` val
 | `announcement`       | string | No       | Board announcement text (shown at top of board)                                                      |
 | `zones`              | array  | No       | Custom zone definitions                                                                              |
 
-#### update_team
+#### update_board
 
-Only board owners (creator or co-owners) and admins can update team settings.
+Only board owners (creator or co-owners) and admins can update board settings.
 
 | Parameter            | Type   | Required | Description                                                                        |
 | -------------------- | ------ | -------- | ---------------------------------------------------------------------------------- |
-| `teamId`             | string | Yes      | Board ID                                                                           |
+| `boardId`            | string | Yes      | Board ID                                                                           |
 | `name`               | string | No       | New board name                                                                     |
 | `description`        | string | No       | New description                                                                    |
 | `color`              | string | No       | New color                                                                          |
@@ -171,7 +200,7 @@ Update zones on a board. Only board owners and admins can modify zones.
 
 | Parameter | Type   | Required | Description                                                                             |
 | --------- | ------ | -------- | --------------------------------------------------------------------------------------- |
-| `teamId`  | string | Yes      | Board ID                                                                                |
+| `boardId` | string | Yes      | Board ID                                                                                |
 | `zones`   | array  | Yes      | Array of zone objects: `[{"id": "...", "name": "...", "zoneType": "board"\|"backlog"}]` |
 
 #### update_stages
@@ -180,7 +209,7 @@ Update stages (kanban columns) on a board. Only board owners and admins can modi
 
 | Parameter | Type   | Required | Description                                                                                       |
 | --------- | ------ | -------- | ------------------------------------------------------------------------------------------------- |
-| `teamId`  | string | Yes      | Board ID                                                                                          |
+| `boardId` | string | Yes      | Board ID                                                                                          |
 | `stages`  | array  | Yes      | Array of stage objects: `[{"id": "...", "zoneId": "...", "name": "...", "statusType": "active"}]` |
 
 Valid `statusType` values per zone type:
@@ -209,7 +238,7 @@ Valid `statusType` values per zone type:
 
 | Parameter         | Type   | Required | Description                                                      |
 | ----------------- | ------ | -------- | ---------------------------------------------------------------- |
-| `teamId`          | string | Yes      | Board ID to list tickets for                                     |
+| `boardId`         | string | Yes      | Board ID to list tickets for                                     |
 | `stageId`         | string | No       | Filter by stage ID                                               |
 | `statusType`      | string | No       | Filter by status type (backlog, queued, active, completed, etc.) |
 | `assigneeId`      | string | No       | Filter by assignee (user sub)                                    |
@@ -226,7 +255,7 @@ Valid `statusType` values per zone type:
 | Parameter   | Type   | Required    | Description                                             |
 | ----------- | ------ | ----------- | ------------------------------------------------------- |
 | `ticketId`  | string | Conditional | Internal ticket ID (use one of ticketId or displayId)   |
-| `teamId`    | string | Conditional | Required when using ticketId (not needed for displayId) |
+| `boardId`   | string | Conditional | Required when using ticketId (not needed for displayId) |
 | `displayId` | string | Conditional | Human-readable display ID like "ENG-42"                 |
 
 #### search_tickets
@@ -234,18 +263,18 @@ Valid `statusType` values per zone type:
 | Parameter | Type   | Required | Description                              |
 | --------- | ------ | -------- | ---------------------------------------- |
 | `query`   | string | Yes      | Search text (matches title, description) |
-| `teamId`  | string | No       | Limit search to a specific board         |
+| `boardId` | string | No       | Limit search to a specific board         |
 
 #### create_ticket
 
-**IMPORTANT:** Call `get_config` first to get valid ticket types and staff. Call `get_team` to get valid stage IDs for the board.
+**Preferred:** Pass `boardName`, `stageName`, `assigneeName`, `customerName`, etc. and the bridge resolves them to IDs (see [Name-based parameters](#name-based-parameters)). Only call `get_config` / `get_board` first if you need to _show_ the data to the user.
 
-> **WARNING:** `stageId` MUST be a valid UUID from the `get_team` response (`zones[].stages[].id`). Do NOT use status names like "backlog", "completed", or "active" -- they will be rejected. Invalid stage IDs will return a 400 error.
+> **NEVER invent IDs.** If you don't already know the `stageId` for a stage, pass `stageName` and let the bridge resolve it. Hallucinated IDs (e.g. `custom-1234567890-abc123` patterns from previous tool results) will be rejected with a 400 error.
 
 | Parameter       | Type   | Required | Description                                                                     |
 | --------------- | ------ | -------- | ------------------------------------------------------------------------------- |
-| `teamId`        | string | Yes      | Board to create the ticket in                                                   |
-| `stageId`       | string | Yes      | Stage ID (from get_team response zones/stages)                                  |
+| `boardId`       | string | Yes      | Board to create the ticket in                                                   |
+| `stageId`       | string | Yes      | Stage ID (from get_board response zones/stages)                                 |
 | `title`         | string | Yes      | Ticket title                                                                    |
 | `ticketTypeId`  | string | No       | Ticket type ID (from get_config ticketTypes)                                    |
 | `description`   | string | No       | Ticket description (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
@@ -270,51 +299,51 @@ Valid `statusType` values per zone type:
 
 #### update_ticket
 
-You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002"). If `displayId` is provided, the system will automatically resolve it to the internal UUID and team ID.
+You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002"). If `displayId` is provided, the system will automatically resolve it to the internal UUID and board ID.
 
-| Parameter       | Type    | Required | Description                                                   |
-| --------------- | ------- | -------- | ------------------------------------------------------------- |
-| `ticketId`      | string  | Yes\*    | Ticket UUID (\* or provide `displayId` instead)               |
-| `displayId`     | string  | No       | Display ID (e.g. "BUG-002") -- resolves automatically         |
-| `teamId`        | string  | Yes\*    | Board the ticket belongs to (\* auto-resolved from displayId) |
-| `currentTeamId` | string  | No       | Current board (for cross-board moves)                         |
-| `title`         | string  | No       | New title                                                     |
-| `description`   | string  | No       | New description                                               |
-| `stageId`       | string  | No       | Move to different stage (auto-updates status type)            |
-| `zoneId`        | string  | No       | Move to different zone                                        |
-| `priority`      | string  | No       | New priority                                                  |
-| `assigneeId`    | string  | No       | New assignee                                                  |
-| `assigneeName`  | string  | No       | Assignee display name                                         |
-| `dueDate`       | string  | No       | New due date                                                  |
-| `customerId`    | string  | No       | Link to customer                                              |
-| `supplierId`    | string  | No       | Link to supplier                                              |
-| `workUnitId`    | string  | No       | Link to sprint/work unit                                      |
-| `projectId`     | string  | No       | Link to project                                               |
-| `tags`          | array   | No       | Updated tags                                                  |
-| `fields`        | object  | No       | Updated custom field values                                   |
-| `effortPoints`  | number  | No       | Updated effort points                                         |
-| `order`         | number  | No       | Position order within stage                                   |
-| `version`       | number  | No       | Optimistic locking (prevents concurrent edits)                |
-| `archived`      | boolean | No       | Set true to archive, false to unarchive                       |
+| Parameter        | Type    | Required | Description                                                   |
+| ---------------- | ------- | -------- | ------------------------------------------------------------- |
+| `ticketId`       | string  | Yes\*    | Ticket UUID (\* or provide `displayId` instead)               |
+| `displayId`      | string  | No       | Display ID (e.g. "BUG-002") -- resolves automatically         |
+| `boardId`        | string  | Yes\*    | Board the ticket belongs to (\* auto-resolved from displayId) |
+| `currentBoardId` | string  | No       | Current board (for cross-board moves)                         |
+| `title`          | string  | No       | New title                                                     |
+| `description`    | string  | No       | New description                                               |
+| `stageId`        | string  | No       | Move to different stage (auto-updates status type)            |
+| `zoneId`         | string  | No       | Move to different zone                                        |
+| `priority`       | string  | No       | New priority                                                  |
+| `assigneeId`     | string  | No       | New assignee                                                  |
+| `assigneeName`   | string  | No       | Assignee display name                                         |
+| `dueDate`        | string  | No       | New due date                                                  |
+| `customerId`     | string  | No       | Link to customer                                              |
+| `supplierId`     | string  | No       | Link to supplier                                              |
+| `workUnitId`     | string  | No       | Link to sprint/work unit                                      |
+| `projectId`      | string  | No       | Link to project                                               |
+| `tags`           | array   | No       | Updated tags                                                  |
+| `fields`         | object  | No       | Updated custom field values                                   |
+| `effortPoints`   | number  | No       | Updated effort points                                         |
+| `order`          | number  | No       | Position order within stage                                   |
+| `version`        | number  | No       | Optimistic locking (prevents concurrent edits)                |
+| `archived`       | boolean | No       | Set true to archive, false to unarchive                       |
 
 #### delete_ticket
 
-You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002"). If `displayId` is provided, the system will automatically resolve it to the internal UUID and team ID.
+You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002"). If `displayId` is provided, the system will automatically resolve it to the internal UUID and board ID.
 
 | Parameter   | Type   | Required | Description                                                   |
 | ----------- | ------ | -------- | ------------------------------------------------------------- |
 | `ticketId`  | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)               |
 | `displayId` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically         |
-| `teamId`    | string | Yes\*    | Board the ticket belongs to (\* auto-resolved from displayId) |
+| `boardId`   | string | Yes\*    | Board the ticket belongs to (\* auto-resolved from displayId) |
 
 #### bulk_update_tickets
 
 Update multiple tickets at once (e.g., move all to a new stage, reassign).
 
-| Parameter   | Type   | Required | Description                                                                                                        |
-| ----------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| `ticketIds` | array  | Yes      | Array of ticket IDs to update                                                                                      |
-| `changes`   | object | Yes      | Fields to apply to all tickets. Must include `teamId`. Supports: `stageId`, `assigneeId`, `priority`, `tags`, etc. |
+| Parameter   | Type   | Required | Description                                                                                                         |
+| ----------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `ticketIds` | array  | Yes      | Array of ticket IDs to update                                                                                       |
+| `changes`   | object | Yes      | Fields to apply to all tickets. Must include `boardId`. Supports: `stageId`, `assigneeId`, `priority`, `tags`, etc. |
 
 #### add_comment
 
@@ -325,7 +354,7 @@ You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BU
 | `ticketId`  | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)                           |
 | `displayId` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically                     |
 | `content`   | string | Yes      | Comment text (use HTML for rich text, e.g. `<p>`, `<strong>`, `<ul><li>`) |
-| `teamId`    | string | No       | Board ID (helps with comment count update)                                |
+| `boardId`   | string | No       | Board ID (helps with comment count update)                                |
 
 #### list_comments
 
@@ -360,13 +389,13 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 
 | Parameter | Type   | Required | Description |
 | --------- | ------ | -------- | ----------- |
-| `teamId`  | string | Yes      | Board ID    |
+| `boardId` | string | Yes      | Board ID    |
 
 #### create_work_unit
 
 | Parameter   | Type   | Required | Description                         |
 | ----------- | ------ | -------- | ----------------------------------- |
-| `teamId`    | string | Yes      | Board ID                            |
+| `boardId`   | string | Yes      | Board ID                            |
 | `name`      | string | Yes      | Sprint name                         |
 | `goal`      | string | No       | Sprint goal/objective               |
 | `startDate` | string | No       | Start date (ISO 8601)               |
@@ -378,7 +407,7 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 
 | Parameter    | Type   | Required | Description    |
 | ------------ | ------ | -------- | -------------- |
-| `teamId`     | string | Yes      | Board ID       |
+| `boardId`    | string | Yes      | Board ID       |
 | `workUnitId` | string | Yes      | Work unit ID   |
 | `name`       | string | No       | New name       |
 | `goal`       | string | No       | New goal       |
@@ -391,7 +420,7 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 
 | Parameter    | Type   | Required | Description  |
 | ------------ | ------ | -------- | ------------ |
-| `teamId`     | string | Yes      | Board ID     |
+| `boardId`    | string | Yes      | Board ID     |
 | `workUnitId` | string | Yes      | Work unit ID |
 
 ---
@@ -412,8 +441,8 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 | `linkedTicketDisplayId` | string | Yes      | Target ticket display ID (e.g., "ENG-42")        |
 | `linkedTicketTitle`     | string | No       | Target ticket title                              |
 | `linkType`              | string | Yes      | Link type: depends_on, blocks, related_to        |
-| `teamId`                | string | No       | Source ticket's board ID                         |
-| `linkedTeamId`          | string | No       | Target ticket's board ID (for cross-board links) |
+| `boardId`               | string | No       | Source ticket's board ID                         |
+| `linkedBoardId`         | string | No       | Target ticket's board ID (for cross-board links) |
 
 #### delete_link
 
@@ -552,16 +581,19 @@ Parameters are identical to customer activity operations, but use `supplierId` i
 
 ### Uploads
 
-| Operation           | Description                                                 | Approval |
-| ------------------- | ----------------------------------------------------------- | -------- |
-| `upload_attachment` | Get a presigned URL to upload a file attachment to a ticket | Yes      |
+| Operation           | Description                                                                | Approval |
+| ------------------- | -------------------------------------------------------------------------- | -------- |
+| `upload_attachment` | Upload a file from the workspace to a ticket as an attachment on a comment | Yes      |
 
-| Parameter           | Type   | Required | Description                                                         |
-| ------------------- | ------ | -------- | ------------------------------------------------------------------- |
-| `fileName`          | string | Yes      | Name of the file to upload                                          |
-| `contentType`       | string | Yes      | MIME type (e.g., "application/pdf")                                 |
-| `ticketId`          | string | No       | Associate with a specific ticket                                    |
-| `workspaceFilePath` | string | No       | Pass absolute workspace path (e.g., `/workdir/foo`) to auto-upload. |
+The file at `workspaceFilePath` is PUT to S3 via a presigned URL, and a system comment (`📎 Attached: <name>`) is added to the ticket carrying the attachment record. The attachment shows up under the ticket's Attachments section in the UI and in `get_ticket` under `comments[].attachments`.
+
+| Parameter           | Type   | Required | Description                                                                                                      |
+| ------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `workspaceFilePath` | string | Yes      | Absolute workspace path (e.g. `/workdir/uploads/screenshot.png`). User-pasted files land in `/workdir/uploads/`. |
+| `ticketId`          | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)                                                                  |
+| `displayId`         | string | No       | Display ID (e.g. `BUG-064`) -- resolves automatically                                                            |
+| `fileName`          | string | Yes      | Name to store the file as (typically the basename of `workspaceFilePath`).                                       |
+| `contentType`       | string | Yes      | MIME type (e.g., `image/png`, `application/pdf`).                                                                |
 
 ---
 
@@ -571,10 +603,10 @@ Parameters are identical to customer activity operations, but use `supplierId` i
 | ------------- | ---------------------------------------- | -------- |
 | `get_metrics` | Get ticket counts by status for board(s) | No       |
 
-| Parameter | Type   | Required | Description                                |
-| --------- | ------ | -------- | ------------------------------------------ |
-| `teamIds` | string | Yes      | Comma-separated board IDs                  |
-| `teamId`  | string | Yes      | Single board ID (alternative to `teamIds`) |
+| Parameter  | Type   | Required | Description                                 |
+| ---------- | ------ | -------- | ------------------------------------------- |
+| `boardIds` | string | Yes      | Comma-separated board IDs                   |
+| `boardId`  | string | Yes      | Single board ID (alternative to `boardIds`) |
 
 ---
 
@@ -697,41 +729,53 @@ create_customer(
 
 ## Workflow Examples
 
-### Create a ticket
+### Create a ticket (preferred -- names only)
 
 ```
-# 1. Load config to get ticket types, statuses, staff
-mcp__numa__numa_ops_tool(operation="get_config", params='{}', description="Load ops config")
-
-# 2. List boards to find the right one
-mcp__numa__numa_ops_tool(operation="list_teams", params='{}', description="List all boards")
-
-# 3. Get the board to find valid stage IDs
-mcp__numa__numa_ops_tool(operation="get_team", params='{"teamId":"team-abc"}', description="Get board details with stages")
-
-# 4. Create the ticket with a valid stageId
+# One call. The bridge resolves boardName, stageName, ticketTypeName, and
+# assigneeName to IDs automatically.
 mcp__numa__numa_ops_tool(
     operation="create_ticket",
-    params='{"teamId":"team-abc","stageId":"stage-xyz","title":"Fix login bug","ticketTypeId":"tt-bug123","priority":"high","description":"<p>Users report <strong>500 errors</strong> on the login page.</p><ul><li>Affects all browsers</li><li>Started after last deploy</li></ul>"}',
-    description="Create ticket: Fix login bug (high priority) in Engineering board"
+    params='{"boardName":"Engineering","stageName":"Triage","title":"Fix login bug","ticketTypeName":"Bug","priority":"high","assigneeName":"Tom Wiltshire","description":"<p>Users report <strong>500 errors</strong> on the login page.</p><ul><li>Affects all browsers</li><li>Started after last deploy</li></ul>"}',
+    description="Create ticket: Fix login bug (high priority) in Engineering board, assigned to Tom Wiltshire"
 )
 ```
 
 ### Search and update
 
 ```
-# Search for tickets
+# Search for tickets by board name
 mcp__numa__numa_ops_tool(
     operation="search_tickets",
-    params='{"query":"login bug","teamId":"team-abc"}',
-    description="Search for login bug tickets"
+    params='{"query":"login bug","boardName":"Engineering"}',
+    description="Search for login bug tickets in Engineering board"
 )
 
-# Move ticket to a different stage
+# Move ticket to a different stage by name
 mcp__numa__numa_ops_tool(
     operation="update_ticket",
-    params='{"ticketId":"ticket-xyz","teamId":"team-abc","stageId":"stage-inprogress"}',
-    description="Move ticket to In Progress stage"
+    params='{"displayId":"BUG-081","stageName":"In Progress"}',
+    description='Move BUG-081 to "In Progress" stage'
+)
+```
+
+### Move a customer through their lifecycle
+
+```
+mcp__numa__numa_ops_tool(
+    operation="update_customer",
+    params='{"customerName":"Acme Corp","lifecycleStageName":"At Risk"}',
+    description='Move Acme Corp to "At Risk" lifecycle stage'
+)
+```
+
+### Bulk reassign by name
+
+```
+mcp__numa__numa_ops_tool(
+    operation="bulk_update_tickets",
+    params='{"ticketIds":["t-1","t-2","t-3"],"changes":{"boardName":"Engineering","assigneeName":"Tom Wiltshire"}}',
+    description="Reassign 3 tickets to Tom Wiltshire"
 )
 ```
 
@@ -739,11 +783,12 @@ mcp__numa__numa_ops_tool(
 
 ## Best Practices
 
-1. **Always call `get_config` first** — you need ticket types, statuses, and staff IDs before creating tickets
-2. **Call `get_team` to get stage IDs** — `stageId` must be a valid UUID from `get_team` stages. The API will reject invalid stage IDs with a 400 error. Do not use status names like "backlog" or "completed" as stage IDs
-3. **Link tickets using ticketUrl** — ticket responses include a `ticketUrl` field (e.g., `https://acme.numa.arcanum.ai/ops?ticket=ENG-42`). Always include this link when referencing tickets so users can click through directly
-4. **Include full content in approval descriptions** — for write operations, describe exactly what will be created/changed
-5. **Respect team scoping** — users can only see boards they have access to
-6. **Use search before creating** — check if a similar ticket already exists
-7. **Use HTML for rich text** — ticket descriptions and comments render HTML, not markdown. Use `<p>`, `<strong>`, `<em>`, `<ul><li>`, `<ol><li>`, `<a href="...">`, `<h3>`, etc. Plain text is also fine but will not be formatted. Do NOT use markdown syntax (e.g., `**bold**`, `- list`) as it will render as literal text
-8. **Board owner operations** — `update_team`, `update_zones`, `update_stages` require board owner or admin access. Use `get_team` to check the current user's permissions
+1. **Use names, not IDs.** Pass `boardName`, `stageName`, `assigneeName`, `customerName`, `lifecycleStageName`, etc. The bridge resolves them to IDs. Skip the lookup dance unless you need to show data to the user.
+2. **Never invent IDs.** If you don't know an ID, pass the name -- the bridge resolves it. Don't pattern-match IDs from prior tool results into a guess.
+3. **Trust the structured errors.** When a name doesn't match or matches multiple entities, the bridge returns the available options. Pass that back to the user; don't guess.
+4. **Link tickets using ticketUrl** -- ticket responses include a `ticketUrl` field (e.g. `https://acme.numa.arcanum.ai/ops?ticket=ENG-42`). Always include this link when referencing tickets so users can click through.
+5. **Include full content in approval descriptions** -- for write operations, describe exactly what will be created/changed.
+6. **Respect board scoping** -- users can only see boards they have access to.
+7. **Use search before creating** -- check if a similar ticket already exists.
+8. **Use HTML for rich text** -- ticket descriptions and comments render HTML, not markdown. Use `<p>`, `<strong>`, `<em>`, `<ul><li>`, `<ol><li>`, `<a href="...">`, `<h3>`, etc. Plain text is also fine but will not be formatted. Do NOT use markdown syntax (e.g. `**bold**`, `- list`) as it will render as literal text.
+9. **Board owner operations** -- `update_board`, `update_zones`, `update_stages` require board owner or admin access.

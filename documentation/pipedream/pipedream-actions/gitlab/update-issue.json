@@ -1,0 +1,78 @@
+{
+  "name": "Update Issue",
+  "description": "Updates an existing project issue. [See the documentation](https://docs.gitlab.com/ee/api/issues.html#edit-issue)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "gitlab-update-issue",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "gitlab",
+      "type": "app",
+      "app": "gitlab"
+    },
+    {
+      "name": "projectId",
+      "type": "integer",
+      "label": "Project ID",
+      "description": "The project ID, as displayed in the main project page",
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIid",
+      "type": "string",
+      "label": "Issue Internal ID",
+      "description": "The internal ID of a project's issue ",
+      "remoteOptions": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "The title of the issue",
+      "optional": true
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "The description of the issue",
+      "optional": true
+    },
+    {
+      "name": "labels",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "Comma-separated label names for an issue. Set to an empty string to unassign all labels",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "assigneeIds",
+      "type": "string[]",
+      "label": "Assignee IDs",
+      "description": "The ID of the user(s) to assign the issue to. Set to 0 or provide an empty value to unassign all assignees",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "stateEvent",
+      "type": "string",
+      "label": "State Event",
+      "description": "The state event of an issue. Set close to close the issue and reopen to reopen it",
+      "optional": true,
+      "options": ["close", "reopen"]
+    },
+    {
+      "name": "discussionLocked",
+      "type": "boolean",
+      "label": "Lock Discussion",
+      "description": "Flag indicating if the issue's discussion is locked. If the discussion is locked only project members can add or edit comments",
+      "optional": true
+    }
+  ]
+}

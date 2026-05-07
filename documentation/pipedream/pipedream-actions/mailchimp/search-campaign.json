@@ -1,0 +1,39 @@
+{
+  "name": "Search Campaigns",
+  "description": "Searches for the campaigns. [See docs here](https://mailchimp.com/developer/marketing/api/search-campaigns/search-campaigns/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-search-campaign",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "query",
+      "type": "string",
+      "label": "Query text",
+      "description": "Search query text used to filter results."
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Fields",
+      "description": "A string list of fields to return. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "excludeFields",
+      "type": "string[]",
+      "label": "Exclude Fields",
+      "description": "A string list of fields to exclude_fields. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    }
+  ]
+}

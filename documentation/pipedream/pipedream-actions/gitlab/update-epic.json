@@ -1,0 +1,124 @@
+{
+  "name": "Update Epic",
+  "description": "Updates an epic. [See the documentation](https://docs.gitlab.com/ee/api/epics.html#update-epic)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "gitlab-update-epic",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "gitlab",
+      "type": "app",
+      "app": "gitlab"
+    },
+    {
+      "name": "groupId",
+      "type": "string",
+      "label": "Group ID",
+      "description": "Select a Group or use a custom Group ID. You must be an Owner of this group",
+      "remoteOptions": true
+    },
+    {
+      "name": "epicIid",
+      "type": "string",
+      "label": "Epic Internal ID",
+      "description": "The internal ID of a project's epic. [This feature is restricted to Gitlab's Premium and Ultimate tiers.](https://docs.gitlab.com/ee/api/epics.html)",
+      "remoteOptions": true
+    },
+    {
+      "name": "add_labels",
+      "type": "string[]",
+      "label": "Add labels",
+      "description": "The comma-separated list of labels",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "confidential",
+      "type": "boolean",
+      "label": "Confidential",
+      "description": "Whether the epic should be confidential",
+      "optional": true
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "The description of the issue",
+      "optional": true
+    },
+    {
+      "name": "labels",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "Comma-separated label names for an issue. Set to an empty string to unassign all labels.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "parent_id",
+      "type": "string",
+      "label": "Parent Id",
+      "description": "The ID of a parent epic. Available in GitLab 14.6 and later",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "remove_labels",
+      "type": "string[]",
+      "label": "Remove labels",
+      "description": "Comma-separated label names to remove from an issue.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "stateEvent",
+      "type": "string",
+      "label": "State Event",
+      "description": "The state event of an issue. Set close to close the issue and reopen to reopen it",
+      "optional": true,
+      "options": ["close", "reopen"]
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Title",
+      "description": "The title of an epic",
+      "optional": true
+    },
+    {
+      "name": "updated_at",
+      "type": "string",
+      "label": "Updated at",
+      "description": "When the epic was updated. Date time string, ISO 8601 formatted, for example `2016-03-11T03:45:40Z` . Requires administrator or project/group owner privileges (available in GitLab 13.5 and later)",
+      "optional": true
+    },
+    {
+      "name": "color",
+      "type": "string",
+      "label": "Color",
+      "description": "The color of the epic. Introduced in GitLab 14.8, behind a feature flag named `epic_highlight_color` (disabled by default)",
+      "optional": true
+    },
+    {
+      "name": "start_date_is_fixed",
+      "type": "boolean",
+      "label": "Start Date Is Fixed",
+      "description": "Whether start date should be sourced from start_date_fixed or from milestones (in GitLab 11.3 and later)",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "due_date_is_fixed",
+      "type": "boolean",
+      "label": "Due Date Is Fixed",
+      "description": "Whether due date should be sourced from due_date_fixed or from milestones (in GitLab 11.3 and later)",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

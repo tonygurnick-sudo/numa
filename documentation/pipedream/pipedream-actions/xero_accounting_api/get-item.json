@@ -1,0 +1,32 @@
+{
+  "name": "Get Item",
+  "description": "Gets details of an item.",
+  "component_type": "action",
+  "version": "0.2.4",
+  "key": "xero_accounting_api-get-item",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "itemId",
+      "label": "Item ID",
+      "type": "string",
+      "description": "Possible values:\n* **ItemID** - The Xero identifier for an Item e.g. 297c2dc5-cc47-4afd-8ec8-74990b8761e9\n* **Code**- The user defined code of an item e.g. ITEM-001"
+    }
+  ]
+}

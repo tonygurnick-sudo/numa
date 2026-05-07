@@ -1,0 +1,32 @@
+{
+  "name": "Clone Site Page",
+  "description": "Clone a site page in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/cms/pages#post-%2Fcms%2Fv3%2Fpages%2Fsite-pages%2Fclone)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "hubspot-clone-site-page",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "pageId",
+      "type": "string",
+      "label": "Page ID",
+      "description": "The ID of the page to clone.",
+      "remoteOptions": true
+    },
+    {
+      "name": "cloneName",
+      "type": "string",
+      "label": "Clone Name",
+      "description": "The name of the cloned page."
+    }
+  ]
+}

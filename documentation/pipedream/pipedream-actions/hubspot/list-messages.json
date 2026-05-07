@@ -1,0 +1,71 @@
+{
+  "name": "List Messages",
+  "description": "Retrieves a list of messages in a thread. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-message/get-conversations-v3-conversations-threads-threadId-messages)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "hubspot-list-messages",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "inboxId",
+      "type": "string",
+      "label": "Inbox ID",
+      "description": "The ID of an inbox",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "channelId",
+      "type": "string",
+      "label": "Channel ID",
+      "description": "The ID of a channel",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "threadId",
+      "type": "string",
+      "label": "Thread ID",
+      "description": "The ID of a thread",
+      "remoteOptions": true
+    },
+    {
+      "name": "archived",
+      "type": "boolean",
+      "label": "Archived",
+      "description": "Whether to return only results that have been archived",
+      "optional": true
+    },
+    {
+      "name": "after",
+      "type": "string",
+      "label": "After",
+      "description": "The paging cursor token of the last successfully read resource will be returned as the paging.next.after JSON property of a paged response containing more results.",
+      "optional": true
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "label": "Limit",
+      "description": "The maximum number of results to display per page",
+      "optional": true
+    },
+    {
+      "name": "sort",
+      "type": "string",
+      "label": "Sort",
+      "description": "The sort direction",
+      "options": ["createdAt", "-createdAt"],
+      "optional": true
+    }
+  ]
+}

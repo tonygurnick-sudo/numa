@@ -54,8 +54,8 @@ export const SharedAnalytics = () => {
     return (
       <div className="shared-analytics-error">
         <Alert variant="danger">{error}</Alert>
-        <Link to="/files" className="btn btn-primary">
-          {t('analytics.backToDashboard')}
+        <Link to="/numa-files" className="btn btn-primary">
+          {t('analytics.backToFiles')}
         </Link>
       </div>
     );

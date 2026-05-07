@@ -183,16 +183,17 @@ Update all of the following:
 
 Feature flags are accessed via `getFlag(flagName)` from `src/utils/featureFlags.ts`. Key flags:
 
-| Flag                      | Controls                                       |
-| ------------------------- | ---------------------------------------------- |
-| `PIPEDREAM_INTEGRATIONS`  | Pipedream SaaS integrations                    |
-| `NUMA_WORKSPACE_CHAT`     | Workspace chat agent                           |
-| `SCHEDULING`              | Agent scheduling + notifications               |
-| `DATA_CONNECTORS_ENABLED` | Data connectors (SharePoint, Teams, Box, etc.) |
-| `NUMA_OPS`                | Numa Ops (tickets/projects)                    |
-| `V2_APPS`                 | V2 Apps (experimental)                         |
-| `AGENTS`                  | Agent builder                                  |
-| `SECRETS_VAULT_ENABLED`   | Secrets vault                                  |
+| Flag                      | Controls                                                                                                                                                                                                  |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PIPEDREAM_INTEGRATIONS`  | Pipedream SaaS integrations                                                                                                                                                                               |
+| `NUMA_WORKSPACE_CHAT`     | Workspace chat agent                                                                                                                                                                                      |
+| `SCHEDULING`              | The /automations route + scheduling/triggers wizard (master switch)                                                                                                                                       |
+| `EVENT_TRIGGERS`          | Event-triggered automations (the "When something happens" path). Off → only cron schedules are offerable. Independent of `PIPEDREAM_INTEGRATIONS` (which gates Pipedream-backed sources within triggers). |
+| `DATA_CONNECTORS_ENABLED` | Data connectors (SharePoint, Teams, Box, etc.)                                                                                                                                                            |
+| `NUMA_OPS`                | Numa Ops (tickets/projects)                                                                                                                                                                               |
+| `V2_APPS`                 | V2 Apps (experimental)                                                                                                                                                                                    |
+| `AGENTS`                  | Agent builder                                                                                                                                                                                             |
+| `SECRETS_VAULT_ENABLED`   | Secrets vault                                                                                                                                                                                             |
 
 ---
 

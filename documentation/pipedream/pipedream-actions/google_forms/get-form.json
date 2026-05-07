@@ -1,0 +1,25 @@
+{
+  "name": "Get Form",
+  "description": "Get information about a Google Form. [See the documentation](https://developers.google.com/forms/api/reference/rest/v1/forms/get)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "google_forms-get-form",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleForms",
+      "type": "app",
+      "app": "google_forms"
+    },
+    {
+      "name": "formId",
+      "type": "string",
+      "label": "Form ID",
+      "description": "Identifier of a Google Form"
+    }
+  ]
+}

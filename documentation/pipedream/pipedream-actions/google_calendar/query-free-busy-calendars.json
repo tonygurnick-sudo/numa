@@ -1,0 +1,50 @@
+{
+  "name": "Retrieve Free/Busy Calendar Details",
+  "description": "Retrieve free/busy calendar details from Google Calendar. [See the documentation](https://googleapis.dev/nodejs/googleapis/latest/calendar/classes/Resource$Freebusy.html#query)",
+  "component_type": "action",
+  "version": "0.2.0",
+  "key": "google_calendar-query-free-busy-calendars",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleCalendar",
+      "type": "app",
+      "app": "google_calendar"
+    },
+    {
+      "name": "calendarId",
+      "label": "Calendar ID",
+      "type": "string[]",
+      "description": "Select calendars to retrieve free/busy details",
+      "default": ["primary"],
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "timeMin",
+      "label": "Min time",
+      "description": "Lower bound (exclusive) for an event's time to filter by. Must be an RFC3339 timestamp with mandatory time zone offset, for example, 2011-06-03T10:00:00-07:00, 2011-06-03T10:00:00Z. Milliseconds may be provided but are ignored. Must be smaller than Max Time.",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "timeMax",
+      "label": "Max Time",
+      "description": "Upper bound (exclusive) for an event's time to filter by. Must be an RFC3339 timestamp with mandatory time zone offset, for example, 2011-06-03T10:00:00-07:00, 2011-06-03T10:00:00Z. Milliseconds may be provided but are ignored. Must be greater than Min Time.",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "timeZone",
+      "type": "string",
+      "label": "Time Zone",
+      "description": "Specify the preferred time zone to be used on the response",
+      "optional": true,
+      "remoteOptions": true
+    }
+  ]
+}

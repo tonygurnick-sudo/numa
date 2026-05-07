@@ -1,0 +1,41 @@
+{
+  "name": "List Folder Articles",
+  "description": "List folder articles in Freshdesk. [See the documentation](https://developers.freshdesk.com/api/#solution_article_attributes)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "freshdesk-list-folder-articles",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "categoryId",
+      "type": "integer",
+      "label": "Category ID",
+      "description": "The ID of a category",
+      "remoteOptions": true
+    },
+    {
+      "name": "folderId",
+      "type": "integer",
+      "label": "Folder ID",
+      "description": "The ID of a folder",
+      "remoteOptions": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of results to return",
+      "default": 100,
+      "optional": true
+    }
+  ]
+}

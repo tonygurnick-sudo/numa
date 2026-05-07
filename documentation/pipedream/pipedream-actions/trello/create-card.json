@@ -1,0 +1,158 @@
+{
+  "name": "Create Card",
+  "description": "Creates a new card. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-cards/#api-cards-post).",
+  "component_type": "action",
+  "version": "1.0.5",
+  "key": "trello-create-card",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "board",
+      "type": "string",
+      "label": "Board",
+      "description": "The Trello board you wish to select",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the card.",
+      "optional": false
+    },
+    {
+      "name": "desc",
+      "type": "string",
+      "label": "Description",
+      "description": "The description for the card",
+      "optional": true
+    },
+    {
+      "name": "pos",
+      "type": "string",
+      "label": "Position",
+      "description": "The position of the new card. `top`, `bottom`, or a positive float",
+      "options": ["top", "bottom"],
+      "optional": true
+    },
+    {
+      "name": "due",
+      "type": "string",
+      "label": "Due Date",
+      "description": "Card due date in ISO format",
+      "optional": true
+    },
+    {
+      "name": "dueComplete",
+      "type": "boolean",
+      "label": "Due Complete",
+      "description": "Flag that indicates if `dueDate` expired",
+      "optional": true
+    },
+    {
+      "name": "idList",
+      "type": "string",
+      "label": "List",
+      "description": "The ID of the list the card should be created in.",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "idMembers",
+      "type": "string[]",
+      "label": "Members",
+      "description": "Array of member IDs to add to the card",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "idLabels",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "Array of labelIDs to add to the card",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "file",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "Provide either a file URL or a path to a file in the /tmp directory (for example, /tmp/myFile.pdf).",
+      "optional": true
+    },
+    {
+      "name": "mimeType",
+      "type": "string",
+      "label": "Mime Type",
+      "description": "Mime type of the attached file. Eg. `application/pdf`",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "idCardSource",
+      "type": "string",
+      "label": "Copy Card",
+      "description": "Specify an existing card to copy contents from. Keep in mind that if you copy a card, the **File Attachment Path**, **File Attachment URL** and **File Attachment Type** fields will be ignored.",
+      "optional": true,
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "keepFromSource",
+      "type": "string[]",
+      "label": "Copy From Source",
+      "description": "Specify which properties to copy from the source card",
+      "options": ["all", "attachments", "checklists", "comments", "due", "labels", "members", "stickers"],
+      "optional": true,
+      "hidden": true
+    },
+    {
+      "name": "address",
+      "type": "string",
+      "label": "Address",
+      "description": "For use with/by the Map Power-Up",
+      "optional": true
+    },
+    {
+      "name": "locationName",
+      "type": "string",
+      "label": "Location Name",
+      "description": "For use with/by the Map Power-Up",
+      "optional": true
+    },
+    {
+      "name": "coordinates",
+      "type": "string",
+      "label": "Coordinates",
+      "description": "Latitude, longitude coordinates. For use with/by the Map Power-Up. Should take the form `lat, long`.",
+      "optional": true
+    },
+    {
+      "name": "customFieldIds",
+      "type": "string[]",
+      "label": "Custom Field Ids",
+      "description": "An array of custom field Ids to create/update",
+      "optional": true,
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

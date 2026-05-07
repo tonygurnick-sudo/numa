@@ -1,0 +1,48 @@
+{
+  "name": "Find or Create Contact",
+  "description": "Finds a contact by name or email address. Optionally, create one if none are found. [See the docs here](https://developer.xero.com/documentation/api/accounting/contacts/#get-contacts)",
+  "component_type": "action",
+  "version": "0.1.2",
+  "key": "xero_accounting_api-find-or-create-contact",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Contact name",
+      "description": "Full name of contact/organization ",
+      "optional": true
+    },
+    {
+      "name": "emailAddress",
+      "type": "string",
+      "label": "Email address",
+      "description": "Email address of contact/organization.",
+      "optional": true
+    },
+    {
+      "name": "createContactIfNotFound",
+      "description": "Create a new contact if not found?.",
+      "label": "Create a new contact if not found",
+      "type": "string",
+      "options": ["Yes", "No"],
+      "reloadProps": true
+    }
+  ]
+}

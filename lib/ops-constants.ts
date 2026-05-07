@@ -25,19 +25,19 @@ export const STATUS_TYPE_TO_ZONES: Record<StatusType, ZoneType[]> = {
 // ─── Default Zones ──────────────────────────────────────────────────────────
 //
 // Default two-zone layout used when no explicit zones array is provided
-// during team creation.
+// during board creation.
 
 export const DEFAULT_ZONES: { name: string; zoneType: ZoneType; order: number }[] = [
   { name: 'Product Backlog', zoneType: 'backlog', order: 1000 },
   { name: 'Board', zoneType: 'board', order: 2000 },
 ];
 
-// ─── Team Presets ───────────────────────────────────────────────────────────
+// ─── Board Presets ──────────────────────────────────────────────────────────
 //
-// Presets define the default zones and stages when creating a new team.
+// Presets define the default zones and stages when creating a new board.
 // Each preset is zone-centric: it defines an array of zones, each with its
 // own stages. Users can rename stages during wizard creation or later in
-// Team Settings.
+// Board Settings.
 
 export type PresetStage = {
   name: string;
@@ -50,7 +50,7 @@ export type PresetZone = {
   stages: PresetStage[];
 };
 
-export type TeamPreset = {
+export type BoardPreset = {
   id: string;
   name: string;
   description: string;
@@ -58,10 +58,10 @@ export type TeamPreset = {
   zones: PresetZone[];
 };
 
-/** @deprecated Use TeamPreset instead. */
-export type BoardPreset = TeamPreset;
+/** @deprecated Use BoardPreset instead. */
+export type TeamPreset = BoardPreset;
 
-export const TEAM_PRESETS: TeamPreset[] = [
+export const BOARD_PRESETS: BoardPreset[] = [
   {
     id: 'standard',
     name: 'Blank Board',
@@ -90,12 +90,12 @@ export const TEAM_PRESETS: TeamPreset[] = [
   },
 ];
 
-/** @deprecated Use TEAM_PRESETS instead. */
-export const BOARD_PRESETS = TEAM_PRESETS;
+/** @deprecated Use BOARD_PRESETS instead. */
+export const TEAM_PRESETS = BOARD_PRESETS;
 
-// ─── Team Preset Metadata ───────────────────────────────────────────────────
+// ─── Board Preset Metadata ──────────────────────────────────────────────────
 
-export type TeamPresetInfo = {
+export type BoardPresetInfo = {
   mode: BoardMode;
   name: string;
   nameKey: string;
@@ -103,21 +103,25 @@ export type TeamPresetInfo = {
   defaultPreset: string;
 };
 
-/** @deprecated Use TeamPresetInfo instead. */
-export type BoardModeInfo = TeamPresetInfo;
+/** @deprecated Use BoardPresetInfo instead. */
+export type TeamPresetInfo = BoardPresetInfo;
+/** @deprecated Use BoardPresetInfo instead. */
+export type BoardModeInfo = BoardPresetInfo;
 
-export const TEAM_PRESETS_INFO: TeamPresetInfo[] = [
+export const BOARD_PRESETS_INFO: BoardPresetInfo[] = [
   {
     mode: 'normal',
     name: 'Empty Template',
-    nameKey: 'teams.modeStandard',
-    descriptionKey: 'teams.modeStandardDesc',
+    nameKey: 'boards.modeStandard',
+    descriptionKey: 'boards.modeStandardDesc',
     defaultPreset: 'standard',
   },
 ];
 
-/** @deprecated Use TEAM_PRESETS_INFO instead. */
-export const BOARD_MODES = TEAM_PRESETS_INFO;
+/** @deprecated Use BOARD_PRESETS_INFO instead. */
+export const TEAM_PRESETS_INFO = BOARD_PRESETS_INFO;
+/** @deprecated Use BOARD_PRESETS_INFO instead. */
+export const BOARD_MODES = BOARD_PRESETS_INFO;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -128,6 +132,6 @@ export const isStatusTypeAllowedInZone = (statusType: StatusType, zoneType: Zone
 /** Get the first valid zone for a statusType (used for auto-move). */
 export const getDefaultZoneForStatusType = (statusType: StatusType): ZoneType => STATUS_TYPE_TO_ZONES[statusType][0];
 
-/** Get a team preset by ID, falling back to 'standard'. */
-export const getPreset = (presetId?: string): TeamPreset =>
-  TEAM_PRESETS.find((p) => p.id === presetId) ?? TEAM_PRESETS[0];
+/** Get a board preset by ID, falling back to 'standard'. */
+export const getPreset = (presetId?: string): BoardPreset =>
+  BOARD_PRESETS.find((p) => p.id === presetId) ?? BOARD_PRESETS[0];

@@ -37,7 +37,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
   const { numaPost, numaPut, numaDelete } = useNumaRequest();
   const { user } = useAuth();
   const { showToast } = useToast();
-  const { config, teams, tickets, refreshConfig, selectTeam, refreshTickets } = useOps();
+  const { config, boards, tickets, refreshConfig, selectBoard, refreshTickets } = useOps();
   const isAdmin = user?.decoded_tokens?.idToken?.['cognito:groups']?.includes('Admins') ?? false;
   const userSub = user?.decoded_tokens?.idToken?.sub ?? '';
 
@@ -79,10 +79,10 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
 
   const boardVisibilityText = useMemo(() => {
     if (allBoards || !boardIds.length) return t('projects.visibleAllBoards', 'Visible on all boards');
-    const names = boardIds.map((id) => teams.find((tm) => tm.id === id)?.name).filter(Boolean);
+    const names = boardIds.map((id) => boards.find((tm) => tm.id === id)?.name).filter(Boolean);
     if (!names.length) return t('projects.visibleAllBoards', 'Visible on all boards');
     return t('projects.visibleOnBoards', { boards: names.join(', '), defaultValue: `Visible on: ${names.join(', ')}` });
-  }, [allBoards, boardIds, teams, t]);
+  }, [allBoards, boardIds, boards, t]);
 
   // ── Dirty detection ───────────────────────────────────────────────────
 
@@ -237,8 +237,8 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
 
   // ── Board toggle ──────────────────────────────────────────────────────
 
-  const toggleBoard = (teamId: string) => {
-    setBoardIds((prev) => (prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]));
+  const toggleBoard = (boardId: string) => {
+    setBoardIds((prev) => (prev.includes(boardId) ? prev.filter((id) => id !== boardId) : [...prev, boardId]));
   };
 
   const handleAllBoardsToggle = (checked: boolean) => {
@@ -495,7 +495,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
                         style={{ fontSize: 'var(--ops-font-sm, 0.8rem)' }}
                       />
                       {!allBoards &&
-                        teams.map((team) => (
+                        boards.map((team) => (
                           <Form.Check
                             key={team.id}
                             type="checkbox"
@@ -538,7 +538,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
                         autoFocus
                         onChange={(e) => {
                           if (e.target.value) {
-                            selectTeam(e.target.value);
+                            selectBoard(e.target.value);
                             setShowBoardPicker(false);
                             setShowCreateTicket(true);
                           }
@@ -553,7 +553,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
                         <option value="" disabled>
                           {t('projects.selectBoard', 'Select a board...')}
                         </option>
-                        {(allBoards ? teams : teams.filter((tm) => boardIds.includes(tm.id))).map((tm) => (
+                        {(allBoards ? boards : boards.filter((tm) => boardIds.includes(tm.id))).map((tm) => (
                           <option key={tm.id} value={tm.id}>
                             {tm.name}
                           </option>
@@ -579,9 +579,9 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
                       size="sm"
                       onClick={() => {
                         // If only one board available, skip picker
-                        const availableBoards = allBoards ? teams : teams.filter((tm) => boardIds.includes(tm.id));
+                        const availableBoards = allBoards ? boards : boards.filter((tm) => boardIds.includes(tm.id));
                         if (availableBoards.length === 1) {
-                          selectTeam(availableBoards[0].id);
+                          selectBoard(availableBoards[0].id);
                           setShowCreateTicket(true);
                         } else {
                           setShowBoardPicker(true);
@@ -602,7 +602,7 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {projectTickets.slice(0, 20).map((ticket) => (
-                    <TicketRow key={ticket.id} ticket={ticket} config={config} teams={teams} />
+                    <TicketRow key={ticket.id} ticket={ticket} config={config} boards={boards} />
                   ))}
                   {projectTickets.length > 20 && (
                     <div style={{ fontSize: 'var(--ops-font-xs, 0.7rem)', color: '#9ca3af', paddingTop: 4 }}>
@@ -715,15 +715,15 @@ const STATUS_TYPE_COLORS: Record<string, string> = {
 function TicketRow({
   ticket,
   config,
-  teams,
+  boards,
 }: {
   ticket: Ticket;
   config: { statuses?: { id: string; name: string; statusType?: string }[] } | null;
-  teams: { id: string; name: string }[];
+  boards: { id: string; name: string }[];
 }): React.JSX.Element {
   const status = config?.statuses?.find((s) => s.id === ticket.stageId);
   const statusColor = STATUS_TYPE_COLORS[status?.statusType ?? 'backlog'] ?? '#9ca3af';
-  const boardName = teams.find((t) => t.id === ticket.teamId)?.name;
+  const boardName = boards.find((t) => t.id === ticket.boardId)?.name;
 
   return (
     <div

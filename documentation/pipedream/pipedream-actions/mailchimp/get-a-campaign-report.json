@@ -1,0 +1,41 @@
+{
+  "name": "Get A Campaign Report",
+  "description": "Gets a campaign report. [See docs here](https://mailchimp.com/developer/marketing/api/campaign-advice/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-get-a-campaign-report",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "campaignId",
+      "type": "string",
+      "label": "Campaign ID",
+      "description": "The unique ID of the campaign",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Fields",
+      "description": "A string list of fields to return. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "excludeFields",
+      "type": "string[]",
+      "label": "Exclude Fields",
+      "description": "A string list of fields to exclude_fields. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    }
+  ]
+}

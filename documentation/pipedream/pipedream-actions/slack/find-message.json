@@ -1,0 +1,57 @@
+{
+  "name": "Find Message",
+  "description": "Find a Slack message. [See the documentation](https://api.slack.com/methods/search.messages)",
+  "component_type": "action",
+  "version": "0.0.26",
+  "key": "slack-find-message",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "query",
+      "type": "string",
+      "label": "Query",
+      "description": "Search query."
+    },
+    {
+      "name": "teamId",
+      "type": "string",
+      "label": "Team",
+      "description": "Select a team.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "maxResults",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "The maximum number of messages to return",
+      "default": 100,
+      "optional": true
+    },
+    {
+      "name": "sort",
+      "type": "string",
+      "label": "Sort",
+      "description": "Return matches sorted by either `score` or `timestamp`",
+      "options": ["score", "timestamp"],
+      "optional": true
+    },
+    {
+      "name": "sortDirection",
+      "type": "string",
+      "label": "Sort Direction",
+      "description": "Sort ascending (asc) or descending (desc)`",
+      "options": ["desc", "asc"],
+      "optional": true
+    }
+  ]
+}

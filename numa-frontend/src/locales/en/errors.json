@@ -46,6 +46,8 @@
     "deleteFailed": "Failed to delete folder",
     "listFilesFailed": "Failed to list files in folder",
     "deleteFilesFailed": "Failed to delete files",
+    "createSubfolderFailed": "Failed to create subfolder",
+    "deleteSubfolderFailed": "Failed to delete subfolder",
     "stateFailed": "Failed to load folder status"
   },
   "branding": {
@@ -72,6 +74,9 @@
     "accessDenied": "Access denied: Please check your permissions for Pipedream relay lambda invocation",
     "relayNotFound": "Pipedream relay lambda not found: Please check configuration",
     "timeout": "Request timeout: Pipedream relay is taking too long to respond",
-    "externalUserIdMissing": "Unable to derive external user ID: missing client ID or user ID"
+    "externalUserIdMissing": "Unable to derive external user ID: missing client ID or user ID",
+    "listTriggersFailed": "Failed to list triggers",
+    "configurePropFailed": "Failed to load options for this field",
+    "proxyRequestFailed": "Failed to call upstream API via Pipedream proxy"
   }
 }

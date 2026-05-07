@@ -1,0 +1,40 @@
+{
+  "name": "Replace Image",
+  "description": "Replace image in a existing document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/request#ReplaceImageRequest)",
+  "component_type": "action",
+  "version": "0.0.11",
+  "key": "google_docs-replace-image",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleDocs",
+      "type": "app",
+      "app": "google_docs"
+    },
+    {
+      "name": "docId",
+      "type": "string",
+      "label": "Document",
+      "description": "Search for and select a document. You can also use a custom expression to pass a value from a previous step (e.g., `{{steps.foo.$return_value.documentId}}`) or you can enter a static ID (e.g., `1KuEN7k8jVP3Qi0_svM5OO8oEuiLkq0csihobF67eat8`).",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "imageId",
+      "type": "string",
+      "label": "Image ID",
+      "description": "The image that will be replaced",
+      "remoteOptions": true
+    },
+    {
+      "name": "imageUri",
+      "type": "string",
+      "label": "Image URL",
+      "description": "The URL of the image you want to insert into the doc"
+    }
+  ]
+}

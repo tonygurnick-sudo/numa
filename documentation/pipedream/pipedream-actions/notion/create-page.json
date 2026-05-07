@@ -1,0 +1,51 @@
+{
+  "name": "Create Page",
+  "description": "Create a page from a parent page. [See the documentation](https://developers.notion.com/reference/post-page)",
+  "component_type": "action",
+  "version": "0.3.1",
+  "key": "notion-create-page",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "parent",
+      "type": "string",
+      "label": "Parent Page ID",
+      "description": "Select a parent page or provide a page ID",
+      "useQuery": true,
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Page Title",
+      "description": "The page title (defaults to `Untitled`)",
+      "optional": true
+    },
+    {
+      "name": "metaTypes",
+      "type": "string[]",
+      "label": "Meta Types",
+      "description": "Select one or more page attributes (such as icon and cover)",
+      "options": ["icon", "cover"],
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "pageContent",
+      "type": "string",
+      "label": "Page Content",
+      "description": "The content of the page, using Markdown syntax. [See the documentation](https://www.notion.com/help/writing-and-editing-basics#markdown-and-shortcuts) for more information",
+      "optional": true
+    }
+  ]
+}

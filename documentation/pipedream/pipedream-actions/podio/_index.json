@@ -1,0 +1,98 @@
+[
+  {
+    "key": "podio-upload-from-url",
+    "name": "Upload From URL",
+    "description": "Uploads a file from a URL to Podio. [See the documentation](https://github.com/podio/podio-rb/blob/6c77c92792c3ae79d487a997909122e90e544bf1/lib/podio/models/file_attachment.rb#L62)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "podio-upload-file",
+    "name": "Upload File",
+    "description": "Uploads a new file to Podio. [See the documentation](https://developers.podio.com/doc/files/upload-file-1004361)",
+    "version": "0.1.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "podio-update-item",
+    "name": "Update an Item",
+    "description": "Updates an item. [See the documentation](https://developers.podio.com/doc/items/update-item-22363)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "podio-find-item",
+    "name": "Find Item",
+    "description": "Filters items for the given app. [See the documentation](https://developers.podio.com/doc/items/filter-items-4496747)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "podio-create-task",
+    "name": "Create Task",
+    "description": "Creates a task to the given workspace. [See the documentation](https://developers.podio.com/doc/tasks/create-task-22419)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "podio-create-status",
+    "name": "Create Status",
+    "description": "Creates a status to the given workspace. [See the documentation](https://developers.podio.com/doc/status/add-new-status-message-22336)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "podio-create-item",
+    "name": "Create an Item",
+    "description": "Adds a new item to the given app. [See the documentation](https://developers.podio.com/doc/items/add-new-item-22362)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "podio-attach-file",
+    "name": "Attach File",
+    "description": "Attaches an uploaded file to the given object. [See the documentation](https://developers.podio.com/doc/files/attach-file-22518)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  }
+]

@@ -1,0 +1,63 @@
+{
+  "name": "Upload File",
+  "description": "Upload a file to OneDrive. [See the documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content?view=odsp-graph-online)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "sharepoint-upload-file",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "siteId",
+      "type": "string",
+      "label": "Site",
+      "description": "Identifier of a site",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "driveId",
+      "type": "string",
+      "label": "Drive ID",
+      "description": "Identifier of a drive within a site",
+      "remoteOptions": true
+    },
+    {
+      "name": "uploadFolderId",
+      "type": "string",
+      "label": "Upload Folder ID",
+      "description": "The ID of the folder where you want to upload the file. You can either search for the folder here or provide a custom *Folder ID*.",
+      "optional": true,
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "filePath",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "The file to upload. Provide either a file URL or a path to a file in the `/tmp` directory (for example, `/tmp/myFile.txt`)"
+    },
+    {
+      "name": "filename",
+      "type": "string",
+      "label": "Name",
+      "description": "Name of the new uploaded file"
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

@@ -1,0 +1,50 @@
+{
+  "name": "Update Groups Members",
+  "description": "Update the list of users for a User Group. [See the documentation](https://api.slack.com/methods/usergroups.users.update)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "slack-update-group-members",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "userGroup",
+      "type": "string",
+      "label": "User Group",
+      "description": "The encoded ID of the User Group.",
+      "remoteOptions": true
+    },
+    {
+      "name": "usersToAdd",
+      "type": "string[]",
+      "label": "Users to Add",
+      "description": "A list of encoded user IDs that represent the users to add to the group.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "usersToRemove",
+      "type": "string[]",
+      "label": "Users to Remove",
+      "description": "A list of encoded user IDs that represent the users to remove from the group.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "team",
+      "type": "string",
+      "label": "Team",
+      "description": "Encoded team id where the user group exists, required if org token is used.",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

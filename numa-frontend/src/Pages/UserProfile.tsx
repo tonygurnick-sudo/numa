@@ -728,6 +728,7 @@ export default function UserProfilePage({
       emailSignatureEnabled: DEFAULT_CHAT_SETTINGS.emailSignatureEnabled,
       emailSignatureText: DEFAULT_CHAT_SETTINGS.emailSignatureText,
       chatScrollMode: DEFAULT_CHAT_SETTINGS.chatScrollMode,
+      chatSuggestionsEnabled: DEFAULT_CHAT_SETTINGS.chatSuggestionsEnabled,
     }));
     setDirty(true);
   };
@@ -760,6 +761,7 @@ export default function UserProfilePage({
           emailSignatureEnabled: userDefaults.emailSignatureEnabled,
           emailSignatureText: userDefaults.emailSignatureText,
           chatScrollMode: userDefaults.chatScrollMode,
+          chatSuggestionsEnabled: userDefaults.chatSuggestionsEnabled,
         },
         numaPut
       );
@@ -1556,6 +1558,48 @@ export default function UserProfilePage({
                 ))}
               </div>
             </div>
+
+            {getFlag('CHAT_SUGGESTIONS') && (
+              <div className="profile-section">
+                <div className="profile-section__title">{t('userProfile.defaults.chatSuggestions.label')}</div>
+                <p className="profile-section__description">{t('userProfile.defaults.chatSuggestions.help')}</p>
+                <div className="profile-radio-group">
+                  {([true, false] as const).map((enabled) => (
+                    <div
+                      key={String(enabled)}
+                      className={`profile-radio-option ${userDefaults.chatSuggestionsEnabled === enabled ? 'is-selected' : ''}`}
+                      onClick={() => {
+                        if (disableProfileForm) return;
+                        setUserDefaults((prev) => ({ ...prev, chatSuggestionsEnabled: enabled }));
+                        setDirty(true);
+                      }}
+                    >
+                      <div className="profile-radio-option__inner">
+                        <Form.Check
+                          type="radio"
+                          id={`chat-suggestions-${enabled}`}
+                          name="chatSuggestionsEnabled"
+                          checked={userDefaults.chatSuggestionsEnabled === enabled}
+                          disabled={disableProfileForm}
+                          onChange={() => {
+                            setUserDefaults((prev) => ({ ...prev, chatSuggestionsEnabled: enabled }));
+                            setDirty(true);
+                          }}
+                        />
+                        <div className="profile-radio-option__text">
+                          <div className="profile-radio-option__label">
+                            {t(`userProfile.defaults.chatSuggestions.${enabled ? 'enabled' : 'disabled'}`)}
+                          </div>
+                          <div className="profile-radio-option__help">
+                            {t(`userProfile.defaults.chatSuggestions.${enabled ? 'enabledHelp' : 'disabledHelp'}`)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {renderSaveActions(
               'userProfile.actions.resetBrowser',

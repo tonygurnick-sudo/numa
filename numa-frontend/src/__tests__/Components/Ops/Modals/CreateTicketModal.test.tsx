@@ -21,6 +21,9 @@ vi.mock('../../../../Components/Ops/OpsContext', () => ({
 vi.mock('../../../../Providers/AuthProvider', () => ({
   useAuth: vi.fn(),
 }));
+vi.mock('../../../../Providers/ToastContext', () => ({
+  useToast: () => ({ showToast: vi.fn() }),
+}));
 vi.mock('../../../../Services/OpsService', () => ({
   listCustomers: vi.fn().mockResolvedValue([]),
   listSuppliers: vi.fn().mockResolvedValue([]),
@@ -48,9 +51,9 @@ describe('CreateTicketModal (FEAT-108 validation)', () => {
       projects: [],
     };
 
-    const mockTeamData = {
-      team: {
-        id: 'team-1',
+    const mockBoardData = {
+      board: {
+        id: 'board-1',
         allowedTicketTypes: ['tt-1'],
         preset: 'software',
       },
@@ -60,7 +63,7 @@ describe('CreateTicketModal (FEAT-108 validation)', () => {
 
     (useOps as any).mockReturnValue({
       config: mockConfig,
-      teamData: mockTeamData,
+      boardData: mockBoardData,
       workUnits: [],
       refreshTickets: vi.fn(),
       refreshCrmData: vi.fn(),

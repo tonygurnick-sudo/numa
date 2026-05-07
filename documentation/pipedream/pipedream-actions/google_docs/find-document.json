@@ -1,0 +1,42 @@
+{
+  "name": "Find Document",
+  "description": "Search for a specific file by name. [See the documentation](https://developers.google.com/drive/api/v3/search-files) for more information",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "google_docs-find-document",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_docs"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "nameSearchTerm",
+      "type": "string",
+      "label": "Search Name",
+      "description": "Search for a file by name (equivalent to the query `name contains [value]`).",
+      "optional": true
+    },
+    {
+      "name": "searchQuery",
+      "type": "string",
+      "label": "Search Query",
+      "description": "Search for a file with a query. [See the documentation](https://developers.google.com/drive/api/guides/ref-search-terms) for more information. If specified, `Search Name` will be ignored.",
+      "optional": true
+    }
+  ]
+}

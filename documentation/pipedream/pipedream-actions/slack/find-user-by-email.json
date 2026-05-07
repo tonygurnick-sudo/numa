@@ -1,0 +1,25 @@
+{
+  "name": "Find User by Email",
+  "description": "Find a user by matching against their email. [See the documentation](https://api.slack.com/methods/users.lookupByEmail)",
+  "component_type": "action",
+  "version": "0.0.24",
+  "key": "slack-find-user-by-email",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "An email address belonging to a user in the workspace"
+    }
+  ]
+}

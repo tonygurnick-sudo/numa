@@ -17,9 +17,16 @@ from prm import client as prm_client
 
 logger = structlog.get_logger()
 
-# Approval polling configuration
+# Approval polling configuration.
+#
+# If you change APPROVAL_TIMEOUT_SECONDS, also update the matching constants in
+# `services/numa-workspace-agent/numa_workspace_agent/sdk_runner.py` (currently
+# imported indirectly via the MCP tool flow) and
+# `numa-frontend/src/Components/WorkspaceChat/WorkspaceChatInlineTool.tsx`.
+# There is no shared package — three copies, kept in sync manually.
+# Tests in `tests/test_approval.py` will fail if the Python copies drift.
 APPROVAL_POLL_INTERVAL_SECONDS = 5
-APPROVAL_TIMEOUT_SECONDS = 90
+APPROVAL_TIMEOUT_SECONDS = 180
 
 # DynamoDB table name from environment
 INTEGRATIONS_APPROVAL_TABLE = os.environ.get("INTEGRATIONS_APPROVAL_TABLE_NAME", "")
@@ -111,9 +118,46 @@ def poll_approval(approval_id: str) -> Tuple[str, str]:
         raise ValueError("INTEGRATIONS_APPROVAL_TABLE_NAME is not configured")
 
     dynamodb = prm_client("dynamodb")
-    deadline = time.time() + APPROVAL_TIMEOUT_SECONDS
+
+    # Anchor the deadline to the DDB record's created_at, not to wall-clock-now.
+    # This way the user's effective approval window is always
+    # APPROVAL_TIMEOUT_SECONDS from when the card became visible (the SSE
+    # event timestamp ~= DDB created_at), regardless of when polling
+    # happens to start. Fixes a race where eager tool dispatch could burn
+    # the entire window before the card was even rendered (see incident
+    # 2026-05-02 in nd-labs).
+    initial = dynamodb.get_item(
+        TableName=table_name,
+        Key={"approval_id": {"S": approval_id}},
+    )
+    initial_item = initial.get("Item", {})
+    created_at_str = initial_item.get("created_at", {}).get("N")
+
+    if created_at_str:
+        deadline = int(created_at_str) + APPROVAL_TIMEOUT_SECONDS
+        # Safety floor: never give the user less than 30s of polling even
+        # if created_at is unexpectedly stale or clock-skewed.
+        deadline = max(deadline, time.time() + 30)
+    else:
+        # Fallback: DDB record not visible yet (eventual consistency, very
+        # rare since create_approval_request is a strongly-consistent put).
+        deadline = time.time() + APPROVAL_TIMEOUT_SECONDS
+
+    # Honour the initial read so we don't double-poll on the first iteration.
+    initial_status = initial_item.get("status", {}).get("S", "pending")
+    if initial_status in ("approved", "denied"):
+        deny_reason = initial_item.get("deny_reason", {}).get("S", "")
+        logger.info(
+            "Approval decision received",
+            approval_id=approval_id,
+            status=initial_status,
+            has_deny_reason=bool(deny_reason),
+        )
+        return initial_status, deny_reason
 
     while time.time() < deadline:
+        time.sleep(APPROVAL_POLL_INTERVAL_SECONDS)
+
         response = dynamodb.get_item(
             TableName=table_name,
             Key={"approval_id": {"S": approval_id}},
@@ -131,8 +175,6 @@ def poll_approval(approval_id: str) -> Tuple[str, str]:
                 has_deny_reason=bool(deny_reason),
             )
             return status, deny_reason
-
-        time.sleep(APPROVAL_POLL_INTERVAL_SECONDS)
 
     logger.warning(
         "Approval timed out",

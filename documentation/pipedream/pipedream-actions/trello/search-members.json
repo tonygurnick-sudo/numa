@@ -1,0 +1,49 @@
+{
+  "name": "Search Members",
+  "description": "Search for Trello members. [See the documentation](https://developer.atlassian.com/cloud/trello/rest/api-group-search/#api-search-members-get).",
+  "component_type": "action",
+  "version": "0.2.5",
+  "key": "trello-search-members",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "trello",
+      "description": "Pipedream Trello Components"
+    },
+    {
+      "name": "query",
+      "type": "string",
+      "label": "Search Query",
+      "description": "Search query 1 to 16384 characters long"
+    },
+    {
+      "name": "idBoard",
+      "type": "string",
+      "label": "Board ID",
+      "description": "The ID of the board to search for members.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "idOrganization",
+      "type": "string",
+      "label": "Organization ID",
+      "description": "The ID of the organization to search for members.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "label": "Limit",
+      "description": "The maximum number of results to return. Maximum of 20.",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "name": "Download File",
+  "description": "Download a file. [See the documentation](https://developers.google.com/drive/api/v3/manage-downloads) for more information",
+  "component_type": "action",
+  "version": "0.1.18",
+  "key": "google_drive-download-file",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File",
+      "description": "The file to download",
+      "remoteOptions": true
+    },
+    {
+      "name": "filePath",
+      "type": "string",
+      "label": "Destination File Path",
+      "description": "The destination file name or path [in the `/tmp` directory](https://pipedream.com/docs/workflows/steps/code/nodejs/working-with-files/#the-tmp-directory) (e.g., `/tmp/myFile.csv`)",
+      "optional": true
+    },
+    {
+      "name": "mimeType",
+      "type": "string",
+      "label": "Conversion Format",
+      "description": "The format to which to convert the downloaded file if it is a [Google Workspace document](https://developers.google.com/drive/api/v3/ref-export-formats)",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "write",
+      "sync": true
+    },
+    {
+      "name": "getBufferResponse",
+      "type": "boolean",
+      "label": "Get Buffer Response",
+      "description": "Whether to return the file content as a buffer instead of writing to a file path",
+      "optional": true
+    }
+  ],
+  "stash": "required"
+}

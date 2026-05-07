@@ -427,8 +427,10 @@ export class CustomerSuccessPortalConstruct extends Construct {
           'ecr:DescribeRepositories',
         ],
         resources: [
-          // Images account/region used by the portal Containers page
+          // Images account/region used by the portal Containers page.
+          // Both prod (numa-deploy) and dev (numa-deploy-dev) channels are listable.
           'arn:aws:ecr:ap-southeast-2:826326270637:repository/numa-deploy',
+          'arn:aws:ecr:ap-southeast-2:826326270637:repository/numa-deploy-dev',
         ],
       },
       {

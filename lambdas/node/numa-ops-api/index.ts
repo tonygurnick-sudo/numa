@@ -22,6 +22,7 @@ import {
 } from '../../../lib/ops-constants';
 import type { PresetZone } from '../../../lib/ops-constants';
 import type { ZoneType, StatusType } from '../../../lib/ops-schemas';
+import { dbToApi, translateTeamString } from '../../../lib/ops-serialize';
 
 const client = withPRM(DynamoDBClient, {});
 
@@ -102,11 +103,14 @@ const jsonResponse = (
 ): { statusCode: number; headers: typeof HEADERS; body: string } => ({
   statusCode,
   headers: HEADERS,
-  body: JSON.stringify(payload),
+  // dbToApi recursively renames `teamId`/`team`/`teams` -> board variants on
+  // the way out so the wire surface is consistently board-shaped. The DB
+  // attribute names underneath remain as `teamId` (no migration).
+  body: JSON.stringify(dbToApi(payload)),
 });
 
 const errorResponse = (statusCode: number, message: string): ReturnType<typeof jsonResponse> =>
-  jsonResponse(statusCode, { error: message });
+  jsonResponse(statusCode, { error: translateTeamString(message) });
 
 /**
  * Resolve user display name from staff records in OPS_CONFIG_TABLE.
@@ -362,7 +366,7 @@ const buildAuditItem = (
 
 // ─── Teams ───────────────────────────────────────────────────────────────────────
 
-const handleTeams = async (
+const handleBoards = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
@@ -382,12 +386,12 @@ const handleTeams = async (
   if (method === 'GET' && segments.length === 1) {
     const teamId = segments[0];
     const items = await queryByPK(`TEAM#${teamId}`);
-    if (items.length === 0) return errorResponse(404, 'Team not found');
+    if (items.length === 0) return errorResponse(404, 'Board not found');
     const meta = items.find((i) => String(i.SK) === 'META');
 
     // Verify user has access to this team
     if (meta && !hasTeamAccess(meta, auth)) {
-      return errorResponse(403, 'You do not have access to this team');
+      return errorResponse(403, 'You do not have access to this board');
     }
 
     const zones = items
@@ -569,9 +573,9 @@ const handleTeams = async (
 
     const metaResults = await queryByPK(`TEAM#${teamId}`, 'META');
     const meta = metaResults[0];
-    if (!meta) return errorResponse(404, 'Team not found');
+    if (!meta) return errorResponse(404, 'Board not found');
 
-    if (!isAdmin(auth) && !isTeamOwner(meta, auth)) return errorResponse(403, 'Admin or team owner access required');
+    if (!isAdmin(auth) && !isTeamOwner(meta, auth)) return errorResponse(403, 'Admin or board owner access required');
 
     const updated: Record<string, unknown> = {
       ...meta,
@@ -594,14 +598,14 @@ const handleTeams = async (
     // Find team meta first for ownership check
     const metaResults = await queryByPK(`TEAM#${teamId}`, 'META');
     const meta = metaResults[0];
-    if (!meta) return errorResponse(404, 'Team not found');
+    if (!meta) return errorResponse(404, 'Board not found');
 
-    if (!isAdmin(auth) && !isTeamOwner(meta, auth)) return errorResponse(403, 'Admin or team owner access required');
+    if (!isAdmin(auth) && !isTeamOwner(meta, auth)) return errorResponse(403, 'Admin or board owner access required');
 
     const tickets = await queryByPK(`TEAM#${teamId}`, 'TICKET#');
     const activeTickets = tickets.filter((t) => t.statusType !== 'deleted');
     if (activeTickets.length > 0) {
-      return errorResponse(409, 'Cannot delete team with active tickets');
+      return errorResponse(409, 'Cannot delete board with active tickets');
     }
 
     // Delete all team items (zones, stages, tickets, etc.)
@@ -616,9 +620,9 @@ const handleTeams = async (
   if (method === 'PUT' && segments.length === 2 && segments[1] === 'zones') {
     const teamId = segments[0];
     const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
-    if (!teamMeta) return errorResponse(404, 'Team not found');
+    if (!teamMeta) return errorResponse(404, 'Board not found');
     if (!isAdmin(auth) && !isTeamOwner(teamMeta, auth))
-      return errorResponse(403, 'Admin or team owner access required');
+      return errorResponse(403, 'Admin or board owner access required');
     const zones = body.zones;
     if (!Array.isArray(zones)) return errorResponse(400, 'Missing required field: zones (array)');
 
@@ -650,9 +654,9 @@ const handleTeams = async (
   if (method === 'DELETE' && segments.length === 3 && segments[1] === 'zones') {
     const teamId = segments[0];
     const teamMetaForZoneDel = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
-    if (!teamMetaForZoneDel) return errorResponse(404, 'Team not found');
+    if (!teamMetaForZoneDel) return errorResponse(404, 'Board not found');
     if (!isAdmin(auth) && !isTeamOwner(teamMetaForZoneDel, auth))
-      return errorResponse(403, 'Admin or team owner access required');
+      return errorResponse(403, 'Admin or board owner access required');
     const zoneId = segments[2];
 
     // Load team items to validate
@@ -688,9 +692,9 @@ const handleTeams = async (
   if (method === 'PUT' && segments.length === 2 && segments[1] === 'stages') {
     const teamId = segments[0];
     const teamMetaForStages = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
-    if (!teamMetaForStages) return errorResponse(404, 'Team not found');
+    if (!teamMetaForStages) return errorResponse(404, 'Board not found');
     if (!isAdmin(auth) && !isTeamOwner(teamMetaForStages, auth))
-      return errorResponse(403, 'Admin or team owner access required');
+      return errorResponse(403, 'Admin or board owner access required');
     const stages = body.stages;
     if (!Array.isArray(stages)) return errorResponse(400, 'Missing required field: stages (array)');
 
@@ -752,9 +756,9 @@ const handleTeams = async (
   if (method === 'POST' && segments.length === 2 && segments[1] === 'work-units') {
     const teamId = segments[0];
     const wuTeamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
-    if (!wuTeamMeta) return errorResponse(404, 'Team not found');
+    if (!wuTeamMeta) return errorResponse(404, 'Board not found');
     if (!isAdmin(auth) && !isTeamOwner(wuTeamMeta, auth))
-      return errorResponse(403, 'Admin or team owner access required');
+      return errorResponse(403, 'Admin or board owner access required');
     const { name, goal, startDate, endDate, status, capacity } = body;
     if (!name) return errorResponse(400, 'Missing required field: name');
 
@@ -1019,9 +1023,9 @@ const handleTeams = async (
   if (method === 'DELETE' && segments.length === 3 && segments[1] === 'work-units') {
     const teamId = segments[0];
     const wuDelTeamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
-    if (!wuDelTeamMeta) return errorResponse(404, 'Team not found');
+    if (!wuDelTeamMeta) return errorResponse(404, 'Board not found');
     if (!isAdmin(auth) && !isTeamOwner(wuDelTeamMeta, auth))
-      return errorResponse(403, 'Admin or team owner access required');
+      return errorResponse(403, 'Admin or board owner access required');
     const id = segments[2];
     const existing = await getItem(`TEAM#${teamId}`, `WORKUNIT#${id}`);
     if (!existing) return errorResponse(404, 'Work unit not found');
@@ -1308,7 +1312,7 @@ const handleTickets = async (
     }
 
     // Increment commentCount on the ticket — need to find the ticket first
-    const ticketItems = await queryByPK(`TEAM#${String(body.teamId ?? '')}`, `TICKET#${ticketId}`);
+    const ticketItems = await queryByPK(`TEAM#${String(body.boardId ?? '')}`, `TICKET#${ticketId}`);
     // Fallback: scan for ticket by looking at GSI3
     let ticket = ticketItems.find((t) => String(t.SK) === `TICKET#${ticketId}`);
     if (!ticket) {
@@ -1363,13 +1367,13 @@ const handleTickets = async (
 
     await deleteItem(String(existing.PK), String(existing.SK));
 
-    // Decrement commentCount — find ticket via body.teamId or best-effort
-    if (body.teamId) {
+    // Decrement commentCount — find ticket via body.boardId or best-effort
+    if (body.boardId) {
       try {
         await dynamo.send(
           new UpdateCommand({
             TableName: OPS_TABLE,
-            Key: { PK: `TEAM#${String(body.teamId)}`, SK: `TICKET#${ticketId}` },
+            Key: { PK: `TEAM#${String(body.boardId)}`, SK: `TICKET#${ticketId}` },
             UpdateExpression: 'ADD commentCount :dec',
             ExpressionAttributeValues: { ':dec': -1 },
           })
@@ -1400,8 +1404,8 @@ const handleTickets = async (
     const ts = now();
 
     // Look up source ticket's displayId for the inverse link record
-    const srcTeamId = body.teamId ? String(body.teamId) : undefined;
-    const linkedTeamId = body.linkedTeamId ? String(body.linkedTeamId) : srcTeamId;
+    const srcTeamId = body.boardId ? String(body.boardId) : undefined;
+    const linkedTeamId = body.linkedBoardId ? String(body.linkedBoardId) : srcTeamId;
 
     let srcDisplayId: string | undefined;
     let srcTitle: string | undefined;
@@ -1503,9 +1507,9 @@ const handleTickets = async (
     await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems as never }));
 
     // Decrement linkCount (best-effort)
-    if (body.teamId) {
-      const teamId = String(body.teamId);
-      const linkedTeamId = body.linkedTeamId ? String(body.linkedTeamId) : teamId;
+    if (body.boardId) {
+      const teamId = String(body.boardId);
+      const linkedTeamId = body.linkedBoardId ? String(body.linkedBoardId) : teamId;
       try {
         await Promise.all([
           dynamo.send(
@@ -1562,14 +1566,19 @@ const handleTickets = async (
     const results: Record<string, unknown>[] = [];
 
     for (const tid of ticketIds as string[]) {
-      const teamId = String((changes as Record<string, unknown>).teamId ?? '');
+      const teamId = String((changes as Record<string, unknown>).boardId ?? '');
       const existing = await getItem(`TEAM#${teamId}`, `TICKET#${tid}`);
       if (!existing) {
         results.push({ ticketId: tid, error: 'not found' });
         continue;
       }
 
-      const changesObj = changes as Record<string, unknown>;
+      // Strip `boardId` from the spread so we don't write the API-shape key
+      // alongside the existing DB-shape `teamId` attribute on the item. The
+      // routing teamId above is what we actually use; the item's teamId is
+      // unchanged on a same-board edit.
+      const { boardId: _boardId, ...changesObj } = changes as Record<string, unknown>;
+      void _boardId;
 
       // Derive statusType from stage when stageId changes
       let derivedStatusType: string | undefined;
@@ -1604,13 +1613,13 @@ const handleTickets = async (
 
   // ── GET /ops/tickets — list tickets (with access check) ─────────────────────
   if (method === 'GET' && segments.length === 0) {
-    const teamId = qp.teamId;
-    if (!teamId) return errorResponse(400, 'Missing required query parameter: teamId');
+    const teamId = qp.boardId;
+    if (!teamId) return errorResponse(400, 'Missing required query parameter: boardId');
 
     // Verify user has access to the team
     const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
     if (teamMeta && !hasTeamAccess(teamMeta, auth)) {
-      return errorResponse(403, 'You do not have access to this team');
+      return errorResponse(403, 'You do not have access to this board');
     }
 
     const limit = qp.limit ? parseInt(qp.limit, 10) : undefined;
@@ -1681,7 +1690,7 @@ const handleTickets = async (
     const ticketId = segments[0];
     // We need to find the ticket; use GSI3 lookup with a scan over known boards
     // or the caller can provide teamId as query param
-    const teamId = qp.teamId;
+    const teamId = qp.boardId;
     let ticket: Record<string, unknown> | undefined;
 
     if (teamId) {
@@ -1691,7 +1700,7 @@ const handleTickets = async (
     if (!ticket) {
       // Fallback: try to find via all boards (expensive, but works)
       // For efficiency, caller should provide teamId
-      return errorResponse(400, 'Please provide teamId as query parameter for single ticket lookup');
+      return errorResponse(400, 'Please provide boardId as query parameter for single ticket lookup');
     }
 
     // Fetch links and recent comments
@@ -1710,7 +1719,7 @@ const handleTickets = async (
   // ── POST /ops/tickets — create ticket ───────────────────────────────────────
   if (method === 'POST' && segments.length === 0) {
     const {
-      teamId: rawTeamId,
+      boardId: rawTeamId,
       stageId: rawStageId,
       zoneId: rawZoneId,
       ticketTypeId,
@@ -1738,7 +1747,7 @@ const handleTickets = async (
 
     // Detect unknown parameters
     const knownCreateFields = new Set([
-      'teamId',
+      'boardId',
       'stageId',
       'zoneId',
       'ticketTypeId',
@@ -1766,14 +1775,14 @@ const handleTickets = async (
     const unknownKeys = Object.keys(body).filter((k) => !knownCreateFields.has(k));
 
     if (!rawTeamId || !rawStageId || !title)
-      return errorResponse(400, 'Missing required fields: teamId, stageId, title');
+      return errorResponse(400, 'Missing required fields: boardId, stageId, title');
 
     const teamId = String(rawTeamId);
 
     // Verify user has access to create tickets in this team
     const createTeamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
     if (createTeamMeta && !hasTeamAccess(createTeamMeta, auth)) {
-      return errorResponse(403, 'You do not have access to this team');
+      return errorResponse(403, 'You do not have access to this board');
     }
 
     const stageId = String(rawStageId);
@@ -1883,10 +1892,10 @@ const handleTickets = async (
   // ── PUT /ops/tickets/{ticketId} — update ticket ─────────────────────────────
   if (method === 'PUT' && segments.length === 1) {
     const ticketId = segments[0];
-    const teamId = body.teamId ? String(body.teamId) : undefined;
-    const currentTeamId = body.currentTeamId ? String(body.currentTeamId) : teamId;
+    const teamId = body.boardId ? String(body.boardId) : undefined;
+    const currentTeamId = body.currentBoardId ? String(body.currentBoardId) : teamId;
 
-    if (!currentTeamId) return errorResponse(400, 'Missing required field: teamId or currentTeamId');
+    if (!currentTeamId) return errorResponse(400, 'Missing required field: boardId or currentBoardId');
 
     const existing = await getItem(`TEAM#${currentTeamId}`, `TICKET#${ticketId}`);
     if (!existing) return errorResponse(404, 'Ticket not found');
@@ -1907,7 +1916,7 @@ const handleTickets = async (
     if (isCrossTeamMove) {
       const targetMeta = (await queryByPK(`TEAM#${targetTeamId}`, 'META'))[0];
       if (targetMeta && !hasTeamAccess(targetMeta, auth)) {
-        return errorResponse(403, 'You do not have access to the target team');
+        return errorResponse(403, 'You do not have access to the target board');
       }
     }
 
@@ -2197,8 +2206,8 @@ const handleTickets = async (
   // ── DELETE /ops/tickets/{ticketId} — soft delete ────────────────────────────
   if (method === 'DELETE' && segments.length === 1) {
     const ticketId = segments[0];
-    const teamId = qp.teamId;
-    if (!teamId) return errorResponse(400, 'Missing required query parameter: teamId');
+    const teamId = qp.boardId;
+    if (!teamId) return errorResponse(400, 'Missing required query parameter: boardId');
 
     const existing = await getItem(`TEAM#${teamId}`, `TICKET#${ticketId}`);
     if (!existing) return errorResponse(404, 'Ticket not found');
@@ -2221,8 +2230,8 @@ const handleTickets = async (
   // ── POST /ops/tickets/{ticketId}/restore — restore soft-deleted ticket ──────
   if (method === 'POST' && segments.length === 2 && segments[1] === 'restore') {
     const ticketId = segments[0];
-    const teamId = body.teamId ? String(body.teamId) : qp.teamId;
-    if (!teamId) return errorResponse(400, 'Missing required field: teamId');
+    const teamId = body.boardId ? String(body.boardId) : qp.boardId;
+    if (!teamId) return errorResponse(400, 'Missing required field: boardId');
 
     const existing = await getItem(`TEAM#${teamId}`, `TICKET#${ticketId}`);
     if (!existing) return errorResponse(404, 'Ticket not found');
@@ -2272,10 +2281,10 @@ const handleMetrics = async (
   event: APIGatewayProxyEventV2
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const qp = event.queryStringParameters ?? {};
-  const teamIds = qp.teamIds ? qp.teamIds.split(',') : [];
+  const teamIds = qp.boardIds ? qp.boardIds.split(',') : [];
 
   if (teamIds.length === 0) {
-    return errorResponse(400, 'Missing required query parameter: teamIds');
+    return errorResponse(400, 'Missing required query parameter: boardIds');
   }
 
   const metrics: Record<string, Record<string, number>> = {};
@@ -2363,12 +2372,17 @@ const handleUserPreferences = async (
     return jsonResponse(200, item ?? {});
   }
 
-  // PUT /ops/user-preferences/{teamId}
+  // PUT /ops/user-preferences/{boardId}
   if (method === 'PUT') {
     const existing = await getItem(pk, sk);
+    // Strip API-shape keys from the spread so we don't store both `boardId`
+    // (from body) and `teamId` (the canonical DB attribute) on the item.
+    const { boardId: _boardId, board: _board, ...bodyRest } = body as Record<string, unknown>;
+    void _boardId;
+    void _board;
     const updated: Record<string, unknown> = {
       ...(existing ?? {}),
-      ...body,
+      ...bodyRest,
       PK: pk,
       SK: sk,
       entityType: 'USER_PREFERENCE',
@@ -2412,25 +2426,25 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     const rest = segments.slice(2);
 
     switch (resource) {
-      case 'teams':
-        return handleTeams(method, rest, body, auth);
+      case 'boards':
+        return await handleBoards(method, rest, body, auth);
 
       case 'tickets': {
         // Handle the by-display-id sub-path specially
         if (rest[0] === 'by-display-id') {
-          return handleTickets(method, rest, body, auth, event);
+          return await handleTickets(method, rest, body, auth, event);
         }
-        return handleTickets(method, rest, body, auth, event);
+        return await handleTickets(method, rest, body, auth, event);
       }
 
       case 'metrics':
-        return handleMetrics(auth, event);
+        return await handleMetrics(auth, event);
 
       case 'uploads':
-        return handleUploads(method, rest, body, event.queryStringParameters ?? {});
+        return await handleUploads(method, rest, body, event.queryStringParameters ?? {});
 
       case 'user-preferences':
-        return handleUserPreferences(method, rest, body, auth);
+        return await handleUserPreferences(method, rest, body, auth);
 
       default:
         return errorResponse(404, 'Route not found');
@@ -2449,6 +2463,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         stack: err.stack,
       })
     );
+    if (err.name === 'ValidationException' && /item size has exceeded/i.test(err.message)) {
+      return errorResponse(
+        413,
+        'Description is too large to save. Try removing or shrinking embedded images, or attach them as files instead.'
+      );
+    }
     return errorResponse(500, `Internal Server Error: ${err.message}`);
   }
 };

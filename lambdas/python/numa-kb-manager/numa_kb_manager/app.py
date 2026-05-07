@@ -1074,6 +1074,245 @@ async def rename_kb_file(request: Request, kb_id: str) -> Response:
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
+# ── KB subfolders (S3 prefix markers) ────────────────────────────────────
+
+
+_FOLDER_NAME_MAX = 120
+_FOLDER_PATH_MAX = 1024
+_FOLDER_NAME_RE = re.compile(r"^[^/\\\x00-\x1f]+$")
+
+
+def _normalize_subfolder_path(raw: Any) -> Tuple[Optional[str], Optional[str]]:
+    """Validate and normalize a subfolder path. Returns (path, error)."""
+    if not isinstance(raw, str):
+        return None, "'path' must be a string"
+    cleaned = raw.strip().strip("/")
+    if not cleaned:
+        return None, "'path' is required"
+    if len(cleaned) > _FOLDER_PATH_MAX:
+        return None, "'path' is too long"
+    segments = cleaned.split("/")
+    for seg in segments:
+        if not seg or seg in (".", ".."):
+            return None, "'path' contains invalid segment"
+        if len(seg) > _FOLDER_NAME_MAX:
+            return None, f"folder name '{seg}' is too long"
+        if not _FOLDER_NAME_RE.match(seg):
+            return None, f"folder name '{seg}' contains invalid characters"
+    return "/".join(segments), None
+
+
+@app.post("/api/kb/{kb_id}/folders")
+async def create_kb_folder(request: Request, kb_id: str) -> Response:
+    """Create an empty subfolder inside a KB by writing a zero-byte S3 marker.
+
+    Body:
+        {"path": "reports/q3"}
+
+    Subfolders are S3 prefixes; we materialize them as zero-byte objects with
+    a trailing slash so empty folders are visible in listings. Requires EDITOR
+    permission on the KB (admin group bypass for the company KB, matching the
+    delete/rename handlers).
+    """
+    guard, user = _guard_request(request)
+    if guard is not None:
+        return guard
+
+    try:
+        user_id = user["sub"]
+        kb_manager = KnowledgeBaseManager()
+
+        user_groups = user.get("cognito:groups", []) or []
+        is_company_admin = kb_id == "company" and "admin" in user_groups
+        if not is_company_admin and not kb_manager.check_permission(
+            kb_id, user_id, "EDITOR"
+        ):
+            logger.warning(
+                "Access denied - user lacks EDITOR permission for subfolder create",
+                kb_id=kb_id,
+                user_id=user_id,
+            )
+            return JSONResponse({"error": "Access denied"}, status_code=403)
+
+        kb = kb_manager.get_kb(kb_id)
+        if not kb:
+            return JSONResponse({"error": "KB not found"}, status_code=404)
+
+        s3_prefix = kb.get("s3_prefix", "")
+        if not s3_prefix:
+            return JSONResponse(
+                {"error": "KB configuration incomplete"}, status_code=500
+            )
+
+        body = await request.json()
+        path, path_err = _normalize_subfolder_path(body.get("path"))
+        if path_err is not None:
+            return JSONResponse({"error": path_err}, status_code=400)
+
+        marker_key = f"{s3_prefix}{path}/"
+        s3 = prm_client("s3", region=REGION)
+
+        # Collision check: marker already exists, OR any object lives under
+        # this prefix. Either way, the folder is already there.
+        try:
+            s3.head_object(Bucket=DATA_BUCKET, Key=marker_key)
+            return JSONResponse(
+                {"error": "Folder already exists", "path": path},
+                status_code=409,
+            )
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code not in ("404", "NoSuchKey", "NotFound"):
+                logger.error(
+                    "Subfolder pre-check failed",
+                    kb_id=kb_id,
+                    marker_key=marker_key,
+                    error=str(e),
+                )
+                return JSONResponse({"error": "Pre-check failed"}, status_code=500)
+
+        existing = s3.list_objects_v2(Bucket=DATA_BUCKET, Prefix=marker_key, MaxKeys=1)
+        if existing.get("KeyCount", 0) > 0:
+            return JSONResponse(
+                {"error": "Folder already exists", "path": path},
+                status_code=409,
+            )
+
+        s3.put_object(Bucket=DATA_BUCKET, Key=marker_key, Body=b"")
+
+        logger.info(
+            "KB subfolder created",
+            kb_id=kb_id,
+            user_id=user_id,
+            path=path,
+        )
+
+        return JSONResponse(
+            {"path": path, "key": marker_key},
+            status_code=201,
+        )
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB subfolder creation failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+@app.delete("/api/kb/{kb_id}/folders")
+async def delete_kb_folder(request: Request, kb_id: str) -> Response:
+    """Delete a subfolder marker (and optionally its contents).
+
+    Body:
+        {"path": "reports/q3", "recursive": false}
+
+    With ``recursive=false``, only the empty folder marker is deleted — if any
+    child objects exist (excluding the marker itself), returns 409. With
+    ``recursive=true``, every object under the prefix is deleted in batches.
+    """
+    guard, user = _guard_request(request)
+    if guard is not None:
+        return guard
+
+    try:
+        user_id = user["sub"]
+        kb_manager = KnowledgeBaseManager()
+
+        user_groups = user.get("cognito:groups", []) or []
+        is_company_admin = kb_id == "company" and "admin" in user_groups
+        if not is_company_admin and not kb_manager.check_permission(
+            kb_id, user_id, "EDITOR"
+        ):
+            logger.warning(
+                "Access denied - user lacks EDITOR permission for subfolder delete",
+                kb_id=kb_id,
+                user_id=user_id,
+            )
+            return JSONResponse({"error": "Access denied"}, status_code=403)
+
+        kb = kb_manager.get_kb(kb_id)
+        if not kb:
+            return JSONResponse({"error": "KB not found"}, status_code=404)
+
+        s3_prefix = kb.get("s3_prefix", "")
+        if not s3_prefix:
+            return JSONResponse(
+                {"error": "KB configuration incomplete"}, status_code=500
+            )
+
+        body = await request.json()
+        path, path_err = _normalize_subfolder_path(body.get("path"))
+        if path_err is not None:
+            return JSONResponse({"error": path_err}, status_code=400)
+        recursive = bool(body.get("recursive", False))
+
+        folder_prefix = f"{s3_prefix}{path}/"
+        s3 = prm_client("s3", region=REGION)
+
+        # Collect every key under the prefix.
+        keys: List[str] = []
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=DATA_BUCKET, Prefix=folder_prefix):
+            for obj in page.get("Contents", []):
+                k = obj.get("Key") if isinstance(obj, dict) else None
+                if isinstance(k, str):
+                    keys.append(k)
+
+        if not keys:
+            # Nothing to delete — folder doesn't exist.
+            return JSONResponse(
+                {"error": "Folder not found", "path": path},
+                status_code=404,
+            )
+
+        if not recursive:
+            non_marker = [k for k in keys if k != folder_prefix]
+            if non_marker:
+                return JSONResponse(
+                    {
+                        "error": "Folder is not empty",
+                        "path": path,
+                        "childCount": len(non_marker),
+                    },
+                    status_code=409,
+                )
+            # Just the marker — delete it.
+            s3.delete_object(Bucket=DATA_BUCKET, Key=folder_prefix)
+            deleted_count = 1
+        else:
+            deleted_count = 0
+            for i in range(0, len(keys), 1000):
+                batch = keys[i : i + 1000]
+                response = s3.delete_objects(
+                    Bucket=DATA_BUCKET,
+                    Delete={
+                        "Objects": [{"Key": k} for k in batch],
+                        "Quiet": True,
+                    },
+                )
+                deleted_count += len(batch) - len(response.get("Errors", []) or [])
+
+        # Refresh cached document count after the deletion.
+        _, _, doc_count = _list_kb_files(DATA_BUCKET, s3_prefix, "")
+        kb_manager.update_document_count(kb_id, doc_count)
+
+        logger.info(
+            "KB subfolder deleted",
+            kb_id=kb_id,
+            user_id=user_id,
+            path=path,
+            recursive=recursive,
+            deleted_count=deleted_count,
+        )
+
+        return JSONResponse(
+            {"path": path, "deletedCount": deleted_count},
+            status_code=200,
+        )
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB subfolder deletion failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 # ── KB sync state (Bedrock or Q Business) ─────────────────────────────────
 
 

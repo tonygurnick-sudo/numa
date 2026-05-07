@@ -1,0 +1,72 @@
+{
+  "name": "List Threads",
+  "description": "Retrieves a list of threads. [See the documentation](https://developers.hubspot.com/docs/api-reference/conversations-conversations-inbox-&-messages-v3/public-thread/get-conversations-v3-conversations-threads)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "hubspot-list-threads",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "associatedContactId",
+      "type": "string",
+      "label": "Associated Contact ID",
+      "description": "The ID of the contact to filter threads by",
+      "useQuery": true,
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "association",
+      "type": "string",
+      "label": "Association",
+      "description": "You can specify an association type here of TICKET. If this is set the response will included a thread associations object and associated ticket id if present. If there are no associations to a ticket with this conversation, then the thread associations object will not be present on the response.",
+      "options": ["TICKET"],
+      "optional": true
+    },
+    {
+      "name": "archived",
+      "type": "boolean",
+      "label": "Archived",
+      "description": "Whether to return only results that have been archived",
+      "optional": true
+    },
+    {
+      "name": "inboxId",
+      "type": "string",
+      "label": "Inbox ID",
+      "description": "The ID of the conversations inbox you can optionally include to retrieve the associated messages for. This parameter cannot be used in conjunction with the associatedContactId property.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "property",
+      "type": "string",
+      "label": "Property",
+      "description": "A specific property to include in the thread response",
+      "optional": true
+    },
+    {
+      "name": "after",
+      "type": "string",
+      "label": "After",
+      "description": "The paging cursor token of the last successfully read resource will be returned as the paging.next.after JSON property of a paged response containing more results.",
+      "optional": true
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "label": "Limit",
+      "description": "The maximum number of results to display per page",
+      "optional": true
+    }
+  ]
+}

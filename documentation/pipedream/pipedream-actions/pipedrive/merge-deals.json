@@ -1,0 +1,35 @@
+{
+  "name": "Merge Deals",
+  "description": "Merge two deals in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Deals#mergeDeals)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "pipedrive-merge-deals",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "dealId",
+      "type": "string",
+      "label": "Deal ID",
+      "description": "The ID of the deal to merge",
+      "optional": false,
+      "remoteOptions": true
+    },
+    {
+      "name": "targetDealId",
+      "type": "string",
+      "label": "Target Deal ID",
+      "description": "The ID of the deal that the deal will be merged with",
+      "optional": false,
+      "remoteOptions": true
+    }
+  ]
+}

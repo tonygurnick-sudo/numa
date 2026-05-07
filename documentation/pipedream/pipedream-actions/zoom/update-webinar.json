@@ -1,0 +1,85 @@
+{
+  "name": "Update Webinar",
+  "description": "Update a webinar's topic, start time, or other settings",
+  "component_type": "action",
+  "version": "0.1.7",
+  "key": "zoom-update-webinar",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "webinarID",
+      "type": "string",
+      "label": "Webinar ID",
+      "description": "The Zoom Webinar ID of the webinar you'd like to update."
+    },
+    {
+      "name": "topic",
+      "type": "string",
+      "description": "Webinar topic",
+      "optional": true
+    },
+    {
+      "name": "type",
+      "type": "integer",
+      "description": "Webinar type:\n1 - Instant webinar.\n2 - Scheduled webinar.\n3 - Recurring webinar with no fixed time.\n8 - Recurring webinar with fixed time.",
+      "optional": true
+    },
+    {
+      "name": "start_time",
+      "type": "string",
+      "description": "Webinar start time. We support two formats for start_time - local time and GMT.\nTo set time as GMT the format should be yyyy-MM-ddTHH:mm:ssZ.\nTo set time using a specific timezone, use yyyy-MM-ddTHH:mm:ss format and specify the timezone ID in the timezone field OR leave it blank and the timezone set on your Zoom account will be used. You can also set the time as UTC as the timezone field.\nThe start_time should only be used for scheduled and / or recurring webinars with fixed time.",
+      "optional": true
+    },
+    {
+      "name": "duration",
+      "type": "integer",
+      "description": "Webinar duration (minutes). Used for scheduled webinars only.",
+      "optional": true
+    },
+    {
+      "name": "timezone",
+      "type": "string",
+      "description": "Time zone to format start_time. For example, \u0093America/Los_Angeles\u0094. For scheduled webinars only. Please reference our time [zone list](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) for supported time zones and their formats.",
+      "optional": true
+    },
+    {
+      "name": "password",
+      "type": "string",
+      "description": "Password to join the webinar. Password may only contain the following characters: [a-z A-Z 0-9 @ - _ *]. Max of 10 characters.",
+      "optional": true
+    },
+    {
+      "name": "agenda",
+      "type": "string",
+      "description": "Webinar description.",
+      "optional": true
+    },
+    {
+      "name": "tracking_fields",
+      "type": "any",
+      "description": "Tracking fields.",
+      "optional": true
+    },
+    {
+      "name": "recurrence",
+      "type": "object",
+      "description": "Recurrence object",
+      "optional": true
+    },
+    {
+      "name": "settings",
+      "type": "string",
+      "description": "Webinar settings.",
+      "optional": true
+    }
+  ]
+}

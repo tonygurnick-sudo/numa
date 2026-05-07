@@ -1,0 +1,71 @@
+{
+  "name": "Edit A Campaign Template Content",
+  "description": "Edits a defined content area of a custom HTML template. [See docs here](https://mailchimp.com/developer/marketing/api/campaign-content/set-campaign-content/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-edit-campaign-template-content",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "campaignId",
+      "type": "string",
+      "label": "Campaign ID",
+      "description": "The unique ID of the campaign",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "archiveType",
+      "type": "string",
+      "label": "Archive type",
+      "description": "The type of encoded file.",
+      "optional": true,
+      "options": ["zip", "tar.gz", "tar.bz2", "tar", "tgz", "tbz"]
+    },
+    {
+      "name": "templateSections",
+      "type": "object",
+      "label": "Template sections",
+      "description": "Content for the sections of the template. Each key should be the unique mc:edit area name from the template.",
+      "optional": true,
+      "reloadProps": true
+    },
+    {
+      "name": "plainText",
+      "type": "string",
+      "label": "Plain text",
+      "description": "The plain-text portion of the campaign. If left unspecified, we'll generate this automatically.",
+      "optional": true
+    },
+    {
+      "name": "html",
+      "type": "string",
+      "label": "Plain text",
+      "description": "The plain-text portion of the campaign. If left unspecified, we'll generate this automatically.",
+      "optional": true
+    },
+    {
+      "name": "url",
+      "type": "string",
+      "label": "URL",
+      "description": "When importing a campaign, the URL where the HTML lives.",
+      "optional": true
+    },
+    {
+      "name": "variateContents",
+      "type": "string[]",
+      "label": "Variate contents",
+      "optional": true,
+      "description": "Stringified object list of content options for [Multivariate Campaigns](https://mailchimp.com/help/about-multivariate-campaigns/). \n      Allowed keys are archive, template, content_label, plain_text, html, and url.\n        Each content option must provide HTML content and may optionally provide plain text. \n        For campaigns not testing content, only one object should be provided."
+    }
+  ]
+}

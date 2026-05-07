@@ -13,17 +13,17 @@ interface ProjectsViewProps {
 
 export function ProjectsView({ initialProjectId }: ProjectsViewProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-  const { config, teams, selectedTeamId, boardViewMode, tickets } = useOps();
+  const { config, boards, selectedBoardId, boardViewMode, tickets } = useOps();
 
   const [boardFilter, setBoardFilter] = useState<string>('');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(initialProjectId ?? null);
   const [creatingNew, setCreatingNew] = useState(false);
 
   const projects = config?.projects ?? [];
-  const accessibleTeamIds = useMemo(() => new Set(teams.map((t) => t.id)), [teams]);
+  const accessibleTeamIds = useMemo(() => new Set(boards.map((t) => t.id)), [boards]);
 
   const filteredProjects = useMemo(() => {
-    const activeFilter = boardFilter || (boardViewMode === 'singleTeam' ? selectedTeamId : null);
+    const activeFilter = boardFilter || (boardViewMode === 'singleBoard' ? selectedBoardId : null);
     return (
       projects
         .filter((p) => p.isActive)
@@ -35,7 +35,7 @@ export function ProjectsView({ initialProjectId }: ProjectsViewProps): React.JSX
           return p.boardIds.includes(activeFilter);
         })
     );
-  }, [projects, boardFilter, boardViewMode, selectedTeamId, accessibleTeamIds]);
+  }, [projects, boardFilter, boardViewMode, selectedBoardId, accessibleTeamIds]);
 
   // Ticket counts per project
   const ticketCounts = useMemo(() => {
@@ -101,7 +101,7 @@ export function ProjectsView({ initialProjectId }: ProjectsViewProps): React.JSX
     <>
       {/* Toolbar row -- matches Board row 2 pattern */}
       <div className="d-flex align-items-center px-3 gap-2 border-bottom bg-white" style={{ minHeight: 64 }}>
-        {teams.length > 1 && (
+        {boards.length > 1 && (
           <Form.Select
             size="sm"
             value={boardFilter}
@@ -109,7 +109,7 @@ export function ProjectsView({ initialProjectId }: ProjectsViewProps): React.JSX
             style={{ width: 'auto', borderRadius: 8 }}
           >
             <option value="">{t('projects.allBoards')}</option>
-            {teams.map((team) => (
+            {boards.map((team) => (
               <option key={team.id} value={team.id}>
                 {team.name}
               </option>

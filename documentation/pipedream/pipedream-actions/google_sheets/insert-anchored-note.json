@@ -1,0 +1,56 @@
+{
+  "name": "Insert an Anchored Note",
+  "description": "Insert a note on a spreadsheet cell. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/batchUpdate)",
+  "component_type": "action",
+  "version": "0.1.14",
+  "key": "google_sheets-insert-anchored-note",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "cell",
+      "type": "string",
+      "label": "Cell Number",
+      "description": "The A1 notation of the cell. E.g., `A1`"
+    },
+    {
+      "name": "content",
+      "type": "string",
+      "label": "Comment",
+      "description": "The comment to add to the spreadsheet."
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "name": "Create Contact Workflow",
+  "description": "Create a contact workflow in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/automation/create-manage-workflows#post-%2Fautomation%2Fv4%2Fflows)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "hubspot-create-contact-workflow",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "canEnrollFromSalesforce",
+      "type": "boolean",
+      "label": "Can Enroll From Salesforce",
+      "description": "Whether the contact workflow can enroll from Salesforce",
+      "optional": true
+    },
+    {
+      "name": "isEnabled",
+      "type": "boolean",
+      "label": "Is Enabled",
+      "description": "Whether the contact workflow is enabled",
+      "optional": true
+    },
+    {
+      "name": "flowType",
+      "type": "string",
+      "label": "Flow Type",
+      "description": "The type of flow",
+      "options": ["WORKFLOW", "ACTION_SET", "UNKNOWN"],
+      "optional": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the contact workflow",
+      "optional": true
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "The description of the contact workflow",
+      "optional": true
+    },
+    {
+      "name": "uuid",
+      "type": "string",
+      "label": "UUID",
+      "description": "The UUID of the contact workflow",
+      "optional": true
+    },
+    {
+      "name": "startAction",
+      "type": "string",
+      "label": "Start Action",
+      "description": "The start action of the contact workflow",
+      "optional": true
+    },
+    {
+      "name": "actions",
+      "type": "string[]",
+      "label": "Actions",
+      "description": "The actions of the contact workflow",
+      "options": ["STATIC_BRANCH", "LIST_BRANCH", "AB_TEST_BRANCH", "CUSTOM_CODE", "WEBHOOK", "SINGLE_CONNECTION"],
+      "optional": true
+    },
+    {
+      "name": "enrollmentCriteria",
+      "type": "object",
+      "label": "Enrollment Criteria",
+      "description": "An object with the enrollment criteria data for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/enrollment-criteria-in-contact-workflows) for more information.",
+      "optional": true
+    },
+    {
+      "name": "enrollmentSchedule",
+      "type": "object",
+      "label": "Enrollment Schedule",
+      "description": "An object with the enrollment schedule data for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/enrollment-schedule-in-contact-workflows) for more information.",
+      "optional": true
+    },
+    {
+      "name": "timeWindows",
+      "type": "string[]",
+      "label": "Time Windows",
+      "description": "A list of time windows for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/time-windows-in-contact-workflows) for more information.",
+      "optional": true
+    },
+    {
+      "name": "blockedDates",
+      "type": "string[]",
+      "label": "Blocked Dates",
+      "description": "A list of blocked dates for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/blocked-dates-in-contact-workflows) for more information.",
+      "optional": true
+    },
+    {
+      "name": "customProperties",
+      "type": "object",
+      "label": "Custom Properties",
+      "description": "An object with the custom properties data for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/custom-properties-in-contact-workflows) for more information.",
+      "optional": true
+    },
+    {
+      "name": "dataSources",
+      "type": "string[]",
+      "label": "Data Sources",
+      "description": "A list of data sources for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/data-sources-in-contact-workflows) for more information.",
+      "optional": true
+    },
+    {
+      "name": "suppressionListIds",
+      "type": "string[]",
+      "label": "Suppression List IDs",
+      "description": "A list of suppression list IDs for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/suppression-list-ids-in-contact-workflows) for more information.",
+      "optional": true
+    },
+    {
+      "name": "goalFilterBranch",
+      "type": "object",
+      "label": "Goal Filter Branch",
+      "description": "An object with the goal filter branch data for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/goal-filter-branch-in-contact-workflows) for more information.",
+      "optional": true
+    },
+    {
+      "name": "eventAnchor",
+      "type": "object",
+      "label": "Event Anchor",
+      "description": "An object with the event anchor data for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/event-anchor-in-contact-workflows) for more information.",
+      "optional": true
+    },
+    {
+      "name": "unEnrollmentSetting",
+      "type": "object",
+      "label": "Un Enrollment Setting",
+      "description": "An object with the un enrollment setting data for the contact workflow. [See the documentation](https://developers.hubspot.com/changelog/un-enrollment-setting-in-contact-workflows) for more information.",
+      "optional": true
+    }
+  ]
+}

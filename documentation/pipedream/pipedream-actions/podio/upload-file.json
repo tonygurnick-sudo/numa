@@ -1,0 +1,40 @@
+{
+  "name": "Upload File",
+  "description": "Uploads a new file to Podio. [See the documentation](https://developers.podio.com/doc/files/upload-file-1004361)",
+  "component_type": "action",
+  "version": "0.1.2",
+  "key": "podio-upload-file",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "podio"
+    },
+    {
+      "name": "filePath",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "The file to upload. Provide either a file URL or a path to a file in the `/tmp` directory (for example, `/tmp/myFile.txt`)"
+    },
+    {
+      "name": "fileName",
+      "type": "string",
+      "label": "File Name",
+      "description": "File name of the uploaded file. If not specified, the original file name will be used.",
+      "optional": true
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

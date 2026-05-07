@@ -1,10 +1,18 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  DeleteCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
+import { dbToApi, translateTeamString } from '../../../lib/ops-serialize';
 
 const client = withPRM(DynamoDBClient, {});
 const dynamo = DynamoDBDocumentClient.from(client, {
@@ -56,11 +64,13 @@ const jsonResponse = (
 ): { statusCode: number; headers: typeof HEADERS; body: string } => ({
   statusCode,
   headers: HEADERS,
-  body: JSON.stringify(payload),
+  // dbToApi recursively translates DB-shape keys (teamId, team, teams, etc.)
+  // to API-shape (boardId, board, boards). Single boundary for all ops APIs.
+  body: JSON.stringify(dbToApi(payload)),
 });
 
 const errorResponse = (statusCode: number, message: string): ReturnType<typeof jsonResponse> =>
-  jsonResponse(statusCode, { error: message });
+  jsonResponse(statusCode, { error: translateTeamString(message) });
 
 const parseJwt = (token: string): Item => {
   try {
@@ -236,6 +246,46 @@ const getLinkedTicketCount = async (entityType: string, entityId: string): Promi
   return result.Count ?? 0;
 };
 
+// Page through IDX_CUSTOMER items on the ops table. Each row carries the ticket's
+// teamId and ticketId so we can address the main item and its index sibling.
+const queryOpsCustomerIndex = async (customerId: string): Promise<Item[]> => {
+  const items: Item[] = [];
+  let lastKey: Item | undefined;
+  do {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: OPS_TABLE,
+        IndexName: 'GSI2',
+        KeyConditionExpression: 'GSI2PK = :pk AND begins_with(GSI2SK, :sk)',
+        ExpressionAttributeValues: { ':pk': `CUSTOMER#${customerId}`, ':sk': 'TICKET#' },
+        ExclusiveStartKey: lastKey,
+      })
+    );
+    items.push(...((result.Items ?? []) as Item[]));
+    lastKey = result.LastEvaluatedKey as Item | undefined;
+  } while (lastKey);
+  return items;
+};
+
+// Drop the customer link from a single ticket: clear customerId/customerName on
+// the main item and delete the IDX_CUSTOMER index sibling.
+const unlinkCustomerFromTicket = async (teamId: string, ticketId: string): Promise<void> => {
+  await dynamo.send(
+    new UpdateCommand({
+      TableName: OPS_TABLE,
+      Key: { PK: `TEAM#${teamId}`, SK: `TICKET#${ticketId}` },
+      UpdateExpression: 'REMOVE customerId, customerName SET updatedAt = :ts',
+      ExpressionAttributeValues: { ':ts': now() },
+    })
+  );
+  await dynamo.send(
+    new DeleteCommand({
+      TableName: OPS_TABLE,
+      Key: { PK: `TEAM#${teamId}`, SK: `TICKET#${ticketId}#IDX_CUSTOMER` },
+    })
+  );
+};
+
 // ─── Customers ──────────────────────────────────────────────────────────────────
 
 const handleCustomers = async (
@@ -392,20 +442,27 @@ const handleCustomers = async (
     return jsonResponse(200, updated);
   }
 
-  // DELETE /ops/customers/{id} — delete (check linked tickets)
+  // DELETE /ops/customers/{id} — unlink from any tickets, then delete
   if (method === 'DELETE' && segments.length === 1) {
     const id = segments[0];
-    const ticketCount = await getLinkedTicketCount('CUSTOMER', id);
-    if (ticketCount > 0) {
-      return errorResponse(409, `Cannot delete customer with ${ticketCount} linked ticket(s)`);
+
+    // Unlink each linked ticket. Tickets keep existing; they just lose the
+    // customer badge. Cross-board tickets are handled because each
+    // IDX_CUSTOMER row carries its own teamId.
+    const idxItems = await queryOpsCustomerIndex(id);
+    for (const idx of idxItems) {
+      const ticketTeamId = String(idx.teamId ?? '').trim();
+      const ticketId = String(idx.ticketId ?? '').trim();
+      if (!ticketTeamId || !ticketId) continue;
+      await unlinkCustomerFromTicket(ticketTeamId, ticketId);
     }
 
-    // Delete all sub-items (activities, documents)
+    // Delete customer META + activities + documents
     const allItems = await queryByPK(`CUSTOMER#${id}`);
     for (const item of allItems) {
       await deleteItem(String(item.PK), String(item.SK));
     }
-    return jsonResponse(200, { deleted: true });
+    return jsonResponse(200, { deleted: true, unlinkedTicketCount: idxItems.length });
   }
 
   return errorResponse(404, 'Route not found');
@@ -777,9 +834,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     switch (resource) {
       case 'customers':
-        return handleCustomers(method, rest, body, auth, event);
+        return await handleCustomers(method, rest, body, auth, event);
       case 'suppliers':
-        return handleSuppliers(method, rest, body, auth, event);
+        return await handleSuppliers(method, rest, body, auth, event);
       default:
         return errorResponse(404, 'Route not found');
     }

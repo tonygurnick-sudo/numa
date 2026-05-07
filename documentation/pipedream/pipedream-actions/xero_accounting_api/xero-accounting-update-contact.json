@@ -1,0 +1,241 @@
+{
+  "name": "Update Contact",
+  "description": "Updates a contact given its identifier.",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-xero-accounting-update-contact",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "contactId",
+      "type": "string",
+      "label": "Contact ID",
+      "description": "Contact identifier of the contact to update",
+      "remoteOptions": true
+    },
+    {
+      "name": "name",
+      "label": "Name",
+      "type": "string",
+      "description": "Full name of contact/organisation (max length = 255). The following is required to create a contact.",
+      "optional": true
+    },
+    {
+      "name": "contactNumber",
+      "label": "Contact Number",
+      "type": "string",
+      "description": "This can be updated via the API only i.e. This field is read only on the Xero contact screen, used to identify contacts in external systems (max length = 50). If the Contact Number is used, this is displayed as Contact Code in the Contacts UI in Xero.",
+      "optional": true
+    },
+    {
+      "name": "accountNumber",
+      "label": "Account Number",
+      "type": "string",
+      "description": "A user defined account number. This can be updated via the API and the [Xero UI](https://help.xero.com/ContactsAccountNumber) (max length = 50).",
+      "optional": true
+    },
+    {
+      "name": "contactStatus",
+      "label": "Contact Status",
+      "type": "string",
+      "description": "Current status of a contact - see contact status [types](https://developer.xero.com/documentation/api/types#ContactStatuses)",
+      "optional": true,
+      "options": ["ACTIVE", "ARCHIVED", "GDPRREQUEST"]
+    },
+    {
+      "name": "firstName",
+      "label": "First Name",
+      "type": "string",
+      "description": "First name of contact person (max length = 255)",
+      "optional": true
+    },
+    {
+      "name": "lastName",
+      "label": "Last Name",
+      "type": "string",
+      "description": "Last name of contact person (max length = 255)",
+      "optional": true
+    },
+    {
+      "name": "emailAddress",
+      "label": "Email Address",
+      "type": "string",
+      "description": "Email address of contact person (umlauts not supported) (max length = 255)",
+      "optional": true
+    },
+    {
+      "name": "skypeUserName",
+      "label": "Skype User Name",
+      "type": "string",
+      "description": "Skype user name of contact",
+      "optional": true
+    },
+    {
+      "name": "contactPersons",
+      "label": "Contact Persons",
+      "type": "any",
+      "description": "See [contact persons](https://developer.xero.com/documentation/api/contacts#contact-persons)",
+      "optional": true
+    },
+    {
+      "name": "bankAccountDetails",
+      "label": "Bank Account Details",
+      "type": "string",
+      "description": "Bank account number of contact",
+      "optional": true
+    },
+    {
+      "name": "taxNumber",
+      "label": "Tax Number",
+      "type": "string",
+      "description": "Tax number of contact - this is also known as the ABN (Australia), GST Number (New Zealand), VAT Number (UK) or Tax ID Number (US and global) in the Xero UI depending on which regionalized version of Xero you are using (max length = 50)",
+      "optional": true
+    },
+    {
+      "name": "accountReceivableTaxType",
+      "label": "Account Receivable Tax Type",
+      "type": "string",
+      "description": "Default tax type used for contact on AP invoices",
+      "optional": true
+    },
+    {
+      "name": "accountPayableType",
+      "label": "Account Payable Type",
+      "type": "string",
+      "description": "Store certain address types for a contact - see address types",
+      "optional": true
+    },
+    {
+      "name": "addresses",
+      "label": "Addresses",
+      "type": "any",
+      "description": "Store certain address types for a contact - see address types",
+      "optional": true
+    },
+    {
+      "name": "phones",
+      "label": "Phones",
+      "type": "any",
+      "description": "Store certain phone types for a contact - see phone types",
+      "optional": true
+    },
+    {
+      "name": "isSupplier",
+      "label": "Is Supplier",
+      "type": "boolean",
+      "description": "true or false \u0096 Boolean that describes if a contact that has any AP invoices entered against them. Cannot be set via PUT or POST - it is automatically set when an accounts payable invoice is generated against this contact.",
+      "optional": true
+    },
+    {
+      "name": "isCustomer",
+      "label": "Is Customer",
+      "type": "boolean",
+      "description": "true or false \u0096 Boolean that describes if a contact has any AR invoices entered against them. Cannot be set via PUT or POST - it is automatically set when an accounts receivable invoice is generated against this contact.",
+      "optional": true
+    },
+    {
+      "name": "defaultCurrency",
+      "label": "Default Currency",
+      "type": "string",
+      "description": "Default currency for raising invoices against contact",
+      "optional": true
+    },
+    {
+      "name": "xeroNetworkKey",
+      "label": "Xero Network Key",
+      "type": "string",
+      "description": "Store XeroNetworkKey for contacts",
+      "optional": true
+    },
+    {
+      "name": "salesDefaultAccountCode",
+      "label": "Sales Default Account Code",
+      "type": "string",
+      "description": "The default sales [account code](https://developer.xero.com/documentation/api/accounts) for contacts",
+      "optional": true
+    },
+    {
+      "name": "puchasesDefaultAccountCode",
+      "label": "Purchases Default Account Code",
+      "type": "string",
+      "description": "The default purchases [account code](https://developer.xero.com/documentation/api/accounts) for contacts",
+      "optional": true
+    },
+    {
+      "name": "salesTrackingCategories",
+      "label": "Sales Tracking Categories",
+      "type": "string",
+      "description": "The default sales [tracking categories](https://developer.xero.com/documentation/api/tracking-categories/) for contacts",
+      "optional": true
+    },
+    {
+      "name": "puechasesTrackingCategories",
+      "label": "Purchases Tracking Categories",
+      "type": "string",
+      "description": "The default purchases [tracking categories](https://developer.xero.com/documentation/api/tracking-categories/) for contacts",
+      "optional": true
+    },
+    {
+      "name": "trackingCategoryName",
+      "label": "Tracking Category Name",
+      "type": "string",
+      "description": "The name of the Tracking Category assigned to the contact under SalesTrackingCategories and PurchasesTrackingCategories",
+      "optional": true
+    },
+    {
+      "name": "trackingOptionName",
+      "label": "Tracking Option Name",
+      "type": "string",
+      "description": "The name of the Tracking Option assigned to the contact under SalesTrackingCategories and PurchasesTrackingCategories",
+      "optional": true
+    },
+    {
+      "name": "paymentTermsBillDay",
+      "label": "Payment Terms Bill Day",
+      "type": "integer",
+      "description": "The default payment terms bill day",
+      "optional": true
+    },
+    {
+      "name": "paymentTermsBillType",
+      "type": "string",
+      "label": "Payment Terms Bill Type",
+      "description": "The default payment terms bill type",
+      "optional": true,
+      "options": [
+        {
+          "label": "day(s) after bill date",
+          "value": "DAYSAFTERBILLDATE"
+        },
+        {
+          "label": "day(s) after bill month",
+          "value": "DAYSAFTERBILLMONTH"
+        },
+        {
+          "label": "of the current month",
+          "value": "OFCURRENTMONTH"
+        },
+        {
+          "label": "of the following month",
+          "value": "OFFOLLOWINGMONTH"
+        }
+      ]
+    }
+  ]
+}

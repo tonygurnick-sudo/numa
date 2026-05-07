@@ -1,0 +1,98 @@
+{
+  "name": "People Enrichment",
+  "description": "Enriches a person's information, the more information you pass in, the more likely we can find a match. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#people-enrichment)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "apollo_io-people-enrichment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "firstName",
+      "type": "string",
+      "label": "First Name",
+      "description": "The person's first name",
+      "optional": true
+    },
+    {
+      "name": "lastName",
+      "type": "string",
+      "label": "Last Name",
+      "description": "The person's last name",
+      "optional": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The full name of the person",
+      "optional": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email",
+      "description": "The person's email",
+      "optional": true
+    },
+    {
+      "name": "hashedEmail",
+      "type": "string",
+      "label": "Hashed Email",
+      "description": "The hashed email of the person. The email should adhere to either the MD5 or SHA-256 hash format. Example: `8d935115b9ff4489f2d1f9249503cadf` (MD5) or `97817c0c49994eb500ad0a5e7e2d8aed51977b26424d508f66e4e8887746a152` (SHA-256)",
+      "optional": true
+    },
+    {
+      "name": "organizationName",
+      "type": "string",
+      "label": "Organization Name",
+      "description": "The person's company name",
+      "optional": true
+    },
+    {
+      "name": "domain",
+      "type": "string",
+      "label": "Domain",
+      "description": "The domain name for the person's employer. This can be the current employer or a previous employer. Do not include `www.`, the `@` symbol, or similar. Example: `apollo.io` or `microsoft.com`",
+      "optional": true
+    },
+    {
+      "name": "personId",
+      "type": "string",
+      "label": "Person ID",
+      "description": "The Apollo ID for the person",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "linkedinUrl",
+      "type": "string",
+      "label": "LinkedIn URL",
+      "description": "The URL for the person's LinkedIn profile",
+      "optional": true
+    },
+    {
+      "name": "revealPersonalEmails",
+      "type": "boolean",
+      "label": "Reveal Personal Emails",
+      "description": "Set to `true` if you want to enrich the person's data with personal emails",
+      "optional": true
+    },
+    {
+      "name": "revealPhoneNumber",
+      "type": "boolean",
+      "label": "Reveal Phone Number",
+      "description": "Set to `true` if you want to enrich the person's data with all available phone numbers, including mobile phone numbers",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

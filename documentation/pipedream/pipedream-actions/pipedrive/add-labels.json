@@ -1,0 +1,107 @@
+{
+  "name": "Add Labels",
+  "description": "Adds labels to a lead, person, deal, or organization in Pipedrive. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#updateLead)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "pipedrive-add-labels",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "description": "The type of the item to add labels to",
+      "options": ["lead", "person", "deal", "organization"],
+      "reloadProps": true
+    },
+    {
+      "name": "leadId",
+      "type": "string",
+      "label": "Lead ID",
+      "description": "The ID of the lead to add labels to",
+      "optional": true,
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "personId",
+      "type": "integer",
+      "label": "Person ID",
+      "description": "The ID of the person to add labels to",
+      "optional": true,
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "dealId",
+      "type": "string",
+      "label": "Deal ID",
+      "description": "The ID of the deal to add labels to",
+      "optional": true,
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "organizationId",
+      "type": "integer",
+      "label": "Organization ID",
+      "description": "The ID of the organization to add labels to",
+      "optional": true,
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "leadLabelIds",
+      "type": "string[]",
+      "label": "Lead Label IDs",
+      "description": "The IDs of the lead labels to associate with the lead",
+      "optional": true,
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "personLabelIds",
+      "type": "integer[]",
+      "label": "Person Label IDs",
+      "description": "The IDs of the person labels to associate with the person",
+      "remoteOptions": true,
+      "hidden": true,
+      "optional": true
+    },
+    {
+      "name": "dealLabelIds",
+      "type": "integer[]",
+      "label": "Label IDs",
+      "description": "The IDs of labels assigned to the deal",
+      "optional": true,
+      "remoteOptions": true,
+      "hidden": true
+    },
+    {
+      "name": "organizationLabelIds",
+      "type": "integer[]",
+      "label": "Organization Label IDs",
+      "description": "The IDs of the organization labels to associate with the organization",
+      "remoteOptions": true,
+      "hidden": true,
+      "optional": true
+    },
+    {
+      "name": "replaceExistingLabels",
+      "type": "boolean",
+      "label": "Replace Existing Labels",
+      "description": "Set to `true` to replace the existing labels with the new ones, `false` to add the new labels to the existing ones. Defaults to `false`.",
+      "default": false,
+      "optional": true
+    }
+  ]
+}

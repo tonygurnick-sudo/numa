@@ -588,6 +588,27 @@ export class NumaFrontendInfra extends Construct {
       });
     }
 
+    // Pipedream-events webhook (must come before /api/* catch-all).
+    //
+    // The default `/api/*` behavior uses `apiCachePolicy` which whitelists
+    // only `authorization`, `x-analytics-api-key`, `x-api-key` — every other
+    // header is stripped before reaching API Gateway. Pipedream signs with
+    // `x-pd-signature` and identifies the trigger via `x-pd-emitter-id`,
+    // so the receiver lambda was getting empty headers and rejecting the
+    // delivery as malformed. Use AllViewerExceptHostHeader (same pattern as
+    // the chat agent / workspace agent / KB manager Function URL routes) so
+    // the receiver sees the headers Pipedream actually sent.
+    orderedCacheBehavior.push({
+      targetOriginId: 'api-gateway',
+      allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+      cachedMethods: ['GET', 'HEAD'],
+      pathPattern: '/api/webhooks/pipedream-events/*',
+      viewerProtocolPolicy: 'redirect-to-https',
+      compress: true,
+      cachePolicyId: cachingDisabledPolicyId,
+      originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac', // AllViewerExceptHostHeader
+    });
+
     // API Gateway catch-all (must be last)
     orderedCacheBehavior.push({
       targetOriginId: 'api-gateway',

@@ -1,0 +1,42 @@
+{
+  "name": "Assign Issue",
+  "description": "Assigns an issue to a user. [See the documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-issueidorkey-assignee-put)",
+  "component_type": "action",
+  "version": "0.0.16",
+  "key": "jira-assign-issue",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "jira",
+      "type": "app",
+      "app": "jira"
+    },
+    {
+      "name": "cloudId",
+      "type": "string",
+      "label": "Cloud ID",
+      "description": "The cloud ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "issueIdOrKey",
+      "type": "string",
+      "label": "Issue ID or Key",
+      "description": "The ID or key of an issue",
+      "remoteOptions": true
+    },
+    {
+      "name": "accountId",
+      "type": "string",
+      "label": "Assignee ID",
+      "description": "The account ID of the user, which uniquely identifies the user across all Atlassian products, For example, `5b10ac8d82e05b22cc7d4ef5`",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

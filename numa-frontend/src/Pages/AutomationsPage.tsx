@@ -35,6 +35,26 @@ import { getDerivedAutomationStatus, formatRelativeTime } from '../utils/automat
 import { describeCronExpression } from '../utils/cronUtils';
 import type { AgentSchedule } from '../types/agentSchedules';
 import type { AgentSummary } from '../types/agents';
+import {
+  summarizePipedreamConfiguredProps,
+  summarizePipedreamTrigger,
+} from '../Components/PipedreamTriggers/pipedreamTriggerLabels';
+import { findPipedreamTriggerComponent } from '../../../lib/pipedream-trigger-apps';
+
+const PipedreamTriggerListChip = ({ appSlug, componentId }: { appSlug: string; componentId: string }) => {
+  const { t } = useTranslation('automations');
+  const summary = summarizePipedreamTrigger(appSlug, componentId, t);
+  return (
+    <span className="automation-list-row__chip automation-list-row__chip--schedule">
+      {summary.iconSrc ? (
+        <img src={summary.iconSrc} alt="" width={12} height={12} />
+      ) : (
+        <i className={`${summary.fallbackIcon} small`} />
+      )}
+      {summary.combined}
+    </span>
+  );
+};
 
 const RECENT_ACTIVITY_LIMIT = 6;
 
@@ -460,20 +480,53 @@ export const AutomationsPage = () => {
                       </span>
                       {automation.triggerType === 'event' ? (
                         <>
-                          <span className="automation-list-row__chip automation-list-row__chip--schedule">
-                            <Zap size={12} />
-                            {t('list.triggerEmail')}
-                          </span>
-                          {automation.trigger?.filters &&
+                          {automation.trigger?.source === 'pipedream' ? (
+                            <>
+                              <PipedreamTriggerListChip
+                                appSlug={automation.trigger.app_slug}
+                                componentId={automation.trigger.component_id}
+                              />
+                              {(() => {
+                                const pdTrigger = automation.trigger;
+                                const found = findPipedreamTriggerComponent(pdTrigger.app_slug, pdTrigger.component_id);
+                                const forced = found ? Object.keys(found.trigger.restraints.forced_props) : [];
+                                const rows = summarizePipedreamConfiguredProps({
+                                  componentId: pdTrigger.component_id,
+                                  appSlug: pdTrigger.app_slug,
+                                  configuredProps: pdTrigger.configured_props,
+                                  configuredPropLabels: pdTrigger.configured_prop_labels,
+                                  forcedPropNames: forced,
+                                  t,
+                                });
+                                return rows.map((r) => (
+                                  <span
+                                    key={r.propName}
+                                    className="automation-list-row__chip automation-list-row__chip--filter"
+                                  >
+                                    <span className="text-muted small me-1">{r.label}:</span>
+                                    {r.value}
+                                  </span>
+                                ));
+                              })()}
+                            </>
+                          ) : (
+                            <span className="automation-list-row__chip automation-list-row__chip--schedule">
+                              <Zap size={12} />
+                              {t('list.triggerEmail')}
+                            </span>
+                          )}
+                          {automation.trigger?.source === 'gmail' &&
                             automation.trigger.filters.length > 0 &&
                             (() => {
-                              const filters = automation.trigger!.filters;
+                              // narrowed to GmailEventTrigger by the source check above
+                              const gmailTrigger = automation.trigger;
+                              const filters = gmailTrigger.filters;
                               const isExpanded = expandedFilters.has(automation.scheduleId);
                               const MAX_VISIBLE = 3;
                               const visible = isExpanded ? filters : filters.slice(0, MAX_VISIBLE);
                               const hasMore = filters.length > MAX_VISIBLE;
                               const logic =
-                                automation.trigger!.filter_logic === 'any' ? t('list.filterOr') : t('list.filterAnd');
+                                gmailTrigger.filter_logic === 'any' ? t('list.filterOr') : t('list.filterAnd');
 
                               return (
                                 <>
@@ -542,15 +595,21 @@ export const AutomationsPage = () => {
                       )}
                     </div>
                     <div className="automation-list-row__actions" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="outline-secondary"
-                        size="sm"
-                        className="automation-list-row__run-btn"
-                        onClick={() => handleRunNow(automation)}
-                        disabled={runningIds.has(automation.scheduleId)}
-                      >
-                        <Play size={12} />
-                      </Button>
+                      {/* Run Now is meaningless for event triggers — they need
+                          an actual event payload to do anything useful. Hide
+                          it on event automations rather than wire up a synthetic-
+                          payload UX. */}
+                      {automation.triggerType !== 'event' && (
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          className="automation-list-row__run-btn"
+                          onClick={() => handleRunNow(automation)}
+                          disabled={runningIds.has(automation.scheduleId)}
+                        >
+                          <Play size={12} />
+                        </Button>
+                      )}
                       <Form.Check
                         type="switch"
                         checked={automation.status === 'active'}

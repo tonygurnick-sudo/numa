@@ -1,0 +1,102 @@
+{
+  "name": "Upload File",
+  "description": "Upload a file to Google Drive. [See the documentation](https://developers.google.com/drive/api/v3/manage-uploads) for more information",
+  "component_type": "action",
+  "version": "2.0.8",
+  "key": "google_drive-upload-file",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "parentId",
+      "type": "string",
+      "label": "Folder",
+      "description": "The folder you want to upload the file to. If not specified, the file will be placed directly in the drive's top-level folder.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "filePath",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "Provide either a file URL or a path to a file in the /tmp directory (for example, /tmp/myFile.pdf)."
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the new file (e.g. `/myFile.csv`). By default, the name is the same as the source file's.",
+      "optional": true
+    },
+    {
+      "name": "mimeType",
+      "type": "string",
+      "label": "Mime Type",
+      "description": "The file's MIME type (e.g., `image/jpeg`). Google Drive will attempt to automatically detect an appropriate value from uploaded content if no value is provided.",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "uploadType",
+      "type": "string",
+      "label": "Upload Type",
+      "description": "The type of upload request to the /upload URI. Required if you are uploading data, but not if are creating a metadata-only file. [See the documentation](https://developers.google.com/drive/api/reference/rest/v2/files/update#path-parameters) for more information.",
+      "options": [
+        {
+          "label": "Simple upload. Upload the media only, without any metadata.",
+          "value": "media"
+        },
+        {
+          "label": "Resumable upload. Upload the file in a resumable fashion, using a series of at least two requests where the first request includes the metadata.",
+          "value": "resumable"
+        },
+        {
+          "label": "Multipart upload. Upload both the media and its metadata, in a single request.",
+          "value": "multipart"
+        }
+      ],
+      "default": "multipart",
+      "optional": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File to replace",
+      "description": "ID of the file to replace. Leave it empty to upload a new file.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "metadata",
+      "type": "object",
+      "label": "Metadata",
+      "description": "Additional metadata to supply in the upload. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/files) for information on available fields. Values will be parsed as JSON where applicable. Example: `{ \"description\": \"my file description\" }`",
+      "optional": true
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

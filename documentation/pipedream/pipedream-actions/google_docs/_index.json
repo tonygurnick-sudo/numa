@@ -1,0 +1,146 @@
+[
+  {
+    "key": "google_docs-create-document-from-template",
+    "name": "Create New Document From Template",
+    "description": "Create a new Google Docs file from a template. Optionally include placeholders in the template document that will get replaced from this action. [See documentation](https://www.npmjs.com/package/google-docs-mustaches)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "google_docs-replace-text",
+    "name": "Replace Text",
+    "description": "Replace all instances of matched text in an existing document. Supports Markdown formatting in the replacement text. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/request#ReplaceAllTextRequest)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "google_docs-replace-image",
+    "name": "Replace Image",
+    "description": "Replace image in a existing document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/request#ReplaceImageRequest)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_docs-insert-text",
+    "name": "Insert Text",
+    "description": "Insert text into a document. [See the documentation](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/request#inserttextrequest)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_docs-insert-table",
+    "name": "Insert Table",
+    "description": "Insert a table into a document. [See the documentation](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/request#inserttablerequest)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_docs-insert-page-break",
+    "name": "Insert Page Break",
+    "description": "Insert a page break into a document. [See the documentation](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/request#insertpagebreakrequest)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_docs-get-tab-content",
+    "name": "Get Tab Content",
+    "description": "Get the content of a tab in a document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/get)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_docs-get-document",
+    "name": "Get Document",
+    "description": "Get the contents of the latest version of a document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/get)",
+    "version": "0.1.10",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_docs-find-document",
+    "name": "Find Document",
+    "description": "Search for a specific file by name. [See the documentation](https://developers.google.com/drive/api/v3/search-files) for more information",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_docs-create-document",
+    "name": "Create a New Document",
+    "description": "Create a new document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/create)",
+    "version": "0.2.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_docs-append-text",
+    "name": "Append Text",
+    "description": "Append text to an existing document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/request#InsertTextRequest)",
+    "version": "0.1.10",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_docs-append-image",
+    "name": "Append Image to Document",
+    "description": "Appends an image to the end of a document. [See the documentation](https://developers.google.com/docs/api/reference/rest/v1/documents/request#InsertInlineImageRequest)",
+    "version": "0.0.11",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  }
+]

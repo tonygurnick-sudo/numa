@@ -1,0 +1,39 @@
+{
+  "name": "Create Branch",
+  "description": "Create a new branch in the repository. [See the documentation](https://docs.gitlab.com/ee/api/branches.html#create-repository-branch)",
+  "component_type": "action",
+  "version": "0.3.3",
+  "key": "gitlab-create-branch",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gitlab",
+      "type": "app",
+      "app": "gitlab"
+    },
+    {
+      "name": "projectId",
+      "type": "integer",
+      "label": "Project ID",
+      "description": "The project ID, as displayed in the main project page",
+      "remoteOptions": true
+    },
+    {
+      "name": "ref",
+      "type": "string",
+      "label": "Branch Ref",
+      "description": "The branch name or commit SHA to create branch from",
+      "remoteOptions": true
+    },
+    {
+      "name": "branchName",
+      "type": "string",
+      "label": "Branch Name",
+      "description": "The name of the branch to create"
+    }
+  ]
+}

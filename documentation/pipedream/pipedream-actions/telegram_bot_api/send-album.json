@@ -1,0 +1,39 @@
+{
+  "name": "Send an Album (Media Group)",
+  "description": "Sends a group of photos or videos as an album. [See the docs](https://core.telegram.org/bots/api#sendmediagroup) for more information",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "telegram_bot_api-send-album",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "telegramBotApi",
+      "type": "app",
+      "app": "telegram_bot_api"
+    },
+    {
+      "name": "chatId",
+      "type": "string",
+      "label": "Chat ID",
+      "description": "Enter the unique identifier for the target chat (e.g. `1035597319`) or username of the target public chat (in the format `@channelusername` or `@supergroupusername`). For example, if the group's public link is `t.me/mygroup`, the username is `@mygroup`."
+    },
+    {
+      "name": "media",
+      "type": "any",
+      "label": "Media",
+      "description": "A JSON-serialized array describing photos and videos to be sent, must include 2\u201310 items (e.g., `[{\"type\":\"photo\",\"media\":\"https://example.com/myImage.jpeg\"},{\"type\":\"video\",\"media\":\"/tmp/myVideo.mp4\"}]`). [See the docs](https://core.telegram.org/bots/api#inputmedia) for more information about the input media object.",
+      "optional": false
+    },
+    {
+      "name": "disable_notification",
+      "type": "boolean",
+      "label": "Disable Notifications",
+      "description": "Choose if to send the message silently. iOS users will not receive a notification, Android users will receive a notification with no sound.",
+      "optional": true
+    }
+  ]
+}

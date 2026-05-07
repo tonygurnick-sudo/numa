@@ -1,0 +1,19 @@
+{
+  "name": "Retrieve Workflows",
+  "description": "Retrieve a list of all workflows. [See the documentation](https://developers.hubspot.com/docs/api-reference/legacy/create-manage-workflows-v3/get-automation-v3-workflows)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "hubspot-retrieve-workflows",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    }
+  ]
+}

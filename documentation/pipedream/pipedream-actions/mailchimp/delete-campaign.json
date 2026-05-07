@@ -1,0 +1,27 @@
+{
+  "name": "Delete Campaign",
+  "description": "Delete a specific campaign. [See docs here](https://mailchimp.com/developer/marketing/api/campaigns/delete-campaign/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-delete-campaign",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "campaignId",
+      "type": "string",
+      "label": "Campaign ID",
+      "description": "The unique ID of the campaign",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

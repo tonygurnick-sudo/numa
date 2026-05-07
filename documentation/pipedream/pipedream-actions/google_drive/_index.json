@@ -1,0 +1,446 @@
+[
+  {
+    "key": "google_drive-create-file-from-template",
+    "name": "Create New File From Template",
+    "description": "Create a new Google Docs file from a template. Optionally include placeholders in the template document that will get replaced from this action. [See documentation](https://www.npmjs.com/package/google-docs-mustaches)",
+    "version": "0.1.18",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "google_drive-upload-file",
+    "name": "Upload File",
+    "description": "Upload a file to Google Drive. [See the documentation](https://developers.google.com/drive/api/v3/manage-uploads) for more information",
+    "version": "2.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 10
+  },
+  {
+    "key": "google_drive-update-shared-drive",
+    "name": "Update Shared Drive",
+    "description": "Update an existing shared drive. [See the documentation](https://developers.google.com/drive/api/v3/reference/drives/update) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "google_drive-update-reply",
+    "name": "Update Reply",
+    "description": "Update a reply on a specific comment. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/replies/update) for more information",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "google_drive-update-file",
+    "name": "Update File",
+    "description": "Update a file's metadata and/or content. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/update) for more information",
+    "version": "2.0.7",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 13
+  },
+  {
+    "key": "google_drive-update-comment",
+    "name": "Update Comment",
+    "description": "Update the content of a specific comment. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/comments/update) for more information",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-search-shared-drives",
+    "name": "Search for Shared Drives",
+    "description": "Search for shared drives with query options. [See the documentation](https://developers.google.com/drive/api/v3/search-shareddrives) for more information",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_drive-resolve-comment",
+    "name": "Resolve Comment",
+    "description": "Mark a comment as resolved. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/comments/update)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_drive-resolve-access-proposal",
+    "name": "Resolve Access Proposals",
+    "description": "Accept or deny a request for access to a file or folder in Google Drive. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/accessproposals/resolve)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "google_drive-reply-to-comment",
+    "name": "Reply to Comment",
+    "description": "Add a reply to an existing comment. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/replies/create)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_drive-move-file",
+    "name": "Move File",
+    "description": "Move a file from one folder to another. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/update) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_drive-move-file-to-trash",
+    "name": "Move File to Trash",
+    "description": "Move a file or folder to trash. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/update) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_drive-list-replies",
+    "name": "List Replies",
+    "description": "List replies to a specific comment. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/replies/list) for more information",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-list-files",
+    "name": "List Files",
+    "description": "List files from a specific folder. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/list) for more information",
+    "version": "0.1.19",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-list-comments",
+    "name": "List Comments",
+    "description": "List all comments on a file. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/comments/list)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_drive-list-access-proposals",
+    "name": "List Access Proposals",
+    "description": "List access proposals for a file or folder. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/accessproposals/list)",
+    "version": "0.0.8",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_drive-get-shared-drive",
+    "name": "Get Shared Drive",
+    "description": "Get metadata for one or all shared drives. [See the documentation](https://developers.google.com/drive/api/v3/reference/drives/get) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_drive-get-reply",
+    "name": "Get Reply By ID",
+    "description": "Get reply by ID on a specific comment. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/replies/get) for more information",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-get-folder-id-for-path",
+    "name": "Get Folder ID for a Path",
+    "description": "Retrieve a folderId for a path. [See the documentation](https://developers.google.com/drive/api/v3/search-files) for more information",
+    "version": "0.1.17",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_drive-get-file-by-id",
+    "name": "Get File By ID",
+    "description": "Get info on a specific file. [See the documentation](https://developers.google.com/drive/api/reference/rest/v3/files/get) for more information",
+    "version": "0.0.12",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_drive-get-current-user",
+    "name": "Get Current User",
+    "description": "Retrieve Google Drive account metadata for the authenticated user via `about.get`, including display name, email, permission ID, and storage quota. Useful when flows or agents need to confirm the active Google identity or understand available storage. [See the documentation](https://developers.google.com/drive/api/v3/reference/about/get).",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "google_drive-get-comment",
+    "name": "Get Comment By ID",
+    "description": "Get comment by ID on a specific file. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/comments/get) for more information",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-find-spreadsheets",
+    "name": "Find Spreadsheets",
+    "description": "Search for a specific spreadsheet by name. [See the documentation](https://developers.google.com/drive/api/v3/search-files) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-find-forms",
+    "name": "Find Forms",
+    "description": "List Google Form documents or search for a Form by name. [See the documentation](https://developers.google.com/drive/api/v3/search-files) for more information",
+    "version": "0.0.16",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-find-folder",
+    "name": "Find Folder",
+    "description": "Search for a specific folder by name. [See the documentation](https://developers.google.com/drive/api/v3/search-files) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_drive-find-file",
+    "name": "Find File",
+    "description": "Search for a specific file by name. [See the documentation](https://developers.google.com/drive/api/v3/search-files) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_drive-download-file",
+    "name": "Download File",
+    "description": "Download a file. [See the documentation](https://developers.google.com/drive/api/v3/manage-downloads) for more information",
+    "version": "0.1.18",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "google_drive-delete-shared-drive",
+    "name": "Delete Shared Drive",
+    "description": "Delete a shared drive without any content. [See the documentation](https://developers.google.com/drive/api/v3/reference/drives/delete) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "google_drive-delete-reply",
+    "name": "Delete Reply",
+    "description": "Delete a reply on a specific comment. [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/replies/delete) for more information",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-delete-file",
+    "name": "Delete File",
+    "description": "Permanently delete a file or folder without moving it to the trash. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/delete) for more information",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_drive-delete-comment",
+    "name": "Delete Comment",
+    "description": "Delete a specific comment (Requires ownership or permissions). [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/comments/delete)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_drive-create-shared-drive",
+    "name": "Create Shared Drive",
+    "description": "Create a new shared drive. [See the documentation](https://developers.google.com/drive/api/v3/reference/drives/create) for more information",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 2
+  },
+  {
+    "key": "google_drive-create-folder",
+    "name": "Create Folder",
+    "description": "Create a new empty folder. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/create) for more information",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_drive-create-file-from-text",
+    "name": "Create New File From Text",
+    "description": "Create a new file from plain text. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/create) for more information",
+    "version": "0.2.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-copy-file",
+    "name": "Copy File",
+    "description": "Create a copy of the specified file. [See the documentation](https://developers.google.com/drive/api/v3/reference/files/copy) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_drive-add-file-sharing-preference",
+    "name": "Share File or Folder",
+    "description": "Add a [sharing permission](https://support.google.com/drive/answer/7166529) to the sharing preferences of a file or folder and provide a sharing URL. [See the documentation](https://developers.google.com/drive/api/v3/reference/permissions/create)",
+    "version": "0.2.8",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_drive-add-comment",
+    "name": "Add Comment",
+    "description": "Add an unanchored comment to a Google Doc (general feedback, no text highlighting). [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/comments/create)",
+    "version": "0.1.0",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  }
+]

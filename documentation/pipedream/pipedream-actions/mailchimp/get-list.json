@@ -1,0 +1,48 @@
+{
+  "name": "Get List",
+  "description": "Searches for lists. [See docs here](https://mailchimp.com/developer/marketing/api/lists/)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "mailchimp-get-list",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Fields",
+      "description": "A string list of fields to return. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "excludeFields",
+      "type": "string[]",
+      "label": "Exclude Fields",
+      "description": "A string list of fields to exclude_fields. Reference parameters of sub-objects with dot notation.",
+      "optional": true
+    },
+    {
+      "name": "includeTotalContacts",
+      "type": "boolean",
+      "label": "Include total contacts",
+      "description": "Return the total_contacts field in the stats response, which contains an approximate count of all contacts in any state.",
+      "optional": true
+    }
+  ]
+}

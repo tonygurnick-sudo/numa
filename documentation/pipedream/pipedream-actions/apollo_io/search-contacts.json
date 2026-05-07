@@ -1,0 +1,54 @@
+{
+  "name": "Search For Contacts",
+  "description": "Search for contacts in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#search-for-contacts)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "apollo_io-search-contacts",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "search",
+      "type": "string",
+      "label": "Search",
+      "description": "The contact's name, title, company, or email"
+    },
+    {
+      "name": "contactStageId",
+      "type": "string[]",
+      "label": "Contact Stage ID",
+      "description": "Identifier of a contact stage",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "sortByField",
+      "type": "string",
+      "label": "Sort By Field",
+      "description": "The field to sort the response.",
+      "options": [
+        "contact_last_activity_date",
+        "contact_email_last_opened_at",
+        "contact_email_last_clicked_at",
+        "contact_created_at",
+        "contact_updated_at"
+      ],
+      "optional": true
+    },
+    {
+      "name": "sortAscending",
+      "type": "boolean",
+      "label": "Sort Ascending",
+      "description": "The order to be applied to the sort.",
+      "optional": true
+    }
+  ]
+}

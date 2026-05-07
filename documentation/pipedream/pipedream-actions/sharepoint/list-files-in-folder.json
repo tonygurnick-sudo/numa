@@ -1,0 +1,65 @@
+{
+  "name": "List Files in Folder",
+  "description": "Retrieves a list of the files and/or folders directly within a folder. [See the documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_list_children)",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "sharepoint-list-files-in-folder",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "siteId",
+      "type": "string",
+      "label": "Site",
+      "description": "Identifier of a site",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "driveId",
+      "type": "string",
+      "label": "Drive ID",
+      "description": "Identifier of a drive within a site",
+      "remoteOptions": true
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder ID",
+      "description": "The folder to list files in. You can either search for the folder here or provide a custom *Folder ID*.",
+      "optional": true,
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "excludeFolders",
+      "type": "boolean",
+      "label": "Exclude Folders?",
+      "description": "Set to `true` to return only files in the response. Defaults to `false`",
+      "optional": true
+    },
+    {
+      "name": "select",
+      "type": "string",
+      "label": "Select",
+      "description": "A comma-separated list of properties to return in the response",
+      "optional": true
+    },
+    {
+      "name": "orderBy",
+      "type": "string",
+      "label": "Order By",
+      "description": "The field to order the results by",
+      "default": "lastModifiedDateTime",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "Get Comments",
+  "description": "Fetches comments for a file. [See the documentation](https://developer.box.com/reference/get-files-id-comments/).",
+  "component_type": "action",
+  "version": "0.0.3",
+  "key": "box-get-comments",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "box"
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Parent Folder",
+      "description": "Use this option to select your File ID from a dropdown list.",
+      "optional": true,
+      "default": "0",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File ID",
+      "description": "The file ID to get comments from. Use a custom expression to reference a file from your workflow or select it from the dropdown list.",
+      "remoteOptions": true
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Get Current User",
+  "description": "Retrieve information about the authenticated Google Calendar account, including the primary calendar (summary, timezone, ACL flags), a list of accessible calendars, user-level settings (timezone, locale, week start), and the color palette that controls events and calendars. Ideal for confirming which calendar account is in use, customizing downstream scheduling, or equipping LLMs with the user\u2019s context (timezones, available calendars) prior to creating or updating events. [See the documentation](https://developers.google.com/calendar/api/v3/reference/calendars/get).",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "google_calendar-get-current-user",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleCalendar",
+      "type": "app",
+      "app": "google_calendar"
+    }
+  ]
+}

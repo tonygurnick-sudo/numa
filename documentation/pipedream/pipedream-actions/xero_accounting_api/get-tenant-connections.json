@@ -1,0 +1,19 @@
+{
+  "name": "Get Tenant Connections",
+  "description": "Gets the tenants connections the user is authorized to access",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-get-tenant-connections",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    }
+  ]
+}

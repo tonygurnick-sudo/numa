@@ -51,7 +51,7 @@ export const OpsHomeView = ({
 }: OpsHomeViewProps) => {
   const { t } = useTranslation('ops');
   const { numaGet } = useNumaRequest();
-  const { teams } = useOps();
+  const { boards } = useOps();
 
   // ── Local data (initialized from cache for instant render) ─────────────
   const [metrics, setMetrics] = useState<MetricsResponse | null>(() => getCached('metrics'));
@@ -96,9 +96,9 @@ export const OpsHomeView = ({
   // ── Derived data ────────────────────────────────────────────────────────
   const teamMetricsMap = useMemo(() => {
     const map = new Map<string, { open: number; closed: number }>();
-    if (metrics?.teams) {
-      for (const tm of metrics.teams) {
-        map.set(tm.teamId, {
+    if (metrics?.boards) {
+      for (const tm of metrics.boards) {
+        map.set(tm.boardId, {
           open: sumCounts(tm.counts, OPEN_STATUSES),
           closed: sumCounts(tm.counts, CLOSED_STATUSES),
         });
@@ -178,7 +178,7 @@ export const OpsHomeView = ({
         {t('home.overview')}
       </h6>
       <div className="d-flex gap-3 flex-wrap mb-4">
-        <StatCard label={t('home.boardsCount')} value={teams.length} color="#6366f1" />
+        <StatCard label={t('home.boardsCount')} value={boards.length} color="#6366f1" />
         <StatCard label={t('home.openTickets')} value={metrics?.totals?.open ?? 0} color="#f59e0b" />
         <StatCard label={t('home.closedTickets')} value={metrics?.totals?.closed ?? 0} color="#10b981" />
         <StatCard label={t('home.customersCount')} value={customerCount} color="#0d9488" />
@@ -192,14 +192,14 @@ export const OpsHomeView = ({
       >
         {t('home.yourBoards')}
       </h6>
-      {teams.length === 0 ? (
+      {boards.length === 0 ? (
         <div className="border rounded p-4 text-center text-muted mb-4">
           <i className="bi bi-kanban fs-3 d-block mb-2" />
           <span>{t('home.noBoardsYet')}</span>
         </div>
       ) : (
         <div className="row g-3 mb-4">
-          {teams.map((team) => {
+          {boards.map((team) => {
             const stats = teamMetricsMap.get(team.id);
             return (
               <div key={team.id} className="col-md-4">

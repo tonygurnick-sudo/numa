@@ -1,0 +1,46 @@
+{
+  "name": "Add Row",
+  "description": "Insert a new row into a specified Excel worksheet. [See the documentation](https://learn.microsoft.com/en-us/graph/api/range-insert?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.2",
+  "key": "microsoft_excel-add-row",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "microsoftExcel",
+      "type": "app",
+      "app": "microsoft_excel"
+    },
+    {
+      "name": "folderId",
+      "type": "string",
+      "label": "Folder ID",
+      "description": "The ID of the folder where the item is located",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Sheet ID",
+      "description": "The ID of the spreadsheet you want to use",
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheet",
+      "type": "string",
+      "label": "Worksheet",
+      "description": "The name of the worksheet to use",
+      "remoteOptions": true
+    },
+    {
+      "name": "values",
+      "type": "string[]",
+      "label": "Values",
+      "description": "An array of values for the new row. Each item in the array represents one cell. E.g. `[1, 2, 3]`"
+    }
+  ]
+}

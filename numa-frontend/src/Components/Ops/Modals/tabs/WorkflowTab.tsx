@@ -93,7 +93,7 @@ interface WorkflowTabProps {
   stages: Partial<WorkStage>[];
   setStages: React.Dispatch<React.SetStateAction<Partial<WorkStage>[]>>;
   tickets: Ticket[];
-  teamId?: string;
+  boardId?: string;
   defaultZoneId: string;
   setDefaultZoneId: (v: string) => void;
   defaultStageId: string;
@@ -106,7 +106,7 @@ export function WorkflowTab({
   stages,
   setStages,
   tickets,
-  teamId,
+  boardId,
   defaultZoneId,
   setDefaultZoneId,
   defaultStageId,
@@ -156,7 +156,7 @@ export function WorkflowTab({
       name: trimmedName,
       zoneType: newZoneType,
       order: maxOrder + 1000,
-      teamId,
+      boardId,
     };
     setZones((prev) => [...prev, newZone]);
 
@@ -166,7 +166,7 @@ export function WorkflowTab({
       statusType: newZoneType === 'backlog' ? 'backlog' : 'queued',
       zoneId,
       order: 1000,
-      teamId,
+      boardId,
     };
     setStages((prev) => [...prev, defaultStage]);
 
@@ -238,7 +238,7 @@ export function WorkflowTab({
         statusType: newStage.statusType as StatusType,
         zoneId,
         order: maxOrder + 1000,
-        teamId,
+        boardId,
       },
     ]);
     setNewStageByZone((prev) => ({ ...prev, [zoneId]: { name: '', statusType: '' } }));

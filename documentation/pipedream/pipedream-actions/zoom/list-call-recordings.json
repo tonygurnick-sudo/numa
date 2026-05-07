@@ -1,0 +1,49 @@
+{
+  "name": "List Call Recordings",
+  "description": "Get your account's call recordings. [See the documentation](https://developers.zoom.us/docs/api/rest/reference/phone/methods/#operation/getPhoneRecordings)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "zoom-list-call-recordings",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "infoBox",
+      "type": "alert",
+      "alertType": "info",
+      "content": "The Zoom API returns calls from the last 30 days by default. You can use the `Start Date` and `End Date` props to change this."
+    },
+    {
+      "name": "startDate",
+      "type": "string",
+      "label": "Start Date",
+      "description": "The start date/time in `yyyy-mm-dd` or `yyyy-MM-ddTHH:mm:ssZ` format. If `End Date` is not specified, calls made within a 30-day period starting on `Start Date` will be retrieved.",
+      "optional": true
+    },
+    {
+      "name": "endDate",
+      "type": "string",
+      "label": "End Date",
+      "description": "The end date/time in `yyyy-mm-dd` or `yyyy-MM-ddTHH:mm:ssZ` format. Calls made after `Start Date` and before `End Date` will be retrieved. Date range should be a maximum of 30 days.",
+      "optional": true
+    },
+    {
+      "name": "max",
+      "type": "integer",
+      "label": "Max Resources",
+      "description": "The maximum number of resources to retrieve.",
+      "optional": true,
+      "default": 30,
+      "min": 1,
+      "max": 300
+    }
+  ]
+}

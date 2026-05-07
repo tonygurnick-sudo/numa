@@ -1,0 +1,26 @@
+{
+  "name": "Get Organization Administrators",
+  "description": "Gets the administrator members of a selected organization. [See the documentation](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role?view=li-lms-2025-01&tabs=http#find-organization-administrators)",
+  "component_type": "action",
+  "version": "0.3.5",
+  "key": "linkedin-get-organization-administrators",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "linkedin",
+      "type": "app",
+      "app": "linkedin"
+    },
+    {
+      "name": "organizationId",
+      "type": "string",
+      "label": "Organization Id",
+      "description": "The ID of the organization for which administrators are being retrieved",
+      "remoteOptions": true
+    }
+  ]
+}

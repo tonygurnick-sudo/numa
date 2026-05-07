@@ -1,0 +1,136 @@
+{
+  "name": "Update Conditional Format Rule",
+  "description": "Modify existing conditional formatting rule. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#UpdateConditionalFormatRuleRequest)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "google_sheets-update-conditional-format-rule",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "range",
+      "type": "string",
+      "label": "Range",
+      "description": "The range of cells to protect (e.g., `A1:A10`)"
+    },
+    {
+      "name": "conditionType",
+      "type": "string",
+      "label": "Validation Type",
+      "description": "The type of data condition",
+      "options": [
+        "ONE_OF_LIST",
+        "NUMBER_GREATER",
+        "NUMBER_LESS",
+        "DATE_BEFORE",
+        "DATE_AFTER",
+        "TEXT_CONTAINS",
+        "TEXT_IS_EMAIL",
+        "TEXT_IS_URL",
+        "BOOLEAN"
+      ]
+    },
+    {
+      "name": "conditionValues",
+      "type": "string[]",
+      "label": "Condition Values",
+      "description": "Values for condition (e.g., color scales or custom formulas)"
+    },
+    {
+      "name": "formattingType",
+      "type": "string",
+      "label": "Formatting Type",
+      "description": "Choose between boolean condition or gradient color scale",
+      "options": ["BOOLEAN_RULE", "GRADIENT_RULE"],
+      "default": "BOOLEAN_RULE"
+    },
+    {
+      "name": "rgbColor",
+      "type": "object",
+      "label": "RGB Color",
+      "description": "The RGB color value (e.g., {\"red\": 1.0, \"green\": 0.5, \"blue\": 0.2})",
+      "optional": true
+    },
+    {
+      "name": "textFormat",
+      "type": "object",
+      "label": "Text Format",
+      "description": "The text format options",
+      "optional": true
+    },
+    {
+      "name": "bold",
+      "type": "boolean",
+      "label": "Bold",
+      "description": "Whether the text is bold",
+      "optional": true
+    },
+    {
+      "name": "italic",
+      "type": "boolean",
+      "label": "Italic",
+      "description": "Whether the text is italic",
+      "optional": true
+    },
+    {
+      "name": "strikethrough",
+      "type": "boolean",
+      "label": "Strikethrough",
+      "description": "Whether the text is strikethrough",
+      "optional": true
+    },
+    {
+      "name": "interpolationPointType",
+      "type": "string",
+      "label": "Interpolation Point Type",
+      "description": "The interpolation point type",
+      "options": ["MIN", "MAX", "NUMBER", "PERCENT", "PERCENTILE"],
+      "optional": true
+    },
+    {
+      "name": "index",
+      "type": "integer",
+      "label": "Index",
+      "description": "The zero-based index of the rule"
+    },
+    {
+      "name": "newIndex",
+      "type": "integer",
+      "label": "New Index",
+      "description": "The new zero-based index of the rule",
+      "optional": true
+    }
+  ]
+}

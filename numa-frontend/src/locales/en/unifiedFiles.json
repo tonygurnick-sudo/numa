@@ -11,6 +11,8 @@
   },
   "actions": {
     "newFolder": "New Folder",
+    "newSubfolder": "New Subfolder",
+    "upload": "Upload",
     "uploadFiles": "Upload Files",
     "settings": "Settings",
     "refresh": "Refresh"
@@ -60,6 +62,8 @@
     "editorsHelp": "Editors can upload files and modify this folder; they automatically gain viewer access.",
     "invalidEmails": "These look unusual as emails: {{values}}",
     "noteTitle": "Note:",
+    "aboutTitle": "About top-level folders",
+    "aboutBody": "Top-level folders are shareable with people in your workspace and gate what's searchable in chat — like a knowledge base. To organise files inside a folder, open it and create subfolders.",
     "notes": {
       "creator": "You will be set as the creator and automatically added as an editor.",
       "personal": "Personal folders: Only you have access.",
@@ -72,6 +76,27 @@
       "nameRequired": "Please provide a name for the folder.",
       "editorsMustBeViewers": "Editors must also be viewers for shared folders."
     }
+  },
+  "createSubfolder": {
+    "title": "New folder in \"{{parent}}\"",
+    "nameLabel": "Folder name",
+    "namePlaceholder": "e.g., Q3 Reports",
+    "nameHelp": "Choose a name for this subfolder. Slashes and special characters aren't allowed.",
+    "creating": "Creating...",
+    "createButton": "Create folder",
+    "success": "Folder created",
+    "errors": {
+      "nameRequired": "Please provide a name for the folder.",
+      "invalidName": "Folder name can't contain slashes or special characters.",
+      "collision": "A folder with that name already exists here.",
+      "generic": "Failed to create folder."
+    }
+  },
+  "contextMenu": {
+    "addSubfolder": "Add subfolder",
+    "upload": "Upload files",
+    "settings": "Sharing & permissions",
+    "delete": "Delete"
   },
   "folderSettings": {
     "title": "Folder Settings",
@@ -172,8 +197,13 @@
   "delete": {
     "confirm_one": "Delete {{count}} file?",
     "confirm_other": "Delete {{count}} files?",
-    "confirmFolder": "Delete all files in \"{{name}}\"? This will remove {{count}} file(s).",
+    "confirmFolder": "Delete \"{{name}}\" and all {{count}} file(s) inside it?",
+    "confirmEmptyFolder": "Delete empty folder \"{{name}}\"?",
     "confirmMessage": "This action cannot be undone. Deleted files will be removed from the folder.",
+    "deleteFolderButton": "Delete folder",
+    "folderSuccess": "Folder deleted",
+    "topLevelTitle": "Delete \"{{name}}\"?",
+    "topLevelMessage": "This folder and everything inside it will be permanently deleted. This cannot be undone.",
     "success_one": "Deleted {{count}} file",
     "success_other": "Deleted {{count}} files",
     "partial": "Deleted {{succeeded}} file(s); {{failed}} failed",

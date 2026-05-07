@@ -1,0 +1,56 @@
+{
+  "name": "Create Associations",
+  "description": "Create associations between objects. [See the documentation](https://developers.hubspot.com/docs/api/crm/associations#endpoint?spec=POST-/crm/v3/associations/{fromObjectType}/{toObjectType}/batch/create)",
+  "component_type": "action",
+  "version": "1.0.14",
+  "key": "hubspot-create-associations",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "fromObjectType",
+      "type": "string",
+      "label": "From Object Type",
+      "description": "The type of the object being associated",
+      "remoteOptions": true
+    },
+    {
+      "name": "fromObjectId",
+      "type": "string",
+      "label": "From Object",
+      "description": "The ID of the object being associated",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "toObjectType",
+      "type": "string",
+      "label": "To Object Type",
+      "description": "Type of the objects the from object is being associated with",
+      "remoteOptions": true
+    },
+    {
+      "name": "associationType",
+      "type": "integer",
+      "label": "Association Type",
+      "description": "Type of the association",
+      "remoteOptions": true
+    },
+    {
+      "name": "toObjectIds",
+      "type": "string[]",
+      "label": "To Objects",
+      "description": "Id's of the objects the from object is being associated with",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

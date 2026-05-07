@@ -1,0 +1,96 @@
+{
+  "name": "Create Item",
+  "description": "Creates a new item.",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-create-item",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "code",
+      "type": "string",
+      "label": "Code",
+      "description": "User defined item code (max length = 30)"
+    },
+    {
+      "name": "inventoryAssetAccountCode",
+      "type": "string",
+      "label": "Inventory Asset Account Code",
+      "description": "The inventory asset [account](https://developer.xero.com/documentation/api/accounts/) for the item. The account must be of type INVENTORY. The COGSAccountCode in PurchaseDetails is also required to create a tracked item",
+      "optional": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the item (max length = 50)",
+      "optional": true
+    },
+    {
+      "name": "isSold",
+      "type": "boolean",
+      "label": "Is Sold",
+      "description": "Boolean value, defaults to true. When IsSold is true the item will be available on sales transactions in the Xero UI. If IsSold is updated to false then Description and SalesDetails values will be nulled.",
+      "optional": true
+    },
+    {
+      "name": "isPurchased",
+      "type": "boolean",
+      "label": "Is Purchased",
+      "description": "Boolean value, defaults to true. When IsPurchased is true the item is available for purchase transactions in the Xero UI. If IsPurchased is updated to false then PurchaseDescription and PurchaseDetails values will be nulled.",
+      "optional": true
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "The sales description of the item (max length = 4000)",
+      "optional": true
+    },
+    {
+      "name": "purchaseDescription",
+      "type": "string",
+      "label": "Purchase Description",
+      "description": "The purchase description of the item (max length = 4000)",
+      "optional": true
+    },
+    {
+      "name": "purchaseDetails",
+      "type": "string",
+      "label": "Purchase Details",
+      "description": "See Purchases & Sales. The [PurchaseDetails](https://developer.xero.com/documentation/api/items#PurchasesSales) element can contain a number of individual sub-elements.",
+      "optional": true
+    },
+    {
+      "name": "salesDetails",
+      "type": "string",
+      "label": "Sales Details",
+      "description": "See Purchases & Sales. The [SalesDetails](https://developer.xero.com/documentation/api/items#PurchasesSales) element can contain a number of individual sub-elements.",
+      "optional": true
+    },
+    {
+      "name": "unitdp",
+      "type": "string",
+      "label": "Unitdp",
+      "description": "By default UnitPrice is returned to two decimal places.",
+      "optional": true,
+      "options": ["2", "4"]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "name": "Approve Workflow",
+  "description": "Suspend the workflow until approved by email. [See the documentation](https://pipedream.com/docs/code/nodejs/rerun#flowsuspend)",
+  "component_type": "action",
+  "version": "0.0.12",
+  "key": "gmail-approve-workflow",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gmail",
+      "type": "app",
+      "app": "gmail"
+    },
+    {
+      "name": "to",
+      "type": "string[]",
+      "label": "To",
+      "description": "Enter a single recipient's email or multiple emails as items in an array."
+    },
+    {
+      "name": "subject",
+      "type": "string",
+      "label": "Subject",
+      "description": "Specify a subject for the email."
+    },
+    {
+      "name": "body",
+      "type": "string",
+      "label": "Email Body",
+      "description": "Include an email body to send. Supports HTML",
+      "optional": true
+    },
+    {
+      "name": "bodyType",
+      "type": "string",
+      "label": "Body Type",
+      "description": "Choose to send as plain text or HTML. Defaults to `plaintext`.",
+      "optional": true,
+      "default": "html",
+      "options": ["html", "plaintext"],
+      "hidden": true
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "name": "Update Message",
+  "description": "Update a message. [See the documentation](https://api.slack.com/methods/chat.update)",
+  "component_type": "action",
+  "version": "0.1.24",
+  "key": "slack-update-message",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "conversation",
+      "type": "string",
+      "label": "Channel",
+      "description": "Select a public or private channel, or a user or group",
+      "remoteOptions": true
+    },
+    {
+      "name": "timestamp",
+      "type": "string",
+      "label": "Message Timestamp",
+      "description": "Timestamp of a message. e.g. `1403051575.000407`."
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "label": "Text",
+      "description": "Text of the message to send (see Slack's [formatting docs](https://api.slack.com/reference/surfaces/formatting)). This field is usually necessary, unless you're providing only attachments instead."
+    },
+    {
+      "name": "as_user",
+      "type": "boolean",
+      "label": "Send as User",
+      "description": "Pass true to update the message as the authed user. Bot users in this context are considered authed users.",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "attachments",
+      "type": "string",
+      "label": "Attachments",
+      "description": "A JSON-based array of structured attachments, presented as a URL-encoded string (e.g., `[{\"pretext\": \"pre-hello\", \"text\": \"text-world\"}]`).",
+      "optional": true
+    }
+  ]
+}

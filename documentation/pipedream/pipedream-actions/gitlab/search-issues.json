@@ -1,0 +1,67 @@
+{
+  "name": "Search Issues",
+  "description": "Search for issues in a repository with a query. [See the documentation](https://docs.gitlab.com/ee/api/issues.html#list-issues)",
+  "component_type": "action",
+  "version": "0.0.4",
+  "key": "gitlab-search-issues",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "gitlab",
+      "type": "app",
+      "app": "gitlab"
+    },
+    {
+      "name": "projectId",
+      "type": "integer",
+      "label": "Project ID",
+      "description": "The project ID, as displayed in the main project page",
+      "remoteOptions": true
+    },
+    {
+      "name": "search",
+      "type": "string",
+      "label": "Search Query",
+      "description": "Search issues against their **title** and **description**. Leave this field blank to list all issues",
+      "default": "",
+      "optional": true
+    },
+    {
+      "name": "labels",
+      "type": "string[]",
+      "label": "Labels",
+      "description": "A list of label names. Issues must have all labels to be returned. `None` lists all issues with no labels. `Any` lists all issues with at least one label",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "state",
+      "type": "string",
+      "label": "Issue State",
+      "description": "Return `all` issues or just those that are `opened` or `closed`",
+      "optional": true,
+      "options": ["all", "opened", "closed"],
+      "default": "all"
+    },
+    {
+      "name": "assigneeId",
+      "type": "string",
+      "label": "Assignee Username",
+      "description": "Return issues assigned to the given username",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "max",
+      "type": "integer",
+      "label": "Max Results",
+      "description": "Max number of results to return. Default value is `100`",
+      "optional": true,
+      "default": 100
+    }
+  ]
+}

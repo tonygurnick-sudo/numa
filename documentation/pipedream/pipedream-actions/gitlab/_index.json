@@ -1,0 +1,122 @@
+[
+  {
+    "key": "gitlab-update-issue",
+    "name": "Update Issue",
+    "description": "Updates an existing project issue. [See the documentation](https://docs.gitlab.com/ee/api/issues.html#edit-issue)",
+    "version": "0.0.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "gitlab-update-epic",
+    "name": "Update Epic",
+    "description": "Updates an epic. [See the documentation](https://docs.gitlab.com/ee/api/epics.html#update-epic)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 15
+  },
+  {
+    "key": "gitlab-search-issues",
+    "name": "Search Issues",
+    "description": "Search for issues in a repository with a query. [See the documentation](https://docs.gitlab.com/ee/api/issues.html#list-issues)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "gitlab-list-repo-branches",
+    "name": "List Repo Branches",
+    "description": "Get a list of repository branches from a project. [See the documentation](https://docs.gitlab.com/ee/api/branches.html#list-repository-branches)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "gitlab-list-commits",
+    "name": "List Commits",
+    "description": "List commits in a repository branch. [See the documentation](https://docs.gitlab.com/ee/api/commits.html#list-repository-commits)",
+    "version": "0.0.4",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "gitlab-get-repo-branch",
+    "name": "Get Repo Branch",
+    "description": "Get a single project repository branch. [See the documentation](https://docs.gitlab.com/ee/api/branches.html#get-single-repository-branch)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "gitlab-get-issue",
+    "name": "Get Issue",
+    "description": "Gets a single issue from repository. [See the documentation](https://docs.gitlab.com/ee/api/issues.html#single-project-issue)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "gitlab-create-issue",
+    "name": "Create issue",
+    "description": "Creates a new issue. [See the documentation](https://docs.gitlab.com/ee/api/issues.html#new-issue)",
+    "version": "0.2.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "gitlab-create-epic",
+    "name": "Create Epic",
+    "description": "Creates a new epic. [See the documentation](https://docs.gitlab.com/ee/api/epics.html#new-epic)",
+    "version": "0.0.5",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 11
+  },
+  {
+    "key": "gitlab-create-branch",
+    "name": "Create Branch",
+    "description": "Create a new branch in the repository. [See the documentation](https://docs.gitlab.com/ee/api/branches.html#create-repository-branch)",
+    "version": "0.3.3",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  }
+]

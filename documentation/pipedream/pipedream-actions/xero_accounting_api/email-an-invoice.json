@@ -1,0 +1,32 @@
+{
+  "name": "Email an Invoice",
+  "description": "Triggers the email of a sales invoice out of Xero.",
+  "component_type": "action",
+  "version": "0.1.4",
+  "key": "xero_accounting_api-email-an-invoice",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "invoiceId",
+      "label": "Invoice ID",
+      "type": "string",
+      "description": "Xero generated unique identifier for the invoice to send by email out of Xero. The invoice must be of Type ACCREC and a valid Status for sending (SUMBITTED,AUTHORISED or PAID)."
+    }
+  ]
+}

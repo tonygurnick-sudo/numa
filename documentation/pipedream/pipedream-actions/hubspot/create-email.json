@@ -1,0 +1,310 @@
+{
+  "name": "Create Marketing Email",
+  "description": "Create a marketing email in Hubspot. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#post-%2Fmarketing%2Fv3%2Femails%2F)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "hubspot-create-email",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the email"
+    },
+    {
+      "name": "campaign",
+      "type": "string",
+      "label": "Campaign ID",
+      "description": "The ID of the campaign to create the email in.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "customReplyTo",
+      "type": "string",
+      "label": "Custom Reply To",
+      "description": "The custom reply to address for the email",
+      "optional": true
+    },
+    {
+      "name": "fromName",
+      "type": "string",
+      "label": "From Name",
+      "description": "The name of the sender",
+      "optional": true
+    },
+    {
+      "name": "replyTo",
+      "type": "string",
+      "label": "Reply To",
+      "description": "The reply to address for the email",
+      "optional": true
+    },
+    {
+      "name": "limitSendFrequency",
+      "type": "boolean",
+      "label": "Limit Send Frequency",
+      "description": "Whether to limit the send frequency for the email",
+      "optional": true
+    },
+    {
+      "name": "suppressGraymail",
+      "type": "boolean",
+      "label": "Suppress Graymail",
+      "description": "Whether to suppress graymail for the email",
+      "optional": true
+    },
+    {
+      "name": "includeContactLists",
+      "type": "string[]",
+      "label": "Lists",
+      "description": "Select the lists to watch for new contacts.",
+      "withLabel": true,
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "excludeContactLists",
+      "type": "string[]",
+      "label": "Lists",
+      "description": "Select the lists to watch for new contacts.",
+      "withLabel": true,
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "feedbackSurveyId",
+      "type": "string",
+      "label": "Feedback Survey ID",
+      "description": "Hubspot's internal ID for the feedback survey",
+      "useQuery": true,
+      "remoteOptions": true,
+      "reloadProps": true,
+      "optional": true
+    },
+    {
+      "name": "rssData",
+      "type": "object",
+      "label": "RSS Data",
+      "description": "An object with the RSS data for the email. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#post-%2Fmarketing%2Fv3%2Femails%2F) for more information.",
+      "optional": true
+    },
+    {
+      "name": "subject",
+      "type": "string",
+      "label": "Subject",
+      "description": "The subject of the email",
+      "optional": true
+    },
+    {
+      "name": "testing",
+      "type": "object",
+      "label": "Testing",
+      "description": "An object with the testing data for the email. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#post-%2Fmarketing%2Fv3%2Femails%2F) for more information.",
+      "optional": true
+    },
+    {
+      "name": "language",
+      "type": "string",
+      "label": "Language",
+      "description": "The language of the email",
+      "options": [
+        {
+          "label": "Afrikaans",
+          "value": "af"
+        },
+        {
+          "label": "Arabic (Egypt)",
+          "value": "ar-eg"
+        },
+        {
+          "label": "Bulgarian",
+          "value": "bg"
+        },
+        {
+          "label": "Bengali",
+          "value": "bn"
+        },
+        {
+          "label": "Czech",
+          "value": "cs"
+        },
+        {
+          "label": "Danish",
+          "value": "da"
+        },
+        {
+          "label": "Greek",
+          "value": "el"
+        },
+        {
+          "label": "English",
+          "value": "en"
+        },
+        {
+          "label": "Spanish",
+          "value": "es"
+        },
+        {
+          "label": "Spanish (Mexico)",
+          "value": "es-mx"
+        },
+        {
+          "label": "Finnish",
+          "value": "fi"
+        },
+        {
+          "label": "French",
+          "value": "fr"
+        },
+        {
+          "label": "French (Canada)",
+          "value": "fr-ca"
+        },
+        {
+          "label": "Hebrew (Israel)",
+          "value": "he-il"
+        },
+        {
+          "label": "Croatian",
+          "value": "hr"
+        },
+        {
+          "label": "Hungarian",
+          "value": "hu"
+        },
+        {
+          "label": "Indonesian",
+          "value": "id"
+        },
+        {
+          "label": "Italian",
+          "value": "it"
+        },
+        {
+          "label": "Japanese",
+          "value": "ja"
+        },
+        {
+          "label": "Korean",
+          "value": "ko"
+        },
+        {
+          "label": "Lithuanian",
+          "value": "lt"
+        },
+        {
+          "label": "Malay",
+          "value": "ms"
+        },
+        {
+          "label": "Dutch",
+          "value": "nl"
+        },
+        {
+          "label": "Norwegian (Norway)",
+          "value": "no-no"
+        },
+        {
+          "label": "Polish",
+          "value": "pl"
+        },
+        {
+          "label": "Portuguese",
+          "value": "pt"
+        },
+        {
+          "label": "Portuguese (Brazil)",
+          "value": "pt-br"
+        },
+        {
+          "label": "Romanian",
+          "value": "ro"
+        },
+        {
+          "label": "Russian",
+          "value": "ru"
+        },
+        {
+          "label": "Slovak",
+          "value": "sk"
+        },
+        {
+          "label": "Slovenian",
+          "value": "sl"
+        },
+        {
+          "label": "Swedish",
+          "value": "sv"
+        },
+        {
+          "label": "Thai",
+          "value": "th"
+        },
+        {
+          "label": "Tagalog",
+          "value": "tl"
+        },
+        {
+          "label": "Ukrainian",
+          "value": "uk"
+        },
+        {
+          "label": "Vietnamese",
+          "value": "vi"
+        },
+        {
+          "label": "Chinese (China)",
+          "value": "zh-cn"
+        },
+        {
+          "label": "Chinese (Hong Kong)",
+          "value": "zh-hk"
+        },
+        {
+          "label": "Chinese (Taiwan)",
+          "value": "zh-tw"
+        }
+      ],
+      "optional": true
+    },
+    {
+      "name": "content",
+      "type": "object",
+      "label": "Content",
+      "description": "An object with the content data for the email. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#post-%2Fmarketing%2Fv3%2Femails%2F) for more information.",
+      "optional": true
+    },
+    {
+      "name": "webversion",
+      "type": "object",
+      "label": "Webversion",
+      "description": "An object with the webversion data for the email. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#post-%2Fmarketing%2Fv3%2Femails%2F) for more information.",
+      "optional": true
+    },
+    {
+      "name": "subscriptionDetails",
+      "type": "object",
+      "label": "Subscription Details",
+      "description": "An object with the subscription details for the email. [See the documentation](https://developers.hubspot.com/docs/reference/api/marketing/emails/marketing-emails#post-%2Fmarketing%2Fv3%2Femails%2F) for more information.",
+      "optional": true
+    },
+    {
+      "name": "sendOnPublish",
+      "type": "boolean",
+      "label": "Send On Publish",
+      "description": "Whether to send the email on publish",
+      "optional": true
+    }
+  ]
+}

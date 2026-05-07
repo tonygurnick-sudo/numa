@@ -1,0 +1,30 @@
+{
+  "name": "Get Meeting Details",
+  "description": "Retrieves the details of a meeting.",
+  "component_type": "action",
+  "version": "0.3.7",
+  "key": "zoom-get-meeting-details",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "meeting_id",
+      "type": "integer",
+      "description": "The meeting ID."
+    },
+    {
+      "name": "occurrence_id",
+      "type": "string",
+      "description": "Meeting occurrence ID.",
+      "optional": true
+    }
+  ]
+}

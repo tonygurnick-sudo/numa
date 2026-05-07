@@ -1,0 +1,54 @@
+{
+  "name": "Create a Contact",
+  "description": "Create a contact. [See the documentation](https://developers.freshdesk.com/api/#create_contact)",
+  "component_type": "action",
+  "version": "0.0.10",
+  "key": "freshdesk-create-contact",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "Name of the contact."
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email Address",
+      "description": "Primary email address of the contact",
+      "optional": true
+    },
+    {
+      "name": "otherEmails",
+      "type": "string[]",
+      "label": "Additional Email Addresses",
+      "description": "One or more additional email addresses for the contact",
+      "optional": true
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Phone Number",
+      "description": "Phone number of the contact",
+      "optional": true
+    },
+    {
+      "name": "companyId",
+      "type": "integer",
+      "label": "Company ID",
+      "description": "Select a company or provide a company ID",
+      "remoteOptions": true,
+      "optional": true
+    }
+  ]
+}

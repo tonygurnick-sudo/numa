@@ -284,6 +284,55 @@ def save_result(
         binary_path.write_bytes(b64.b64decode(inner_result["base64_body"]))
         downloaded_files.append(str(binary_path))
 
+    # Handle oversize binary proxy responses staged to S3 by the proxy.
+    # When the upstream binary would exceed the Lambda 6 MB sync invoke
+    # payload limit, the proxy uploads the raw bytes to a short-lived S3
+    # cache and returns a presigned GET URL instead of base64-inlining.
+    # We fetch the URL into /workdir so the agent sees a real file the
+    # same way it does for small inline binaries above.
+    if (
+        isinstance(inner_result, dict)
+        and inner_result.get("binary")
+        and inner_result.get("binary_storage") == "s3_presigned"
+        and inner_result.get("presigned_url")
+    ):
+        import mimetypes
+
+        content_type = inner_result.get("content_type", "application/octet-stream")
+        ext = mimetypes.guess_extension(content_type.split(";")[0].strip()) or ""
+
+        # Prefer the upstream filename hint when present; otherwise fall
+        # back to the same {action_key}-binary{ext} pattern the inline
+        # base64 branch uses so the LLM gets a predictable name.
+        filename_hint = inner_result.get("filename_hint", "")
+        if isinstance(filename_hint, str) and filename_hint:
+            # Defense in depth — the proxy already sanitizes, but never
+            # trust an upstream-derived filename. Strip path separators,
+            # drop leading dots, cap length.
+            safe_name = (
+                filename_hint.replace("/", "_").replace("\\", "_").lstrip(".")[:120]
+            )
+            if not safe_name:
+                safe_name = f"{action_key}-binary{ext}"
+            elif "." not in safe_name and ext:
+                safe_name = f"{safe_name}{ext}"
+            binary_path = results_dir / safe_name
+        else:
+            binary_path = results_dir / f"{action_key}-binary{ext}"
+
+        try:
+            # Do NOT log the presigned URL itself — it is a bearer token
+            # and CloudWatch retains logs for 30 days.
+            urllib.request.urlretrieve(inner_result["presigned_url"], str(binary_path))
+            downloaded_files.append(str(binary_path))
+        except Exception as dl_err:
+            logger.warning(
+                "Failed to download oversize binary from proxy presigned URL",
+                content_type=content_type,
+                size=inner_result.get("size"),
+                error=str(dl_err),
+            )
+
     if isinstance(inner_result, dict):
         exports = inner_result.get("exports", {})
         filestash_uploads = (

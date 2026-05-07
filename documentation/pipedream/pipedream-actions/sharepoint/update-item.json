@@ -1,0 +1,42 @@
+{
+  "name": "Update Item",
+  "description": "Updates an existing item in Microsoft Sharepoint. [See the documentation](https://learn.microsoft.com/en-us/graph/api/listitem-update?view=graph-rest-1.0&tabs=http)",
+  "component_type": "action",
+  "version": "0.0.9",
+  "key": "sharepoint-update-item",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "sharepoint",
+      "type": "app",
+      "app": "sharepoint"
+    },
+    {
+      "name": "siteId",
+      "type": "string",
+      "label": "Site",
+      "description": "Identifier of a site",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List",
+      "description": "Identifier of a list",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "itemId",
+      "type": "string",
+      "label": "Item",
+      "description": "Identifier of an item",
+      "remoteOptions": true
+    }
+  ]
+}

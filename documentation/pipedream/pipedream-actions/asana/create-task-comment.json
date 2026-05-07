@@ -1,0 +1,68 @@
+{
+  "name": "Create Task Comment",
+  "description": "Adds a comment to a task. [See the documentation](https://developers.asana.com/docs/create-a-story-on-a-task)",
+  "component_type": "action",
+  "version": "0.2.11",
+  "key": "asana-create-task-comment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "asana",
+      "type": "app",
+      "app": "asana"
+    },
+    {
+      "name": "workspace",
+      "label": "Workspace",
+      "description": "Gid of a workspace.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "project",
+      "label": "Project",
+      "description": "List of projects. This field uses the project GID.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "task_gid",
+      "label": "Task GID",
+      "description": "The task GID to operate on.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "text",
+      "label": "Text",
+      "description": "The plain text of the comment to add. Cannot be used with html_text.",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "html_text",
+      "label": "HTML Text",
+      "description": "HTML formatted text for a comment. This will not include the name of the creator.",
+      "type": "string",
+      "optional": true
+    },
+    {
+      "name": "is_pinned",
+      "label": "Is Pinned",
+      "description": "Conditional. Whether the story should be pinned on the resource.",
+      "type": "boolean",
+      "optional": true
+    },
+    {
+      "name": "sticker_name",
+      "label": "Sticker Name",
+      "description": "The name of the sticker in this story. null if there is no sticker.",
+      "type": "string",
+      "optional": true
+    }
+  ]
+}

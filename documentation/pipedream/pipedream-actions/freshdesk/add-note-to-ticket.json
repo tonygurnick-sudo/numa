@@ -1,0 +1,62 @@
+{
+  "name": "Add Note to Ticket",
+  "description": "Add a note or conversation to an existing ticket. [See the documentation](https://developers.freshdesk.com/api/#add_note_to_a_ticket).",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "freshdesk-add-note-to-ticket",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "ticketId",
+      "type": "integer",
+      "label": "Ticket ID",
+      "description": "Select a ticket or provide a ticket ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "body",
+      "type": "string",
+      "label": "Note Body",
+      "description": "Content of the note in HTML format"
+    },
+    {
+      "name": "private",
+      "type": "boolean",
+      "label": "Private Note",
+      "description": "Set to true if the note is private (internal)",
+      "default": false
+    },
+    {
+      "name": "incoming",
+      "type": "boolean",
+      "label": "Incoming",
+      "description": "Set to true if the note should be marked as incoming (false for outgoing)",
+      "default": false,
+      "optional": true
+    },
+    {
+      "name": "user_id",
+      "type": "integer",
+      "label": "User ID",
+      "description": "ID of the user creating the note (defaults to the API user)",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "notify_emails",
+      "type": "string[]",
+      "label": "Notify Emails",
+      "description": "Array of email addresses to notify about this note",
+      "optional": true
+    }
+  ]
+}

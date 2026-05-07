@@ -1,0 +1,37 @@
+{
+  "name": "SOSL Search (Object Search)",
+  "description": "Executes a [Salesforce Object Search Language (SOSL)](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_sosl_examples.htm) text-based search query.",
+  "component_type": "action",
+  "version": "0.2.12",
+  "key": "salesforce_rest_api-sosl-search",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "You can find helpful information on SOQL and SOSL in [the Salesforce documentation](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_sosl_intro.htm)."
+    },
+    {
+      "name": "exampleInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "Example search: `FIND {Joe Smith} IN Name Fields RETURNING lead(name, phone)`"
+    },
+    {
+      "name": "search",
+      "type": "string",
+      "label": "SOSL Query",
+      "description": "A SOSL search query. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_sosl_examples.htm) for examples and more information."
+    }
+  ]
+}

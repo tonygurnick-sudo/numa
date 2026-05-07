@@ -1,0 +1,60 @@
+{
+  "name": "Create Opportunity",
+  "description": "Creates a new opportunity in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#create-opportunity)",
+  "component_type": "action",
+  "version": "0.0.6",
+  "key": "apollo_io-create-opportunity",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "ownerId",
+      "type": "string",
+      "label": "Owner ID",
+      "description": "Identifier of the user to associate as owner.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Name",
+      "description": "The name of the opportunity."
+    },
+    {
+      "name": "amount",
+      "type": "integer",
+      "label": "Amount",
+      "description": "The amount of money involved in the opportunity/deal.",
+      "optional": true
+    },
+    {
+      "name": "opportunityStageId",
+      "type": "string",
+      "label": "Opportunity Stage ID",
+      "description": "The ID of the current stage.",
+      "remoteOptions": true
+    },
+    {
+      "name": "closedDate",
+      "type": "string",
+      "label": "Closed Date",
+      "description": "The date the opportunity was closed."
+    },
+    {
+      "name": "accountId",
+      "type": "string",
+      "label": "Account ID",
+      "description": "Identifier of the account for this contact",
+      "remoteOptions": true
+    }
+  ]
+}

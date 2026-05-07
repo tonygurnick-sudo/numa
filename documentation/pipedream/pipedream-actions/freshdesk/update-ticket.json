@@ -1,0 +1,106 @@
+{
+  "name": "Update a Ticket",
+  "description": "Update status, priority, subject, description, agent, group, etc.  [See the documentation](https://developers.freshdesk.com/api/#update_ticket).",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "freshdesk-update-ticket",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "freshdesk",
+      "type": "app",
+      "app": "freshdesk"
+    },
+    {
+      "name": "ticketId",
+      "type": "integer",
+      "label": "Ticket ID",
+      "description": "Select a ticket or provide a ticket ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "status",
+      "type": "integer",
+      "label": "Status",
+      "description": "Status of the ticket",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "priority",
+      "type": "integer",
+      "label": "Priority",
+      "description": "Priority of the ticket",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "subject",
+      "type": "string",
+      "label": "Subject",
+      "description": "Ticket subject",
+      "optional": true
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "label": "Description",
+      "description": "Detailed ticket description (HTML allowed)",
+      "optional": true
+    },
+    {
+      "name": "group_id",
+      "type": "integer",
+      "label": "Group",
+      "description": "Select a group to assign the ticket to.",
+      "remoteOptions": true
+    },
+    {
+      "name": "responder_id",
+      "type": "integer",
+      "label": "Agent",
+      "description": "Select an agent to assign the ticket to",
+      "remoteOptions": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Requester Email (replaces requester)",
+      "description": "Updates the requester. If no contact with this email exists, a new one will be created and assigned to the ticket.",
+      "optional": true
+    },
+    {
+      "name": "phone",
+      "type": "string",
+      "label": "Requester Phone (replaces requester)",
+      "description": "If no contact with this phone number exists, a new one will be created. If used without email, 'name' is required.",
+      "optional": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Requester Name (required with phone if no email)",
+      "description": "Used when creating a contact with phone but no email.",
+      "optional": true
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "label": "Type",
+      "description": "Type of ticket (must match one of the allowed values)",
+      "optional": true,
+      "options": ["Question", "Incident", "Problem", "Feature Request", "Refund"]
+    },
+    {
+      "name": "custom_fields",
+      "type": "object",
+      "label": "Custom Fields",
+      "description": "Custom fields as key-value pairs (make sure types match your config)",
+      "optional": true
+    }
+  ]
+}

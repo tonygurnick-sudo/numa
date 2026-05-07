@@ -1,0 +1,374 @@
+[
+  {
+    "key": "google_sheets-add-single-row",
+    "name": "Add Single Row",
+    "description": "Add a single row of data to Google Sheets. Optionally insert the row at a specific index (e.g., row 2 to insert after headers, shifting existing data down). [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append)",
+    "version": "2.2.0",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_sheets-update-conditional-format-rule",
+    "name": "Update Conditional Format Rule",
+    "description": "Modify existing conditional formatting rule. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#UpdateConditionalFormatRuleRequest)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 16
+  },
+  {
+    "key": "google_sheets-set-data-validation",
+    "name": "Set Data Validation",
+    "description": "Add data validation rules to cells (dropdowns, checkboxes, date/number validation). [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#SetDataValidationRequest)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "google_sheets-merge-cells",
+    "name": "Merge Cells",
+    "description": "Merge a range of cells into a single cell. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#MergeCellsRequest)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_sheets-delete-conditional-format-rule",
+    "name": "Delete Conditional Format Rule",
+    "description": "Remove conditional formatting rule by index. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#DeleteConditionalFormatRuleRequest)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_sheets-add-protected-range",
+    "name": "Add Protected Range",
+    "description": "Add edit protection to cell range with permissions. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#AddProtectedRangeRequest)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 9
+  },
+  {
+    "key": "google_sheets-add-conditional-format-rule",
+    "name": "Add Conditional Format Rule",
+    "description": "Create conditional formatting with color scales or custom formulas. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#AddConditionalFormatRuleRequest)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 15
+  },
+  {
+    "key": "google_sheets-upsert-row",
+    "name": "Upsert Row",
+    "description": "Upsert a row of data in a Google Sheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append)",
+    "version": "0.1.18",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "google_sheets-update-row",
+    "name": "Update Row",
+    "description": "Update a row in a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update)",
+    "version": "0.1.18",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_sheets-update-multiple-rows",
+    "name": "Update Multiple Rows",
+    "description": "Update multiple rows in a spreadsheet defined by a range. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update)",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "google_sheets-update-formatting",
+    "name": "Update Formatting",
+    "description": "Update the formatting of a cell in a spreadsheet. [See the documentation](https://developers.google.com/workspace/sheets/api/samples/formatting)",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 22
+  },
+  {
+    "key": "google_sheets-update-cell",
+    "name": "Update Cell",
+    "description": "Update a cell in a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update)",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_sheets-move-dimension",
+    "name": "Move Dimension",
+    "description": "Move a dimension in a spreadsheet. [See the documentation](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/request#MoveDimensionRequest)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "google_sheets-list-worksheets",
+    "name": "List Worksheets",
+    "description": "Get a list of all worksheets in a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/get)",
+    "version": "0.1.14",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_sheets-insert-dimension",
+    "name": "Insert Dimension",
+    "description": "Insert a dimension into a spreadsheet. [See the documentation](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/request#InsertDimensionRequest)",
+    "version": "0.0.1",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "google_sheets-insert-comment",
+    "name": "Insert Comment",
+    "description": "Insert a comment into a spreadsheet. [See the documentation](https://developers.google.com/drive/api/v3/reference/comments/create)",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_sheets-insert-anchored-note",
+    "name": "Insert an Anchored Note",
+    "description": "Insert a note on a spreadsheet cell. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/batchUpdate)",
+    "version": "0.1.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_sheets-get-values-in-range",
+    "name": "Get Values in Range",
+    "description": "Get all values or values from a range of cells using A1 notation. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/get)",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_sheets-get-spreadsheet-by-id",
+    "name": "Get Spreadsheet by ID",
+    "description": "Returns the spreadsheet at the given ID. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/get) for more information",
+    "version": "0.1.15",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 3
+  },
+  {
+    "key": "google_sheets-get-current-user",
+    "name": "Get Current User",
+    "description": "Retrieve Google Sheets account metadata for the authenticated user by calling Drive's `about.get`, returning the user profile (display name, email, permission ID) and storage quota information. Helpful when you need to verify which Google account is active, tailor sheet operations to available storage, or give an LLM clear context about the user identity before composing read/write actions. [See the Drive API documentation](https://developers.google.com/drive/api/v3/reference/about/get).",
+    "version": "0.0.2",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 1
+  },
+  {
+    "key": "google_sheets-get-cell",
+    "name": "Get Cell",
+    "description": "Fetch the contents of a specific cell in a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/get)",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_sheets-find-row",
+    "name": "Find Row",
+    "description": "Find one or more rows by a column and value. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/get)",
+    "version": "0.2.17",
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 7
+  },
+  {
+    "key": "google_sheets-delete-worksheet",
+    "name": "Delete Worksheet",
+    "description": "Delete a specific worksheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/batchUpdate)",
+    "version": "0.1.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_sheets-delete-rows",
+    "name": "Delete Rows",
+    "description": "Deletes the specified rows from a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#deletedimensionrequest)",
+    "version": "0.0.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_sheets-create-worksheet",
+    "name": "Create Worksheet",
+    "description": "Create a blank worksheet with a title. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/batchUpdate)",
+    "version": "0.1.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 4
+  },
+  {
+    "key": "google_sheets-create-spreadsheet",
+    "name": "Create Spreadsheet",
+    "description": "Create a blank spreadsheet or duplicate an existing spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/create)",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_sheets-copy-worksheet",
+    "name": "Copy Worksheet",
+    "description": "Copy an existing worksheet to another Google Sheets file. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.sheets/copyTo)",
+    "version": "0.1.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_sheets-clear-rows",
+    "name": "Clear Rows",
+    "description": "Delete the content of a row or rows in a spreadsheet. Deleted rows will appear as blank rows. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/clear)",
+    "version": "0.1.16",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 6
+  },
+  {
+    "key": "google_sheets-clear-cell",
+    "name": "Clear Cell",
+    "description": "Delete the content of a specific cell in a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/clear)",
+    "version": "0.1.18",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": true
+    },
+    "prop_count": 5
+  },
+  {
+    "key": "google_sheets-add-multiple-rows",
+    "name": "Add Multiple Rows",
+    "description": "Add multiple rows of data to a Google Sheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append)",
+    "version": "0.2.17",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 8
+  },
+  {
+    "key": "google_sheets-add-column",
+    "name": "Create Column",
+    "description": "Create a new column in a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/batchUpdate)",
+    "version": "0.1.14",
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true,
+      "destructiveHint": false
+    },
+    "prop_count": 5
+  }
+]

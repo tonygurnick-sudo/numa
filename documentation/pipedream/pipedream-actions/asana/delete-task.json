@@ -1,0 +1,40 @@
+{
+  "name": "Delete Task",
+  "description": "Deletes a specific and existing task. [See the documentation](https://developers.asana.com/docs/delete-a-task)",
+  "component_type": "action",
+  "version": "0.0.12",
+  "key": "asana-delete-task",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "asana",
+      "type": "app",
+      "app": "asana"
+    },
+    {
+      "name": "workspace",
+      "label": "Workspace",
+      "description": "Gid of a workspace.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "project",
+      "label": "Project",
+      "description": "List of projects. This field uses the project GID.",
+      "type": "string",
+      "remoteOptions": true
+    },
+    {
+      "name": "task_gid",
+      "label": "Task GID",
+      "description": "The ID of the task to delete.",
+      "type": "string",
+      "remoteOptions": true
+    }
+  ]
+}

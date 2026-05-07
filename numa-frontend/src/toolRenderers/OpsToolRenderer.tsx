@@ -21,12 +21,12 @@ import {
   getContrastText,
   type OpsPayload,
   type OpsTicket,
-  type OpsTeam,
+  type OpsBoard,
   type OpsCustomer,
   type OpsSupplier,
   type OpsProject,
   type OpsConfig,
-  type OpsTeamDetail,
+  type OpsBoardDetail,
   type OpsComment,
 } from './opsHelpers';
 
@@ -213,27 +213,27 @@ const TicketDetail = ({ ticket }: { ticket: OpsTicket }) => {
   );
 };
 
-// ── Team views ─────────────────────────────────────────────────────────
+// ── Board views ────────────────────────────────────────────────────────
 
-const TeamRow = ({ team }: { team: OpsTeam }) => {
+const BoardRow = ({ board }: { board: OpsBoard }) => {
   const { t } = useTranslation('common');
-  const color = team.color || '#6c757d';
-  const isRestricted = team.accessControl?.mode === 'specific';
-  const sprintLabel = team.workUnitSeries?.enabled ? team.workUnitSeries.label : null;
-  const typeCount = team.allowedTicketTypes?.length;
+  const color = board.color || '#6c757d';
+  const isRestricted = board.accessControl?.mode === 'specific';
+  const sprintLabel = board.workUnitSeries?.enabled ? board.workUnitSeries.label : null;
+  const typeCount = board.allowedTicketTypes?.length;
 
   return (
     <div className="ops-renderer-team-row" style={{ borderLeftColor: color }}>
       <div className="ops-renderer-team-header">
         <span className="ops-renderer-team-color-dot" style={{ backgroundColor: color }} />
-        <span className="ops-renderer-team-name">{team.name}</span>
+        <span className="ops-renderer-team-name">{board.name}</span>
         {isRestricted && (
           <span className="ops-renderer-team-badge restricted">
             <i className="bi bi-lock" />
           </span>
         )}
       </div>
-      {team.description && <div className="ops-renderer-team-desc">{team.description}</div>}
+      {board.description && <div className="ops-renderer-team-desc">{board.description}</div>}
       <div className="ops-renderer-team-meta">
         {sprintLabel && (
           <span className="ops-renderer-team-chip">
@@ -245,9 +245,9 @@ const TeamRow = ({ team }: { team: OpsTeam }) => {
             <i className="bi bi-tag" /> {t('toolRenderers.numaOps.ticketTypes', { count: typeCount })}
           </span>
         )}
-        {team.ticketCount != null && (
+        {board.ticketCount != null && (
           <span className="ops-renderer-team-chip">
-            <i className="bi bi-ticket-perforated" /> {team.ticketCount}
+            <i className="bi bi-ticket-perforated" /> {board.ticketCount}
           </span>
         )}
       </div>
@@ -255,33 +255,33 @@ const TeamRow = ({ team }: { team: OpsTeam }) => {
   );
 };
 
-const TeamList = ({ teams }: { teams: OpsTeam[] }) => {
+const BoardList = ({ boards }: { boards: OpsBoard[] }) => {
   const { t } = useTranslation('common');
-  if (!teams.length) return <EmptyState message={t('toolRenderers.numaOps.noTeams')} />;
+  if (!boards.length) return <EmptyState message={t('toolRenderers.numaOps.noBoards')} />;
   return (
     <div className="ops-renderer-team-list">
-      {teams.map((team, idx) => (
-        <TeamRow key={team.id || idx} team={team} />
+      {boards.map((board, idx) => (
+        <BoardRow key={board.id || idx} board={board} />
       ))}
     </div>
   );
 };
 
-// ── Team detail view (get_team with zones + stages) ───────────────────
+// ── Board detail view (get_board with zones + stages) ─────────────────
 
-/** Check if a result object is a rich team detail (has team/zones/stages). */
-function isTeamDetail(data: unknown): data is OpsTeamDetail {
+/** Check if a result object is a rich board detail (has board/zones/stages). */
+function isBoardDetail(data: unknown): data is OpsBoardDetail {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
-  return d.team != null && typeof d.team === 'object';
+  return d.board != null && typeof d.board === 'object';
 }
 
-const TeamDetailView = ({ detail }: { detail: OpsTeamDetail }) => {
+const BoardDetailView = ({ detail }: { detail: OpsBoardDetail }) => {
   const { t } = useTranslation('common');
-  const { team, zones = [], stages = [] } = detail;
-  const color = team.color || '#6c757d';
-  const isRestricted = team.accessControl?.mode === 'specific';
-  const sprintLabel = team.workUnitSeries?.enabled ? team.workUnitSeries.label : null;
+  const { board, zones = [], stages = [] } = detail;
+  const color = board.color || '#6c757d';
+  const isRestricted = board.accessControl?.mode === 'specific';
+  const sprintLabel = board.workUnitSeries?.enabled ? board.workUnitSeries.label : null;
 
   // Group stages by zone
   const stagesByZone = zones
@@ -296,7 +296,7 @@ const TeamDetailView = ({ detail }: { detail: OpsTeamDetail }) => {
       <div className="ops-renderer-team-detail-header" style={{ borderLeftColor: color }}>
         <div className="ops-renderer-team-header">
           <span className="ops-renderer-team-color-dot" style={{ backgroundColor: color }} />
-          <span className="ops-renderer-team-name">{team.name}</span>
+          <span className="ops-renderer-team-name">{board.name}</span>
           {isRestricted && (
             <span className="ops-renderer-team-badge restricted">
               <i className="bi bi-lock" />
@@ -308,7 +308,7 @@ const TeamDetailView = ({ detail }: { detail: OpsTeamDetail }) => {
             </span>
           )}
         </div>
-        {team.description && <div className="ops-renderer-team-desc">{team.description}</div>}
+        {board.description && <div className="ops-renderer-team-desc">{board.description}</div>}
       </div>
 
       {stagesByZone.length > 0 && (
@@ -338,11 +338,11 @@ const TeamDetailView = ({ detail }: { detail: OpsTeamDetail }) => {
         </div>
       )}
 
-      {team.allowedTicketTypes && team.allowedTicketTypes.length > 0 && (
+      {board.allowedTicketTypes && board.allowedTicketTypes.length > 0 && (
         <div className="ops-renderer-team-meta" style={{ paddingLeft: 0, marginTop: 6 }}>
           <span className="ops-renderer-team-chip">
             <i className="bi bi-tag" />{' '}
-            {t('toolRenderers.numaOps.ticketTypes', { count: team.allowedTicketTypes.length })}
+            {t('toolRenderers.numaOps.ticketTypes', { count: board.allowedTicketTypes.length })}
           </span>
         </div>
       )}
@@ -661,8 +661,8 @@ const OpsBody = ({ payload, conversationId, sub }: { payload: OpsPayload; conver
     switch (category) {
       case 'tickets':
         return <TicketList tickets={items as OpsTicket[]} />;
-      case 'teams':
-        return <TeamList teams={items as OpsTeam[]} />;
+      case 'boards':
+        return <BoardList boards={items as OpsBoard[]} />;
       case 'customers':
         return <CrmList entities={items as OpsCustomer[]} type="customer" />;
       case 'suppliers':
@@ -694,9 +694,9 @@ const OpsBody = ({ payload, conversationId, sub }: { payload: OpsPayload; conver
           );
         }
         break;
-      case 'teams':
-        if (isTeamDetail(result)) return <TeamDetailView detail={result} />;
-        if (wrapper.team && typeof wrapper.team === 'object') return <TeamRow team={wrapper.team as OpsTeam} />;
+      case 'boards':
+        if (isBoardDetail(result)) return <BoardDetailView detail={result} />;
+        if (wrapper.board && typeof wrapper.board === 'object') return <BoardRow board={wrapper.board as OpsBoard} />;
         break;
       case 'customers':
         if (wrapper.customer && typeof wrapper.customer === 'object')

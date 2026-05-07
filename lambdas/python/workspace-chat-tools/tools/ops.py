@@ -194,10 +194,10 @@ def _invoke_ops_lambda(
 
 # Operations that route to numa-ops-api
 OPS_API_OPERATIONS = {
-    "list_teams",
-    "get_team",
-    "create_team",
-    "update_team",
+    "list_boards",
+    "get_board",
+    "create_board",
+    "update_board",
     "update_zones",
     "update_stages",
     "list_tickets",
@@ -268,7 +268,7 @@ def _resolve_ticket_by_display_id(
     user_name: str = "",
     user_groups: list | None = None,
 ) -> tuple[str, str]:
-    """Resolve a display ID (e.g. 'BUG-002') to (ticket_id, team_id).
+    """Resolve a display ID (e.g. 'BUG-002') to (ticket_id, board_id).
 
     Calls the get_ticket by-display-id endpoint internally.
     Raises ValueError if the display ID is not found.
@@ -284,13 +284,576 @@ def _resolve_ticket_by_display_id(
     )
     ticket = result.get("ticket", result)
     ticket_id = ticket.get("id", "")
-    team_id = ticket.get("teamId", "")
+    board_id = ticket.get("boardId", "")
     if not ticket_id:
         raise ValueError(
             f"Could not resolve display ID '{display_id}' to a ticket. "
             "Check that the display ID is correct (e.g. 'BUG-002')."
         )
-    return ticket_id, team_id
+    return ticket_id, board_id
+
+
+# ── Name → ID resolution ──────────────────────────────────────────────
+# Models work naturally with names ("the Funnel stage", "Acme Corp"), but
+# the ops API requires internal IDs. Rather than forcing the model to
+# dance through get_board / get_config / list_customers to find IDs --
+# which it gets wrong (BUG-081) -- the bridge accepts name-based fields
+# alongside ID fields and resolves them before calling the API. ID wins
+# when both are provided. Lookups are cached per tool invocation.
+
+
+class _LookupCache:  # pylint: disable=too-many-instance-attributes
+    """Per-invocation cache for name→ID lookups so multiple resolutions on
+    a single request don't repeat get_board / get_config / list_* calls.
+    """
+
+    def __init__(
+        self,
+        *,
+        user_sub: str,
+        user_email: str,
+        user_name: str,
+        user_groups: list | None,
+    ) -> None:
+        self.user_sub = user_sub
+        self.user_email = user_email
+        self.user_name = user_name
+        self.user_groups = user_groups
+        self._boards: list | None = None
+        self._board_details: dict[str, dict] = {}
+        self._config: dict | None = None
+        self._customers_by_search: dict[str, list] = {}
+        self._suppliers_by_search: dict[str, list] = {}
+        self._work_units_by_board: dict[str, list] = {}
+
+    def _invoke(
+        self,
+        lambda_name: str,
+        method: str,
+        path: str,
+        body: dict | None = None,
+        qp: dict | None = None,
+    ) -> dict:
+        return _invoke_ops_lambda(
+            lambda_name=lambda_name,
+            method=method,
+            path=path,
+            body=body,
+            query_params=qp,
+            user_sub=self.user_sub,
+            user_email=self.user_email,
+            user_name=self.user_name,
+            user_groups=self.user_groups,
+        )
+
+    def boards(self) -> list[dict]:
+        if self._boards is None:
+            r = self._invoke(OPS_API_LAMBDA, "GET", "ops/boards")
+            self._boards = r.get("boards", []) or []
+        return self._boards
+
+    def board_details(self, board_id: str) -> dict:
+        if board_id not in self._board_details:
+            self._board_details[board_id] = (
+                self._invoke(OPS_API_LAMBDA, "GET", f"ops/boards/{board_id}") or {}
+            )
+        return self._board_details[board_id]
+
+    def config(self) -> dict:
+        if self._config is None:
+            self._config = (
+                self._invoke(OPS_CONFIG_API_LAMBDA, "GET", "ops/config") or {}
+            )
+        return self._config
+
+    def customers_by_search(self, term: str) -> list[dict]:
+        key = term.strip().lower()
+        if key not in self._customers_by_search:
+            r = self._invoke(
+                OPS_CRM_API_LAMBDA, "GET", "ops/customers", qp={"search": term}
+            )
+            self._customers_by_search[key] = r.get("customers", []) or []
+        return self._customers_by_search[key]
+
+    def suppliers_by_search(self, term: str) -> list[dict]:
+        key = term.strip().lower()
+        if key not in self._suppliers_by_search:
+            r = self._invoke(
+                OPS_CRM_API_LAMBDA, "GET", "ops/suppliers", qp={"search": term}
+            )
+            self._suppliers_by_search[key] = r.get("suppliers", []) or []
+        return self._suppliers_by_search[key]
+
+    def work_units(self, board_id: str) -> list[dict]:
+        if board_id not in self._work_units_by_board:
+            r = self._invoke(OPS_API_LAMBDA, "GET", f"ops/boards/{board_id}/work-units")
+            self._work_units_by_board[board_id] = r.get("workUnits", []) or []
+        return self._work_units_by_board[board_id]
+
+
+def _ci_eq(a: str | None, b: str | None) -> bool:
+    """Case-insensitive whitespace-trimmed equality."""
+    if a is None or b is None:
+        return False
+    return a.strip().lower() == b.strip().lower()
+
+
+# Keys we rename when an API response leaks a DB-shape attribute. The Node
+# API does this translation server-side via its dbToApi serializer; this
+# walker is belt-and-braces so the model never sees a stray "teamId".
+_DB_TO_API_KEYS: dict[str, str] = {
+    "teamId": "boardId",
+    "team_id": "board_id",
+    "team": "board",
+    "teams": "boards",
+    "teamIds": "boardIds",
+    "team_ids": "board_ids",
+    "currentTeamId": "currentBoardId",
+    "current_team_id": "current_board_id",
+    "linkedTeamId": "linkedBoardId",
+    "linked_team_id": "linked_board_id",
+    "teamName": "boardName",
+}
+
+
+def _translate_response_keys(value: Any) -> Any:
+    """Recursively rename DB-shape keys to API-shape (team -> board) on a
+    parsed response payload. Leaves values untouched -- only keys are
+    renamed.
+    """
+    if isinstance(value, list):
+        return [_translate_response_keys(v) for v in value]
+    if isinstance(value, dict):
+        return {
+            _DB_TO_API_KEYS.get(k, k): _translate_response_keys(v)
+            for k, v in value.items()
+        }
+    return value
+
+
+def _resolve_board(cache: _LookupCache, name: str) -> str:
+    teams = cache.boards()
+    matches = [t for t in teams if _ci_eq(t.get("name"), name)]
+    if not matches:
+        avail = ", ".join(t.get("name", "") for t in teams) or "(none)"
+        raise ValueError(f'No board named "{name}". Available boards: {avail}.')
+    if len(matches) > 1:
+        raise ValueError(
+            f'Multiple boards named "{name}" -- use boardId to disambiguate.'
+        )
+    return matches[0].get("id", "")
+
+
+def _resolve_stage(
+    cache: _LookupCache,
+    board_id: str,
+    name: str,
+    zone_name: str | None = None,
+) -> str:
+    details = cache.board_details(board_id)
+    stages = details.get("stages", []) or []
+    zones = details.get("zones", []) or []
+    candidates = [s for s in stages if _ci_eq(s.get("name"), name)]
+    if zone_name and candidates:
+        zone_ids = {z.get("id") for z in zones if _ci_eq(z.get("name"), zone_name)}
+        if not zone_ids:
+            avail = ", ".join(z.get("name", "") for z in zones) or "(none)"
+            raise ValueError(
+                f'No zone named "{zone_name}" on this board. '
+                f"Available zones: {avail}."
+            )
+        candidates = [s for s in candidates if s.get("zoneId") in zone_ids]
+    if not candidates:
+        avail = (
+            ", ".join(sorted({s.get("name", "") for s in stages if s.get("name")}))
+            or "(none)"
+        )
+        raise ValueError(
+            f'No stage named "{name}" on this board. Available stages: {avail}.'
+        )
+    if len(candidates) > 1:
+        zone_by_id = {z.get("id"): z.get("name", "?") for z in zones}
+        locations = ", ".join(
+            f'"{c.get("name", "")}" ({zone_by_id.get(c.get("zoneId", ""), "?")} zone)'
+            for c in candidates
+        )
+        raise ValueError(
+            f'Stage name "{name}" matches multiple stages: {locations}. '
+            "Specify zoneName or stageId to disambiguate."
+        )
+    return candidates[0].get("id", "")
+
+
+def _resolve_zone(cache: _LookupCache, board_id: str, name: str) -> str:
+    details = cache.board_details(board_id)
+    zones = details.get("zones", []) or []
+    matches = [z for z in zones if _ci_eq(z.get("name"), name)]
+    if not matches:
+        avail = ", ".join(z.get("name", "") for z in zones) or "(none)"
+        raise ValueError(
+            f'No zone named "{name}" on this board. Available zones: {avail}.'
+        )
+    if len(matches) > 1:
+        raise ValueError(f'Multiple zones named "{name}" on this board -- use zoneId.')
+    return matches[0].get("id", "")
+
+
+def _resolve_staff(cache: _LookupCache, name: str) -> tuple[str, str]:
+    """Returns (id, canonicalName). Tries exact name match first, then
+    case-insensitive substring against name and email.
+    """
+    config = cache.config()
+    staff = config.get("staff", []) or []
+
+    exact = [s for s in staff if _ci_eq(s.get("name"), name)]
+    if exact:
+        if len(exact) > 1:
+            raise ValueError(
+                f'Multiple staff named "{name}" -- use the user sub directly.'
+            )
+        s = exact[0]
+        return (
+            s.get("id", "") or s.get("sub", ""),
+            s.get("name") or name,
+        )
+
+    target = name.strip().lower()
+    partial = [
+        s
+        for s in staff
+        if target in (s.get("name") or "").lower()
+        or target in (s.get("email") or "").lower()
+    ]
+    if not partial:
+        raise ValueError(
+            f'No staff member matching "{name}". Use the full name as it '
+            "appears in get_config staff, or pass the user sub directly."
+        )
+    if len(partial) > 1:
+        names = ", ".join((s.get("name") or s.get("email") or "") for s in partial[:5])
+        raise ValueError(
+            f'Multiple staff match "{name}": {names}. Use the full name or sub.'
+        )
+    s = partial[0]
+    return s.get("id", "") or s.get("sub", ""), s.get("name") or name
+
+
+def _resolve_project(cache: _LookupCache, name: str) -> str:
+    config = cache.config()
+    projects = config.get("projects", []) or []
+    matches = [p for p in projects if _ci_eq(p.get("name"), name)]
+    if not matches:
+        active = [p.get("name", "") for p in projects if p.get("isActive", True)]
+        avail = ", ".join(active) or "(none)"
+        raise ValueError(
+            f'No project named "{name}". Available active projects: {avail}.'
+        )
+    if len(matches) > 1:
+        raise ValueError(f'Multiple projects named "{name}" -- use projectId.')
+    return matches[0].get("id", "")
+
+
+def _resolve_customer(cache: _LookupCache, name: str) -> tuple[str, str]:
+    """Returns (id, canonicalCompanyName)."""
+    customers = cache.customers_by_search(name)
+    exact = [c for c in customers if _ci_eq(c.get("companyName"), name)]
+    if exact:
+        if len(exact) > 1:
+            raise ValueError(f'Multiple customers named "{name}" -- use customerId.')
+        return exact[0].get("id", ""), exact[0].get("companyName") or name
+    if not customers:
+        raise ValueError(f'No customer matching "{name}".')
+    if len(customers) > 1:
+        names = ", ".join(c.get("companyName", "") for c in customers[:5])
+        suffix = "" if len(customers) <= 5 else f" (and {len(customers) - 5} more)"
+        raise ValueError(
+            f'Multiple customers match "{name}": {names}{suffix}. '
+            "Use the exact company name or customerId."
+        )
+    return customers[0].get("id", ""), customers[0].get("companyName") or name
+
+
+def _resolve_supplier(cache: _LookupCache, name: str) -> tuple[str, str]:
+    suppliers = cache.suppliers_by_search(name)
+    exact = [s for s in suppliers if _ci_eq(s.get("companyName"), name)]
+    if exact:
+        if len(exact) > 1:
+            raise ValueError(f'Multiple suppliers named "{name}" -- use supplierId.')
+        return exact[0].get("id", ""), exact[0].get("companyName") or name
+    if not suppliers:
+        raise ValueError(f'No supplier matching "{name}".')
+    if len(suppliers) > 1:
+        names = ", ".join(s.get("companyName", "") for s in suppliers[:5])
+        raise ValueError(
+            f'Multiple suppliers match "{name}": {names}. '
+            "Use the exact name or supplierId."
+        )
+    return suppliers[0].get("id", ""), suppliers[0].get("companyName") or name
+
+
+def _resolve_lifecycle_stage(
+    cache: _LookupCache, name: str, *, supplier: bool = False
+) -> str:
+    config = cache.config()
+    cfg_key = "supplierConfig" if supplier else "crmConfig"
+    stages = (config.get(cfg_key) or {}).get("lifecycleStages", []) or []
+    matches = [s for s in stages if _ci_eq(s.get("name"), name)]
+    if not matches:
+        avail = ", ".join(s.get("name", "") for s in stages) or "(none)"
+        kind = "supplier" if supplier else "customer"
+        raise ValueError(
+            f'No {kind} lifecycle stage named "{name}". Available stages: {avail}.'
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f'Multiple lifecycle stages named "{name}" -- use the stage id directly.'
+        )
+    return matches[0].get("id", "")
+
+
+def _resolve_work_unit(cache: _LookupCache, board_id: str, name: str) -> str:
+    units = cache.work_units(board_id)
+    matches = [u for u in units if _ci_eq(u.get("name"), name)]
+    if not matches:
+        avail = ", ".join(u.get("name", "") for u in units) or "(none)"
+        raise ValueError(
+            f'No sprint named "{name}" on this board. Available sprints: {avail}.'
+        )
+    if len(matches) > 1:
+        # Reusing names across cycles is common -- prefer the active sprint.
+        active = [u for u in matches if u.get("status") == "active"]
+        if len(active) == 1:
+            return active[0].get("id", "")
+        raise ValueError(f'Multiple sprints named "{name}" -- use workUnitId.')
+    return matches[0].get("id", "")
+
+
+def _resolve_ticket_type(cache: _LookupCache, name: str) -> str:
+    config = cache.config()
+    types = config.get("ticketTypes", []) or []
+    matches = [
+        t for t in types if _ci_eq(t.get("name"), name) or _ci_eq(t.get("prefix"), name)
+    ]
+    if not matches:
+        avail = (
+            ", ".join(f"{t.get('name', '')} ({t.get('prefix', '')})" for t in types)
+            or "(none)"
+        )
+        raise ValueError(f'No ticket type matching "{name}". Available types: {avail}.')
+    if len(matches) > 1:
+        raise ValueError(
+            f'Multiple ticket types matching "{name}" -- use ticketTypeId.'
+        )
+    return matches[0].get("id", "")
+
+
+def _pop_first(params: dict, *keys: str) -> str | None:
+    """Pop and return the first non-empty value among `keys`, removing all
+    listed keys from `params`. Returns None if none found.
+    """
+    found: str | None = None
+    for k in keys:
+        v = params.pop(k, None)
+        if found is not None:
+            continue
+        if isinstance(v, str) and v.strip():
+            found = v.strip()
+        elif v is not None:
+            s = str(v).strip()
+            found = s or None
+    return found
+
+
+def _drop_keys(params: dict, *keys: str) -> None:
+    for k in keys:
+        params.pop(k, None)
+
+
+_SUPPLIER_OPERATIONS = frozenset(
+    {
+        "list_suppliers",
+        "get_supplier",
+        "create_supplier",
+        "update_supplier",
+        "delete_supplier",
+        "create_supplier_activity",
+        "update_supplier_activity",
+        "delete_supplier_activity",
+    }
+)
+
+
+def _resolve_names_in_params(
+    params: dict,
+    cache: _LookupCache,
+    *,
+    parent_board_id: str = "",
+    is_supplier_context: bool = False,
+) -> None:
+    """Mutate `params`: replace name-based fields with their resolved IDs.
+
+    Handles both pure-lookup names (popped after resolution) and display-name
+    fields like assigneeName/customerName (kept and canonicalized so the API
+    stores the canonical spelling).
+
+    `parent_board_id` lets callers pass a boardId from an enclosing scope --
+    used by bulk_update_tickets where boardId lives at top level but stage /
+    work-unit names live inside the `changes` dict.
+
+    `is_supplier_context` tells lifecycle-stage resolution to look at the
+    supplier config rather than the customer (CRM) config.
+    """
+
+    def has_id(*ks: str) -> bool:
+        return any(params.get(k) for k in ks)
+
+    # ── boardName → boardId (run first; many others need boardId)
+    if not has_id("boardId", "board_id"):
+        board_name = _pop_first(params, "boardName", "board_name")
+        if board_name:
+            params["boardId"] = _resolve_board(cache, board_name)
+    else:
+        _drop_keys(params, "boardName", "board_name")
+
+    board_id = params.get("boardId") or params.get("board_id") or parent_board_id or ""
+
+    # ── zoneName → zoneId (also consumed by stage resolution below)
+    zone_name: str | None = None
+    if not has_id("zoneId", "zone_id"):
+        zone_name = _pop_first(params, "zoneName", "zone_name")
+    else:
+        _drop_keys(params, "zoneName", "zone_name")
+
+    # ── stageName → stageId (requires boardId; consumes zoneName)
+    if not has_id("stageId", "stage_id"):
+        stage_name = _pop_first(params, "stageName", "stage_name")
+        if stage_name:
+            if not board_id:
+                raise ValueError(
+                    f'Cannot resolve stageName "{stage_name}" without a '
+                    "boardId or boardName."
+                )
+            params["stageId"] = _resolve_stage(cache, board_id, stage_name, zone_name)
+            zone_name = None  # consumed
+    else:
+        _drop_keys(params, "stageName", "stage_name")
+
+    # zoneName left over (no stage) -- resolve standalone
+    if zone_name and not has_id("zoneId", "zone_id"):
+        if not board_id:
+            raise ValueError(
+                f'Cannot resolve zoneName "{zone_name}" without a boardId or boardName.'
+            )
+        params["zoneId"] = _resolve_zone(cache, board_id, zone_name)
+
+    # ── workUnitName / sprintName → workUnitId
+    if not has_id("workUnitId", "work_unit_id"):
+        wu_name = _pop_first(
+            params,
+            "workUnitName",
+            "work_unit_name",
+            "sprintName",
+            "sprint_name",
+        )
+        if wu_name:
+            if not board_id:
+                raise ValueError(
+                    f'Cannot resolve workUnitName "{wu_name}" without a '
+                    "boardId or boardName."
+                )
+            params["workUnitId"] = _resolve_work_unit(cache, board_id, wu_name)
+    else:
+        _drop_keys(
+            params, "workUnitName", "work_unit_name", "sprintName", "sprint_name"
+        )
+
+    # ── projectName → projectId
+    if not has_id("projectId", "project_id"):
+        project_name = _pop_first(params, "projectName", "project_name")
+        if project_name:
+            params["projectId"] = _resolve_project(cache, project_name)
+    else:
+        _drop_keys(params, "projectName", "project_name")
+
+    # ── ticketTypeName → ticketTypeId
+    if not has_id("ticketTypeId", "ticket_type_id"):
+        tt_name = _pop_first(params, "ticketTypeName", "ticket_type_name")
+        if tt_name:
+            params["ticketTypeId"] = _resolve_ticket_type(cache, tt_name)
+    else:
+        _drop_keys(params, "ticketTypeName", "ticket_type_name")
+
+    # ── lifecycleStageName → lifecycleStage
+    # Heuristic: presence of supplier-only fields (annualSpend / paymentTerms)
+    # or supplierLifecycleStageName routes to the supplier config.
+    if not has_id("lifecycleStage", "lifecycle_stage"):
+        ls_supplier = _pop_first(
+            params, "supplierLifecycleStageName", "supplier_lifecycle_stage_name"
+        )
+        ls_customer = _pop_first(params, "lifecycleStageName", "lifecycle_stage_name")
+        is_supplier = bool(
+            ls_supplier
+            or is_supplier_context
+            or params.get("annualSpend") is not None
+            or params.get("annual_spend") is not None
+            or params.get("paymentTerms") is not None
+            or params.get("payment_terms") is not None
+        )
+        chosen = ls_supplier or ls_customer
+        if chosen:
+            params["lifecycleStage"] = _resolve_lifecycle_stage(
+                cache, chosen, supplier=is_supplier
+            )
+    else:
+        _drop_keys(
+            params,
+            "lifecycleStageName",
+            "lifecycle_stage_name",
+            "supplierLifecycleStageName",
+            "supplier_lifecycle_stage_name",
+        )
+
+    # ── Display-name fields: resolve to IDs when missing, canonicalize the
+    # name for storage. These remain valid API fields so we keep them set.
+    if not has_id("assigneeId", "assignee_id"):
+        a_name = params.get("assigneeName") or params.get("assignee_name")
+        if a_name:
+            sub, canonical = _resolve_staff(cache, str(a_name))
+            params["assigneeId"] = sub
+            params["assigneeName"] = canonical
+            params.pop("assignee_name", None)
+
+    if not has_id("reporterId", "reporter_id"):
+        r_name = params.get("reporterName") or params.get("reporter_name")
+        if r_name:
+            sub, canonical = _resolve_staff(cache, str(r_name))
+            params["reporterId"] = sub
+            params["reporterName"] = canonical
+            params.pop("reporter_name", None)
+
+    if not has_id("ownerId", "owner_id"):
+        o_name = params.get("ownerName") or params.get("owner_name")
+        if o_name:
+            sub, canonical = _resolve_staff(cache, str(o_name))
+            params["ownerId"] = sub
+            params["ownerName"] = canonical
+            params.pop("owner_name", None)
+
+    if not has_id("customerId", "customer_id"):
+        c_name = params.get("customerName") or params.get("customer_name")
+        if c_name:
+            cid, canonical = _resolve_customer(cache, str(c_name))
+            params["customerId"] = cid
+            params["customerName"] = canonical
+            params.pop("customer_name", None)
+
+    if not has_id("supplierId", "supplier_id"):
+        s_name = params.get("supplierName") or params.get("supplier_name")
+        if s_name:
+            sid, canonical = _resolve_supplier(cache, str(s_name))
+            params["supplierId"] = sid
+            params["supplierName"] = canonical
+            params.pop("supplier_name", None)
 
 
 def _p(params: dict, *keys: str) -> Any:
@@ -571,11 +1134,14 @@ def _resolve_lambda_and_request(
 
     # ── CRM operations → numa-ops-crm-api ──
     if operation == "list_customers":
+        # `stage` is the API's lifecycle-stage filter. Accept lifecycleStage
+        # (the field name resolution sets) as a fallback so name resolution
+        # via lifecycleStageName flows through to the right query param.
         qp = _build_qp(
             params,
             [
                 ("search", "search"),
-                ("stage", "stage"),
+                ("stage", "stage", "lifecycleStage", "lifecycle_stage"),
                 ("ownerId", "ownerId", "owner_id"),
                 ("territory", "territory"),
                 ("industry", "industry"),
@@ -681,7 +1247,7 @@ def _resolve_lambda_and_request(
             params,
             [
                 ("search", "search"),
-                ("stage", "stage"),
+                ("stage", "stage", "lifecycleStage", "lifecycle_stage"),
                 ("ownerId", "ownerId", "owner_id"),
                 ("territory", "territory"),
                 ("industry", "industry"),
@@ -768,14 +1334,14 @@ def _resolve_lambda_and_request(
         )
 
     # ── Core ops operations → numa-ops-api ──
-    if operation == "list_teams":
-        return (OPS_API_LAMBDA, "GET", "ops/teams", None, None)
+    if operation == "list_boards":
+        return (OPS_API_LAMBDA, "GET", "ops/boards", None, None)
 
-    if operation == "get_team":
-        team_id = _p(params, "teamId", "team_id") or ""
-        return (OPS_API_LAMBDA, "GET", f"ops/teams/{team_id}", None, None)
+    if operation == "get_board":
+        board_id = _p(params, "boardId", "board_id") or ""
+        return (OPS_API_LAMBDA, "GET", f"ops/boards/{board_id}", None, None)
 
-    if operation == "create_team":
+    if operation == "create_board":
         body = _build_body(
             params,
             [
@@ -794,10 +1360,10 @@ def _resolve_lambda_and_request(
                 ("zones", "zones"),
             ],
         )
-        return (OPS_API_LAMBDA, "POST", "ops/teams", body, None)
+        return (OPS_API_LAMBDA, "POST", "ops/boards", body, None)
 
-    if operation == "update_team":
-        team_id = _p(params, "teamId", "team_id") or ""
+    if operation == "update_board":
+        board_id = _p(params, "boardId", "board_id") or ""
         body = _build_body(
             params,
             [
@@ -813,26 +1379,26 @@ def _resolve_lambda_and_request(
                 ("announcement", "announcement"),
             ],
         )
-        return (OPS_API_LAMBDA, "PUT", f"ops/teams/{team_id}", body, None)
+        return (OPS_API_LAMBDA, "PUT", f"ops/boards/{board_id}", body, None)
 
     if operation == "update_zones":
-        team_id = _p(params, "teamId", "team_id") or ""
+        board_id = _p(params, "boardId", "board_id") or ""
         zones = params.get("zones", [])
         return (
             OPS_API_LAMBDA,
             "PUT",
-            f"ops/teams/{team_id}/zones",
+            f"ops/boards/{board_id}/zones",
             {"zones": zones},
             None,
         )
 
     if operation == "update_stages":
-        team_id = _p(params, "teamId", "team_id") or ""
+        board_id = _p(params, "boardId", "board_id") or ""
         stages = params.get("stages", [])
         return (
             OPS_API_LAMBDA,
             "PUT",
-            f"ops/teams/{team_id}/stages",
+            f"ops/boards/{board_id}/stages",
             {"stages": stages},
             None,
         )
@@ -841,7 +1407,7 @@ def _resolve_lambda_and_request(
         qp = _build_qp(
             params,
             [
-                ("teamId", "teamId", "team_id"),
+                ("boardId", "boardId", "board_id"),
                 ("stageId", "stageId", "stage_id"),
                 ("statusType", "statusType", "status_type"),
                 ("assigneeId", "assigneeId", "assignee_id"),
@@ -867,7 +1433,7 @@ def _resolve_lambda_and_request(
                 None,
             )
         ticket_id = _p(params, "ticketId", "ticket_id") or ""
-        qp = _build_qp(params, [("teamId", "teamId", "team_id")])
+        qp = _build_qp(params, [("boardId", "boardId", "board_id")])
         return (
             OPS_API_LAMBDA,
             "GET",
@@ -878,16 +1444,16 @@ def _resolve_lambda_and_request(
 
     if operation == "search_tickets":
         qp = {"search": _p(params, "query", "search") or ""}
-        team_id = _p(params, "teamId", "team_id")
-        if team_id:
-            qp["teamId"] = team_id
+        board_id = _p(params, "boardId", "board_id")
+        if board_id:
+            qp["boardId"] = board_id
         return (OPS_API_LAMBDA, "GET", "ops/tickets", None, qp)
 
     if operation == "create_ticket":
         body = _build_body(
             params,
             [
-                ("teamId", "teamId", "team_id"),
+                ("boardId", "boardId", "board_id"),
                 ("title", "title", "name"),  # accept "name" as alias for "title"
                 ("ticketTypeId", "ticketTypeId", "ticket_type_id"),
                 ("description", "description"),
@@ -920,8 +1486,8 @@ def _resolve_lambda_and_request(
         body = _build_body(
             params,
             [
-                ("teamId", "teamId", "team_id"),
-                ("currentTeamId", "currentTeamId", "current_team_id"),
+                ("boardId", "boardId", "board_id"),
+                ("currentBoardId", "currentBoardId", "current_board_id"),
                 ("title", "title", "name"),
                 ("description", "description"),
                 ("stageId", "stageId", "stage_id"),
@@ -950,14 +1516,14 @@ def _resolve_lambda_and_request(
 
     if operation == "delete_ticket":
         ticket_id = _p(params, "ticketId", "ticket_id") or ""
-        qp = _build_qp(params, [("teamId", "teamId", "team_id")])
+        qp = _build_qp(params, [("boardId", "boardId", "board_id")])
         return (OPS_API_LAMBDA, "DELETE", f"ops/tickets/{ticket_id}", None, qp)
 
     if operation == "bulk_update_tickets":
         changes = dict(params.get("changes", {}))
-        team_id = _p(params, "teamId", "team_id")
-        if team_id and "teamId" not in changes:
-            changes["teamId"] = team_id
+        board_id = _p(params, "boardId", "board_id")
+        if board_id and "boardId" not in changes:
+            changes["boardId"] = board_id
         body = {
             "ticketIds": _p(params, "ticketIds", "ticket_ids") or [],
             "changes": changes,
@@ -968,7 +1534,7 @@ def _resolve_lambda_and_request(
         ticket_id = _p(params, "ticketId", "ticket_id") or ""
         body = {
             "content": params.get("content", ""),
-            "teamId": _p(params, "teamId", "team_id"),
+            "boardId": _p(params, "boardId", "board_id"),
             "displayId": _p(params, "displayId", "display_id"),
         }
         if "attachments" in params:
@@ -993,11 +1559,11 @@ def _resolve_lambda_and_request(
         return (OPS_API_LAMBDA, "POST", "ops/uploads/presigned-url", body, None)
 
     if operation == "list_work_units":
-        team_id = _p(params, "teamId", "team_id") or ""
-        return (OPS_API_LAMBDA, "GET", f"ops/teams/{team_id}/work-units", None, None)
+        board_id = _p(params, "boardId", "board_id") or ""
+        return (OPS_API_LAMBDA, "GET", f"ops/boards/{board_id}/work-units", None, None)
 
     if operation == "create_work_unit":
-        team_id = _p(params, "teamId", "team_id") or ""
+        board_id = _p(params, "boardId", "board_id") or ""
         body = _build_body(
             params,
             [
@@ -1009,10 +1575,10 @@ def _resolve_lambda_and_request(
                 ("capacity", "capacity"),
             ],
         )
-        return (OPS_API_LAMBDA, "POST", f"ops/teams/{team_id}/work-units", body, None)
+        return (OPS_API_LAMBDA, "POST", f"ops/boards/{board_id}/work-units", body, None)
 
     if operation == "update_work_unit":
-        team_id = _p(params, "teamId", "team_id") or ""
+        board_id = _p(params, "boardId", "board_id") or ""
         work_unit_id = _p(params, "workUnitId", "work_unit_id") or ""
         body = _build_body(
             params,
@@ -1028,18 +1594,18 @@ def _resolve_lambda_and_request(
         return (
             OPS_API_LAMBDA,
             "PUT",
-            f"ops/teams/{team_id}/work-units/{work_unit_id}",
+            f"ops/boards/{board_id}/work-units/{work_unit_id}",
             body,
             None,
         )
 
     if operation == "delete_work_unit":
-        team_id = _p(params, "teamId", "team_id") or ""
+        board_id = _p(params, "boardId", "board_id") or ""
         work_unit_id = _p(params, "workUnitId", "work_unit_id") or ""
         return (
             OPS_API_LAMBDA,
             "DELETE",
-            f"ops/teams/{team_id}/work-units/{work_unit_id}",
+            f"ops/boards/{board_id}/work-units/{work_unit_id}",
             None,
             None,
         )
@@ -1054,8 +1620,8 @@ def _resolve_lambda_and_request(
             or "",
             "linkedTicketTitle": _p(params, "linkedTicketTitle", "linked_ticket_title"),
             "linkType": _p(params, "linkType", "link_type") or "",
-            "teamId": _p(params, "teamId", "team_id"),
-            "linkedTeamId": _p(params, "linkedTeamId", "linked_team_id"),
+            "boardId": _p(params, "boardId", "board_id"),
+            "linkedBoardId": _p(params, "linkedBoardId", "linked_board_id"),
         }
         return (OPS_API_LAMBDA, "POST", f"ops/tickets/{ticket_id}/links", body, None)
 
@@ -1073,13 +1639,13 @@ def _resolve_lambda_and_request(
 
     if operation == "get_metrics":
         qp = {}
-        team_ids = _p(params, "teamIds", "team_ids")
-        if team_ids:
-            qp["teamIds"] = team_ids
+        board_ids = _p(params, "boardIds", "board_ids")
+        if board_ids:
+            qp["boardIds"] = board_ids
         else:
-            team_id = _p(params, "teamId", "team_id")
-            if team_id:
-                qp["teamIds"] = team_id
+            board_id = _p(params, "boardId", "board_id")
+            if board_id:
+                qp["boardIds"] = board_id
         return (OPS_API_LAMBDA, "GET", "ops/metrics", None, qp or None)
 
     raise ValueError(f"Unknown ops operation: {operation}")
@@ -1098,12 +1664,12 @@ def _filter_projects_by_access(
     Projects with no boardIds (all-boards) pass through. Projects with
     boardIds are only included if at least one board is accessible to the user.
     """
-    # Fetch the user's accessible teams (list_teams already filters by access)
+    # Fetch the user's accessible boards (list_boards already filters by access)
     try:
-        teams_result = _invoke_ops_lambda(
+        boards_result = _invoke_ops_lambda(
             lambda_name=OPS_API_LAMBDA,
             method="GET",
-            path="ops/teams",
+            path="ops/boards",
             body=None,
             query_params=None,
             user_sub=user_sub,
@@ -1111,19 +1677,19 @@ def _filter_projects_by_access(
             user_name=user_name,
             user_groups=user_groups,
         )
-        accessible_team_ids = {
-            t["id"] for t in teams_result.get("teams", []) if "id" in t
+        accessible_board_ids = {
+            b["id"] for b in boards_result.get("boards", []) if "id" in b
         }
     except Exception:
-        # If team lookup fails, don't block — return unfiltered
-        logger.warning("Failed to fetch teams for project access filtering")
+        # If board lookup fails, don't block -- return unfiltered
+        logger.warning("Failed to fetch boards for project access filtering")
         return result
 
     def is_accessible(project: dict) -> bool:
         board_ids = project.get("boardIds")
         if not board_ids:
             return True  # No boards = visible to all
-        return bool(set(board_ids) & accessible_team_ids)
+        return bool(set(board_ids) & accessible_board_ids)
 
     if operation == "list_projects":
         projects = result.get("projects", [])
@@ -1182,7 +1748,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
 
     # Approval gate: for write operations that are not auto-approved,
     # create a DynamoDB approval record and poll until the user approves,
-    # denies, or the 90-second timeout expires.
+    # denies, or the approval window expires.
     if not auto_approved and request_id:
         try:
             action_key = f"ops-{operation.replace('_', '-')}"
@@ -1208,7 +1774,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
             if decision == "timeout":
                 return {
                     "status": "timeout",
-                    "message": "Approval timed out (90 seconds)",
+                    "message": "Approval timed out",
                     "approval_id": approval_id,
                 }
 
@@ -1233,6 +1799,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
         "add_comment",
         "list_comments",
         "get_audit",
+        "upload_attachment",
     }
     if operation in _ticket_mutations:
         has_ticket_id = bool(op_params.get("ticketId") or op_params.get("ticket_id"))
@@ -1248,7 +1815,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
                 raise ValueError(
                     f"Invalid displayId for {operation}: expected a non-empty string"
                 )
-            resolved_id, resolved_team_id = _resolve_ticket_by_display_id(
+            resolved_id, resolved_board_id = _resolve_ticket_by_display_id(
                 display_id_val,
                 user_sub=user_sub,
                 user_email=user_email,
@@ -1257,10 +1824,36 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
             )
             op_params["ticketId"] = resolved_id
             if (
-                not (op_params.get("teamId") or op_params.get("team_id"))
-                and resolved_team_id
+                not (op_params.get("boardId") or op_params.get("board_id"))
+                and resolved_board_id
             ):
-                op_params["teamId"] = resolved_team_id
+                op_params["boardId"] = resolved_board_id
+
+    # ── Resolve name-based parameters to IDs ─────────────────────────────
+    # Models can pass human-readable names (stageName, customerName,
+    # assigneeName, etc.) alongside or instead of IDs. The bridge resolves
+    # them here so the API only ever sees IDs. Lookups are cached per
+    # invocation so multiple resolutions on the same request don't repeat
+    # the same get_board / get_config / list_* calls.
+    cache = _LookupCache(
+        user_sub=user_sub,
+        user_email=user_email,
+        user_name=user_name,
+        user_groups=user_groups,
+    )
+    is_supplier_op = operation in _SUPPLIER_OPERATIONS
+    _resolve_names_in_params(op_params, cache, is_supplier_context=is_supplier_op)
+    # bulk_update_tickets nests its updates inside `changes`, which can
+    # carry the same name-based fields (stageName, assigneeName, etc.).
+    # Pass the top-level boardId so stage/work-unit resolution has context.
+    if operation == "bulk_update_tickets" and isinstance(
+        op_params.get("changes"), dict
+    ):
+        _resolve_names_in_params(
+            op_params["changes"],
+            cache,
+            parent_board_id=op_params.get("boardId") or op_params.get("board_id") or "",
+        )
 
     try:
         lambda_name, method, path, body, query_params = _resolve_lambda_and_request(
@@ -1280,11 +1873,17 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
         )
 
         # Filter projects by board access: only show projects whose boardIds
-        # overlap with the user's accessible teams (or have no boardIds = all).
+        # overlap with the user's accessible boards (or have no boardIds = all).
         if operation in ("list_projects", "get_config") and isinstance(result, dict):
             result = _filter_projects_by_access(
                 result, operation, user_sub, user_email, user_name, user_groups
             )
+
+        # Belt-and-braces: the Node API already translates DB-shape to API-shape
+        # (teamId -> boardId, etc.) via its serializer. The bridge re-runs the
+        # same key-rename pass so the model never sees a leaked team key even
+        # if a future API change forgets to wire something through dbToApi.
+        result = _translate_response_keys(result)
 
         return result
 

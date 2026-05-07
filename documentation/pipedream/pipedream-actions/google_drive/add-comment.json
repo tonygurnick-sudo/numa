@@ -1,0 +1,48 @@
+{
+  "name": "Add Comment",
+  "description": "Add an unanchored comment to a Google Doc (general feedback, no text highlighting). [See the documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3/comments/create)",
+  "component_type": "action",
+  "version": "0.1.0",
+  "key": "google_drive-add-comment",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": false,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "fileId",
+      "type": "string",
+      "label": "File",
+      "description": "The file to add a comment to.",
+      "remoteOptions": true
+    },
+    {
+      "name": "content",
+      "type": "string",
+      "label": "Comment Content",
+      "description": "The text content of the comment to add"
+    },
+    {
+      "name": "anchor",
+      "type": "string",
+      "label": "Anchor",
+      "description": "A region of the document represented as a JSON string. For details on defining anchor properties, refer to [Manage comments and replies](https://developers.google.com/workspace/drive/api/v3/manage-comments).",
+      "optional": true
+    }
+  ]
+}

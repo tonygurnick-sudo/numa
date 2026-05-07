@@ -3,18 +3,19 @@ import { fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
 import { ECRImage } from '@/types';
 import { getConfigValue } from './configService';
 import { authService } from './authService';
-import { getAllImageMetadata, type ImageMetadata } from './imageTagService';
+import { getAllImageMetadata, type ImageMetadata, type RepositoryName } from './imageTagService';
 
 export class ECRService {
-  private repositoryName = 'numa-deploy'; // Matches GitLab CI: ECR_REPO: ${ECR_BASE}/numa-deploy
+  private repositoryName: RepositoryName;
   private cachedImages: ECRImage[] = [];
   private lastFetchTime: number = 0;
   private readonly cacheDuration = 10 * 60 * 1000; // 10 minutes
 
-  constructor() {}
+  constructor(repositoryName: RepositoryName) {
+    this.repositoryName = repositoryName;
+  }
 
   private getCredentialsProvider() {
-    // Return a provider that ensures valid tokens before resolving credentials
     if (!this.isInBrowser() || !this.hasCognitoConfig()) return undefined;
 
     const region = getConfigValue('AWS_REGION') || 'us-east-1';
@@ -60,7 +61,6 @@ export class ECRService {
       });
       const registryId = getConfigValue('ECR_REGISTRY_ID') || undefined;
 
-      // Fetch all pages of images (pagination required when > 100 images)
       const allImageDetails: ImageDetail[] = [];
       let nextToken: string | undefined;
 
@@ -89,24 +89,24 @@ export class ECRService {
       } while (nextToken);
 
       if (allImageDetails.length === 0) {
+        this.cachedImages = [];
+        this.lastFetchTime = now;
         return [];
       }
 
-      // Get image metadata for custom names
-      const imageMetadata = await getAllImageMetadata();
+      // Metadata table is shared across repos; filter to this repo only.
+      const allMetadata = await getAllImageMetadata();
       const metadataMap = new Map<string, ImageMetadata>();
-      imageMetadata.forEach((meta) => {
-        metadataMap.set(`${meta.imageTag}:${meta.digest}`, meta);
-      });
+      allMetadata
+        .filter((m) => m.repository === this.repositoryName)
+        .forEach((meta) => metadataMap.set(`${meta.imageTag}:${meta.digest}`, meta));
 
       this.cachedImages = this.mapImageDetailsToECRImages(allImageDetails, metadataMap);
       this.lastFetchTime = now;
 
       return this.cachedImages;
     } catch (error) {
-      console.error('Failed to fetch ECR images:', error);
-
-      // Return empty array when ECR is not accessible - no mock data
+      console.error(`Failed to fetch ECR images for ${this.repositoryName}:`, error);
       throw error;
     }
   }
@@ -118,7 +118,7 @@ export class ECRService {
     return imageDetails
       .filter((image) => image.imageTags && image.imageTags.length > 0)
       .map((image) => {
-        const tag = image.imageTags![0]; // Use first tag
+        const tag = image.imageTags![0];
         const digest = image.imageDigest || 'sha256:unknown';
         const metadata = metadataMap?.get(`${tag}:${digest}`);
 
@@ -138,18 +138,17 @@ export class ECRService {
   }
 
   private extractGitCommitFromTag(tag: string): string {
-    // GitLab CI pushes images with short SHA as tag (e.g., "abc123de")
     if (/^[a-f0-9]{8}$/.test(tag)) {
       return tag;
     }
     return 'unknown';
   }
 
-  private extractBranchFromTag(tag: string): string {
-    if (tag === 'latest') return 'main';
-    if (tag.startsWith('v')) return 'main'; // Version tags usually from main
-    if (tag.includes('hotfix')) return 'hotfix';
-    return 'feature';
+  private extractBranchFromTag(_tag: string): string {
+    // CI now only pushes :${SHA} tags — branch is no longer encoded in the tag.
+    // The repository name is the channel marker (numa-deploy = main, numa-deploy-dev = dev/dev-image/*).
+    if (this.repositoryName === 'numa-deploy-dev') return 'dev';
+    return 'main';
   }
 
   async getImagesByTag(tags: string[]): Promise<ECRImage[]> {
@@ -158,8 +157,9 @@ export class ECRService {
   }
 
   async getLatestImage(): Promise<ECRImage | undefined> {
+    // No more :latest tag — most-recent-by-pushedAt is the latest.
     const allImages = await this.getAllImages();
-    return allImages.find((image) => image.tag === 'latest') || allImages[0];
+    return allImages[0];
   }
 
   clearCache(): void {
@@ -168,4 +168,13 @@ export class ECRService {
   }
 }
 
-export const ecrService = new ECRService();
+// Singletons per channel
+export const prodEcrService = new ECRService('numa-deploy');
+export const devEcrService = new ECRService('numa-deploy-dev');
+
+// Backwards compat: existing imports of `ecrService` still work and point at prod.
+export const ecrService = prodEcrService;
+
+export function getEcrService(repository: RepositoryName): ECRService {
+  return repository === 'numa-deploy-dev' ? devEcrService : prodEcrService;
+}

@@ -1,0 +1,63 @@
+{
+  "name": "Upload File",
+  "description": "Uploads a file to the specified document. [See the documentation](https://developer.xero.com/documentation/api/accounting/invoices#upload-attachment)",
+  "component_type": "action",
+  "version": "1.0.4",
+  "key": "xero_accounting_api-upload-file",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "xeroAccountingApi",
+      "type": "app",
+      "app": "xero_accounting_api"
+    },
+    {
+      "name": "tenantId",
+      "type": "string",
+      "label": "Tenant ID",
+      "description": "Select an organization tenant to use, or provide a tenant ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "filePathOrUrl",
+      "type": "string",
+      "label": "File Path or URL",
+      "description": "The file to upload. Provide either a file URL or a path to a file in the `/tmp` directory (for example, `/tmp/myFile.txt`)"
+    },
+    {
+      "name": "documentType",
+      "label": "Document Type",
+      "type": "string",
+      "description": "Document type of where the attachment will be sent to. This is used in as part of the Xero Account API endpoint where the request is sent against.",
+      "options": [
+        "Accounts",
+        "BankTransactions",
+        "Contacts",
+        "CreditNotes",
+        "Invoices",
+        "ManualJournals",
+        "PurchaseOrders",
+        "Receipts",
+        "RepeatingInvoices"
+      ]
+    },
+    {
+      "name": "documentId",
+      "label": "Document ID",
+      "type": "string",
+      "description": "Xero identifier of the document where the attachment will be sent to."
+    },
+    {
+      "name": "syncDir",
+      "type": "dir",
+      "accessMode": "read",
+      "sync": true,
+      "optional": true
+    }
+  ],
+  "stash": "optional"
+}

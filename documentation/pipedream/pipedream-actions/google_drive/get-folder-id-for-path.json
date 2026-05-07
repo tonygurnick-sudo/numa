@@ -1,0 +1,35 @@
+{
+  "name": "Get Folder ID for a Path",
+  "description": "Retrieve a folderId for a path. [See the documentation](https://developers.google.com/drive/api/v3/search-files) for more information",
+  "component_type": "action",
+  "version": "0.1.17",
+  "key": "google_drive-get-folder-id-for-path",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "googleDrive",
+      "type": "app",
+      "app": "google_drive"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "path",
+      "type": "string",
+      "label": "Path",
+      "description": "The path to the folder (e.g., `myFolder/mySubFolder1/mySubFolder2`)",
+      "optional": false
+    }
+  ]
+}

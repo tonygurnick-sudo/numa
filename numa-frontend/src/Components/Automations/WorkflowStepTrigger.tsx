@@ -12,7 +12,12 @@ type WorkflowStepTriggerProps = {
 
 export const WorkflowStepTrigger = ({ selectedTrigger, onSelect }: WorkflowStepTriggerProps) => {
   const { t } = useTranslation('automations');
-  const connectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
+  // Event triggers (the "When something happens" path) ship behind their
+  // own flag so we can release Scheduling without releasing Triggers.
+  // SCHEDULING gates the entire /automations route; this gates the event
+  // option specifically. Pipedream-backed source availability is a further
+  // step inside the picker, gated by PIPEDREAM_INTEGRATIONS.
+  const triggersEnabled = getFlag('EVENT_TRIGGERS');
 
   return (
     <div className="workflow-step">
@@ -39,12 +44,12 @@ export const WorkflowStepTrigger = ({ selectedTrigger, onSelect }: WorkflowStepT
 
         {/* When something happens — event-based */}
         <div
-          className={`workflow-trigger-card ${selectedTrigger === 'event' ? 'workflow-trigger-card--selected' : ''} ${!connectorsEnabled ? 'workflow-trigger-card--disabled' : ''}`}
-          onClick={() => connectorsEnabled && onSelect('event')}
+          className={`workflow-trigger-card ${selectedTrigger === 'event' ? 'workflow-trigger-card--selected' : ''} ${!triggersEnabled ? 'workflow-trigger-card--disabled' : ''}`}
+          onClick={() => triggersEnabled && onSelect('event')}
           role="button"
-          tabIndex={connectorsEnabled ? 0 : -1}
-          onKeyDown={(e) => e.key === 'Enter' && connectorsEnabled && onSelect('event')}
-          aria-disabled={!connectorsEnabled}
+          tabIndex={triggersEnabled ? 0 : -1}
+          onKeyDown={(e) => e.key === 'Enter' && triggersEnabled && onSelect('event')}
+          aria-disabled={!triggersEnabled}
         >
           <div className="workflow-trigger-card__icon">
             <Zap size={32} />
@@ -56,9 +61,9 @@ export const WorkflowStepTrigger = ({ selectedTrigger, onSelect }: WorkflowStepT
         </div>
       </div>
 
-      {!connectorsEnabled && (
+      {!triggersEnabled && (
         <Alert variant="light" className="mt-3 small border">
-          {t('trigger.event.connectorsDisabled')}
+          {t('trigger.event.triggersDisabled')}
         </Alert>
       )}
     </div>

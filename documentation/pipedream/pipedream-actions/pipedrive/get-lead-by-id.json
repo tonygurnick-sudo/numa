@@ -1,0 +1,27 @@
+{
+  "name": "Get Lead by ID",
+  "description": "Get a lead by its ID. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#getLead)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "pipedrive-get-lead-by-id",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "leadId",
+      "type": "string",
+      "label": "Lead ID",
+      "description": "The ID of the lead to get",
+      "optional": false,
+      "remoteOptions": true
+    }
+  ]
+}

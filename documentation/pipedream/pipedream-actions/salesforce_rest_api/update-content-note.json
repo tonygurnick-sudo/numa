@@ -1,0 +1,69 @@
+{
+  "name": "Update Content Note",
+  "description": "Updates an enhanced Salesforce content note, which can include formatted text and is part of Salesforce Files. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_contentnote.htm) and [Set Up Notes](https://help.salesforce.com/s/articleView?id=sales.notes_admin_setup.htm&type=5).",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "salesforce_rest_api-update-content-note",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "contentNoteId",
+      "type": "string",
+      "label": "Content Note ID",
+      "description": "The ID of the content note to update.",
+      "remoteOptions": true
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_contentnote.htm) for more information on available fields."
+    },
+    {
+      "name": "OwnerId",
+      "type": "string",
+      "label": "Owner ID",
+      "description": "ID of the user who owns the note.",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "Title",
+      "type": "string",
+      "label": "Title",
+      "description": "Title of the note.",
+      "optional": true
+    },
+    {
+      "name": "Content",
+      "type": "string",
+      "label": "Content",
+      "description": "The content or body of the note, which can include properly formatted HTML or plain text.",
+      "optional": true
+    },
+    {
+      "name": "IsReadOnly",
+      "type": "boolean",
+      "label": "Read Only",
+      "description": "Indicates whether the note is read only.",
+      "optional": true
+    },
+    {
+      "name": "useAdvancedProps",
+      "type": "boolean",
+      "label": "See All Props",
+      "description": "Set to true to see all available props for this object.",
+      "optional": true,
+      "reloadProps": true
+    }
+  ]
+}

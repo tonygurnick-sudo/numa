@@ -1,0 +1,34 @@
+{
+  "name": "Update Email Template",
+  "description": "Updates an email template. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_update_fields.htm)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "salesforce_rest_api-update-email-template",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "recordId",
+      "type": "string",
+      "label": "Record ID",
+      "description": "The email template to update.",
+      "remoteOptions": true
+    },
+    {
+      "name": "fieldsToUpdate",
+      "type": "string[]",
+      "label": "Fields to Update",
+      "description": "Select the field(s) you want to update for this record.",
+      "remoteOptions": true,
+      "reloadProps": true
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "name": "Verify Slack Signature",
+  "description": "Verifying requests from Slack, slack signs its requests using a secret that's unique to your app. [See the documentation](https://api.slack.com/authentication/verifying-requests-from-slack)",
+  "component_type": "action",
+  "version": "0.0.17",
+  "key": "slack-verify-slack-signature",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "slack",
+      "type": "app",
+      "app": "slack"
+    },
+    {
+      "name": "slackSigningSecret",
+      "type": "string",
+      "label": "Signing Secret",
+      "description": "Slack [Signing Secret](https://api.slack.com/authentication/verifying-requests-from-slack#:~:text=Slack%20Signing%20Secret%2C%20available%20in%20the%20app%20admin%20panel%20under%20Basic%20Info.), available in the app admin panel under Basic Info.",
+      "secret": true
+    },
+    {
+      "name": "slackSignature",
+      "type": "string",
+      "label": "X-Slack-Signature",
+      "description": "Slack signature (from X-Slack-Signature header)."
+    },
+    {
+      "name": "slackRequestTimestamp",
+      "type": "string",
+      "label": "X-Slack-Request-Timestamp",
+      "description": "Slack request timestamp (from X-Slack-Request-Timestamp header)."
+    },
+    {
+      "name": "requestBody",
+      "type": "any",
+      "label": "Request Body",
+      "description": "The body of the request to be verified."
+    }
+  ]
+}

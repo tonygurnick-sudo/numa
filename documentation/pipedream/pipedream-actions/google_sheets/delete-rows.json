@@ -1,0 +1,56 @@
+{
+  "name": "Delete Rows",
+  "description": "Deletes the specified rows from a spreadsheet. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#deletedimensionrequest)",
+  "component_type": "action",
+  "version": "0.0.14",
+  "key": "google_sheets-delete-rows",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "The drive containing the spreadsheet to edit. If you are connected with any [Google Shared Drives](https://support.google.com/a/users/answer/9310351), you can select it here.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "startIndex",
+      "type": "integer",
+      "label": "Start Index",
+      "description": "Row number of the start (inclusive) of the range of rows to delete"
+    },
+    {
+      "name": "endIndex",
+      "type": "integer",
+      "label": "End Index",
+      "description": "Row number of the end (exclusive) of the range of rows to delete",
+      "optional": true
+    }
+  ]
+}

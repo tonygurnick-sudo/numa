@@ -1,0 +1,51 @@
+{
+  "name": "Create Communication",
+  "description": "Create a WhatsApp, LinkedIn, or SMS message. [See the documentation](https://developers.hubspot.com/beta-docs/reference/api/crm/engagements/communications/v3#post-%2Fcrm%2Fv3%2Fobjects%2Fcommunications)",
+  "component_type": "action",
+  "version": "0.0.21",
+  "key": "hubspot-create-communication",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot",
+      "reloadProps": true
+    },
+    {
+      "name": "toObjectType",
+      "type": "string",
+      "label": "Associated Object Type",
+      "description": "Type of object the communication is being associated with",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "toObjectId",
+      "type": "string",
+      "label": "Associated Object",
+      "description": "ID of object the communication is being associated with",
+      "useQuery": true,
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "associationType",
+      "type": "integer",
+      "label": "Association Type",
+      "description": "A unique identifier to indicate the association type between the communication and the other object",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "objectProperties",
+      "type": "object",
+      "label": "Object Properties",
+      "description": "Enter the `communication` properties as a JSON object"
+    }
+  ]
+}

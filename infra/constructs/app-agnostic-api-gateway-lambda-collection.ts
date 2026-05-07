@@ -1249,6 +1249,66 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'POST', path: 'webhooks/connector-events/{secret}' },
     });
 
+    // Pipedream Event Receiver (webhook endpoint — unauthenticated, validated
+    // by per-client URL secret + per-trigger HMAC signature).
+    //
+    // Pipedream delivers events here when any deployed trigger (dc_xxx) fires.
+    // The receiver looks up the schedule via the deployed-trigger-id-index GSI
+    // on the agent-schedules table, verifies the HMAC against the signing key
+    // stored on the schedule record, then persists the event and emits to the
+    // shared connector-events EventBridge bus (where the dispatcher picks it up).
+    //
+    // See dev-notes/tasks/pipedream-triggers/PLAN.md §3.3 for the design rationale.
+    const pipedreamEventReceiverEnv = {
+      CLIENT_NAME: props.clientName,
+      AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
+      AGENT_SCHEDULES_DC_GSI_NAME: 'deployed-trigger-id-index',
+      CONNECTOR_EVENTS_TABLE_NAME: props.connectorEventsTableName,
+      OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+      EVENT_BUS_NAME: props.connectorEventBusName,
+      // Same shared secret as the Gmail receiver — defence-in-depth path
+      // component. Real auth is the per-trigger HMAC verified inside the lambda.
+      WEBHOOK_SECRET: props.cloudfrontSharedSecret,
+    } as Record<string, string>;
+
+    const pipedreamEventReceiverPolicy = [
+      {
+        // Schedule lookup — Query the GSI; need both the table and the index ARN.
+        effect: 'Allow',
+        actions: ['dynamodb:Query'],
+        resources: [
+          `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/deployed-trigger-id-index`,
+        ],
+      },
+      {
+        // Event persistence — same connector-events table the Gmail receiver uses.
+        effect: 'Allow',
+        actions: ['dynamodb:PutItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.connectorEventsTableName}`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['s3:PutObject'],
+        resources: [`${props.outputsBucketArn}/connector-events/*`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['events:PutEvents'],
+        resources: [`arn:aws:events:*:*:event-bus/${props.connectorEventBusName}`],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'pipedream-event-receiver', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/pipedream-event-receiver',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: pipedreamEventReceiverEnv,
+      additionalPolicyStatements: pipedreamEventReceiverPolicy,
+      route: { verb: 'POST', path: 'webhooks/pipedream-events/{secret}' },
+    });
+
     // Gmail Watch Manager (renews Gmail push notification watches every 6 days)
     const gmailWatchManagerEnv = {
       CLIENT_NAME: props.clientName,
@@ -1614,6 +1674,9 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
         AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
         AGENT_SCHEDULE_RUNNER_FUNCTION_NAME: this.agentScheduleRunnerLambda.functionName,
+        // Used by the Pipedream branch to fetch the full event payload that
+        // the receiver lambda persisted under connector-events/pipedream/...
+        OUTPUTS_BUCKET_NAME: props.outputsBucketName,
       },
       additionalPolicyStatements: [
         {
@@ -1638,6 +1701,12 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           effect: 'Allow',
           actions: ['lambda:InvokeFunction'],
           resources: [this.agentScheduleRunnerLambda.arn],
+        },
+        {
+          // Read the full Pipedream event payload that the receiver wrote.
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`${props.outputsBucketArn}/connector-events/*`],
         },
       ],
     });
@@ -1720,6 +1789,13 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ...(props.globalSchedulingMinIntervalMinutes != null && {
         GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: String(props.globalSchedulingMinIntervalMinutes),
       }),
+      // Pipedream-trigger lifecycle. Both empty when integrations are disabled
+      // for this client; the lambda gracefully rejects pipedream-trigger
+      // schedule creates in that case.
+      ...(props.pipedreamRelayLambdaArn && {
+        PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn,
+        PIPEDREAM_WEBHOOK_URL: `https://${props.domainName}/api/webhooks/pipedream-events/${props.cloudfrontSharedSecret}`,
+      }),
     } as Record<string, string>;
 
     const agentSchedulesPolicy = [
@@ -1757,6 +1833,18 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         actions: ['dynamodb:GetItem'],
         resources: [`arn:aws:dynamodb:*:*:table/${props.schedulingSettingsTableName}`],
       },
+      // Pipedream relay invocation for trigger lifecycle. When the relay isn't
+      // deployed, this resource list is empty and the lambda gracefully
+      // rejects deploy attempts at runtime.
+      ...(props.pipedreamRelayLambdaArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['lambda:InvokeFunction'],
+              resources: [props.pipedreamRelayLambdaArn],
+            },
+          ]
+        : []),
     ];
 
     this.addLambdaFunction(this, 'agent-schedules', {
@@ -2433,4 +2521,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   recoveryBucketName?: string;
   /** Recovery bucket ARN for DR stats endpoint IAM policy. */
   recoveryBucketArn?: string;
+  /** Pipedream relay lambda ARN — used by agent-schedules to deploy/update/delete
+   *  Pipedream-trigger schedules. Optional because the relay is only created
+   *  when PIPEDREAM_INTEGRATIONS is enabled. */
+  pipedreamRelayLambdaArn?: string;
 }

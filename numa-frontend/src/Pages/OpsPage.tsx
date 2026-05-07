@@ -42,16 +42,16 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
   const {
     config,
     configLoading,
-    teamLoading,
-    teamData,
-    teams,
+    boardLoading,
+    boardData,
+    boards,
     topView,
     setTopView,
     activeZoneId,
-    selectTeam,
+    selectBoard,
     setBoardViewMode,
-    refreshTeam,
-    refreshTeams,
+    refreshBoard,
+    refreshBoards,
   } = useOps();
 
   const canManage = Boolean(user?.features?.includes('manageUsers'));
@@ -102,13 +102,13 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
               setGlobalSettingsTab(tab);
               setShowGlobalSettings(true);
             }}
-            onOpenBoardSettings={(teamId) => {
-              selectTeam(teamId);
+            onOpenBoardSettings={(boardId) => {
+              selectBoard(boardId);
               setShowBoardSettings(true);
             }}
-            onNavigateToBoard={(teamId) => {
-              selectTeam(teamId);
-              setBoardViewMode('singleTeam');
+            onNavigateToBoard={(boardId) => {
+              selectBoard(boardId);
+              setBoardViewMode('singleBoard');
               setTopView('board');
             }}
           />
@@ -119,8 +119,8 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
           onHide={() => setShowCreateBoard(false)}
           onCreated={(team) => {
             setShowCreateBoard(false);
-            refreshTeams();
-            selectTeam(team.id);
+            refreshBoards();
+            selectBoard(team.id);
           }}
         />
         <BoardSettingsModal
@@ -128,7 +128,7 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
           onHide={() => setShowBoardSettings(false)}
           onSaved={() => {
             setShowBoardSettings(false);
-            refreshTeam();
+            refreshBoard();
           }}
         />
         <GlobalSettingsModal
@@ -201,8 +201,8 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
 
   // ── Board view (default) — unified for both singleTeam and allTeams ──
 
-  // Empty state: no teams at all → welcome screen
-  if (teams.length === 0) {
+  // Empty state: no boards at all → welcome screen
+  if (boards.length === 0) {
     return (
       <>
         <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
@@ -251,8 +251,8 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
           onHide={() => setShowCreateBoard(false)}
           onCreated={(team) => {
             setShowCreateBoard(false);
-            refreshTeams();
-            selectTeam(team.id);
+            refreshBoards();
+            selectBoard(team.id);
           }}
         />
       </>
@@ -260,7 +260,7 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
   }
 
   // Loading team data
-  if (teamLoading && !teamData) {
+  if (boardLoading && !boardData) {
     return (
       <>
         <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
@@ -273,7 +273,7 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
   }
 
   // Determine zone type for content rendering
-  const activeZone = teamData?.zones?.find((z) => z.id === activeZoneId);
+  const activeZone = boardData?.zones?.find((z) => z.id === activeZoneId);
   const zoneType = activeZone?.zoneType ?? 'board';
 
   return (
@@ -292,7 +292,7 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
  */
 const DeepLinkHandler: React.FC = () => {
   const { numaGet } = useNumaRequest();
-  const { tickets, refreshTickets, teamLoading } = useOps();
+  const { tickets, refreshTickets, boardLoading } = useOps();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [ticketId, setTicketId] = useState<string | null>(null);
@@ -324,7 +324,7 @@ const DeepLinkHandler: React.FC = () => {
 
     // If local isn't found, we should fall back to the API.
     // However, if the current board's tickets are still loading, wait before trying the API fallback.
-    if (teamLoading) return;
+    if (boardLoading) return;
 
     // Tickets have finished loading but this one isn't in them — try API (different team)
     processingRef.current = displayId;
@@ -339,7 +339,7 @@ const DeepLinkHandler: React.FC = () => {
       .catch((err) => {
         console.error('[OpsPage] Failed to resolve ticket deep link:', err);
       });
-  }, [tickets, numaGet, searchParams, setSearchParams, teamLoading]);
+  }, [tickets, numaGet, searchParams, setSearchParams, boardLoading]);
 
   return (
     <TicketDetailModal

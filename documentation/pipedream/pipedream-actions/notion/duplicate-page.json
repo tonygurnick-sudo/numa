@@ -1,0 +1,42 @@
+{
+  "name": "Duplicate Page",
+  "description": "Create a new page copied from an existing page block. [See the documentation](https://developers.notion.com/reference/post-page)",
+  "component_type": "action",
+  "version": "0.0.23",
+  "key": "notion-duplicate-page",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "notion",
+      "type": "app",
+      "app": "notion"
+    },
+    {
+      "name": "pageId",
+      "type": "string",
+      "label": "Page ID",
+      "description": "Select a page to copy or provide a page ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "label": "Page Title",
+      "description": "The new page title",
+      "optional": true
+    },
+    {
+      "name": "parentId",
+      "type": "string",
+      "label": "Parent Page ID",
+      "description": "Select a parent page for the new page being created, or provide the ID of a parent page",
+      "useQuery": true,
+      "remoteOptions": true
+    }
+  ]
+}

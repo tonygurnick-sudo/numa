@@ -1,0 +1,260 @@
+{
+  "name": "Create Campaign",
+  "description": "Creates a new campaign draft. [See docs here](https://mailchimp.com/developer/marketing/api/campaigns/add-campaign/)",
+  "component_type": "action",
+  "version": "0.2.3",
+  "key": "mailchimp-create-campaign",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "mailchimp",
+      "type": "app",
+      "app": "mailchimp"
+    },
+    {
+      "name": "type",
+      "label": "Type",
+      "type": "string",
+      "description": "There are four types of campaigns you can create in Mailchimp. A/B Split campaigns have been deprecated and variate campaigns should be used instead.",
+      "options": ["regular", "plaintext", "absplit", "rss", "variate"]
+    },
+    {
+      "name": "listId",
+      "type": "string",
+      "label": "List Id",
+      "description": "The unique ID of the list",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "savedSegmentId",
+      "label": "Saved segment ID",
+      "type": "integer",
+      "description": "The ID for an existing saved segment.",
+      "optional": true
+    },
+    {
+      "name": "prebuiltSegmentId",
+      "label": "Prebuilt segment ID",
+      "type": "string",
+      "description": "The prebuilt segment ID, if a prebuilt segment has been designated for this campaign.",
+      "optional": true
+    },
+    {
+      "name": "segmentMatch",
+      "label": "Segment match",
+      "type": "string",
+      "description": "Segment match type.",
+      "optional": true,
+      "options": ["any", "all"]
+    },
+    {
+      "name": "segmentConditions",
+      "label": "Segment conditions",
+      "type": "any",
+      "description": "Segment match conditions.",
+      "optional": true
+    },
+    {
+      "name": "subjectLine",
+      "label": "Subject line",
+      "type": "string",
+      "description": "The subject line for the campaign.",
+      "optional": true
+    },
+    {
+      "name": "previewText",
+      "label": "Preview text",
+      "type": "string",
+      "description": "The preview text for the campaign.",
+      "optional": true
+    },
+    {
+      "name": "title",
+      "label": "Title",
+      "type": "string",
+      "description": "The title of the campaign.",
+      "optional": true
+    },
+    {
+      "name": "fromName",
+      "label": "From name",
+      "type": "string",
+      "description": "The 'from' name on the campaign (not an email address).",
+      "optional": true
+    },
+    {
+      "name": "replyTo",
+      "label": "Reply to",
+      "type": "string",
+      "description": "The reply-to email address for the campaign. Note: while this field is not required for campaign creation, it is required for sending.",
+      "optional": true
+    },
+    {
+      "name": "useConversation",
+      "label": "Use conversation",
+      "type": "boolean",
+      "description": "Use Mailchimp Conversation feature to manage out-of-office replies.",
+      "optional": true
+    },
+    {
+      "name": "toName",
+      "label": "To name",
+      "type": "string",
+      "description": "The campaign's custom to name.",
+      "optional": true
+    },
+    {
+      "name": "folderId",
+      "label": "Folder ID",
+      "type": "string",
+      "description": "If the campaign is listed in a folder, the ID for that folder.",
+      "optional": true
+    },
+    {
+      "name": "authenticate",
+      "label": "Authenticate",
+      "type": "boolean",
+      "description": "Whether Mailchimp authenticated the campaign. Defaults to true.",
+      "optional": true
+    },
+    {
+      "name": "autoFooter",
+      "label": "Auto footer",
+      "type": "boolean",
+      "description": "Automatically append Mailchimp's default footer to the campaign.",
+      "optional": true
+    },
+    {
+      "name": "inlineCss",
+      "label": "Inline css",
+      "type": "boolean",
+      "description": "Automatically inline the CSS included with the campaign content.",
+      "optional": true
+    },
+    {
+      "name": "autoTweet",
+      "label": "Auto tweet",
+      "type": "boolean",
+      "description": "Automatically tweet a link to the campaign archive page when the campaign is sent.",
+      "optional": true
+    },
+    {
+      "name": "autoFbPost",
+      "label": "Auto fb post",
+      "type": "any",
+      "description": "An array of Facebook page ID to auto-post to.",
+      "optional": true
+    },
+    {
+      "name": "fbComments",
+      "label": "FB comments",
+      "type": "boolean",
+      "description": "Allows Facebook comments on the campaign (also force-enables the Campaign Archive toolbar). Defaults to true.",
+      "optional": true
+    },
+    {
+      "name": "templateId",
+      "label": "Template ID",
+      "type": "integer",
+      "description": "The ID of the template to use.",
+      "optional": true
+    },
+    {
+      "name": "opens",
+      "label": "Opens",
+      "type": "boolean",
+      "description": "Whether to track opens. Defaults to true. Cannot be set to false for variate campaigns.",
+      "optional": true
+    },
+    {
+      "name": "htmlClicks",
+      "label": "HTML clicks",
+      "type": "boolean",
+      "description": "Whether to track clicks in the HTML version of the campaign. Defaults to true. Cannot be set to false for variate campaigns.",
+      "optional": true
+    },
+    {
+      "name": "textClicks",
+      "label": "Text clicks",
+      "type": "boolean",
+      "description": "Whether to track clicks in the plain-text version of the campaign. Defaults to true. Cannot be set to false for variate campaigns.",
+      "optional": true
+    },
+    {
+      "name": "goalTracking",
+      "label": "Goal tracking",
+      "type": "boolean",
+      "description": "Whether to enable Goal tracking.",
+      "optional": true
+    },
+    {
+      "name": "ecomm360",
+      "label": "E-commerce tracking",
+      "type": "boolean",
+      "description": "Whether to enable eCommerce360 tracking.",
+      "optional": true
+    },
+    {
+      "name": "googleAnalytics",
+      "label": "Google analytics",
+      "type": "string",
+      "description": "The custom slug for Google Analytics tracking (max of 50 bytes).",
+      "optional": true
+    },
+    {
+      "name": "clicktale",
+      "label": "Clicktale",
+      "type": "string",
+      "description": "The custom slug for ClickTale tracking (max of 50 bytes).",
+      "optional": true
+    },
+    {
+      "name": "salesforceCampaign",
+      "label": "Salesforce campaign",
+      "type": "boolean",
+      "description": "Create a campaign in a connected Salesforce account.",
+      "optional": true
+    },
+    {
+      "name": "salesforceNotes",
+      "label": "Salesforce notes",
+      "type": "boolean",
+      "description": "Update contact notes for a campaign based on subscriber email addresses.",
+      "optional": true
+    },
+    {
+      "name": "capsuleNotes",
+      "label": "Capsule notes",
+      "type": "boolean",
+      "description": "Update contact notes for a campaign based on subscriber email addresses. Must be using Mailchimp's built-in Capsule integration.",
+      "optional": true
+    },
+    {
+      "name": "socialImageUrl",
+      "label": "Social image url",
+      "type": "string",
+      "description": "The url for the header image for the preview card.",
+      "optional": true
+    },
+    {
+      "name": "socialDescritpion",
+      "label": "Social description",
+      "type": "string",
+      "description": "A short summary of the campaign to display.",
+      "optional": true
+    },
+    {
+      "name": "socialTitle",
+      "label": "Social title",
+      "type": "string",
+      "description": "The title for the preview card. Typically the subject line of the campaign.",
+      "optional": true,
+      "options": ["active", "inactive"]
+    }
+  ]
+}

@@ -9,6 +9,26 @@ import { formatRelativeTime } from '../../utils/automationUtils';
 import type { DerivedAutomationStatus } from '../../utils/automationUtils';
 import type { AgentSchedule } from '../../types/agentSchedules';
 import type { AgentSummary } from '../../types/agents';
+import {
+  summarizePipedreamConfiguredProps,
+  summarizePipedreamTrigger,
+} from '../PipedreamTriggers/pipedreamTriggerLabels';
+import { findPipedreamTriggerComponent } from '../../../../lib/pipedream-trigger-apps';
+
+const PipedreamTriggerChip = ({ appSlug, componentId }: { appSlug: string; componentId: string }) => {
+  const { t } = useTranslation('automations');
+  const summary = summarizePipedreamTrigger(appSlug, componentId, t);
+  return (
+    <span className="d-flex align-items-center gap-1 text-muted">
+      {summary.iconSrc ? (
+        <img src={summary.iconSrc} alt="" width={12} height={12} />
+      ) : (
+        <i className={`${summary.fallbackIcon} small`} />
+      )}
+      <span>{summary.combined}</span>
+    </span>
+  );
+};
 
 type AutomationPipelineCardProps = {
   automation: AgentSchedule;
@@ -114,10 +134,12 @@ export const AutomationPipelineCard = ({
                   <Pencil size={14} className="me-2" />
                   {t('actions.edit')}
                 </Dropdown.Item>
-                <Dropdown.Item onClick={() => onRunNow(automation)} disabled={isRunning}>
-                  <Play size={14} className="me-2" />
-                  {isRunning ? t('actions.running') : t('actions.runNow')}
-                </Dropdown.Item>
+                {!isEventTrigger && (
+                  <Dropdown.Item onClick={() => onRunNow(automation)} disabled={isRunning}>
+                    <Play size={14} className="me-2" />
+                    {isRunning ? t('actions.running') : t('actions.runNow')}
+                  </Dropdown.Item>
+                )}
                 <Dropdown.Divider />
                 <Dropdown.Item className="text-danger" onClick={() => onDelete(automation)}>
                   <Trash2 size={14} className="me-2" />
@@ -138,14 +160,51 @@ export const AutomationPipelineCard = ({
             <div className="d-flex flex-column" style={{ fontSize: '0.8rem', lineHeight: 1.3 }}>
               {isEventTrigger ? (
                 <>
-                  <span className="text-muted">{t('list.triggerEmail')}</span>
-                  {automation.trigger?.filters && automation.trigger.filters.length > 0 && (
+                  {automation.trigger?.source === 'pipedream' ? (
+                    <>
+                      <PipedreamTriggerChip
+                        appSlug={automation.trigger.app_slug}
+                        componentId={automation.trigger.component_id}
+                      />
+                      {(() => {
+                        const pdTrigger = automation.trigger;
+                        const found = findPipedreamTriggerComponent(pdTrigger.app_slug, pdTrigger.component_id);
+                        const forced = found ? Object.keys(found.trigger.restraints.forced_props) : [];
+                        const rows = summarizePipedreamConfiguredProps({
+                          componentId: pdTrigger.component_id,
+                          appSlug: pdTrigger.app_slug,
+                          configuredProps: pdTrigger.configured_props,
+                          configuredPropLabels: pdTrigger.configured_prop_labels,
+                          forcedPropNames: forced,
+                          t,
+                        });
+                        if (rows.length === 0) return null;
+                        return (
+                          <div
+                            className="d-flex flex-column gap-0 text-muted"
+                            style={{ fontSize: '0.7rem', lineHeight: 1.3 }}
+                          >
+                            {rows.slice(0, 3).map((r) => (
+                              <span key={r.propName}>
+                                <span className="fw-medium">{r.label}:</span> {r.value}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <span className="text-muted">{t('list.triggerEmail')}</span>
+                  )}
+                  {automation.trigger?.source === 'gmail' && automation.trigger.filters.length > 0 && (
                     <div className="d-flex flex-column gap-0" style={{ fontSize: '0.7rem' }}>
                       {automation.trigger.filters.slice(0, 3).map((f, i) => (
                         <span key={i} className="text-muted">
                           {i > 0 && (
                             <span className="fw-medium me-1">
-                              {automation.trigger!.filter_logic === 'any' ? t('list.filterOr') : t('list.filterAnd')}
+                              {automation.trigger!.source === 'gmail' && automation.trigger.filter_logic === 'any'
+                                ? t('list.filterOr')
+                                : t('list.filterAnd')}
                             </span>
                           )}
                           {t(`trigger.event.builder.fields.${f.field}`)} {t(`trigger.event.builder.ops.${f.op}`)}{' '}

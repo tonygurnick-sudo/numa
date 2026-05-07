@@ -1,0 +1,49 @@
+{
+  "name": "Delete Conditional Format Rule",
+  "description": "Remove conditional formatting rule by index. [See the documentation](https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/request#DeleteConditionalFormatRuleRequest)",
+  "component_type": "action",
+  "version": "0.0.1",
+  "key": "google_sheets-delete-conditional-format-rule",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "googleSheets",
+      "type": "app",
+      "app": "google_sheets"
+    },
+    {
+      "name": "drive",
+      "type": "string",
+      "label": "Drive",
+      "description": "Defaults to `My Drive`. To select a [Shared Drive](https://support.google.com/a/users/answer/9310351) instead, select it from this list.",
+      "optional": true,
+      "default": "My Drive",
+      "remoteOptions": true
+    },
+    {
+      "name": "sheetId",
+      "type": "string",
+      "label": "Spreadsheet ID",
+      "description": "Select a spreadsheet or provide a spreadsheet ID",
+      "useQuery": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "worksheetId",
+      "type": "integer",
+      "label": "Worksheet ID",
+      "description": "Select a worksheet or provide a worksheet ID",
+      "remoteOptions": true
+    },
+    {
+      "name": "index",
+      "type": "integer",
+      "label": "Index",
+      "description": "The zero-based index of the rule"
+    }
+  ]
+}

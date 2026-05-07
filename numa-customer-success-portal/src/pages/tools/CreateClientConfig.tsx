@@ -105,6 +105,13 @@ export default function CreateClientConfig() {
   const [numaWorkspaceChat, setNumaWorkspaceChat] = useState(defaults.numaWorkspaceChat);
   const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState(defaults.workspaceChatModelSelection);
   const [numaOps, setNumaOps] = useState(defaults.numaOps);
+  const [numaDropZones, setNumaDropZones] = useState(defaults.numaDropZones);
+  const [numaSharing, setNumaSharing] = useState(defaults.numaSharing);
+  const [ssoEnabled, setSsoEnabled] = useState(defaults.ssoEnabled);
+  const [ssoEnterprise, setSsoEnterprise] = useState(defaults.ssoEnterprise);
+  const [developerMode, setDeveloperMode] = useState(defaults.developerMode);
+  const [secretsVaultEnabled, setSecretsVaultEnabled] = useState(defaults.secretsVaultEnabled);
+  const [oauthIntegrationsEnabled, setOauthIntegrationsEnabled] = useState(defaults.oauthIntegrationsEnabled);
   const [v2Apps, setV2Apps] = useState(defaults.v2Apps);
   const [agentCoreRegion, setAgentCoreRegion] = useState('');
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES));
@@ -202,6 +209,14 @@ export default function CreateClientConfig() {
     if (!numaWorkspaceChat) minimal['numaWorkspaceChat'] = false;
     if (workspaceChatModelSelection) minimal['workspaceChatModelSelection'] = true;
     if (numaOps) minimal['numaOps'] = true;
+    if (numaDropZones !== defaults.numaDropZones) minimal['numaDropZones'] = numaDropZones;
+    if (numaSharing !== defaults.numaSharing) minimal['numaSharing'] = numaSharing;
+    if (ssoEnabled !== defaults.ssoEnabled) minimal['ssoEnabled'] = ssoEnabled;
+    if (ssoEnterprise !== defaults.ssoEnterprise) minimal['ssoEnterprise'] = ssoEnterprise;
+    if (developerMode !== defaults.developerMode) minimal['developerMode'] = developerMode;
+    if (secretsVaultEnabled !== defaults.secretsVaultEnabled) minimal['secretsVaultEnabled'] = secretsVaultEnabled;
+    if (oauthIntegrationsEnabled !== defaults.oauthIntegrationsEnabled)
+      minimal['oauthIntegrationsEnabled'] = oauthIntegrationsEnabled;
     if (v2Apps) minimal['v2Apps'] = true;
     if (agentCoreRegion && agentCoreRegion !== region) minimal['agentCoreRegion'] = agentCoreRegion;
 
@@ -327,12 +342,9 @@ export default function CreateClientConfig() {
                         label="Development Instance"
                         value={devInstance}
                         defaultValue={defaults.devInstance}
-                        onChange={(v: boolean) => {
-                          setDevInstance(v);
-                          if (v && allApps === false) setAllApps(true);
-                        }}
+                        onChange={setDevInstance}
                         type="switch"
-                        helpText="Mark as development/demo environment"
+                        helpText="Mark as development/demo environment. Independent from Deploy All Apps."
                       />
                     </Col>
                   </Row>
@@ -340,16 +352,14 @@ export default function CreateClientConfig() {
                   {/* App Configuration Row */}
                   <Row className="mb-4">
                     <Col md={6}>
-                      {devInstance && (
-                        <ConfigField
-                          label="All Apps (Dev)"
-                          value={allApps}
-                          defaultValue={true}
-                          onChange={setAllApps}
-                          type="switch"
-                          helpText="Enable all applications when using a development instance"
-                        />
-                      )}
+                      <ConfigField
+                        label="Deploy All Apps"
+                        value={allApps}
+                        defaultValue={defaults.allApps}
+                        onChange={setAllApps}
+                        type="switch"
+                        helpText="Deploy every app in the library (recommended for dev/demo stacks). Independent from Development Instance."
+                      />
                       <ConfigField
                         label="All Production Apps"
                         value={allProdApps}
@@ -364,7 +374,7 @@ export default function CreateClientConfig() {
                           </Form.Label>
                           {allApps && (
                             <Alert variant="info" className="py-2 px-3 mb-2 small">
-                              All apps are automatically enabled when 'All Apps (Dev)' is selected
+                              All apps are automatically enabled when 'Deploy All Apps' is selected
                             </Alert>
                           )}
                           {allProdApps && !allApps && (
@@ -494,6 +504,62 @@ export default function CreateClientConfig() {
                         onChange={setNumaOps}
                         type="switch"
                         helpText="Enable Numa Ops (work management, kanban boards, CRM)"
+                      />
+                      <ConfigField
+                        label="Drop Zones"
+                        value={numaDropZones}
+                        defaultValue={defaults.numaDropZones}
+                        onChange={setNumaDropZones}
+                        type="switch"
+                        helpText="Allow users to create shared upload folders for external users"
+                      />
+                      <ConfigField
+                        label="Sharing"
+                        value={numaSharing}
+                        defaultValue={defaults.numaSharing}
+                        onChange={setNumaSharing}
+                        type="switch"
+                        helpText="Allow users to share documents externally for Q&A"
+                      />
+                      <ConfigField
+                        label="SSO Self-Service"
+                        value={ssoEnabled}
+                        defaultValue={defaults.ssoEnabled}
+                        onChange={setSsoEnabled}
+                        type="switch"
+                        helpText="Show SSO admin tab so admins can configure SAML 2.0 identity providers"
+                      />
+                      <ConfigField
+                        label="SSO Enterprise (SCIM/OIDC)"
+                        value={ssoEnterprise}
+                        defaultValue={defaults.ssoEnterprise}
+                        onChange={setSsoEnterprise}
+                        type="switch"
+                        helpText="Group mapping, OIDC, SSO-only, SCIM. Requires SSO Self-Service enabled."
+                      />
+                      <ConfigField
+                        label="Developer Mode"
+                        value={developerMode}
+                        defaultValue={defaults.developerMode}
+                        onChange={setDeveloperMode}
+                        type="switch"
+                        helpText="Show power-user actions: file system drill-down, metadata inspection, debug views"
+                      />
+                      <ConfigField
+                        label="Secrets Vault"
+                        value={secretsVaultEnabled}
+                        defaultValue={defaults.secretsVaultEnabled}
+                        onChange={setSecretsVaultEnabled}
+                        type="switch"
+                        helpText="Secure credential storage for the workspace"
+                      />
+                      <ConfigField
+                        label="OAuth Cloud Storage"
+                        value={oauthIntegrationsEnabled}
+                        defaultValue={defaults.oauthIntegrationsEnabled}
+                        onChange={setOauthIntegrationsEnabled}
+                        type="switch"
+                        helpText="Connect Google Drive / OneDrive / Dropbox accounts"
                       />
                       <ConfigField
                         label="V2 Apps (not ready for customers)"

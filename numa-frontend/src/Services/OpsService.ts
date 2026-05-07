@@ -1,11 +1,11 @@
 import type {
   OpsConfigResponse,
   TicketType,
-  Team,
-  TeamResponse,
-  TeamSummary,
-  TeamSummaryListResponse,
-  CreateTeamPayload,
+  Board,
+  BoardResponse,
+  BoardSummary,
+  BoardSummaryListResponse,
+  CreateBoardPayload,
   Ticket,
   TicketListResponse,
   TicketResponse,
@@ -137,57 +137,57 @@ export const deleteField = async (numaDelete: NumaDelete, fieldId: string): Prom
   await numaDelete(`${BASE_URL}/config/fields/${encodeURIComponent(fieldId)}`);
 };
 
-// ─── Teams ────────────────────────────────────────────────────────────────
+// ─── Boards ───────────────────────────────────────────────────────────────
 
-export const listTeams = async (numaGet: NumaGet): Promise<TeamSummary[]> => {
-  const response = (await numaGet(`${BASE_URL}/teams`)) as TeamSummaryListResponse;
-  return response?.teams ?? [];
+export const listBoards = async (numaGet: NumaGet): Promise<BoardSummary[]> => {
+  const response = (await numaGet(`${BASE_URL}/boards`)) as BoardSummaryListResponse;
+  return response?.boards ?? [];
 };
 
-export const getTeam = async (numaGet: NumaGet, teamId: string): Promise<TeamResponse> => {
-  const response = (await numaGet(`${BASE_URL}/teams/${encodeURIComponent(teamId)}`)) as TeamResponse;
+export const getBoard = async (numaGet: NumaGet, boardId: string): Promise<BoardResponse> => {
+  const response = (await numaGet(`${BASE_URL}/boards/${encodeURIComponent(boardId)}`)) as BoardResponse;
   return response;
 };
 
-export const createTeam = async (numaPost: NumaPost, payload: CreateTeamPayload): Promise<Team> => {
-  const response = (await numaPost(`${BASE_URL}/teams`, payload)) as { team: Team };
-  return response.team;
+export const createBoard = async (numaPost: NumaPost, payload: CreateBoardPayload): Promise<Board> => {
+  const response = (await numaPost(`${BASE_URL}/boards`, payload)) as { board: Board };
+  return response.board;
 };
 
-export const updateTeam = async (
+export const updateBoard = async (
   numaPut: NumaPut,
-  teamId: string,
-  payload: Partial<CreateTeamPayload>
-): Promise<Team> => {
-  const response = (await numaPut(`${BASE_URL}/teams/${encodeURIComponent(teamId)}`, payload)) as { team: Team };
-  return response.team;
+  boardId: string,
+  payload: Partial<CreateBoardPayload>
+): Promise<Board> => {
+  const response = (await numaPut(`${BASE_URL}/boards/${encodeURIComponent(boardId)}`, payload)) as { board: Board };
+  return response.board;
 };
 
-export const deleteTeam = async (numaDelete: NumaDelete, teamId: string): Promise<void> => {
-  await numaDelete(`${BASE_URL}/teams/${encodeURIComponent(teamId)}`);
+export const deleteBoard = async (numaDelete: NumaDelete, boardId: string): Promise<void> => {
+  await numaDelete(`${BASE_URL}/boards/${encodeURIComponent(boardId)}`);
 };
 
-export const deleteZone = async (numaDelete: NumaDelete, teamId: string, zoneId: string): Promise<void> => {
-  await numaDelete(`${BASE_URL}/teams/${encodeURIComponent(teamId)}/zones/${encodeURIComponent(zoneId)}`);
+export const deleteZone = async (numaDelete: NumaDelete, boardId: string, zoneId: string): Promise<void> => {
+  await numaDelete(`${BASE_URL}/boards/${encodeURIComponent(boardId)}/zones/${encodeURIComponent(zoneId)}`);
 };
 
-export const updateTeamZones = async (
+export const updateBoardZones = async (
   numaPut: NumaPut,
-  teamId: string,
+  boardId: string,
   zones: Partial<WorkZone>[]
 ): Promise<WorkZone[]> => {
-  const response = (await numaPut(`${BASE_URL}/teams/${encodeURIComponent(teamId)}/zones`, { zones })) as {
+  const response = (await numaPut(`${BASE_URL}/boards/${encodeURIComponent(boardId)}/zones`, { zones })) as {
     zones: WorkZone[];
   };
   return response.zones;
 };
 
-export const updateTeamStages = async (
+export const updateBoardStages = async (
   numaPut: NumaPut,
-  teamId: string,
+  boardId: string,
   stages: Partial<WorkStage>[]
 ): Promise<WorkStage[]> => {
-  const response = (await numaPut(`${BASE_URL}/teams/${encodeURIComponent(teamId)}/stages`, { stages })) as {
+  const response = (await numaPut(`${BASE_URL}/boards/${encodeURIComponent(boardId)}/stages`, { stages })) as {
     stages: WorkStage[];
   };
   return response.stages;
@@ -195,20 +195,20 @@ export const updateTeamStages = async (
 
 // ─── Work Units ────────────────────────────────────────────────────────────
 
-export const listWorkUnits = async (numaGet: NumaGet, teamId: string): Promise<WorkUnit[]> => {
+export const listWorkUnits = async (numaGet: NumaGet, boardId: string): Promise<WorkUnit[]> => {
   const response = (await numaGet(
-    `${BASE_URL}/teams/${encodeURIComponent(teamId)}/work-units`
+    `${BASE_URL}/boards/${encodeURIComponent(boardId)}/work-units`
   )) as WorkUnitListResponse;
   return response?.workUnits ?? [];
 };
 
 export const createWorkUnit = async (
   numaPost: NumaPost,
-  teamId: string,
+  boardId: string,
   payload: CreateWorkUnitPayload
 ): Promise<WorkUnit> => {
   const response = (await numaPost(
-    `${BASE_URL}/teams/${encodeURIComponent(teamId)}/work-units`,
+    `${BASE_URL}/boards/${encodeURIComponent(boardId)}/work-units`,
     payload
   )) as WorkUnitResponse;
   return response.workUnit;
@@ -216,19 +216,19 @@ export const createWorkUnit = async (
 
 export const updateWorkUnit = async (
   numaPut: NumaPut,
-  teamId: string,
+  boardId: string,
   workUnitId: string,
   payload: UpdateWorkUnitPayload
 ): Promise<WorkUnit> => {
   const response = (await numaPut(
-    `${BASE_URL}/teams/${encodeURIComponent(teamId)}/work-units/${encodeURIComponent(workUnitId)}`,
+    `${BASE_URL}/boards/${encodeURIComponent(boardId)}/work-units/${encodeURIComponent(workUnitId)}`,
     payload
   )) as WorkUnitResponse;
   return response.workUnit;
 };
 
-export const deleteWorkUnit = async (numaDelete: NumaDelete, teamId: string, workUnitId: string): Promise<void> => {
-  await numaDelete(`${BASE_URL}/teams/${encodeURIComponent(teamId)}/work-units/${encodeURIComponent(workUnitId)}`);
+export const deleteWorkUnit = async (numaDelete: NumaDelete, boardId: string, workUnitId: string): Promise<void> => {
+  await numaDelete(`${BASE_URL}/boards/${encodeURIComponent(boardId)}/work-units/${encodeURIComponent(workUnitId)}`);
 };
 
 // ─── Tickets ───────────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ export const deleteWorkUnit = async (numaDelete: NumaDelete, teamId: string, wor
 export const listTickets = async (
   numaGet: NumaGet,
   options?: {
-    teamId?: string;
+    boardId?: string;
     zoneId?: string;
     stageId?: string;
     statusType?: string;
@@ -254,7 +254,7 @@ export const listTickets = async (
   }
 ): Promise<TicketListResponse> => {
   const params = cleanParams({
-    teamId: options?.teamId,
+    boardId: options?.boardId,
     zoneId: options?.zoneId,
     stageId: options?.stageId,
     statusType: options?.statusType,
@@ -274,8 +274,8 @@ export const listTickets = async (
   return { tickets: response?.tickets ?? [], cursor: response?.cursor ?? null };
 };
 
-export const getTicket = async (numaGet: NumaGet, ticketId: string, teamId?: string): Promise<TicketResponse> => {
-  const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : '';
+export const getTicket = async (numaGet: NumaGet, ticketId: string, boardId?: string): Promise<TicketResponse> => {
+  const query = boardId ? `?boardId=${encodeURIComponent(boardId)}` : '';
   const response = (await numaGet(`${BASE_URL}/tickets/${encodeURIComponent(ticketId)}${query}`)) as TicketResponse;
   return response;
 };
@@ -303,8 +303,8 @@ export const updateTicket = async (
   return response.ticket;
 };
 
-export const deleteTicket = async (numaDelete: NumaDelete, ticketId: string, teamId?: string): Promise<void> => {
-  const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : '';
+export const deleteTicket = async (numaDelete: NumaDelete, ticketId: string, boardId?: string): Promise<void> => {
+  const query = boardId ? `?boardId=${encodeURIComponent(boardId)}` : '';
   await numaDelete(`${BASE_URL}/tickets/${encodeURIComponent(ticketId)}${query}`);
 };
 
@@ -317,18 +317,18 @@ export const archiveTicket = async (
   numaPut: NumaPut,
   ticketId: string,
   version: number,
-  teamId?: string
+  boardId?: string
 ): Promise<Ticket> => {
-  return updateTicket(numaPut, ticketId, { archived: true, version, teamId });
+  return updateTicket(numaPut, ticketId, { archived: true, version, boardId });
 };
 
 export const unarchiveTicket = async (
   numaPut: NumaPut,
   ticketId: string,
   version: number,
-  teamId?: string
+  boardId?: string
 ): Promise<Ticket> => {
-  return updateTicket(numaPut, ticketId, { archived: false, version, teamId });
+  return updateTicket(numaPut, ticketId, { archived: false, version, boardId });
 };
 
 export const bulkUpdateTickets = async (numaPost: NumaPost, payload: BulkUpdateTicketsPayload): Promise<void> => {
@@ -448,8 +448,8 @@ export const getPresignedDownloadUrl = async (numaGet: NumaGet, s3Key: string): 
 
 // ─── User Preferences ──────────────────────────────────────────────────────
 
-export const getUserPreferences = async (numaGet: NumaGet, teamId: string): Promise<UserPreference> => {
-  const response = (await numaGet(`${BASE_URL}/user-preferences/${encodeURIComponent(teamId)}`)) as
+export const getUserPreferences = async (numaGet: NumaGet, boardId: string): Promise<UserPreference> => {
+  const response = (await numaGet(`${BASE_URL}/user-preferences/${encodeURIComponent(boardId)}`)) as
     | UserPreferenceResponse
     | UserPreference;
   return 'preferences' in response ? response.preferences : (response as UserPreference);
@@ -457,10 +457,10 @@ export const getUserPreferences = async (numaGet: NumaGet, teamId: string): Prom
 
 export const saveUserPreferences = async (
   numaPut: NumaPut,
-  teamId: string,
+  boardId: string,
   payload: Partial<UserPreference>
 ): Promise<UserPreference> => {
-  const response = (await numaPut(`${BASE_URL}/user-preferences/${encodeURIComponent(teamId)}`, payload)) as
+  const response = (await numaPut(`${BASE_URL}/user-preferences/${encodeURIComponent(boardId)}`, payload)) as
     | UserPreferenceResponse
     | UserPreference;
   return 'preferences' in response ? response.preferences : (response as UserPreference);
@@ -518,8 +518,16 @@ export const updateCustomer = async (
   return customer;
 };
 
-export const deleteCustomer = async (numaDelete: NumaDelete, customerId: string): Promise<void> => {
-  await numaDelete(`${BASE_URL}/customers/${encodeURIComponent(customerId)}`);
+export const deleteCustomer = async (
+  numaDelete: NumaDelete,
+  customerId: string
+): Promise<{ deleted: boolean; unlinkedTicketCount: number }> => {
+  const response = await numaDelete(`${BASE_URL}/customers/${encodeURIComponent(customerId)}`);
+  const r = (response ?? {}) as { deleted?: unknown; unlinkedTicketCount?: unknown };
+  return {
+    deleted: r.deleted === true,
+    unlinkedTicketCount: typeof r.unlinkedTicketCount === 'number' ? r.unlinkedTicketCount : 0,
+  };
 };
 
 // ─── Customer Activities ───────────────────────────────────────────────────

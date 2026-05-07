@@ -1,0 +1,79 @@
+{
+  "name": "Create Meeting",
+  "description": "Creates a meeting for a user. A maximum of 100 meetings can be created for a user in a day.",
+  "component_type": "action",
+  "version": "0.1.5",
+  "key": "zoom-create-meeting",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "zoom",
+      "type": "app",
+      "app": "zoom"
+    },
+    {
+      "name": "topic",
+      "type": "string",
+      "description": "Meeting topic",
+      "optional": true
+    },
+    {
+      "name": "type",
+      "type": "integer",
+      "description": "Meeting type:\n1 - Instant meeting.\n2 - Scheduled meeting.\n3 - Recurring meeting with no fixed time.\n8 - Recurring meeting with fixed time.",
+      "optional": true
+    },
+    {
+      "name": "start_time",
+      "type": "string",
+      "description": "Meeting start time. We support two formats for start_time - local time and GMT.\nTo set time as GMT the format should be yyyy-MM-ddTHH:mm:ssZ.\nTo set time using a specific timezone, use yyyy-MM-ddTHH:mm:ss format and specify the timezone ID in the timezone field OR leave it blank and the timezone set on your Zoom account will be used. You can also set the time as UTC as the timezone field.\nThe start_time should only be used for scheduled and / or recurring webinars with fixed time.",
+      "optional": true
+    },
+    {
+      "name": "duration",
+      "type": "integer",
+      "description": "Meeting duration (minutes). Used for scheduled meetings only.",
+      "optional": true
+    },
+    {
+      "name": "timezone",
+      "type": "string",
+      "description": "Time zone to format start_time. For example, \u0093America/Los_Angeles\u0094. For scheduled meetings only. Please reference our time [zone list](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) for supported time zones and their formats.",
+      "optional": true
+    },
+    {
+      "name": "password",
+      "type": "string",
+      "description": "Password to join the meeting. Password may only contain the following characters: [a-z A-Z 0-9 @ - _ *]. Max of 10 characters.",
+      "optional": true
+    },
+    {
+      "name": "agenda",
+      "type": "string",
+      "description": "Meeting description.",
+      "optional": true
+    },
+    {
+      "name": "tracking_fields",
+      "type": "any",
+      "description": "Tracking fields.",
+      "optional": true
+    },
+    {
+      "name": "recurrence",
+      "type": "object",
+      "description": "Recurrence object",
+      "optional": true
+    },
+    {
+      "name": "settings",
+      "type": "string",
+      "description": "Meeting settings.",
+      "optional": true
+    }
+  ]
+}

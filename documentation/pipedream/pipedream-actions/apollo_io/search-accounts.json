@@ -1,0 +1,48 @@
+{
+  "name": "Search For Accounts",
+  "description": "Search for accounts in Apollo.io. [See the documentation](https://apolloio.github.io/apollo-api-docs/?shell#search-for-accounts)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "apollo_io-search-accounts",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "apollo_io"
+    },
+    {
+      "name": "search",
+      "type": "string",
+      "label": "Search",
+      "description": "The account's name"
+    },
+    {
+      "name": "accountStageId",
+      "type": "string[]",
+      "label": "Account Stage ID",
+      "description": "Identifier of an account stage",
+      "remoteOptions": true,
+      "optional": true
+    },
+    {
+      "name": "sortByField",
+      "type": "string",
+      "label": "Sort By Field",
+      "description": "The field to sort the response.",
+      "options": ["account_last_activity_date", "account_created_at"],
+      "optional": true
+    },
+    {
+      "name": "sortAscending",
+      "type": "boolean",
+      "label": "Sort Ascending",
+      "description": "The order to be applied to the sort.",
+      "optional": true
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "name": "Search Leads",
+  "description": "Search for leads by name or email. [See the documentation](https://developers.pipedrive.com/docs/api/v1/Leads#searchLeads)",
+  "component_type": "action",
+  "version": "0.0.7",
+  "key": "pipedrive-search-leads",
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "pipedriveApp",
+      "type": "app",
+      "app": "pipedrive"
+    },
+    {
+      "name": "term",
+      "type": "string",
+      "label": "Search Term",
+      "description": "The search term to look for. Minimum 2 characters (or 1 if using exact_match)."
+    },
+    {
+      "name": "exactMatch",
+      "type": "boolean",
+      "label": "Exact Match",
+      "description": "When enabled, only full exact matches against the given term are returned. It is not case sensitive.",
+      "optional": true
+    },
+    {
+      "name": "fields",
+      "type": "string[]",
+      "label": "Search Fields",
+      "description": "An array containing fields to perform the search from. Defaults to all of them.",
+      "optional": true,
+      "options": ["custom_fields", "notes", "title"]
+    },
+    {
+      "name": "personId",
+      "type": "integer",
+      "label": "Person ID",
+      "description": "Will filter leads by the provided Person ID",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "organizationId",
+      "type": "integer",
+      "label": "Organization ID",
+      "description": "Will filter leads by the provided Organization ID",
+      "optional": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "includeFields",
+      "type": "string",
+      "label": "Include fields",
+      "description": "Supports including optional fields in the results which are not provided by default.",
+      "optional": true,
+      "options": ["lead.was_seen"]
+    }
+  ]
+}

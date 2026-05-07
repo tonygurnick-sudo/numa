@@ -1,0 +1,70 @@
+{
+  "name": "Update an Item",
+  "description": "Updates an item. [See the documentation](https://developers.podio.com/doc/items/update-item-22363)",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "podio-update-item",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": true
+  },
+  "configurable_props": [
+    {
+      "name": "app",
+      "type": "app",
+      "app": "podio"
+    },
+    {
+      "name": "orgId",
+      "type": "string",
+      "label": "Organization ID",
+      "description": "An ID identifying the organization",
+      "remoteOptions": true
+    },
+    {
+      "name": "spaceId",
+      "type": "string",
+      "label": "Space ID",
+      "description": "An ID identifying the space",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "appId",
+      "type": "string",
+      "label": "App ID",
+      "description": "An ID identifying the application",
+      "remoteOptions": true,
+      "reloadProps": true
+    },
+    {
+      "name": "itemId",
+      "type": "string",
+      "label": "Item ID",
+      "description": "An ID identifying the item",
+      "remoteOptions": true
+    },
+    {
+      "name": "tags",
+      "type": "string[]",
+      "label": "Tags",
+      "description": "The tags to put on the item",
+      "optional": true
+    },
+    {
+      "name": "reminder",
+      "type": "integer",
+      "label": "Reminder",
+      "description": "Minutes to remind before the due date",
+      "optional": true
+    },
+    {
+      "name": "fileIds",
+      "type": "string[]",
+      "label": "File IDs",
+      "description": "Temporary files that have been uploaded and should be attached to this item",
+      "optional": true
+    }
+  ]
+}

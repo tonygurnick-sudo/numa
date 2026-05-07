@@ -1,0 +1,40 @@
+{
+  "name": "Create Custom Object",
+  "description": "Create a new custom object in Hubspot. [See the documentation](https://developers.hubspot.com/beta-docs/guides/api/crm/objects/custom-objects#create-a-custom-object)",
+  "component_type": "action",
+  "version": "1.0.15",
+  "key": "hubspot-create-custom-object",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "hubspot",
+      "type": "app",
+      "app": "hubspot"
+    },
+    {
+      "name": "customObjectType",
+      "type": "string",
+      "label": "Custom Object Type",
+      "description": "The type of custom object to create. This is the object's `fullyQualifiedName`, `objectTypeId`, or the short-hand custom object type name (aka `p_{object_name}`)",
+      "remoteOptions": true
+    },
+    {
+      "name": "propertyGroups",
+      "type": "string[]",
+      "label": "Property Groups",
+      "hidden": true,
+      "reloadProps": true,
+      "remoteOptions": true
+    },
+    {
+      "name": "objectProperties",
+      "type": "object",
+      "label": "Object Properties",
+      "description": "Enter the object properties to create as a JSON object"
+    }
+  ]
+}

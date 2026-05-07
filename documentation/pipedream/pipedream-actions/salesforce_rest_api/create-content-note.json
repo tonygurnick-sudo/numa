@@ -1,0 +1,101 @@
+{
+  "name": "Create Content Note",
+  "description": "Creates a content note. [See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_contentnote.htm) and [Set Up Notes](https://help.salesforce.com/s/articleView?id=sales.notes_admin_setup.htm&type=5).",
+  "component_type": "action",
+  "version": "0.0.5",
+  "key": "salesforce_rest_api-create-content-note",
+  "annotations": {
+    "readOnlyHint": false,
+    "openWorldHint": true,
+    "destructiveHint": false
+  },
+  "configurable_props": [
+    {
+      "name": "salesforce",
+      "type": "app",
+      "app": "salesforce_rest_api"
+    },
+    {
+      "name": "docsInfo",
+      "type": "alert",
+      "alertType": "info",
+      "content": "[See the documentation](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_contentnote.htm) for more information on available fields."
+    },
+    {
+      "name": "OwnerId",
+      "type": "string",
+      "label": "Owner ID",
+      "description": "ID of the user who owns the note.",
+      "remoteOptions": true
+    },
+    {
+      "name": "Title",
+      "type": "string",
+      "label": "Title",
+      "description": "Title of the note."
+    },
+    {
+      "name": "Content",
+      "type": "string",
+      "label": "Content",
+      "description": "The content or body of the note, which can include properly formatted HTML or plain text."
+    },
+    {
+      "name": "IsReadOnly",
+      "type": "boolean",
+      "label": "Read Only",
+      "description": "Indicates whether the note is read only.",
+      "optional": true
+    },
+    {
+      "name": "LinkedEntityId",
+      "type": "string",
+      "label": "Linked Entity ID",
+      "description": "ID of the linked object. Can include Chatter users, groups, records (any that support Chatter feed tracking including custom objects), and Salesforce CRM Content libraries.",
+      "optional": true
+    },
+    {
+      "name": "ShareType",
+      "type": "string",
+      "label": "Share Type",
+      "description": "The permission granted to the user of the shared file in a library. This is determined by the permission the user already has in the library.",
+      "optional": true,
+      "default": "I",
+      "options": [
+        {
+          "label": "Viewer Permission",
+          "value": "V"
+        },
+        {
+          "label": "Collaborator Permission",
+          "value": "C"
+        },
+        {
+          "label": "Inferred Permission",
+          "value": "I"
+        }
+      ]
+    },
+    {
+      "name": "Visibility",
+      "type": "string",
+      "label": "Visibility",
+      "description": "Specifies whether this file is available to all users, internal users, or shared users.",
+      "optional": true,
+      "options": [
+        {
+          "label": "All Users",
+          "value": "AllUsers"
+        },
+        {
+          "label": "Internal Users",
+          "value": "InternalUsers"
+        },
+        {
+          "label": "Shared Users",
+          "value": "SharedUsers"
+        }
+      ]
+    }
+  ]
+}
