@@ -30,16 +30,23 @@ export const handler: PreSignUpTriggerHandler = async (event) => {
 
   // Prefer the mapped SAML `email` attribute, but fall back to NameID for
   // IdPs whose default SAML app does not emit a dedicated email attribute
-  // (Google Workspace's default app only emits NameID). Cognito eventually
-  // derives email from NameID when the user is materialised, but that happens
-  // AFTER PreSignUp — without this fallback we'd skip linking and Cognito
-  // would create a duplicate EXTERNAL_PROVIDER account.
+  // (Google Workspace's default app only emits NameID). The user pool is
+  // configured with UsernameAttributes:["email"], so the SSO admin settings
+  // Lambda intentionally omits the `email` attribute mapping when the admin
+  // selects emailSource='upn' — mapping email there triggers Cognito's
+  // "Deletion of username alias attribute is not allowed" error on every
+  // SAML sign-in by an existing native user.
   let email = event.request.userAttributes.email?.toLowerCase();
   if (!email && providerUserId.includes('@')) {
     email = providerUserId.toLowerCase();
     console.log(
       JSON.stringify({ _name: 'SSO_EMAIL_FROM_NAMEID', userName: event.userName, email, provider: providerName })
     );
+    // Write the derived email back into userAttributes so Cognito stores it on
+    // the materialised JIT user. Without this, federated users created via JIT
+    // provisioning end up with a blank email attribute (visible in Numa as
+    // empty user rows in the admin UI).
+    event.request.userAttributes.email = email;
   }
 
   if (!email) {
