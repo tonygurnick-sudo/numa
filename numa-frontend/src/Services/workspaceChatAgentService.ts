@@ -1103,20 +1103,37 @@ export async function pollConversationUntilComplete(
   getIdToken?: GetIdToken
 ): Promise<{ status: string; active?: boolean }> {
   const intervalMs = opts?.intervalMs ?? 3000;
-  const timeoutMs = opts?.timeoutMs ?? 600_000; // 10 min default
+  const timeoutMs = opts?.timeoutMs ?? 3_600_000; // 1 h default — matches AgentCore idle limit
   const startTime = Date.now();
+  // Tolerate transient status-call failures (e.g. brief 502 from API Gateway,
+  // network blip). Only give up after several consecutive failures so a long
+  // recovery isn't torn down by a single hiccup.
+  const maxConsecutiveFailures = 5;
+  let consecutiveFailures = 0;
 
   while (Date.now() - startTime < timeoutMs) {
     if (opts?.signal?.aborted) {
       throw new DOMException('Polling aborted', 'AbortError');
     }
 
-    const data = await checkConversationStatus(conversationId, getIdToken);
-    opts?.onPoll?.(data);
+    try {
+      const data = await checkConversationStatus(conversationId, getIdToken);
+      consecutiveFailures = 0;
+      opts?.onPoll?.(data);
 
-    // Agent is done: not running, or running without an active in-memory run
-    if (data.status !== 'running' || !data.active) {
-      return data;
+      // Agent is done: not running, or running without an active in-memory run
+      if (data.status !== 'running' || !data.active) {
+        return data;
+      }
+    } catch (err) {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= maxConsecutiveFailures) {
+        throw err;
+      }
+      console.warn(
+        `[WorkspaceChat] Status poll failed (${consecutiveFailures}/${maxConsecutiveFailures}), retrying:`,
+        err
+      );
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
