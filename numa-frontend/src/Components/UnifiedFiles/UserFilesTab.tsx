@@ -533,6 +533,43 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       setIsMoving(true);
       try {
         const result = await knowledgeBaseService.moveKBFiles(sourceKbId, toMove, destKbId, destPath);
+        // Optimistically rewrite source -> dest keys so the moved entries
+        // jump folders (or jump to a sibling KB) immediately. Without this,
+        // the old keys linger until the refetch completes and the
+        // preserve-deep-entries branch in `fetchKbFiles` keeps them.
+        const mapping = new Map(result.successful.map((s) => [s.sourceKey, s.destKey]));
+        if (mapping.size > 0) {
+          setKbFileStates((prev) => {
+            const next = new Map(prev);
+            const source = prev.get(sourceKbId);
+            if (!source) return next;
+            if (sourceKbId === destKbId) {
+              next.set(sourceKbId, {
+                ...source,
+                files: source.files.map((f) => {
+                  const dest = mapping.get(f.Key);
+                  return dest ? { ...f, Key: dest } : f;
+                }),
+              });
+            } else {
+              const moved: S3Object[] = [];
+              const remaining = source.files.filter((f) => {
+                const dest = mapping.get(f.Key);
+                if (dest) {
+                  moved.push({ ...f, Key: dest });
+                  return false;
+                }
+                return true;
+              });
+              next.set(sourceKbId, { ...source, files: remaining });
+              const destState = prev.get(destKbId);
+              if (destState && moved.length > 0) {
+                next.set(destKbId, { ...destState, files: [...destState.files, ...moved] });
+              }
+            }
+            return next;
+          });
+        }
         if (result.failed.length > 0) {
           showToast({
             message: t('move.partial', { succeeded: result.successful.length, failed: result.failed.length }),

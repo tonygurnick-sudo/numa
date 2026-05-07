@@ -405,6 +405,21 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
       setIsMoving(true);
       try {
         const result = await knowledgeBaseService.moveKBFiles('company', toMove, 'company', destPath);
+        // Optimistically rewrite source -> dest keys so the moved entries
+        // jump folders immediately. Without this, the old keys linger until
+        // the refetch completes and `fetchFiles` doesn't drop them — they
+        // sit in `prev.files` and get kept by the preserve-deep-entries
+        // branch since they're absent from the new shallow listing.
+        const mapping = new Map(result.successful.map((s) => [s.sourceKey, s.destKey]));
+        if (mapping.size > 0) {
+          setFileState((prev) => ({
+            ...prev,
+            files: prev.files.map((f) => {
+              const dest = mapping.get(f.Key);
+              return dest ? { ...f, Key: dest } : f;
+            }),
+          }));
+        }
         if (result.failed.length > 0) {
           showToast({
             message: t('move.partial', { succeeded: result.successful.length, failed: result.failed.length }),
