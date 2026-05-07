@@ -42,11 +42,12 @@ export const handler: PreSignUpTriggerHandler = async (event) => {
     console.log(
       JSON.stringify({ _name: 'SSO_EMAIL_FROM_NAMEID', userName: event.userName, email, provider: providerName })
     );
-    // Write the derived email back into userAttributes so Cognito stores it on
-    // the materialised JIT user. Without this, federated users created via JIT
-    // provisioning end up with a blank email attribute (visible in Numa as
-    // empty user rows in the admin UI).
-    event.request.userAttributes.email = email;
+    // NOTE: We cannot stamp the email back onto event.request.userAttributes here
+    // — Cognito ignores PreSignUp_ExternalProvider Lambda modifications to
+    // userAttributes for federated users. The sso-group-mapper PostAuthentication
+    // Lambda backfills the missing email via AdminUpdateUserAttributes after the
+    // JIT user is materialised (it's the first hook where the user exists and is
+    // writable).
   }
 
   if (!email) {
