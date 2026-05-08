@@ -222,16 +222,25 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
   }
 
   // Build claims
-  const claimsToAdd: Record<string, unknown> = {
-    'https://aws.amazon.com/tags': {
-      principal_tags: {
-        Email: email ? [email] : [],
-        username: [userSub],
-        aud: [event.callerContext.clientId],
-        Groups: groups,
-      },
-    },
+  const principalTags: Record<string, string[]> = {
+    username: [userSub],
+    aud: [event.callerContext.clientId],
+    Groups: groups,
   };
+  if (email) principalTags.Email = [email];
+
+  const claimsToAdd: Record<string, unknown> = {
+    'https://aws.amazon.com/tags': { principal_tags: principalTags },
+  };
+
+  // For federated first-login (and any other case where we derived email above),
+  // override the standard ID token `email` claim so the frontend doesn't see a
+  // blank user. Cognito's default `email` claim sources from userAttributes,
+  // which stays empty for JIT users until sso-group-mapper's PostAuthentication
+  // backfill writes it — and PostAuth fires AFTER this trigger.
+  if (email && !event.request.userAttributes.email) {
+    claimsToAdd.email = email;
+  }
 
   if (graceExpiresAt) {
     claimsToAdd['custom:mfa_reset_pending'] = 'true';

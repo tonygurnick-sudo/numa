@@ -60,13 +60,27 @@ export const handler: PreSignUpTriggerHandler = async (event) => {
   try {
     // Look up existing user by email. Fetch a handful so we can reliably pick
     // the native account even if stale EXTERNAL_PROVIDER duplicates exist.
-    // Cognito ListUsers filter syntax requires double-quoted values; escape any
-    // embedded quotes/backslashes so an exotic email can't break the filter.
-    const safeEmail = email.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    // Cognito's ListUsers filter syntax has no escape characters — values are
+    // wrapped in double quotes and that's it. If the email contains `"` or `\`
+    // we can't safely build a filter; skip the lookup and fall through to JIT
+    // provisioning rather than crash or silently match the wrong user.
+    if (email.includes('"') || email.includes('\\')) {
+      console.warn(
+        JSON.stringify({
+          _name: 'SSO_PRESIGNUP_UNSAFE_EMAIL',
+          email,
+          reason: 'contains characters not safe for Cognito filter',
+        })
+      );
+      event.response.autoConfirmUser = true;
+      event.response.autoVerifyEmail = true;
+      return event;
+    }
+
     const listResult = await getCognito().send(
       new ListUsersCommand({
         UserPoolId: event.userPoolId,
-        Filter: `email = "${safeEmail}"`,
+        Filter: `email = "${email}"`,
         Limit: 10,
       })
     );
