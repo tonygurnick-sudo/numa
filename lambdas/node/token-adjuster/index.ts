@@ -157,8 +157,23 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
 
   const { groupsToOverride } = event.request.groupConfiguration;
 
-  const email = event.request.userAttributes.email;
+  let email = event.request.userAttributes.email;
   const userSub = event.request.userAttributes.sub;
+
+  // First-login derivation for federated (SSO) users: PreTokenGeneration runs
+  // before sso-group-mapper's PostAuthentication backfill, so on the very first
+  // sign-in the email attribute is still empty for JIT users when the IdP
+  // attribute mapping omits `email` (required to avoid the username-alias
+  // deletion error on UsernameAttributes:["email"] pools). Derive from
+  // event.userName ("ProviderName_NameID"; NameID is the email for our SAML
+  // configs) so the first session's tokens carry the right email.
+  if (!email && event.request.userAttributes['identities'] && event.userName.includes('_')) {
+    const candidate = event.userName.split('_').slice(1).join('_').toLowerCase();
+    if (candidate.includes('@')) {
+      email = candidate;
+      console.log(JSON.stringify({ _name: 'TOKEN_EMAIL_DERIVED', sub: userSub, email }));
+    }
+  }
 
   // Cognito auto-creates a per-IdP group (e.g. "us-east-1_abc_GoogleWorkspace")
   // for every federated sign-in. Those aren't Numa roles — ignore them when
@@ -210,7 +225,7 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
   const claimsToAdd: Record<string, unknown> = {
     'https://aws.amazon.com/tags': {
       principal_tags: {
-        Email: [email],
+        Email: email ? [email] : [],
         username: [userSub],
         aud: [event.callerContext.clientId],
         Groups: groups,

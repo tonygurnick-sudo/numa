@@ -60,10 +60,13 @@ export const handler: PreSignUpTriggerHandler = async (event) => {
   try {
     // Look up existing user by email. Fetch a handful so we can reliably pick
     // the native account even if stale EXTERNAL_PROVIDER duplicates exist.
+    // Cognito ListUsers filter syntax requires double-quoted values; escape any
+    // embedded quotes/backslashes so an exotic email can't break the filter.
+    const safeEmail = email.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     const listResult = await getCognito().send(
       new ListUsersCommand({
         UserPoolId: event.userPoolId,
-        Filter: `email = "${email}"`,
+        Filter: `email = "${safeEmail}"`,
         Limit: 10,
       })
     );
