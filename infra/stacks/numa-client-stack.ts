@@ -1392,6 +1392,8 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         oauthProviders: z.record(z.string(), z.any()).optional(), // Object with provider configs
         oauthIntegrationsEnabled: z.boolean().optional(),
         contentSearchEnabled: z.boolean().optional(),
+        numaFiles: z.boolean().optional(),
+        transcriptionService: z.any().optional(),
 
         /**
          * Whether to enable V2 Apps (next-generation app framework with agents, workspace, runs).

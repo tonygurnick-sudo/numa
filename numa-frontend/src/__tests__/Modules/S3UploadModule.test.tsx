@@ -178,9 +178,10 @@ describe('S3UploadModule Component', () => {
     await waitForConfigReady();
 
     const fileInput = screen.getByTestId('file-upload-input') as HTMLInputElement;
-    const largeFile = new File(['x'.repeat(11 * 1024 * 1024)], 'large.pdf', {
+    const largeFile = new File(['x'], 'large.pdf', {
       type: 'application/pdf',
     });
+    Object.defineProperty(largeFile, 'size', { value: 11 * 1024 * 1024 });
 
     fireEvent.change(fileInput, { target: { files: [largeFile] } });
 
