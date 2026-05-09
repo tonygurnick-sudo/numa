@@ -32,6 +32,7 @@ i18n
       'support',
       'automations',
       'unifiedFiles',
+      'compliance',
     ],
     interpolation: { escapeValue: false },
     detection: {
