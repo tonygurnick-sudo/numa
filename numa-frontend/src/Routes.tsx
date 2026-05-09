@@ -28,6 +28,7 @@ const PublicDemoChat = lazy(() => import('./Pages/PublicDemoChat').then((m) => (
 const PublicDemoFilePreview = lazy(() =>
   import('./Pages/PublicDemoFilePreview').then((m) => ({ default: m.PublicDemoFilePreview }))
 );
+const SecurePosture = lazy(() => import('./Pages/SecurePosture').then((m) => ({ default: m.SecurePosture })));
 
 // Component to wrap authenticated routes with AppLayout
 const AuthenticatedLayout = ({ children, requiredFeature }: { children: ReactNode; requiredFeature?: string }) => {
@@ -94,6 +95,8 @@ const AppRoutes = () => {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/create-password" element={<ResetPassword />} />
           <Route path="/ian" element={<Ian />} />
+          {/* Public security & compliance posture pages - no authentication required */}
+          <Route path="/secure" element={<SecurePosture />} />
           {/* Public shared document Q&A page - no authentication required */}
           <Route path="/shared/:uuid" element={<SharedDocumentChat />} />
           {/* Public drop zone upload page - no authentication required */}
