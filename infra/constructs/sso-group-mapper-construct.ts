@@ -39,6 +39,7 @@ export class SSOGroupMapper extends Construct {
             'cognito-idp:AdminAddUserToGroup',
             'cognito-idp:AdminRemoveUserFromGroup',
             'cognito-idp:AdminListGroupsForUser',
+            'cognito-idp:AdminUpdateUserAttributes',
           ],
           resources: ['arn:aws:cognito-idp:*:*:userpool/*'],
         },
