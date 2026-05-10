@@ -328,7 +328,7 @@ export function useWorkspaceChatStreaming({
                     // Agent is still running — poll until it finishes, then reload trace
                     await pollConversationUntilComplete(
                       disconnectedConvId,
-                      { intervalMs: 3000, timeoutMs: 600_000, signal: pollingAbort.signal },
+                      { intervalMs: 3000, timeoutMs: 3_600_000, signal: pollingAbort.signal },
                       getIdToken
                     );
                     // Agent done — reload trace from S3
