@@ -157,8 +157,23 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
 
   const { groupsToOverride } = event.request.groupConfiguration;
 
-  const email = event.request.userAttributes.email;
+  let email = event.request.userAttributes.email;
   const userSub = event.request.userAttributes.sub;
+
+  // First-login derivation for federated (SSO) users: PreTokenGeneration runs
+  // before sso-group-mapper's PostAuthentication backfill, so on the very first
+  // sign-in the email attribute is still empty for JIT users when the IdP
+  // attribute mapping omits `email` (required to avoid the username-alias
+  // deletion error on UsernameAttributes:["email"] pools). Derive from
+  // event.userName ("ProviderName_NameID"; NameID is the email for our SAML
+  // configs) so the first session's tokens carry the right email.
+  if (!email && event.request.userAttributes['identities'] && event.userName.includes('_')) {
+    const candidate = event.userName.split('_').slice(1).join('_').toLowerCase();
+    if (candidate.includes('@')) {
+      email = candidate;
+      console.log(JSON.stringify({ _name: 'TOKEN_EMAIL_DERIVED', sub: userSub, email }));
+    }
+  }
 
   // Cognito auto-creates a per-IdP group (e.g. "us-east-1_abc_GoogleWorkspace")
   // for every federated sign-in. Those aren't Numa roles — ignore them when
@@ -207,16 +222,25 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
   }
 
   // Build claims
-  const claimsToAdd: Record<string, unknown> = {
-    'https://aws.amazon.com/tags': {
-      principal_tags: {
-        Email: [email],
-        username: [userSub],
-        aud: [event.callerContext.clientId],
-        Groups: groups,
-      },
-    },
+  const principalTags: Record<string, string[]> = {
+    username: [userSub],
+    aud: [event.callerContext.clientId],
+    Groups: groups,
   };
+  if (email) principalTags.Email = [email];
+
+  const claimsToAdd: Record<string, unknown> = {
+    'https://aws.amazon.com/tags': { principal_tags: principalTags },
+  };
+
+  // For federated first-login (and any other case where we derived email above),
+  // override the standard ID token `email` claim so the frontend doesn't see a
+  // blank user. Cognito's default `email` claim sources from userAttributes,
+  // which stays empty for JIT users until sso-group-mapper's PostAuthentication
+  // backfill writes it — and PostAuth fires AFTER this trigger.
+  if (email && !event.request.userAttributes.email) {
+    claimsToAdd.email = email;
+  }
 
   if (graceExpiresAt) {
     claimsToAdd['custom:mfa_reset_pending'] = 'true';
