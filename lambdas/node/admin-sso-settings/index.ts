@@ -262,9 +262,17 @@ async function createOrUpdateIdentityProvider(config: SSOConfig): Promise<void> 
   // Build Cognito attribute mapping
   const attributeMapping: Record<string, string> = { ...config.attributeMapping };
 
-  // Apply email source override for SAML — when 'upn', use NameID as email
+  // When emailSource === 'upn', omit the email mapping entirely. The user pool is
+  // configured with UsernameAttributes:["email"], so any SAML attribute mapping that
+  // touches the email field is interpreted by Cognito as a username-alias deletion and
+  // rejected with "Deletion of username alias attribute is not allowed" on every SAML
+  // sign-in by an existing native user. The previous mapping pointed at the SAML
+  // `nameidentifier` claim, but `nameidentifier` lives in the SAML `Subject` element,
+  // not `AttributeStatement` — Cognito found nothing and tried to clear the alias.
+  // The pre-signup Lambda's fallback (cognito-pre-signup/index.ts) derives email from
+  // the SAML NameID for JIT-provisioned users when no email attribute is mapped.
   if (protocol === 'SAML' && config.emailSource === 'upn') {
-    attributeMapping['email'] = 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier';
+    delete attributeMapping['email'];
   }
 
   const exists = await identityProviderExists(config.providerName);
