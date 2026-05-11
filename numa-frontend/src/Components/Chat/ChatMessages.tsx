@@ -925,22 +925,33 @@ const ChatMessages = ({
 
               {/* Pending-background-tasks footer. Rendered when this assistant
                   turn ended with one or more `run_in_background` shells still
-                  alive in the MicroVM. Subtle italic note inviting the user
+                  alive in the MicroVM. Bubble-style note inviting the user
                   to send a message when they want to check on the tasks. */}
               {message.role === 'assistant' &&
                 message.pendingBackgroundTasks &&
                 message.pendingBackgroundTasks.count > 0 && (
                   <div
-                    className="text-muted small fst-italic mt-2"
-                    style={{ opacity: 0.75 }}
+                    className="pending-background-tasks-note d-flex align-items-start gap-2 mt-3 px-3 py-2 rounded"
+                    style={{
+                      backgroundColor: 'rgba(99, 102, 241, 0.08)',
+                      border: '1px solid rgba(99, 102, 241, 0.2)',
+                      fontSize: '0.875rem',
+                    }}
                     role="status"
                     aria-live="polite"
                   >
-                    {message.pendingBackgroundTasks.count === 1
-                      ? t('pendingBackgroundTasks.single')
-                      : t('pendingBackgroundTasks.multiple', {
-                          count: message.pendingBackgroundTasks.count,
-                        })}
+                    <i
+                      className="bi bi-hourglass-split text-primary"
+                      style={{ fontSize: '1rem', lineHeight: '1.4', flexShrink: 0 }}
+                      aria-hidden="true"
+                    />
+                    <span className="text-body-secondary fst-italic">
+                      {message.pendingBackgroundTasks.count === 1
+                        ? t('pendingBackgroundTasks.single')
+                        : t('pendingBackgroundTasks.multiple', {
+                            count: message.pendingBackgroundTasks.count,
+                          })}
+                    </span>
                   </div>
                 )}
 

@@ -76,7 +76,14 @@ const INLINE_TOOLS = new Set([
   'Grep',
   'Skill',
   'mcp__scripts__execute_script',
+  // Background-bash tools. The SDK surfaces these under two name pairs depending
+  // on internal aliasing; we keep all four registered so the rendering kicks in
+  // regardless of which name the model emits.
   'TaskOutput',
+  'BashOutputTool',
+  'BashOutput',
+  'TaskStop',
+  'KillShell',
 ]);
 
 /** Tools that are internal plumbing (hidden from UI) - kept for future use */
@@ -93,7 +100,16 @@ const _SPECIAL_CARD_TOOLS = new Set(['Task', 'TodoWrite', 'AskUserQuestion']);
 // ============================================================
 
 /** Transient tools - fade out after completion (file system exploration, internal plumbing) */
-const TRANSIENT_TOOLS = new Set(['Glob', 'Grep', 'Read', 'TaskOutput']);
+const TRANSIENT_TOOLS = new Set([
+  'Glob',
+  'Grep',
+  'Read',
+  'TaskOutput',
+  'BashOutputTool',
+  'BashOutput',
+  'TaskStop',
+  'KillShell',
+]);
 
 /** Important tools with icons - always visible */
 const IMPORTANT_TOOLS = new Map<string, { icon: string; name: string }>([
@@ -405,8 +421,14 @@ export function getInlineToolDisplay(toolName: string, input: unknown): { text: 
       return { text: `Running ${interpreter} script${code ? `: ${code}...` : ''}` };
     }
     case 'TaskOutput':
+    case 'BashOutputTool':
+    case 'BashOutput':
       // Internal tool for retrieving background task results
-      return { text: 'Getting task results...' };
+      return { text: 'Checking background task...' };
+    case 'TaskStop':
+    case 'KillShell':
+      // Internal tool for stopping a background task
+      return { text: 'Stopping background task...' };
     case 'Glob':
       // Internal file-finding tool - show user-friendly message
       return { text: 'Searching files...' };
