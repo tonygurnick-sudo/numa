@@ -398,6 +398,7 @@ def create_agent_options(
     feature_flags: Optional[dict[str, bool]] = None,
     home_dir: Optional[Path] = None,
     thinking_override: Optional[str] = None,
+    is_streaming: bool = True,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -416,6 +417,12 @@ def create_agent_options(
         agent_file_paths: Optional list of downloaded agent reference file paths
         agent_type_config: Optional agent type config. Defaults to "numa-chat".
         user_profile: Optional user profile dict for AI personalisation
+        is_streaming: True for interactive streaming chat (uses 1h prompt
+            cache TTL, allows background-bash). False for scheduled runs,
+            sync, fire-and-forget, pipelines, V2 apps, Nolia phases (uses
+            default 5m TTL, disables background-bash). Caller knows this
+            because `stream_claude_sdk` and `run_claude_sdk` are the two
+            entry points and they each set this flag explicitly.
 
     Returns:
         Configured ClaudeAgentOptions
@@ -476,9 +483,6 @@ def create_agent_options(
         "CLAUDE_CODE_USE_BEDROCK": "1",
         "AWS_REGION": REGION,
         "AWS_DEFAULT_REGION": REGION,  # Some AWS SDKs need this
-        # Prompt caching: enable 1-hour TTL for Bedrock (default is 5min).
-        # Reduces cache write costs across longer conversations.
-        "ENABLE_PROMPT_CACHING_1H_BEDROCK": "1",
         # Disable OpenTelemetry in SDK subprocess (X-Ray OTLP not configured)
         "OTEL_SDK_DISABLED": "true",
         # Thinking tokens (from agent type config, or thinking_override preset)
@@ -521,16 +525,36 @@ def create_agent_options(
         "OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME": oauth_workspace_tools_lambda,
     }
 
+    # Prompt-cache TTL: 1h for interactive streaming chats; default 5m for
+    # everything else (scheduled runs, sync, fire-and-forget, pipelines, V2
+    # apps, Nolia phases).
+    #
+    # Why this split: 1h tier costs ~$6/MTok on cache writes, 5m tier
+    # ~$3.75/MTok. Interactive chats amortise the higher write across
+    # follow-up turns within the hour, so 1h wins overall. Non-streaming
+    # invocations fire once and never reuse the cache before it expires —
+    # the 1h write premium is pure waste. Measured ~25% savings per
+    # scheduled run ($0.13 avg across 311 sampled runs).
+    #
+    # The 5m TTL has a sliding window (refreshes on each cache hit), so
+    # even multi-minute scheduled runs stay warm during active processing.
+    if is_streaming:
+        env["ENABLE_PROMPT_CACHING_1H_BEDROCK"] = "1"
+
     # Background bash (`run_in_background: true` + BashOutput / TaskStop) is only
     # useful when the harness can hold a connection open to surface completion.
     # That's the "watching state" wired into stream_claude_sdk (streaming response
-    # mode only). For non-streaming agent types — scheduled runs, fire-and-forget,
+    # mode only). For non-streaming invocations — scheduled runs, fire-and-forget,
     # sync pipelines — there's no user listening and no watching state, so a
     # background task that outlives the agent's turn is orphaned: it keeps
     # running in the MicroVM, produces no notification, and the agent declares
-    # its work done without seeing the result. Disable the feature entirely for
-    # those response modes.
-    if type_config.response_mode != "stream":
+    # its work done without seeing the result. Disable the feature for those.
+    #
+    # Uses `is_streaming` rather than `type_config.response_mode` because the
+    # runtime response mode can differ from the agent type's default (e.g. the
+    # schedule runner uses the `numa-chat` type but overrides to `sync` via
+    # the request body).
+    if not is_streaming:
         env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] = "1"
 
     # Pass allowed KBs (with id and name) to custom tools for security and attribution
