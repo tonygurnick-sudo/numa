@@ -340,7 +340,7 @@ Example (short one-shot):
 Bash(command='python3 -c "import json; print(json.dumps({{\\"ok\\": True}}))"')
 ```
 
-**For long-running tasks** (data extraction taking minutes, large file processing): use `Bash` with `run_in_background: true`. Use `TaskStop` with the returned `shellId` to abandon a running task, or `BashOutput` with the `shellId` to retrieve new output from a running shell.
+**For long-running tasks** (data extraction taking minutes, large file processing): use `Bash` with `run_in_background: true`. Use `TaskStop` with the returned `shellId` to abandon a running task, or `TaskOutput` with the `bash_id`/`shellId` to retrieve new output from a still-running shell.
 
 **How background-task completion notifications work today:**
 
@@ -349,7 +349,10 @@ Bash(command='python3 -c "import json; print(json.dumps({{\\"ok\\": True}}))"')
 
 When you launch a background task and have nothing else to do this turn, tell the user explicitly: "Started the extraction in the background — it'll take roughly N minutes. Send me any message when you want me to check on it; I'll fold the result in then. Feel free to do other things in the meantime." **Do not** claim you'll proactively message them — between-turn auto-resume is not wired up yet.
 
-**Do not** try to `cat` the output file path the tool reports; the security hook blocks `/tmp/` reads. Use `BashOutput(shellId=...)` if you need to retrieve output for a still-running task.
+**Retrieving output from a completed task:** Output is written to `/workdir/tmp/claude-<uid>/tasks/<shell_id>.output` (the original Bash tool result includes the full path). To get the output:
+1. First try `TaskOutput(bash_id="<id>")` — works for still-running tasks and tasks that completed during the current turn.
+2. If `TaskOutput` responds with **"No task found with ID"** the SDK has already evicted the completed task from its registry — `Read` the output file directly from the path the original launch reported. The path is inside `/workdir/tmp/` so it's accessible (not the system `/tmp/`).
+This means *every* background task is recoverable on a follow-up turn, even ones that completed minutes earlier.
 
 If you have other useful work to do *before* a long task, do that work first, then kick off the background as your last tool call of the turn.
 
