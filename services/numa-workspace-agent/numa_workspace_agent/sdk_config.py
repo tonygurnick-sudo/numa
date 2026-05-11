@@ -114,6 +114,28 @@ ALLOWED_MODELS = set(
 BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
 
 
+# Thinking-config presets selectable via the "@<suffix>" form on modelId.
+# Throwaway plumbing for comparison testing — productionised path will configure
+# thinking per-model server-side. See plan: thinking-config model variants.
+THINKING_PRESETS: dict[str, dict] = {
+    "no-thinking": {"thinking": {"type": "disabled"}, "effort": None},
+    "low-thinking": {"thinking": {"type": "adaptive"}, "effort": "low"},
+    "high-thinking": {"thinking": {"type": "adaptive"}, "effort": "high"},
+}
+
+
+def parse_model_id_with_thinking(
+    raw: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """Split a composite modelId like 'anthropic.claude-sonnet-4-6@high-thinking'
+    into (bare_id, 'high-thinking'). Returns (raw, None) when no recognised suffix
+    is present."""
+    if not raw or "@" not in raw:
+        return raw, None
+    bare, _, suffix = raw.partition("@")
+    return bare, suffix if suffix in THINKING_PRESETS else None
+
+
 def validate_model_id(model_id: Optional[str]) -> Optional[str]:
     """
     Validate and return a region-appropriate model ID for use with Bedrock.
@@ -358,6 +380,7 @@ def create_agent_options(
     company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     home_dir: Optional[Path] = None,
+    thinking_override: Optional[str] = None,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -686,13 +709,21 @@ def create_agent_options(
     if type_config.agents:
         options_kwargs["agents"] = type_config.agents
 
-    # Thinking configuration — type_config.thinking overrides env-var approach
-    if type_config.thinking:
-        options_kwargs["thinking"] = type_config.thinking
+    # Thinking configuration — request-scoped `thinking_override` (from the modelId
+    # "@<suffix>" form) always wins over the agent type's defaults when set.
+    effective_thinking = type_config.thinking
+    effective_effort = type_config.effort
+    if thinking_override and thinking_override in THINKING_PRESETS:
+        preset = THINKING_PRESETS[thinking_override]
+        effective_thinking = preset["thinking"]
+        effective_effort = preset["effort"]
+
+    if effective_thinking:
+        options_kwargs["thinking"] = effective_thinking
 
     # Effort level — controls reasoning depth ("low", "medium", "high", "max")
-    if type_config.effort:
-        options_kwargs["effort"] = type_config.effort
+    if effective_effort:
+        options_kwargs["effort"] = effective_effort
 
     return ClaudeAgentOptions(**options_kwargs)
 
