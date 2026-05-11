@@ -117,10 +117,27 @@ BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
 # Thinking-config presets selectable via the "@<suffix>" form on modelId.
 # Throwaway plumbing for comparison testing — productionised path will configure
 # thinking per-model server-side. See plan: thinking-config model variants.
+#
+# "no-thinking" sets thinking=None so the field is omitted entirely from the
+# ClaudeAgentOptions kwargs — this is the model-agnostic way to disable extended
+# thinking and works for both the new ({"type":"disabled"}-aware) Sonnet 4.6 /
+# Opus 4.6 interface AND the legacy interface still used by Haiku 4.5
+# (which only accepts {"type":"enabled","budget_tokens":N}).
 THINKING_PRESETS: dict[str, dict] = {
-    "no-thinking": {"thinking": {"type": "disabled"}, "effort": None},
-    "low-thinking": {"thinking": {"type": "adaptive"}, "effort": "low"},
-    "high-thinking": {"thinking": {"type": "adaptive"}, "effort": "high"},
+    # max_thinking_tokens=0 ensures the SDK env-var fallback also says "off" —
+    # otherwise MAX_THINKING_TOKENS=10000 (from agent type default) keeps
+    # thinking on even when the `thinking` kwarg is omitted.
+    "no-thinking": {"thinking": None, "effort": None, "max_thinking_tokens": 0},
+    "low-thinking": {
+        "thinking": {"type": "adaptive"},
+        "effort": "low",
+        "max_thinking_tokens": None,
+    },
+    "high-thinking": {
+        "thinking": {"type": "adaptive"},
+        "effort": "high",
+        "max_thinking_tokens": None,
+    },
 }
 
 
@@ -444,6 +461,16 @@ def create_agent_options(
         "OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME", ""
     )
 
+    # Resolve MAX_THINKING_TOKENS so the SDK env-var fallback stays in sync with
+    # any request-scoped thinking_override. Without this, the SDK falls back to
+    # the agent type default (10k) even when the `thinking` kwarg is omitted,
+    # which keeps thinking on for @no-thinking.
+    effective_max_thinking_tokens = type_config.max_thinking_tokens
+    if thinking_override and thinking_override in THINKING_PRESETS:
+        preset_max = THINKING_PRESETS[thinking_override].get("max_thinking_tokens")
+        if preset_max is not None:
+            effective_max_thinking_tokens = preset_max
+
     env: dict[str, str] = {
         # SDK Bedrock configuration
         "CLAUDE_CODE_USE_BEDROCK": "1",
@@ -454,11 +481,31 @@ def create_agent_options(
         "ENABLE_PROMPT_CACHING_1H_BEDROCK": "1",
         # Disable OpenTelemetry in SDK subprocess (X-Ray OTLP not configured)
         "OTEL_SDK_DISABLED": "true",
-        # Thinking tokens (from agent type config)
-        "MAX_THINKING_TOKENS": str(type_config.max_thinking_tokens),
+        # Thinking tokens (from agent type config, or thinking_override preset)
+        "MAX_THINKING_TOKENS": str(effective_max_thinking_tokens),
         # Set HOME so SDK stores sessions in .claude/ under this directory.
         # Pipeline steps can override via home_dir for per-step isolation.
         "HOME": str(home_dir) if home_dir else str(LOCAL_ROOT / ".system"),
+        # ── SDK noise reduction ─────────────────────────────────────────
+        # Workspace is /workdir/, not a git repo — strip built-in commit/PR
+        # workflow guidance and git-status snapshot from the system prompt.
+        "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1",
+        # Hide slash commands that aren't reachable through our chat UI
+        # (auth is via Cognito/JWT, version pinned by deploy, feedback goes
+        # through Arcanum support channels).
+        "DISABLE_LOGIN_COMMAND": "1",
+        "DISABLE_LOGOUT_COMMAND": "1",
+        "DISABLE_UPGRADE_COMMAND": "1",
+        "DISABLE_DOCTOR_COMMAND": "1",
+        "DISABLE_EXTRA_USAGE_COMMAND": "1",
+        "DISABLE_FEEDBACK_COMMAND": "1",
+        "DISABLE_INSTALL_GITHUB_APP_COMMAND": "1",
+        # Strip the SDK's built-in subagent types (Explore, Plan, etc.) from
+        # the system prompt. We have our own subagent strategy via the Task
+        # tool and Nolia phases. Only applies in non-interactive mode (which
+        # is what we run via the Python SDK wrapper).
+        "CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS": "1",
+        # ────────────────────────────────────────────────────────────────
         # Workspace tools Lambda for custom tools (KB queries, etc.)
         "WORKSPACE_TOOLS_LAMBDA_NAME": workspace_tools_lambda,
         # OAuth workspace tools Lambda for OAuth cloud storage tools
