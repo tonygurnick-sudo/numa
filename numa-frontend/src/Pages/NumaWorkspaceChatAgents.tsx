@@ -10,6 +10,7 @@ import { PageHeader } from '../Components/PageHeader';
 import { ChatHistorySidebar, type ChatHistorySidebarRef } from '../Components/Chat/ChatHistorySidebar';
 import { AgentAvatar } from '../Components/Agents/AgentAvatar';
 import { ChatInput } from '../Components/Chat/ChatInput';
+import { BackgroundTaskWatchingChip } from '../Components/Chat/BackgroundTaskWatchingChip';
 import { ExportConversationButton } from '../Components/Chat/ExportConversationButton';
 import { ChatMessages } from '../Components/Chat/ChatMessages';
 import { useShowChatCost } from '../hooks/useShowChatCost';
@@ -1547,6 +1548,7 @@ const NumaWorkspaceChatAgents = () => {
     retryAttempt,
     maxRetryAttempts,
     canRetry,
+    backgroundWatch,
   } = useWorkspaceChatStreaming({
     setMessages,
     setButtonStatus,
@@ -3065,6 +3067,11 @@ const NumaWorkspaceChatAgents = () => {
                                 }
                               : null
                           }
+                        />
+                        <BackgroundTaskWatchingChip
+                          state={backgroundWatch}
+                          onStop={stopStream}
+                          isStopping={isStopping}
                         />
                         <ChatInput
                           inputMessage={inputMessage}

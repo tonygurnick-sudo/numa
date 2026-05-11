@@ -340,6 +340,120 @@ def _transcribe_audio_file(file_path: str) -> dict[str, Any]:
     return payload.get("result", {})
 
 
+# ── Background-bash watching state ────────────────────────────────────
+# When the model launches a Bash command with run_in_background=True, the
+# task runs inside the MicroVM after the model's turn would otherwise end.
+# Today the harness has no way to wake the model up when that task completes,
+# so the user would just see a dead chat. The watching state holds the SSE
+# stream open so the frontend can render a "background task running" chip
+# and keep the composer enabled — user can type a new message (closes the
+# stream, starts a fresh turn) or click Stop. No model-driven auto-resume
+# in this version; the user must send a message to get status.
+
+# Max wall-clock the harness will sit in the watching state. After this,
+# we emit a timeout event and close the SSE. Next user message picks back
+# up. 10 min covers most "I'll walk away and come back" patterns.
+_BACKGROUND_WATCH_MAX_SECONDS = 600
+
+# How often we emit a chip-pulse SSE event with updated elapsed_seconds.
+# Light — no model invocation, just a server-push for the UI tick.
+_BACKGROUND_WATCH_PULSE_INTERVAL = 5
+
+
+async def _emit_background_watching_state(
+    *,
+    trace_path: Path,
+    stop_event: asyncio.Event,
+    disconnect_checker: Optional[Callable[[], Awaitable[bool]]],
+    request_id: Optional[str],
+    conversation_id: str,
+) -> AsyncIterator[bytes]:
+    """Hold the SSE stream open after a turn ends with live background bash shells.
+
+    Emits:
+      - turn_state="watching" once on entry (signals frontend to mark assistant
+        message complete + enable composer + render chip)
+      - background_task_status="running" pulses every _BACKGROUND_WATCH_PULSE_INTERVAL
+        seconds, with updated elapsed_seconds
+      - background_task_status terminal event on exit, with state =
+        "timeout" / "stop_event" / "client_disconnect"
+
+    Aborts on stop_event, client disconnect, or the 10-minute cap.
+    """
+    started_at = datetime.now(timezone.utc)
+
+    logger.info(
+        "Entering background-bash watching state",
+        _name="BACKGROUND_WATCH_START",
+        conversation_id=conversation_id,
+        request_id=request_id,
+        max_seconds=_BACKGROUND_WATCH_MAX_SECONDS,
+    )
+
+    entry_event = {
+        "type": "turn_state",
+        "state": "watching",
+        "timestamp": started_at.isoformat(),
+        "request_id": request_id or "",
+    }
+    with trace_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry_event) + "\n")
+    yield format_sse_event(entry_event)
+
+    exit_reason = "timeout"
+    while True:
+        elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+        if elapsed >= _BACKGROUND_WATCH_MAX_SECONDS:
+            exit_reason = "timeout"
+            break
+        if stop_event.is_set():
+            exit_reason = "stop_event"
+            break
+        if disconnect_checker and await disconnect_checker():
+            exit_reason = "client_disconnect"
+            break
+
+        # Chip pulse — frontend uses elapsed_seconds to render "running… (1m 23s)"
+        pulse_event = {
+            "type": "background_task_status",
+            "state": "running",
+            "elapsed_seconds": int(elapsed),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "request_id": request_id or "",
+        }
+        # Don't trace pulses (noisy) — only stream to client
+        yield format_sse_event(pulse_event)
+
+        # Sleep in 1s slices so stop_event / disconnect are responsive
+        for _ in range(_BACKGROUND_WATCH_PULSE_INTERVAL):
+            if stop_event.is_set() or (
+                disconnect_checker and await disconnect_checker()
+            ):
+                break
+            await asyncio.sleep(1)
+
+    elapsed_final = int((datetime.now(timezone.utc) - started_at).total_seconds())
+    terminal_event = {
+        "type": "background_task_status",
+        "state": exit_reason,
+        "elapsed_seconds": elapsed_final,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "request_id": request_id or "",
+    }
+    with trace_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(terminal_event) + "\n")
+    yield format_sse_event(terminal_event)
+
+    logger.info(
+        "Exited background-bash watching state",
+        _name="BACKGROUND_WATCH_END",
+        conversation_id=conversation_id,
+        request_id=request_id,
+        elapsed_seconds=elapsed_final,
+        reason=exit_reason,
+    )
+
+
 async def stream_claude_sdk(
     conversation_id: str,
     prompt: str,
@@ -418,6 +532,13 @@ async def stream_claude_sdk(
     run_key: Optional[RunKey] = (
         (user_sub, conversation_id, request_id) if request_id else None
     )
+
+    # Background-bash watching state: did the model launch any `run_in_background`
+    # shells this turn? If so, hold the SSE stream open after the assistant message
+    # ends so the frontend can render a "background task running" chip and the
+    # composer stays enabled. Without this, the chat looks dead while the task
+    # finishes inside the MicroVM.
+    background_shells_launched = False
 
     # Initialize stream log for verbose debugging
     stream_log = StreamLog(
@@ -756,6 +877,16 @@ async def stream_claude_sdk(
                                 block.name,
                                 block.input if isinstance(block.input, dict) else None,
                             )
+                            # Watch for background-bash launches. If the turn
+                            # ends with any of these still live, we hold the
+                            # SSE open in a watching state so the frontend can
+                            # show progress and the user can interject.
+                            if (
+                                block.name == "Bash"
+                                and isinstance(block.input, dict)
+                                and block.input.get("run_in_background") is True
+                            ):
+                                background_shells_launched = True
                 elif isinstance(message, UserMessage):
                     # Check for tool results in user messages
                     content = message.content
@@ -1319,6 +1450,23 @@ async def stream_claude_sdk(
                     with trace_path.open("a", encoding="utf-8") as f:
                         f.write(json.dumps(serialized) + "\n")
                     yield format_sse_event(serialized)
+
+        # ── Background-bash watching state ────────────────────────────
+        # If this turn launched any run_in_background shells, hold the SSE
+        # open so the frontend can render a "background task running" chip
+        # next to the composer. The composer stays enabled — the user can
+        # type a new message (which closes this stream and starts a fresh
+        # turn) or click Stop. No auto-resume on completion in v1; if the
+        # user wants status they send a message, model checks via BashOutput.
+        if background_shells_launched and not stop_reason:
+            async for sse_chunk in _emit_background_watching_state(
+                trace_path=trace_path,
+                stop_event=stop_event,
+                disconnect_checker=disconnect_checker,
+                request_id=request_id,
+                conversation_id=conversation_id,
+            ):
+                yield sse_chunk
 
     except Exception as e:
         import traceback

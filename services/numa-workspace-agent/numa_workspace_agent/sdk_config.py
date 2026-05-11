@@ -512,6 +512,18 @@ def create_agent_options(
         "OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME": oauth_workspace_tools_lambda,
     }
 
+    # Background bash (`run_in_background: true` + BashOutput / TaskStop) is only
+    # useful when the harness can hold a connection open to surface completion.
+    # That's the "watching state" wired into stream_claude_sdk (streaming response
+    # mode only). For non-streaming agent types — scheduled runs, fire-and-forget,
+    # sync pipelines — there's no user listening and no watching state, so a
+    # background task that outlives the agent's turn is orphaned: it keeps
+    # running in the MicroVM, produces no notification, and the agent declares
+    # its work done without seeing the result. Disable the feature entirely for
+    # those response modes.
+    if type_config.response_mode != "stream":
+        env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] = "1"
+
     # Pass allowed KBs (with id and name) to custom tools for security and attribution
     if allowed_kb_ids is not None:
         env["NUMA_ALLOWED_KBS"] = json.dumps(

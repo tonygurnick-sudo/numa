@@ -629,9 +629,10 @@ export function updateSegmentWithInput(
  */
 export function createWorkspaceChatMessageHelpers(
   setMessages: (updater: (prev: WorkspaceChatMessage[]) => WorkspaceChatMessage[]) => void,
-  setButtonStatus: (status: 'idle' | 'loading' | 'streaming') => void
+  setButtonStatus: (status: 'idle' | 'loading' | 'streaming') => void,
+  setBackgroundWatch?: WorkspaceChatMessageHelpers['setBackgroundWatch']
 ): WorkspaceChatMessageHelpers {
-  return { setMessages, setButtonStatus };
+  return { setMessages, setButtonStatus, setBackgroundWatch };
 }
 
 // ============================================================
@@ -2228,6 +2229,39 @@ export function createStreamEventHandler(config: StreamEventHandlerConfig): (eve
         }
         return updated;
       });
+      return;
+    }
+
+    // === Background-bash watching state ===
+    // turn_state="watching" fires once when the model finished its turn but
+    // a run_in_background shell is still live. Frontend transitions:
+    //  - assistant message marked complete (already done by ResultMessage)
+    //  - composer stays enabled (the watching state is not "streaming")
+    //  - pulsing chip rendered with elapsed_seconds
+    // background_task_status pulses follow with elapsed_seconds updates.
+    // Terminal background_task_status events (timeout/stop_event/client_disconnect)
+    // clear the chip.
+    if (event.type === 'turn_state' && (event as { state?: string }).state === 'watching') {
+      helpers.setBackgroundWatch?.(() => ({ active: true, elapsedSeconds: 0 }));
+      return;
+    }
+    if (event.type === 'background_task_status') {
+      const evt = event as { state: string; elapsed_seconds?: number };
+      if (evt.state === 'running') {
+        helpers.setBackgroundWatch?.((prev) => ({
+          ...prev,
+          active: true,
+          elapsedSeconds: evt.elapsed_seconds ?? prev.elapsedSeconds,
+        }));
+      } else {
+        // Terminal — clear the chip with a reason the UI can use to render
+        // a brief "still running, ping me to check" hint on timeout.
+        helpers.setBackgroundWatch?.(() => ({
+          active: false,
+          elapsedSeconds: evt.elapsed_seconds ?? 0,
+          terminalReason: evt.state as 'timeout' | 'stop_event' | 'client_disconnect',
+        }));
+      }
       return;
     }
 
