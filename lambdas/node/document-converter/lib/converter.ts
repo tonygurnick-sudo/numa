@@ -1,4 +1,4 @@
-import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { execSync } from 'child_process';
 import { postProcessDocxTables } from './docx-postprocess.js';
 
@@ -54,6 +54,19 @@ async function ensureLibreOffice(): Promise<void> {
 }
 
 /**
+ * Wipe and recreate the LibreOffice user profile.
+ * Exit 81 typically signals stale profile state surviving across warm starts —
+ * resetting the profile and retrying clears the flake without a cold start.
+ */
+function resetLibreOfficeProfile(): void {
+  const profileDir = '/tmp/lo_profile';
+  if (existsSync(profileDir)) {
+    rmSync(profileDir, { recursive: true, force: true });
+  }
+  mkdirSync(profileDir, { recursive: true });
+}
+
+/**
  * Run LibreOffice conversion directly with full error visibility.
  * Bypasses the @shelf/aws-lambda-libreoffice `convertTo` wrapper which
  * swallows stderr, has opaque retry logic, and deletes the input file.
@@ -61,6 +74,8 @@ async function ensureLibreOffice(): Promise<void> {
  * Uses --env:UserInstallation to set a clean, explicit user profile path.
  * LO 6.4 (the Lambda layer version) has PDF export bugs that surface when
  * the default profile at $HOME/.config is absent or incomplete on cold starts.
+ *
+ * Retries once on exit 81 (profile-state flake), wiping /tmp/lo_profile first.
  */
 function runLibreOffice(inputPath: string, format: string, outdir = '/tmp'): string {
   const cmd =
@@ -68,18 +83,53 @@ function runLibreOffice(inputPath: string, format: string, outdir = '/tmp'): str
     ` "-env:UserInstallation=${LO_USER_PROFILE}"` +
     ` --convert-to ${format} --outdir ${outdir} ${inputPath}`;
 
-  let stdout = '';
-  let stderr = '';
-  try {
-    stdout = execSync(cmd, { encoding: 'utf8', timeout: 90000, stdio: ['pipe', 'pipe', 'pipe'] });
-  } catch (error: unknown) {
-    const e = error as { stdout?: string; stderr?: string; status?: number };
-    stdout = e.stdout || '';
-    stderr = e.stderr || '';
-    console.error(`[LibreOffice] exit ${e.status}, stdout: ${stdout.trim()}, stderr: ${stderr.trim()}`);
-    throw new Error(`LibreOffice failed (exit ${e.status}): ${stderr.trim() || stdout.trim()}`);
-  }
+  const attempt = (): { stdout: string; stderr: string } => {
+    try {
+      const out = execSync(cmd, { encoding: 'utf8', timeout: 90000, stdio: ['pipe', 'pipe', 'pipe'] });
+      return { stdout: out, stderr: '' };
+    } catch (error: unknown) {
+      const e = error as { stdout?: string; stderr?: string; status?: number };
+      const stdout = e.stdout || '';
+      const stderr = e.stderr || '';
+      console.error(`[LibreOffice] exit ${e.status}, stdout: ${stdout.trim()}, stderr: ${stderr.trim()}`);
 
+      // Exit 81: profile-state flake. Wipe profile and retry once.
+      // Production traces show same-params alternating success/failure with no
+      // useful diagnostic; the only thing that distinguishes the two is
+      // residual state in /tmp/lo_profile carried across warm starts.
+      if (e.status === 81) {
+        console.warn(`[LibreOffice] exit 81 — wiping /tmp/lo_profile and retrying once`);
+        resetLibreOfficeProfile();
+        try {
+          const retryOut = execSync(cmd, {
+            encoding: 'utf8',
+            timeout: 90000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+          console.log(`[LibreOffice] retry succeeded after profile reset`);
+          return { stdout: retryOut, stderr: '' };
+        } catch (retryError: unknown) {
+          const re = retryError as { stdout?: string; stderr?: string; status?: number };
+          const retryStdout = re.stdout || '';
+          const retryStderr = re.stderr || '';
+          console.error(
+            `[LibreOffice] retry exit ${re.status}, stdout: ${retryStdout.trim()}, stderr: ${retryStderr.trim()}`
+          );
+          const detail = retryStderr.trim() || retryStdout.trim() || '(LibreOffice produced no diagnostic output)';
+          throw new Error(
+            `LibreOffice conversion failed (exit ${re.status}). ` +
+              `Wiped /tmp/lo_profile and retried once — second attempt also failed. ` +
+              `File: ${inputPath}. Detail: ${detail}`
+          );
+        }
+      }
+
+      const detail = stderr.trim() || stdout.trim() || '(LibreOffice produced no diagnostic output)';
+      throw new Error(`LibreOffice failed (exit ${e.status}). File: ${inputPath}. Detail: ${detail}`);
+    }
+  };
+
+  const { stdout, stderr } = attempt();
   if (stderr) console.warn(`[LibreOffice] stderr: ${stderr.trim()}`);
 
   // Derive expected output path from input filename
