@@ -63,13 +63,13 @@ Proactively use render when the conversation naturally calls for a visual:
 
 - Simple text output (just write it as a message)
 - The user hasn't asked for a visual and the content doesn't benefit from one
-- Creating a file for download (use execute_script, then reference it)
+- Creating a file for download (Write the file to `/workdir/outputs/`, then reference it)
 - Full-page applications or complex multi-page dashboards (create as a file instead)
 
 ## Render vs Create: Two Different Things
 
 - **Render** (this tool): Inline visual in the conversation. Designed for the chat viewport. Think: a diagram, a card, a chart, a preview. Compact and self-contained.
-- **Create file** (execute_script): A standalone HTML document saved to /workdir/. Can be a full dashboard, multi-page layout, or complex app.
+- **Create file** (Write to `/workdir/outputs/` or run a generator script in `/workdir/tmp/`): A standalone HTML document the user can download. Full dashboards, multi-page layouts, complex apps.
 
 If you want to both create AND preview, create the file first, then render it with `file_path`.
 
@@ -351,7 +351,7 @@ White background, 0.5px border, 12px radius, 16px padding.
 ## Tips
 
 - Use inline SVG for diagrams and flowcharts -- renders directly without iframe, crisper and lighter
-- For complex dashboards: create the HTML file first with execute_script, then render with file_path
+- For complex dashboards: Write the HTML file to `/workdir/tmp/<name>.html` (or `/workdir/outputs/<name>.html` if it's the deliverable), then render with `file_path`. To iterate on the dashboard, use `Edit` to patch the HTML in place — much cheaper than re-Writing the whole file.
 - Use colour to convey meaning -- status indicators, priority levels, category groupings
 - Rounded corners and subtle borders make rendered content feel native to the chat
 - Multiple renders per response is encouraged -- interleave visuals with explanation text

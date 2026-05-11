@@ -312,31 +312,39 @@ TOOL_USAGE = """## Tool Usage Policy
 
 ## Bash Best Practices
 
-When executing bash commands (typically for running Python scripts):
+When executing bash commands (typically for running Python or Node scripts):
 - Always quote file paths containing spaces with double quotes
 - Use absolute paths rather than changing directories with cd
 - Never use interactive commands (like python -i, less, vim) since the environment doesn't support interactive input
 - The Bash tool has built-in security validation that blocks commands containing shell patterns like `${{...}}` or `$'...'`. This affects inline Python that uses dollar signs (e.g., currency formatting).
-- **Heredocs are NOT supported:** The shell operator `<<` is blocked for security. Instead, use the `execute_script` tool or write to a file and execute.
+- **Heredocs are NOT supported:** The shell operator `<<` is blocked. Use `python3 -c` for short inline snippets, or Write to a file and run with Bash for longer scripts.
 
-**IMPORTANT: For running scripts, ALWAYS prefer the execute_script tool over the Bash tool:**
-- Call `mcp__scripts__execute_script` with interpreter="python3", "bash", or "node" and your code
-- This is faster, cleaner, and does not require user approval for system binaries
-- The Bash tool requires user approval for commands like `pandoc`, `pdftoppm` — execute_script does not
-- Always provide a description field explaining what the script does (e.g., "Converting DOCX to PDF")
+**Running scripts — prefer Bash with Write/Edit over inline-only execution:**
 
-**Only use Bash when:**
-- The script file already exists on disk (e.g., `/workdir/outputs/existing_script.py`)
-- You need to run a complex multi-file project
+- **Short snippets** (a single calculation, a quick pandas check, ~20 lines or less): use `Bash("python3 -c \"...\"")` or `Bash("node -e \"...\"")` inline. Avoid dollar signs in the inline code — the SDK blocks them.
+- **Longer scripts and anything you'll iterate on:** `Write` the script to `/workdir/tmp/<descriptive_name>.{{py,js}}`, then run with `Bash("python3 /workdir/tmp/<name>.py")`. To iterate, use `Edit` to patch the file in place — patch-style edits are dramatically cheaper than re-emitting the full script body each turn.
+- `/workdir/tmp/` is the scratch directory for intermediate scripts and data. `/workdir/outputs/` is reserved for files the user is meant to see; don't put working scripts there.
+- Legitimate Python imports (`os.path`, `pandas`, `pptxgenjs`, `openpyxl`, `shutil` against `/workdir` paths) are allowed. The security boundary is at subprocess egress (network, env vars, system paths like /etc/proc/var), not at module imports.
 
-Example:
+Example (longer script you'll iterate on):
 ```
-mcp__scripts__execute_script(
-  interpreter="python3",
-  description="Loading and analyzing sales data",
-  code="import pandas as pd\\ndf = pd.read_excel('/workdir/uploads/data.xlsx')\\nprint(df.head())"
-)
+Write(file_path="/workdir/tmp/build_deck.js", content="<full script>")
+Bash(command="node /workdir/tmp/build_deck.js")
+# next turn, after seeing the output:
+Edit(file_path="/workdir/tmp/build_deck.js", old_string="...", new_string="...")
+Bash(command="node /workdir/tmp/build_deck.js")
 ```
+
+Example (short one-shot):
+```
+Bash(command='python3 -c "import json; print(json.dumps({{\\"ok\\": True}}))"')
+```
+
+**For long-running tasks** (data extraction taking minutes, large file processing): use `Bash` with `run_in_background: true`. Poll output with the `BashOutput` tool using the returned `shellId` — **do not** try to `cat` the output file path the tool reports; the security hook blocks `/tmp/` reads. Use `KillShell` to abandon a task.
+
+When you kick off a background task and have nothing else to do this turn, finish your turn with a message that invites the user to redirect ("Started the extraction in the background — should take ~3 min. Anything else you want me to do while we wait, or just hold for the result?"). The harness will keep polling the background task for up to 5 min after your turn ends and surface the result automatically if the user doesn't interject. If the user does send a new message during the wait, you'll be brought back with their new request and you can decide whether to also check on the background task inline. For tasks much longer than 5 min, tell the user to ping back when they want a status check.
+
+Parallel tool calls (multiple `tool_use` blocks in one assistant message) are encouraged for independent short tasks — prefer parallel calls over `run_in_background` when the work is short enough to fit in one turn.
 
 **For simple inline Python:** Avoid dollar signs entirely:
 - Use "USD {{:.2f}}".format(value) instead of "${{:.2f}}".format(value)
