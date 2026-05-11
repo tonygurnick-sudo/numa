@@ -7,6 +7,7 @@ mistaken for file paths.
 import pytest
 from numa_workspace_agent.hooks.security import (
     check_bash_command,
+    is_blocked_path,
     strip_data_content,
 )
 
@@ -505,3 +506,87 @@ class TestDenyResponseRemediation:
         msg = resp["hookSpecificOutput"]["permissionDecisionReason"]
         # Falls through to the generic hint
         assert "/workdir/" in msg
+
+
+# ── SDK tool-results allowlist ───────────────────────────────────────────────
+
+
+class TestSdkToolResultsAllowlist:
+    """The Claude Agent SDK persists oversized tool outputs to
+    /workdir/.system/.claude/projects/<id>/tool-results/<tool_use_id>.json
+    and tells the model to Read them. Without an allowlist the security hook
+    blocks the Read and the SDK+hook contradict each other.
+
+    The allowlist is narrowly scoped to that exact path shape AND to the Read
+    tool only — Write/Edit/Glob/Grep and Bash listing still block.
+    """
+
+    TOOL_RESULT_PATH = (
+        "/workdir/.system/.claude/projects/abc-123/tool-results/"
+        "toolu_bdrk_01ABCDEFGHIJ.json"
+    )
+
+    def test_read_allowed_on_tool_result_json(self):
+        blocked, reason = is_blocked_path(
+            self.TOOL_RESULT_PATH, allow_sdk_tool_results=True
+        )
+        assert not blocked, f"Should be allowed but got: {reason}"
+
+    def test_write_still_blocked_on_tool_result_json(self):
+        """Allowlist must NOT extend to Write — model should not be able to
+        forge tool-result files in the SDK's persistence directory."""
+        blocked, _ = is_blocked_path(
+            self.TOOL_RESULT_PATH, allow_sdk_tool_results=False
+        )
+        assert blocked
+
+    def test_other_system_paths_still_blocked_even_for_read(self):
+        """Allowlist is exact-shape: only tool-results/*.json, nothing else."""
+        blocked, _ = is_blocked_path(
+            "/workdir/.system/.claude/projects/abc/sessions/xyz.json",
+            allow_sdk_tool_results=True,
+        )
+        assert blocked
+
+    def test_random_system_file_still_blocked(self):
+        blocked, _ = is_blocked_path(
+            "/workdir/.system/memory_paths.auto", allow_sdk_tool_results=True
+        )
+        assert blocked
+
+    def test_tool_results_subdirectory_traversal_blocked(self):
+        """Can't escape into a sibling .system directory via the tool-results pattern."""
+        blocked, _ = is_blocked_path(
+            "/workdir/.system/.claude/projects/abc/tool-results/../../sessions/x.json",
+            allow_sdk_tool_results=True,
+        )
+        assert blocked
+
+    def test_non_json_in_tool_results_still_blocked(self):
+        """Allowlist requires .json suffix."""
+        blocked, _ = is_blocked_path(
+            "/workdir/.system/.claude/projects/abc/tool-results/toolu_xyz.txt",
+            allow_sdk_tool_results=True,
+        )
+        assert blocked
+
+    def test_nested_subdir_in_tool_results_blocked(self):
+        """Allowlist requires exactly one filename component after tool-results/."""
+        blocked, _ = is_blocked_path(
+            "/workdir/.system/.claude/projects/abc/tool-results/nested/x.json",
+            allow_sdk_tool_results=True,
+        )
+        assert blocked
+
+    def test_bash_cat_tool_result_still_blocked(self):
+        """Bash never gets the allowlist — model can't ls/cat the directory."""
+        blocked, _ = check_bash_command(
+            f"cat {TestSdkToolResultsAllowlist.TOOL_RESULT_PATH}"
+        )
+        assert blocked
+
+    def test_bash_ls_tool_results_dir_still_blocked(self):
+        blocked, _ = check_bash_command(
+            "ls /workdir/.system/.claude/projects/abc/tool-results/"
+        )
+        assert blocked

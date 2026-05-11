@@ -403,13 +403,32 @@ def normalize_path(path: str, cwd: str = WORKSPACE_ROOT) -> str:
     return os.path.realpath(path)
 
 
-def is_blocked_path(path: str, cwd: str = WORKSPACE_ROOT) -> tuple[bool, str | None]:
+# SDK-persisted tool-result overflow lives under /workdir/.system/.claude/projects/.
+# When a tool's output is too large for inline return, the Claude Agent SDK persists
+# the full payload here and tells the model to Read it. Pre-allowlist these paths
+# so the SDK and the hook don't contradict each other; everything else under
+# /workdir/.system/ stays blocked (memory paths, trace files, session state).
+SDK_TOOL_RESULT_ALLOWLIST = re.compile(
+    r"^/workdir/\.system/\.claude/projects/[^/]+/tool-results/[^/]+\.json$"
+)
+
+
+def is_blocked_path(
+    path: str,
+    cwd: str = WORKSPACE_ROOT,
+    *,
+    allow_sdk_tool_results: bool = False,
+) -> tuple[bool, str | None]:
     """
     Check if a path should be blocked.
 
     Security model:
     1. Block EVERYTHING outside /workdir (no exceptions)
     2. Block sensitive paths within /workdir (.system/, secrets/, .env)
+    3. If `allow_sdk_tool_results` is True, narrowly permit reading the SDK's
+       persisted tool-result JSON sidecars (only set by Read in security_hook;
+       Write/Edit/Glob/Grep keep their full blocklist semantics so the model
+       can't enumerate or modify the directory).
 
     Returns:
         (is_blocked, reason) tuple
@@ -422,6 +441,14 @@ def is_blocked_path(path: str, cwd: str = WORKSPACE_ROOT) -> tuple[bool, str | N
     # Block EVERYTHING outside /workdir - simple and secure
     if not normalized.startswith(WORKSPACE_ROOT + "/") and normalized != WORKSPACE_ROOT:
         return True, f"Access outside workspace '{WORKSPACE_ROOT}' is blocked"
+
+    # SDK-persisted tool-result files: pre-allowlist for Read only. The SDK
+    # writes these when a tool result exceeds the inline size cap and tells
+    # the model to Read the resulting JSON sidecar. Everything else under
+    # .system/ — memory paths, trace files, session state — stays blocked
+    # by BLOCKED_PATH_PATTERNS below.
+    if allow_sdk_tool_results and SDK_TOOL_RESULT_ALLOWLIST.match(normalized):
+        return False, None
 
     # Check against blocked path patterns within workspace (.system/, secrets/, .env)
     for pattern in BLOCKED_PATH_PATTERNS:
@@ -795,10 +822,17 @@ async def security_hook(
     blocked = False
     reason = None
 
-    # Check tools that use file_path field (Read, Write, Edit)
+    # Check tools that use file_path field (Read, Write, Edit).
+    # Read gets the SDK-tool-results allowlist so the model can pick up the
+    # JSON sidecars the SDK persists for oversized tool outputs; Write/Edit do
+    # NOT — the directory is read-only from the model's perspective.
     if tool_name in FILE_PATH_TOOLS:
         file_path = tool_input.get("file_path", "")
-        blocked, reason = is_blocked_path(file_path, cwd)
+        blocked, reason = is_blocked_path(
+            file_path,
+            cwd,
+            allow_sdk_tool_results=(tool_name == "Read"),
+        )
 
     # Check MultiEdit tool (has edits array with file_path in each)
     elif tool_name == "MultiEdit":
