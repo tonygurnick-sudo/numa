@@ -1646,7 +1646,13 @@ const fetchAccessibleKBIds = async (userSub: string): Promise<string[]> => {
       const editors = extractStringList(item.editors);
       const createdBy = typeof item.created_by === 'string' ? item.created_by : '';
 
-      if (viewers.includes('*') || viewers.includes(userSub) || editors.includes(userSub) || createdBy === userSub) {
+      if (
+        viewers.includes('*') ||
+        editors.includes('*') ||
+        viewers.includes(userSub) ||
+        editors.includes(userSub) ||
+        createdBy === userSub
+      ) {
         accessibleKBIds.push(kbId);
       }
     }

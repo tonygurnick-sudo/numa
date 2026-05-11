@@ -741,7 +741,11 @@ class KnowledgeBaseManager:
         if "SS" in viewers_value:
             viewers = list(viewers_value["SS"])
         elif "L" in viewers_value:
-            viewers = []
+            viewers = [
+                v["S"]
+                for v in viewers_value.get("L", [])
+                if isinstance(v, dict) and "S" in v
+            ]
         else:
             viewers = []
 
@@ -749,7 +753,11 @@ class KnowledgeBaseManager:
         if "SS" in editors_value:
             editors = list(editors_value["SS"])
         elif "L" in editors_value:
-            editors = []
+            editors = [
+                v["S"]
+                for v in editors_value.get("L", [])
+                if isinstance(v, dict) and "S" in v
+            ]
         else:
             editors = []
 
