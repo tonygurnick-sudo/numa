@@ -278,3 +278,40 @@ class TestCreateAgentOptionsWithType:
         assert (
             "CRITICAL IDENTITY INSTRUCTION: You are Numa" not in options.system_prompt
         )
+
+
+class TestCreateAgentOptionsCacheTTL:
+    """The `is_streaming` flag controls prompt-cache TTL and background-bash
+    enablement. 1h TTL is the right call for interactive chat (reuses cache
+    across turns within the hour); 5m default is correct for everything else
+    (scheduled, sync, fire-and-forget, pipelines, V2 apps, Nolia) where the
+    1h write premium has nothing to amortise against.
+    """
+
+    def test_streaming_enables_1h_cache(self):
+        """Interactive chat → 1h cache TTL → ENABLE_PROMPT_CACHING_1H_BEDROCK=1."""
+        options = create_agent_options(is_streaming=True)
+        assert options.env.get("ENABLE_PROMPT_CACHING_1H_BEDROCK") == "1"
+
+    def test_non_streaming_omits_1h_cache(self):
+        """Scheduled / sync / fire-and-forget → omit the 1h env var so the
+        SDK falls back to its 5m default. ~25% cheaper per scheduled run."""
+        options = create_agent_options(is_streaming=False)
+        assert "ENABLE_PROMPT_CACHING_1H_BEDROCK" not in options.env
+
+    def test_streaming_default_is_true(self):
+        """Default behaviour preserves the current chat experience."""
+        options = create_agent_options()
+        assert options.env.get("ENABLE_PROMPT_CACHING_1H_BEDROCK") == "1"
+
+    def test_non_streaming_disables_background_bash(self):
+        """Non-streaming has no harness to surface completion → orphan risk.
+        Use `is_streaming` (the runtime flag), not `type_config.response_mode`
+        (the static default), since the schedule runner overrides the
+        runtime mode via the request body."""
+        options = create_agent_options(is_streaming=False)
+        assert options.env.get("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS") == "1"
+
+    def test_streaming_keeps_background_bash_enabled(self):
+        options = create_agent_options(is_streaming=True)
+        assert "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" not in options.env

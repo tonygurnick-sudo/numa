@@ -707,6 +707,7 @@ async def stream_claude_sdk(
         company_profile=company_profile,
         feature_flags=feature_flags,
         thinking_override=thinking_override,
+        is_streaming=True,
     )
 
     logger.info(
@@ -1466,6 +1467,7 @@ async def stream_claude_sdk(
                 company_profile=company_profile,
                 feature_flags=feature_flags,
                 thinking_override=thinking_override,
+                is_streaming=True,
             )
 
             async with ClaudeSDKClient(options=fallback_options) as retry_client:
@@ -1796,6 +1798,7 @@ async def run_claude_sdk(
         feature_flags=feature_flags,
         home_dir=system_dir,
         thinking_override=thinking_override,
+        is_streaming=False,
     )
 
     logger.info(
@@ -2185,6 +2188,7 @@ async def run_claude_sdk(
                 feature_flags=feature_flags,
                 home_dir=system_dir,
                 thinking_override=thinking_override,
+                is_streaming=False,
             )
 
             async with ClaudeSDKClient(options=fallback_options) as retry_client:
