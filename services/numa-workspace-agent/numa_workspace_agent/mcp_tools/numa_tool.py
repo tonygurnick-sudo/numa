@@ -55,7 +55,14 @@ def _ok(text: str) -> dict[str, Any]:
 
 def _err(text: str) -> dict[str, Any]:
     """Build an error MCP tool response."""
-    return {"content": [{"type": "text", "text": text}], "isError": True}
+    # Dual-write: claude-agent-sdk's in-process MCP handler reads snake_case
+    # `is_error`, but the MCP spec proper uses camelCase `isError`. Writing
+    # both keeps both transports correct.
+    return {
+        "content": [{"type": "text", "text": text}],
+        "is_error": True,
+        "isError": True,
+    }
 
 
 # ── Helper: get KB config from environment ───────────────────────────────────
@@ -658,7 +665,7 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
         }
         convert_result = await _handle_convert_document(convert_params)
 
-        if convert_result.get("isError"):
+        if convert_result.get("is_error") or convert_result.get("isError"):
             error_text = convert_result.get("content", [{}])[0].get(
                 "text", "unknown error"
             )

@@ -54,15 +54,21 @@ class TestResponseHelpers:
         assert result == {"content": [{"type": "text", "text": "hello"}]}
 
     def test_err_structure(self):
+        # Dual-write `is_error` (snake_case — claude-agent-sdk's in-process
+        # MCP handler) AND `isError` (camelCase — MCP spec proper). Missing
+        # `is_error` was the root cause of fleet-wide `is_error: null` on
+        # tool failures.
         result = _err("bad thing happened")
         assert result == {
             "content": [{"type": "text", "text": "bad thing happened"}],
+            "is_error": True,
             "isError": True,
         }
 
     def test_ok_does_not_have_error_flag(self):
         result = _ok("fine")
         assert "isError" not in result
+        assert "is_error" not in result
 
 
 # ---------------------------------------------------------------------------

@@ -357,6 +357,7 @@ async def execute_script(args: dict[str, Any]) -> dict[str, Any]:
                     "text": f"Error: Interpreter must be one of {list(ALLOWED_INTERPRETERS.keys())}",
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -364,6 +365,7 @@ async def execute_script(args: dict[str, Any]) -> dict[str, Any]:
     if not code.strip():
         return {
             "content": [{"type": "text", "text": "Error: Code cannot be empty"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -381,6 +383,7 @@ async def execute_script(args: dict[str, Any]) -> dict[str, Any]:
                     ),
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -407,6 +410,7 @@ async def execute_script(args: dict[str, Any]) -> dict[str, Any]:
             "content": [
                 {"type": "text", "text": f"Error: Failed to create script file: {e}"}
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -443,6 +447,7 @@ async def execute_script(args: dict[str, Any]) -> dict[str, Any]:
             "content": [
                 {"type": "text", "text": f"Error: Script timed out after {timeout}s"}
             ],
+            "is_error": True,
             "isError": True,
         }
     except FileNotFoundError:
@@ -453,11 +458,13 @@ async def execute_script(args: dict[str, Any]) -> dict[str, Any]:
                     "text": f"Error: Interpreter '{interpreter}' not found",
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
     except Exception as e:
         return {
             "content": [{"type": "text", "text": f"Error: {type(e).__name__}: {e}"}],
+            "is_error": True,
             "isError": True,
         }
     finally:

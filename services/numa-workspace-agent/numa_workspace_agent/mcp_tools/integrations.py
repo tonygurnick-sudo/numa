@@ -92,6 +92,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -101,6 +102,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
     except json.JSONDecodeError as e:
         return {
             "content": [{"type": "text", "text": f"Error: Invalid props JSON: {e}"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -166,6 +168,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                             ),
                         }
                     ],
+                    "is_error": True,
                     "isError": True,
                 }
             return {
@@ -201,6 +204,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
         if status == "already_executed":
@@ -215,6 +219,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -233,6 +238,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:
         return {
             "content": [{"type": "text", "text": f"Error executing {action_key}: {e}"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -279,6 +285,7 @@ async def configure_props(args: dict[str, Any]) -> dict[str, Any]:
             "content": [
                 {"type": "text", "text": f"Error: Invalid configured_props JSON: {e}"}
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -312,6 +319,7 @@ async def configure_props(args: dict[str, Any]) -> dict[str, Any]:
                     "text": f"Error configuring {action_key}.{prop_name}: {e}",
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -393,6 +401,7 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -439,6 +448,7 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                             ),
                         }
                     ],
+                    "is_error": True,
                     "isError": True,
                 }
             return {
@@ -473,6 +483,7 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
         if status == "already_executed":
@@ -487,6 +498,7 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -505,5 +517,6 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:
         return {
             "content": [{"type": "text", "text": f"Error in proxy request: {e}"}],
+            "is_error": True,
             "isError": True,
         }
