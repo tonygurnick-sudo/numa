@@ -143,6 +143,17 @@ export function useWorkspaceChatStreaming({
   const [isStopping, setIsStopping] = useState(false);
   const isStoppingRef = useRef(false);
 
+  // Background-bash watching state — set when the model launched a
+  // run_in_background shell and the harness is holding the SSE open. While
+  // active, the assistant message is rendered complete, the composer stays
+  // enabled, and a pulsing chip near the input shows elapsed time.
+  const [backgroundWatch, setBackgroundWatch] = useState<{
+    active: boolean;
+    elapsedSeconds: number;
+    /** Set when the watching state has ended; clears the chip. */
+    terminalReason?: 'timeout' | 'stop_event' | 'client_disconnect';
+  }>({ active: false, elapsedSeconds: 0 });
+
   // Network resilience state
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -161,6 +172,9 @@ export function useWorkspaceChatStreaming({
     setRetryAttempt(0);
     setCanRetry(false);
     currentRequestIdRef.current = null;
+    // Clear the background-bash watching chip on abort — user may have hit
+    // Stop or sent a new message which closes the SSE.
+    setBackgroundWatch({ active: false, elapsedSeconds: 0 });
   }, []);
 
   const stopStream = useCallback(async () => {
@@ -244,7 +258,7 @@ export function useWorkspaceChatStreaming({
       currentRequestIdRef.current = requestId;
 
       // Create workspace chat message helpers
-      const workspaceChatHelpers = createWorkspaceChatMessageHelpers(setMessages, setButtonStatus);
+      const workspaceChatHelpers = createWorkspaceChatMessageHelpers(setMessages, setButtonStatus, setBackgroundWatch);
 
       // Get timezone for the request
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -681,5 +695,7 @@ export function useWorkspaceChatStreaming({
     maxRetryAttempts,
     canRetry,
     workspaceChatRawText: workspaceChatRawTextRef.current,
+    backgroundWatch,
+    setBackgroundWatch,
   };
 }

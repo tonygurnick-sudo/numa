@@ -24,7 +24,8 @@ export type WorkspaceChatModelId =
   | 'anthropic.claude-sonnet-4-6@high-thinking'
   | 'anthropic.claude-opus-4-6-v1'
   | 'anthropic.claude-opus-4-6-v1@no-thinking'
-  | 'anthropic.claude-haiku-4-5-20251001-v1:0';
+  | 'anthropic.claude-haiku-4-5-20251001-v1:0'
+  | 'anthropic.claude-haiku-4-5-20251001-v1:0@no-thinking';
 
 /** Model option for display in the UI */
 export interface WorkspaceChatModelOption {
@@ -72,6 +73,11 @@ export const WORKSPACE_MODEL_OPTIONS: WorkspaceChatModelOption[] = [
     id: 'anthropic.claude-haiku-4-5-20251001-v1:0',
     label: 'Claude Haiku 4.5',
     description: 'Fast',
+  },
+  {
+    id: 'anthropic.claude-haiku-4-5-20251001-v1:0@no-thinking',
+    label: 'Claude Haiku 4.5 — no thinking',
+    description: 'Test: thinking disabled',
   },
 ];
 
@@ -652,6 +658,19 @@ export interface WorkspaceChatEventContext {
 export interface WorkspaceChatMessageHelpers {
   setMessages: (updater: (prev: WorkspaceChatMessage[]) => WorkspaceChatMessage[]) => void;
   setButtonStatus: (status: 'idle' | 'loading' | 'streaming') => void;
+  /** Optional — set when the streaming hook wants to track background-bash
+   *  watching state. Event handlers update this on `turn_state` /
+   *  `background_task_status` SSE events. */
+  setBackgroundWatch?: (updater: (prev: BackgroundWatchState) => BackgroundWatchState) => void;
+}
+
+/** Background-bash watching state — surfaced to the UI as a pulsing chip
+ *  near the composer while the harness holds the SSE open after a turn that
+ *  launched a `run_in_background` shell. */
+export interface BackgroundWatchState {
+  active: boolean;
+  elapsedSeconds: number;
+  terminalReason?: 'timeout' | 'stop_event' | 'client_disconnect';
 }
 
 // ============================================================
@@ -722,7 +741,9 @@ export type SDKEventType =
   | 'StreamEvent'
   | 'completion'
   | 'assistant_advice'
-  | 'tool_approval';
+  | 'tool_approval'
+  | 'turn_state'
+  | 'background_task_status';
 
 /** Base SDK event with common fields */
 export interface SDKBaseEvent {
@@ -900,7 +921,41 @@ export type SDKEvent =
   | SDKAttachmentsEvent
   | SDKCompletionEvent
   | SDKAssistantAdviceEvent
-  | SDKToolApprovalEvent;
+  | SDKToolApprovalEvent
+  | SDKTurnStateEvent
+  | SDKBackgroundTaskStatusEvent;
+
+/**
+ * Emitted once when the model's turn ends but a `run_in_background` shell is
+ * still live in the MicroVM. The frontend uses this to transition into the
+ * "watching" state: assistant message marked complete, composer stays enabled,
+ * pulsing chip rendered near the input. Sending a new message closes the
+ * stream and starts a fresh turn (normal interrupt path).
+ */
+export interface SDKTurnStateEvent {
+  type: 'turn_state';
+  state: 'watching';
+  timestamp?: string;
+  request_id?: string;
+  parent_tool_use_id?: string | null;
+}
+
+/**
+ * Emitted periodically during the watching state (chip pulse with elapsed
+ * seconds) and once on exit with a terminal state. Terminal states:
+ *   - `running` — still running (pulse update)
+ *   - `timeout` — hit the 10-min watching cap; user should ping back later
+ *   - `stop_event` — user clicked Stop
+ *   - `client_disconnect` — frontend closed the SSE (e.g. sent a new message)
+ */
+export interface SDKBackgroundTaskStatusEvent {
+  type: 'background_task_status';
+  state: 'running' | 'timeout' | 'stop_event' | 'client_disconnect';
+  elapsed_seconds: number;
+  timestamp?: string;
+  request_id?: string;
+  parent_tool_use_id?: string | null;
+}
 
 /** SDK Tool Approval event — emitted when an integration tool needs user approval */
 export interface SDKToolApprovalEvent {
