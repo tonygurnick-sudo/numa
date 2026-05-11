@@ -11,6 +11,7 @@ import { WorkflowStepEventTrigger, type EventSourceSelection } from './WorkflowS
 import type { EventTrigger, GmailEventTrigger } from '../../types/agentSchedules';
 import type { PipedreamTriggerDraft } from '../PipedreamTriggers/PipedreamTriggerConfigurator';
 import { PipedreamProxyService } from '../../Services/PipedreamProxyService';
+import type { ScheduleQuotaViolation as QuotaViolation } from '../../Services/ScheduleService';
 import { WorkflowStepAgent } from './WorkflowStepAgent';
 import { WorkflowStepPrompt } from './WorkflowStepPrompt';
 import { WorkflowStepReview } from './WorkflowStepReview';
@@ -36,7 +37,7 @@ type AutomationWorkflowBuilderProps = {
     cronExpression?: string;
     timezone?: string;
     label: string;
-    maxRuns: number;
+    maxRuns?: number;
     emailNotifications: boolean;
     notificationEmails: string[];
     agentSnapshot?: {
@@ -162,6 +163,16 @@ const buildCronExpression = (
   }
 };
 
+/**
+ * The creator's email is always a notification recipient — they cannot remove
+ * themselves from the list. This guarantees the owner gets failure / quota /
+ * approval notices even if they prune the picker.
+ */
+const ensureCreatorIncluded = (emails: string[], creatorEmail: string | undefined): string[] => {
+  if (!creatorEmail) return emails;
+  return emails.includes(creatorEmail) ? emails : [creatorEmail, ...emails];
+};
+
 export const AutomationWorkflowBuilder = ({
   agents,
   agentsLoading,
@@ -239,10 +250,18 @@ export const AutomationWorkflowBuilder = ({
   // Details
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [maxRuns, setMaxRuns] = useState(100);
-  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [maxRuns, setMaxRuns] = useState(0);
   const [notificationEmails, setNotificationEmails] = useState<string[]>([]);
   const [timezone, setTimezone] = useState(getDefaultTimezone());
+  // Latest QuotaPreflight verdict — bubbled up from the schedule + review
+  // steps. Used to gate Next / Save when the verdict is `blocked` (cron
+  // would push the company over its hard cap, or admin approval is off and
+  // the user-cap would be breached).
+  const [quotaVerdict, setQuotaVerdict] = useState<'ok' | 'needs-approval' | 'blocked' | null>(null);
+  // Number of unresolved preflight blockers (feature-flag, integrations,
+  // folder access) bubbled up from the review step. Save is hard-disabled
+  // while > 0 so users resolve them before submitting.
+  const [preflightBlockerCount, setPreflightBlockerCount] = useState(0);
 
   // UI state
   const [error, setError] = useState<string | null>(null);
@@ -275,7 +294,11 @@ export const AutomationWorkflowBuilder = ({
       // Cap at 100 even when loading legacy schedules saved with higher /
       // unlimited values, so the input never displays an out-of-range value.
       setMaxRuns(Math.min(100, Math.max(1, editingAutomation.maxRuns || 100)));
-      setEmailNotifications(editingAutomation.emailNotifications !== false);
+      // emailNotifications has no UI surface in this builder — saves always
+      // pass `true` (see handleSave below). The legacy `setEmailNotifications`
+      // load that lived here was a rebase-merge artefact; the state pair
+      // doesn't exist. Removing this line was the missing half of that
+      // refactor — leaving it caused a ReferenceError when editing.
       setNotificationEmails(
         editingAutomation.notificationEmails?.length
           ? editingAutomation.notificationEmails
@@ -408,16 +431,39 @@ export const AutomationWorkflowBuilder = ({
             // sitting on an empty config form.
             return Boolean(pipedreamDraft?.component_id);
           }
-          return !!cronExpression;
+          // Cron schedules: also block on a hard quota verdict (e.g. company
+          // cap breach, or admin approval disabled and user cap breached).
+          // The lambda would reject at save time anyway — gating Next here
+          // forces the user to fix the cadence before they get further into
+          // the wizard.
+          return !!cronExpression && quotaVerdict !== 'blocked';
         case 2:
           return !!selectedAgentId;
         case 3:
           return !!name.trim();
+        case 4:
+          // Review step: same gating as the schedule step. `quotaVerdict`
+          // here reflects the review-step preflight (which knows about
+          // maxRuns), so it can flip from blocked → needs-approval / ok if
+          // the user set Max-runs to fit. Also blocks on any unresolved
+          // SchedulePreflightStepper blockers (feature flag off, missing
+          // integration, folder access).
+          return quotaVerdict !== 'blocked' && preflightBlockerCount === 0;
         default:
           return true;
       }
     },
-    [triggerType, cronExpression, selectedAgentId, name, eventTrigger, eventSource, pipedreamDraft]
+    [
+      triggerType,
+      cronExpression,
+      selectedAgentId,
+      name,
+      eventTrigger,
+      eventSource,
+      pipedreamDraft,
+      quotaVerdict,
+      preflightBlockerCount,
+    ]
   );
 
   const handleNext = useCallback(() => {
@@ -470,9 +516,11 @@ export const AutomationWorkflowBuilder = ({
         cronExpression: triggerType === 'event' ? undefined : cronExpression,
         timezone: triggerType === 'event' ? undefined : timezone,
         label: name.trim(),
-        maxRuns,
-        emailNotifications,
-        notificationEmails: emailNotifications ? notificationEmails : [],
+        // 0 in the UI means "unlimited" — backend expects either a positive
+        // integer cap or omitted/undefined, so translate 0 → undefined.
+        maxRuns: maxRuns > 0 ? maxRuns : undefined,
+        emailNotifications: true,
+        notificationEmails: ensureCreatorIncluded(notificationEmails, currentUserEmail),
         agentSnapshot: selectedAgent
           ? {
               agentId: selectedAgent.agentId,
@@ -484,7 +532,33 @@ export const AutomationWorkflowBuilder = ({
           : undefined,
       });
     } catch (err) {
-      setError(isEditing ? t('errors.update') : t('errors.create'));
+      // Prefer the structured error from the lambda response body. The
+      // `agent-schedules` create endpoint returns:
+      //   { error: "Schedule quota exceeded (user): 350 > 300.",
+      //     code: "QUOTA_EXCEEDED",
+      //     violation: { scope, current, requested, limit, approvable } }
+      // Surface this so the user sees the actual reason instead of the generic
+      // "Failed to create automation" axios string.
+      const response = (err as { response?: { data?: { error?: string; violation?: QuotaViolation } } })?.response;
+      const serverError = response?.data?.error;
+      const violation = response?.data?.violation;
+      if (violation) {
+        const scopeLabel =
+          violation.scope === 'company'
+            ? 'company runs/month'
+            : violation.scope === 'user'
+              ? 'user runs/month'
+              : violation.scope === 'concurrent_company'
+                ? 'concurrent schedules in the company'
+                : violation.scope === 'concurrent_user'
+                  ? 'concurrent schedules per user'
+                  : 'concurrent schedules';
+        setError(
+          `${serverError ?? 'Quota exceeded.'} (${scopeLabel} cap: ${violation.current} → ${violation.requested}, limit ${violation.limit})`
+        );
+      } else {
+        setError(serverError || (isEditing ? t('errors.update') : t('errors.create')));
+      }
       console.error('[AutomationWorkflowBuilder] Save failed:', err);
     } finally {
       setSubmitting(false);
@@ -501,7 +575,6 @@ export const AutomationWorkflowBuilder = ({
     cronExpression,
     timezone,
     maxRuns,
-    emailNotifications,
     notificationEmails,
     onSave,
     isEditing,
@@ -558,6 +631,10 @@ export const AutomationWorkflowBuilder = ({
             onMonthlyWeekDayChange={setMonthlyWeekDay}
             monthlyInterval={monthlyInterval}
             onMonthlyIntervalChange={setMonthlyInterval}
+            cronExpression={cronExpression}
+            timezone={timezone}
+            maxRuns={maxRuns}
+            onQuotaVerdictChange={setQuotaVerdict}
           />
         );
       case 2:
@@ -581,8 +658,6 @@ export const AutomationWorkflowBuilder = ({
             onPromptChange={setPrompt}
             maxRuns={maxRuns}
             onMaxRunsChange={setMaxRuns}
-            emailNotifications={emailNotifications}
-            onEmailNotificationsChange={setEmailNotifications}
             notificationEmails={notificationEmails}
             onNotificationEmailsChange={setNotificationEmails}
             currentUserEmail={currentUserEmail}
@@ -590,6 +665,7 @@ export const AutomationWorkflowBuilder = ({
             onTimezoneChange={setTimezone}
             submitting={submitting}
             nameError={nameError || undefined}
+            cronExpression={triggerType === 'event' ? undefined : cronExpression}
           />
         );
       case 4:
@@ -604,8 +680,9 @@ export const AutomationWorkflowBuilder = ({
             prompt={prompt}
             maxRuns={maxRuns}
             timezone={timezone}
-            emailNotifications={emailNotifications}
             onEditStep={setCurrentStep}
+            onQuotaVerdictChange={setQuotaVerdict}
+            onPreflightBlockerCountChange={setPreflightBlockerCount}
           />
         );
       default:
@@ -614,8 +691,11 @@ export const AutomationWorkflowBuilder = ({
   };
 
   const { branding } = useBranding();
-  const brandPrimaryColor = branding.resolvedAssets?.primaryColor || branding.primaryColor || '#6366f1';
-  const brandPrimaryContrast = branding.resolvedAssets?.primaryContrast || branding.primaryContrast || '#ffffff';
+  // Use BrandingTheme's typed colors object — `branding.primaryColor` and
+  // `branding.resolvedAssets?.primaryColor` aren't on the type and resolve
+  // to undefined at runtime.
+  const brandPrimaryColor = branding.colors?.primary || '#6366f1';
+  const brandPrimaryContrast = branding.colors?.buttonPrimaryText || '#ffffff';
 
   return (
     <div className="automation-workflow-builder">
@@ -676,7 +756,7 @@ export const AutomationWorkflowBuilder = ({
           ) : (
             <Button
               onClick={handleSave}
-              disabled={submitting || !canProceed(3)}
+              disabled={submitting || !canProceed(3) || !canProceed(4)}
               style={{
                 backgroundColor: brandPrimaryColor,
                 borderColor: brandPrimaryColor,

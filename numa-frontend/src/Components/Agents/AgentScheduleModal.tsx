@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Form, Button, Alert } from 'react-bootstrap';
+import { Modal, Form, Button, Alert, Badge } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { AgentSummary } from '../../types/agents';
-import type { AgentSchedule } from '../../types/agentSchedules';
+import type { AgentSchedule, ScheduledRunConfig, AgentScheduleSnapshot } from '../../types/agentSchedules';
 import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from './schedulingTypes';
 import { CronExpressionBuilder } from './CronExpressionBuilder';
 import { getDefaultTimezone, getAllTimezones } from '../../utils/timezoneUtils';
 import { parseCronExpression } from '../../utils/schedulingUtils';
 import { useSchedulingMinInterval } from '../../hooks/useSchedulingMinInterval';
+import { useSchedulePreflight } from '../../hooks/useSchedulePreflight';
+import { SchedulePreflightStepper } from '../Scheduling/SchedulePreflightStepper';
+import { HighFrequencyConfirmModal } from '../Scheduling/HighFrequencyConfirmModal';
+import { estimateCronIntervalMinutes, projectMonthlyRuns, isHighFrequencyCadence } from '../../utils/cronProjection';
 
 type ScheduleModalProps = {
   show: boolean;
@@ -20,6 +24,22 @@ type ScheduleModalProps = {
     cronExpression: string;
     timezone: string;
     label?: string;
+    /**
+     * Optional schedule expiry (epoch ms). When set, runner auto-pauses the
+     * schedule once `Date.now() >= expiresAt`. `null` clears any existing
+     * expiry. `undefined` leaves it unchanged.
+     */
+    expiresAt?: number | null;
+    /**
+     * FEAT-105 round-2 — fresh runConfig + agentSnapshot computed from the
+     * current agent's toolsConfig. Optional so older callers continue to work,
+     * but parents should forward these to ScheduleService.update so the
+     * schedule record's frozen `run_config` and `agent_snapshot` stay in
+     * sync with the live agent (the runner re-refreshes at run time, but
+     * having the cached values fresh keeps the audit screen accurate too).
+     */
+    runConfig?: ScheduledRunConfig;
+    agentSnapshot?: AgentScheduleSnapshot;
   }) => Promise<void>;
 };
 
@@ -146,6 +166,10 @@ export const AgentScheduleModal = ({
 }: ScheduleModalProps) => {
   const { t } = useTranslation('agents');
   const { effectiveMin, loading: minIntervalLoading } = useSchedulingMinInterval();
+  // Preflight blockers — scheduling feature flag, required integrations,
+  // accessible folders. Surfaces "you can't schedule because X" before
+  // the user fills out the form. Save is disabled while any are present.
+  const preflightBlockers = useSchedulePreflight(agent);
   // Form state
   const [taskName, setTaskName] = useState('');
   const [jobInstructions, setJobInstructions] = useState(defaultPrompt);
@@ -180,9 +204,15 @@ export const AgentScheduleModal = ({
   const [monthlyAnchorMonth, setMonthlyAnchorMonth] = useState(() => new Date().getMonth() + 1);
   const [customCron, setCustomCron] = useState('cron(0 13 * * ? *)');
   const [timezone, setTimezone] = useState(getDefaultTimezone());
+  /** Optional end date (YYYY-MM-DD). Empty string = no expiry. */
+  const [expiresAtDate, setExpiresAtDate] = useState<string>('');
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /** When true, the high-frequency confirmation modal is showing. */
+  const [showHighFreqModal, setShowHighFreqModal] = useState(false);
+  /** Set to true once the user has acknowledged a high-frequency warning so submit can proceed. */
+  const [highFreqAcknowledged, setHighFreqAcknowledged] = useState(false);
 
   // Initialize form values when modal opens or editing schedule changes
   useEffect(() => {
@@ -272,6 +302,16 @@ export const AgentScheduleModal = ({
         setDailyAnchorDay(now.getDate());
         setMonthlyAnchorMonth(now.getMonth() + 1);
         setTimezone(getDefaultTimezone());
+      }
+      // Hydrate expiry from existing schedule, otherwise clear.
+      if (editingSchedule?.expiresAt) {
+        const d = new Date(editingSchedule.expiresAt);
+        const yy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        setExpiresAtDate(`${yy}-${mm}-${dd}`);
+      } else {
+        setExpiresAtDate('');
       }
       setError(null);
       setSubmitting(false);
@@ -420,15 +460,79 @@ export const AgentScheduleModal = ({
       }
     }
 
+    // Friction gate: check if the cadence is high-frequency. Show the
+    // confirmation modal; the modal's onConfirm calls performSubmit() directly.
+    const cronExpression = cronPreview.trim();
+    const projected = projectMonthlyRuns(cronExpression);
+    const intervalMin = estimateCronIntervalMinutes(cronExpression);
+    if (isHighFrequencyCadence(projected, intervalMin) && !highFreqAcknowledged) {
+      setShowHighFreqModal(true);
+      return;
+    }
+
+    await performSubmit(cronExpression);
+  };
+
+  /**
+   * Build a fresh runConfig + agentSnapshot from the current agent. Mirrors
+   * the inline path in AgentCreateModal so editing a schedule doesn't leave
+   * stale `enabledTools` / `enabledConnections` / `allowedKnowledgeBases`
+   * cached on the schedule record. Only emitted when an `agent` prop is
+   * available; otherwise we send `undefined` and the parent omits the fields.
+   */
+  const buildFreshAgentRunConfig = (): {
+    runConfig?: ScheduledRunConfig;
+    agentSnapshot?: AgentScheduleSnapshot;
+  } => {
+    if (!agent) return {};
+    const tc = agent.toolsConfig;
+    const allowed = tc?.allowedKnowledgeBases;
+    const hasKBs = allowed === null || (Array.isArray(allowed) && allowed.length > 0);
+    const enabledTools: string[] = [];
+    if (hasKBs) enabledTools.push('knowledge_base');
+    if (tc?.webSearchEnabled || tc?.autoToolsEnabled) enabledTools.push('web_search');
+    if (tc?.createAgentEnabled) enabledTools.push('create_agent_tool');
+    enabledTools.push('memories_tool');
+
+    return {
+      runConfig: {
+        enabledTools,
+        enabledConnections: tc?.enabledConnections,
+        enabledKBIds: Array.isArray(allowed) ? allowed.filter(Boolean) : undefined,
+        autoToolsEnabled: tc?.autoToolsEnabled,
+        webSearchEnabled: tc?.webSearchEnabled,
+        createAgentEnabled: tc?.createAgentEnabled,
+      },
+      agentSnapshot: {
+        agentId: agent.agentId,
+        title: agent.title,
+        icon: agent.icon,
+        toolsConfig: tc,
+        visibility: agent.visibility,
+      },
+    };
+  };
+
+  /** Actual submit logic — called from handleSubmit OR the friction modal's confirm. */
+  const performSubmit = async (cronExpression: string) => {
     setSubmitting(true);
     try {
-      const cronExpression = cronPreview.trim();
-
+      const fresh = buildFreshAgentRunConfig();
+      // YYYY-MM-DD → end-of-day epoch ms in local tz (so the day itself
+      // remains valid up to midnight). Empty input clears expiry on edit.
+      const expiresAtMs = expiresAtDate
+        ? new Date(`${expiresAtDate}T23:59:59`).getTime()
+        : isEditing
+          ? null // explicit clear when editing and the user emptied the field
+          : undefined;
       await onCreate({
         promptText: jobInstructions.trim(),
         cronExpression: cronExpression.trim(),
         timezone: timezone.trim(),
         label: taskName.trim() || undefined,
+        expiresAt: expiresAtMs,
+        runConfig: fresh.runConfig,
+        agentSnapshot: fresh.agentSnapshot,
       });
       setSubmitting(false);
 
@@ -528,11 +632,30 @@ export const AgentScheduleModal = ({
               monthlyInterval={monthlyInterval}
               onMonthlyIntervalChange={setMonthlyInterval}
               minIntervalMinutes={effectiveMin}
+              cronExpression={cronPreview}
+              timezone={timezone}
             />
             <div className="visually-hidden">
               <Form.Label htmlFor="cronExpressionHidden">{t('scheduling.fields.cronExpression.label')}</Form.Label>
               <Form.Control id="cronExpressionHidden" type="text" value={cronPreview} readOnly name="cronExpression" />
             </div>
+            {/* Projected runs / month — quota awareness signal for the user. */}
+            {(() => {
+              const projected = projectMonthlyRuns(cronPreview);
+              const variant = projected > 100 ? 'warning' : 'secondary';
+              return (
+                <div className="mt-2 small text-muted d-flex align-items-center gap-2">
+                  <Badge bg={variant}>
+                    {t('scheduling.projection.runsPerMo', { defaultValue: '~{{count}} runs/mo', count: projected })}
+                  </Badge>
+                  <span>
+                    {t('scheduling.projection.hint', {
+                      defaultValue: 'Projected based on your cadence — counts toward your quota.',
+                    })}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Job instructions */}
@@ -560,12 +683,36 @@ export const AgentScheduleModal = ({
               ))}
             </Form.Select>
           </div>
+
+          {/* Optional end date — auto-pauses the schedule once past this date. */}
+          <div className="mb-3">
+            <Form.Label>{t('scheduling.fields.expiresAt.label', { defaultValue: 'End date (optional)' })}</Form.Label>
+            <Form.Control
+              type="date"
+              value={expiresAtDate}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setExpiresAtDate(e.target.value)}
+              disabled={submitting}
+            />
+            <Form.Text muted>
+              {t('scheduling.fields.expiresAt.help', {
+                defaultValue: 'Schedule auto-pauses on this date. Leave blank to run until manually paused.',
+              })}
+            </Form.Text>
+          </div>
+
+          {/* Preflight blockers — feature flag, missing integrations,
+              folder access. Render before the footer so users see them
+              right above the Save button. */}
+          <div className="mt-3">
+            <SchedulePreflightStepper blockers={preflightBlockers} />
+          </div>
         </Modal.Body>
         <Modal.Footer className="d-flex justify-content-between">
           <Button variant="secondary" onClick={onHide} disabled={submitting}>
             {t('scheduling.actions.cancel')}
           </Button>
-          <Button type="submit" variant="primary" disabled={submitting}>
+          <Button type="submit" variant="primary" disabled={submitting || preflightBlockers.length > 0}>
             {submitting
               ? isEditing
                 ? t('scheduling.modal.submitting.update')
@@ -574,6 +721,20 @@ export const AgentScheduleModal = ({
           </Button>
         </Modal.Footer>
       </Form>
+      <HighFrequencyConfirmModal
+        show={showHighFreqModal}
+        projectedRunsPerMonth={projectMonthlyRuns(cronPreview)}
+        intervalMinutes={estimateCronIntervalMinutes(cronPreview)}
+        onCancel={() => setShowHighFreqModal(false)}
+        onConfirm={() => {
+          setHighFreqAcknowledged(true);
+          setShowHighFreqModal(false);
+          // Skip form re-submit dance — call performSubmit directly with the
+          // current cron preview. The validations have already passed (we got
+          // here from handleSubmit's friction gate).
+          void performSubmit(cronPreview.trim());
+        }}
+      />
     </Modal>
   );
 };

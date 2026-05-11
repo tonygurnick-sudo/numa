@@ -42,15 +42,37 @@ export type PipedreamEventTrigger = {
 
 export type EventTrigger = GmailEventTrigger | PipedreamEventTrigger;
 
+export type TypedScheduleErrorKind =
+  | 'integration_not_connected'
+  | 'integration_revoked'
+  | 'kb_not_accessible'
+  | 'agent_archived'
+  | 'agent_deleted'
+  | 'feature_disabled_company'
+  | 'feature_disabled_user'
+  | 'quota_exceeded'
+  | 'agent_invocation_failed'
+  | 'unknown';
+
+export type TypedScheduleError = {
+  kind: TypedScheduleErrorKind;
+  message: string;
+  resource?: string;
+  remediationPath?: string;
+};
+
+
 export type AgentSchedule = {
   scheduleId: string;
+  /** Schedule owner's Cognito sub. Useful in admin tenant view. */
+  userId?: string;
   conversationId: string;
   promptText: string;
   triggerType?: 'cron' | 'event';
   trigger?: EventTrigger;
   cronExpression?: string;
   timezone?: string;
-  status: 'active' | 'paused' | 'deleted';
+  status: 'active' | 'paused' | 'deleted' | 'pending_approval' | 'admin_locked';
   eventType?: 'agent' | 'application' | 'data_sync';
   label?: string;
   agentId: string;
@@ -60,14 +82,34 @@ export type AgentSchedule = {
   lastRunEpoch?: number;
   lastStatus?: string;
   lastError?: string;
+  lastErrorTyped?: TypedScheduleError;
   lastRunConversationId?: string;
   lastRunS3Key?: string;
   runConfig?: ScheduledRunConfig;
   maxRuns?: number;
   totalRuns?: number;
+  /** Cached projected runs/month — computed at create/update time. */
+  projectedRunsPerMonth?: number;
   emailNotifications?: boolean;
   notificationEmail?: string;
   notificationEmails?: string[];
+  /** Set when an admin approved a pending_approval schedule. */
+  approvedBy?: string;
+  approvedAt?: number;
+  /**
+   * `'company'` means the schedule was promoted to the company quota
+   * bucket (typically via admin approval) — it counts against the company
+   * monthly cap only, not the owner's per-user cap. Defaults to `'user'`.
+   */
+  quotaScope?: 'user' | 'company';
+  /** Optional schedule expiry — epoch ms. */
+  expiresAt?: number;
+  /** Sub of the admin who set status to admin_locked. */
+  adminLockedBy?: string;
+  /** Epoch ms when the admin lock was applied. */
+  adminLockedAt?: number;
+  /** Optional reason the admin gave for locking — surfaced to the owner. */
+  adminLockReason?: string;
 };
 
 import type { AgentToolsConfig } from './agents';
@@ -101,6 +143,8 @@ export type CreateAgentSchedulePayload = {
   emailNotifications?: boolean;
   notificationEmail?: string;
   notificationEmails?: string[];
+  /** Optional schedule expiry — epoch ms. Must be in the future at create time. */
+  expiresAt?: number;
 };
 
 export type UpdateAgentSchedulePayload = {
@@ -110,8 +154,18 @@ export type UpdateAgentSchedulePayload = {
   cronExpression?: string;
   timezone?: string;
   label?: string;
-  status?: 'active' | 'paused' | 'deleted';
+  status?: 'active' | 'paused' | 'deleted' | 'admin_locked';
+  /** Admin-supplied reason when transitioning to admin_locked. Optional. */
+  adminLockReason?: string;
+  /** Set or clear (via null) the schedule's expiry. */
+  expiresAt?: number | null;
   runConfig?: ScheduledRunConfig;
+  /**
+   * FEAT-105 round-2 — fresh agent snapshot rebuilt from the live agent's
+   * toolsConfig. Optional; when present, the schedule's cached agent_snapshot
+   * is updated so future runs see the same config the user just edited.
+   */
+  agentSnapshot?: AgentScheduleSnapshot;
   maxRuns?: number;
   emailNotifications?: boolean;
   notificationEmails?: string[];

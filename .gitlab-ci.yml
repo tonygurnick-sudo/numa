@@ -113,7 +113,6 @@ pre-commit:
         - lambdas/node/agent-schedules
         - lambdas/node/agents
         - lambdas/node/api-gateway-authorizer
-        - lambdas/node/application-scheduler
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder
         - lambdas/node/branding-config
@@ -123,7 +122,6 @@ pre-commit:
         - lambdas/node/cloudfront-invalidator
         - lambdas/node/connector-event-dispatcher
         - lambdas/node/connector-event-receiver
-        - lambdas/node/data-sync-scheduler
         - lambdas/node/document-converter
         - lambdas/node/gmail-watch-manager
         - lambdas/node/google-cloud-setup

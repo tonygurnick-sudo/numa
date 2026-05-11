@@ -1,18 +1,56 @@
 import { isScheduleCompleted } from './cronUtils';
 import type { AgentSchedule } from '../types/agentSchedules';
 
-export type DerivedAutomationStatus = 'active' | 'paused' | 'completed';
+export type DerivedAutomationStatus = 'active' | 'paused' | 'completed' | 'pending' | 'locked';
 
 /**
- * Derives a display status for an automation.
- * - 'paused' if manually paused
- * - 'completed' if active but all runs are done (one-time past date or maxRuns reached)
- * - 'active' otherwise
+ * Derives a display status for an automation. The underlying schedule
+ * record can be in five states; this collapses them onto a UI-friendly
+ * label so callers don't need to remember the full set.
+ *
+ * - `'paused'` — owner toggled it off
+ * - `'pending'` — created over the user cap, awaiting admin approval
+ *   (no EventBridge rule exists yet, so it isn't actually firing)
+ * - `'locked'` — admin put it in `admin_locked` state; owner can't toggle
+ * - `'completed'` — active but exhausted (one-time past date / maxRuns hit)
+ * - `'active'` — running on schedule
+ *
+ * Anything other than these maps to `'active'` as a safe fallback.
  */
 export const getDerivedAutomationStatus = (schedule: AgentSchedule): DerivedAutomationStatus => {
   if (schedule.status === 'paused') return 'paused';
+  if (schedule.status === 'pending_approval') return 'pending';
+  if (schedule.status === 'admin_locked') return 'locked';
   if (schedule.status === 'active' && isScheduleCompleted(schedule)) return 'completed';
   return 'active';
+};
+
+/**
+ * Whether this schedule is funded by the company quota bucket rather than
+ * the owner's personal cap. True for explicitly-promoted schedules
+ * (`quotaScope === 'company'`) and for legacy admin-approved ones (where
+ * the `quotaScope` field never got set but approval implies promotion).
+ */
+export const automationUsesCompanyQuota = (schedule: AgentSchedule): boolean =>
+  schedule.quotaScope === 'company' || !!schedule.approvedBy;
+
+/**
+ * Single source of truth for the Bootstrap `bg` value used on status
+ * badges across the automations UI.
+ */
+export const automationStatusBadgeVariant = (status: DerivedAutomationStatus): string => {
+  switch (status) {
+    case 'active':
+      return 'success';
+    case 'paused':
+      return 'warning';
+    case 'pending':
+      return 'info';
+    case 'locked':
+      return 'danger';
+    case 'completed':
+      return 'secondary';
+  }
 };
 
 /**

@@ -6,6 +6,11 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { clientService } from '@/services/clientService';
 import { clientMetadataService } from '@/services/clientMetadataService';
 import {
+  platformSettingsService,
+  PLATFORM_QUOTA_INITIAL_VALUES,
+  PlatformSettings as PlatformSettingsType,
+} from '@/services/platformSettingsService';
+import {
   getDefaultClientConfigValues,
   type ClientConfig,
   clientConfigSchema,
@@ -91,7 +96,19 @@ export default function CreateClientConfig() {
   const [pipedream, setPipedream] = useState(false); // default: false, not in defaults helper
   const [dataConnectorsEnabled, setDataConnectorsEnabled] = useState(defaults.dataConnectorsEnabled);
   const [scheduling, setScheduling] = useState(defaults.scheduling);
+  // Sub-flag of `scheduling`. Defaults false — clients must opt in to
+  // event triggers explicitly. Cron schedules continue to work even when
+  // this is off.
+  const [triggers, setTriggers] = useState<boolean>(defaults.eventTriggers);
   const [schedulingMinIntervalMinutes, setSchedulingMinIntervalMinutes] = useState<string>('');
+  // FEAT-105 — per-client (Level 2) automation quota overrides
+  const [maxRunsPerCompanyPerMonth, setMaxRunsPerCompanyPerMonth] = useState<string>('');
+  const [maxRunsPerUserPerMonth, setMaxRunsPerUserPerMonth] = useState<string>('');
+  const [maxTriggerRunsPerCompanyPerMonth, setMaxTriggerRunsPerCompanyPerMonth] = useState<string>('');
+  const [maxTriggerRunsPerUserPerMonth, setMaxTriggerRunsPerUserPerMonth] = useState<string>('');
+  const [maxConcurrentActiveSchedulesPerCompany, setMaxConcurrentActiveSchedulesPerCompany] = useState<string>('');
+  const [maxConcurrentActiveSchedulesPerUser, setMaxConcurrentActiveSchedulesPerUser] = useState<string>('');
+  const [requireApprovalAboveUserCap, setRequireApprovalAboveUserCap] = useState<boolean | null>(null);
   const [mfa, setMfa] = useState(defaults.mfa);
   const [devInstance, setDevInstance] = useState(defaults.devInstance);
   const [allowQuotaSharing, setAllowQuotaSharing] = useState(defaults.allowBedrockQuotaSharing);
@@ -131,6 +148,39 @@ export default function CreateClientConfig() {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [uploadedConfig, setUploadedConfig] = useState<ClientConfig | null>(null);
   const [showJsonPreview, setShowJsonPreview] = useState(false);
+
+  // Live platform-settings (Level 1) so the inheritance placeholders show
+  // what users actually inherit, not a hardcoded guess.
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettingsType | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await platformSettingsService.get();
+        if (!cancelled) setPlatformSettings(s);
+      } catch {
+        if (!cancelled) setPlatformSettings({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const inherited = <K extends keyof typeof PLATFORM_QUOTA_INITIAL_VALUES>(
+    key: K
+  ): (typeof PLATFORM_QUOTA_INITIAL_VALUES)[K] => {
+    const fromRecord = platformSettings?.[key as keyof PlatformSettingsType];
+    if (typeof fromRecord === typeof PLATFORM_QUOTA_INITIAL_VALUES[key] && fromRecord !== undefined) {
+      return fromRecord as (typeof PLATFORM_QUOTA_INITIAL_VALUES)[K];
+    }
+    return PLATFORM_QUOTA_INITIAL_VALUES[key];
+  };
+
+  const inheritPlaceholder = (key: keyof typeof PLATFORM_QUOTA_INITIAL_VALUES, suffix = ''): string => {
+    if (platformSettings === null) return 'Leave empty to inherit (loading…)';
+    return `Leave empty to inherit (Platform Settings → ${inherited(key).toLocaleString()}${suffix})`;
+  };
 
   // Prefill from query params when available
   useEffect(() => {
@@ -195,13 +245,51 @@ export default function CreateClientConfig() {
     if (dataConnectorsEnabled) minimal['dataConnectorsEnabled'] = true;
     if (agents) minimal['agents'] = true;
     if (scheduling) minimal['scheduling'] = true;
+    // Only persist `triggers` when it differs from the default (false).
+    // Writing `triggers: true` is the opt-in signal; missing/false stays
+    // implicit so the create payload stays minimal for the common case.
+    if (scheduling && triggers === true) (minimal as any)['eventTriggers'] = true;
     if (schedulingMinIntervalMinutes) {
       const val = parseInt(schedulingMinIntervalMinutes, 10);
       if (isNaN(val) || val < 5 || val > 1440) {
-        setError('Scheduling Min Interval must be a whole number between 5 and 1440 minutes');
+        setError('Minimum Automation Interval must be a whole number between 5 and 1440 minutes');
         return;
       }
       minimal['schedulingMinIntervalMinutes'] = val;
+    }
+    // FEAT-105 — quota overrides
+    const parsePositiveQuota = (raw: string, label: string): number | undefined | { error: string } => {
+      if (!raw) return undefined;
+      const n = parseInt(raw, 10);
+      if (isNaN(n) || !Number.isInteger(n) || n <= 0) return { error: `${label} must be a positive integer` };
+      return n;
+    };
+    const quotaFields: Array<[keyof typeof minimal, string, string]> = [
+      ['maxRunsPerCompanyPerMonth', maxRunsPerCompanyPerMonth, 'Max schedule runs / company / month'],
+      ['maxRunsPerUserPerMonth', maxRunsPerUserPerMonth, 'Max schedule runs / user / month'],
+      ['maxTriggerRunsPerCompanyPerMonth', maxTriggerRunsPerCompanyPerMonth, 'Max trigger runs / company / month'],
+      ['maxTriggerRunsPerUserPerMonth', maxTriggerRunsPerUserPerMonth, 'Max trigger runs / user / month'],
+      [
+        'maxConcurrentActiveSchedulesPerCompany',
+        maxConcurrentActiveSchedulesPerCompany,
+        'Max concurrent active automations / company',
+      ],
+      [
+        'maxConcurrentActiveSchedulesPerUser',
+        maxConcurrentActiveSchedulesPerUser,
+        'Max concurrent active automations / user',
+      ],
+    ];
+    for (const [key, raw, label] of quotaFields) {
+      const result = parsePositiveQuota(raw, label);
+      if (result && typeof result === 'object' && 'error' in result) {
+        setError(result.error);
+        return;
+      }
+      if (typeof result === 'number') minimal[key] = result;
+    }
+    if (requireApprovalAboveUserCap != null) {
+      minimal['requireApprovalAboveUserCap'] = requireApprovalAboveUserCap;
     }
     if (mfa) minimal['mfa'] = true;
     if (brandingProviderEnabled !== defaults.brandingProviderEnabled)
@@ -473,23 +561,6 @@ export default function CreateClientConfig() {
                         helpText="Enable Numa Workspace Chat (V2). On by default."
                       />
                       <ConfigField
-                        label="Agent Scheduling"
-                        value={scheduling}
-                        defaultValue={defaults.scheduling}
-                        onChange={setScheduling}
-                        type="switch"
-                        helpText="Enable agent scheduling and notifications features"
-                      />
-                      <ConfigField
-                        label="Scheduling Min Interval (minutes)"
-                        value={schedulingMinIntervalMinutes}
-                        defaultValue=""
-                        onChange={setSchedulingMinIntervalMinutes}
-                        type="text"
-                        placeholder="Leave empty to use global default"
-                        helpText="Override minimum scheduling interval for this client (minutes, min 5). Leave empty to inherit global default."
-                      />
-                      <ConfigField
                         label="Workspace Chat Model Selection"
                         value={workspaceChatModelSelection}
                         defaultValue={defaults.workspaceChatModelSelection}
@@ -598,6 +669,139 @@ export default function CreateClientConfig() {
                         ]}
                         helpText="Indexing backend that powers Numa Files search for this client"
                       />
+                    </Col>
+                  </Row>
+
+                  {/* FEAT-105 — Agent Automations gets its own full-width section
+                      below the feature-flag grid for breathing room. Sub-options
+                      inherit from the platform-settings record (Level 1) when
+                      left empty — that's the sole source of truth, no code-side
+                      fallback default. */}
+                  <Row className="mb-4">
+                    <Col xs={12}>
+                      <h5 className="mb-3">Agent Automations</h5>
+                      <ConfigField
+                        label="Agent Automations"
+                        value={scheduling}
+                        defaultValue={defaults.scheduling}
+                        onChange={setScheduling}
+                        type="switch"
+                        helpText="Enable agent automations (schedules + triggers) and notifications. The sub-options below only apply when this is on."
+                      />
+                      {scheduling && (
+                        <div className="border-start border-3 ps-3 ms-2 mb-3 bg-light bg-opacity-50 rounded-end py-3">
+                          <ConfigField
+                            label="Event Triggers"
+                            value={triggers}
+                            defaultValue={defaults.eventTriggers}
+                            onChange={setTriggers}
+                            type="switch"
+                            helpText="Sub-flag of Agent Automations. When off, hides the event-trigger builder for users, the trigger admin tab, and the trigger quota fields below. Cron schedules continue to work."
+                          />
+                          <Row className="g-3 mt-1">
+                            <Col xs={12}>
+                              <ConfigField
+                                label="Minimum Automation Interval (minutes)"
+                                value={schedulingMinIntervalMinutes}
+                                defaultValue=""
+                                onChange={setSchedulingMinIntervalMinutes}
+                                type="text"
+                                placeholder={inheritPlaceholder('schedulingMinIntervalMinutes', ' min')}
+                                helpText="Minimum allowed interval between automation runs. Applies to schedules. Leave empty to inherit platform default."
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <div className="text-muted small fw-semibold mb-2 text-uppercase">
+                                Schedule Run Quotas (cron-based, projected)
+                              </div>
+                              <ConfigField
+                                label="Max Schedule Runs / Company / Month"
+                                value={maxRunsPerCompanyPerMonth}
+                                defaultValue=""
+                                onChange={setMaxRunsPerCompanyPerMonth}
+                                type="text"
+                                placeholder={inheritPlaceholder('maxRunsPerCompanyPerMonth')}
+                                helpText="Hard cap on tenant-wide schedule runs per month. Always enforced — schedules above this are rejected at creation regardless of admin approval."
+                              />
+                              <ConfigField
+                                label="Max Schedule Runs / User / Month"
+                                value={maxRunsPerUserPerMonth}
+                                defaultValue=""
+                                onChange={setMaxRunsPerUserPerMonth}
+                                type="text"
+                                placeholder={inheritPlaceholder('maxRunsPerUserPerMonth')}
+                                helpText="Above this triggers admin approval (when enabled) or hard rejection."
+                              />
+                            </Col>
+                            {triggers && (
+                              <Col md={6}>
+                                <div className="text-muted small fw-semibold mb-2 text-uppercase">
+                                  Trigger Run Quotas (event-based, actuals)
+                                </div>
+                                <ConfigField
+                                  label="Max Trigger Runs / Company / Month"
+                                  value={maxTriggerRunsPerCompanyPerMonth}
+                                  defaultValue=""
+                                  onChange={setMaxTriggerRunsPerCompanyPerMonth}
+                                  type="text"
+                                  placeholder={inheritPlaceholder('maxTriggerRunsPerCompanyPerMonth')}
+                                  helpText="Hard cap on tenant-wide trigger fires per month. Counted at fire time."
+                                />
+                                <ConfigField
+                                  label="Max Trigger Runs / User / Month"
+                                  value={maxTriggerRunsPerUserPerMonth}
+                                  defaultValue=""
+                                  onChange={setMaxTriggerRunsPerUserPerMonth}
+                                  type="text"
+                                  placeholder={inheritPlaceholder('maxTriggerRunsPerUserPerMonth')}
+                                  helpText="Over-cap fires are dropped silently with a one-shot per-month notification to the owner."
+                                />
+                              </Col>
+                            )}
+                            <Col xs={12}>
+                              <div className="text-muted small fw-semibold mb-2 text-uppercase mt-2">
+                                Concurrent Active Automations{triggers ? ' (schedules + triggers combined)' : ''}
+                              </div>
+                            </Col>
+                            <Col md={6}>
+                              <ConfigField
+                                label="Max Concurrent Active Automations / Company"
+                                value={maxConcurrentActiveSchedulesPerCompany}
+                                defaultValue=""
+                                onChange={setMaxConcurrentActiveSchedulesPerCompany}
+                                type="text"
+                                placeholder={inheritPlaceholder('maxConcurrentActiveSchedulesPerCompany')}
+                                helpText={
+                                  triggers
+                                    ? 'Hard tenant-wide cap on simultaneously active automations (cron schedules + event triggers).'
+                                    : 'Hard tenant-wide cap on simultaneously active cron schedules.'
+                                }
+                              />
+                            </Col>
+                            <Col md={6}>
+                              <ConfigField
+                                label="Max Concurrent Active Automations / User"
+                                value={maxConcurrentActiveSchedulesPerUser}
+                                defaultValue=""
+                                onChange={setMaxConcurrentActiveSchedulesPerUser}
+                                type="text"
+                                placeholder={inheritPlaceholder('maxConcurrentActiveSchedulesPerUser')}
+                                helpText="Per-user cap on simultaneously active automations."
+                              />
+                            </Col>
+                            <Col xs={12}>
+                              <ConfigField
+                                label="Require Admin Approval Above User Cap"
+                                value={requireApprovalAboveUserCap ?? false}
+                                defaultValue={true}
+                                onChange={setRequireApprovalAboveUserCap as any}
+                                type="switch"
+                                helpText="When on, a user requesting more than their per-user cap goes to admin approval (admin can authorise up to the company cap, never above). When off, those requests are hard-rejected. The company quota is always a hard ceiling — admin approval cannot breach it. Default on."
+                              />
+                            </Col>
+                          </Row>
+                        </div>
+                      )}
                     </Col>
                   </Row>
 
@@ -852,7 +1056,15 @@ export default function CreateClientConfig() {
             Please review the configuration to be created for <strong>{clientName || '—'}</strong>:
           </p>
           <pre className="bg-light p-3 rounded" style={{ maxHeight: '50vh', overflow: 'auto' }}>
-            {JSON.stringify(pendingConfig, null, 2)}
+            {pendingConfig
+              ? JSON.stringify(
+                  pendingConfig,
+                  Object.keys(pendingConfig as Record<string, unknown>)
+                    .filter((k) => (pendingConfig as Record<string, unknown>)[k] !== undefined)
+                    .sort(),
+                  2
+                )
+              : ''}
           </pre>
         </Modal.Body>
         <Modal.Footer>

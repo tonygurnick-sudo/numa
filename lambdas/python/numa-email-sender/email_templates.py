@@ -8,7 +8,8 @@ Templates are Jinja2 strings rendered with caller-provided context variables.
 from typing import Dict, Optional, TypedDict
 
 import structlog
-from jinja2 import Environment
+from jinja2 import Environment, select_autoescape
+from markupsafe import Markup
 
 logger = structlog.get_logger()
 
@@ -148,8 +149,13 @@ BASE_TEMPLATE = """<!DOCTYPE html>
 </body>
 </html>"""
 
-jinja_env = Environment(autoescape=False)
-base_template = jinja_env.from_string(BASE_TEMPLATE)
+# Two environments: HTML rendering escapes all interpolated values to defend
+# against XSS in user-controlled fields (schedule names, error summaries,
+# admin lock reasons, etc.). Plain-text rendering (subjects, text bodies) must
+# NOT escape — entities like `&amp;` would render literally in the user's inbox.
+html_jinja_env = Environment(autoescape=select_autoescape(["html"]))
+text_jinja_env = Environment(autoescape=False)
+base_template = html_jinja_env.from_string(BASE_TEMPLATE)
 
 
 class TemplateConfig(TypedDict):
@@ -191,6 +197,11 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "</tr></table>{% endif %}"
             '{% if run_url %}<a href="{{run_url}}" class="button">'
             "View Results &rarr;</a>{% endif %}"
+            "{% if manage_url %}"
+            '<p style="margin:24px 0 0;font-size:12px;color:#888;text-align:center;">'
+            "Don't want these? "
+            '<a href="{{manage_url}}" style="color:#666;text-decoration:underline;">Pause or manage this schedule</a>.'
+            "</p>{% endif %}"
         ),
         "text": (
             "{{schedule_name}} completed successfully."
@@ -200,6 +211,7 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "{% if duration %}\nDuration: {{duration}}{% endif %}"
             "{% if run_count %}\nRun: {{run_count}}{% endif %}"
             "{% if run_url %}\n\nView results: {{run_url}}{% endif %}"
+            "{% if manage_url %}\nPause or manage this schedule: {{manage_url}}{% endif %}"
         ),
     },
     "schedule_failed": {
@@ -229,6 +241,11 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "</tr></table>{% endif %}"
             '{% if run_url %}<a href="{{run_url}}" class="button">'
             "View Details &rarr;</a>{% endif %}"
+            "{% if manage_url %}"
+            '<p style="margin:24px 0 0;font-size:12px;color:#888;text-align:center;">'
+            "Want this to stop? "
+            '<a href="{{manage_url}}" style="color:#666;text-decoration:underline;">Pause or manage this schedule</a>.'
+            "</p>{% endif %}"
         ),
         "text": (
             "{{schedule_name}} failed."
@@ -237,6 +254,7 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "{% if summary %}\n\nError: {{summary}}{% endif %}"
             "{% if duration %}\nDuration: {{duration}}{% endif %}"
             "{% if run_url %}\n\nView details: {{run_url}}{% endif %}"
+            "{% if manage_url %}\nPause or manage this schedule: {{manage_url}}{% endif %}"
         ),
     },
     "schedule_partial": {
@@ -270,6 +288,11 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "</tr></table>{% endif %}"
             '{% if run_url %}<a href="{{run_url}}" class="button">'
             "View Results &rarr;</a>{% endif %}"
+            "{% if manage_url %}"
+            '<p style="margin:24px 0 0;font-size:12px;color:#888;text-align:center;">'
+            "Don't want these? "
+            '<a href="{{manage_url}}" style="color:#666;text-decoration:underline;">Pause or manage this schedule</a>.'
+            "</p>{% endif %}"
         ),
         "text": (
             "{{schedule_name}} completed with warnings."
@@ -279,6 +302,98 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "{% if duration %}\nDuration: {{duration}}{% endif %}"
             "{% if run_count %}\nRun: {{run_count}}{% endif %}"
             "{% if run_url %}\n\nView results: {{run_url}}{% endif %}"
+            "{% if manage_url %}\nPause or manage this schedule: {{manage_url}}{% endif %}"
+        ),
+    },
+    "schedule_quota_warning": {
+        "subject": "Scheduled agents — approaching {{scope}} quota ({{percent}}%)",
+        "title": "Scheduled agents quota warning",
+        "html": (
+            '<div class="status-icon status-icon-warning">⚠</div>'
+            '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
+            "{{scope_label}} is at <strong>{{percent}}%</strong> of its monthly scheduled-run quota."
+            "</p>"
+            '<div class="summary">'
+            '<p style="margin:0 0 8px;font-weight:600;color:#333;font-size:13px;">Current usage</p>'
+            '<p style="margin:0;color:#555;">'
+            "{{current}} of {{limit}} projected runs/month "
+            "{% if active_count %}across {{active_count}} active schedules{% endif %}."
+            "</p>"
+            "</div>"
+            '<p style="font-size:14px;color:#555;line-height:1.55;margin:20px 0 0;">'
+            "Once the cap is reached, new schedules above the user limit will need admin approval, "
+            "and high-frequency schedules may be auto-paused. Review the list and pause anything you don't need."
+            "</p>"
+            '{% if manage_url %}<a href="{{manage_url}}" class="button">Review schedules &rarr;</a>{% endif %}'
+        ),
+        "text": (
+            "{{scope_label}} is at {{percent}}% of its monthly scheduled-run quota.\n\n"
+            "Current usage: {{current}} of {{limit}} projected runs/month"
+            "{% if active_count %} across {{active_count}} active schedules{% endif %}.\n\n"
+            "Review and pause anything you don't need:"
+            "{% if manage_url %} {{manage_url}}{% endif %}"
+        ),
+    },
+    "schedule_trigger_quota_blocked": {
+        "subject": "{{schedule_name}} — out of monthly trigger budget",
+        "title": "Trigger fire skipped — out of monthly budget",
+        "html": (
+            '<div class="status-icon status-icon-warning">⚠</div>'
+            '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
+            "Your automation "
+            '<span style="font-weight:600;color:#333;">{{schedule_name}}</span> '
+            "tried to fire but skipped — {{scope_label_lower}} out of monthly trigger budget."
+            "</p>"
+            '<div class="summary">'
+            '<p style="margin:0 0 8px;font-weight:600;color:#333;font-size:13px;">What this means</p>'
+            '<p style="margin:0 0 12px;color:#555;">'
+            "{{scope_label}} hit the monthly trigger cap of <strong>{{cap}}</strong>. "
+            "The automation is still <strong>active</strong> — it'll start firing again on the 1st when the budget resets."
+            "</p>"
+            '<p style="margin:0;color:#555;">'
+            "<strong>Note:</strong> pausing or deleting existing triggers won't refund this month's usage — past fires stay counted. "
+            "If you need more budget right now, ask an admin to raise the cap."
+            "</p>"
+            "</div>"
+            '<p style="font-size:14px;color:#555;line-height:1.55;margin:20px 0 0;">'
+            "You'll get this email once per month per scope, not on every skipped fire."
+            "</p>"
+            '{% if manage_url %}<a href="{{manage_url}}" class="button">View automation &rarr;</a>{% endif %}'
+        ),
+        "text": (
+            "Your automation '{{schedule_name}}' tried to fire but skipped — {{scope_label_lower}} out of monthly trigger budget.\n\n"
+            "{{scope_label}} hit the monthly trigger cap of {{cap}}. "
+            "The automation is still active — it'll start firing again on the 1st when the budget resets.\n\n"
+            "Note: pausing or deleting existing triggers won't refund this month's usage — past fires stay counted. "
+            "If you need more budget right now, ask an admin to raise the cap."
+            "{% if manage_url %}\n\nView automation: {{manage_url}}{% endif %}"
+        ),
+    },
+    "schedule_paused_by_admin": {
+        "subject": "{{schedule_name}} — paused by an admin",
+        "title": "Automation paused by admin",
+        "html": (
+            '<div class="status-icon status-icon-warning">⚠</div>'
+            '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
+            "An admin has {{action_label}} your automation "
+            '<span style="font-weight:600;color:#333;">{{schedule_name}}</span>.'
+            "</p>"
+            "{% if reason %}"
+            '<div class="summary">'
+            '<p style="margin:0 0 8px;font-weight:600;color:#333;font-size:13px;">Reason</p>'
+            '<p style="margin:0;color:#555;">{{reason}}</p>'
+            "</div>"
+            "{% endif %}"
+            '<p style="font-size:14px;color:#555;line-height:1.55;margin:20px 0 0;">'
+            "{{next_steps}}"
+            "</p>"
+            '{% if manage_url %}<a href="{{manage_url}}" class="button">View automation &rarr;</a>{% endif %}'
+        ),
+        "text": (
+            "An admin has {{action_label}} your automation '{{schedule_name}}'.\n"
+            "{% if reason %}\nReason: {{reason}}\n{% endif %}"
+            "\n{{next_steps}}"
+            "{% if manage_url %}\n\nView automation: {{manage_url}}{% endif %}"
         ),
     },
     "generic": {
@@ -313,10 +428,17 @@ def render_template(
     config = EMAIL_TEMPLATES[template_name]
 
     try:
-        subject = jinja_env.from_string(config["subject"]).render(**template_data)
-        title = jinja_env.from_string(config["title"]).render(**template_data)
-        content_html = jinja_env.from_string(config["html"]).render(**template_data)
-        text = jinja_env.from_string(config["text"]).render(**template_data)
+        subject = text_jinja_env.from_string(config["subject"]).render(**template_data)
+        text = text_jinja_env.from_string(config["text"]).render(**template_data)
+        # title and content_html are already-rendered HTML — wrap as Markup so
+        # the base template doesn't double-escape them when injecting via
+        # {{title}} / {{content}}.
+        title = Markup(
+            html_jinja_env.from_string(config["title"]).render(**template_data)
+        )
+        content_html = Markup(
+            html_jinja_env.from_string(config["html"]).render(**template_data)
+        )
 
         html = base_template.render(
             title=title,

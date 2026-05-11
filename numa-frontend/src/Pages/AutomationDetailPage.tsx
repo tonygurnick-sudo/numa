@@ -30,7 +30,7 @@ import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
 import { useBranding } from '../Providers/BrandingContext';
 import { getNextRunTimes, describeCronExpression } from '../utils/cronUtils';
-import { getDerivedAutomationStatus, formatRelativeTime } from '../utils/automationUtils';
+import { getDerivedAutomationStatus, automationStatusBadgeVariant, formatRelativeTime } from '../utils/automationUtils';
 import { listObjectsInFolder, fetchFileFromS3, downloadFileFromS3 } from '../utils/s3Utils';
 import { jwtDecode } from 'jwt-decode';
 import type { AgentSchedule } from '../types/agentSchedules';
@@ -147,8 +147,26 @@ export const AutomationDetailPage: React.FC = () => {
   const { numaGet, numaPut, numaDelete, numaPost } = useNumaRequest();
   const { getCredentials, region: authRegion, getAccessToken, user, lambdaClient } = useAuth();
   const { branding } = useBranding();
-  const brandPrimaryColor = branding.resolvedAssets?.primaryColor || branding.primaryColor || '#6366f1';
-  const brandPrimaryContrast = branding.resolvedAssets?.primaryContrast || branding.primaryContrast || '#ffffff';
+  // BrandingTheme stores colors under `branding.colors.*`; the legacy paths
+  // (`branding.primaryColor`, `branding.resolvedAssets?.primaryColor`) don't
+  // exist on the type and resolve to undefined at runtime, so partner-branded
+  // tenants were silently falling back to the default purple. Use the
+  // typed paths.
+  const brandPrimaryColor = branding.colors?.primary || '#6366f1';
+  const brandPrimaryContrast = branding.colors?.buttonPrimaryText || '#ffffff';
+
+  // Defensive UI gating — if an admin somehow lands on a non-owned schedule
+  // (e.g. via a shared URL or stale link), hide owner-only actions and show
+  // the same "Viewing as admin" banner pattern as ScheduleDetailPage. The
+  // server-side list endpoint is owner-scoped, so for non-admins the
+  // automation simply won't load — that's already handled by the not-found
+  // branch. This block exists for the future-proofing case where the page
+  // ever wires an admin cross-user fetch (and as defence-in-depth if the
+  // server gating regresses).
+  const currentUserSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
+  const isCurrentUserAdmin = (user?.decoded_tokens?.idToken?.['cognito:groups'] as string[] | undefined)?.includes(
+    'admin'
+  );
 
   const [automation, setAutomation] = useState<AgentSchedule | null>(null);
   const [agent, setAgent] = useState<AgentSummary | null>(null);
@@ -157,6 +175,10 @@ export const AutomationDetailPage: React.FC = () => {
   const [pipedreamHealthState, setPipedreamHealthState] = useState<'unknown' | 'healthy' | 'unhealthy'>('unknown');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Non-blocking advisory surfaced after a successful action (e.g. reactivate
+  // while trigger budget is exhausted). Schedule status update succeeded —
+  // this just tells the user the trigger won't fire until budget resets.
+  const [notice, setNotice] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -230,39 +252,78 @@ export const AutomationDetailPage: React.FC = () => {
       const prefix = `numa-chat/scheduled-runs/${userId}/${automationId}/`;
       const keys = await listObjectsInFolder(prefix, outputsBucket, region, getCredentials);
 
+      // Sort comparator used both pre- and post-log-load. Prefers the log's
+      // own timestamps (ISO strings written by the runner); falls back to
+      // `timestamp` only if the log isn't loaded yet. Returns `0` for missing
+      // values so a NaN-returning comparator can't make sort unstable.
+      const sortKey = (r: RunHistoryItem): number => {
+        const t = r.log?.completedAt || r.log?.startedAt;
+        if (t) {
+          const parsed = Date.parse(t);
+          if (Number.isFinite(parsed)) return parsed;
+        }
+        const ts = r.timestamp?.getTime?.();
+        return Number.isFinite(ts) ? (ts as number) : 0;
+      };
+
       const items: RunHistoryItem[] = keys
         .filter((key: string) => key.endsWith('.json'))
         .map((key: string) => {
           const parts = key.split('/');
           const fileName = parts[parts.length - 1] || '';
           const runId = fileName.replace('.json', '');
-          const tsMatch = runId.match(/^(\d+)/);
-          const timestamp = tsMatch ? new Date(parseInt(tsMatch[1], 10)) : new Date();
-          return { runId, s3Key: key, timestamp };
+          // Pre-load placeholder. The previous regex (`runId.match(/^(\d+)/)`)
+          // tried to extract a ms timestamp from the runId, but our runIds
+          // are UUIDv4 strings — the leading hex digits aren't a timestamp.
+          // For e.g. `1086091a-...` the regex matched `1086091` and produced
+          // a 1970 Date. For `aedffbca-...` (no leading digits) it fell
+          // through to `new Date()` which set NOW. Result: completely wrong
+          // sort order that never corrected even after logs loaded, because
+          // we never re-derived `timestamp` from the log content. Now we
+          // sort by `log.completedAt` / `startedAt` directly via `sortKey`,
+          // and only consult `timestamp` when no log is loaded yet.
+          return { runId, s3Key: key, timestamp: new Date(0) };
         })
-        .sort((a: RunHistoryItem, b: RunHistoryItem) => b.timestamp.getTime() - a.timestamp.getTime());
+        .sort((a: RunHistoryItem, b: RunHistoryItem) => sortKey(b) - sortKey(a));
 
       setRunHistory(items);
 
-      const toLoad = items.slice(0, 10);
-      const loaded = await Promise.all(
-        toLoad.map(async (item) => {
-          try {
-            const blob = await fetchFileFromS3(item.s3Key, outputsBucket, region, getCredentials);
-            const text = await blob.text();
-            const log = JSON.parse(text) as ScheduledRunLog;
-            return { ...item, log, loading: false };
-          } catch {
-            return { ...item, loading: false, error: 'Failed to load' };
-          }
-        })
-      );
+      // Load every listed run's log, not just the first 10. Pre-truncating
+      // here produced a misleading "X succeeded / Y total" ratio because the
+      // success counter excluded unloaded rows from its numerator but
+      // counted them in the denominator, and rows past index 10 rendered as
+      // empty placeholders the user could only resolve by clicking each one.
+      // Logs are ~1-2 KB so the bandwidth cost is small; we batch to avoid
+      // firing N concurrent requests against S3 for very large run histories.
+      const batchSize = 10;
+      const loaded: RunHistoryItem[] = [];
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const batchResults = await Promise.all(
+          batch.map(async (item) => {
+            try {
+              const blob = await fetchFileFromS3(item.s3Key, outputsBucket, region, getCredentials);
+              const text = await blob.text();
+              const log = JSON.parse(text) as ScheduledRunLog;
+              return { ...item, log, loading: false };
+            } catch {
+              return { ...item, loading: false, error: 'Failed to load' };
+            }
+          })
+        );
+        loaded.push(...batchResults);
+      }
 
       setRunHistory((prev) =>
-        prev.map((item) => {
-          const loadedItem = loaded.find((l) => l.runId === item.runId);
-          return loadedItem || item;
-        })
+        prev
+          .map((item) => {
+            const loadedItem = loaded.find((l) => l.runId === item.runId);
+            return loadedItem || item;
+          })
+          // Re-sort post-load so the now-populated `log.completedAt` values
+          // drive ordering. Without this the array kept the pre-load order
+          // (where all sortKeys were 0 = stable = S3-list order).
+          .sort((a, b) => sortKey(b) - sortKey(a))
       );
     } catch (err) {
       console.error('[AutomationDetailPage] Failed to load run history:', err);
@@ -313,8 +374,23 @@ export const AutomationDetailPage: React.FC = () => {
     const newStatus = automation.status === 'active' ? 'paused' : 'active';
     try {
       setActionLoading('status');
-      await ScheduleService.update(numaPut, automationId, { status: newStatus });
+      const updated = await ScheduleService.update(numaPut, automationId, { status: newStatus });
       setAutomation((prev) => (prev ? { ...prev, status: newStatus } : prev));
+      // Reactivating an event trigger while at-budget: lambda returns a
+      // triggerWarning. Update succeeded — schedule is active again — but
+      // surface the advisory so the user knows fires won't run until reset.
+      if (updated.triggerWarning) {
+        const w = updated.triggerWarning;
+        const who = w.scope === 'company' ? 'your company is' : 'you are';
+        setNotice(
+          `Reactivated. Heads up: ${who} at the monthly trigger budget cap (${w.current}/${w.limit}). ` +
+            `It won't fire until the budget resets on the 1st. Past usage from deleted/paused triggers ` +
+            `stays counted, so removing existing triggers won't refund this month — ask an admin to ` +
+            `raise the cap if you need budget now.`
+        );
+      } else {
+        setNotice(null);
+      }
     } catch (err) {
       console.error('[AutomationDetailPage] Failed to toggle status:', err);
     } finally {
@@ -327,7 +403,11 @@ export const AutomationDetailPage: React.FC = () => {
     try {
       setActionLoading('run');
       await ScheduleService.run(numaPost, automationId);
-      setTimeout(() => loadRunHistory(), 3000);
+      // Sequenced refetch — was setTimeout(loadRunHistory, 3000) which raced
+      // with concurrent toggles. Run is queued (202) so the new row may not
+      // appear immediately; user can refresh the page if they want to watch
+      // the status transition.
+      await loadRunHistory();
     } catch (err) {
       console.error('[AutomationDetailPage] Failed to run:', err);
     } finally {
@@ -454,6 +534,9 @@ export const AutomationDetailPage: React.FC = () => {
 
   const isActive = automation.status === 'active';
   const displayName = automation.label || automation.agentTitle || t('detail.title');
+  const isAdminCrossUser = Boolean(
+    automation.userId && currentUserSub && automation.userId !== currentUserSub && isCurrentUserAdmin
+  );
 
   return (
     <LayoutDashboard>
@@ -461,11 +544,7 @@ export const AutomationDetailPage: React.FC = () => {
         title={displayName}
         subtitle={
           <span className="d-flex align-items-center gap-2">
-            <Badge
-              bg={derivedStatus === 'active' ? 'success' : derivedStatus === 'completed' ? 'secondary' : 'warning'}
-            >
-              {t(`status.${derivedStatus}`)}
-            </Badge>
+            <Badge bg={automationStatusBadgeVariant(derivedStatus)}>{t(`status.${derivedStatus}`)}</Badge>
             {agent?.title || automation.agentTitle || ''}
           </span>
         }
@@ -483,14 +562,41 @@ export const AutomationDetailPage: React.FC = () => {
       />
 
       <Container fluid className="px-4 py-3">
+        {/* Defensive admin-cross-user banner. The list endpoint is owner-
+            scoped server-side so non-admins can never see another user's
+            schedule here, but if an admin lands on a non-owned schedule via
+            a future cross-user fetch (or a shared URL) we want to hide
+            owner-only actions explicitly rather than relying on the lambda
+            to reject them. */}
+        {isAdminCrossUser && (
+          <Alert variant="info" className="mb-4 d-flex align-items-start gap-2">
+            <i className="bi bi-info-circle-fill mt-1" aria-hidden="true" />
+            <div>
+              <div className="fw-semibold">Viewing as admin</div>
+              <div className="small">
+                This automation is owned by another user. Owner-only actions (Run now, Edit, Delete) are hidden — pause
+                or resume from the audit panel if needed.
+              </div>
+            </div>
+          </Alert>
+        )}
+
+        {notice && (
+          <Alert variant="warning" className="mb-4" dismissible onClose={() => setNotice(null)}>
+            {notice}
+          </Alert>
+        )}
+
         {/* Action Buttons */}
         <Row className="mb-4">
           <Col>
             <div className="d-flex gap-2 flex-wrap">
-              {/* Run Now is meaningless for event triggers — they need a real
-                  event payload to do anything useful. Hide it for events
-                  rather than wire up a synthetic-payload tester UX. */}
-              {automation.triggerType !== 'event' && (
+              {/* Run Now + Edit + Delete are owner-only (admin viewing
+                  someone else's schedule sees only the inactive/active
+                  toggle). Run Now is also hidden for event triggers — they
+                  need a real event payload to do anything useful, so a
+                  synthetic-payload run isn't a useful smoke test. */}
+              {!isAdminCrossUser && automation.triggerType !== 'event' && (
                 <Button
                   size="sm"
                   style={{
@@ -512,27 +618,33 @@ export const AutomationDetailPage: React.FC = () => {
                   )}
                 </Button>
               )}
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={() => navigate(`/automations/${automationId}/edit`)}
-              >
-                <Pencil size={14} className="me-1" />
-                {t('actions.edit')}
-              </Button>
-              <Button
-                variant={isActive ? 'outline-warning' : 'outline-success'}
-                size="sm"
-                onClick={handleToggleStatus}
-                disabled={actionLoading === 'status'}
-              >
-                {isActive ? <Pause size={14} className="me-1" /> : <Play size={14} className="me-1" />}
-                {isActive ? t('actions.pause') : t('actions.resume')}
-              </Button>
-              <Button variant="outline-danger" size="sm" onClick={() => setShowDeleteConfirm(true)}>
-                <Trash2 size={14} className="me-1" />
-                {t('actions.delete')}
-              </Button>
+              {!isAdminCrossUser && (
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => navigate(`/automations/${automationId}/edit`)}
+                >
+                  <Pencil size={14} className="me-1" />
+                  {t('actions.edit')}
+                </Button>
+              )}
+              {(automation.status === 'active' || automation.status === 'paused') && (
+                <Button
+                  variant={isActive ? 'outline-warning' : 'outline-success'}
+                  size="sm"
+                  onClick={handleToggleStatus}
+                  disabled={actionLoading === 'status'}
+                >
+                  {isActive ? <Pause size={14} className="me-1" /> : <Play size={14} className="me-1" />}
+                  {isActive ? t('actions.pause') : t('actions.resume')}
+                </Button>
+              )}
+              {!isAdminCrossUser && (
+                <Button variant="outline-danger" size="sm" onClick={() => setShowDeleteConfirm(true)}>
+                  <Trash2 size={14} className="me-1" />
+                  {t('actions.delete')}
+                </Button>
+              )}
             </div>
           </Col>
         </Row>
@@ -868,7 +980,7 @@ export const AutomationDetailPage: React.FC = () => {
                                     undefined,
                                     automation.timezone ? { timeZone: automation.timezone } : undefined
                                   )
-                                : run.timestamp?.toLocaleString() || '\u2014'}
+                                : '\u2014'}
                             </td>
                             <td className="align-middle">
                               {run.log?.completedAt

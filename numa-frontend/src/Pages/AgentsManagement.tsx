@@ -625,6 +625,9 @@ export const AgentsManagement = () => {
     cronExpression: string;
     timezone: string;
     label?: string;
+    expiresAt?: number | null;
+    runConfig?: AgentSchedule['runConfig'];
+    agentSnapshot?: NonNullable<Parameters<typeof ScheduleService.update>[2]>['agentSnapshot'];
   }) => {
     try {
       if (!scheduleModal.agent) return;
