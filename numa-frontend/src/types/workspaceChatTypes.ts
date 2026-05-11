@@ -10,10 +10,20 @@
 // ============================================================
 
 /** Available workspace chat model IDs (bare, without regional prefix).
- * The backend adds the correct regional prefix (us., au.) based on deployment region. */
+ * The backend adds the correct regional prefix (us., au.) based on deployment region.
+ *
+ * IDs may carry an "@<thinking-suffix>" — recognised suffixes are no-thinking,
+ * low-thinking, high-thinking. The backend splits the suffix off (see
+ * parse_model_id_with_thinking in sdk_config.py) and applies a THINKING_PRESETS
+ * override to type_config.thinking / type_config.effort. This is throwaway
+ * comparison-testing plumbing; production will set thinking per-model server-side. */
 export type WorkspaceChatModelId =
   | 'anthropic.claude-sonnet-4-6'
+  | 'anthropic.claude-sonnet-4-6@no-thinking'
+  | 'anthropic.claude-sonnet-4-6@low-thinking'
+  | 'anthropic.claude-sonnet-4-6@high-thinking'
   | 'anthropic.claude-opus-4-6-v1'
+  | 'anthropic.claude-opus-4-6-v1@no-thinking'
   | 'anthropic.claude-haiku-4-5-20251001-v1:0';
 
 /** Model option for display in the UI */
@@ -34,9 +44,29 @@ export const WORKSPACE_MODEL_OPTIONS: WorkspaceChatModelOption[] = [
     description: 'Balanced',
   },
   {
+    id: 'anthropic.claude-sonnet-4-6@no-thinking',
+    label: 'Claude Sonnet 4.6 — no thinking',
+    description: 'Test: thinking disabled',
+  },
+  {
+    id: 'anthropic.claude-sonnet-4-6@low-thinking',
+    label: 'Claude Sonnet 4.6 — low effort',
+    description: 'Test: adaptive thinking, low effort',
+  },
+  {
+    id: 'anthropic.claude-sonnet-4-6@high-thinking',
+    label: 'Claude Sonnet 4.6 — high effort',
+    description: 'Test: adaptive thinking, high effort',
+  },
+  {
     id: 'anthropic.claude-opus-4-6-v1',
     label: 'Claude Opus 4.6',
     description: 'Complex',
+  },
+  {
+    id: 'anthropic.claude-opus-4-6-v1@no-thinking',
+    label: 'Claude Opus 4.6 — no thinking',
+    description: 'Test: thinking disabled',
   },
   {
     id: 'anthropic.claude-haiku-4-5-20251001-v1:0',

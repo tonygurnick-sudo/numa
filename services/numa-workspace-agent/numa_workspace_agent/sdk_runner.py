@@ -372,6 +372,7 @@ async def stream_claude_sdk(
     company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     voice_recordings: Optional[list[str]] = None,
+    thinking_override: Optional[str] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -589,6 +590,7 @@ async def stream_claude_sdk(
         user_profile=user_profile,
         company_profile=company_profile,
         feature_flags=feature_flags,
+        thinking_override=thinking_override,
     )
 
     logger.info(
@@ -1284,6 +1286,7 @@ async def stream_claude_sdk(
                 user_profile=user_profile,
                 company_profile=company_profile,
                 feature_flags=feature_flags,
+                thinking_override=thinking_override,
             )
 
             async with ClaudeSDKClient(options=fallback_options) as retry_client:
@@ -1453,6 +1456,7 @@ async def run_claude_sdk(
     company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     system_dir: Optional[Path] = None,
+    thinking_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run Claude SDK to completion and return the collected result.
 
@@ -1578,6 +1582,7 @@ async def run_claude_sdk(
         company_profile=company_profile,
         feature_flags=feature_flags,
         home_dir=system_dir,
+        thinking_override=thinking_override,
     )
 
     logger.info(
@@ -1966,6 +1971,7 @@ async def run_claude_sdk(
                 company_profile=company_profile,
                 feature_flags=feature_flags,
                 home_dir=system_dir,
+                thinking_override=thinking_override,
             )
 
             async with ClaudeSDKClient(options=fallback_options) as retry_client:

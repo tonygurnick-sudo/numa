@@ -69,7 +69,7 @@ from .s3_workspace import (
     sync_uploads_from_s3,
     write_result_to_s3,
 )
-from .sdk_config import CLIENT_NAME, LOCAL_ROOT
+from .sdk_config import CLIENT_NAME, LOCAL_ROOT, parse_model_id_with_thinking
 from .sdk_runner import (
     check_sdk_available,
     format_sse_event,
@@ -1548,8 +1548,21 @@ async def _handle_chat(
     has_uploads = body.get("hasUploads", False)
     expected_upload_paths = body.get("expectedUploadPaths", [])
 
-    # Model selection (global cross-region inference profile)
-    model_id = body.get("modelId")
+    # Model selection (global cross-region inference profile).
+    # Frontend may send a composite ID like "anthropic.claude-sonnet-4-6@high-thinking"
+    # which encodes a thinking-preset suffix. Split it here so the bare ID flows
+    # through validate_model_id() unchanged and the preset is threaded to the runner.
+    raw_model_id = body.get("modelId")
+    model_id, thinking_override = parse_model_id_with_thinking(raw_model_id)
+    if thinking_override:
+        logger.info(
+            "Thinking override selected",
+            _name="MODEL_THINKING_OVERRIDE",
+            phase="request",
+            raw_model_id=raw_model_id,
+            bare_model_id=model_id,
+            thinking_override=thinking_override,
+        )
     request_id = body.get("requestId") or str(uuid.uuid4())
 
     # Pipedream integrations - construct external_user_id for the relay
@@ -1863,6 +1876,7 @@ async def _handle_chat(
                 company_profile=company_profile,  # Company profile for system prompt
                 feature_flags=feature_flags,  # Feature flags for conditional tools
                 voice_recordings=voice_recordings,  # Voice recordings to auto-transcribe
+                thinking_override=thinking_override,  # @<suffix> override from modelId
             )
             async for chunk in sdk_stream:
                 # Stream chunk directly to frontend via HTTP SSE
@@ -2137,6 +2151,7 @@ async def _handle_sync(
             agent_type_config=agent_type_config,
             company_profile=company_profile,
             feature_flags=feature_flags,
+            thinking_override=thinking_override,
         )
 
     # If the agent type uses result_file mode, read /workdir/outputs/result.json
@@ -2457,6 +2472,7 @@ async def _handle_fire_and_forget(
                     agent_type_config=agent_type_config,
                     company_profile=company_profile,
                     feature_flags=feature_flags,
+                    thinking_override=thinking_override,
                 )
 
             # If the agent type uses result_file mode, read result.json
