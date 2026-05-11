@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { Alert, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from './schedulingTypes';
+import { getNextRunTimes } from '../../utils/cronUtils';
+import { estimateCronIntervalMinutes } from '../../utils/cronProjection';
 
 type CronExpressionBuilderProps = {
   frequency: FrequencyType;
@@ -36,44 +38,21 @@ type CronExpressionBuilderProps = {
   onMonthlyIntervalChange: (value: number) => void;
   /** Effective minimum scheduling interval in minutes. Defaults to 5 (platform default). */
   minIntervalMinutes?: number;
+  /**
+   * Pre-built cron expression. When provided, the preview block renders an
+   * "~N runs/month" projection next to the summary so the user sees quota
+   * impact while picking the cadence. Optional — keeps the builder usable
+   * for callers that don't track the cron expression separately.
+   */
+  cronExpression?: string;
+  /**
+   * IANA timezone for the next-run preview (FEAT-105 round-2). When provided
+   * alongside `cronExpression`, the builder shows the next 5 fire times.
+   */
+  timezone?: string;
 };
 
 const dayOrder: WeekDay[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-
-/**
- * Lightweight cron interval estimator for frontend validation.
- * KEEP IN SYNC with lib/scheduling-schemas.ts:estimateCronIntervalMinutes()
- * (duplicated because that module depends on zod + Node APIs not available in the browser bundle)
- */
-const estimateCronIntervalMinutes = (expression: string): number | null => {
-  const match = expression.match(/^cron\((.+)\)$/);
-  if (!match) return null;
-  const fields = match[1].trim().split(/\s+/);
-  if (fields.length !== 6) return null;
-  const [minute, hour, dom, month, , year] = fields;
-  if (/^\d{4}$/.test(year)) return Infinity;
-  const minuteStep = minute.match(/^(?:\d+|\*)\/(\d+)$/);
-  if (minuteStep && hour === '*') return parseInt(minuteStep[1], 10);
-  // Comma-separated minute list with hour = * (e.g. "0,15,30,45 * * * ? *")
-  if (hour === '*' && /^\d+(,\d+)+$/.test(minute)) {
-    const values = minute
-      .split(',')
-      .map((v) => parseInt(v, 10))
-      .sort((a, b) => a - b);
-    let minGap = 60 - values[values.length - 1] + values[0];
-    for (let i = 1; i < values.length; i++) minGap = Math.min(minGap, values[i] - values[i - 1]);
-    return minGap;
-  }
-  const hourStep = hour.match(/^(?:\d+|\*)\/(\d+)$/);
-  if (hourStep) return parseInt(hourStep[1], 10) * 60;
-  const domStep = dom.match(/^(?:\d+|\*)\/(\d+)$/);
-  if (domStep) return parseInt(domStep[1], 10) * 1440;
-  if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && (dom === '*' || dom === '?')) return 1440;
-  if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && /^\d+$/.test(dom)) return 43200;
-  const monthStep = month.match(/^(?:\d+|\*)\/(\d+)$/);
-  if (monthStep) return parseInt(monthStep[1], 10) * 43200;
-  return null;
-};
 
 /** Formats a minute-based interval into a human-readable string */
 const formatMinIntervalForDisplay = (
@@ -145,7 +124,9 @@ export const CronExpressionBuilder = ({
   onMonthlyWeekDayChange,
   monthlyInterval,
   onMonthlyIntervalChange,
-  minIntervalMinutes = 5,
+  minIntervalMinutes = 60,
+  cronExpression,
+  timezone,
 }: CronExpressionBuilderProps) => {
   const { t } = useTranslation('agents');
   const effectiveMin = Math.max(minIntervalMinutes, 5);
@@ -194,12 +175,13 @@ export const CronExpressionBuilder = ({
         description: t('scheduling.frequency.monthly.description'),
         icon: 'bi-calendar3',
       },
-      {
-        value: 'custom' as const,
-        label: t('scheduling.frequency.custom.label'),
-        description: t('scheduling.frequency.custom.description'),
-        icon: 'bi-code-slash',
-      },
+      // FEAT-105 — "Custom" raw-cron option removed from the picker. The
+      // 'custom' FrequencyType value is intentionally kept so existing
+      // schedules created with arbitrary cron expressions continue to load
+      // and render in edit mode; users just can't pick `custom` for new
+      // schedules anymore. Direct response to the ticket bullet
+      // "remove custom cron jobs" — too easy to set up quota-damaging or
+      // broken schedules with raw cron syntax.
     ],
     [t, effectiveMin]
   );
@@ -641,8 +623,64 @@ export const CronExpressionBuilder = ({
       <div className="cron-builder__details">{renderFrequencyDetails()}</div>
 
       <div className="cron-builder__preview mt-4 p-3 rounded-3">
-        <div className="text-muted small mb-1">{t('scheduling.summary.label')}</div>
-        <div className="cron-builder__summary">{summary}</div>
+        <div className="d-flex justify-content-between align-items-start gap-2">
+          <div className="flex-grow-1">
+            <div className="text-muted small mb-1">{t('scheduling.summary.label')}</div>
+            <div className="cron-builder__summary">{summary}</div>
+          </div>
+          {/* FEAT-105 — projected monthly run count derived from the cron */}
+          {(() => {
+            if (!cronExpression) return null;
+            const intervalMin = estimateCronIntervalMinutes(cronExpression);
+            if (intervalMin === null) return null;
+            if (!Number.isFinite(intervalMin)) {
+              return (
+                <span
+                  className="badge bg-light text-dark border align-self-center"
+                  title={t('scheduling.projection.onceTitle', { defaultValue: 'One-time schedule' })}
+                >
+                  {t('scheduling.projection.once', { defaultValue: 'Once' })}
+                </span>
+              );
+            }
+            const projected = Math.max(1, Math.round(43_800 / intervalMin));
+            const variant = projected > 100 ? 'warning' : 'light';
+            return (
+              <span
+                className={`badge bg-${variant} text-dark border align-self-center`}
+                title={t('scheduling.projection.tooltip', {
+                  defaultValue: 'Projected runs/month based on this cadence — counts toward your quota',
+                })}
+              >
+                {t('scheduling.projection.runsPerMo', { defaultValue: '~{{count}} runs/mo', count: projected })}
+              </span>
+            );
+          })()}
+        </div>
+        {/* FEAT-105 round-2 — next-5-runs preview. Helps the user sanity-check
+            their cadence before saving. Only renders when we have both a cron
+            expression and an IANA timezone — falls back silently otherwise. */}
+        {cronExpression &&
+          timezone &&
+          (() => {
+            const next = getNextRunTimes(cronExpression, timezone, 5);
+            if (next.length === 0) return null;
+            return (
+              <div className="mt-3 pt-3 border-top">
+                <div className="text-muted small fw-semibold mb-2">
+                  {t('scheduling.preview.nextRunsTitle', { defaultValue: 'Next 5 runs' })}
+                </div>
+                <ul className="list-unstyled small mb-0">
+                  {next.map((d, i) => (
+                    <li key={i} className="text-muted">
+                      <i className="bi bi-clock me-2" aria-hidden="true" />
+                      {d.toLocaleString(undefined, { timeZone: timezone })}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
       </div>
     </div>
   );

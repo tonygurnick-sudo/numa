@@ -120,6 +120,14 @@ export const AVAILABLE_TOOLS: Tool[] = [
     category: 'management',
     parameters: [],
   },
+  {
+    id: 'platform-settings',
+    name: 'Platform Settings',
+    description:
+      'Manage global platform-level defaults that apply across all customers — automation quotas (schedules, triggers), minimum interval, and warning thresholds.',
+    category: 'management',
+    parameters: [],
+  },
 ];
 
 export const getToolsByCategory = () => {

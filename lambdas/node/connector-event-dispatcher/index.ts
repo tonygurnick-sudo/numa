@@ -120,6 +120,10 @@ interface EmailFilter {
 interface ScheduleRecord {
   user_id: string;
   schedule_id: string;
+  tenant_id?: string;
+  agent_id?: string;
+  agent_title?: string;
+  label?: string;
   status: string;
   trigger_type?: string;
   trigger?: {
@@ -128,6 +132,8 @@ interface ScheduleRecord {
     filters?: EmailFilter[];
     filter_logic?: 'all' | 'any';
   };
+  recent_runs?: Record<string, number>;
+  last_quota_blocked_month?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +374,33 @@ const fetchMessage = async (accessToken: string, messageId: string): Promise<Nor
 // Filter evaluation
 // ---------------------------------------------------------------------------
 
+/**
+ * Domains owned by Numa that should never trigger an automation. Stops
+ * accidental feedback loops where an automation sends an email through the
+ * numa-email-sender lambda and that email then triggers the same (or
+ * another) Gmail trigger. Matched against the email's `from` field via a
+ * suffix check, so subdomains are blocked too (e.g.
+ * `no-reply@notifications.numa.arcanum.ai`).
+ */
+const NUMA_SENDER_DOMAINS = ['numa.arcanum.ai', 'notifications.numa.arcanum.ai'];
+
+/**
+ * Returns true when an email originates from a Numa-owned sender domain.
+ * Parses the address out of the `from` field (handles both bare addresses
+ * and `Name <addr@host>` formats).
+ */
+const isFromNumaSender = (email: NormalizedEmail): boolean => {
+  const fromValue = email.from?.toLowerCase() ?? '';
+  // Match either inside angle brackets or anywhere in the string for bare
+  // addresses. Suffix-match against the domain so subdomains are blocked too.
+  const match = fromValue.match(/<([^>]+)>/) ?? [, fromValue];
+  const addr = match[1] ?? fromValue;
+  const at = addr.lastIndexOf('@');
+  if (at === -1) return false;
+  const host = addr.slice(at + 1).trim();
+  return NUMA_SENDER_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
+};
+
 const fieldValue = (email: NormalizedEmail, field: FilterField): string => {
   switch (field) {
     case 'sender':
@@ -411,6 +444,12 @@ const evalFilter = (email: NormalizedEmail, filter: EmailFilter): boolean => {
 };
 
 const matchesSchedule = (email: NormalizedEmail, schedule: ScheduleRecord): boolean => {
+  // Fail closed for non-Gmail-source schedules. Without this, a Pipedream-source
+  // schedule (no `filters` field) would unconditionally match because the
+  // empty-filters branch below returns true — causing the Gmail dispatcher to
+  // fire Slack/Pipedream automations on every inbound email and, via the
+  // `schedule_completed` notification email, an infinite self-trigger loop.
+  if (schedule.trigger?.source !== 'gmail') return false;
   const filters = schedule.trigger?.filters ?? [];
   if (filters.length === 0) return true;
   const logic = schedule.trigger?.filter_logic ?? 'all';
@@ -426,9 +465,14 @@ const listEventSchedulesForUser = async (userId: string): Promise<ScheduleRecord
     new QueryCommand({
       TableName: SCHEDULES_TABLE,
       KeyConditionExpression: 'user_id = :u',
-      FilterExpression: '#status = :active AND trigger_type = :event',
-      ExpressionAttributeNames: { '#status': 'status' },
-      ExpressionAttributeValues: { ':u': userId, ':active': 'active', ':event': 'event' },
+      FilterExpression: '#status = :active AND trigger_type = :event AND trigger.#source = :gmail',
+      ExpressionAttributeNames: { '#status': 'status', '#source': 'source' },
+      ExpressionAttributeValues: {
+        ':u': userId,
+        ':active': 'active',
+        ':event': 'event',
+        ':gmail': 'gmail',
+      },
     })
   );
   return (res.Items || []) as ScheduleRecord[];
@@ -465,6 +509,15 @@ const invokeRunner = async (scheduleId: string, email: NormalizedEmail): Promise
  *
  * The runner interpolates `{{ event.<field> }}` from `extracted.fields` (and
  * supports `{{ event.raw.* }}` for power users).
+ *
+ * Trigger-quota enforcement (cap check, atomic counter, recent_runs
+ * increment, and the in-app + email "trigger blocked" notification) all
+ * live in `agent-schedule-runner` — see `enforceTriggerQuotaOrBail` /
+ * `notifyTriggerQuotaBlocked`. The runner runs them AFTER its
+ * `claimEventMessageSlot` dedupe so increments only happen for fires that
+ * actually run, and the owner gets exactly one notification per scope per
+ * month. The fire-and-forget invoke here is fine: any drop / quota block
+ * is observable via the runner's structured logs and CloudWatch metrics.
  */
 const invokeRunnerPipedream = async (
   scheduleId: string,
@@ -684,15 +737,29 @@ export const handler: Handler = async (event: EventBridgeEvent) => {
       continue;
     }
 
+    // Hard block: emails originating from Numa-owned sender domains never
+    // trigger automations. Stops feedback loops between the
+    // numa-email-sender lambda and Gmail triggers (e.g. quota-warning
+    // email → Gmail trigger → fires agent → sends another email → loop).
+    if (isFromNumaSender(email)) {
+      console.info(`${LOG_PREFIX} Skipped numa-sender email`, { messageId, from: email.from });
+      continue;
+    }
+
     for (const schedule of schedules) {
-      if (matchesSchedule(email, schedule)) {
-        try {
-          await invokeRunner(schedule.schedule_id, email);
-          dispatchCount += 1;
-        } catch (err) {
-          failCount += 1;
-          console.error(`${LOG_PREFIX} Failed to invoke runner`, schedule.schedule_id, err);
-        }
+      if (!matchesSchedule(email, schedule)) continue;
+      try {
+        // Quota enforcement + counter increment moved to the runner — see
+        // `enforceTriggerQuotaOrBail` in agent-schedule-runner. Done there
+        // so increments only happen for fires that actually run (after the
+        // runner's `claimRunSlot` dedupes Gmail re-deliveries). Dispatcher
+        // is now responsible only for filter matching + numa-sender block
+        // + Lambda invoke.
+        await invokeRunner(schedule.schedule_id, email);
+        dispatchCount += 1;
+      } catch (err) {
+        failCount += 1;
+        console.error(`${LOG_PREFIX} Failed to dispatch trigger fire`, schedule.schedule_id, err);
       }
     }
   }

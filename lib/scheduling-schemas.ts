@@ -146,6 +146,33 @@ export const EventTriggerSchema = z.discriminatedUnion('source', [
   PipedreamEventTriggerSchema,
 ]);
 
+/**
+ * Typed error written by the runner when a scheduled run fails for a
+ * reason the frontend can act on (broken integration, missing KB, etc.).
+ * Free-form `last_error` is still kept alongside this for legacy records.
+ */
+export const TypedScheduleErrorSchema = z.object({
+  kind: z.enum([
+    'integration_not_connected',
+    'integration_revoked',
+    'kb_not_accessible',
+    'agent_archived',
+    'agent_deleted',
+    'feature_disabled_company',
+    'feature_disabled_user',
+    'quota_exceeded',
+    'agent_invocation_failed',
+    'unknown',
+  ]),
+  /** Human-readable summary for fallback rendering. */
+  message: z.string().max(500),
+  /** Optional integration / KB / feature identifier the error refers to. */
+  resource: z.string().optional(),
+  /** Path the frontend can deep-link to for remediation. */
+  remediationPath: z.string().optional(),
+});
+export type TypedScheduleError = z.infer<typeof TypedScheduleErrorSchema>;
+
 // Main schedule record schema
 export const ScheduleRecordSchema = z
   .object({
@@ -169,7 +196,13 @@ export const ScheduleRecordSchema = z
         message: 'Invalid timezone. Must be a valid IANA timezone identifier',
       })
       .optional(),
-    status: z.enum(['active', 'paused', 'deleted']),
+    /**
+     * `admin_locked` is set by an admin via the tenant audit panel. The owner
+     * can see the schedule but cannot reactivate or edit it — only an admin
+     * can transition out of `admin_locked` (typically back to `paused` so the
+     * owner regains control).
+     */
+    status: z.enum(['active', 'paused', 'deleted', 'pending_approval', 'admin_locked']),
     event_type: z.enum(['agent', 'application', 'data_sync']).optional().default('agent'),
     agent_id: z.string().min(1, 'Agent ID is required'),
     agent_title: z.string().optional(),
@@ -183,7 +216,70 @@ export const ScheduleRecordSchema = z
     notification_emails: z.array(z.string().email()).max(10).optional(),
     last_run_epoch: z.number().optional(),
     last_status: z.string().optional(),
+    /**
+     * Free-form error string. Prefer `last_error_typed` for new code; this
+     * field is kept for backwards compatibility with existing records.
+     */
     last_error: z.string().optional(),
+    /**
+     * Typed last_error so the frontend can render an actionable message
+     * (e.g. "Reconnect Gmail") instead of the raw exception text.
+     */
+    last_error_typed: TypedScheduleErrorSchema.optional(),
+    /**
+     * Cached projected runs/month for this schedule. Computed at create /
+     * update time from the cron expression. Null for event-trigger schedules.
+     */
+    projected_runs_per_month: z.number().int().min(0).optional(),
+    /**
+     * Sub of the admin who approved the schedule when it was created above
+     * the user cap. Set only on transition from `pending_approval` → `active`.
+     */
+    approved_by: z.string().optional(),
+    /** Epoch ms of the approval. */
+    approved_at: z.number().optional(),
+    /**
+     * Which quota bucket this schedule is counted against.
+     *
+     * - `'user'` (default): counts against the owner's per-user monthly cap
+     *   AND the company cap.
+     * - `'company'`: counts against the company cap ONLY — excluded from the
+     *   owner's per-user monthly cap. Set automatically when an admin
+     *   approves a `pending_approval` schedule (which by definition exceeded
+     *   the owner's user cap), so the user can keep creating schedules up to
+     *   their personal cap without the approved one eating into it.
+     *
+     * Per-agent and concurrent caps remain unaffected (those are hard caps,
+     * never approvable).
+     */
+    quota_scope: z.enum(['user', 'company']).optional().default('user'),
+    /**
+     * Optional schedule expiry. When set and `Date.now() >= expires_at`, the
+     * runner auto-pauses the schedule, deletes the EventBridge rule, and
+     * sends a `schedule_expired` notification. Owners cannot reactivate
+     * past-expiry schedules (must extend or clear `expires_at` first).
+     */
+    expires_at: z.number().int().positive().optional(),
+    /** Sub of the admin who put the schedule into `admin_locked`. */
+    admin_locked_by: z.string().optional(),
+    /** Epoch ms when the admin lock was applied. */
+    admin_locked_at: z.number().optional(),
+    /** Optional admin-supplied reason shown to the owner. */
+    admin_lock_reason: z.string().max(500).optional(),
+    /**
+     * Rolling per-day fire counter for event-trigger schedules. Keyed
+     * `'YYYY-MM-DD'`. Pruned to the last ~35 entries on each write — old
+     * enough to project a 30-day rate, small enough to keep the record
+     * lightweight. Cron schedules don't populate this (use projected
+     * `projected_runs_per_month` instead).
+     */
+    recent_runs: z.record(z.string(), z.number().int().min(0)).optional(),
+    /**
+     * `'YYYY-MM'` of the last month a quota-block notification was sent for
+     * this schedule. Used by the dispatcher to dedupe so a tenant over cap
+     * gets one notification per month, not one per blocked fire.
+     */
+    last_quota_blocked_month: z.string().optional(),
     created_at: z.number().positive('Invalid creation timestamp'),
     updated_at: z.number().positive('Invalid update timestamp'),
     schedule_name: z.string().min(1, 'Schedule name is required'),
@@ -242,11 +338,20 @@ export const CreateSchedulePayloadSchema = z
     runConfig: ScheduledRunConfigSchema.optional(),
     eventType: z.enum(['agent', 'application', 'data_sync']).optional().default('agent'),
     maxRuns: z.number().int().positive().optional(),
+    /** Optional epoch-ms expiry. Must be in the future at create time. */
+    expiresAt: z.number().int().positive().optional(),
     emailNotifications: z.boolean().optional().default(false),
     notificationEmail: z.string().email().optional(),
     notificationEmails: z.array(z.string().email()).max(10).optional(),
   })
   .superRefine((payload, ctx) => {
+    if (payload.expiresAt !== undefined && payload.expiresAt <= Date.now()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expiresAt'],
+        message: 'Expiry must be in the future',
+      });
+    }
     if (payload.triggerType === 'event') {
       if (!payload.trigger) {
         ctx.addIssue({
@@ -274,34 +379,59 @@ export const CreateSchedulePayloadSchema = z
   });
 
 // Update payload schema
-export const UpdateSchedulePayloadSchema = z.object({
-  status: z.enum(['active', 'paused', 'deleted']).optional(),
-  promptText: z.string().max(4000, 'Prompt text too long').optional(),
-  cronExpression: z
-    .string()
-    .refine(validateCronExpression, {
-      message:
-        'Invalid cron expression format. Use AWS EventBridge format: cron(minute hour day-of-month month day-of-week year)',
-    })
-    .optional(),
-  timezone: z
-    .string()
-    .refine((tz) => VALID_TIMEZONES.has(tz), {
-      message: 'Invalid timezone. Must be a valid IANA timezone identifier',
-    })
-    .optional(),
-  label: z.string().max(200, 'Label too long').optional(),
-  runConfig: ScheduledRunConfigSchema.optional(),
-  agentTitle: z.string().optional(),
-  appTitle: z.string().optional(),
-  agentSnapshot: AgentSnapshotSchema.optional(),
-  maxRuns: z.number().int().positive().nullable().optional(),
-  emailNotifications: z.boolean().optional().default(false),
-  notificationEmail: z.string().email().optional(),
-  notificationEmails: z.array(z.string().email()).max(10).optional(),
-  triggerType: z.enum(['cron', 'event']).optional(),
-  trigger: EventTriggerSchema.optional(),
-});
+export const UpdateSchedulePayloadSchema = z
+  .object({
+    /**
+     * `admin_locked` writes (and reactivations FROM `admin_locked`) are gated
+     * server-side — the schema accepts the value but the lambda rejects when
+     * the caller isn't an admin.
+     */
+    status: z.enum(['active', 'paused', 'deleted', 'admin_locked']).optional(),
+    /** Optional admin-supplied reason for an `admin_locked` transition. */
+    adminLockReason: z.string().max(500).optional(),
+    /** Set or clear (via null) the schedule's expiry. */
+    expiresAt: z.number().int().positive().nullable().optional(),
+    promptText: z.string().max(4000, 'Prompt text too long').optional(),
+    cronExpression: z
+      .string()
+      .refine(validateCronExpression, {
+        message:
+          'Invalid cron expression format. Use AWS EventBridge format: cron(minute hour day-of-month month day-of-week year)',
+      })
+      .optional(),
+    timezone: z
+      .string()
+      .refine((tz) => VALID_TIMEZONES.has(tz), {
+        message: 'Invalid timezone. Must be a valid IANA timezone identifier',
+      })
+      .optional(),
+    label: z.string().max(200, 'Label too long').optional(),
+    runConfig: ScheduledRunConfigSchema.optional(),
+    agentTitle: z.string().optional(),
+    appTitle: z.string().optional(),
+    agentSnapshot: AgentSnapshotSchema.optional(),
+    maxRuns: z.number().int().positive().nullable().optional(),
+    // Do NOT add `.default(false)` here — partial PUTs would silently disable
+    // existing email notifications because Zod fills in the default and the
+    // lambda's `!== undefined` write check then overwrites the stored value.
+    // The lambda only writes this field when the caller explicitly sets it.
+    emailNotifications: z.boolean().optional(),
+    notificationEmail: z.string().email().optional(),
+    notificationEmails: z.array(z.string().email()).max(10).optional(),
+    triggerType: z.enum(['cron', 'event']).optional(),
+    trigger: EventTriggerSchema.optional(),
+  })
+  .superRefine((payload, ctx) => {
+    // Mirror the create-side rule: an explicit non-null expiresAt must be in
+    // the future. `null` clears the expiry, `undefined` leaves it untouched.
+    if (payload.expiresAt !== undefined && payload.expiresAt !== null && payload.expiresAt <= Date.now()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expiresAt'],
+        message: 'Expiry must be in the future',
+      });
+    }
+  });
 
 // Application schedule schema
 export const ApplicationScheduleRecordSchema = z.object({

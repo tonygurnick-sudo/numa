@@ -163,6 +163,8 @@ export const AgentCreateModal = ({
     }
   });
   const [scheduleMaxRuns, setScheduleMaxRuns] = useState<string>('');
+  /** Optional ISO date string (YYYY-MM-DD). Empty = no expiry. */
+  const [scheduleExpiresAt, setScheduleExpiresAt] = useState<string>('');
   const [scheduleEmailNotifications, setScheduleEmailNotifications] = useState(false);
 
   // Inline schedule management state (for editing existing agents)
@@ -362,6 +364,7 @@ export const AgentCreateModal = ({
       setScheduleFrequency('daily');
       setScheduleStartTime('09:00');
       setScheduleMaxRuns('');
+      setScheduleExpiresAt('');
       setScheduleEmailNotifications(false);
       // Reset inline schedule management state
       setEditingScheduleData(null);
@@ -412,6 +415,7 @@ export const AgentCreateModal = ({
       setScheduleFrequency('daily');
       setScheduleStartTime('09:00');
       setScheduleMaxRuns('');
+      setScheduleExpiresAt('');
       setScheduleEmailNotifications(false);
       setEditingScheduleData(null);
       setSelectedTeamIds(new Set());
@@ -761,7 +765,7 @@ export const AgentCreateModal = ({
         try {
           const cronParts = buildScheduleCronExpression();
           const conversationId = `schedule-${saved.agentId}-${Date.now()}`;
-          await ScheduleService.create(numaPost, {
+          const created = await ScheduleService.create(numaPost, {
             agentId: saved.agentId,
             agentTitle: saved.title,
             conversationId,
@@ -770,6 +774,9 @@ export const AgentCreateModal = ({
             timezone: scheduleTimezone,
             label: scheduleName.trim() || undefined,
             maxRuns: scheduleMaxRuns ? parseInt(scheduleMaxRuns, 10) : undefined,
+            // YYYY-MM-DD → end-of-day epoch ms in the user's local tz so the
+            // schedule still fires on the chosen date through to midnight.
+            expiresAt: scheduleExpiresAt ? new Date(`${scheduleExpiresAt}T23:59:59`).getTime() : undefined,
             emailNotifications: scheduleEmailNotifications,
             runConfig: {
               enabledTools: buildScheduleEnabledTools(),
@@ -787,6 +794,20 @@ export const AgentCreateModal = ({
               visibility: formState.visibility,
             },
           });
+          if (created.requiresApproval) {
+            // Schedule was parked in pending_approval; surface a notice so the user knows.
+            const v = created.quotaViolation;
+            const detail = v ? ` (${v.scope} cap: ${v.requested}/${v.limit} runs/mo)` : '';
+            // Toast is fire-and-forget — fall back to alert for now since the
+            // global Toast context isn't imported here yet. Phase 4 will wire
+            // a structured "approval required" banner with admin-name lookup.
+
+            alert(
+              t('scheduling.approval.requiredToast', {
+                defaultValue: `Your schedule was created but needs admin approval before it runs${detail}.`,
+              })
+            );
+          }
           onScheduleCreated?.();
         } catch (schedErr) {
           console.error('AgentCreateModal: schedule creation failed', schedErr);

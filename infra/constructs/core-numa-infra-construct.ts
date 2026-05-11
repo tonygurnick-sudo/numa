@@ -762,6 +762,7 @@ export class CoreNumaInfra extends Construct {
         // Pipedream-trigger lookup: deployed_trigger_id (dc_xxx) is the only
         // identifier the receiver lambda has on inbound webhook events.
         { name: 'deployed_trigger_id', type: 'S' },
+        { name: 'tenant_id', type: 'S' },
       ],
       globalSecondaryIndex: [
         {
@@ -794,6 +795,14 @@ export class CoreNumaInfra extends Construct {
           hashKey: 'deployed_trigger_id',
           projectionType: 'INCLUDE',
           nonKeyAttributes: ['user_id', 'schedule_id', 'trigger', 'status'],
+        },
+        {
+          // Used by `agent-schedules` for tenant-scope queries (admin audit
+          // screen, quota aggregation). Avoids Scan on the schedules table.
+          // Sort client-side — keeping the GSI definition minimal.
+          name: 'tenant-id-index',
+          hashKey: 'tenant_id',
+          projectionType: 'ALL',
         },
       ],
       pointInTimeRecovery: {

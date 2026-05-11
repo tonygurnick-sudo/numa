@@ -77,9 +77,16 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
   },
   {
     key: 'scheduling',
-    label: 'Agent Scheduling',
+    label: 'Agent Automations',
     type: 'boolean',
-    description: 'Enable agent scheduling and notifications features',
+    description: 'Master switch for agent automations (cron schedules + event triggers + notifications)',
+  },
+  {
+    key: 'eventTriggers',
+    label: 'Event Triggers',
+    type: 'boolean',
+    description:
+      'Sub-flag of Agent Automations. Off hides the trigger builder, admin tab, and trigger quotas. No effect when Agent Automations is off.',
   },
   {
     key: 'workspaceChatModelSelection',
@@ -155,10 +162,67 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
   },
   {
     key: 'schedulingMinIntervalMinutes',
-    label: 'Scheduling Min Interval (minutes)',
+    label: 'Minimum Automation Interval (minutes)',
     type: 'number',
     allowUnset: true,
-    description: 'Minimum scheduling interval for this client (minutes, min 5). Unset to inherit global default.',
+    description:
+      'Minimum interval between automation runs for this client (minutes, min 5). Unset to inherit global default (60).',
+  },
+  // FEAT-105 — per-client schedule (cron) run quotas. Projected — computed from cron expression.
+  // Unset = inherit Level-1 platform default. Only effective when `scheduling: true`.
+  {
+    key: 'maxRunsPerCompanyPerMonth',
+    label: 'Max Schedule Runs / Company / Month',
+    type: 'number',
+    allowUnset: true,
+    description: 'Hard cap on tenant-wide schedule (cron) runs per month. Unset to inherit platform default (2000).',
+  },
+  {
+    key: 'maxRunsPerUserPerMonth',
+    label: 'Max Schedule Runs / User / Month',
+    type: 'number',
+    allowUnset: true,
+    description:
+      'Per-user schedule-run cap. Above this triggers admin approval (when enabled). Unset to inherit (750).',
+  },
+  // FEAT-105 — per-client trigger (event) run quotas. Actuals — counted at fire time.
+  {
+    key: 'maxTriggerRunsPerCompanyPerMonth',
+    label: 'Max Trigger Runs / Company / Month',
+    type: 'number',
+    allowUnset: true,
+    description: 'Hard cap on tenant-wide trigger (event) fires per month. Unset to inherit platform default (1000).',
+  },
+  {
+    key: 'maxTriggerRunsPerUserPerMonth',
+    label: 'Max Trigger Runs / User / Month',
+    type: 'number',
+    allowUnset: true,
+    description:
+      'Per-user trigger-fire cap. Over-cap fires are dropped silently (one notification/month). Unset to inherit (100).',
+  },
+  // FEAT-105 — concurrent active automations (cron + triggers combined).
+  {
+    key: 'maxConcurrentActiveSchedulesPerCompany',
+    label: 'Max Concurrent Active Automations / Company',
+    type: 'number',
+    allowUnset: true,
+    description:
+      'Hard tenant-wide cap on simultaneously active automations (schedules + triggers). Unset to inherit (1000).',
+  },
+  {
+    key: 'maxConcurrentActiveSchedulesPerUser',
+    label: 'Max Concurrent Active Automations / User',
+    type: 'number',
+    allowUnset: true,
+    description: 'Per-user cap on simultaneously active automations. Unset to inherit (100).',
+  },
+  {
+    key: 'requireApprovalAboveUserCap',
+    label: 'Require Admin Approval Above User Cap',
+    type: 'boolean',
+    description:
+      'When on, a user requesting more than their per-user schedule cap goes to admin approval (admin can authorise up to the company cap, never above). When off, those requests are hard-rejected. The company quota is always a hard ceiling — admin approval cannot breach it. Default on.',
   },
   {
     key: 'groups',

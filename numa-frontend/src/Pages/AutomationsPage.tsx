@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Container, Row, Col, Button, Alert, Spinner, Modal, Form, Badge, Card } from 'react-bootstrap';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Container, Row, Col, Button, Alert, Spinner, Modal, Form, Badge, Card, Pagination } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import {
   Plus,
@@ -27,11 +27,12 @@ import { AutomationPipelineCard } from '../Components/Automations/AutomationPipe
 import { AutomationRunsFeed } from '../Components/Automations/AutomationRunsFeed';
 import { AutomationWorkflowBuilder } from '../Components/Automations/AutomationWorkflowBuilder';
 import { AgentAvatar } from '../Components/Agents/AgentAvatar';
+import { QuotaUsageStrip } from '../Components/Scheduling/QuotaUsageStrip';
 import { ScheduleService } from '../Services/ScheduleService';
 import { listAgents, getCachedAgents } from '../Services/AgentsService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useBranding } from '../Providers/BrandingContext';
-import { getDerivedAutomationStatus, formatRelativeTime } from '../utils/automationUtils';
+import { getDerivedAutomationStatus, automationUsesCompanyQuota, formatRelativeTime } from '../utils/automationUtils';
 import { describeCronExpression } from '../utils/cronUtils';
 import type { AgentSchedule } from '../types/agentSchedules';
 import type { AgentSummary } from '../types/agents';
@@ -60,6 +61,13 @@ const RECENT_ACTIVITY_LIMIT = 6;
 
 export const AutomationsPage = () => {
   const { t } = useTranslation('automations');
+  // Hold a ref to `t` so callbacks can read the latest translator without
+  // re-creating themselves whenever react-i18next swaps the function
+  // identity (which it does on language load and other internal events).
+  // Without this, `loadData` recreates → `useEffect([loadData])` fires →
+  // `setLoading(true)` re-renders → `t` swaps again → infinite loop.
+  const tRef = useRef(t);
+  tRef.current = t;
   const navigate = useNavigate();
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const { branding } = useBranding();
@@ -70,6 +78,9 @@ export const AutomationsPage = () => {
   const [agents, setAgents] = useState<AgentSummary[]>(() => getCachedAgents('owned') || []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Non-blocking notice surfaced after a successful action (e.g. trigger
+  // saved while at-budget — informational, not a failure).
+  const [notice, setNotice] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('active');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>(() => {
@@ -81,6 +92,10 @@ export const AutomationsPage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [agentsLoading, setAgentsLoading] = useState(true);
   const [expandedFilters, setExpandedFilters] = useState<Set<string>>(new Set());
+  // Page through long lists — silent 1MB DDB cap aside, rendering 200+ cards
+  // makes the page feel sluggish. Paginating client-side is good enough for now.
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 24;
 
   const agentMap = useMemo(() => {
     const map = new Map<string, AgentSummary>();
@@ -100,13 +115,13 @@ export const AutomationsPage = () => {
       setAutomations(schedulesResult.filter((s) => s.status !== 'deleted'));
       setAgents(agentsResult);
     } catch (err) {
-      setError(t('errors.load'));
+      setError(tRef.current('errors.load'));
       console.error('[AutomationsPage] Failed to load:', err);
     } finally {
       setLoading(false);
       setAgentsLoading(false);
     }
-  }, [numaGet, t]);
+  }, [numaGet]);
 
   useEffect(() => {
     loadData();
@@ -127,13 +142,26 @@ export const AutomationsPage = () => {
       result = result.filter((a) => {
         const derived = getDerivedAutomationStatus(a);
         if (statusFilter === 'active') return derived === 'active';
-        if (statusFilter === 'paused') return derived === 'paused';
-        if (statusFilter === 'completed') return derived === 'completed';
+        // 'inactive' is anything that isn't currently firing — paused,
+        // pending approval, admin-locked, or completed. The badge on each
+        // card surfaces the precise reason.
+        if (statusFilter === 'inactive') return derived !== 'active';
         return true;
       });
     }
     return result;
   }, [automations, searchQuery, statusFilter, agentMap]);
+
+  // Reset to page 1 whenever filters change so we don't get stuck "looking at"
+  // an empty later page.
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAutomations.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pageAutomations = filteredAutomations.slice(pageStart, pageStart + PAGE_SIZE);
 
   // Recent activity: automations that have run, sorted by most recent
   const recentActivity = useMemo(() => {
@@ -143,15 +171,38 @@ export const AutomationsPage = () => {
       .slice(0, RECENT_ACTIVITY_LIMIT);
   }, [automations]);
 
+  /**
+   * Optimistic toggle — flip the switch immediately, hit the API in the
+   * background, and roll back + surface an error if it fails. Without this
+   * the switch lags behind the click by however long the round-trip takes,
+   * which feels broken even on a fast network.
+   */
   const handleToggleStatus = useCallback(
     async (automation: AgentSchedule) => {
+      // Capture the FULL object for rollback, not just `status`. Derived UI
+      // state (next-run label, quota chip, badge variant) reads from
+      // `quotaScope`, `expiresAt`, `cronExpression`, and others — flipping
+      // status alone is fine today but will silently diverge as soon as any
+      // other field is added to derived computations.
+      const previousAutomation = automation;
       const newStatus = automation.status === 'active' ? 'paused' : 'active';
+
+      setAutomations((prev) =>
+        prev.map((a) => (a.scheduleId === automation.scheduleId ? { ...a, status: newStatus } : a))
+      );
+
       try {
         await ScheduleService.update(numaPut, automation.scheduleId, { status: newStatus });
-        setAutomations((prev) =>
-          prev.map((a) => (a.scheduleId === automation.scheduleId ? { ...a, status: newStatus } : a))
-        );
       } catch (err) {
+        // Restore the entire previous object so any derived state stays consistent.
+        setAutomations((prev) => prev.map((a) => (a.scheduleId === automation.scheduleId ? previousAutomation : a)));
+        const responseError = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+        const msg =
+          responseError ||
+          (err instanceof Error
+            ? err.message
+            : tRef.current('errors.toggleStatus', { defaultValue: 'Failed to update automation status' }));
+        setError(msg);
         console.error('[AutomationsPage] Failed to toggle status:', err);
       }
     },
@@ -176,7 +227,12 @@ export const AutomationsPage = () => {
       try {
         setRunningIds((prev) => new Set(prev).add(automation.scheduleId));
         await ScheduleService.run(numaPost, automation.scheduleId);
-        setTimeout(() => loadData(), 2000);
+        // Sequenced refetch: previously this used setTimeout(loadData, 2000)
+        // which raced with concurrent toggles and overwrote optimistic state.
+        // The runner returns 202 (queued) — the actual run status changes
+        // asynchronously; the user can refresh manually if they want to see
+        // the new last_status. The schedule list itself is up-to-date.
+        await loadData();
       } catch (err) {
         console.error('[AutomationsPage] Failed to run:', err);
       } finally {
@@ -200,7 +256,7 @@ export const AutomationsPage = () => {
       cronExpression?: string;
       timezone?: string;
       label: string;
-      maxRuns: number;
+      maxRuns?: number;
       emailNotifications: boolean;
       notificationEmails: string[];
       agentSnapshot?: {
@@ -212,7 +268,7 @@ export const AutomationsPage = () => {
       };
     }) => {
       const conversationId = `auto-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      await ScheduleService.create(numaPost, {
+      const created = await ScheduleService.create(numaPost, {
         agentId: payload.agentId,
         agentTitle: payload.agentTitle,
         conversationId,
@@ -227,6 +283,22 @@ export const AutomationsPage = () => {
         notificationEmails: payload.notificationEmails,
         agentSnapshot: payload.agentSnapshot,
       });
+      // Non-blocking advisory: when a trigger is created while the tenant /
+      // user is already at trigger budget cap, the create succeeds but
+      // fires won't run until next month's reset. Surface as a notice on
+      // the dashboard rather than blocking the save.
+      setError(null);
+      if (created.triggerWarning) {
+        const w = created.triggerWarning;
+        const who = w.scope === 'company' ? 'your company is' : 'you are';
+        setNotice(
+          `Automation saved. Heads up: ${who} at the monthly trigger budget cap (${w.current}/${w.limit}). ` +
+            `It won't fire until the budget resets on the 1st. Past usage from deleted/paused triggers stays counted, ` +
+            `so removing existing triggers won't refund this month — ask an admin to raise the cap if you need budget now.`
+        );
+      } else {
+        setNotice(null);
+      }
       await loadData();
       setActiveTab('dashboard');
     },
@@ -248,15 +320,12 @@ export const AutomationsPage = () => {
 
   const statusCounts = useMemo(() => {
     let active = 0;
-    let completed = 0;
-    let paused = 0;
+    let inactive = 0;
     for (const a of automations) {
-      const derived = getDerivedAutomationStatus(a);
-      if (derived === 'active') active++;
-      else if (derived === 'completed') completed++;
-      else if (derived === 'paused') paused++;
+      if (getDerivedAutomationStatus(a) === 'active') active++;
+      else inactive++;
     }
-    return { active, completed, paused };
+    return { active, inactive };
   }, [automations]);
 
   const statusBadgeVariant = (status: string) => {
@@ -266,6 +335,10 @@ export const AutomationsPage = () => {
   };
 
   const renderStatCards = () => {
+    // Three buckets keeps the dashboard focused: Active = what's firing,
+    // Inactive = everything else (paused / pending / locked / completed —
+    // the per-card badge spells out which), All = total. The detail badge
+    // on each list item is the canonical answer for "why isn't this active?"
     const cards = [
       {
         key: 'active',
@@ -276,20 +349,12 @@ export const AutomationsPage = () => {
         bg: 'rgba(25, 135, 84, 0.08)',
       },
       {
-        key: 'completed',
-        label: t('status.completed'),
-        count: statusCounts.completed,
-        icon: <CheckCircle2 size={20} />,
+        key: 'inactive',
+        label: t('page.filters.status.inactive', { defaultValue: 'Inactive' }),
+        count: statusCounts.inactive,
+        icon: <Pause size={20} />,
         color: '#6c757d',
         bg: 'rgba(108, 117, 125, 0.08)',
-      },
-      {
-        key: 'paused',
-        label: t('page.filters.status.paused'),
-        count: statusCounts.paused,
-        icon: <Pause size={20} />,
-        color: '#ffc107',
-        bg: 'rgba(255, 193, 7, 0.08)',
       },
       {
         key: 'all',
@@ -304,7 +369,7 @@ export const AutomationsPage = () => {
     return (
       <Row className="g-3 mb-4">
         {cards.map((card) => (
-          <Col key={card.key} xs={6} lg={3}>
+          <Col key={card.key} xs={4}>
             <Card
               className="border-0 shadow-sm h-100"
               role="button"
@@ -433,7 +498,7 @@ export const AutomationsPage = () => {
         </div>
       ) : viewMode === 'cards' ? (
         <Row className="g-3">
-          {filteredAutomations.map((automation) => (
+          {pageAutomations.map((automation) => (
             <Col key={automation.scheduleId} xs={12} sm={6} lg={4}>
               <AutomationPipelineCard
                 automation={automation}
@@ -449,7 +514,7 @@ export const AutomationsPage = () => {
         </Row>
       ) : (
         <div className="automation-list">
-          {filteredAutomations.map((automation) => {
+          {pageAutomations.map((automation) => {
             const agent = agentMap.get(automation.agentId);
             const derived = getDerivedAutomationStatus(automation);
             const lastRun = formatRelativeTime(automation.lastRunEpoch);
@@ -579,7 +644,19 @@ export const AutomationsPage = () => {
                     </div>
                   </div>
                   <div className="automation-list-row__right">
-                    <Badge bg={statusBadgeVariant(derived)} className="automation-list-row__status">
+                    {automationUsesCompanyQuota(automation) && (
+                      <span
+                        className="text-muted me-2"
+                        style={{ fontSize: '0.7rem' }}
+                        title={t('card.companyQuotaTooltip', {
+                          defaultValue:
+                            'Admin-approved — runs against the company quota only, not your personal monthly cap.',
+                        })}
+                      >
+                        {t('card.companyQuota', { defaultValue: 'company quota' })}
+                      </span>
+                    )}
+                    <Badge bg={statusBadgeVariant(derived)} className="automation-list-row__status me-3">
                       {t(`status.${derived}`)}
                     </Badge>
                     <div className="automation-list-row__stats">
@@ -613,6 +690,7 @@ export const AutomationsPage = () => {
                       <Form.Check
                         type="switch"
                         checked={automation.status === 'active'}
+                        disabled={automation.status !== 'active' && automation.status !== 'paused'}
                         onChange={() => handleToggleStatus(automation)}
                         className="automation-card__toggle"
                       />
@@ -623,6 +701,32 @@ export const AutomationsPage = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {filteredAutomations.length > PAGE_SIZE && (
+        <div className="d-flex justify-content-between align-items-center mt-3">
+          <div className="small text-muted">
+            {t('page.pagination.showing', {
+              defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
+              from: pageStart + 1,
+              to: Math.min(pageStart + PAGE_SIZE, filteredAutomations.length),
+              total: filteredAutomations.length,
+            })}
+          </div>
+          <Pagination size="sm" className="mb-0">
+            <Pagination.First disabled={safePage === 1} onClick={() => setPage(1)} />
+            <Pagination.Prev disabled={safePage === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} />
+            <Pagination.Item active>{safePage}</Pagination.Item>
+            <Pagination.Next
+              disabled={safePage === totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            />
+            <Pagination.Last disabled={safePage === totalPages} onClick={() => setPage(totalPages)} />
+            <span className="ms-2 small text-muted align-self-center">
+              {t('page.pagination.totalPages', { defaultValue: 'of {{total}}', total: totalPages })}
+            </span>
+          </Pagination>
         </div>
       )}
     </>
@@ -698,6 +802,10 @@ export const AutomationsPage = () => {
       {renderStatCards()}
       {renderAutomationsList()}
       {renderRecentActivity()}
+      {/* Quota usage moved to the bottom — it's reference material, not
+          something the user needs to look at every visit. The preflight
+          banner during create-flow surfaces it when it actually matters. */}
+      <QuotaUsageStrip />
     </>
   );
 
@@ -737,6 +845,12 @@ export const AutomationsPage = () => {
         {error && (
           <Alert variant="danger" className="mb-3">
             {error}
+          </Alert>
+        )}
+
+        {notice && (
+          <Alert variant="warning" className="mb-3" dismissible onClose={() => setNotice(null)}>
+            {notice}
           </Alert>
         )}
 

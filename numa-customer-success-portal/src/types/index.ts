@@ -112,7 +112,28 @@ export const clientConfigSchema = z.object({
   numaWorkspaceChat: z.boolean().optional(), // default: true
   agentCoreRegion: z.string().optional(), // default: client region
   scheduling: z.boolean().optional(), // default: false
+  /**
+   * Sub-flag of `scheduling`. When `scheduling: true` and `eventTriggers: false`,
+   * cron schedules work but event triggers (Gmail-message etc.) are hidden
+   * from the user-facing automation builder, the admin Settings >
+   * Scheduling page, and trigger-quota fields here in the CSP.
+   *
+   * Default `false` — new clients must opt in via the CSP form. Existing
+   * clients that had scheduling on at the time this flag landed were
+   * backfilled to `true` via `tools/backfill-triggers-flag.ts`. Has no effect
+   * when `scheduling: false`.
+   */
+  eventTriggers: z.boolean().optional(),
   schedulingMinIntervalMinutes: z.number().int().min(5).optional(), // per-client min interval override
+  // Per-client quota overrides (Level 2). Unset → fall back to platform-settings (Level 1).
+  // 0 is a valid value for caps — means "0 allowed" (a way to disable a quota target).
+  maxRunsPerCompanyPerMonth: z.number().int().min(0).optional(),
+  maxRunsPerUserPerMonth: z.number().int().min(0).optional(),
+  maxTriggerRunsPerCompanyPerMonth: z.number().int().min(0).optional(),
+  maxTriggerRunsPerUserPerMonth: z.number().int().min(0).optional(),
+  maxConcurrentActiveSchedulesPerCompany: z.number().int().min(0).optional(),
+  maxConcurrentActiveSchedulesPerUser: z.number().int().min(0).optional(),
+  requireApprovalAboveUserCap: z.boolean().optional(),
   workspaceChatModelSelection: z.boolean().optional(), // default: false
   numaOps: z.boolean().optional(), // default: false
   numaDropZones: z.boolean().optional(), // default: false
@@ -213,6 +234,10 @@ export const getDefaultClientConfigValues = () => ({
   brandingProviderEnabled: false,
   numaWorkspaceChat: true,
   scheduling: false,
+  // Defaults to false. Existing clients with scheduling already on were
+  // backfilled by tools/backfill-triggers-flag.ts so they keep triggers;
+  // any new client must explicitly opt in via the Agent Automations form.
+  eventTriggers: false,
   workspaceChatModelSelection: false,
   numaOps: false,
   numaDropZones: false,
@@ -259,8 +284,16 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     visionModelType: 'Vision Model Type',
     numaChatAgents: 'Numa Chat Agents',
     agents: 'Agents',
-    scheduling: 'Agent Scheduling',
-    schedulingMinIntervalMinutes: 'Scheduling Min Interval (minutes)',
+    scheduling: 'Agent Automations',
+    eventTriggers: 'Event Triggers',
+    schedulingMinIntervalMinutes: 'Minimum Automation Interval (minutes)',
+    maxRunsPerCompanyPerMonth: 'Max Schedule Runs / Company / Month',
+    maxRunsPerUserPerMonth: 'Max Schedule Runs / User / Month',
+    maxTriggerRunsPerCompanyPerMonth: 'Max Trigger Runs / Company / Month',
+    maxTriggerRunsPerUserPerMonth: 'Max Trigger Runs / User / Month',
+    maxConcurrentActiveSchedulesPerCompany: 'Max Concurrent Active Automations / Company',
+    maxConcurrentActiveSchedulesPerUser: 'Max Concurrent Active Automations / User',
+    requireApprovalAboveUserCap: 'Require Admin Approval Above User Cap',
     v2Apps: 'V2 Apps',
     mfa: 'Multi-Factor Authentication (MFA)',
     numaDropZones: 'Drop Zones',

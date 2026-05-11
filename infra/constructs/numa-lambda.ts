@@ -117,6 +117,10 @@ export class NumaLambda extends Construct {
         role: role.arn,
         timeout: props.timeout || 900,
         ...(props.ephemeralStorageMb ? { ephemeralStorage: { size: props.ephemeralStorageMb } } : {}),
+        ...(props.reservedConcurrentExecutions != null
+          ? { reservedConcurrentExecutions: props.reservedConcurrentExecutions }
+          : {}),
+        ...(props.deadLetterTargetArn ? { deadLetterConfig: { targetArn: props.deadLetterTargetArn } } : {}),
         tracingConfig: {
           mode: 'Active',
         },
@@ -168,6 +172,10 @@ export class NumaLambda extends Construct {
         sourceCodeHash,
         timeout: props.timeout || 900,
         ...(props.ephemeralStorageMb ? { ephemeralStorage: { size: props.ephemeralStorageMb } } : {}),
+        ...(props.reservedConcurrentExecutions != null
+          ? { reservedConcurrentExecutions: props.reservedConcurrentExecutions }
+          : {}),
+        ...(props.deadLetterTargetArn ? { deadLetterConfig: { targetArn: props.deadLetterTargetArn } } : {}),
         tracingConfig: {
           mode: 'Active',
         },
@@ -196,6 +204,16 @@ export interface NumaLambdaProps {
   systemLogLevel?: 'INFO' | 'WARN' | 'ERROR';
   /** ECR image URI for container-based Lambdas (e.g., 123456.dkr.ecr.us-east-1.amazonaws.com/name:tag) */
   imageUri?: string;
+  /**
+   * Cap on simultaneously executing instances. -1 (default) means unreserved.
+   * Used for traffic-spiking lambdas that could DOS downstream services.
+   */
+  reservedConcurrentExecutions?: number;
+  /**
+   * Dead-letter target for async failures (EventBridge / event source mappings).
+   * Pass the SQS queue ARN here so failed invocations are retained for triage.
+   */
+  deadLetterTargetArn?: string;
   /** Set to 'Image' for container-based Lambda deployment. Defaults to 'Zip'. */
   packageType?: 'Zip' | 'Image';
   /** Lambda CPU architecture. Defaults to 'x86_64' for Zip, 'arm64' for Image. */

@@ -617,6 +617,28 @@ export class NumaClientStack extends TerraformStack {
       schedulingSettingsTableName: core.schedulingSettingsTable.name,
       perClientSchedulingMinIntervalMinutes: clientConfig.schedulingMinIntervalMinutes,
       globalSchedulingMinIntervalMinutes: props.globalSchedulingMinIntervalMinutes,
+      scheduleQuotas: {
+        // Per-client (Level 2) overrides take precedence over the global
+        // platform-settings (Level 1) values. Platform-settings is the sole
+        // source of truth for unset Level 2 fields — there is no code-side
+        // fallback. Lambdas throw on missing fields at runtime.
+        maxRunsPerCompanyPerMonth:
+          clientConfig.maxRunsPerCompanyPerMonth ?? props.globalScheduleQuotas?.maxRunsPerCompanyPerMonth,
+        maxRunsPerUserPerMonth:
+          clientConfig.maxRunsPerUserPerMonth ?? props.globalScheduleQuotas?.maxRunsPerUserPerMonth,
+        maxTriggerRunsPerCompanyPerMonth:
+          clientConfig.maxTriggerRunsPerCompanyPerMonth ?? props.globalScheduleQuotas?.maxTriggerRunsPerCompanyPerMonth,
+        maxTriggerRunsPerUserPerMonth:
+          clientConfig.maxTriggerRunsPerUserPerMonth ?? props.globalScheduleQuotas?.maxTriggerRunsPerUserPerMonth,
+        maxConcurrentActiveSchedulesPerCompany:
+          clientConfig.maxConcurrentActiveSchedulesPerCompany ??
+          props.globalScheduleQuotas?.maxConcurrentActiveSchedulesPerCompany,
+        maxConcurrentActiveSchedulesPerUser:
+          clientConfig.maxConcurrentActiveSchedulesPerUser ??
+          props.globalScheduleQuotas?.maxConcurrentActiveSchedulesPerUser,
+        requireApprovalAboveUserCap:
+          clientConfig.requireApprovalAboveUserCap ?? props.globalScheduleQuotas?.requireApprovalAboveUserCap,
+      },
       mfaSettingsTableName: core.mfaSettingsTable.name,
       userPoolId: core.userPoolId,
       chatSettingsTableName: core.chatSettingsTable.name,
@@ -862,6 +884,11 @@ export class NumaClientStack extends TerraformStack {
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
+        // Sub-flag of SCHEDULING gating the event-trigger surface (the "When
+        // something happens" wizard tile, the admin trigger audit panel, and
+        // the per-client trigger quota fields in the CSP). Defaults false —
+        // clients must opt in explicitly. Cron schedules work whenever
+        // SCHEDULING is on, regardless of EVENT_TRIGGERS.
         EVENT_TRIGGERS: clientConfig.eventTriggers ?? false,
         SCHEDULING_MIN_INTERVAL_MINUTES: clientConfig.schedulingMinIntervalMinutes ?? null,
         GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: props.globalSchedulingMinIntervalMinutes ?? null,
@@ -1283,15 +1310,19 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         scheduling: z.boolean().optional().default(false),
 
         /**
-         * Whether to enable event-triggered automations (the "When something
-         * happens" path of the Automations builder). Independent of `scheduling`
-         * (which gates the route entirely) and `pipedreamIntegrations` (which
-         * gates Pipedream-backed sources within the trigger picker).
+         * Sub-flag of `scheduling`. Gates the event-trigger surface: the
+         * "When something happens" tile in the Automations wizard, the admin
+         * Settings > Scheduling > Triggers tab, the trigger audit panel, and
+         * the per-client trigger quota fields in the CSP. Defaults to `false` —
+         * clients must explicitly opt in. Cron schedules remain functional
+         * regardless. Has no effect when `scheduling: false`. Independent of
+         * `pipedreamIntegrations` (which gates Pipedream-backed sources
+         * within the trigger picker).
          *
-         * Frontend-only gating today — does NOT alter infra (no constructs
-         * are created/skipped based on this flag). The agent-schedules lambda,
-         * pipedream-event-receiver, dispatcher, and runner are always present.
-         * The flag just hides the "When something happens" tile in the wizard.
+         * Existing clients on `scheduling: true` at the time this flag landed
+         * were backfilled to `eventTriggers: true` via
+         * `tools/backfill-triggers-flag.ts` so the default flip didn't
+         * silently disable them.
          *
          * @default false
          */
@@ -1306,6 +1337,46 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @minimum 5
          */
         schedulingMinIntervalMinutes: z.number().int().min(5).optional(),
+
+        /**
+         * Per-client cap on total scheduled runs per month across the tenant.
+         * Hard ceiling — schedules that would push the tenant over this are
+         * rejected at creation. Falls back to the platform-settings record
+         * (Level 1, in numa-client-config) when unset.
+         */
+        maxRunsPerCompanyPerMonth: z.number().int().min(0).optional(),
+
+        /**
+         * Per-client cap on scheduled runs per user per month. Above this,
+         * schedules go to admin approval if `requireApprovalAboveUserCap`
+         * is true (or are hard-rejected if not).
+         */
+        maxRunsPerUserPerMonth: z.number().int().min(0).optional(),
+
+        /**
+         * Per-client cap on simultaneously active schedules across the whole tenant.
+         */
+        maxConcurrentActiveSchedulesPerCompany: z.number().int().min(0).optional(),
+
+        /**
+         * Per-client cap on simultaneously active schedules per user.
+         */
+        maxConcurrentActiveSchedulesPerUser: z.number().int().min(0).optional(),
+
+        /**
+         * If true, schedules above the user cap are routed to admin approval
+         * instead of being hard-rejected. Default true.
+         */
+        requireApprovalAboveUserCap: z.boolean().optional(),
+
+        /**
+         * Per-client cap on event-trigger fires per month across the tenant.
+         * Actuals (counted at fire time), not projected.
+         */
+        maxTriggerRunsPerCompanyPerMonth: z.number().int().min(0).optional(),
+
+        /** Per-client cap on event-trigger fires per user per month. */
+        maxTriggerRunsPerUserPerMonth: z.number().int().min(0).optional(),
 
         /**
          * Whether to enable Drop Zone creation in the Files shared tab.
@@ -1461,6 +1532,20 @@ export interface NumaClientStackProps {
   clientConfig: ClientConfig;
   /** Global scheduling minimum interval (minutes), read from platform-settings record. */
   globalSchedulingMinIntervalMinutes?: number;
+  /**
+   * Global scheduled-run quotas (Level 1), read from platform-settings.
+   * Per-client overrides on `ClientConfig` take precedence — see numa-client-stack
+   * where these flow through to the lambda construct.
+   */
+  globalScheduleQuotas?: {
+    maxRunsPerCompanyPerMonth?: number;
+    maxRunsPerUserPerMonth?: number;
+    maxTriggerRunsPerCompanyPerMonth?: number;
+    maxTriggerRunsPerUserPerMonth?: number;
+    maxConcurrentActiveSchedulesPerCompany?: number;
+    maxConcurrentActiveSchedulesPerUser?: number;
+    requireApprovalAboveUserCap?: boolean;
+  };
 }
 
 export interface AppDefinition {

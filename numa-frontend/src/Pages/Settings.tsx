@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { getFlag } from '../utils/featureFlags';
-import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form, Table, Badge } from 'react-bootstrap';
+import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Bot } from 'lucide-react';
 import UserManagement from './UserManagement';
@@ -19,7 +19,8 @@ import { DataConnectorsTab } from '../Components/DataConnectors/DataConnectorsTa
 import { DisasterRecoveryTab } from '../Components/DisasterRecovery/DisasterRecoveryTab';
 import { CapabilitiesService, type CapabilitySettingsMap } from '../Services/CapabilitiesService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
-import { AdminSchedulingSettingsService } from '../Services/AdminSchedulingSettingsService';
+import { ScheduleQuotaAdminForm } from '../Components/Scheduling/ScheduleQuotaAdminForm';
+import { ScheduleAuditPanel } from '../Components/Scheduling/ScheduleAuditPanel';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
@@ -167,14 +168,6 @@ export default function SettingsPage() {
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   const [agentsLoading, setAgentsLoading] = useState<boolean>(true);
   const [agentsSaving, setAgentsSaving] = useState<boolean>(false);
-
-  // Scheduling admin settings (Level 3 — client-admin minimum interval)
-  const [schedulingMinInterval, setSchedulingMinInterval] = useState<string>('');
-  const [schedulingArcanumFloor, setSchedulingArcanumFloor] = useState<number>(5);
-  const [schedulingMinLoading, setSchedulingMinLoading] = useState<boolean>(true);
-  const [schedulingMinSaving, setSchedulingMinSaving] = useState<boolean>(false);
-  const [schedulingMinError, setSchedulingMinError] = useState<string | null>(null);
-  const [schedulingMinSuccess, setSchedulingMinSuccess] = useState<string | null>(null);
 
   const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
 
@@ -371,33 +364,6 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [isAdmin, agentsFeatureEnabled, user, numaGet]);
-
-  // Load Scheduling admin settings
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!isAdmin || !schedulingEnabled) {
-        if (!cancelled) setSchedulingMinLoading(false);
-        return;
-      }
-      try {
-        setSchedulingMinLoading(true);
-        const res = await AdminSchedulingSettingsService.get(numaGet);
-        if (!cancelled) {
-          setSchedulingMinInterval(res.minIntervalMinutes != null ? String(res.minIntervalMinutes) : '');
-          setSchedulingArcanumFloor(res.arcanumFloor);
-        }
-      } catch (e) {
-        console.warn('Settings: failed to load scheduling settings', e);
-        if (!cancelled) setSchedulingMinLoading(false);
-      } finally {
-        if (!cancelled) setSchedulingMinLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAdmin, schedulingEnabled, user, numaGet]);
 
   // Load Company Profile
   useEffect(() => {
@@ -895,7 +861,7 @@ export default function SettingsPage() {
       { key: 'company-profile', label: t('tabs.companyProfile'), iconClassName: 'bi bi-building' },
       ...(agentsFeatureEnabled ? [{ key: 'agents', label: t('tabs.agents'), iconClassName: 'bi bi-robot' }] : []),
       ...(schedulingEnabled
-        ? [{ key: 'scheduling', label: t('tabs.scheduling'), iconClassName: 'bi bi-clock-history' }]
+        ? [{ key: 'scheduling', label: t('tabs.scheduling'), iconClassName: 'bi bi-lightning-charge-fill' }]
         : []),
       { key: 'integrations', label: t('tabs.integrations'), iconClassName: 'bi bi-plug' },
       ...(dataConnectorsEnabled
@@ -1913,97 +1879,18 @@ export default function SettingsPage() {
                   eventKey="scheduling"
                   title={
                     <span>
-                      <i className="bi bi-clock-history me-2"></i>
+                      <i className="bi bi-lightning-charge-fill me-2"></i>
                       {t('tabs.scheduling')}
                     </span>
                   }
                 >
                   <div className="mb-3">
-                    <Alert variant="secondary" className="mb-3">
-                      <div className="d-flex align-items-start">
-                        <i className="bi bi-clock-history me-2 mt-1"></i>
-                        <div>
-                          <div className="settings-section-title">{t('schedulingSettings.title')}</div>
-                          <div className="small text-muted">{t('schedulingSettings.description')}</div>
-                        </div>
-                      </div>
-                    </Alert>
-                    {schedulingMinLoading ? (
-                      <div className="text-center py-4">
-                        <Spinner animation="border" />
-                      </div>
-                    ) : (
-                      <div>
-                        {schedulingMinError && (
-                          <Alert variant="danger" dismissible onClose={() => setSchedulingMinError(null)}>
-                            {schedulingMinError}
-                          </Alert>
-                        )}
-                        {schedulingMinSuccess && (
-                          <Alert variant="success" dismissible onClose={() => setSchedulingMinSuccess(null)}>
-                            {schedulingMinSuccess}
-                          </Alert>
-                        )}
-                        <div className="mb-3 p-3 border rounded-3 bg-light">
-                          <div className="small text-muted mb-1">
-                            {t('schedulingSettings.arcanumFloor', {
-                              minutes: schedulingArcanumFloor,
-                            })}
-                          </div>
-                        </div>
-                        <Form.Group className="mb-3">
-                          <Form.Label>{t('schedulingSettings.minInterval.label')}</Form.Label>
-                          <Form.Control
-                            type="number"
-                            min={schedulingArcanumFloor}
-                            step={1}
-                            value={schedulingMinInterval}
-                            onChange={(e) => setSchedulingMinInterval(e.target.value)}
-                            placeholder={t('schedulingSettings.minInterval.placeholder')}
-                          />
-                          <Form.Text className="text-muted">
-                            {t('schedulingSettings.minInterval.helpText', {
-                              floor: schedulingArcanumFloor,
-                            })}
-                          </Form.Text>
-                        </Form.Group>
-                        <div className="d-flex gap-2">
-                          <Button
-                            variant="primary"
-                            disabled={schedulingMinSaving}
-                            onClick={async () => {
-                              setSchedulingMinError(null);
-                              setSchedulingMinSuccess(null);
-                              const parsed = schedulingMinInterval ? parseInt(schedulingMinInterval, 10) : null;
-                              if (parsed !== null && (isNaN(parsed) || parsed < schedulingArcanumFloor)) {
-                                setSchedulingMinError(
-                                  t('schedulingSettings.validation.belowFloor', {
-                                    floor: schedulingArcanumFloor,
-                                  })
-                                );
-                                return;
-                              }
-                              try {
-                                setSchedulingMinSaving(true);
-                                await AdminSchedulingSettingsService.update(parsed, numaPut);
-                                setSchedulingMinSuccess(t('schedulingSettings.saveSuccess'));
-                              } catch (e) {
-                                setSchedulingMinError((e as Error).message || t('schedulingSettings.saveFailed'));
-                              } finally {
-                                setSchedulingMinSaving(false);
-                              }
-                            }}
-                          >
-                            {schedulingMinSaving ? <Spinner animation="border" size="sm" className="me-2" /> : null}
-                            {schedulingMinSaving ? t('actions.saving') : t('actions.saveChanges')}
-                          </Button>
-                          {schedulingMinInterval && (
-                            <Button variant="outline-secondary" onClick={() => setSchedulingMinInterval('')}>
-                              {t('schedulingSettings.clearButton')}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                    {isAdmin && (
+                      <>
+                        <ScheduleQuotaAdminForm />
+                        <hr className="my-4" />
+                        <ScheduleAuditPanel />
+                      </>
                     )}
                   </div>
                 </Tab>

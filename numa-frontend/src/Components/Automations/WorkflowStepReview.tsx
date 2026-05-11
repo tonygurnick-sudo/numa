@@ -1,8 +1,12 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from 'react-bootstrap';
 import { Clock, Bot, Settings, Pencil, Zap, Mail } from 'lucide-react';
 import { describeCronExpression } from '../../utils/cronUtils';
 import { AgentAvatar } from '../Agents/AgentAvatar';
+import { QuotaPreflight } from '../Scheduling/QuotaPreflight';
+import { SchedulePreflightStepper } from '../Scheduling/SchedulePreflightStepper';
+import { useSchedulePreflight } from '../../hooks/useSchedulePreflight';
 import type { AgentSummary } from '../../types/agents';
 import type { GmailEventTrigger } from '../../types/agentSchedules';
 import type { PipedreamTriggerDraft } from '../PipedreamTriggers/PipedreamTriggerConfigurator';
@@ -20,8 +24,11 @@ type WorkflowStepReviewProps = {
   prompt: string;
   maxRuns: number;
   timezone: string;
-  emailNotifications: boolean;
   onEditStep: (step: number) => void;
+  /** Bubbles the preflight verdict up so the wizard can disable Save. */
+  onQuotaVerdictChange?: (verdict: 'ok' | 'needs-approval' | 'blocked' | null) => void;
+  /** Bubbles preflight blocker count up so the wizard can disable Save. */
+  onPreflightBlockerCountChange?: (count: number) => void;
 };
 
 export const WorkflowStepReview = ({
@@ -34,10 +41,16 @@ export const WorkflowStepReview = ({
   prompt,
   maxRuns,
   timezone,
-  emailNotifications,
   onEditStep,
+  onQuotaVerdictChange,
+  onPreflightBlockerCountChange,
 }: WorkflowStepReviewProps) => {
   const { t } = useTranslation('automations');
+  // Preflight blockers (feature flag, integrations, folder access).
+  const preflightBlockers = useSchedulePreflight(agent);
+  useEffect(() => {
+    onPreflightBlockerCountChange?.(preflightBlockers.length);
+  }, [preflightBlockers, onPreflightBlockerCountChange]);
 
   const isEvent = triggerType === 'event';
   const scheduleDescription = cronExpression ? describeCronExpression(cronExpression) : '\u2014';
@@ -49,6 +62,24 @@ export const WorkflowStepReview = ({
     <div className="workflow-step">
       <h5 className="mb-1 fw-semibold">{t('review.title')}</h5>
       <p className="text-muted small mb-4">{t('review.subtitle')}</p>
+
+      {/* Hard blockers first — feature flag, required integrations, folder
+          access. User can't proceed past these regardless of quota. */}
+      <div className="mb-3">
+        <SchedulePreflightStepper blockers={preflightBlockers} />
+      </div>
+
+      {/* Live quota verdict — same component as the Schedule step so the
+          user gets a consistent green/yellow/red signal before they Save. */}
+      <div className="mb-3">
+        <QuotaPreflight
+          triggerType={isEvent ? 'event' : 'cron'}
+          cronExpression={isEvent ? undefined : cronExpression}
+          agentTitle={agent?.title}
+          maxRuns={maxRuns}
+          onVerdictChange={onQuotaVerdictChange}
+        />
+      </div>
 
       <div className="d-flex flex-column gap-3">
         {/* Trigger type */}
@@ -205,10 +236,6 @@ export const WorkflowStepReview = ({
                 </div>
                 <div>
                   <span className="fw-medium">{t('review.maxRunsLabel')}:</span> {maxRuns}
-                </div>
-                <div>
-                  <span className="fw-medium">{t('review.emailLabel')}:</span>{' '}
-                  {emailNotifications ? t('review.enabled') : t('review.disabled')}
                 </div>
               </div>
             </div>
