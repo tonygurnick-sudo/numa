@@ -2233,33 +2233,55 @@ export function createStreamEventHandler(config: StreamEventHandlerConfig): (eve
     }
 
     // === Background-bash watching state ===
-    // turn_state="watching" fires once when the model finished its turn but
-    // a run_in_background shell is still live. Frontend transitions:
-    //  - assistant message marked complete (already done by ResultMessage)
-    //  - composer stays enabled (the watching state is not "streaming")
-    //  - pulsing chip rendered with elapsed_seconds
-    // background_task_status pulses follow with elapsed_seconds updates.
-    // Terminal background_task_status events (timeout/stop_event/client_disconnect)
-    // clear the chip.
+    // Event sequence:
+    //   turn_state{state:"watching"}                — entry, mark message done + show chip
+    //   background_task_status{state:"running"}     — pulse with elapsed_seconds (every 5s)
+    //   background_task_status{state:"completed"}   — a specific shell finished (mtime stability)
+    //                                                  → chip transitions to "✓ done, ping me"
+    //   background_task_status{state:"all_completed"
+    //                          |"timeout"
+    //                          |"stop_event"
+    //                          |"client_disconnect"} — terminal, watching state exits
     if (event.type === 'turn_state' && (event as { state?: string }).state === 'watching') {
       helpers.setBackgroundWatch?.(() => ({ active: true, elapsedSeconds: 0 }));
       return;
     }
     if (event.type === 'background_task_status') {
-      const evt = event as { state: string; elapsed_seconds?: number };
+      const evt = event as {
+        state: string;
+        elapsed_seconds?: number;
+        shell_id?: string;
+        command?: string;
+        output_preview?: string;
+      };
       if (evt.state === 'running') {
         helpers.setBackgroundWatch?.((prev) => ({
           ...prev,
           active: true,
           elapsedSeconds: evt.elapsed_seconds ?? prev.elapsedSeconds,
         }));
+      } else if (evt.state === 'completed') {
+        // Shell finished — chip transitions to "✓ done, send a message to
+        // see the result". Watching state stays active until the terminal
+        // `all_completed` event (or the user pings, triggering client_disconnect).
+        helpers.setBackgroundWatch?.((prev) => ({
+          ...prev,
+          active: true,
+          elapsedSeconds: evt.elapsed_seconds ?? prev.elapsedSeconds,
+          completed: {
+            shellId: evt.shell_id ?? '',
+            command: evt.command ?? '',
+            outputPreview: evt.output_preview ?? '',
+          },
+        }));
       } else {
-        // Terminal — clear the chip with a reason the UI can use to render
-        // a brief "still running, ping me to check" hint on timeout.
+        // Terminal (all_completed / timeout / stop_event / client_disconnect)
+        // — clear the chip with a reason the UI can use to render an
+        // optional hint.
         helpers.setBackgroundWatch?.(() => ({
           active: false,
           elapsedSeconds: evt.elapsed_seconds ?? 0,
-          terminalReason: evt.state as 'timeout' | 'stop_event' | 'client_disconnect',
+          terminalReason: evt.state as 'timeout' | 'stop_event' | 'client_disconnect' | 'all_completed',
         }));
       }
       return;

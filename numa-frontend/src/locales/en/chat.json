@@ -2,6 +2,8 @@
   "jumpToLatest": "Jump to latest",
   "backgroundWatch": {
     "running": "Background task running…",
+    "completedTitle": "Background task complete",
+    "completedHint": "Send me a message and I'll fetch the full result.",
     "elapsed": "{{minutes}}m {{seconds}}s",
     "elapsedShort": "{{seconds}}s",
     "stop": "Stop",

@@ -670,7 +670,19 @@ export interface WorkspaceChatMessageHelpers {
 export interface BackgroundWatchState {
   active: boolean;
   elapsedSeconds: number;
-  terminalReason?: 'timeout' | 'stop_event' | 'client_disconnect';
+  /** Set when the harness has detected a shell completion via mtime stability,
+   *  but the user hasn't pinged back yet. Chip shows "✓ Task done — send a
+   *  message to see the result". Cleared when the user sends their next
+   *  message (which starts a fresh turn). */
+  completed?: {
+    shellId: string;
+    command: string;
+    outputPreview: string;
+  };
+  /** Set when the watching state has ended; clears the active chip and
+   *  optionally renders a brief hint (e.g. "still running, ping me to check"
+   *  on timeout). */
+  terminalReason?: 'timeout' | 'stop_event' | 'client_disconnect' | 'all_completed';
 }
 
 // ============================================================
@@ -938,20 +950,39 @@ export interface SDKTurnStateEvent {
   timestamp?: string;
   request_id?: string;
   parent_tool_use_id?: string | null;
+  /** Shells the harness is watching on entry. */
+  shells?: Array<{ shell_id: string; command: string }>;
 }
 
 /**
- * Emitted periodically during the watching state (chip pulse with elapsed
- * seconds) and once on exit with a terminal state. Terminal states:
- *   - `running` — still running (pulse update)
- *   - `timeout` — hit the 10-min watching cap; user should ping back later
- *   - `stop_event` — user clicked Stop
- *   - `client_disconnect` — frontend closed the SSE (e.g. sent a new message)
+ * Events the watching loop emits per shell / per poll. States:
+ *   - `running` — chip pulse, shell still active. Includes elapsed_seconds and
+ *     active_shells count.
+ *   - `completed` — a specific shell's output file went stable for the
+ *     completion-detection window. Includes shell_id, command, and an
+ *     output_preview (last ~2KB) for the chip.
+ *   - `all_completed` — every tracked shell reached the completed state;
+ *     watching loop exits cleanly.
+ *   - `timeout` — hit the 10-min watching cap with shells still running.
+ *   - `stop_event` — user clicked Stop on the chip.
+ *   - `client_disconnect` — frontend closed the SSE (e.g. user sent a new
+ *     message); we still treat this as a clean abort.
  */
 export interface SDKBackgroundTaskStatusEvent {
   type: 'background_task_status';
-  state: 'running' | 'timeout' | 'stop_event' | 'client_disconnect';
+  state: 'running' | 'completed' | 'all_completed' | 'timeout' | 'stop_event' | 'client_disconnect';
   elapsed_seconds: number;
+  /** Set when state is `running`: how many shells are still active. */
+  active_shells?: number;
+  /** Set when state is `completed`: the specific shell that just finished. */
+  shell_id?: string;
+  /** Set when state is `completed`: the command that was launched. */
+  command?: string;
+  /** Set when state is `completed`: last ~2KB of the shell's output file. */
+  output_preview?: string;
+  /** Set when state is `all_completed` / `timeout` / `stop_event` / `client_disconnect`:
+   *  shell_ids the harness saw complete during this watching session. */
+  completed_shells?: string[];
   timestamp?: string;
   request_id?: string;
   parent_tool_use_id?: string | null;

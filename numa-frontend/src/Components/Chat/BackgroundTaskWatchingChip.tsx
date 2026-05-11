@@ -47,9 +47,45 @@ export function BackgroundTaskWatchingChip({
     );
   }
 
-  // Terminal stop/disconnect — just clear silently (don't render).
+  // Terminal stop/disconnect/all_completed — clear silently. The next user
+  // message will trigger a fresh turn where the model can call BashOutput
+  // and surface the actual result.
   if (!state.active) {
     return null;
+  }
+
+  // Completed state — harness detected the shell finished (mtime stability).
+  // Show "✓ Task done" and prompt the user to send a message for the result.
+  // Composer stays enabled; sending a message closes the SSE and starts a
+  // new turn.
+  if (state.completed) {
+    return (
+      <div
+        className="d-flex align-items-center gap-2 px-3 py-2 mb-2 rounded-3 border"
+        style={{
+          background: 'var(--bs-success-bg-subtle, #d1e7dd)',
+          borderColor: 'var(--bs-success-border-subtle, #a3cfbb)',
+          fontSize: '0.875rem',
+        }}
+        role="status"
+        aria-live="polite"
+      >
+        <i className="bi bi-check-circle-fill text-success" aria-hidden="true" />
+        <div className="d-flex flex-column">
+          <span className="text-body">{t('backgroundWatch.completedTitle')}</span>
+          <span className="text-muted small">{t('backgroundWatch.completedHint')}</span>
+        </div>
+        <button
+          type="button"
+          className="btn btn-sm btn-outline-secondary ms-auto"
+          onClick={onStop}
+          disabled={isStopping}
+          aria-label={t('backgroundWatch.stop')}
+        >
+          {t('backgroundWatch.stop')}
+        </button>
+      </div>
+    );
   }
 
   // Live watching — pulsing chip with elapsed timer + Stop.
