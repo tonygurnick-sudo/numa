@@ -4,6 +4,7 @@ import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import {
   CognitoIdentityProviderClient,
   AdminGetUserCommand,
+  AdminUpdateUserAttributesCommand,
   DescribeUserPoolCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
@@ -172,6 +173,36 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
     if (candidate.includes('@')) {
       email = candidate;
       console.log(JSON.stringify({ _name: 'TOKEN_EMAIL_DERIVED', sub: userSub, email }));
+
+      // Persist the derived email back onto the Cognito user record. PostAuthentication
+      // is the documented backfill point but Cognito does not reliably fire it on the
+      // very first JIT-creation auth, leaving fresh SSO users with an empty email
+      // attribute even though their JWT carries one. PreTokenGeneration fires on every
+      // authentication including the JIT one, so we backfill here too. Best-effort —
+      // if the write fails the JWT still has the derived email so the session works;
+      // we just log and continue rather than block the login.
+      try {
+        await getCognito().send(
+          new AdminUpdateUserAttributesCommand({
+            UserPoolId: event.userPoolId,
+            Username: event.userName,
+            UserAttributes: [
+              { Name: 'email', Value: email },
+              { Name: 'email_verified', Value: 'true' },
+            ],
+          })
+        );
+        console.log(JSON.stringify({ _name: 'TOKEN_EMAIL_BACKFILL', sub: userSub, email }));
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            _name: 'TOKEN_EMAIL_BACKFILL_FAILED',
+            sub: userSub,
+            email,
+            error: (err as Error).message,
+          })
+        );
+      }
     }
   }
 
