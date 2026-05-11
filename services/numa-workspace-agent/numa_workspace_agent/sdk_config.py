@@ -505,6 +505,15 @@ def create_agent_options(
         # tool and Nolia phases. Only applies in non-interactive mode (which
         # is what we run via the Python SDK wrapper).
         "CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS": "1",
+        # Route the SDK's internal temp files (incl. background-bash output)
+        # into /workdir/tmp/claude-{uid}/... where the model can Read them.
+        # Default is /tmp/, which our security hook blocks — so completed
+        # background tasks have unrecoverable output once the SDK's task
+        # registry evicts the ID. With this redirect:
+        #   /workdir/tmp/claude-{uid}/tasks/<shell_id>.output
+        # is readable by the model directly when TaskOutput returns
+        # "no task found" for a task that completed between turns.
+        "CLAUDE_CODE_TMPDIR": str(LOCAL_ROOT / "tmp"),
         # ────────────────────────────────────────────────────────────────
         # Workspace tools Lambda for custom tools (KB queries, etc.)
         "WORKSPACE_TOOLS_LAMBDA_NAME": workspace_tools_lambda,
