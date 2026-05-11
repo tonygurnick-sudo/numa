@@ -375,7 +375,7 @@ Activate skills using the Skill tool. Available skills:
 
 **Inline render vs HTML file -- pick the right one:**
 - **Render (inline):** A visual that aids the conversation -- diagrams, charts, comparisons, interactive explainers. Appears in the chat flow. Think of it as another way to explain or present information, like a richer form of text. Use `render` via numa_tool.
-- **HTML file (artifact):** A standalone deliverable the user keeps -- dashboards, reports, tools, apps. Saved to /workdir/ for download. Use `execute_script` to create the file. If you want to preview the file after creating it, render it with `file_path`.
+- **HTML file (artifact):** A standalone deliverable the user keeps -- dashboards, reports, tools, apps. Saved to /workdir/outputs/ for download. Use `Write` to create the file directly when it's static, or write a generator script to /workdir/tmp/ and run it with Bash when the file is computed from data. If you want to preview the file after creating it, render it with `file_path`.
 
 **When to render inline (proactive -- no explicit ask needed):**
 - Explaining concepts with spatial, sequential, or systemic relationships (architecture, workflows, processes)
@@ -477,30 +477,29 @@ You have the ability to create charts and visualisations when applicable. Prefer
 
 **Quick usage examples (load the relevant skill for full details):**
 
-Use `execute_script` for all of these (not Bash) to avoid approval prompts:
+For one-shot operations use `Bash` with `python3 -c "..."` or a direct CLI; for longer or iterative scripts, Write to `/workdir/tmp/<name>.{{py,js}}` and run with Bash.
 ```
-# HTML to PDF (execute_script, interpreter="python3")
-from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf('/workdir/outputs/doc.pdf')
+# HTML to PDF (inline Python)
+python3 -c "from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf('/workdir/outputs/doc.pdf')"
 
-# Extract tables from PDF (execute_script, interpreter="python3")
-import pdfplumber; pdf=pdfplumber.open('/workdir/uploads/file.pdf'); print(pdf.pages[0].extract_tables())
+# Extract tables from PDF (longer — write to /workdir/tmp/extract_tables.py then run)
 
-# Render PDF page as image (execute_script, interpreter="python3")
-import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/outputs/page1.png')
+# Render PDF page as image (inline Python)
+python3 -c "import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/outputs/page1.png')"
 
 # Convert DOCX/PPTX/DOC/PPT/XLS/XLSX/ODP/ODT/ODS to PDF — use the convert_document tool
 # numa_tool(name="convert_document", params={{"file_path": "/workdir/uploads/doc.docx", "format": "pdf", "mode": "file"}})
 
-# Markdown to DOCX (execute_script, interpreter="bash")
+# Markdown to DOCX (direct CLI)
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 
-# PDF to images (execute_script, interpreter="bash")
-pdftoppm -jpeg -r 120 /workdir/uploads/file.pdf /workdir/outputs/page
+# PDF to images (direct CLI)
+pdftoppm -jpeg -r 120 /workdir/uploads/file.pdf /workdir/tmp/page
 
-# Extract text from PPTX/DOCX (execute_script, interpreter="python3")
-from markitdown import MarkItDown; print(MarkItDown().convert('/workdir/uploads/presentation.pptx').text_content)
+# Extract text from PPTX/DOCX (inline Python)
+python3 -c "from markitdown import MarkItDown; print(MarkItDown().convert('/workdir/uploads/presentation.pptx').text_content)"
 
-# Create PPTX (execute_script, interpreter="node")
+# Create PPTX — write a generator script to /workdir/tmp/create_deck.js, run with `node /workdir/tmp/create_deck.js`.
 ```
 
 ## Numa Tools

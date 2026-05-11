@@ -161,10 +161,21 @@ class TestNumaChatType:
         config = get_agent_type_config("numa-chat")
         assert config.response_mode == "stream"
 
-    def test_all_mcp_enabled(self):
+    def test_mcp_servers_enabled(self):
+        """numa-chat keeps integrations/numa/connect MCP servers. The scripts MCP
+        server (execute_script) was removed — model now uses Write+Bash+Edit."""
         config = get_agent_type_config("numa-chat")
-        assert config.enable_scripts_mcp is True
+        assert config.enable_scripts_mcp is False
         assert config.enable_integrations_mcp is True
+        assert config.enable_numa_mcp is True
+        assert config.enable_connect_mcp is True
+
+    def test_execute_script_not_in_allowed_tools(self):
+        """The chat agent must not list mcp__scripts__execute_script — the tool
+        is intentionally disabled; the security-hook loosening + prompt flip
+        steered the model to Write+Bash+Edit instead."""
+        config = get_agent_type_config("numa-chat")
+        assert "mcp__scripts__execute_script" not in config.allowed_tools
 
     def test_has_all_sdk_tools(self):
         config = get_agent_type_config("numa-chat")
