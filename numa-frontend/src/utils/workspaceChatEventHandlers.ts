@@ -629,10 +629,9 @@ export function updateSegmentWithInput(
  */
 export function createWorkspaceChatMessageHelpers(
   setMessages: (updater: (prev: WorkspaceChatMessage[]) => WorkspaceChatMessage[]) => void,
-  setButtonStatus: (status: 'idle' | 'loading' | 'streaming') => void,
-  setBackgroundWatch?: WorkspaceChatMessageHelpers['setBackgroundWatch']
+  setButtonStatus: (status: 'idle' | 'loading' | 'streaming') => void
 ): WorkspaceChatMessageHelpers {
-  return { setMessages, setButtonStatus, setBackgroundWatch };
+  return { setMessages, setButtonStatus };
 }
 
 // ============================================================
@@ -2232,58 +2231,38 @@ export function createStreamEventHandler(config: StreamEventHandlerConfig): (eve
       return;
     }
 
-    // === Background-bash watching state ===
-    // Event sequence:
-    //   turn_state{state:"watching"}                — entry, mark message done + show chip
-    //   background_task_status{state:"running"}     — pulse with elapsed_seconds (every 5s)
-    //   background_task_status{state:"completed"}   — a specific shell finished (mtime stability)
-    //                                                  → chip transitions to "✓ done, ping me"
-    //   background_task_status{state:"all_completed"
-    //                          |"timeout"
-    //                          |"stop_event"
-    //                          |"client_disconnect"} — terminal, watching state exits
-    if (event.type === 'turn_state' && (event as { state?: string }).state === 'watching') {
-      helpers.setBackgroundWatch?.(() => ({ active: true, elapsedSeconds: 0 }));
-      return;
-    }
-    if (event.type === 'background_task_status') {
+    // === Background-bash pending-tasks note ===
+    // The backend emits a single `background_tasks_pending` SSE event at turn
+    // end when one or more `run_in_background` shells are still alive in the
+    // MicroVM. We attach the metadata to the last assistant message so it
+    // renders a subtle italic footer ("Numa finished while N background tasks
+    // are still running. Send a message when you want to check on them.").
+    if (event.type === 'background_tasks_pending') {
       const evt = event as {
-        state: string;
-        elapsed_seconds?: number;
-        shell_id?: string;
-        command?: string;
-        output_preview?: string;
+        shells?: Array<{ shell_id: string; command: string }>;
+        count?: number;
       };
-      if (evt.state === 'running') {
-        helpers.setBackgroundWatch?.((prev) => ({
-          ...prev,
-          active: true,
-          elapsedSeconds: evt.elapsed_seconds ?? prev.elapsedSeconds,
-        }));
-      } else if (evt.state === 'completed') {
-        // Shell finished — chip transitions to "✓ done, send a message to
-        // see the result". Watching state stays active until the terminal
-        // `all_completed` event (or the user pings, triggering client_disconnect).
-        helpers.setBackgroundWatch?.((prev) => ({
-          ...prev,
-          active: true,
-          elapsedSeconds: evt.elapsed_seconds ?? prev.elapsedSeconds,
-          completed: {
-            shellId: evt.shell_id ?? '',
-            command: evt.command ?? '',
-            outputPreview: evt.output_preview ?? '',
-          },
-        }));
-      } else {
-        // Terminal (all_completed / timeout / stop_event / client_disconnect)
-        // — clear the chip with a reason the UI can use to render an
-        // optional hint.
-        helpers.setBackgroundWatch?.(() => ({
-          active: false,
-          elapsedSeconds: evt.elapsed_seconds ?? 0,
-          terminalReason: evt.state as 'timeout' | 'stop_event' | 'client_disconnect' | 'all_completed',
-        }));
+      const shells = (evt.shells ?? []).map((s) => ({
+        shellId: s.shell_id,
+        command: s.command,
+      }));
+      const count = evt.count ?? shells.length;
+      if (count === 0) {
+        return;
       }
+      setMessages((prev) => {
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].role === 'assistant') {
+            updated[i] = {
+              ...updated[i],
+              pendingBackgroundTasks: { count, shells },
+            };
+            return updated;
+          }
+        }
+        return prev;
+      });
       return;
     }
 

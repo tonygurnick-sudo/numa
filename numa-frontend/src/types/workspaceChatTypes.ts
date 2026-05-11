@@ -320,6 +320,17 @@ export interface WorkspaceChatMessage {
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   durationMs?: number;
+  /**
+   * Set when this assistant turn ended with one or more `run_in_background`
+   * bash shells still alive in the MicroVM. The UI renders a subtle italic
+   * footer beneath the message ("Numa finished while N background tasks are
+   * still running. Send a message when you want to check on them."). Populated
+   * from the backend's `background_tasks_pending` SSE event.
+   */
+  pendingBackgroundTasks?: {
+    count: number;
+    shells: Array<{ shellId: string; command: string }>;
+  };
 }
 
 /** Segment types for rendering message content */
@@ -658,31 +669,6 @@ export interface WorkspaceChatEventContext {
 export interface WorkspaceChatMessageHelpers {
   setMessages: (updater: (prev: WorkspaceChatMessage[]) => WorkspaceChatMessage[]) => void;
   setButtonStatus: (status: 'idle' | 'loading' | 'streaming') => void;
-  /** Optional — set when the streaming hook wants to track background-bash
-   *  watching state. Event handlers update this on `turn_state` /
-   *  `background_task_status` SSE events. */
-  setBackgroundWatch?: (updater: (prev: BackgroundWatchState) => BackgroundWatchState) => void;
-}
-
-/** Background-bash watching state — surfaced to the UI as a pulsing chip
- *  near the composer while the harness holds the SSE open after a turn that
- *  launched a `run_in_background` shell. */
-export interface BackgroundWatchState {
-  active: boolean;
-  elapsedSeconds: number;
-  /** Set when the harness has detected a shell completion via mtime stability,
-   *  but the user hasn't pinged back yet. Chip shows "✓ Task done — send a
-   *  message to see the result". Cleared when the user sends their next
-   *  message (which starts a fresh turn). */
-  completed?: {
-    shellId: string;
-    command: string;
-    outputPreview: string;
-  };
-  /** Set when the watching state has ended; clears the active chip and
-   *  optionally renders a brief hint (e.g. "still running, ping me to check"
-   *  on timeout). */
-  terminalReason?: 'timeout' | 'stop_event' | 'client_disconnect' | 'all_completed';
 }
 
 // ============================================================
@@ -754,8 +740,7 @@ export type SDKEventType =
   | 'completion'
   | 'assistant_advice'
   | 'tool_approval'
-  | 'turn_state'
-  | 'background_task_status';
+  | 'background_tasks_pending';
 
 /** Base SDK event with common fields */
 export interface SDKBaseEvent {
@@ -934,55 +919,22 @@ export type SDKEvent =
   | SDKCompletionEvent
   | SDKAssistantAdviceEvent
   | SDKToolApprovalEvent
-  | SDKTurnStateEvent
-  | SDKBackgroundTaskStatusEvent;
+  | SDKBackgroundTasksPendingEvent;
 
 /**
- * Emitted once when the model's turn ends but a `run_in_background` shell is
- * still live in the MicroVM. The frontend uses this to transition into the
- * "watching" state: assistant message marked complete, composer stays enabled,
- * pulsing chip rendered near the input. Sending a new message closes the
- * stream and starts a fresh turn (normal interrupt path).
+ * Emitted once at the end of a turn that launched one or more
+ * `run_in_background` shells which are still alive in the MicroVM. The
+ * frontend renders this as a subtle italic footer beneath the assistant's
+ * final message ("Numa finished while N background tasks are still running.
+ * Send a message when you'd like to check on them."). The stream then closes
+ * normally — no held connection, no polling chip, no model re-invocation.
+ * The user's next message starts a fresh turn where the model can call
+ * BashOutputTool to surface the actual result.
  */
-export interface SDKTurnStateEvent {
-  type: 'turn_state';
-  state: 'watching';
-  timestamp?: string;
-  request_id?: string;
-  parent_tool_use_id?: string | null;
-  /** Shells the harness is watching on entry. */
-  shells?: Array<{ shell_id: string; command: string }>;
-}
-
-/**
- * Events the watching loop emits per shell / per poll. States:
- *   - `running` — chip pulse, shell still active. Includes elapsed_seconds and
- *     active_shells count.
- *   - `completed` — a specific shell's output file went stable for the
- *     completion-detection window. Includes shell_id, command, and an
- *     output_preview (last ~2KB) for the chip.
- *   - `all_completed` — every tracked shell reached the completed state;
- *     watching loop exits cleanly.
- *   - `timeout` — hit the 10-min watching cap with shells still running.
- *   - `stop_event` — user clicked Stop on the chip.
- *   - `client_disconnect` — frontend closed the SSE (e.g. user sent a new
- *     message); we still treat this as a clean abort.
- */
-export interface SDKBackgroundTaskStatusEvent {
-  type: 'background_task_status';
-  state: 'running' | 'completed' | 'all_completed' | 'timeout' | 'stop_event' | 'client_disconnect';
-  elapsed_seconds: number;
-  /** Set when state is `running`: how many shells are still active. */
-  active_shells?: number;
-  /** Set when state is `completed`: the specific shell that just finished. */
-  shell_id?: string;
-  /** Set when state is `completed`: the command that was launched. */
-  command?: string;
-  /** Set when state is `completed`: last ~2KB of the shell's output file. */
-  output_preview?: string;
-  /** Set when state is `all_completed` / `timeout` / `stop_event` / `client_disconnect`:
-   *  shell_ids the harness saw complete during this watching session. */
-  completed_shells?: string[];
+export interface SDKBackgroundTasksPendingEvent {
+  type: 'background_tasks_pending';
+  shells: Array<{ shell_id: string; command: string }>;
+  count: number;
   timestamp?: string;
   request_id?: string;
   parent_tool_use_id?: string | null;

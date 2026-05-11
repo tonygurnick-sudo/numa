@@ -1,14 +1,8 @@
 {
   "jumpToLatest": "Jump to latest",
-  "backgroundWatch": {
-    "running": "Background task running…",
-    "completedTitle": "Background task complete",
-    "completedHint": "Send me a message and I'll fetch the full result.",
-    "elapsed": "{{minutes}}m {{seconds}}s",
-    "elapsedShort": "{{seconds}}s",
-    "stop": "Stop",
-    "timeoutHint": "Still running — send me a message when you want me to check on it.",
-    "stoppedHint": "Stopped watching. The task may still be running in the background."
+  "pendingBackgroundTasks": {
+    "single": "Note: Numa finished while a background task is still running. Send a message when you'd like to check on it.",
+    "multiple": "Note: Numa finished while {{count}} background tasks are still running. Send a message when you'd like to check on them."
   },
   "cost": {
     "perMessage": "${{cost}} · {{turns}} turns · {{inputTokens}} in / {{outputTokens}} out · {{durationSec}}s",

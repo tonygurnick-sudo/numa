@@ -341,39 +341,23 @@ def _transcribe_audio_file(file_path: str) -> dict[str, Any]:
     return payload.get("result", {})
 
 
-# ── Background-bash watching state ────────────────────────────────────
+# ── Background-bash pending-tasks note ────────────────────────────────
 # When the model launches a Bash command with run_in_background=True, the
-# task runs inside the MicroVM after the model's turn would otherwise end.
-# The watching state holds the SSE stream open so the frontend can render a
-# "background task running" chip and the composer stays enabled. Every poll,
-# the harness checks each tracked shell's output file: if mtime is stable for
-# _BACKGROUND_WATCH_COMPLETION_STABLE_SECONDS, the task is marked completed
-# and a `state: "completed"` SSE event fires. The chip transitions to
-# "✓ done — send a message to see the result". The user explicitly drives
-# the next turn (no harness-initiated model re-invocation), which is much
-# cheaper than a synthetic-message approach.
-
-# Max wall-clock the harness will sit in the watching state. After this,
-# we emit a timeout event and close the SSE. Next user message picks back
-# up. 10 min covers most "I'll walk away and come back" patterns.
-_BACKGROUND_WATCH_MAX_SECONDS = 600
-
-# How often we emit a chip-pulse SSE event with updated elapsed_seconds.
-# Light — no model invocation, just a server-push for the UI tick.
-_BACKGROUND_WATCH_PULSE_INTERVAL = 5
-
-# Treat a shell as completed when its output file's mtime has been stable
-# for this many seconds. Heuristic — false-positives recover (user pings,
-# model calls BashOutput, sees actual state). 30s is conservative enough
-# to absorb most legitimate quiet periods (compute-bound work, API polling).
-_BACKGROUND_WATCH_COMPLETION_STABLE_SECONDS = 30
+# task keeps running inside the MicroVM after the model's turn ends. The
+# harness emits a single `background_tasks_pending` SSE event at turn end
+# so the frontend can render a subtle italic note beneath the assistant's
+# final message ("Numa finished while background tasks are still running.
+# Send a message when you want to check on them."). The stream then closes
+# normally — the composer enables naturally, no held connection, no chip,
+# no model re-invocation. When the user sends their next message, the model
+# sees the live shell in conversation state and can call BashOutputTool to
+# surface the result.
 
 # Regex for parsing the SDK's `run_in_background: true` tool-result message.
 # Format observed in the bundled SDK binary:
 #   "Command running in background with ID: <shell_id>. Output is being written to: <path>"
-# We accept either the regular ID form or the "manually backgrounded" form
-# the SDK emits when the user moves a foreground command to background via
-# Ctrl+B (`Command was manually backgrounded by user with ID: ...`).
+# Three variants: regular, manually-backgrounded (Ctrl+B), and assistant-
+# auto-backgrounded (when a foreground command exceeds the SDK's blocking budget).
 _BG_BASH_RESULT_RE = re.compile(
     r"(?:Command running in background with ID|"
     r"Command was manually backgrounded by user with ID|"
@@ -419,222 +403,26 @@ def _parse_background_bash_result(
     return match.group("shell_id"), match.group("path")
 
 
-def _check_shell_completion(
-    output_path: str,
-    state: dict[str, Any],
-) -> bool:
-    """Return True if the shell at `output_path` looks completed.
-
-    Heuristic: file mtime hasn't changed for
-    _BACKGROUND_WATCH_COMPLETION_STABLE_SECONDS. `state` is per-shell scratch
-    storage carried across polls; the caller passes the same dict in each
-    iteration.
-
-    Returns False (still running) if the file doesn't yet exist, has been
-    modified within the stability window, or we can't stat it for any reason.
-    """
-    try:
-        stat = os.stat(output_path)
-    except FileNotFoundError:
-        # File hasn't been created yet — bash started but no output yet.
-        # Treat as still running; reset stability tracking.
-        state["last_mtime"] = None
-        state["last_size"] = None
-        state["stable_since"] = None
-        return False
-    except OSError as e:
-        logger.warning(
-            "Could not stat background-bash output file; treating as running",
-            output_path=output_path,
-            error=str(e),
-        )
-        return False
-
-    now = time.time()
-    current_mtime = stat.st_mtime
-    current_size = stat.st_size
-
-    if (
-        state.get("last_mtime") == current_mtime
-        and state.get("last_size") == current_size
-    ):
-        # Unchanged since last poll. Has it been stable long enough?
-        stable_since = state.get("stable_since") or now
-        state["stable_since"] = stable_since
-        return (now - stable_since) >= _BACKGROUND_WATCH_COMPLETION_STABLE_SECONDS
-
-    # Changed (or first observation) — reset the stability clock.
-    state["last_mtime"] = current_mtime
-    state["last_size"] = current_size
-    state["stable_since"] = now
-    return False
-
-
-def _read_output_preview(output_path: str, max_bytes: int = 2048) -> str:
-    """Read up to the last `max_bytes` of a shell's output file for a chip
-    preview. Best-effort — returns empty string on any error."""
-    try:
-        size = os.path.getsize(output_path)
-        with open(output_path, "rb") as f:
-            if size > max_bytes:
-                f.seek(-max_bytes, os.SEEK_END)
-            data = f.read()
-        return data.decode("utf-8", errors="replace")
-    except (FileNotFoundError, OSError) as e:
-        logger.warning(
-            "Could not read background-bash output preview",
-            output_path=output_path,
-            error=str(e),
-        )
-        return ""
-
-
-async def _emit_background_watching_state(
+def _build_pending_background_tasks_event(
     *,
-    trace_path: Path,
-    stop_event: asyncio.Event,
-    disconnect_checker: Optional[Callable[[], Awaitable[bool]]],
-    request_id: Optional[str],
-    conversation_id: str,
     background_shells: dict[str, dict[str, Any]],
-) -> AsyncIterator[bytes]:
-    """Hold the SSE stream open after a turn ends with live background bash shells.
-
-    Emits:
-      - turn_state="watching" once on entry (signals frontend to mark assistant
-        message complete + enable composer + render chip)
-      - background_task_status="running" pulses every _BACKGROUND_WATCH_PULSE_INTERVAL
-        seconds, with updated elapsed_seconds, while shells are still running
-      - background_task_status="completed" with shell_id + output_preview when
-        a shell's output file goes stable for _BACKGROUND_WATCH_COMPLETION_STABLE_SECONDS
-      - background_task_status terminal event on exit, with state =
-        "timeout" / "stop_event" / "client_disconnect" / "all_completed"
-
-    Detection of completion is harness-side mtime polling — no model invocation.
-    Aborts on stop_event, client disconnect, all shells completed, or 10-min cap.
-    """
-    started_at = datetime.now(timezone.utc)
-    # Per-shell scratch state for completion detection.
-    # shell_id -> {last_mtime, last_size, stable_since}
-    completion_state: dict[str, dict[str, Any]] = {sid: {} for sid in background_shells}
-    # Shells we've already emitted a "completed" event for.
-    completed_shell_ids: set[str] = set()
-
-    logger.info(
-        "Entering background-bash watching state",
-        _name="BACKGROUND_WATCH_START",
-        conversation_id=conversation_id,
-        request_id=request_id,
-        max_seconds=_BACKGROUND_WATCH_MAX_SECONDS,
-        tracked_shells=list(background_shells.keys()),
-    )
-
-    entry_event = {
-        "type": "turn_state",
-        "state": "watching",
-        "timestamp": started_at.isoformat(),
-        "request_id": request_id or "",
+    request_id: Optional[str],
+) -> dict[str, Any]:
+    """Build the `background_tasks_pending` SSE event payload emitted at turn
+    end when the model launched one or more `run_in_background` shells that
+    haven't yet been killed. The frontend renders this as a subtle italic
+    footer beneath the last assistant message — see the
+    BackgroundTasksPendingNote component."""
+    return {
+        "type": "background_tasks_pending",
         "shells": [
             {"shell_id": sid, "command": info.get("command", "")}
             for sid, info in background_shells.items()
         ],
-    }
-    with trace_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry_event) + "\n")
-    yield format_sse_event(entry_event)
-
-    exit_reason = "timeout"
-    while True:
-        elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
-        if elapsed >= _BACKGROUND_WATCH_MAX_SECONDS:
-            exit_reason = "timeout"
-            break
-        if stop_event.is_set():
-            exit_reason = "stop_event"
-            break
-        if disconnect_checker and await disconnect_checker():
-            exit_reason = "client_disconnect"
-            break
-
-        # Check each shell for completion (file mtime stability).
-        for shell_id, info in background_shells.items():
-            if shell_id in completed_shell_ids:
-                continue
-            output_path = info.get("output_path", "")
-            if not output_path:
-                continue
-            if _check_shell_completion(output_path, completion_state[shell_id]):
-                # Newly detected completion — emit and remember.
-                completed_shell_ids.add(shell_id)
-                completion_event = {
-                    "type": "background_task_status",
-                    "state": "completed",
-                    "shell_id": shell_id,
-                    "command": info.get("command", ""),
-                    "elapsed_seconds": int(elapsed),
-                    "output_preview": _read_output_preview(output_path),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "request_id": request_id or "",
-                }
-                with trace_path.open("a", encoding="utf-8") as f:
-                    f.write(json.dumps(completion_event) + "\n")
-                yield format_sse_event(completion_event)
-                logger.info(
-                    "Background shell completed (mtime stability)",
-                    _name="BG_SHELL_COMPLETED",
-                    shell_id=shell_id,
-                    elapsed_seconds=int(elapsed),
-                    conversation_id=conversation_id,
-                    request_id=request_id,
-                )
-
-        # If every tracked shell is now complete, exit the watching state.
-        if completed_shell_ids and completed_shell_ids == set(background_shells.keys()):
-            exit_reason = "all_completed"
-            break
-
-        # Chip pulse — frontend uses elapsed_seconds to render "running… (1m 23s)"
-        pulse_event = {
-            "type": "background_task_status",
-            "state": "running",
-            "elapsed_seconds": int(elapsed),
-            "active_shells": len(background_shells) - len(completed_shell_ids),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "request_id": request_id or "",
-        }
-        # Don't trace pulses (noisy) — only stream to client
-        yield format_sse_event(pulse_event)
-
-        # Sleep in 1s slices so stop_event / disconnect are responsive
-        for _ in range(_BACKGROUND_WATCH_PULSE_INTERVAL):
-            if stop_event.is_set() or (
-                disconnect_checker and await disconnect_checker()
-            ):
-                break
-            await asyncio.sleep(1)
-
-    elapsed_final = int((datetime.now(timezone.utc) - started_at).total_seconds())
-    terminal_event = {
-        "type": "background_task_status",
-        "state": exit_reason,
-        "elapsed_seconds": elapsed_final,
-        "completed_shells": list(completed_shell_ids),
+        "count": len(background_shells),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "request_id": request_id or "",
     }
-    with trace_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(terminal_event) + "\n")
-    yield format_sse_event(terminal_event)
-
-    logger.info(
-        "Exited background-bash watching state",
-        _name="BACKGROUND_WATCH_END",
-        conversation_id=conversation_id,
-        request_id=request_id,
-        elapsed_seconds=elapsed_final,
-        reason=exit_reason,
-        completed_shells=list(completed_shell_ids),
-    )
 
 
 async def stream_claude_sdk(
@@ -1671,27 +1459,30 @@ async def stream_claude_sdk(
                         f.write(json.dumps(serialized) + "\n")
                     yield format_sse_event(serialized)
 
-        # ── Background-bash watching state ────────────────────────────
-        # If this turn launched any run_in_background shells we managed to
-        # track (got the tool_result with shell_id + output_path), hold the
-        # SSE open so the frontend can render a "background task running"
-        # chip next to the composer. The composer stays enabled — the user
-        # can type a new message (which closes this stream and starts a
-        # fresh turn) or click Stop. Harness polls each shell's output file
-        # for completion (mtime stability); on completion we emit a
-        # `state: "completed"` event with a short preview, frontend shows
-        # "✓ done, send a message to see the result", and the user drives
-        # the next turn (model calls BashOutput for the actual result).
+        # ── Background-bash pending-tasks note ────────────────────────
+        # If this turn launched one or more run_in_background shells (that we
+        # successfully tracked via tool_result parsing), emit a single SSE
+        # event noting they're still alive. The frontend renders this as a
+        # subtle italic footer beneath the last assistant message. The stream
+        # then closes normally — composer enables, user can send a new
+        # message when they want to check on the tasks (model will call
+        # BashOutputTool on that next turn to surface the actual result).
         if background_shells and not stop_reason:
-            async for sse_chunk in _emit_background_watching_state(
-                trace_path=trace_path,
-                stop_event=stop_event,
-                disconnect_checker=disconnect_checker,
-                request_id=request_id,
-                conversation_id=conversation_id,
+            pending_event = _build_pending_background_tasks_event(
                 background_shells=background_shells,
-            ):
-                yield sse_chunk
+                request_id=request_id,
+            )
+            with trace_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(pending_event) + "\n")
+            yield format_sse_event(pending_event)
+            logger.info(
+                "Emitted background_tasks_pending note at turn end",
+                _name="BG_TASKS_PENDING_NOTE",
+                conversation_id=conversation_id,
+                request_id=request_id,
+                shell_count=len(background_shells),
+                shells=list(background_shells.keys()),
+            )
 
     except Exception as e:
         import traceback
