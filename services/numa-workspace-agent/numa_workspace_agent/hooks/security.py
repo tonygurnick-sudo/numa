@@ -756,6 +756,16 @@ def _remediation_hint(reason: str) -> str:
             "scratch files and /workdir/outputs/ for user-facing artefacts. "
             "Redirects to /dev/null and similar harmless device paths are allowed."
         )
+    if reason.startswith("Access to '") and ".system" in reason:
+        # Same path the Bash `ls -la /workdir` branch uses — keep the two
+        # consistent so the model gets the same remediation regardless of
+        # which tool surfaced the block.
+        return (
+            "/workdir/.system/ and /workdir/secrets/ are hidden from listing "
+            "and access. SDK-persisted tool results under "
+            "/workdir/.system/.claude/projects/*/tool-results/*.json can be Read "
+            "directly when the SDK gives you that path."
+        )
     if reason.startswith("Access outside workspace") or reason.startswith(
         "Access to '"
     ):

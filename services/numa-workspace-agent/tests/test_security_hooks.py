@@ -507,6 +507,29 @@ class TestDenyResponseRemediation:
         # Falls through to the generic hint
         assert "/workdir/" in msg
 
+    def test_read_system_path_block_mentions_tool_results_allowlist(self):
+        """The Read path's `.system/` block (e.g. via is_blocked_path) must
+        give the same SDK-tool-results allowlist hint as the Bash `ls -la`
+        path. Test data from nd-labs reports showed these two paths giving
+        different hints — fixed."""
+        from numa_workspace_agent.hooks.security import deny_response
+
+        resp = deny_response(
+            "Access to 'workdir/.system' is blocked by security policy"
+        )
+        msg = resp["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "tool-results" in msg
+        assert "SDK" in msg or "sdk" in msg.lower()
+
+    def test_outside_workspace_block_does_not_mention_tool_results(self):
+        """Generic 'access outside workspace' shouldn't get the .system
+        allowlist hint — wrong category."""
+        from numa_workspace_agent.hooks.security import deny_response
+
+        resp = deny_response("Access outside workspace '/workdir' is blocked")
+        msg = resp["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "tool-results" not in msg
+
 
 # ── SDK tool-results allowlist ───────────────────────────────────────────────
 
