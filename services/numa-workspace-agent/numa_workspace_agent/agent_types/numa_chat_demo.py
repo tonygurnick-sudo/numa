@@ -238,8 +238,9 @@ NUMA_CHAT_DEMO = AgentTypeConfig(
         # Shell
         "BashOutput",
         "KillShell",
-        # MCP tools -- scripts + numa (web search), no integrations/connectors/vault
-        "mcp__scripts__execute_script",
+        # MCP tools -- numa (web search) only; no integrations/connectors/vault.
+        # Note: mcp__scripts__execute_script removed (model now uses Write+Bash+Edit;
+        # see numa_chat.py for rationale).
         "mcp__numa__numa_tool",
         # NOTE: No mcp__integrations__*, mcp__connectors__*, mcp__vault__*, mcp__numa__numa_ops_tool
         # Bash commands
@@ -282,8 +283,10 @@ NUMA_CHAT_DEMO = AgentTypeConfig(
         "Bash(pandoc:*)",
         "Bash(qpdf:*)",
     ],
-    # Layer 2: Scripts + Numa MCP only (web search via numa_tool)
-    enable_scripts_mcp=True,
+    # Layer 2: Numa MCP only (web search via numa_tool).
+    # Note: scripts MCP (execute_script) disabled for chat — model now uses
+    # Write+Bash+Edit instead.
+    enable_scripts_mcp=False,
     enable_integrations_mcp=False,
     enable_numa_mcp=True,
     allowed_numa_operations=[
