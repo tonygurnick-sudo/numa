@@ -20,7 +20,8 @@ NUMA_CHAT = AgentTypeConfig(
         "Glob",
         "Grep",
         "Bash",
-        "BashOutput",  # Poll output of a still-running run_in_background shell
+        "BashOutputTool",  # Poll output of a still-running run_in_background shell
+        # (SDK's internal name; appears in the bundled binary's tool registry)
         "KillShell",  # SDK exposes this to the model as TaskStop
         "TodoWrite",
         "Skill",
@@ -37,7 +38,7 @@ NUMA_CHAT = AgentTypeConfig(
         "TodoWrite",
         "Skill",
         # Shell
-        "BashOutput",
+        "BashOutputTool",
         "KillShell",
         # MCP tools (our custom tools)
         # Note: mcp__scripts__execute_script removed — the model is now directed

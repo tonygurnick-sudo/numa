@@ -296,6 +296,12 @@ type ChatMessage = {
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   durationMs?: number;
+  // Set when this assistant turn ended with one or more `run_in_background`
+  // bash shells still alive in the MicroVM. Footer note rendered below.
+  pendingBackgroundTasks?: {
+    count: number;
+    shells: Array<{ shellId: string; command: string }>;
+  };
 };
 
 const ChatMessages = ({
@@ -916,6 +922,27 @@ const ChatMessages = ({
               {message.role === 'assistant' && message.references?.length > 0 && (
                 <ChatReferencesDropdown references={message.references} getCredentials={getCredentials} />
               )}
+
+              {/* Pending-background-tasks footer. Rendered when this assistant
+                  turn ended with one or more `run_in_background` shells still
+                  alive in the MicroVM. Subtle italic note inviting the user
+                  to send a message when they want to check on the tasks. */}
+              {message.role === 'assistant' &&
+                message.pendingBackgroundTasks &&
+                message.pendingBackgroundTasks.count > 0 && (
+                  <div
+                    className="text-muted small fst-italic mt-2"
+                    style={{ opacity: 0.75 }}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {message.pendingBackgroundTasks.count === 1
+                      ? t('pendingBackgroundTasks.single')
+                      : t('pendingBackgroundTasks.multiple', {
+                          count: message.pendingBackgroundTasks.count,
+                        })}
+                  </div>
+                )}
 
               {/* Dev-only cost footer for this assistant turn */}
               {showCost && message.role === 'assistant' && message.costUsd != null && (
