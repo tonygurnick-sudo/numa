@@ -20,7 +20,8 @@ NUMA_CHAT = AgentTypeConfig(
         "Glob",
         "Grep",
         "Bash",
-        "KillShell",
+        "BashOutput",  # Poll output of a still-running run_in_background shell
+        "KillShell",  # SDK exposes this to the model as TaskStop
         "TodoWrite",
         "Skill",
     ],

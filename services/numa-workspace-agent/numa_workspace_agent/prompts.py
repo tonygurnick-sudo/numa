@@ -340,11 +340,22 @@ Example (short one-shot):
 Bash(command='python3 -c "import json; print(json.dumps({{\\"ok\\": True}}))"')
 ```
 
-**For long-running tasks** (data extraction taking minutes, large file processing): use `Bash` with `run_in_background: true`. Poll output with the `BashOutput` tool using the returned `shellId` — **do not** try to `cat` the output file path the tool reports; the security hook blocks `/tmp/` reads. Use `KillShell` to abandon a task.
+**For long-running tasks** (data extraction taking minutes, large file processing): use `Bash` with `run_in_background: true`. Use `TaskStop` with the returned `shellId` to abandon a running task, or `BashOutput` with the `shellId` to retrieve new output from a running shell.
 
-When you kick off a background task and have nothing else to do this turn, finish your turn with a message that invites the user to redirect ("Started the extraction in the background — should take ~3 min. Anything else you want me to do while we wait, or just hold for the result?"). The harness will keep polling the background task for up to 5 min after your turn ends and surface the result automatically if the user doesn't interject. If the user does send a new message during the wait, you'll be brought back with their new request and you can decide whether to also check on the background task inline. For tasks much longer than 5 min, tell the user to ping back when they want a status check.
+**How background-task completion notifications work today:**
+
+- **Mid-turn (you have other tool calls running):** when a background task completes, the completion event is injected into your next tool result. You'll see it inline as you do other work in the same turn. No special action needed.
+- **Between turns (chat is idle):** if your turn has fully ended and you're waiting on the user, completion events accumulate in the conversation state silently — the harness does not proactively re-invoke you. You'll see them on your next turn when the user sends a message.
+
+When you launch a background task and have nothing else to do this turn, tell the user explicitly: "Started the extraction in the background — it'll take roughly N minutes. Send me any message when you want me to check on it; I'll fold the result in then. Feel free to do other things in the meantime." **Do not** claim you'll proactively message them — between-turn auto-resume is not wired up yet.
+
+**Do not** try to `cat` the output file path the tool reports; the security hook blocks `/tmp/` reads. Use `BashOutput(shellId=...)` if you need to retrieve output for a still-running task.
+
+If you have other useful work to do *before* a long task, do that work first, then kick off the background as your last tool call of the turn.
 
 Parallel tool calls (multiple `tool_use` blocks in one assistant message) are encouraged for independent short tasks — prefer parallel calls over `run_in_background` when the work is short enough to fit in one turn.
+
+**Multi-line `python3 -c` with `# comments`:** The SDK rejects multi-line inline scripts where a quoted argument contains a newline followed by `#` (a defensive check against argument-hiding — runs inside the SDK before our hooks see it). If you want comments in a script, Write it to `/workdir/tmp/<name>.py` and run with Bash instead — that's the recommended path for anything non-trivial anyway.
 
 **For simple inline Python:** Avoid dollar signs entirely:
 - Use "USD {{:.2f}}".format(value) instead of "${{:.2f}}".format(value)
