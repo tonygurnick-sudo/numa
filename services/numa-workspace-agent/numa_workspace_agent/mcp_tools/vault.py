@@ -93,6 +93,7 @@ async def _handle_list_secrets(params: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result, dict) and result.get("error"):
         return {
             "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -128,11 +129,13 @@ async def _handle_request_secret(params: dict[str, Any]) -> dict[str, Any]:
     if not secret_name:
         return {
             "content": [{"type": "text", "text": "Error: secret_name is required"}],
+            "is_error": True,
             "isError": True,
         }
     if not purpose:
         return {
             "content": [{"type": "text", "text": "Error: purpose is required"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -181,6 +184,7 @@ async def _handle_request_secret(params: dict[str, Any]) -> dict[str, Any]:
                         "text": f"Secret '{secret_name}' not found in the user's vault.",
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -211,6 +215,7 @@ async def _handle_request_secret(params: dict[str, Any]) -> dict[str, Any]:
         if result.get("error"):
             return {
                 "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -218,6 +223,7 @@ async def _handle_request_secret(params: dict[str, Any]) -> dict[str, Any]:
         "content": [
             {"type": "text", "text": f"Unexpected response from vault: {result}"}
         ],
+        "is_error": True,
         "isError": True,
     }
 
@@ -291,6 +297,7 @@ async def vault(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
     if not isinstance(params, dict):
@@ -304,6 +311,7 @@ async def vault(args: dict[str, Any]) -> dict[str, Any]:
                     ),
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -319,6 +327,7 @@ async def vault(args: dict[str, Any]) -> dict[str, Any]:
                     ),
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -328,5 +337,6 @@ async def vault(args: dict[str, Any]) -> dict[str, Any]:
         logger.exception("vault handler failed", operation=name)
         return {
             "content": [{"type": "text", "text": f"Error in vault.{name}: {e}"}],
+            "is_error": True,
             "isError": True,
         }
