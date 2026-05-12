@@ -1232,7 +1232,7 @@ async def create_kb_folder(request: Request, kb_id: str) -> Response:
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
-@app.delete("/api/kb/{kb_id}/folders")
+@app.post("/api/kb/{kb_id}/folders/delete")
 async def delete_kb_folder(request: Request, kb_id: str) -> Response:
     """Delete a subfolder marker (and optionally its contents).
 
@@ -1242,6 +1242,9 @@ async def delete_kb_folder(request: Request, kb_id: str) -> Response:
     With ``recursive=false``, only the empty folder marker is deleted — if any
     child objects exist (excluding the marker itself), returns 409. With
     ``recursive=true``, every object under the prefix is deleted in batches.
+
+    Uses POST (not DELETE) so the JSON body survives CloudFront and Lambda
+    Function URL transport — matches the sibling /files/delete endpoint.
     """
     guard, user = _guard_request(request)
     if guard is not None:
