@@ -9,6 +9,7 @@ import asyncio
 import errno
 import json
 import os
+import re
 import time
 import uuid as uuid_mod
 from dataclasses import dataclass
@@ -340,6 +341,90 @@ def _transcribe_audio_file(file_path: str) -> dict[str, Any]:
     return payload.get("result", {})
 
 
+# ── Background-bash pending-tasks note ────────────────────────────────
+# When the model launches a Bash command with run_in_background=True, the
+# task keeps running inside the MicroVM after the model's turn ends. The
+# harness emits a single `background_tasks_pending` SSE event at turn end
+# so the frontend can render a subtle italic note beneath the assistant's
+# final message ("Numa finished while background tasks are still running.
+# Send a message when you want to check on them."). The stream then closes
+# normally — the composer enables naturally, no held connection, no chip,
+# no model re-invocation. When the user sends their next message, the model
+# sees the live shell in conversation state and can call BashOutputTool to
+# surface the result.
+
+# Regex for parsing the SDK's `run_in_background: true` tool-result message.
+# Format observed in the bundled SDK binary:
+#   "Command running in background with ID: <shell_id>. Output is being written to: <path>"
+# Three variants: regular, manually-backgrounded (Ctrl+B), and assistant-
+# auto-backgrounded (when a foreground command exceeds the SDK's blocking budget).
+_BG_BASH_RESULT_RE = re.compile(
+    r"(?:Command running in background with ID|"
+    r"Command was manually backgrounded by user with ID|"
+    r"Command exceeded the assistant-mode blocking budget .*? "
+    r"and was moved to the background with ID): "
+    r"(?P<shell_id>[A-Za-z0-9_\-]+)\. .*?"
+    r"Output is being written to: (?P<path>[^\s,]+)",
+    re.DOTALL,
+)
+
+
+def _parse_background_bash_result(
+    content: Any,
+) -> Optional[tuple[str, str]]:
+    """Extract (shell_id, output_path) from a Bash tool_result when the
+    corresponding Bash tool_use had run_in_background=true.
+
+    The SDK encodes a standard sentence into the tool_result content.
+    Returns None if the content doesn't match the expected format
+    (e.g. the bash was foreground after all, or the SDK emitted an error
+    instead of the success message).
+    """
+    if content is None:
+        return None
+    # ToolResultBlock.content may be a str or a list of {type, text} blocks.
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                t = item.get("text")
+                if isinstance(t, str):
+                    parts.append(t)
+            elif isinstance(item, str):
+                parts.append(item)
+        text = "\n".join(parts)
+    else:
+        return None
+    match = _BG_BASH_RESULT_RE.search(text)
+    if not match:
+        return None
+    return match.group("shell_id"), match.group("path")
+
+
+def _build_pending_background_tasks_event(
+    *,
+    background_shells: dict[str, dict[str, Any]],
+    request_id: Optional[str],
+) -> dict[str, Any]:
+    """Build the `background_tasks_pending` SSE event payload emitted at turn
+    end when the model launched one or more `run_in_background` shells that
+    haven't yet been killed. The frontend renders this as a subtle italic
+    footer beneath the last assistant message — see the
+    BackgroundTasksPendingNote component."""
+    return {
+        "type": "background_tasks_pending",
+        "shells": [
+            {"shell_id": sid, "command": info.get("command", "")}
+            for sid, info in background_shells.items()
+        ],
+        "count": len(background_shells),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "request_id": request_id or "",
+    }
+
+
 async def stream_claude_sdk(
     conversation_id: str,
     prompt: str,
@@ -372,6 +457,7 @@ async def stream_claude_sdk(
     company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     voice_recordings: Optional[list[str]] = None,
+    thinking_override: Optional[str] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -417,6 +503,37 @@ async def stream_claude_sdk(
     run_key: Optional[RunKey] = (
         (user_sub, conversation_id, request_id) if request_id else None
     )
+
+    # Background-bash watching state. Tracks shells the model launched with
+    # `run_in_background: true` so the watching loop can poll their output files
+    # for completion (mtime stability) without re-invoking the model.
+    #
+    # Two-stage capture:
+    #   1. AssistantMessage with Bash tool_use (run_in_background=True) → record
+    #      tool_use_id in `pending_bg_tool_uses`. We know the model started
+    #      something but don't yet have the shell_id / output path.
+    #   2. UserMessage with ToolResultBlock matching that tool_use_id → parse
+    #      the SDK's standard result message ("Command running in background
+    #      with ID: <X>. Output is being written to: <path>") to extract the
+    #      shell_id and output file path. Move into `background_shells`.
+    #
+    # If a tool_use never gets a matching tool_result (e.g. model interrupted
+    # mid-tool-call), the entry stays in `pending_bg_tool_uses` and is ignored
+    # by the watching state.
+    #
+    # We also track shells the model has "handled" this turn:
+    #   - `polled_shell_ids`  — model already called TaskOutput / BashOutputTool
+    #     on them (so it knows the current status and there's no need for the
+    #     user to ping back about them).
+    #   - `killed_shell_ids`  — model called TaskStop / KillShell on them.
+    # At turn-end, only shells in `background_shells - polled - killed` end up
+    # in the pending-tasks footer note.
+    pending_bg_tool_uses: dict[str, str] = {}  # tool_use_id -> command (for logs)
+    background_shells: dict[str, dict[str, Any]] = (
+        {}
+    )  # shell_id -> {command, output_path}
+    polled_shell_ids: set[str] = set()
+    killed_shell_ids: set[str] = set()
 
     # Initialize stream log for verbose debugging
     stream_log = StreamLog(
@@ -589,6 +706,8 @@ async def stream_claude_sdk(
         user_profile=user_profile,
         company_profile=company_profile,
         feature_flags=feature_flags,
+        thinking_override=thinking_override,
+        is_streaming=True,
     )
 
     logger.info(
@@ -754,6 +873,47 @@ async def stream_claude_sdk(
                                 block.name,
                                 block.input if isinstance(block.input, dict) else None,
                             )
+                            # Watch for background-bash launches. The matching
+                            # tool_result (captured below) will give us the
+                            # shell_id and output file path.
+                            if (
+                                block.name == "Bash"
+                                and isinstance(block.input, dict)
+                                and block.input.get("run_in_background") is True
+                            ):
+                                pending_bg_tool_uses[block.id] = str(
+                                    block.input.get("command", "")
+                                )
+                            # Track shells the model has explicitly handled
+                            # this turn (so we exclude them from the
+                            # end-of-turn pending-tasks count). The SDK exposes
+                            # these tools to the model under several names:
+                            #   - poll output: BashOutputTool / TaskOutput
+                            #   - cancel:      KillShell / TaskStop
+                            # The shell id is in `bash_id` (chat) or
+                            # `shell_id` (some SDK builds) or `task_id`.
+                            elif block.name in (
+                                "BashOutputTool",
+                                "TaskOutput",
+                            ) and isinstance(block.input, dict):
+                                sid = (
+                                    block.input.get("bash_id")
+                                    or block.input.get("shell_id")
+                                    or block.input.get("task_id")
+                                )
+                                if isinstance(sid, str):
+                                    polled_shell_ids.add(sid)
+                            elif block.name in (
+                                "KillShell",
+                                "TaskStop",
+                            ) and isinstance(block.input, dict):
+                                sid = (
+                                    block.input.get("shell_id")
+                                    or block.input.get("bash_id")
+                                    or block.input.get("task_id")
+                                )
+                                if isinstance(sid, str):
+                                    killed_shell_ids.add(sid)
                 elif isinstance(message, UserMessage):
                     # Check for tool results in user messages
                     content = message.content
@@ -765,6 +925,28 @@ async def stream_claude_sdk(
                                     block.content,
                                     block.is_error,
                                 )
+                                # If this result is for a tracked background
+                                # Bash tool_use, parse the SDK's message to
+                                # extract the shell_id and output file path.
+                                if block.tool_use_id in pending_bg_tool_uses:
+                                    cmd = pending_bg_tool_uses.pop(block.tool_use_id)
+                                    parsed = _parse_background_bash_result(
+                                        block.content
+                                    )
+                                    if parsed:
+                                        shell_id, output_path = parsed
+                                        background_shells[shell_id] = {
+                                            "command": cmd,
+                                            "output_path": output_path,
+                                            "tool_use_id": block.tool_use_id,
+                                        }
+                                        logger.info(
+                                            "Tracked background shell for watching state",
+                                            _name="BG_SHELL_TRACKED",
+                                            shell_id=shell_id,
+                                            output_path=output_path,
+                                            tool_use_id=block.tool_use_id,
+                                        )
 
                 # Serialize message to JSON
                 serialized = serialize_message(message)
@@ -1284,6 +1466,8 @@ async def stream_claude_sdk(
                 user_profile=user_profile,
                 company_profile=company_profile,
                 feature_flags=feature_flags,
+                thinking_override=thinking_override,
+                is_streaming=True,
             )
 
             async with ClaudeSDKClient(options=fallback_options) as retry_client:
@@ -1316,6 +1500,40 @@ async def stream_claude_sdk(
                     with trace_path.open("a", encoding="utf-8") as f:
                         f.write(json.dumps(serialized) + "\n")
                     yield format_sse_event(serialized)
+
+        # ── Background-bash pending-tasks note ────────────────────────
+        # If this turn launched one or more run_in_background shells AND the
+        # model didn't already handle them (poll via TaskOutput or kill via
+        # TaskStop), emit a single SSE event noting they're still alive. The
+        # frontend renders this as a subtle italic footer beneath the last
+        # assistant message. The stream then closes normally — composer
+        # enables, user can send a new message when they want to check on
+        # the tasks (model will call TaskOutput on that next turn to surface
+        # the actual result, falling back to a direct Read of the output file
+        # if the SDK's task registry has already evicted the ID).
+        unhandled_shells = {
+            sid: info
+            for sid, info in background_shells.items()
+            if sid not in polled_shell_ids and sid not in killed_shell_ids
+        }
+        if unhandled_shells and not stop_reason:
+            pending_event = _build_pending_background_tasks_event(
+                background_shells=unhandled_shells,
+                request_id=request_id,
+            )
+            with trace_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(pending_event) + "\n")
+            yield format_sse_event(pending_event)
+            logger.info(
+                "Emitted background_tasks_pending note at turn end",
+                _name="BG_TASKS_PENDING_NOTE",
+                conversation_id=conversation_id,
+                request_id=request_id,
+                shell_count=len(unhandled_shells),
+                shells=list(unhandled_shells.keys()),
+                polled_count=len(polled_shell_ids),
+                killed_count=len(killed_shell_ids),
+            )
 
     except Exception as e:
         import traceback
@@ -1453,6 +1671,7 @@ async def run_claude_sdk(
     company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     system_dir: Optional[Path] = None,
+    thinking_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run Claude SDK to completion and return the collected result.
 
@@ -1578,6 +1797,8 @@ async def run_claude_sdk(
         company_profile=company_profile,
         feature_flags=feature_flags,
         home_dir=system_dir,
+        thinking_override=thinking_override,
+        is_streaming=False,
     )
 
     logger.info(
@@ -1966,6 +2187,8 @@ async def run_claude_sdk(
                 company_profile=company_profile,
                 feature_flags=feature_flags,
                 home_dir=system_dir,
+                thinking_override=thinking_override,
+                is_streaming=False,
             )
 
             async with ClaudeSDKClient(options=fallback_options) as retry_client:

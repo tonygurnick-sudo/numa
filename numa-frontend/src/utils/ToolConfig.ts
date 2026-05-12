@@ -30,7 +30,8 @@ const TOOL_RENDERERS: Record<string, ToolRenderer> = {
   mcp__numa__numa_tool: FallbackRenderer,
   mcp__numa__numa_ops_tool: OpsToolRenderer,
   // Numa sub-tool renderers (used when effectiveToolName resolves from mcp__numa__numa_tool input)
-  knowledge_base: KnowledgeBaseRenderer,
+  numa_files: KnowledgeBaseRenderer,
+  knowledge_base: KnowledgeBaseRenderer, // legacy alias for numa_files
   extract_content: FallbackRenderer,
   convert_document: FallbackRenderer,
   agents: FallbackRenderer,
@@ -48,7 +49,8 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   mcp__numa__numa_tool: 'common:toolLabels.numaTool',
   mcp__numa__numa_ops_tool: 'common:toolLabels.numaOps',
   // Numa sub-tool labels (resolved from mcp__numa__numa_tool input name)
-  knowledge_base: 'common:toolLabels.knowledgeBase',
+  numa_files: 'common:toolLabels.numaFiles',
+  knowledge_base: 'common:toolLabels.numaFiles', // legacy alias for numa_files
   extract_content: 'common:toolLabels.extractContent',
   convert_document: 'common:toolLabels.convertDocument',
   agents: 'common:toolLabels.agents',
@@ -131,7 +133,7 @@ export function resolveToolVisual(toolName: string | null | undefined): ToolVisu
   // Numa MCP tool and sub-tools
   if (name === 'mcp__numa__numa_tool') return { kind: 'icon', className: 'bi bi-tools' };
   if (name === 'mcp__numa__numa_ops_tool') return { kind: 'icon', className: 'bi bi-card-checklist' };
-  if (name === 'knowledge_base') return { kind: 'icon', className: 'bi bi-folder2-open' };
+  if (name === 'numa_files' || name === 'knowledge_base') return { kind: 'icon', className: 'bi bi-folder2-open' };
   if (name === 'extract_content') return { kind: 'icon', className: 'bi bi-file-earmark-text' };
   if (name === 'convert_document') return { kind: 'icon', className: 'bi bi-file-earmark-arrow-down' };
   if (name === 'agents') return { kind: 'icon', className: 'bi bi-robot' };

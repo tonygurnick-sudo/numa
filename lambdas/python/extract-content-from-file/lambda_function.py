@@ -134,18 +134,28 @@ PILLOW_IMAGE_FORMATS = [
 ]
 
 # Formats convertible to PDF via document-converter (LibreOffice) → vision pipeline
+# Includes Microsoft Office legacy binary formats (.doc/.ppt/.xls), modern
+# formats (.pptx — .docx and .xlsx have their own structured paths above),
+# and template variants (legacy .dot/.pot/.xlt + modern .dotx/.potx/.xltx).
+# LibreOffice handles all of these transparently via `soffice --convert-to pdf`.
 LIBREOFFICE_CONVERTIBLE_FORMATS = [
     ".doc",
+    ".dot",
+    ".dotx",
     ".key",
     ".numbers",
     ".odp",
     ".ods",
     ".odt",
     ".pages",
+    ".pot",
+    ".potx",
     ".ppt",
     ".pptx",
     ".rtf",
     ".xls",
+    ".xlt",
+    ".xltx",
 ]
 
 # Audio/video formats for transcription

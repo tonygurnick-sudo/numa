@@ -296,6 +296,12 @@ type ChatMessage = {
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   durationMs?: number;
+  // Set when this assistant turn ended with one or more `run_in_background`
+  // bash shells still alive in the MicroVM. Footer note rendered below.
+  pendingBackgroundTasks?: {
+    count: number;
+    shells: Array<{ shellId: string; command: string }>;
+  };
 };
 
 const ChatMessages = ({
@@ -719,7 +725,8 @@ const ChatMessages = ({
                       const displayText = numaInput?.description || sc.steps?.[0] || sc.label || 'Numa Tool';
                       const subTool = numaInput?.name;
                       const NUMA_ICONS: Record<string, string> = {
-                        knowledge_base: 'bi-folder2-open',
+                        numa_files: 'bi-folder2-open',
+                        knowledge_base: 'bi-folder2-open', // legacy alias
                         web_search: 'bi-search',
                         extract_content: 'bi-file-earmark-text',
                         convert_document: 'bi-file-earmark-arrow-down',
@@ -916,6 +923,38 @@ const ChatMessages = ({
               {message.role === 'assistant' && message.references?.length > 0 && (
                 <ChatReferencesDropdown references={message.references} getCredentials={getCredentials} />
               )}
+
+              {/* Pending-background-tasks footer. Rendered when this assistant
+                  turn ended with one or more `run_in_background` shells still
+                  alive in the MicroVM. Bubble-style note inviting the user
+                  to send a message when they want to check on the tasks. */}
+              {message.role === 'assistant' &&
+                message.pendingBackgroundTasks &&
+                message.pendingBackgroundTasks.count > 0 && (
+                  <div
+                    className="pending-background-tasks-note d-flex align-items-start gap-2 mt-3 px-3 py-2 rounded"
+                    style={{
+                      backgroundColor: 'rgba(99, 102, 241, 0.08)',
+                      border: '1px solid rgba(99, 102, 241, 0.2)',
+                      fontSize: '0.875rem',
+                    }}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <i
+                      className="bi bi-hourglass-split text-primary"
+                      style={{ fontSize: '1rem', lineHeight: '1.4', flexShrink: 0 }}
+                      aria-hidden="true"
+                    />
+                    <span className="text-body-secondary fst-italic">
+                      {message.pendingBackgroundTasks.count === 1
+                        ? t('pendingBackgroundTasks.single')
+                        : t('pendingBackgroundTasks.multiple', {
+                            count: message.pendingBackgroundTasks.count,
+                          })}
+                    </span>
+                  </div>
+                )}
 
               {/* Dev-only cost footer for this assistant turn */}
               {showCost && message.role === 'assistant' && message.costUsd != null && (

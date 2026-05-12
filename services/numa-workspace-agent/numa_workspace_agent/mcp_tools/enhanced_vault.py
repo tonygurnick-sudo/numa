@@ -113,6 +113,7 @@ async def list_vault_secrets(args: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(result, dict) and result.get("error"):
             return {
                 "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -197,6 +198,7 @@ async def list_vault_secrets(args: Dict[str, Any]) -> Dict[str, Any]:
         logger.exception("Error in list_vault_secrets")
         return {
             "content": [{"type": "text", "text": f"Error listing vault secrets: {e}"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -234,6 +236,7 @@ async def request_vault_secret(args: Dict[str, Any]) -> Dict[str, Any]:
         if not secret_name:
             return {
                 "content": [{"type": "text", "text": "Error: secret_name is required"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -252,6 +255,7 @@ async def request_vault_secret(args: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(result, dict) and result.get("error"):
             return {
                 "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -278,6 +282,7 @@ async def request_vault_secret(args: Dict[str, Any]) -> Dict[str, Any]:
                         "text": f"Secret '{secret_name}' was found but contains no credential fields.",
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -304,6 +309,7 @@ async def request_vault_secret(args: Dict[str, Any]) -> Dict[str, Any]:
             "content": [
                 {"type": "text", "text": f"Error requesting vault secret: {e}"}
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -332,6 +338,7 @@ async def list_oauth_connectors(args: Dict[str, Any]) -> Dict[str, Any]:
         if not provider:
             return {
                 "content": [{"type": "text", "text": "Error: provider is required"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -345,6 +352,7 @@ async def list_oauth_connectors(args: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(result, dict) and result.get("error"):
             return {
                 "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -390,6 +398,7 @@ async def list_oauth_connectors(args: Dict[str, Any]) -> Dict[str, Any]:
             "content": [
                 {"type": "text", "text": f"Error listing OAuth connectors: {e}"}
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -440,6 +449,7 @@ async def create_oauth_connector(args: Dict[str, Any]) -> Dict[str, Any]:
                         "text": "Error: provider and connector_name are required",
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -456,6 +466,7 @@ async def create_oauth_connector(args: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(result, dict) and result.get("error"):
             return {
                 "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -487,6 +498,7 @@ async def create_oauth_connector(args: Dict[str, Any]) -> Dict[str, Any]:
             "content": [
                 {"type": "text", "text": f"Error creating OAuth connector: {e}"}
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -522,6 +534,7 @@ async def list_available_templates(args: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(result, dict) and result.get("error"):
             return {
                 "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -578,6 +591,7 @@ async def list_available_templates(args: Dict[str, Any]) -> Dict[str, Any]:
         logger.exception("Error in list_available_templates")
         return {
             "content": [{"type": "text", "text": f"Error listing templates: {e}"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -638,6 +652,7 @@ async def create_custom_secret(args: Dict[str, Any]) -> Dict[str, Any]:
                         "text": "Error: secret_name and fields are required",
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -656,6 +671,7 @@ async def create_custom_secret(args: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(result, dict) and result.get("error"):
             return {
                 "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -674,6 +690,7 @@ async def create_custom_secret(args: Dict[str, Any]) -> Dict[str, Any]:
         logger.exception("Error in create_custom_secret")
         return {
             "content": [{"type": "text", "text": f"Error creating custom secret: {e}"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -708,6 +725,7 @@ async def delete_vault_secret(args: Dict[str, Any]) -> Dict[str, Any]:
         if not secret_name:
             return {
                 "content": [{"type": "text", "text": "Error: secret_name is required"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -735,6 +753,7 @@ async def delete_vault_secret(args: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(result, dict) and result.get("error"):
             return {
                 "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+                "is_error": True,
                 "isError": True,
             }
 
@@ -762,5 +781,6 @@ async def delete_vault_secret(args: Dict[str, Any]) -> Dict[str, Any]:
         logger.exception("Error in delete_vault_secret")
         return {
             "content": [{"type": "text", "text": f"Error deleting vault secret: {e}"}],
+            "is_error": True,
             "isError": True,
         }

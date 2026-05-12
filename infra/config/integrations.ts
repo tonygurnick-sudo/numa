@@ -55,6 +55,7 @@ export const SUPPORTED_INTEGRATIONS = [
   'google_ads',
   'zoho_crm',
   'microsofttodo',
+  'fathom',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];

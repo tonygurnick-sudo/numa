@@ -130,21 +130,33 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
         return errorResponse(400, 'Source file is empty');
       }
 
-      // Detect input format from S3 key extension
+      // Detect input format from S3 key extension. Includes Microsoft Office
+      // legacy binary formats (.doc/.ppt/.xls), modern formats (.docx/.pptx),
+      // template variants (legacy .dot/.pot/.xlt + modern .dotx/.potx/.xltx),
+      // HTML, and other LibreOffice-supported formats.
       const keyLower = request.sourceKey.toLowerCase();
       const LIBREOFFICE_EXTENSIONS = [
         '.doc',
         '.docx',
+        '.dot',
+        '.dotx',
+        '.htm',
+        '.html',
         '.key',
         '.numbers',
         '.odp',
         '.ods',
         '.odt',
         '.pages',
+        '.pot',
+        '.potx',
         '.ppt',
         '.pptx',
         '.rtf',
         '.xls',
+        '.xlsx',
+        '.xlt',
+        '.xltx',
       ];
       const inputFormat = keyLower.endsWith('.pdf')
         ? 'pdf'

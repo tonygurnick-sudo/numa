@@ -27,9 +27,10 @@ import type { FileReference } from '../../hooks/useFilePreviewProcessor';
 import ResizableSplitView from '../ResizableSplitView';
 import { FilePreviewPanel } from '../FilePreviewPanel';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
-import type { S3FileInfo, ListKBFilesResponse } from '../../Services/knowledgeBaseService';
+import type { S3FileInfo } from '../../Services/knowledgeBaseService';
 import { CreateSubfolderModal } from './CreateSubfolderModal';
 import { FolderContextMenu, type FolderContextAction, type FolderContextTarget } from './FolderContextMenu';
+import { extractDroppedUploadBatch, isExternalFileDrag, type DroppedUploadBatch } from './dropUploadUtils';
 
 const COMPANY_KB_PREFIX = 'documents/company/';
 
@@ -124,6 +125,9 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const [clearFileUploader, setClearFileUploader] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState('');
+  const [uploadInitialFolder, setUploadInitialFolder] = useState('');
+  const [droppedUploadBatch, setDroppedUploadBatch] = useState<DroppedUploadBatch | null>(null);
+  const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [folderOptions, setFolderOptions] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
 
@@ -180,7 +184,6 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const canView = Boolean(user?.features?.includes('useCompanyData'));
   const canAdd = Boolean(user?.features?.includes('addToCompanyData'));
   const canDelete = Boolean(user?.features?.includes('deleteFromCompanyData'));
-  const role: 'VIEWER' | 'EDITOR' = canAdd || canDelete ? 'EDITOR' : 'VIEWER';
 
   // Hide parent page actions -- we handle them in the toolbar
   useEffect(() => {
@@ -391,6 +394,19 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     [canAdd, selectedKeys]
   );
 
+  const onFolderDragStart = useCallback(
+    (e: React.DragEvent, folderId: string) => {
+      if (!canAdd) {
+        e.preventDefault();
+        return;
+      }
+      const folderKey = folderId.endsWith('/') ? folderId : `${folderId}/`;
+      e.dataTransfer.setData('application/json', JSON.stringify({ sourceKbId: 'company', keys: [folderKey] }));
+      e.dataTransfer.effectAllowed = 'move';
+    },
+    [canAdd]
+  );
+
   const executeMove = useCallback(
     async (keys: string[], destPath: string) => {
       const destFolderPrefix = destPath
@@ -411,13 +427,21 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
         // sit in `prev.files` and get kept by the preserve-deep-entries
         // branch since they're absent from the new shallow listing.
         const mapping = new Map(result.successful.map((s) => [s.sourceKey, s.destKey]));
+        const movedFolderPrefixes = toMove.filter((k) => k.endsWith('/'));
+        const isMovedFolderMarker = (key: string) =>
+          key.endsWith('/') && movedFolderPrefixes.some((prefix) => key === prefix || key.startsWith(prefix));
+        const keepFolderState = (id: string) =>
+          !movedFolderPrefixes.some((prefix) => id === prefix || id.startsWith(prefix));
         if (mapping.size > 0) {
           setFileState((prev) => ({
             ...prev,
-            files: prev.files.map((f) => {
+            files: prev.files.flatMap((f) => {
               const dest = mapping.get(f.Key);
-              return dest ? { ...f, Key: dest } : f;
+              if (dest) return [{ ...f, Key: dest }];
+              return isMovedFolderMarker(f.Key) ? [] : [f];
             }),
+            expandedFolders: new Set([...prev.expandedFolders].filter(keepFolderState)),
+            loadedFolders: new Set([...prev.loadedFolders].filter(keepFolderState)),
           }));
         }
         if (result.failed.length > 0) {
@@ -600,9 +624,9 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
         }
       };
       fetchFoldersForUpload();
-      setSelectedFolder('');
+      setSelectedFolder(uploadInitialFolder);
     }
-  }, [showUploadModal, dataBucket, region, getCredentials]);
+  }, [showUploadModal, uploadInitialFolder, dataBucket, region, getCredentials]);
 
   useEffect(() => {
     if (clearFileUploader) {
@@ -720,6 +744,63 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     if (!folderId.startsWith(COMPANY_KB_PREFIX)) return '';
     return folderId.slice(COMPANY_KB_PREFIX.length).replace(/\/$/, '');
   }, []);
+
+  const currentUploadFolderPath = useMemo(
+    () => (currentFolderId ? subfolderRelativePath(currentFolderId) : ''),
+    [currentFolderId, subfolderRelativePath]
+  );
+
+  const handleExternalUploadDrop = useCallback(
+    async (e: React.DragEvent, folderPath: string) => {
+      if (!canAdd || !isExternalFileDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setIsExternalDragOver(false);
+
+      const batch = await extractDroppedUploadBatch(e.dataTransfer, false);
+      if (!batch.files.length && !batch.folderRejection) return;
+
+      setUploadInitialFolder(folderPath);
+      setSelectedFolder(folderPath);
+      setDroppedUploadBatch({ id: Date.now(), ...batch });
+      setShowUploadModal(true);
+    },
+    [canAdd]
+  );
+
+  const handleFinderExternalDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      if (!canAdd || !isExternalFileDrag(e)) return;
+      e.preventDefault();
+      setIsExternalDragOver(true);
+    },
+    [canAdd]
+  );
+
+  const handleFinderExternalDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!canAdd || !isExternalFileDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setIsExternalDragOver(true);
+    },
+    [canAdd]
+  );
+
+  const handleFinderExternalDragLeave = useCallback((e: React.DragEvent) => {
+    if (!isExternalFileDrag(e)) return;
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsExternalDragOver(false);
+    }
+  }, []);
+
+  const handleFinderExternalDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!canAdd || !isExternalFileDrag(e)) return;
+      void handleExternalUploadDrop(e, currentUploadFolderPath);
+    },
+    [canAdd, currentUploadFolderPath, handleExternalUploadDrop]
+  );
 
   const openAddSubfolder = useCallback((parentPath: string, parentDisplayName: string) => {
     setSubfolderTarget({ parentPath, parentDisplayName });
@@ -840,7 +921,13 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   // ── Render ─────────────────────────────────────────────────
 
   const mainContent = (
-    <div className="finder-files">
+    <div
+      className={`finder-files ${isExternalDragOver ? 'finder-files--external-drop-over' : ''}`}
+      onDragEnter={handleFinderExternalDragEnter}
+      onDragOver={handleFinderExternalDragOver}
+      onDragLeave={handleFinderExternalDragLeave}
+      onDrop={handleFinderExternalDrop}
+    >
       {uploadSuccess && (
         <Alert variant="success" dismissible onClose={() => setUploadSuccess(false)} className="mx-3 mt-2 mb-0">
           <i className="bi bi-check-circle me-2" />
@@ -985,7 +1072,11 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
           {canAdd && (
             <button
               className="finder-btn finder-btn--labelled"
-              onClick={() => setShowUploadModal(true)}
+              onClick={() => {
+                setUploadInitialFolder(currentUploadFolderPath);
+                setDroppedUploadBatch(null);
+                setShowUploadModal(true);
+              }}
               title={t('actions.upload')}
             >
               <i className="bi bi-upload" />
@@ -1087,9 +1178,13 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                draggable={!isFolder && !!row.originalKey && canAdd}
+                draggable={(isFolder || !!row.originalKey) && canAdd}
                 onDragStart={(e) => {
-                  if (!isFolder && row.originalKey) onFileDragStart(e, row.originalKey);
+                  if (isFolder) {
+                    onFolderDragStart(e, row.id);
+                  } else if (row.originalKey) {
+                    onFileDragStart(e, row.originalKey);
+                  }
                 }}
                 onDragOver={(e) => {
                   if (isFolder) onTargetDragOver(e, row.id, canAdd);
@@ -1098,7 +1193,12 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                   if (isFolder) onTargetDragLeave(row.id);
                 }}
                 onDrop={(e) => {
-                  if (isFolder && canAdd) onDropOnSubfolder(e, row.id);
+                  if (!isFolder || !canAdd) return;
+                  if (isExternalFileDrag(e)) {
+                    void handleExternalUploadDrop(e, subfolderRelativePath(row.id));
+                  } else {
+                    onDropOnSubfolder(e, row.id);
+                  }
                 }}
                 onContextMenu={(e) => {
                   if (isFolder) {
@@ -1269,6 +1369,8 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                   kb_id="company"
                   selectedFolder={selectedFolder}
                   enableFolderUpload
+                  preloadedFiles={droppedUploadBatch}
+                  autoUploadPreloaded
                 />
               </div>
             </div>

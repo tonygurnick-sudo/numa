@@ -186,6 +186,9 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Microsoft To-Do
   microsofttodo: [],
+
+  // Fathom
+  fathom: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {

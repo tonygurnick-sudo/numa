@@ -1,6 +1,6 @@
 ---
 name: spreadsheet-handling
-description: 'Read, write, and analyze spreadsheet files (Excel, CSV, TSV). Use when working with .xlsx, .xls, .xlsm, .csv, .tsv files, data analysis, pivot tables, or format conversion.'
+description: 'Read, write, and analyze spreadsheet files (Excel, CSV, TSV). Use when working with .xlsx, .xls, .xlsm, .xlt, .xltx, .csv, .tsv files, data analysis, pivot tables, or format conversion.'
 ---
 
 # Spreadsheet Handling Skill
@@ -27,6 +27,8 @@ python -m markitdown /workdir/uploads/data.xlsx
 ```
 
 This outputs the spreadsheet content as markdown tables — useful for quick review.
+
+> **For richer extraction** and for legacy/template formats (`.xls`, `.xlt`, `.xltx`) where markitdown may miss structure, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
 
 ---
 

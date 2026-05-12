@@ -2595,6 +2595,7 @@ const NumaWorkspaceChatAgents = () => {
           userId={sub}
           userEmail={userEmail}
           environment={window.location.hostname}
+          getCredentials={getCredentials}
         />
       )}
 

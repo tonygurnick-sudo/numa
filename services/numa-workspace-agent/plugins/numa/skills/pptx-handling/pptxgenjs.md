@@ -1,6 +1,6 @@
 # PptxGenJS Tutorial
 
-Create presentations from scratch using PptxGenJS (Node.js). Use `execute_script` with `interpreter="node"` for inline code, or write a `.js` file and run with `node`.
+Create presentations from scratch using PptxGenJS (Node.js). Write the script to `/workdir/tmp/<descriptive>.js`, then run with `Bash("node /workdir/tmp/<descriptive>.js")`. To iterate on revisions, use `Edit` to patch the file in place — patch-style edits are dramatically cheaper than re-emitting the full script body each turn.
 
 ## Setup & Basic Structure
 
@@ -18,13 +18,14 @@ slide.addText('Hello World!', { x: 0.5, y: 0.5, fontSize: 36, color: '363636' })
 pres.writeFile({ fileName: '/workdir/outputs/presentation.pptx' });
 ```
 
-**Preferred:** Use `execute_script(interpreter="node", code="...")` to run this inline.
+**Workflow:**
 
-**Alternative:** Save as `/workdir/outputs/create_deck.js` and run with Bash:
-
-```bash
-node /workdir/outputs/create_deck.js
 ```
+Write(file_path="/workdir/tmp/create_deck.js", content="<full script above>")
+Bash(command="node /workdir/tmp/create_deck.js")
+```
+
+Subsequent edits ("change the title color", "fix slide 4's bar chart") use `Edit` to patch the existing file. Don't re-Write the whole script — it's expensive and loses incremental context.
 
 ## Layout Dimensions
 

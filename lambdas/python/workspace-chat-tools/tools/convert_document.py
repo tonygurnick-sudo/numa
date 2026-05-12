@@ -56,19 +56,32 @@ BLOCKED_PATH_PATTERNS = [
 # Valid output formats
 VALID_FORMATS = ["pdf", "docx"]
 
-# Valid input formats for direct file conversion (matches document-converter Lambda)
+# Valid input formats for direct file conversion (matches document-converter Lambda).
+# Includes legacy MS Office binary (.doc/.ppt/.xls), modern (.docx/.pptx/.xlsx),
+# templates (legacy .dot/.pot/.xlt + modern .dotx/.potx/.xltx), HTML, and other
+# LibreOffice-supported formats. MUST stay in sync with LIBREOFFICE_EXTENSIONS
+# in lambdas/node/document-converter/index.ts and LIBREOFFICE_CONVERTIBLE_FORMATS
+# in lambdas/python/extract-content-from-file/lambda_function.py.
 VALID_INPUT_FORMATS = [
     "pdf",
     "docx",
     "doc",
+    "dotx",
+    "dot",
     "pptx",
     "ppt",
+    "potx",
+    "pot",
     "xlsx",
     "xls",
+    "xltx",
+    "xlt",
     "odp",
     "ods",
     "odt",
     "rtf",
+    "html",
+    "htm",
     "key",
     "numbers",
     "pages",

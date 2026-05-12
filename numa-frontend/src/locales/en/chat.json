@@ -1,5 +1,9 @@
 {
   "jumpToLatest": "Jump to latest",
+  "pendingBackgroundTasks": {
+    "single": "Note: Numa finished while a background task is still running. Send a message when you'd like to check on it.",
+    "multiple": "Note: Numa finished while {{count}} background tasks are still running. Send a message when you'd like to check on them."
+  },
   "cost": {
     "perMessage": "${{cost}} · {{turns}} turns · {{inputTokens}} in / {{outputTokens}} out · {{durationSec}}s",
     "runningTotal": "Total: ${{cost}} (dev)",
@@ -337,8 +341,9 @@
       }
     },
     "compaction": {
-      "summarizing": "Summarizing conversation...",
+      "summarizing": "Compacting conversation...",
       "complete": "Conversation summarized",
+      "failed": "Conversation compaction failed",
       "tokensSaved": "Reduced context by {{tokens}} tokens"
     },
     "pendingFiles": {

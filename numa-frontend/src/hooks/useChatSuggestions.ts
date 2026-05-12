@@ -3,6 +3,13 @@ import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { WorkspaceChatMessage } from '../types/workspaceChatTypes';
 import { generateChatSuggestions, isToolOnlyTurn } from '../utils/chatSuggestions';
 
+// Global kill switch for the chat-suggestions feature. Flip to `false` to
+// re-enable. When `true`, the hook returns an inert no-op regardless of the
+// CHAT_SUGGESTIONS feature flag or per-user opt-in — keeps the code in place
+// for fast re-enablement without disturbing the flag system or the per-user
+// preference UI.
+const CHAT_SUGGESTIONS_DISABLED = true;
+
 // Haiku 4.5 pricing (USD per token)
 const HAIKU_INPUT_PRICE_PER_TOKEN = 1.0 / 1_000_000;
 const HAIKU_OUTPUT_PRICE_PER_TOKEN = 5.0 / 1_000_000;
@@ -41,6 +48,10 @@ export function useChatSuggestions({
   language,
   debugMode = false,
 }: UseChatSuggestionsOptions): UseChatSuggestionsReturn {
+  // Honour the global kill switch — short-circuit before any state/effect work
+  // so the feature is fully inert when disabled.
+  const effectiveEnabled = enabled && !CHAT_SUGGESTIONS_DISABLED;
+
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUsage, setLastUsage] = useState<{ inputTokens: number; outputTokens: number } | null>(null);
@@ -53,7 +64,7 @@ export function useChatSuggestions({
   const armedMessageCountRef = useRef<number>(0);
 
   // Stable refs so callbacks don't capture stale closures
-  const enabledRef = useRef(enabled);
+  const enabledRef = useRef(effectiveEnabled);
   const bedrockClientRef = useRef(bedrockClient);
   const messagesRef = useRef(messages);
   const enabledToolsRef = useRef(enabledTools);
@@ -64,8 +75,8 @@ export function useChatSuggestions({
   const regionRef = useRef(region);
 
   useEffect(() => {
-    enabledRef.current = enabled;
-  }, [enabled]);
+    enabledRef.current = effectiveEnabled;
+  }, [effectiveEnabled]);
   useEffect(() => {
     bedrockClientRef.current = bedrockClient;
   }, [bedrockClient]);
