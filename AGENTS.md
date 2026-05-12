@@ -66,6 +66,7 @@ Skills are stored in `.claude/skills/` and contain detailed context for specific
 | `numa-ops`                   | Numa Ops work — tickets, kanban boards, teams, projects, customers, suppliers, CRM, backlog                                                              |
 | `numa-connectors`            | Creating or modifying data connectors (OAuth, token, API-key), connectorRegistry, Files Remote, connector wizards, backend providers                     |
 | `numa-integrations`          | Pipedream integrations — proxy model, adding integrations, admin policies, workspace agent integration prompts                                           |
+| `numa-triggers`              | Numa Automations event triggers (native + Pipedream-backed) — adding sources, debugging webhooks, trigger lifecycle, source/trigger picker UX            |
 | `nolia-developer-guide`      | Any Nolia work — agent types, prompts, orchestrator, workspace setup, KB integration, rules generation                                                   |
 | `numa-scheduled-agents`      | Agent scheduling, schedule runner, EventBridge, cron expressions, scheduled run config                                                                   |
 | `numa-gitlab`                | Checking CI/CD pipeline status, viewing failed jobs, retrying, MR details                                                                                |
@@ -80,12 +81,15 @@ Skills are stored in `.claude/skills/` and contain detailed context for specific
 
 The `documentation/` folder contains detailed reference docs for specific domains. These are committed to the repo and complement the skills above. Read the relevant docs when working in these areas.
 
-| Folder                               | Contents                                                                                                             |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `documentation/connectors/`          | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration      |
-| `documentation/email-sending/`       | Centralized email sender: architecture, security model, templates, code examples, infra wiring, deployment           |
-| `documentation/extending-numa-chat/` | How to extend Numa chat with new tools: MCP groups, skills, Lambda delegation, HITL, frontend rendering, agent types |
-| `documentation/nolia/`               | Nolia architecture, pipeline details, rules generation, project notes                                                |
+| Folder                                | Contents                                                                                                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `documentation/connectors/`           | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration                                                    |
+| `documentation/deployment-pipelines/` | End-to-end pipeline: GitLab CI → ECR (prod/dev channels) → Customer Success Portal → Step Functions/ECS → CDKTF                                                    |
+| `documentation/email-sending/`        | Centralized email sender: architecture, security model, templates, code examples, infra wiring, deployment                                                         |
+| `documentation/extending-numa-chat/`  | How to extend Numa chat with new tools: MCP groups, skills, Lambda delegation, HITL, frontend rendering, agent types                                               |
+| `documentation/gitlab-runners/`       | Shared CI runners: AWS resources, autoscaler architecture, tokens, common ops, hotfix log                                                                          |
+| `documentation/nolia/`                | Nolia architecture, pipeline details, rules generation, project notes                                                                                              |
+| `documentation/pipedream/`            | Pipedream integration into Numa: proxy/relay architecture, account model, security boundaries, triggers deep-dive + add-a-trigger guide, API reference cheat sheet |
 
 ---
 
@@ -99,7 +103,7 @@ If the Context7 MCP server is enabled, always use it automatically when doing co
 | ------------------------- | ---------- | ------------ | ------------------------------------------------------------------------------- |
 | `q-demo`                  | Q Demo     | 905418183804 | Dev/demo stacks — all dev client accounts live here                             |
 | `arcanum-q-deployer-prod` | Q Deployer | 207567759910 | Deployer account — holds `numa-client-config` table, deploys to client accounts |
-| `arcanum-prod-numa-demo`  | HQ/Demo    | —            | HQ stack (the main Arcanum internal/demo environment)                           |
+| `arcanum-prod-numa-demo`  | HQ/Demo    | —            | HQ stack — Arcanum's own Numa instance (dogfooding). Client name: `hq`          |
 
 Use `AWS_PROFILE=q-demo` for most local dev and client account access. Use `AWS_PROFILE=arcanum-prod-numa-demo` for the HQ stack. Use `AWS_PROFILE=arcanum-q-deployer-prod` for deployer-level operations (e.g., `cd tools/ && AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config nolia`).
 
@@ -221,6 +225,7 @@ CloudFront routes `/api/*` to API Gateway and `/api/numa-chat-agent/*` directly 
 - **S3 buckets per client:** `outputs` (app artifacts, chat uploads, run status) and `data` (knowledge base documents).
 - **Knowledge bases:** Amazon Q Business (enterprise search) or Bedrock KB (S3-backed vector store, ~30min indexing cadence). Configurable per client.
 - **Chat history:** DynamoDB `numa-<client>-chat-history` — conversation turns, tool use, results frames.
+- **Workspace chat traces:** S3 at `s3://numa-<client>-outputs/numa-chat/workspace/<user_sub>/conversations/<conversation_id>/_system/trace.jsonl` — NDJSON event log of the full conversation (user messages, assistant messages, StreamEvents, tool use, completions). Loaded on page refresh to reconstruct chat state.
 
 ---
 
@@ -228,9 +233,11 @@ CloudFront routes `/api/*` to API Gateway and `/api/numa-chat-agent/*` directly 
 
 Each client deploys into its own isolated AWS account. The deployer account (Q Deployer, `arcanum-q-deployer-prod`) assumes an `ArcanumAIAccess` role into client accounts to provision infrastructure. Integrations use a separate proxy account.
 
-**Instance URLs:** All Numa instances follow the pattern `https://<client-name>.numa.arcanum.ai/`. The custom domain field in client config exists but is unreliable without manual fiddling -- don’t use it. Assume the standard subdomain pattern.
+**Instance URLs:** All Numa instances follow the pattern `https://<client-name>.numa.arcanum.ai/`. The custom domain field in client config exists but is unreliable without manual fiddling -- don't use it. Assume the standard subdomain pattern.
 
 **Single source of truth:** The `numa-client-config` DynamoDB table in the deployer account holds all client configuration — region, feature flags, preferred knowledge base, budget, etc. The frontend `public/config.json` is gitignored and local-only — developers edit it for localhost. In deployed environments, it’s auto-generated from the DynamoDB table.
+
+**Reading client config:** Always use the `retrieve-config` tool rather than raw DynamoDB queries: `cd tools/ && AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config <client-name>`. It resolves defaults and merges correctly — raw DynamoDB items may omit flags that default to `false`, giving an incomplete picture.
 
 ### clientConfigProd.json — Local Dev Override
 
