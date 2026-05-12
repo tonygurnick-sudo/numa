@@ -33,6 +33,8 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 python -m markitdown presentation.pptx
 ```
 
+> **For richer extraction** and for legacy/template formats (`.ppt`, `.pot`, `.potx`) where markitdown often returns empty or truncated content, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+
 For visual overview, convert to PDF then render as images:
 
 ```

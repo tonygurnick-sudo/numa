@@ -185,6 +185,8 @@ python -m markitdown /workdir/uploads/document.docx
 
 This outputs the document content as markdown — great for quick review or processing.
 
+> **For richer extraction** (full body, tables, more accurate structure) and for legacy/template formats (`.doc`, `.dot`, `.dotx`) where markitdown often returns empty or truncated content, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+
 ### Extract All Text with python-docx
 
 ```python
