@@ -36,6 +36,7 @@ from numa_workspace_agent.mcp_tools.numa_tool import (
     _handle_knowledge_base,
     _handle_memories,
     _handle_query_kb,
+    _handle_render,
     _handle_web_search,
     _ok,
     numa_tool,
@@ -1529,6 +1530,84 @@ class TestHandleKbDownload:
         parsed = json.loads(result["content"][0]["text"])
         assert parsed["message"] == "No download available"
 
+    @pytest.mark.parametrize(
+        "file_alias", ["file_name", "filename", "path", "file_path"]
+    )
+    async def test_file_aliases_accepted(self, tmp_path, file_alias):
+        """Common LLM-reachable spellings for `file` should be accepted."""
+        mock_result = {
+            "filename": "doc.pdf",
+            "presigned_url": "https://s3.example.com/signed",
+            "size_bytes": 100,
+        }
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ) as mock_invoke,
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.download_from_presigned_url",
+                return_value=100,
+            ),
+        ):
+            result = await _handle_kb_download(
+                {file_alias: "doc.pdf", "kb_id": "kb-1", "output_dir": str(tmp_path)}
+            )
+        assert "isError" not in result
+        sent = mock_invoke.call_args[0][1]
+        assert sent["file"] == "doc.pdf"
+        assert sent["kb_id"] == "kb-1"
+
+    @pytest.mark.parametrize("dest_alias", ["destination", "output_path", "dest"])
+    async def test_output_dir_aliases_accepted(self, tmp_path, dest_alias):
+        """Common spellings for `output_dir` should be accepted."""
+        mock_result = {
+            "filename": "doc.pdf",
+            "presigned_url": "https://s3.example.com/signed",
+            "size_bytes": 100,
+        }
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.download_from_presigned_url",
+                return_value=100,
+            ) as mock_dl,
+        ):
+            await _handle_kb_download(
+                {"file": "doc.pdf", "kb_id": "kb-1", dest_alias: str(tmp_path)}
+            )
+        assert mock_dl.call_args[1]["dest_path"].startswith(str(tmp_path))
+
+    async def test_destination_with_filename_uses_parent_dir(self, tmp_path):
+        """A full file-path-style destination should resolve to its parent dir."""
+        mock_result = {
+            "filename": "doc.pdf",
+            "presigned_url": "https://s3.example.com/signed",
+            "size_bytes": 100,
+        }
+        full_path = tmp_path / "doc.pdf"
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.download_from_presigned_url",
+                return_value=100,
+            ) as mock_dl,
+        ):
+            await _handle_kb_download(
+                {
+                    "file": "doc.pdf",
+                    "kb_id": "kb-1",
+                    "destination": str(full_path),
+                }
+            )
+        assert mock_dl.call_args[1]["dest_path"] == str(full_path)
+
 
 # ---------------------------------------------------------------------------
 # _handle_kb_list
@@ -2253,3 +2332,57 @@ class TestHandleMemories:
 
         sent_params = mock_invoke.call_args[0][1]
         assert "scope" not in sent_params
+
+
+# ---------------------------------------------------------------------------
+# _handle_render
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestHandleRender:
+    """Tests for _handle_render handler — focused on type inference fallback."""
+
+    async def test_missing_content_and_file_path_returns_error(self):
+        result = await _handle_render({"type": "html"})
+        assert result["isError"] is True
+        assert "content" in result["content"][0]["text"]
+
+    async def test_invalid_type_with_no_signal_errors(self):
+        # No file_path and content that doesn't look like HTML.
+        result = await _handle_render({"content": "just some text", "type": None})
+        assert result["isError"] is True
+        assert "type" in result["content"][0]["text"]
+
+    @pytest.mark.parametrize("ext", [".html", ".htm", ".svg"])
+    async def test_type_inferred_from_html_extensions(self, tmp_path, ext):
+        f = tmp_path / f"workdir-stub{ext}"
+        # _handle_render only reads files under /workdir/, but type inference
+        # happens before the realpath check — so an error here means inference
+        # succeeded (it accepted the type and tried to read the file).
+        result = await _handle_render({"file_path": str(f)})
+        text = result["content"][0]["text"]
+        assert "must be 'html' or 'image'" not in text
+
+    @pytest.mark.parametrize("ext", [".png", ".jpg", ".jpeg", ".gif", ".webp"])
+    async def test_type_inferred_from_image_extensions(self, tmp_path, ext):
+        f = tmp_path / f"workdir-stub{ext}"
+        result = await _handle_render({"file_path": str(f)})
+        text = result["content"][0]["text"]
+        assert "must be 'html' or 'image'" not in text
+
+    async def test_type_inferred_from_html_content(self):
+        # Content starting with <!DOCTYPE should be detected as html. The render
+        # path for inline content under 2MB should succeed.
+        result = await _handle_render(
+            {"content": "<!DOCTYPE html><html><body>hi</body></html>"}
+        )
+        assert "isError" not in result or not result["isError"]
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["render_type"] == "html"
+
+    async def test_explicit_type_still_wins(self, tmp_path):
+        # If `type` is provided correctly it should be honoured, not overwritten.
+        result = await _handle_render({"type": "html", "content": "<div>ok</div>"})
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["render_type"] == "html"

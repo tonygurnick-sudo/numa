@@ -802,11 +802,25 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
 
 async def _handle_kb_download(params: dict[str, Any]) -> dict[str, Any]:
     """Download file from KB — ports knowledge_base.py cmd_download."""
+    # Accept common LLM-reachable spellings. Models reliably reach for
+    # `file_name`/`filename`/`path` and `destination`/`output_path`/`dest` —
+    # alias them to the documented names rather than failing the call.
     uri = params.get("uri") or params.get("s3_uri")
-    file_name = params.get("file")
+    file_name = (
+        params.get("file")
+        or params.get("file_name")
+        or params.get("filename")
+        or params.get("path")
+        or params.get("file_path")
+    )
 
     if not uri and not file_name:
-        return _err("Either 'uri' or 'file' must be provided for kb_download.")
+        provided = sorted(params.keys())
+        return _err(
+            "Either 'uri' or 'file' must be provided for kb_download. "
+            f"(Got params: {provided}. The download operation expects "
+            "`file` + `kb_id`, or `uri`.)"
+        )
 
     allowed_kbs, allowed_kb_ids, user_sub = _get_kb_config()
 
@@ -840,9 +854,22 @@ async def _handle_kb_download(params: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
         return _ok(json.dumps(result, indent=2))
 
-    # Save file to disk
+    # Save file to disk. Accept `output_dir` (documented) plus common
+    # alternates the model reaches for.
     filename = result.get("filename", "downloaded_file")
-    output_dir = Path(params.get("output_dir", "/workdir/outputs/"))
+    output_dir_raw = (
+        params.get("output_dir")
+        or params.get("destination")
+        or params.get("output_path")
+        or params.get("dest")
+        or "/workdir/outputs/"
+    )
+    # If the caller passed a full file path (ends with the filename or has
+    # a file extension), treat its parent as the output_dir.
+    output_dir_path = Path(output_dir_raw)
+    if output_dir_path.suffix:
+        output_dir_path = output_dir_path.parent
+    output_dir = output_dir_path
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / filename
 
@@ -1378,14 +1405,44 @@ async def _handle_render(params: dict[str, Any]) -> dict[str, Any]:
         height: Optional iframe height in pixels (default 400)
     """
     render_type = params.get("type")
-    if render_type not in ("html", "image"):
-        return _err("'type' must be 'html' or 'image'.")
-
     content = params.get("content")
     file_path = params.get("file_path")
 
     if not content and not file_path:
         return _err("Either 'content' or 'file_path' is required.")
+
+    # Infer type from file extension when missing. The model often
+    # forgets `type` when calling with `file_path` alone — infer rather
+    # than fail. Fall through to a helpful error if it can't be inferred.
+    if render_type not in ("html", "image"):
+        inferred = None
+        if file_path:
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in (".html", ".htm", ".svg"):
+                inferred = "html"
+            elif ext in _IMAGE_MIME_TYPES:
+                inferred = "image"
+        if inferred is None and content:
+            stripped = content.lstrip()[:32].lower()
+            if stripped.startswith(
+                (
+                    "<!doctype",
+                    "<html",
+                    "<svg",
+                    "<div",
+                    "<style",
+                    "<script",
+                    "<section",
+                    "<article",
+                )
+            ):
+                inferred = "html"
+        if inferred is None:
+            return _err(
+                "'type' must be 'html' or 'image' "
+                f"(could not infer from file_path={file_path!r})."
+            )
+        render_type = inferred
 
     mime_type = None
 
