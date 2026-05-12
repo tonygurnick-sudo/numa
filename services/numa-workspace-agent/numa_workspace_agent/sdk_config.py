@@ -113,16 +113,24 @@ ALLOWED_MODELS = set(
 # Cross-account Bedrock access (if configured)
 BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
 
+# Cap on per-API-call output tokens. The CLI default is 64k; we hold this to
+# 32k so interactive chats can run more turns before the SDK's auto-compaction
+# trigger fires (compaction is driven by total context size, and a smaller per-
+# turn output budget means each turn adds less). Tune via the
+# NUMA_MAX_OUTPUT_TOKENS env var if a deployment needs a different cap. The
+# subprocess CLI reads this from CLAUDE_CODE_MAX_OUTPUT_TOKENS — the model can
+# still emit "max_tokens reached" stop reason and recover on the next turn.
+MAX_OUTPUT_TOKENS = int(os.environ.get("NUMA_MAX_OUTPUT_TOKENS", "32000"))
+
 
 # Thinking-config presets selectable via the "@<suffix>" form on modelId.
 # Throwaway plumbing for comparison testing — productionised path will configure
 # thinking per-model server-side. See plan: thinking-config model variants.
 #
 # "no-thinking" sets thinking=None so the field is omitted entirely from the
-# ClaudeAgentOptions kwargs — this is the model-agnostic way to disable extended
-# thinking and works for both the new ({"type":"disabled"}-aware) Sonnet 4.6 /
-# Opus 4.6 interface AND the legacy interface still used by Haiku 4.5
-# (which only accepts {"type":"enabled","budget_tokens":N}).
+# ClaudeAgentOptions kwargs — the model-agnostic way to disable extended
+# thinking. All 4.x models (Sonnet 4.6, Opus 4.6, Haiku 4.5) accept the new
+# {"type": "adaptive" | "enabled" | "disabled"} forms without budget_tokens.
 THINKING_PRESETS: dict[str, dict] = {
     # max_thinking_tokens=0 ensures the SDK env-var fallback also says "off" —
     # otherwise MAX_THINKING_TOKENS=10000 (from agent type default) keeps
@@ -487,6 +495,8 @@ def create_agent_options(
         "OTEL_SDK_DISABLED": "true",
         # Thinking tokens (from agent type config, or thinking_override preset)
         "MAX_THINKING_TOKENS": str(effective_max_thinking_tokens),
+        # Per-API-call output cap. See MAX_OUTPUT_TOKENS comment at module top.
+        "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(MAX_OUTPUT_TOKENS),
         # Set HOME so SDK stores sessions in .claude/ under this directory.
         # Pipeline steps can override via home_dir for per-step isolation.
         "HOME": str(home_dir) if home_dir else str(LOCAL_ROOT / ".system"),

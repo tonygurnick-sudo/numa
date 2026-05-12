@@ -176,12 +176,15 @@ class AgentTypeConfig:
     max_thinking_tokens: int = 10_000
 
     # ── Thinking ───────────────────────────────────────────────────────────
-    # Passed as the ``thinking`` option to ClaudeAgentOptions.
-    # Overrides the deprecated ``max_thinking_tokens`` env var.
+    # Passed as the ``thinking`` option to ClaudeAgentOptions. Overrides the
+    # deprecated ``max_thinking_tokens`` env var on 4.x models.
     # Accepted values:
-    #   {"type": "adaptive"}              – model decides when/how much
-    #   {"type": "enabled", "budget_tokens": N}  – fixed budget
-    #   {"type": "disabled"}              – no extended thinking
+    #   {"type": "adaptive"}  – model decides when/how much (default; pair
+    #                           with ``effort`` to bias depth)
+    #   {"type": "enabled"}   – extended thinking on, model picks budget
+    #   {"type": "disabled"}  – no extended thinking
+    # Note: ``budget_tokens`` is no longer required on Sonnet 4.6 / Opus 4.6
+    # / Haiku 4.5 — use ``effort`` to shape depth instead.
     thinking: Optional[dict] = field(default_factory=lambda: {"type": "adaptive"})
     # Effort level for the model. Controls reasoning depth.
     # "low", "medium", "high", "max". None = SDK default.
