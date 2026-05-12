@@ -129,8 +129,11 @@ MAX_OUTPUT_TOKENS = int(os.environ.get("NUMA_MAX_OUTPUT_TOKENS", "32000"))
 #
 # "no-thinking" sets thinking=None so the field is omitted entirely from the
 # ClaudeAgentOptions kwargs — the model-agnostic way to disable extended
-# thinking. All 4.x models (Sonnet 4.6, Opus 4.6, Haiku 4.5) accept the new
-# {"type": "adaptive" | "enabled" | "disabled"} forms without budget_tokens.
+# thinking. Sonnet 4.6 and Opus 4.6 accept the new
+# {"type": "adaptive" | "enabled" | "disabled"} forms without budget_tokens;
+# Haiku 4.5 still requires the legacy {"type": "enabled", "budget_tokens": N}
+# form, which is why we omit the field for "no-thinking" rather than passing
+# {"type": "disabled"}.
 THINKING_PRESETS: dict[str, dict] = {
     # max_thinking_tokens=0 ensures the SDK env-var fallback also says "off" —
     # otherwise MAX_THINKING_TOKENS=10000 (from agent type default) keeps
