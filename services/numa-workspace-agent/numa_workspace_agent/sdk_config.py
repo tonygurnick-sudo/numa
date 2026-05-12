@@ -139,9 +139,9 @@ THINKING_PRESETS: dict[str, dict] = {
     # otherwise MAX_THINKING_TOKENS=10000 (from agent type default) keeps
     # thinking on even when the `thinking` kwarg is omitted.
     "no-thinking": {"thinking": None, "effort": None, "max_thinking_tokens": 0},
-    "low-thinking": {
+    "medium-thinking": {
         "thinking": {"type": "adaptive"},
-        "effort": "low",
+        "effort": "medium",
         "max_thinking_tokens": None,
     },
     "high-thinking": {
