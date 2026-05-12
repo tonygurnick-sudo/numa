@@ -1972,7 +1972,11 @@ async def _handle_sync(
     company_profile = load_company_profile_from_s3()
     available_kbs = body.get("availableKBs")
     enabled_tools = body.get("enabledTools", [])
-    model_id = body.get("modelId")
+    # Frontend may send "anthropic.claude-sonnet-4-6@high-thinking" — split the
+    # thinking-preset suffix here so the bare ID flows through validate_model_id
+    # unchanged and the preset is threaded to the runner. Mirrors _handle_chat.
+    raw_model_id = body.get("modelId")
+    model_id, thinking_override = parse_model_id_with_thinking(raw_model_id)
     request_id = body.get("requestId") or str(uuid.uuid4())
     attachments_data = body.get("attachments")
     attached_files = attachments_data.get("files", []) if attachments_data else []
@@ -2268,7 +2272,11 @@ async def _handle_fire_and_forget(
     company_profile = load_company_profile_from_s3()
     available_kbs = body.get("availableKBs")
     enabled_tools = body.get("enabledTools", [])
-    model_id = body.get("modelId")
+    # Frontend may send "anthropic.claude-sonnet-4-6@high-thinking" — split the
+    # thinking-preset suffix here so the bare ID flows through validate_model_id
+    # unchanged and the preset is threaded to the runner. Mirrors _handle_chat.
+    raw_model_id = body.get("modelId")
+    model_id, thinking_override = parse_model_id_with_thinking(raw_model_id)
     request_id = body.get("requestId") or str(uuid.uuid4())
     attachments_data = body.get("attachments")
     attached_files = attachments_data.get("files", []) if attachments_data else []
