@@ -520,8 +520,8 @@ class KnowledgeBaseService {
     recursive: boolean
   ): Promise<{ path: string; deletedCount: number }> {
     try {
-      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/folders`), {
-        method: 'DELETE',
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/folders/delete`), {
+        method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({ path, recursive }),
       });
