@@ -20,7 +20,7 @@
 export type WorkspaceChatModelId =
   | 'anthropic.claude-sonnet-4-6'
   | 'anthropic.claude-sonnet-4-6@no-thinking'
-  | 'anthropic.claude-sonnet-4-6@low-thinking'
+  | 'anthropic.claude-sonnet-4-6@medium-thinking'
   | 'anthropic.claude-sonnet-4-6@high-thinking'
   | 'anthropic.claude-opus-4-6-v1'
   | 'anthropic.claude-opus-4-6-v1@no-thinking'
@@ -50,9 +50,9 @@ export const WORKSPACE_MODEL_OPTIONS: WorkspaceChatModelOption[] = [
     description: 'Test: thinking disabled',
   },
   {
-    id: 'anthropic.claude-sonnet-4-6@low-thinking',
-    label: 'Claude Sonnet 4.6 — low effort',
-    description: 'Test: adaptive thinking, low effort',
+    id: 'anthropic.claude-sonnet-4-6@medium-thinking',
+    label: 'Claude Sonnet 4.6 — medium effort',
+    description: 'Test: adaptive thinking, medium effort',
   },
   {
     id: 'anthropic.claude-sonnet-4-6@high-thinking',
