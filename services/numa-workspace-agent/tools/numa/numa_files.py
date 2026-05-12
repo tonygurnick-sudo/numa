@@ -119,10 +119,14 @@ operation: download
 -------------------
 
 Parameters:
-  file        (* required)  Filename to download (use with kb_id)
-  kb_id       (optional)    Folder ID when using file (default: "company")
+  file        (* required)  Filename to download (use with kb_id).
+                            Aliases accepted: file_name, filename, path, file_path
+  kb_id       (optional)    Folder ID when using file (default: "company").
+                            Use the kb_id shown in your Numa Files folder context.
   uri         (* required)  Full S3 URI (alternative to file)
-  output_dir  (optional)    Download location (default: /workdir/outputs/)
+  output_dir  (optional)    Download directory (default: /workdir/outputs/).
+                            Aliases accepted: destination, output_path, dest.
+                            May be a full file path; the parent dir is used.
 
 * Either file or uri must be provided.
 
