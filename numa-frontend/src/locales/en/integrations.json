@@ -289,6 +289,11 @@
       "name": "Microsoft To Do",
       "description": "Manage tasks, lists, and your daily workflow in Microsoft To Do.",
       "example_query": "List all my incomplete tasks for today."
+    },
+    "fathom": {
+      "name": "Fathom",
+      "description": "Access AI-generated meeting recordings, transcripts, summaries, and action items from Fathom.",
+      "example_query": "Summarize the key points and action items from my last call."
     }
   },
   "tabs": {
