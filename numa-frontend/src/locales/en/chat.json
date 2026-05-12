@@ -342,8 +342,9 @@
       }
     },
     "compaction": {
-      "summarizing": "Summarizing conversation...",
+      "summarizing": "Compacting conversation...",
       "complete": "Conversation summarized",
+      "failed": "Conversation compaction failed",
       "tokensSaved": "Reduced context by {{tokens}} tokens"
     },
     "pendingFiles": {
