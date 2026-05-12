@@ -557,19 +557,24 @@ async def _handle_convert_document(params: dict[str, Any]) -> dict[str, Any]:
 
     # For file mode, validate input format (matches document-converter Lambda).
     # MUST stay in sync with VALID_INPUT_FORMATS in
-    # lambdas/python/workspace-chat-tools/tools/convert_document.py and the
-    # LIBREOFFICE_EXTENSIONS allowlist in lambdas/node/document-converter/index.ts.
+    # lambdas/python/workspace-chat-tools/tools/convert_document.py, the
+    # LIBREOFFICE_EXTENSIONS allowlist in lambdas/node/document-converter/index.ts,
+    # and LIBREOFFICE_CONVERTIBLE_FORMATS in
+    # lambdas/python/extract-content-from-file/lambda_function.py.
     _SUPPORTED_INPUT_FORMATS = {
         "pdf",
         "docx",
         "doc",
         "dotx",
+        "dot",
         "pptx",
         "ppt",
         "potx",
         "pot",
         "xlsx",
         "xls",
+        "xltx",
+        "xlt",
         "odp",
         "ods",
         "odt",
