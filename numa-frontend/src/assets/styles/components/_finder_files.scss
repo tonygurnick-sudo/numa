@@ -26,6 +26,17 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
+
+  &.finder-files--external-drop-over {
+    outline: 2px dashed var(--brand-primary, #8e50a7);
+    outline-offset: -8px;
+    background: color-mix(in srgb, var(--brand-primary, #8e50a7) 4%, white 96%);
+
+    .finder-list {
+      background: color-mix(in srgb, var(--brand-primary, #8e50a7) 4%, white 96%);
+    }
+  }
 
   // ── Toolbar ──────────────────────────────────────────────────
   // Designed to feel like a continuation of the tab bar above:

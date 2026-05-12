@@ -11,7 +11,36 @@ import { Share } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { WorkspaceChatSegment } from '@/types/workspaceChatTypes';
-import { getRenderPayload, type ToolResultLike } from '../../toolRenderers/helpers';
+import {
+  fetchS3WorkspaceJson,
+  getRenderPayload,
+  type RenderPayload,
+  type ToolResultLike,
+} from '../../toolRenderers/helpers';
+
+/* ---------- Constants ---------- */
+
+// Inline Numa wordmark used in the HTML export header next to assistant messages.
+// Mirrors public/numa-logo.svg so the export is self-contained.
+const NUMA_LOGO_SVG =
+  '<svg viewBox="0 0 34 33" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14" aria-hidden="true">' +
+  '<rect x="15.3877" width="3.2252" height="23.456" fill="currentColor"/>' +
+  '<path d="M18.6123 0H21.8375V3.0786L20.6647 6.15719H18.6123V0Z" fill="currentColor"/>' +
+  '<rect x="18.6123" y="32.252" width="3.2252" height="23.456" transform="rotate(-180 18.6123 32.252)" fill="currentColor"/>' +
+  '<path d="M15.3877 32.252L12.1625 32.252L12.1625 29.1734L13.3353 26.0948L15.3877 26.0948L15.3877 32.252Z" fill="currentColor"/>' +
+  '<rect x="33.126" y="14.5134" width="3.2252" height="23.456" transform="rotate(90 33.126 14.5134)" fill="currentColor"/>' +
+  '<path d="M33.126 17.7386L33.126 20.9638L30.0474 20.9638L26.9688 19.791L26.9688 17.7386L33.126 17.7386Z" fill="currentColor"/>' +
+  '<rect x="0.874023" y="17.7386" width="3.2252" height="23.456" transform="rotate(-90 0.874023 17.7386)" fill="currentColor"/>' +
+  '<path d="M0.874023 14.5134L0.874024 11.2882L3.95262 11.2882L7.03122 12.461L7.03122 14.5134L0.874023 14.5134Z" fill="currentColor"/>' +
+  '<rect x="27.2627" y="3.58289" width="3.2252" height="23.456" transform="rotate(45 27.2627 3.58289)" fill="currentColor"/>' +
+  '<path d="M29.543 5.86346L31.8235 8.14402L29.6466 10.3209L26.6404 11.6685L25.1892 10.2173L29.543 5.86346Z" fill="currentColor"/>' +
+  '<rect x="6.7373" y="28.6691" width="3.2252" height="23.456" transform="rotate(-135 6.7373 28.6691)" fill="currentColor"/>' +
+  '<path d="M4.45703 26.3885L2.17647 24.1079L4.35337 21.931L7.35956 20.5834L8.81082 22.0347L4.45703 26.3885Z" fill="currentColor"/>' +
+  '<rect x="29.543" y="26.3885" width="3.2252" height="23.456" transform="rotate(135 29.543 26.3885)" fill="currentColor"/>' +
+  '<path d="M27.2627 28.6691L24.9821 30.9496L22.8052 28.7727L21.4576 25.7665L22.9089 24.3153L27.2627 28.6691Z" fill="currentColor"/>' +
+  '<rect x="4.45703" y="5.86346" width="3.2252" height="23.456" transform="rotate(-45 4.45703 5.86346)" fill="currentColor"/>' +
+  '<path d="M6.7373 3.58289L9.01786 1.30233L11.1948 3.47923L12.5424 6.48541L11.0911 7.93668L6.7373 3.58289Z" fill="currentColor"/>' +
+  '</svg>';
 
 /* ---------- Types ---------- */
 
@@ -21,6 +50,8 @@ interface ExportMessage {
   segments?: WorkspaceChatSegment[];
 }
 
+type AwsCredentials = { accessKeyId: string; secretAccessKey: string; sessionToken: string };
+
 interface ExportConversationButtonProps {
   messages: ExportMessage[];
   conversationId: string | null;
@@ -29,6 +60,9 @@ interface ExportConversationButtonProps {
   userId?: string;
   userEmail?: string;
   environment?: string;
+  // Optional: when provided, large render payloads stored in S3 are fetched
+  // and inlined so the export captures the rendered visuals.
+  getCredentials?: () => Promise<AwsCredentials>;
 }
 
 type ExportSegment =
@@ -44,6 +78,15 @@ type ExportSegment =
       title?: string;
       height?: number;
       mimeType?: string;
+    }
+  | {
+      // Placeholder for large render payloads stored in S3. Resolved to a
+      // `render` segment before HTML/text generation when credentials are
+      // available; otherwise downgraded to a tool indicator line.
+      kind: 'pending_render';
+      filePath: string;
+      title?: string;
+      height?: number;
     };
 
 interface ExportedMessage {
@@ -159,9 +202,12 @@ function extractExportMessages(messages: ExportMessage[], t: TFunction): Exporte
             break;
 
           case 'tool_card': {
-            // Check for render sub-tool results -- embed inline content in export
-            const tcInput = seg.input as { name?: string } | undefined;
-            if (seg.toolName === 'mcp__numa__numa_tool' && tcInput?.name === 'render' && seg.result) {
+            const tcInput = seg.input as { name?: string; description?: string } | undefined;
+            const isNumaTool = seg.toolName === 'mcp__numa__numa_tool';
+            const subTool = tcInput?.name;
+
+            // Render sub-tool: inline the rendered visual when content is available
+            if (isNumaTool && subTool === 'render' && seg.result) {
               const renderPayload = getRenderPayload(seg.result as ToolResultLike);
               if (renderPayload?.content) {
                 segments.push({
@@ -174,13 +220,31 @@ function extractExportMessages(messages: ExportMessage[], t: TFunction): Exporte
                 });
                 break;
               }
+              // Large render: content was stripped, full payload lives at file_path
+              // in S3. Emit a placeholder the resolver will replace with the
+              // fetched content (kind: 'pending_render') before generation.
+              if (renderPayload?.file_path) {
+                segments.push({
+                  kind: 'pending_render',
+                  filePath: renderPayload.file_path,
+                  title: renderPayload.title,
+                  height: renderPayload.height,
+                });
+                break;
+              }
             }
-            if (seg.label) {
+
+            // For numa_tool calls, fall back to the agent-provided description
+            // first (live UI does the same) so the export reads naturally even
+            // when `label` resolves to "Numa Tool" / "Unknown Tool".
+            const description = (isNumaTool ? tcInput?.description : undefined) || seg.label;
+            if (description) {
+              const toolLabel = isNumaTool && subTool ? formatToolName(subTool) : formatToolName(seg.toolName);
               segments.push({
                 kind: 'tool',
                 displayText: t('workspace.export.segments.callingTool', {
-                  tool: formatToolName(seg.toolName),
-                  description: seg.label,
+                  tool: toolLabel,
+                  description,
                 }),
                 isError: seg.isError,
               });
@@ -241,12 +305,103 @@ function extractExportMessages(messages: ExportMessage[], t: TFunction): Exporte
   return result;
 }
 
+/* ---------- Pending render resolution ---------- */
+
+/**
+ * Resolve any `pending_render` placeholders by fetching the payload from S3
+ * and swapping in a fully-inlined `render` segment. Placeholders without
+ * credentials, or with failed fetches, are downgraded to a tool indicator.
+ */
+async function resolvePendingRenders(
+  messages: ExportedMessage[],
+  conversationId: string,
+  userId: string | undefined,
+  getCredentials: (() => Promise<AwsCredentials>) | undefined,
+  t: TFunction
+): Promise<ExportedMessage[]> {
+  if (!userId || !getCredentials) {
+    return messages.map((m) => ({
+      ...m,
+      segments: m.segments.map((s) => downgradePending(s, t)),
+    }));
+  }
+
+  // Stable credentials for the batch — fetch once, reuse across renders.
+  let cachedCreds: AwsCredentials | null = null;
+  const credProvider = async () => {
+    if (!cachedCreds) cachedCreds = await getCredentials();
+    return cachedCreds;
+  };
+
+  return Promise.all(
+    messages.map(async (m) => ({
+      ...m,
+      segments: await Promise.all(
+        m.segments.map(async (s) => {
+          if (s.kind !== 'pending_render') return s;
+          const payload = await fetchS3WorkspaceJson<RenderPayload>(s.filePath, conversationId, userId, credProvider, {
+            maxRetries: 2,
+          });
+          if (payload?.content) {
+            return {
+              kind: 'render',
+              renderType: payload.render_type,
+              content: payload.content,
+              title: payload.title ?? s.title,
+              height: payload.height ?? s.height,
+              mimeType: payload.mime_type,
+            } as ExportSegment;
+          }
+          return downgradePending(s, t);
+        })
+      ),
+    }))
+  );
+}
+
+function downgradePending(seg: ExportSegment, t: TFunction): ExportSegment {
+  if (seg.kind !== 'pending_render') return seg;
+  return {
+    kind: 'tool',
+    displayText: t('workspace.export.segments.callingTool', {
+      tool: 'Render',
+      description: seg.title || 'Rendered content (not available in export)',
+    }),
+  };
+}
+
+/* ---------- Inline reference preprocessing ---------- */
+
+// Matches the same set of inline refs the live UI handles in WorkspaceChatMarkdown.tsx
+// but rewrites them inline so micromark + the export styles render them as
+// labelled chips/links instead of leaving raw `<file:...>` text in the output.
+const INLINE_REF_PATTERN = /<(file|folder|kb-source):([^>]+)>/g;
+
+function preprocessInlineReferences(markdown: string): string {
+  return markdown.replace(INLINE_REF_PATTERN, (_match, kind: string, target: string) => {
+    const trimmed = target.trim();
+    if (kind === 'kb-source') {
+      // s3://bucket/.../filename.ext — show the filename only
+      const label = trimmed.split('/').pop() || trimmed;
+      return `<span class="ref-chip ref-kb">${escapeHtml(label)}</span>`;
+    }
+    const label = trimmed.split('/').pop() || trimmed;
+    const cssClass = kind === 'folder' ? 'ref-folder' : 'ref-file';
+    return `<span class="ref-chip ${cssClass}">${escapeHtml(label)}</span>`;
+  });
+}
+
 /* ---------- HTML Generation ---------- */
 
 function renderSegmentHtml(seg: ExportSegment): string {
   switch (seg.kind) {
     case 'text':
-      return `<div class="content">${markdownToHtml(seg.markdown)}</div>`;
+      return `<div class="content">${markdownToHtml(preprocessInlineReferences(seg.markdown))}</div>`;
+
+    case 'pending_render':
+      // Should have been resolved by resolvePendingRenders. Render a neutral
+      // placeholder if it slipped through.
+      return `<div class="segment-tool complete"><span class="tool-text">Rendered content (unavailable)</span></div>`;
 
     case 'tool': {
       const statusClass = seg.isError ? 'error' : 'complete';
@@ -341,13 +496,19 @@ function renderContextMetaText(ctx: ExportContext, t: TFunction): string[] {
 }
 
 function generateHtml(exportedMessages: ExportedMessage[], ctx: ExportContext, t: TFunction): string {
+  const assistantLabel = t('workspace.export.roles.assistant');
   const messagesHtml = exportedMessages
     .map((msg) => {
-      const roleLabel = msg.role === 'user' ? t('workspace.export.roles.user') : t('workspace.export.roles.assistant');
       const segmentsHtml = msg.segments.map(renderSegmentHtml).join('\n');
+      // User messages: no role label — the styled card already signals it.
+      // Assistant messages: Numa wordmark + name so the export feels branded.
+      const header =
+        msg.role === 'assistant'
+          ? `<div class="role"><span class="role-mark">${NUMA_LOGO_SVG}</span><span>${escapeHtml(assistantLabel)}</span></div>`
+          : '';
       return `
     <div class="message ${msg.role}">
-      <div class="role">${escapeHtml(roleLabel)}</div>
+      ${header}
       ${segmentsHtml}
     </div>`;
     })
@@ -381,9 +542,14 @@ function generateHtml(exportedMessages: ExportedMessage[], ctx: ExportContext, t
   .message { margin-bottom: 1.5rem; padding: 1rem 1.25rem; border-radius: 12px; }
   .message.user { background: #f0ecf4; border-left: 4px solid var(--brand-primary); }
   .message.assistant { background: var(--bg-card); border: 1px solid var(--border-color); border-left: 4px solid var(--brand-primary); }
-  .role { font-weight: 600; margin-bottom: 0.5rem; font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .message.user .role { color: var(--brand-primary); }
-  .message.assistant .role { color: var(--brand-primary); }
+  .role { font-weight: 600; margin-bottom: 0.5rem; font-size: 0.8125rem; letter-spacing: 0.01em; display: inline-flex; align-items: center; gap: 0.4rem; color: var(--brand-primary); }
+  .role-mark { display: inline-flex; align-items: center; color: var(--brand-primary); }
+  .role-mark svg { display: block; }
+
+  /* Inline reference chips (file/folder/kb-source) — mirrors live chat pills */
+  .ref-chip { display: inline-flex; align-items: center; gap: 0.3em; padding: 0.05em 0.45em; margin: 0 0.1em; border-radius: 6px; background: #f1ecf6; color: var(--brand-primary); font-size: 0.9em; font-family: 'SF Mono', Monaco, Consolas, monospace; vertical-align: baseline; }
+  .ref-chip.ref-folder { background: #ebf2fa; color: #185fa5; }
+  .ref-chip.ref-kb { background: #eaf3de; color: #3b6d11; }
 
   /* Markdown content */
   .content { line-height: 1.6; color: var(--text-primary); }
@@ -475,6 +641,9 @@ function renderSegmentText(seg: ExportSegment): string {
 
     case 'render':
       return seg.title ? `[Rendered: ${seg.title}]` : '[Rendered content]';
+
+    case 'pending_render':
+      return seg.title ? `[Rendered: ${seg.title}]` : '[Rendered content]';
   }
 }
 
@@ -484,6 +653,8 @@ function generatePlainText(exportedMessages: ExportedMessage[], ctx: ExportConte
   const lines = [title, ...metaLines, '', '---', ''];
 
   for (const msg of exportedMessages) {
+    // Plain text: keep a role label so it's still parseable. The HTML export
+    // drops the user label since the styling already conveys it.
     const label = msg.role === 'user' ? t('workspace.export.roles.user') : t('workspace.export.roles.assistant');
     lines.push(`${label}:`);
 
@@ -523,12 +694,20 @@ export function ExportConversationButton({
   userId,
   userEmail,
   environment,
+  getCredentials,
 }: ExportConversationButtonProps) {
   const { t } = useTranslation('chat');
 
-  const handleExport = (format: 'html' | 'txt') => {
-    const exportedMessages = extractExportMessages(messages, t);
-    if (exportedMessages.length === 0) return;
+  const handleExport = async (format: 'html' | 'txt') => {
+    const initial = extractExportMessages(messages, t);
+    if (initial.length === 0) return;
+
+    // Resolve any large render payloads from S3 before generating the document.
+    // Without credentials (or on fetch failure) placeholders downgrade to a
+    // tool indicator line — better than dropping the segment silently.
+    const exportedMessages = conversationId
+      ? await resolvePendingRenders(initial, conversationId, userId, getCredentials, t)
+      : initial;
 
     const dateStr = new Date().toLocaleString();
     const shortId = conversationId ? conversationId.substring(0, 8) : 'chat';

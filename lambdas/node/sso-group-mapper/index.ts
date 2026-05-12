@@ -3,6 +3,7 @@ import {
   CognitoIdentityProviderClient,
   AdminAddUserToGroupCommand,
   AdminListGroupsForUserCommand,
+  AdminUpdateUserAttributesCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
@@ -54,7 +55,37 @@ export const handler: PostAuthenticationTriggerHandler = async (event) => {
   }
 
   const userSub = event.request.userAttributes.sub;
-  const email = event.request.userAttributes.email;
+  let email = event.request.userAttributes.email;
+
+  // Backfill email for JIT-provisioned federated users when the IdP attribute
+  // mapping omits `email` (required when the pool uses UsernameAttributes:["email"]
+  // to avoid the "Deletion of username alias attribute is not allowed" error on
+  // existing users). The username is "ProviderName_NameID"; for SAML IdPs we
+  // configure NameID = email/UPN, so we can derive the email from there.
+  // PreSignUp_ExternalProvider Lambda modifications to userAttributes are ignored
+  // by Cognito for federated users — PostAuthentication is the first hook where
+  // AdminUpdateUserAttributes can stamp the missing email.
+  if (!email && event.userName.includes('_')) {
+    const candidate = event.userName.split('_').slice(1).join('_').toLowerCase();
+    if (candidate.includes('@')) {
+      try {
+        await getCognito().send(
+          new AdminUpdateUserAttributesCommand({
+            UserPoolId: event.userPoolId,
+            Username: event.userName,
+            UserAttributes: [
+              { Name: 'email', Value: candidate },
+              { Name: 'email_verified', Value: 'true' },
+            ],
+          })
+        );
+        email = candidate;
+        console.log(JSON.stringify({ _name: 'SSO_EMAIL_BACKFILL', sub: userSub, email }));
+      } catch (err) {
+        console.error(`SSO group-mapper: failed to backfill email for ${event.userName}:`, err);
+      }
+    }
+  }
 
   let currentGroups: string[];
   try {

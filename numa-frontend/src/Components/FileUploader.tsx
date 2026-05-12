@@ -7,6 +7,7 @@ import { useAuth } from '../Providers/AuthProvider';
 import { withPRM } from '../utils/prmUtils';
 import { useTranslation } from 'react-i18next';
 import { sanitizeS3Path } from '../utils/sanitizeFilename';
+import type { DroppedUploadBatch } from './UnifiedFiles/dropUploadUtils';
 
 // Type definitions
 interface Config {
@@ -37,6 +38,8 @@ interface FileUploaderProps {
    * folders correspond to knowledge bases and must be created explicitly.
    */
   rejectFolders?: boolean;
+  preloadedFiles?: DroppedUploadBatch | null;
+  autoUploadPreloaded?: boolean;
 }
 
 /** System/OS files that should be excluded from folder uploads. */
@@ -68,6 +71,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   selectedFolder,
   enableFolderUpload = false,
   rejectFolders = false,
+  preloadedFiles = null,
+  autoUploadPreloaded = false,
 }) => {
   const showFolderPicker = enableFolderUpload && !rejectFolders;
   const { t } = useTranslation('common');
@@ -93,6 +98,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   });
   const [config, setConfig] = useState<Config | null>(null);
   const { getCredentials, user } = useAuth();
+  const lastPreloadedBatchId = useRef<number | null>(null);
+  const autoUploadedBatchId = useRef<number | null>(null);
+  const [pendingAutoUploadBatchId, setPendingAutoUploadBatchId] = useState<number | null>(null);
 
   useEffect(() => {
     fetch('/config.json')
@@ -117,6 +125,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       setCurrentFileName('');
       setDetailedError(null);
       setFolderRejection(null);
+      setPendingAutoUploadBatchId(null);
 
       // Clear file input values
       if (fileInputRef.current) {
@@ -244,6 +253,65 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     setSuccess(false);
     setUploadProgress(0);
   };
+
+  useEffect(() => {
+    if (!preloadedFiles || lastPreloadedBatchId.current === preloadedFiles.id) return;
+    lastPreloadedBatchId.current = preloadedFiles.id;
+
+    const rawFiles = preloadedFiles.files as ExtendedFile[];
+    if (preloadedFiles.folderRejection) {
+      setFolderRejection(preloadedFiles.folderRejection);
+    } else {
+      setFolderRejection(null);
+    }
+
+    if (!rawFiles.length) {
+      if (preloadedFiles.folderRejection) {
+        setError(null);
+        setSuccess(false);
+        setUploadProgress(0);
+      }
+      return;
+    }
+
+    if (onFileSelect) {
+      onFileSelect(rawFiles);
+    }
+
+    let validFiles = rawFiles;
+    let invalidFileNames = '';
+    if (validateFile) {
+      const invalidFiles = rawFiles.filter((file) => !validateFile(file));
+      if (invalidFiles.length > 0) {
+        invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
+        validFiles = rawFiles.filter((file) => validateFile(file));
+        if (validFiles.length === 0) {
+          setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
+          return;
+        }
+      }
+    }
+
+    const combinedFiles = [...fileStructure.files, ...validFiles];
+    const folders = new Set([...fileStructure.folders]);
+    validFiles.forEach((file) => {
+      const path = file.customRelativePath || file.webkitRelativePath || file.name;
+      const parts = path.split('/');
+      for (let i = 0; i < parts.length - 1; i++) {
+        folders.add(parts.slice(0, i + 1).join('/'));
+      }
+    });
+
+    setFiles(combinedFiles);
+    setFileStructure({ files: combinedFiles, folders });
+    setTotalFiles(combinedFiles.length);
+    setError(invalidFileNames ? t('fileUploader.errors.invalidFiles', { files: invalidFileNames }) : null);
+    setSuccess(false);
+    setUploadProgress(0);
+    if (autoUploadPreloaded) {
+      setPendingAutoUploadBatchId(preloadedFiles.id);
+    }
+  }, [preloadedFiles, autoUploadPreloaded, fileStructure.files, fileStructure.folders, onFileSelect, validateFile, t]);
 
   const buildKbPrefix = (kbId: string | null | undefined): { prefix: string; sanitizedKbId: string } => {
     const rawId = typeof kbId === 'string' ? kbId.trim() : '';
@@ -420,6 +488,22 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       setCurrentFileName('');
     }
   };
+
+  useEffect(() => {
+    if (!autoUploadPreloaded || pendingAutoUploadBatchId === null) return;
+    if (autoUploadedBatchId.current === pendingAutoUploadBatchId) return;
+    if (isUploading || !fileStructure.files.length || !config?.CLIENT_NAME) return;
+
+    autoUploadedBatchId.current = pendingAutoUploadBatchId;
+    void handleUpload();
+  }, [
+    autoUploadPreloaded,
+    pendingAutoUploadBatchId,
+    isUploading,
+    fileStructure.files.length,
+    config?.CLIENT_NAME,
+    handleUpload,
+  ]);
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();

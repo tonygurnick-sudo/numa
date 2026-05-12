@@ -76,7 +76,14 @@ const INLINE_TOOLS = new Set([
   'Grep',
   'Skill',
   'mcp__scripts__execute_script',
+  // Background-bash tools. The SDK surfaces these under two name pairs depending
+  // on internal aliasing; we keep all four registered so the rendering kicks in
+  // regardless of which name the model emits.
   'TaskOutput',
+  'BashOutputTool',
+  'BashOutput',
+  'TaskStop',
+  'KillShell',
 ]);
 
 /** Tools that are internal plumbing (hidden from UI) - kept for future use */
@@ -93,7 +100,16 @@ const _SPECIAL_CARD_TOOLS = new Set(['Task', 'TodoWrite', 'AskUserQuestion']);
 // ============================================================
 
 /** Transient tools - fade out after completion (file system exploration, internal plumbing) */
-const TRANSIENT_TOOLS = new Set(['Glob', 'Grep', 'Read', 'TaskOutput']);
+const TRANSIENT_TOOLS = new Set([
+  'Glob',
+  'Grep',
+  'Read',
+  'TaskOutput',
+  'BashOutputTool',
+  'BashOutput',
+  'TaskStop',
+  'KillShell',
+]);
 
 /** Important tools with icons - always visible */
 const IMPORTANT_TOOLS = new Map<string, { icon: string; name: string }>([
@@ -196,7 +212,8 @@ export function getToolCategoryAndIcon(
     const inputObj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
     const subTool = (inputObj.name as string) || '';
     const NUMA_SUB_TOOL_ICONS: Record<string, string> = {
-      knowledge_base: 'bi-folder2-open',
+      numa_files: 'bi-folder2-open',
+      knowledge_base: 'bi-folder2-open', // legacy alias
       web_search: 'bi-search',
       extract_content: 'bi-file-earmark-text',
       convert_document: 'bi-file-earmark-arrow-down',
@@ -405,8 +422,14 @@ export function getInlineToolDisplay(toolName: string, input: unknown): { text: 
       return { text: `Running ${interpreter} script${code ? `: ${code}...` : ''}` };
     }
     case 'TaskOutput':
+    case 'BashOutputTool':
+    case 'BashOutput':
       // Internal tool for retrieving background task results
-      return { text: 'Getting task results...' };
+      return { text: 'Checking background task...' };
+    case 'TaskStop':
+    case 'KillShell':
+      // Internal tool for stopping a background task
+      return { text: 'Stopping background task...' };
     case 'Glob':
       // Internal file-finding tool - show user-friendly message
       return { text: 'Searching files...' };
@@ -1020,7 +1043,11 @@ function addCompactionSegment(helpers: WorkspaceChatMessageHelpers): void {
     const updated = ensureAssistantMessage(prev);
     const lastIdx = updated.length - 1;
     const lastMsg = { ...updated[lastIdx] };
-    const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
+    const segments = ([...(lastMsg.segments || [])] as WorkspaceChatSegment[]).filter(
+      (s) => s.kind !== 'inline_thinking'
+    );
+
+    lastMsg.status = 'streaming';
 
     // Check if there's already a compaction segment
     const existingIdx = segments.findIndex((s) => s.kind === 'compaction');
@@ -1548,6 +1575,8 @@ function handleSystemEvent(
   if (isCompactBoundaryEvent(event)) {
     const data = event.data as { compact_metadata?: { pre_tokens?: number; trigger?: string } } | undefined;
     const metadata = data?.compact_metadata;
+    context.isCompacting = true;
+    addCompactionSegment(helpers);
     if (metadata) {
       context.compactionMetadata = {
         preTokens: metadata.pre_tokens,
@@ -1667,6 +1696,9 @@ function handleResultEvent(
         }
         if (seg.kind === 'tool_card' && (seg as WorkspaceChatToolCardSegment).isLoading) {
           return { ...seg, isLoading: false };
+        }
+        if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
+          return { ...seg, status: event.is_error ? 'failed' : 'complete' };
         }
         return seg;
       });
@@ -2231,6 +2263,41 @@ export function createStreamEventHandler(config: StreamEventHandlerConfig): (eve
       return;
     }
 
+    // === Background-bash pending-tasks note ===
+    // The backend emits a single `background_tasks_pending` SSE event at turn
+    // end when one or more `run_in_background` shells are still alive in the
+    // MicroVM. We attach the metadata to the last assistant message so it
+    // renders a subtle italic footer ("Numa finished while N background tasks
+    // are still running. Send a message when you want to check on them.").
+    if (event.type === 'background_tasks_pending') {
+      const evt = event as {
+        shells?: Array<{ shell_id: string; command: string }>;
+        count?: number;
+      };
+      const shells = (evt.shells ?? []).map((s) => ({
+        shellId: s.shell_id,
+        command: s.command,
+      }));
+      const count = evt.count ?? shells.length;
+      if (count === 0) {
+        return;
+      }
+      setMessages((prev) => {
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].role === 'assistant') {
+            updated[i] = {
+              ...updated[i],
+              pendingBackgroundTasks: { count, shells },
+            };
+            return updated;
+          }
+        }
+        return prev;
+      });
+      return;
+    }
+
     // === Process remaining non-streaming SDK events ===
     processSDKEvent(event, eventContextRef.current, helpers);
   };
@@ -2476,6 +2543,9 @@ export function handleSDKStreamComplete(context: SDKEventContext, helpers: Works
         }
         if (seg.kind === 'tool_card' && (seg as WorkspaceChatToolCardSegment).isLoading) {
           return { ...seg, isLoading: false };
+        }
+        if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
+          return { ...seg, status: 'complete' };
         }
         return seg;
       });
@@ -2762,6 +2832,23 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
       if (isCompactBoundaryEvent(event)) {
         const data = systemEvent.data as { compact_metadata?: { pre_tokens?: number; trigger?: string } } | undefined;
         const metadata = data?.compact_metadata;
+        if (!currentAssistantMessage) {
+          currentAssistantMessage = {
+            role: 'assistant',
+            content: '',
+            segments: [],
+          };
+        }
+        currentAssistantMessage.status = 'streaming';
+        currentAssistantMessage.segments = (currentAssistantMessage.segments || []).filter(
+          (s) => s.kind !== 'inline_thinking'
+        );
+        if (!currentAssistantMessage.segments.some((s) => s.kind === 'compaction')) {
+          currentAssistantMessage.segments.push({
+            kind: 'compaction',
+            status: 'summarizing',
+          });
+        }
         if (metadata) {
           compactionMetadata = {
             preTokens: metadata.pre_tokens,
@@ -2805,6 +2892,14 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
             currentAssistantMessage.cacheReadTokens = resultEvent.usage.cache_read_input_tokens;
           if (resultEvent.usage.cache_creation_input_tokens != null)
             currentAssistantMessage.cacheCreationTokens = resultEvent.usage.cache_creation_input_tokens;
+        }
+        if (currentAssistantMessage.segments) {
+          currentAssistantMessage.segments = currentAssistantMessage.segments.map((seg) => {
+            if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
+              return { ...seg, status: resultEvent.is_error ? 'failed' : 'complete' };
+            }
+            return seg;
+          });
         }
       }
       continue;

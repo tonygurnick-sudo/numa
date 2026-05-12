@@ -108,8 +108,17 @@ def _ok(text: str) -> dict[str, Any]:
 
 
 def _err(text: str) -> dict[str, Any]:
-    """Build an error MCP tool response."""
-    return {"content": [{"type": "text", "text": text}], "isError": True}
+    """Build an error MCP tool response.
+
+    Dual-write `is_error` and `isError`: claude-agent-sdk's in-process MCP
+    handler reads snake_case `is_error`, but the MCP spec proper uses camelCase
+    `isError`. Writing both keeps both transports correct.
+    """
+    return {
+        "content": [{"type": "text", "text": text}],
+        "is_error": True,
+        "isError": True,
+    }
 
 
 def is_safe_operation(operation: str) -> bool:

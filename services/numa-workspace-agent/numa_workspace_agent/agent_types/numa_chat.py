@@ -20,7 +20,9 @@ NUMA_CHAT = AgentTypeConfig(
         "Glob",
         "Grep",
         "Bash",
-        "KillShell",
+        "BashOutputTool",  # Poll output of a still-running run_in_background shell
+        # (SDK's internal name; appears in the bundled binary's tool registry)
+        "KillShell",  # SDK exposes this to the model as TaskStop
         "TodoWrite",
         "Skill",
     ],
@@ -36,10 +38,13 @@ NUMA_CHAT = AgentTypeConfig(
         "TodoWrite",
         "Skill",
         # Shell
-        "BashOutput",
+        "BashOutputTool",
         "KillShell",
         # MCP tools (our custom tools)
-        "mcp__scripts__execute_script",  # Execute code without shell heredocs
+        # Note: mcp__scripts__execute_script removed — the model is now directed
+        # to Write to /workdir/tmp/ and run with Bash, then Edit to iterate.
+        # See prompts.py "Bash Best Practices" and the security-hook loosening
+        # commits that made the Bash path actually work for legitimate scripts.
         # Numa platform tools (KB, web search, files, agents, memories)
         "mcp__numa__numa_tool",  # Unified Numa tool dispatcher
         "mcp__numa__numa_ops_tool",  # Numa Ops tool (tickets, teams, CRM — feature-flagged)
@@ -91,8 +96,10 @@ NUMA_CHAT = AgentTypeConfig(
         "Bash(pandoc:*)",  # Document format conversion
         "Bash(qpdf:*)",  # PDF manipulation (merge, split)
     ],
-    # Layer 2: All MCP tools enabled
-    enable_scripts_mcp=True,
+    # Layer 2: MCP tools.
+    # Note: scripts MCP (execute_script) disabled for chat — model now uses
+    # Write+Bash+Edit instead. See agent_types/numa_chat.py allowed_tools comment.
+    enable_scripts_mcp=False,
     enable_integrations_mcp=True,
     enable_numa_mcp=True,
     enable_connect_mcp=True,
@@ -110,6 +117,11 @@ NUMA_CHAT = AgentTypeConfig(
     restrict_integrations=False,
     max_turns=200,
     max_thinking_tokens=10000,
+    # Default chat thinking config: adaptive thinking with low effort.
+    # The dropdown's "@low-thinking" / "@high-thinking" / "@no-thinking" variants
+    # override these at request time via thinking_override (see sdk_config.py).
+    thinking={"type": "adaptive"},
+    effort="low",
 )
 
 register_agent_type(NUMA_CHAT)

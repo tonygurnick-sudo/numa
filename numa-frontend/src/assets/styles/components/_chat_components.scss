@@ -5517,6 +5517,20 @@ $border-radius-pill: 1rem;
     border-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 40%, #e5e7eb);
   }
 
+  &.failed {
+    border-color: #f3c5c5;
+
+    .compaction-header {
+      background: #fff7f7;
+      cursor: default;
+    }
+
+    .compaction-icon,
+    .compaction-label {
+      color: #9f1239;
+    }
+  }
+
   .compaction-header {
     display: flex;
     align-items: center;

@@ -4,6 +4,7 @@ import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import {
   CognitoIdentityProviderClient,
   AdminGetUserCommand,
+  AdminUpdateUserAttributesCommand,
   DescribeUserPoolCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
@@ -157,8 +158,53 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
 
   const { groupsToOverride } = event.request.groupConfiguration;
 
-  const email = event.request.userAttributes.email;
+  let email = event.request.userAttributes.email;
   const userSub = event.request.userAttributes.sub;
+
+  // First-login derivation for federated (SSO) users: PreTokenGeneration runs
+  // before sso-group-mapper's PostAuthentication backfill, so on the very first
+  // sign-in the email attribute is still empty for JIT users when the IdP
+  // attribute mapping omits `email` (required to avoid the username-alias
+  // deletion error on UsernameAttributes:["email"] pools). Derive from
+  // event.userName ("ProviderName_NameID"; NameID is the email for our SAML
+  // configs) so the first session's tokens carry the right email.
+  if (!email && event.request.userAttributes['identities'] && event.userName.includes('_')) {
+    const candidate = event.userName.split('_').slice(1).join('_').toLowerCase();
+    if (candidate.includes('@')) {
+      email = candidate;
+      console.log(JSON.stringify({ _name: 'TOKEN_EMAIL_DERIVED', sub: userSub, email }));
+
+      // Persist the derived email back onto the Cognito user record. PostAuthentication
+      // is the documented backfill point but Cognito does not reliably fire it on the
+      // very first JIT-creation auth, leaving fresh SSO users with an empty email
+      // attribute even though their JWT carries one. PreTokenGeneration fires on every
+      // authentication including the JIT one, so we backfill here too. Best-effort —
+      // if the write fails the JWT still has the derived email so the session works;
+      // we just log and continue rather than block the login.
+      try {
+        await getCognito().send(
+          new AdminUpdateUserAttributesCommand({
+            UserPoolId: event.userPoolId,
+            Username: event.userName,
+            UserAttributes: [
+              { Name: 'email', Value: email },
+              { Name: 'email_verified', Value: 'true' },
+            ],
+          })
+        );
+        console.log(JSON.stringify({ _name: 'TOKEN_EMAIL_BACKFILL', sub: userSub, email }));
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            _name: 'TOKEN_EMAIL_BACKFILL_FAILED',
+            sub: userSub,
+            email,
+            error: (err as Error).message,
+          })
+        );
+      }
+    }
+  }
 
   // Cognito auto-creates a per-IdP group (e.g. "us-east-1_abc_GoogleWorkspace")
   // for every federated sign-in. Those aren't Numa roles — ignore them when
@@ -207,16 +253,25 @@ export const handler: PreTokenGenerationV2TriggerHandler = async function (event
   }
 
   // Build claims
-  const claimsToAdd: Record<string, unknown> = {
-    'https://aws.amazon.com/tags': {
-      principal_tags: {
-        Email: [email],
-        username: [userSub],
-        aud: [event.callerContext.clientId],
-        Groups: groups,
-      },
-    },
+  const principalTags: Record<string, string[]> = {
+    username: [userSub],
+    aud: [event.callerContext.clientId],
+    Groups: groups,
   };
+  if (email) principalTags.Email = [email];
+
+  const claimsToAdd: Record<string, unknown> = {
+    'https://aws.amazon.com/tags': { principal_tags: principalTags },
+  };
+
+  // For federated first-login (and any other case where we derived email above),
+  // override the standard ID token `email` claim so the frontend doesn't see a
+  // blank user. Cognito's default `email` claim sources from userAttributes,
+  // which stays empty for JIT users until sso-group-mapper's PostAuthentication
+  // backfill writes it — and PostAuth fires AFTER this trigger.
+  if (email && !event.request.userAttributes.email) {
+    claimsToAdd.email = email;
+  }
 
   if (graceExpiresAt) {
     claimsToAdd['custom:mfa_reset_pending'] = 'true';

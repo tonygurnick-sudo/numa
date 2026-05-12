@@ -208,6 +208,7 @@ async def _handle_status(params: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result, dict) and result.get("error"):
         return {
             "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -301,6 +302,7 @@ def _check_auth_error(result: dict[str, Any]) -> dict[str, Any] | None:
                     ),
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
     return None
@@ -345,6 +347,7 @@ def _check_needs_credential(result: dict[str, Any]) -> dict[str, Any] | None:
     )
     return {
         "content": [{"type": "text", "text": f"{marker}\n{llm_text}"}],
+        "is_error": True,
         "isError": True,
     }
 
@@ -372,6 +375,7 @@ async def _handle_list_files(params: dict[str, Any]) -> dict[str, Any]:
                     "text": f"Error: {result.get('error', result.get('error_code'))}",
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -439,6 +443,7 @@ async def _handle_search_files(params: dict[str, Any]) -> dict[str, Any]:
                     "text": f"Error: {result.get('error', result.get('error_code'))}",
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -516,6 +521,7 @@ async def _handle_download_file(params: dict[str, Any]) -> dict[str, Any]:
                     "text": f"Error: {result.get('error', result.get('error_code'))}",
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -524,6 +530,7 @@ async def _handle_download_file(params: dict[str, Any]) -> dict[str, Any]:
     if not data:
         return {
             "content": [{"type": "text", "text": "No download result received"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -535,6 +542,7 @@ async def _handle_download_file(params: dict[str, Any]) -> dict[str, Any]:
     if not file_content_hex:
         return {
             "content": [{"type": "text", "text": "No file content received"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -549,6 +557,7 @@ async def _handle_download_file(params: dict[str, Any]) -> dict[str, Any]:
     if not real_path.startswith("/workdir/uploads/"):
         return {
             "content": [{"type": "text", "text": "Invalid file path"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -600,6 +609,7 @@ async def _handle_get_file_info(params: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result, dict) and result.get("error"):
         return {
             "content": [{"type": "text", "text": f"Error: {result['error']}"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -608,6 +618,7 @@ async def _handle_get_file_info(params: dict[str, Any]) -> dict[str, Any]:
     if not data:
         return {
             "content": [{"type": "text", "text": "No file information received"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -665,6 +676,7 @@ async def _handle_request(params: dict[str, Any]) -> dict[str, Any]:
                     "text": f"Error: {result.get('error', result.get('error_code'))}",
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -673,6 +685,7 @@ async def _handle_request(params: dict[str, Any]) -> dict[str, Any]:
     if not data:
         return {
             "content": [{"type": "text", "text": "No response received"}],
+            "is_error": True,
             "isError": True,
         }
 
@@ -779,6 +792,7 @@ async def connectors(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+                "is_error": True,
                 "isError": True,
             }
     if not isinstance(params, dict):
@@ -792,6 +806,7 @@ async def connectors(args: dict[str, Any]) -> dict[str, Any]:
                     ),
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -807,6 +822,7 @@ async def connectors(args: dict[str, Any]) -> dict[str, Any]:
                     ),
                 }
             ],
+            "is_error": True,
             "isError": True,
         }
 
@@ -843,5 +859,6 @@ async def connectors(args: dict[str, Any]) -> dict[str, Any]:
         logger.exception("connectors handler failed", operation=name)
         return {
             "content": [{"type": "text", "text": f"Error in connectors.{name}: {e}"}],
+            "is_error": True,
             "isError": True,
         }

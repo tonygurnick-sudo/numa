@@ -10,11 +10,22 @@
 // ============================================================
 
 /** Available workspace chat model IDs (bare, without regional prefix).
- * The backend adds the correct regional prefix (us., au.) based on deployment region. */
+ * The backend adds the correct regional prefix (us., au.) based on deployment region.
+ *
+ * IDs may carry an "@<thinking-suffix>" — recognised suffixes are no-thinking,
+ * low-thinking, high-thinking. The backend splits the suffix off (see
+ * parse_model_id_with_thinking in sdk_config.py) and applies a THINKING_PRESETS
+ * override to type_config.thinking / type_config.effort. This is throwaway
+ * comparison-testing plumbing; production will set thinking per-model server-side. */
 export type WorkspaceChatModelId =
   | 'anthropic.claude-sonnet-4-6'
+  | 'anthropic.claude-sonnet-4-6@no-thinking'
+  | 'anthropic.claude-sonnet-4-6@medium-thinking'
+  | 'anthropic.claude-sonnet-4-6@high-thinking'
   | 'anthropic.claude-opus-4-6-v1'
-  | 'anthropic.claude-haiku-4-5-20251001-v1:0';
+  | 'anthropic.claude-opus-4-6-v1@no-thinking'
+  | 'anthropic.claude-haiku-4-5-20251001-v1:0'
+  | 'anthropic.claude-haiku-4-5-20251001-v1:0@no-thinking';
 
 /** Model option for display in the UI */
 export interface WorkspaceChatModelOption {
@@ -34,14 +45,39 @@ export const WORKSPACE_MODEL_OPTIONS: WorkspaceChatModelOption[] = [
     description: 'Balanced',
   },
   {
+    id: 'anthropic.claude-sonnet-4-6@no-thinking',
+    label: 'Claude Sonnet 4.6 — no thinking',
+    description: 'Test: thinking disabled',
+  },
+  {
+    id: 'anthropic.claude-sonnet-4-6@medium-thinking',
+    label: 'Claude Sonnet 4.6 — medium effort',
+    description: 'Test: adaptive thinking, medium effort',
+  },
+  {
+    id: 'anthropic.claude-sonnet-4-6@high-thinking',
+    label: 'Claude Sonnet 4.6 — high effort',
+    description: 'Test: adaptive thinking, high effort',
+  },
+  {
     id: 'anthropic.claude-opus-4-6-v1',
     label: 'Claude Opus 4.6',
     description: 'Complex',
   },
   {
+    id: 'anthropic.claude-opus-4-6-v1@no-thinking',
+    label: 'Claude Opus 4.6 — no thinking',
+    description: 'Test: thinking disabled',
+  },
+  {
     id: 'anthropic.claude-haiku-4-5-20251001-v1:0',
     label: 'Claude Haiku 4.5',
     description: 'Fast',
+  },
+  {
+    id: 'anthropic.claude-haiku-4-5-20251001-v1:0@no-thinking',
+    label: 'Claude Haiku 4.5 — no thinking',
+    description: 'Test: thinking disabled',
   },
 ];
 
@@ -284,6 +320,17 @@ export interface WorkspaceChatMessage {
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   durationMs?: number;
+  /**
+   * Set when this assistant turn ended with one or more `run_in_background`
+   * bash shells still alive in the MicroVM. The UI renders a subtle italic
+   * footer beneath the message ("Numa finished while N background tasks are
+   * still running. Send a message when you want to check on them."). Populated
+   * from the backend's `background_tasks_pending` SSE event.
+   */
+  pendingBackgroundTasks?: {
+    count: number;
+    shells: Array<{ shellId: string; command: string }>;
+  };
 }
 
 /** Segment types for rendering message content */
@@ -350,8 +397,8 @@ export interface WorkspaceChatInlineThinkingSegment {
  */
 export interface WorkspaceChatCompactionSegment {
   kind: 'compaction';
-  /** Current status: 'summarizing' while in progress, 'complete' when done */
-  status: 'summarizing' | 'complete';
+  /** Current status: 'summarizing' while in progress, 'complete' when done, 'failed' if compaction could not finish */
+  status: 'summarizing' | 'complete' | 'failed';
   /** The summary text when compaction is complete */
   summary?: string;
   /** Number of tokens before compaction (from compact_boundary metadata) */
@@ -692,7 +739,8 @@ export type SDKEventType =
   | 'StreamEvent'
   | 'completion'
   | 'assistant_advice'
-  | 'tool_approval';
+  | 'tool_approval'
+  | 'background_tasks_pending';
 
 /** Base SDK event with common fields */
 export interface SDKBaseEvent {
@@ -870,7 +918,27 @@ export type SDKEvent =
   | SDKAttachmentsEvent
   | SDKCompletionEvent
   | SDKAssistantAdviceEvent
-  | SDKToolApprovalEvent;
+  | SDKToolApprovalEvent
+  | SDKBackgroundTasksPendingEvent;
+
+/**
+ * Emitted once at the end of a turn that launched one or more
+ * `run_in_background` shells which are still alive in the MicroVM. The
+ * frontend renders this as a subtle italic footer beneath the assistant's
+ * final message ("Numa finished while N background tasks are still running.
+ * Send a message when you'd like to check on them."). The stream then closes
+ * normally — no held connection, no polling chip, no model re-invocation.
+ * The user's next message starts a fresh turn where the model can call
+ * BashOutputTool to surface the actual result.
+ */
+export interface SDKBackgroundTasksPendingEvent {
+  type: 'background_tasks_pending';
+  shells: Array<{ shell_id: string; command: string }>;
+  count: number;
+  timestamp?: string;
+  request_id?: string;
+  parent_tool_use_id?: string | null;
+}
 
 /** SDK Tool Approval event — emitted when an integration tool needs user approval */
 export interface SDKToolApprovalEvent {
@@ -1168,10 +1236,12 @@ export function isSDKThinkingBlock(block: SDKContentBlock): block is SDKThinking
  * This indicates the start of conversation summarization.
  */
 export function isCompactionStatusEvent(event: SDKEvent): boolean {
+  const status = (event as SDKSystemEvent).data?.status;
   return (
     event.type === 'system' &&
     (event as SDKSystemEvent).subtype === 'status' &&
-    (event as SDKSystemEvent).data?.status === 'compacting'
+    typeof status === 'string' &&
+    status.toLowerCase().includes('compact')
   );
 }
 

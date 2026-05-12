@@ -1,4 +1,4 @@
-import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { execSync } from 'child_process';
 import { postProcessDocxTables } from './docx-postprocess.js';
 
@@ -20,22 +20,49 @@ const LO_ARGS = '--headless --invisible --nodefault --nolockcheck --nologo --nor
 const LO_USER_PROFILE = 'file:///tmp/lo_profile';
 
 /**
- * Ensure LibreOffice environment is ready:
- * 1. Unpack the binary from the Lambda layer (idempotent)
- * 2. Create fontconfig so LO can resolve fonts
- * 3. Create a dedicated user profile directory
+ * Cache a "fully initialized" Promise per container so warmup runs at most once.
+ * Each Lambda container has its own state; this lives until the container is
+ * recycled.
+ */
+let libreOfficeWarmup: Promise<void> | null = null;
+
+/**
+ * Ensure LibreOffice environment is ready and fully initialized.
+ *
+ * Cold-start race fix: under concurrent burst (15+ simultaneous cold starts),
+ * the first `--convert-to` invocation on a fresh container reliably failed
+ * ~50% of the time with exit 81 and no diagnostic output. `soffice --version`
+ * succeeds even in this state — different code path. Doing an actual text →
+ * PDF conversion as the warmup probe exercises the filter system, font
+ * loading, and profile init — the exact paths the real failure happens on.
+ *
+ * The probe runs up to 3 times with backoff (2s, 4s) since the cold-start
+ * race itself can hit it. By the time `convertGenericToPdf` is called, a
+ * successful conversion has already happened in this container.
+ *
+ * Steps (memoized — runs once per container life):
+ *   1. Unpack the binary from the Lambda layer (idempotent)
+ *   2. Create fontconfig so LO can resolve fonts
+ *   3. Create a dedicated user profile directory
+ *   4. Convert a 1-byte text file to PDF as the readiness probe
+ *
+ * Validated on nd-labs 2026-05-12: 30/30 concurrent cold starts succeed
+ * (vs 16/30 pre-fix, vs 15/30 with a `--version`-only probe).
  */
 async function ensureLibreOffice(): Promise<void> {
-  await unpack({ inputPath: '/opt/lo.tar.br' });
+  if (libreOfficeWarmup) return libreOfficeWarmup;
 
-  // Fontconfig — prevents "Cannot load default config file" warning
-  const fcPath = '/tmp/fonts.conf';
-  if (!existsSync(fcPath)) {
-    const cachedir = '/tmp/fontconfig-cache';
-    if (!existsSync(cachedir)) mkdirSync(cachedir, { recursive: true });
-    writeFileSync(
-      fcPath,
-      `<?xml version="1.0"?>
+  libreOfficeWarmup = (async (): Promise<void> => {
+    await unpack({ inputPath: '/opt/lo.tar.br' });
+
+    // Fontconfig — prevents "Cannot load default config file" warning
+    const fcPath = '/tmp/fonts.conf';
+    if (!existsSync(fcPath)) {
+      const cachedir = '/tmp/fontconfig-cache';
+      if (!existsSync(cachedir)) mkdirSync(cachedir, { recursive: true });
+      writeFileSync(
+        fcPath,
+        `<?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
 <fontconfig>
   <dir>/tmp/instdir/share/fonts</dir>
@@ -43,14 +70,79 @@ async function ensureLibreOffice(): Promise<void> {
   <dir>/usr/share/fonts</dir>
   <cachedir>${cachedir}</cachedir>
 </fontconfig>`,
-      'utf-8'
-    );
-    process.env.FONTCONFIG_FILE = fcPath;
-  }
+        'utf-8'
+      );
+      process.env.FONTCONFIG_FILE = fcPath;
+    }
 
-  // User profile — isolate LO state from prior invocations
+    // User profile — isolate LO state from prior invocations
+    const profileDir = '/tmp/lo_profile';
+    if (!existsSync(profileDir)) mkdirSync(profileDir, { recursive: true });
+
+    // Cold-start warmup probe: do a real tiny conversion. `--version` succeeds
+    // even when conversion will fail (different code path), so it's not a
+    // reliable readiness signal. A real text → PDF conversion exercises the
+    // filter system, font loading, profile init — everything that exit 81
+    // failures are sensitive to. Retry the probe up to 3 times with backoff
+    // since the cold-start race itself can hit it.
+    const probeIn = '/tmp/warmup-probe.txt';
+    const probeOutDir = '/tmp/warmup-probe-out';
+    if (!existsSync(probeOutDir)) mkdirSync(probeOutDir, { recursive: true });
+    writeFileSync(probeIn, 'warmup', 'utf-8');
+
+    let probeOk = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const t0 = Date.now();
+        execSync(
+          `${SOFFICE_BIN} ${LO_ARGS} "-env:UserInstallation=${LO_USER_PROFILE}" --convert-to pdf --outdir ${probeOutDir} ${probeIn}`,
+          { encoding: 'utf8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'] }
+        );
+        console.log(`[LibreOffice warmup] ready in ${Date.now() - t0}ms (attempt ${attempt})`);
+        probeOk = true;
+        break;
+      } catch (e) {
+        const err = e as { status?: number; stderr?: string };
+        console.warn(
+          `[LibreOffice warmup] probe attempt ${attempt}/3 failed (exit ${err.status}): ${err.stderr || '(no stderr)'}`
+        );
+        if (attempt < 3) {
+          // Wipe profile + back off before retry
+          resetLibreOfficeProfile();
+          execSync(`sleep ${attempt * 2}`); // 2s, 4s
+        }
+      }
+    }
+    // Cleanup probe artifacts (best-effort)
+    try {
+      unlinkSync(probeIn);
+      rmSync(probeOutDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+    if (!probeOk) {
+      // All 3 probe attempts failed — reset the cache so the next request
+      // re-tries init (might hit a fresher container in the pool) and let
+      // the real conversion's retry logic catch any residual flake.
+      console.error(`[LibreOffice warmup] all 3 probes failed; releasing warmup cache`);
+      libreOfficeWarmup = null;
+    }
+  })();
+
+  return libreOfficeWarmup;
+}
+
+/**
+ * Wipe and recreate the LibreOffice user profile.
+ * Exit 81 typically signals stale profile state surviving across warm starts —
+ * resetting the profile and retrying clears the flake without a cold start.
+ */
+function resetLibreOfficeProfile(): void {
   const profileDir = '/tmp/lo_profile';
-  if (!existsSync(profileDir)) mkdirSync(profileDir, { recursive: true });
+  if (existsSync(profileDir)) {
+    rmSync(profileDir, { recursive: true, force: true });
+  }
+  mkdirSync(profileDir, { recursive: true });
 }
 
 /**
@@ -61,6 +153,8 @@ async function ensureLibreOffice(): Promise<void> {
  * Uses --env:UserInstallation to set a clean, explicit user profile path.
  * LO 6.4 (the Lambda layer version) has PDF export bugs that surface when
  * the default profile at $HOME/.config is absent or incomplete on cold starts.
+ *
+ * Retries once on exit 81 (profile-state flake), wiping /tmp/lo_profile first.
  */
 function runLibreOffice(inputPath: string, format: string, outdir = '/tmp'): string {
   const cmd =
@@ -68,18 +162,58 @@ function runLibreOffice(inputPath: string, format: string, outdir = '/tmp'): str
     ` "-env:UserInstallation=${LO_USER_PROFILE}"` +
     ` --convert-to ${format} --outdir ${outdir} ${inputPath}`;
 
-  let stdout = '';
-  let stderr = '';
-  try {
-    stdout = execSync(cmd, { encoding: 'utf8', timeout: 90000, stdio: ['pipe', 'pipe', 'pipe'] });
-  } catch (error: unknown) {
-    const e = error as { stdout?: string; stderr?: string; status?: number };
-    stdout = e.stdout || '';
-    stderr = e.stderr || '';
-    console.error(`[LibreOffice] exit ${e.status}, stdout: ${stdout.trim()}, stderr: ${stderr.trim()}`);
-    throw new Error(`LibreOffice failed (exit ${e.status}): ${stderr.trim() || stdout.trim()}`);
-  }
+  const attempt = (): { stdout: string; stderr: string } => {
+    try {
+      const out = execSync(cmd, { encoding: 'utf8', timeout: 90000, stdio: ['pipe', 'pipe', 'pipe'] });
+      return { stdout: out, stderr: '' };
+    } catch (error: unknown) {
+      const e = error as { stdout?: string; stderr?: string; status?: number };
+      const stdout = e.stdout || '';
+      const stderr = e.stderr || '';
+      console.error(`[LibreOffice] exit ${e.status}, stdout: ${stdout.trim()}, stderr: ${stderr.trim()}`);
 
+      // Exit 81 on Lambda's LO 6.4: most common cause is an incomplete
+      // initialization on cold-start under concurrent load. The pre-warm in
+      // ensureLibreOffice() handles most of this; this retry is the residual
+      // safety net. Wipe profile, sleep briefly to let any half-initialized
+      // state settle, then retry.
+      if (e.status === 81) {
+        console.warn(`[LibreOffice] exit 81 — wiping /tmp/lo_profile and retrying once`);
+        resetLibreOfficeProfile();
+        // 500ms settle: in the original failure traces both attempts failed
+        // back-to-back at ~5s each, suggesting a stateful issue that needs
+        // time to unwind rather than an immediate retry.
+        execSync('sleep 0.5');
+        try {
+          const retryOut = execSync(cmd, {
+            encoding: 'utf8',
+            timeout: 90000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+          console.log(`[LibreOffice] retry succeeded after profile reset`);
+          return { stdout: retryOut, stderr: '' };
+        } catch (retryError: unknown) {
+          const re = retryError as { stdout?: string; stderr?: string; status?: number };
+          const retryStdout = re.stdout || '';
+          const retryStderr = re.stderr || '';
+          console.error(
+            `[LibreOffice] retry exit ${re.status}, stdout: ${retryStdout.trim()}, stderr: ${retryStderr.trim()}`
+          );
+          const detail = retryStderr.trim() || retryStdout.trim() || '(LibreOffice produced no diagnostic output)';
+          throw new Error(
+            `LibreOffice conversion failed (exit ${re.status}). ` +
+              `Wiped /tmp/lo_profile and retried once — second attempt also failed. ` +
+              `File: ${inputPath}. Detail: ${detail}`
+          );
+        }
+      }
+
+      const detail = stderr.trim() || stdout.trim() || '(LibreOffice produced no diagnostic output)';
+      throw new Error(`LibreOffice failed (exit ${e.status}). File: ${inputPath}. Detail: ${detail}`);
+    }
+  };
+
+  const { stdout, stderr } = attempt();
   if (stderr) console.warn(`[LibreOffice] stderr: ${stderr.trim()}`);
 
   // Derive expected output path from input filename

@@ -2316,7 +2316,7 @@ const NumaWorkspaceChatAgents = () => {
                 selectedConversationId,
                 {
                   intervalMs: 3000,
-                  timeoutMs: 600_000,
+                  timeoutMs: 3_600_000,
                 },
                 getIdToken
               )
@@ -2595,6 +2595,7 @@ const NumaWorkspaceChatAgents = () => {
           userId={sub}
           userEmail={userEmail}
           environment={window.location.hostname}
+          getCredentials={getCredentials}
         />
       )}
 

@@ -113,6 +113,56 @@ ALLOWED_MODELS = set(
 # Cross-account Bedrock access (if configured)
 BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
 
+# Cap on per-API-call output tokens. The CLI default is 64k; we hold this to
+# 32k so interactive chats can run more turns before the SDK's auto-compaction
+# trigger fires (compaction is driven by total context size, and a smaller per-
+# turn output budget means each turn adds less). Tune via the
+# NUMA_MAX_OUTPUT_TOKENS env var if a deployment needs a different cap. The
+# subprocess CLI reads this from CLAUDE_CODE_MAX_OUTPUT_TOKENS — the model can
+# still emit "max_tokens reached" stop reason and recover on the next turn.
+MAX_OUTPUT_TOKENS = int(os.environ.get("NUMA_MAX_OUTPUT_TOKENS", "32000"))
+
+
+# Thinking-config presets selectable via the "@<suffix>" form on modelId.
+# Throwaway plumbing for comparison testing — productionised path will configure
+# thinking per-model server-side. See plan: thinking-config model variants.
+#
+# "no-thinking" sets thinking=None so the field is omitted entirely from the
+# ClaudeAgentOptions kwargs — the model-agnostic way to disable extended
+# thinking. Sonnet 4.6 and Opus 4.6 accept the new
+# {"type": "adaptive" | "enabled" | "disabled"} forms without budget_tokens;
+# Haiku 4.5 still requires the legacy {"type": "enabled", "budget_tokens": N}
+# form, which is why we omit the field for "no-thinking" rather than passing
+# {"type": "disabled"}.
+THINKING_PRESETS: dict[str, dict] = {
+    # max_thinking_tokens=0 ensures the SDK env-var fallback also says "off" —
+    # otherwise MAX_THINKING_TOKENS=10000 (from agent type default) keeps
+    # thinking on even when the `thinking` kwarg is omitted.
+    "no-thinking": {"thinking": None, "effort": None, "max_thinking_tokens": 0},
+    "medium-thinking": {
+        "thinking": {"type": "adaptive"},
+        "effort": "medium",
+        "max_thinking_tokens": None,
+    },
+    "high-thinking": {
+        "thinking": {"type": "adaptive"},
+        "effort": "high",
+        "max_thinking_tokens": None,
+    },
+}
+
+
+def parse_model_id_with_thinking(
+    raw: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """Split a composite modelId like 'anthropic.claude-sonnet-4-6@high-thinking'
+    into (bare_id, 'high-thinking'). Returns (raw, None) when no recognised suffix
+    is present."""
+    if not raw or "@" not in raw:
+        return raw, None
+    bare, _, suffix = raw.partition("@")
+    return bare, suffix if suffix in THINKING_PRESETS else None
+
 
 def validate_model_id(model_id: Optional[str]) -> Optional[str]:
     """
@@ -358,6 +408,8 @@ def create_agent_options(
     company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
     home_dir: Optional[Path] = None,
+    thinking_override: Optional[str] = None,
+    is_streaming: bool = True,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -376,6 +428,12 @@ def create_agent_options(
         agent_file_paths: Optional list of downloaded agent reference file paths
         agent_type_config: Optional agent type config. Defaults to "numa-chat".
         user_profile: Optional user profile dict for AI personalisation
+        is_streaming: True for interactive streaming chat (uses 1h prompt
+            cache TTL, allows background-bash). False for scheduled runs,
+            sync, fire-and-forget, pipelines, V2 apps, Nolia phases (uses
+            default 5m TTL, disables background-bash). Caller knows this
+            because `stream_claude_sdk` and `run_claude_sdk` are the two
+            entry points and they each set this flag explicitly.
 
     Returns:
         Configured ClaudeAgentOptions
@@ -421,26 +479,96 @@ def create_agent_options(
         "OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME", ""
     )
 
+    # Resolve MAX_THINKING_TOKENS so the SDK env-var fallback stays in sync with
+    # any request-scoped thinking_override. Without this, the SDK falls back to
+    # the agent type default (10k) even when the `thinking` kwarg is omitted,
+    # which keeps thinking on for @no-thinking.
+    effective_max_thinking_tokens = type_config.max_thinking_tokens
+    if thinking_override and thinking_override in THINKING_PRESETS:
+        preset_max = THINKING_PRESETS[thinking_override].get("max_thinking_tokens")
+        if preset_max is not None:
+            effective_max_thinking_tokens = preset_max
+
     env: dict[str, str] = {
         # SDK Bedrock configuration
         "CLAUDE_CODE_USE_BEDROCK": "1",
         "AWS_REGION": REGION,
         "AWS_DEFAULT_REGION": REGION,  # Some AWS SDKs need this
-        # Prompt caching: enable 1-hour TTL for Bedrock (default is 5min).
-        # Reduces cache write costs across longer conversations.
-        "ENABLE_PROMPT_CACHING_1H_BEDROCK": "1",
         # Disable OpenTelemetry in SDK subprocess (X-Ray OTLP not configured)
         "OTEL_SDK_DISABLED": "true",
-        # Thinking tokens (from agent type config)
-        "MAX_THINKING_TOKENS": str(type_config.max_thinking_tokens),
+        # Thinking tokens (from agent type config, or thinking_override preset)
+        "MAX_THINKING_TOKENS": str(effective_max_thinking_tokens),
+        # Per-API-call output cap. See MAX_OUTPUT_TOKENS comment at module top.
+        "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(MAX_OUTPUT_TOKENS),
         # Set HOME so SDK stores sessions in .claude/ under this directory.
         # Pipeline steps can override via home_dir for per-step isolation.
         "HOME": str(home_dir) if home_dir else str(LOCAL_ROOT / ".system"),
+        # ── SDK noise reduction ─────────────────────────────────────────
+        # Workspace is /workdir/, not a git repo — strip built-in commit/PR
+        # workflow guidance and git-status snapshot from the system prompt.
+        "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1",
+        # Hide slash commands that aren't reachable through our chat UI
+        # (auth is via Cognito/JWT, version pinned by deploy, feedback goes
+        # through Arcanum support channels).
+        "DISABLE_LOGIN_COMMAND": "1",
+        "DISABLE_LOGOUT_COMMAND": "1",
+        "DISABLE_UPGRADE_COMMAND": "1",
+        "DISABLE_DOCTOR_COMMAND": "1",
+        "DISABLE_EXTRA_USAGE_COMMAND": "1",
+        "DISABLE_FEEDBACK_COMMAND": "1",
+        "DISABLE_INSTALL_GITHUB_APP_COMMAND": "1",
+        # Strip the SDK's built-in subagent types (Explore, Plan, etc.) from
+        # the system prompt. We have our own subagent strategy via the Task
+        # tool and Nolia phases. Only applies in non-interactive mode (which
+        # is what we run via the Python SDK wrapper).
+        "CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS": "1",
+        # Route the SDK's internal temp files (incl. background-bash output)
+        # into /workdir/tmp/claude-{uid}/... where the model can Read them.
+        # Default is /tmp/, which our security hook blocks — so completed
+        # background tasks have unrecoverable output once the SDK's task
+        # registry evicts the ID. With this redirect:
+        #   /workdir/tmp/claude-{uid}/tasks/<shell_id>.output
+        # is readable by the model directly when TaskOutput returns
+        # "no task found" for a task that completed between turns.
+        "CLAUDE_CODE_TMPDIR": str(LOCAL_ROOT / "tmp"),
+        # ────────────────────────────────────────────────────────────────
         # Workspace tools Lambda for custom tools (KB queries, etc.)
         "WORKSPACE_TOOLS_LAMBDA_NAME": workspace_tools_lambda,
         # OAuth workspace tools Lambda for OAuth cloud storage tools
         "OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME": oauth_workspace_tools_lambda,
     }
+
+    # Prompt-cache TTL: 1h for interactive streaming chats; default 5m for
+    # everything else (scheduled runs, sync, fire-and-forget, pipelines, V2
+    # apps, Nolia phases).
+    #
+    # Why this split: 1h tier costs ~$6/MTok on cache writes, 5m tier
+    # ~$3.75/MTok. Interactive chats amortise the higher write across
+    # follow-up turns within the hour, so 1h wins overall. Non-streaming
+    # invocations fire once and never reuse the cache before it expires —
+    # the 1h write premium is pure waste. Measured ~25% savings per
+    # scheduled run ($0.13 avg across 311 sampled runs).
+    #
+    # The 5m TTL has a sliding window (refreshes on each cache hit), so
+    # even multi-minute scheduled runs stay warm during active processing.
+    if is_streaming:
+        env["ENABLE_PROMPT_CACHING_1H_BEDROCK"] = "1"
+
+    # Background bash (`run_in_background: true` + BashOutput / TaskStop) is only
+    # useful when the harness can hold a connection open to surface completion.
+    # That's the "watching state" wired into stream_claude_sdk (streaming response
+    # mode only). For non-streaming invocations — scheduled runs, fire-and-forget,
+    # sync pipelines — there's no user listening and no watching state, so a
+    # background task that outlives the agent's turn is orphaned: it keeps
+    # running in the MicroVM, produces no notification, and the agent declares
+    # its work done without seeing the result. Disable the feature for those.
+    #
+    # Uses `is_streaming` rather than `type_config.response_mode` because the
+    # runtime response mode can differ from the agent type's default (e.g. the
+    # schedule runner uses the `numa-chat` type but overrides to `sync` via
+    # the request body).
+    if not is_streaming:
+        env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] = "1"
 
     # Pass allowed KBs (with id and name) to custom tools for security and attribution
     if allowed_kb_ids is not None:
@@ -686,13 +814,21 @@ def create_agent_options(
     if type_config.agents:
         options_kwargs["agents"] = type_config.agents
 
-    # Thinking configuration — type_config.thinking overrides env-var approach
-    if type_config.thinking:
-        options_kwargs["thinking"] = type_config.thinking
+    # Thinking configuration — request-scoped `thinking_override` (from the modelId
+    # "@<suffix>" form) always wins over the agent type's defaults when set.
+    effective_thinking = type_config.thinking
+    effective_effort = type_config.effort
+    if thinking_override and thinking_override in THINKING_PRESETS:
+        preset = THINKING_PRESETS[thinking_override]
+        effective_thinking = preset["thinking"]
+        effective_effort = preset["effort"]
+
+    if effective_thinking:
+        options_kwargs["thinking"] = effective_thinking
 
     # Effort level — controls reasoning depth ("low", "medium", "high", "max")
-    if type_config.effort:
-        options_kwargs["effort"] = type_config.effort
+    if effective_effort:
+        options_kwargs["effort"] = effective_effort
 
     return ClaudeAgentOptions(**options_kwargs)
 

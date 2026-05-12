@@ -22,7 +22,7 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 | Fill template with data | python-pptx         | Works with existing placeholders and structure           |
 | Quick text extraction   | markitdown          | Fast CLI, no code needed                                 |
 
-> **Tool preference:** Use `execute_script` for inline code (Node.js, Python, Bash). Use the Bash tool when running an already-written script file on disk (e.g., `node /workdir/outputs/create_deck.js`).
+> **Tool preference:** For deck creation/iteration, Write the Node script to `/workdir/tmp/create_deck.js` and run with `Bash("node /workdir/tmp/create_deck.js")`. Edit the file in place for revisions — patch-style edits are dramatically cheaper than re-emitting the full script. Reserve `/workdir/outputs/` for the final `.pptx` you want the user to see; keep working scripts in `/workdir/tmp/`.
 
 ---
 
@@ -33,6 +33,8 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 python -m markitdown presentation.pptx
 ```
 
+> **For richer extraction** and for legacy/template formats (`.ppt`, `.pot`, `.potx`) where markitdown often returns empty or truncated content, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+
 For visual overview, convert to PDF then render as images:
 
 ```
@@ -40,12 +42,10 @@ For visual overview, convert to PDF then render as images:
 numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/presentation.pptx", "format": "pdf", "mode": "file"})
 
 # Step 2: Render PDF pages as images
-execute_script(interpreter="bash", description="Rendering slides as images for QA", code="""
-pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/outputs/slide
-""")
+Bash(command="pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide")
 ```
 
-This creates `slide-01.jpg`, `slide-02.jpg`, etc.
+This creates `slide-01.jpg`, `slide-02.jpg`, etc. in `/workdir/tmp/` so they don't clutter the user's outputs view.
 
 ---
 
@@ -53,10 +53,10 @@ This creates `slide-01.jpg`, `slide-02.jpg`, etc.
 
 **Read [pptxgenjs.md](pptxgenjs.md) for the full tutorial.**
 
-Use `execute_script` with `interpreter="node"` for inline PptxGenJS code:
+Write the script to `/workdir/tmp/`, then run with Bash. To iterate, Edit the file in place rather than rewriting it:
 
 ```
-execute_script(interpreter="node", description="Creating presentation", code="""
+Write(file_path="/workdir/tmp/create_deck.js", content="""
 const pptxgen = require("pptxgenjs");
 let pres = new pptxgen();
 pres.layout = "LAYOUT_16x9";
@@ -66,13 +66,10 @@ slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" })
 
 pres.writeFile({ fileName: "/workdir/outputs/presentation.pptx" });
 """)
+Bash(command="node /workdir/tmp/create_deck.js")
 ```
 
-Or write a `.js` file and run with Bash:
-
-```bash
-node /workdir/outputs/create_deck.js
-```
+Subsequent revisions (change a colour, fix a number, adjust a layout): use `Edit` to patch the existing script rather than re-emitting the whole thing.
 
 ---
 
@@ -177,11 +174,11 @@ Your first render is almost never correct. Always verify output visually.
 # Step 1: Convert PPTX to PDF
 numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/presentation.pptx", "format": "pdf", "mode": "file"})
 
-# Step 2: Render PDF pages as images
-execute_script(interpreter="bash", description="Rendering slides as images for QA", code="""
-pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/outputs/slide
-""")
+# Step 2: Render PDF pages as images (in /workdir/tmp/ — they're not for the user)
+Bash(command="pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide")
 ```
+
+> `convert_document` accepts legacy PowerPoint binary formats (`.ppt`, `.pot`) and the modern template variant (`.potx`) in addition to `.pptx` — same `mode="file"` call.
 
 ### Content QA
 

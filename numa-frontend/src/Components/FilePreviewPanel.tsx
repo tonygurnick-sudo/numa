@@ -2,12 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { getFileIconClass } from '../utils/fileUtils';
-import {
-  downloadFileFromS3,
-  downloadFolderAsZip,
-  listObjectsInFolder,
-  getSignedUrlForS3Object,
-} from '../utils/s3Utils';
+import { downloadFileFromS3, downloadFolderAsZip, listObjectsInFolder } from '../utils/s3Utils';
 import { convertDocxPreview } from '../Services/workspaceChatAgentService';
 import { FilePreviewActions } from './FilePreviewActions';
 import {
@@ -92,7 +87,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
   embedded = false,
   initialContent,
   convertDocxFn,
-  fullScreenBasePath: _fullScreenBasePath,
+  fullScreenBasePath = '/file-preview',
 }) => {
   const { t } = useTranslation('chat');
   // Content state
@@ -317,6 +312,31 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
     }
   }, [preview, bucket, region, getCredentials]);
 
+  const openFullScreenPreview = useCallback(() => {
+    if (!preview || preview.type !== 'file') return;
+
+    if (initialContent != null && !preview.fullPath) {
+      // Inline document: pass content via localStorage (sessionStorage is per-tab)
+      const contentKey = `inline-doc-${Date.now()}`;
+      localStorage.setItem(contentKey, initialContent);
+      const params = new URLSearchParams({
+        contentKey,
+        name: preview.filename,
+        ext: preview.extension,
+      });
+      window.open(`${fullScreenBasePath}?${params.toString()}`, '_blank');
+      return;
+    }
+
+    const params = new URLSearchParams({
+      key: preview.fullPath,
+      name: preview.filename,
+      ext: preview.extension,
+      bucket,
+    });
+    window.open(`${fullScreenBasePath}?${params.toString()}`, '_blank');
+  }, [preview, initialContent, fullScreenBasePath, bucket]);
+
   if (!preview) {
     return (
       <div className="file-preview-panel-container">
@@ -338,6 +358,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
   const title = isFile ? preview.filename : `${preview.name}/`;
   const iconClass = isFile ? getFileIconClass(preview.filename) : 'bi bi-folder-fill';
   const iconColor = isFile ? 'var(--color-primary)' : 'var(--bs-warning)';
+  const shouldShowRelativePath = preview.relativePath !== title && preview.relativePath !== preview.fullPath;
 
   // Render file content based on type
   const renderContent = () => {
@@ -525,7 +546,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
           <div className="file-preview-panel-title">
             <i className={iconClass} style={{ color: iconColor, marginRight: '0.5rem' }}></i>
             <span className="fw-semibold">{title}</span>
-            {preview.relativePath !== title && <span className="text-muted ms-2 small">{preview.relativePath}</span>}
+            {shouldShowRelativePath && <span className="text-muted ms-2 small">{preview.relativePath}</span>}
           </div>
           <button type="button" className="file-preview-close-btn" onClick={onClose}>
             <i className="bi bi-x-lg" />
@@ -544,42 +565,9 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
           onDownloadFile={handleDownloadFile}
           onDownloadFolder={handleDownloadFolder}
           onOpenInNewTab={
-            preview.type === 'file' && preview.extension.toLowerCase() === 'html'
-              ? async () => {
-                  try {
-                    const url = await getSignedUrlForS3Object(preview.fullPath, bucket, region, getCredentials);
-                    window.open(url, '_blank');
-                  } catch (err) {
-                    console.error('Error opening in new tab:', err);
-                  }
-                }
-              : undefined
+            preview.type === 'file' && preview.extension.toLowerCase() === 'html' ? openFullScreenPreview : undefined
           }
-          onOpenFullScreen={
-            preview.type === 'file'
-              ? () => {
-                  if (initialContent != null && !preview.fullPath) {
-                    // Inline document: pass content via localStorage (sessionStorage is per-tab)
-                    const contentKey = `inline-doc-${Date.now()}`;
-                    localStorage.setItem(contentKey, initialContent);
-                    const params = new URLSearchParams({
-                      contentKey,
-                      name: preview.filename,
-                      ext: preview.extension,
-                    });
-                    window.open(`/file-preview?${params.toString()}`, '_blank');
-                  } else {
-                    const params = new URLSearchParams({
-                      key: preview.fullPath,
-                      name: preview.filename,
-                      ext: preview.extension,
-                      bucket,
-                    });
-                    window.open(`/file-preview?${params.toString()}`, '_blank');
-                  }
-                }
-              : undefined
-          }
+          onOpenFullScreen={preview.type === 'file' ? openFullScreenPreview : undefined}
         />
       )}
     </div>

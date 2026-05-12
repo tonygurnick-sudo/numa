@@ -35,6 +35,7 @@ import { CreateFolderModal } from './CreateFolderModal';
 import { CreateSubfolderModal } from './CreateSubfolderModal';
 import { FolderContextMenu, type FolderContextAction, type FolderContextTarget } from './FolderContextMenu';
 import { FolderSettingsDrawer } from './FolderSettingsDrawer';
+import { extractDroppedUploadBatch, isExternalFileDrag, type DroppedUploadBatch } from './dropUploadUtils';
 
 interface UserFilesTabProps {
   onActionChange?: (actions: React.ReactNode) => void;
@@ -142,6 +143,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const [clearFileUploader, setClearFileUploader] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState('');
+  const [uploadInitialFolder, setUploadInitialFolder] = useState('');
+  const [droppedUploadBatch, setDroppedUploadBatch] = useState<DroppedUploadBatch | null>(null);
+  const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [folderOptions, setFolderOptions] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
 
@@ -508,6 +512,20 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     [canEditKb, selectedKeys]
   );
 
+  const onFolderDragStart = useCallback(
+    (e: React.DragEvent, sourceKbId: string, folderId: string) => {
+      if (!canEditKb(sourceKbId)) {
+        e.preventDefault();
+        return;
+      }
+      const folderKey = folderId.endsWith('/') ? folderId : `${folderId}/`;
+      e.dataTransfer.setData('application/json', JSON.stringify({ sourceKbId, keys: [folderKey] }));
+      e.dataTransfer.effectAllowed = 'move';
+      setIsDragging(true);
+    },
+    [canEditKb]
+  );
+
   const onFileDragEnd = useCallback(() => {
     setIsDragging(false);
     setDragOverTarget(null);
@@ -538,6 +556,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         // the old keys linger until the refetch completes and the
         // preserve-deep-entries branch in `fetchKbFiles` keeps them.
         const mapping = new Map(result.successful.map((s) => [s.sourceKey, s.destKey]));
+        const movedFolderPrefixes = toMove.filter((k) => k.endsWith('/'));
+        const isMovedFolderMarker = (key: string) =>
+          key.endsWith('/') && movedFolderPrefixes.some((prefix) => key === prefix || key.startsWith(prefix));
+        const keepFolderState = (id: string) =>
+          !movedFolderPrefixes.some((prefix) => id === prefix || id.startsWith(prefix));
         if (mapping.size > 0) {
           setKbFileStates((prev) => {
             const next = new Map(prev);
@@ -546,10 +569,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             if (sourceKbId === destKbId) {
               next.set(sourceKbId, {
                 ...source,
-                files: source.files.map((f) => {
+                files: source.files.flatMap((f) => {
                   const dest = mapping.get(f.Key);
-                  return dest ? { ...f, Key: dest } : f;
+                  if (dest) return [{ ...f, Key: dest }];
+                  return isMovedFolderMarker(f.Key) ? [] : [f];
                 }),
+                expandedFolders: new Set([...source.expandedFolders].filter(keepFolderState)),
+                loadedFolders: new Set([...source.loadedFolders].filter(keepFolderState)),
               });
             } else {
               const moved: S3Object[] = [];
@@ -559,9 +585,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   moved.push({ ...f, Key: dest });
                   return false;
                 }
-                return true;
+                return !isMovedFolderMarker(f.Key);
               });
-              next.set(sourceKbId, { ...source, files: remaining });
+              next.set(sourceKbId, {
+                ...source,
+                files: remaining,
+                expandedFolders: new Set([...source.expandedFolders].filter(keepFolderState)),
+                loadedFolders: new Set([...source.loadedFolders].filter(keepFolderState)),
+              });
               const destState = prev.get(destKbId);
               if (destState && moved.length > 0) {
                 next.set(destKbId, { ...destState, files: [...destState.files, ...moved] });
@@ -851,9 +882,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         }
       };
       fetchFoldersForUpload();
-      setSelectedFolder('');
+      setSelectedFolder(uploadInitialFolder);
     }
-  }, [showUploadModal, uploadTargetKb, CLIENT_NAME, region, getCredentials]);
+  }, [showUploadModal, uploadTargetKb, uploadInitialFolder, CLIENT_NAME, region, getCredentials]);
 
   useEffect(() => {
     if (clearFileUploader) {
@@ -898,11 +929,32 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     setShowSettingsDrawer(true);
   }, []);
 
-  const openUploadForKb = useCallback((kb: UserKB, e: React.MouseEvent) => {
+  const openUploadForKb = useCallback((kb: UserKB, e: React.MouseEvent, initialFolder = '') => {
     e.stopPropagation();
     setUploadTargetKb(kb);
+    setUploadInitialFolder(initialFolder);
+    setDroppedUploadBatch(null);
     setShowUploadModal(true);
   }, []);
+
+  const handleExternalUploadDrop = useCallback(
+    async (e: React.DragEvent, kb: UserKB, folderPath: string, rejectFoldersForDrop: boolean) => {
+      if (!isExternalFileDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setIsExternalDragOver(false);
+
+      const batch = await extractDroppedUploadBatch(e.dataTransfer, rejectFoldersForDrop);
+      if (!batch.files.length && !batch.folderRejection) return;
+
+      setUploadTargetKb(kb);
+      setUploadInitialFolder(folderPath);
+      setSelectedFolder(folderPath);
+      setDroppedUploadBatch({ id: Date.now(), ...batch });
+      setShowUploadModal(true);
+    },
+    []
+  );
 
   // ── Subfolder creation ──────────────────────────────────────
 
@@ -912,6 +964,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     if (!folderId.startsWith(basePrefix)) return '';
     return folderId.slice(basePrefix.length).replace(/\/$/, '');
   }, []);
+
+  const currentUploadFolderPath = useMemo(() => {
+    if (!currentFolder || currentFolder.subfolderPath.length === 0) return '';
+    return subfolderRelativePath(
+      currentFolder.kbId,
+      currentFolder.subfolderPath[currentFolder.subfolderPath.length - 1].id
+    );
+  }, [currentFolder, subfolderRelativePath]);
 
   const openAddSubfolder = useCallback((kbId: string, parentPath: string, parentDisplayName: string) => {
     setSubfolderTarget({ kbId, parentPath, parentDisplayName });
@@ -1192,31 +1252,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   // Only show empty state if there are no folders AND no root files
   const rootState = rootKB ? kbFileStates.get(rootKB.kb_id) : undefined;
   const hasRootFiles = rootState && rootState.files.length > 0;
-  if (allUserKBs.length === 0 && !hasRootFiles && !rootState?.isLoading) {
-    return (
-      <div className="finder-files">
-        <div className="finder-empty">
-          <i className="bi bi-folder" />
-          <span>{t('folderList.empty.title')}</span>
-          <div className="d-flex gap-2 mt-2">
-            <button className="finder-btn finder-btn--primary" onClick={() => setShowCreateModal(true)}>
-              <i className="bi bi-folder-plus" /> {t('actions.newFolder')}
-            </button>
-            {rootKB && (
-              <button className="finder-btn finder-btn--primary" onClick={(e) => openUploadForKb(rootKB, e)}>
-                <i className="bi bi-upload" /> {t('rootFiles.upload')}
-              </button>
-            )}
-          </div>
-        </div>
-        <CreateFolderModal
-          show={showCreateModal}
-          onHide={() => setShowCreateModal(false)}
-          onSuccess={handleFolderCreated}
-        />
-      </div>
-    );
-  }
 
   // ── Build rows ─────────────────────────────────────────────
 
@@ -1226,6 +1261,59 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       (rootKB && currentFolder.kbId === rootKB.kb_id ? rootKB : null))
     : null;
   const canEditCurrent = currentKb && (currentKb.role === 'OWNER' || currentKb.role === 'EDITOR');
+
+  const currentDropTarget = useMemo(() => {
+    if (currentFolder && currentKb && canEditCurrent) {
+      return {
+        kb: currentKb,
+        folderPath: currentUploadFolderPath,
+        rejectFolders: !!rootKB && currentKb.kb_id === rootKB.kb_id && !currentUploadFolderPath,
+      };
+    }
+    if (!currentFolder && rootKB) {
+      return { kb: rootKB, folderPath: '', rejectFolders: true };
+    }
+    return null;
+  }, [currentFolder, currentKb, canEditCurrent, currentUploadFolderPath, rootKB]);
+
+  const handleFinderExternalDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      if (!currentDropTarget || !isExternalFileDrag(e)) return;
+      e.preventDefault();
+      setIsExternalDragOver(true);
+    },
+    [currentDropTarget]
+  );
+
+  const handleFinderExternalDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!currentDropTarget || !isExternalFileDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setIsExternalDragOver(true);
+    },
+    [currentDropTarget]
+  );
+
+  const handleFinderExternalDragLeave = useCallback((e: React.DragEvent) => {
+    if (!isExternalFileDrag(e)) return;
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsExternalDragOver(false);
+    }
+  }, []);
+
+  const handleFinderExternalDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!currentDropTarget || !isExternalFileDrag(e)) return;
+      void handleExternalUploadDrop(
+        e,
+        currentDropTarget.kb,
+        currentDropTarget.folderPath,
+        currentDropTarget.rejectFolders
+      );
+    },
+    [currentDropTarget, handleExternalUploadDrop]
+  );
 
   type RowEntry = {
     row: TableRow;
@@ -1375,7 +1463,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   // ── Render ─────────────────────────────────────────────────
 
   const mainContent = (
-    <div className="finder-files">
+    <div
+      className={`finder-files ${isExternalDragOver ? 'finder-files--external-drop-over' : ''}`}
+      onDragEnter={handleFinderExternalDragEnter}
+      onDragOver={handleFinderExternalDragOver}
+      onDragLeave={handleFinderExternalDragLeave}
+      onDrop={handleFinderExternalDrop}
+    >
       {uploadSuccess && (
         <Alert variant="success" dismissible onClose={() => setUploadSuccess(false)} className="mx-3 mt-2 mb-0">
           <i className="bi bi-check-circle me-2" />
@@ -1557,7 +1651,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           ) : isInsideFolder && canEditCurrent && currentKb ? (
             <button
               className="finder-btn finder-btn--labelled"
-              onClick={(e) => openUploadForKb(currentKb, e)}
+              onClick={(e) => openUploadForKb(currentKb, e, currentUploadFolderPath)}
               title={t('actions.upload')}
             >
               <i className="bi bi-upload" />
@@ -1639,286 +1733,330 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
       {/* File list */}
       <div className="finder-list">
-        {rows.map(({ row, kbId, isKbFolder, kb, special }) => {
-          if (special === 'loading') {
-            return (
-              <div key={row.id} className="finder-loading">
-                <Spinner animation="border" size="sm" variant="secondary" />
-                <span>{tKb('fileExplorer.loadingFiles')}</span>
+        {rows.length === 0 ? (
+          <div className="finder-empty">
+            <i className="bi bi-folder" />
+            <span>
+              {allUserKBs.length === 0 && !hasRootFiles ? t('folderList.empty.title') : tKb('fileExplorer.empty')}
+            </span>
+            {allUserKBs.length === 0 && !hasRootFiles && (
+              <div className="d-flex gap-2 mt-2">
+                <button className="finder-btn finder-btn--primary" onClick={() => setShowCreateModal(true)}>
+                  <i className="bi bi-folder-plus" /> {t('actions.newFolder')}
+                </button>
+                {rootKB && (
+                  <button className="finder-btn finder-btn--primary" onClick={(e) => openUploadForKb(rootKB, e)}>
+                    <i className="bi bi-upload" /> {t('rootFiles.upload')}
+                  </button>
+                )}
               </div>
-            );
-          }
-          if (special === 'empty') {
-            return (
-              <div key={row.id} className="finder-empty" style={{ padding: '1.5rem' }}>
-                <i className="bi bi-inbox" style={{ fontSize: '1.5rem' }} />
-                <span>{tKb('fileExplorer.empty')}</span>
-              </div>
-            );
-          }
+            )}
+          </div>
+        ) : (
+          rows.map(({ row, kbId, isKbFolder, kb, special }) => {
+            if (special === 'loading') {
+              return (
+                <div key={row.id} className="finder-loading">
+                  <Spinner animation="border" size="sm" variant="secondary" />
+                  <span>{tKb('fileExplorer.loadingFiles')}</span>
+                </div>
+              );
+            }
+            if (special === 'empty') {
+              return (
+                <div key={row.id} className="finder-empty" style={{ padding: '1.5rem' }}>
+                  <i className="bi bi-inbox" style={{ fontSize: '1.5rem' }} />
+                  <span>{tKb('fileExplorer.empty')}</span>
+                </div>
+              );
+            }
 
-          const isFolder = row.type === 'folder';
-          const kbState = kbFileStates.get(kbId);
+            const isFolder = row.type === 'folder';
+            const kbState = kbFileStates.get(kbId);
 
-          // KB folder row at root level
-          if (isKbFolder && kb) {
-            const isExpanded = expandedKbs.has(kb.kb_id);
-            const isShared = kb.is_shared || kb.role === 'VIEWER';
-            const isOwner = kb.role === 'OWNER';
-            const isEditor = kb.role === 'EDITOR';
-            const canEdit = isOwner || isEditor;
-            const isDropTarget = dragOverTarget === row.id;
-            const dropDisabled = !canEdit;
+            // KB folder row at root level
+            if (isKbFolder && kb) {
+              const isExpanded = expandedKbs.has(kb.kb_id);
+              const isShared = kb.is_shared || kb.role === 'VIEWER';
+              const isOwner = kb.role === 'OWNER';
+              const isEditor = kb.role === 'EDITOR';
+              const canEdit = isOwner || isEditor;
+              const isDropTarget = dragOverTarget === row.id;
+              const dropDisabled = !canEdit;
+
+              return (
+                <div
+                  key={row.id}
+                  className={[
+                    'finder-row',
+                    'finder-row--folder',
+                    'finder-grid-6',
+                    isExpanded ? 'finder-row--expanded' : '',
+                    isDropTarget ? 'finder-row--drop-over' : '',
+                    isDragging && dropDisabled ? 'finder-row--viewer-disabled' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onDoubleClick={() => navigateIntoKb(kb)}
+                  onContextMenu={(e) => openFolderContextMenu(e, { kind: 'topLevel', kb })}
+                  onDragOver={(e) => onTargetDragOver(e, row.id, !dropDisabled)}
+                  onDragLeave={() => onTargetDragLeave(row.id)}
+                  onDrop={(e) => {
+                    if (isExternalFileDrag(e)) {
+                      void handleExternalUploadDrop(e, kb, '', false);
+                    } else if (!dropDisabled) {
+                      onDropOnKb(e, kb);
+                    }
+                  }}
+                >
+                  <div className="finder-row__name-content">
+                    <span
+                      className="finder-chevron"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleKbExpansion(kb.kb_id);
+                      }}
+                    >
+                      <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
+                    </span>
+                    <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
+                    <span className="finder-name">{kb.kb_name}</span>
+                    {isShared ? (
+                      <i
+                        className="bi bi-people-fill"
+                        style={{ fontSize: '0.7rem', color: '#86868b' }}
+                        title={isOwner ? t('folderList.sharing') : t('folderList.sharedWithYou')}
+                      />
+                    ) : (
+                      <i
+                        className="bi bi-person-fill"
+                        style={{ fontSize: '0.7rem', color: '#86868b' }}
+                        title={t('folderList.private')}
+                      />
+                    )}
+                    {!isOwner && (
+                      <span className="finder-row__badge">{isEditor ? t('badges.editor') : t('badges.viewer')}</span>
+                    )}
+                    {kbFileStates.get(kb.kb_id)?.truncated && (
+                      <i
+                        className="bi bi-exclamation-triangle-fill"
+                        style={{ fontSize: '0.7rem', color: '#eab308' }}
+                        title={t('search.truncatedTooltip')}
+                      />
+                    )}
+                  </div>
+                  <div className="finder-row__meta finder-row__meta--type">{tKb('fileExplorer.table.typeFolder')}</div>
+                  <div className="finder-row__meta d-none d-lg-block"></div>
+                  <div className="finder-row__meta d-none d-md-block"></div>
+                  <div className="finder-row__meta d-none d-sm-block">
+                    {(() => {
+                      const s = kbFileStates.get(kb.kb_id);
+                      // Use the in-cache count once the KB has been deep-loaded
+                      // (recursive + accurate). Fall back to the backend's
+                      // root-level document_count before that.
+                      const cached = s?.deepLoaded ? s.files.filter((f) => !f.Key.endsWith('/')).length : null;
+                      const count = cached ?? kb.document_count ?? 0;
+                      return count > 0 ? tKb('fileExplorer.table.items', { count }) : '';
+                    })()}
+                  </div>
+                  <div className="finder-row__actions">
+                    {canEdit && (
+                      <>
+                        <button onClick={(e) => openUploadForKb(kb, e)} title={t('actions.uploadFiles')}>
+                          <i className="bi bi-upload" />
+                        </button>
+                        <button onClick={(e) => openSettings(kb, e)} title={t('folderList.settings')}>
+                          <i className="bi bi-gear" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // Child rows (files and subfolders)
+            const isSubfolder = isFolder;
+            const isSubfolderExpanded = isSubfolder && (kbState?.expandedFolders.has(row.id) ?? false);
+            const isSubfolderLoading = isSubfolder && (kbState?.loadingFolders.has(row.id) ?? false);
+            const rowCanEdit = canEditKb(kbId);
+            const isFileSelected = !isSubfolder && !!row.originalKey && selectedKeys.has(row.originalKey);
+            const isRowDropTarget = isSubfolder && dragOverTarget === row.id;
 
             return (
               <div
                 key={row.id}
                 className={[
                   'finder-row',
-                  'finder-row--folder',
                   'finder-grid-6',
-                  isExpanded ? 'finder-row--expanded' : '',
-                  isDropTarget ? 'finder-row--drop-over' : '',
-                  isDragging && dropDisabled ? 'finder-row--viewer-disabled' : '',
+                  isSubfolder ? 'finder-row--folder' : '',
+                  `finder-row--depth-${row.depth}`,
+                  isFileSelected ? 'finder-row--selected' : '',
+                  isRowDropTarget ? 'finder-row--drop-over' : '',
+                  !isSubfolder ? 'finder-row--file-selectable' : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                onDoubleClick={() => navigateIntoKb(kb)}
-                onContextMenu={(e) => openFolderContextMenu(e, { kind: 'topLevel', kb })}
-                onDragOver={(e) => onTargetDragOver(e, row.id, !dropDisabled)}
-                onDragLeave={() => onTargetDragLeave(row.id)}
-                onDrop={(e) => (dropDisabled ? undefined : onDropOnKb(e, kb))}
+                draggable={(isSubfolder || !!row.originalKey) && rowCanEdit}
+                onDragStart={(e) => {
+                  if (isSubfolder) {
+                    onFolderDragStart(e, kbId, row.id);
+                  } else if (row.originalKey) {
+                    onFileDragStart(e, kbId, row.originalKey);
+                  }
+                }}
+                onDragEnd={() => {
+                  onFileDragEnd();
+                }}
+                onDragOver={(e) => {
+                  if (isSubfolder) onTargetDragOver(e, row.id, rowCanEdit);
+                }}
+                onDragLeave={() => {
+                  if (isSubfolder) onTargetDragLeave(row.id);
+                }}
+                onDrop={(e) => {
+                  if (!isSubfolder || !rowCanEdit) return;
+                  if (isExternalFileDrag(e)) {
+                    const targetKb =
+                      (rootKB && kbId === rootKB.kb_id
+                        ? rootKB
+                        : allUserKBs.find((candidate) => candidate.kb_id === kbId)) ?? null;
+                    if (targetKb) {
+                      void handleExternalUploadDrop(e, targetKb, subfolderRelativePath(kbId, row.id), false);
+                    }
+                  } else {
+                    onDropOnSubfolder(e, kbId, row.id);
+                  }
+                }}
+                onContextMenu={(e) => {
+                  if (isSubfolder) {
+                    openFolderContextMenu(e, {
+                      kind: 'subfolder',
+                      kbId,
+                      folderId: row.id,
+                      folderName: row.displayName || row.name,
+                    });
+                  }
+                }}
+                onClick={(e) => {
+                  if (!isSubfolder && row.originalKey) handleFileClick(row.originalKey, e);
+                }}
+                onDoubleClick={() => {
+                  if (isSubfolder) {
+                    navigateIntoSubfolder(kbId, row.id, row.displayName || row.name);
+                  } else if (row.originalKey) {
+                    const filename = row.name;
+                    const isWc =
+                      row.originalKey?.includes('web-crawler/') || row.originalKey?.includes('scraped-content/');
+                    const ext = isWc ? 'md' : filename.includes('.') ? filename.split('.').pop() || '' : '';
+                    handleOpenFilePreview({
+                      filename,
+                      fullPath: row.originalKey!,
+                      relativePath: row.originalKey!,
+                      extension: ext,
+                    });
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
               >
                 <div className="finder-row__name-content">
-                  <span
-                    className="finder-chevron"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleKbExpansion(kb.kb_id);
-                    }}
-                  >
-                    <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
-                  </span>
-                  <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
-                  <span className="finder-name">{kb.kb_name}</span>
-                  {isShared ? (
-                    <i
-                      className="bi bi-people-fill"
-                      style={{ fontSize: '0.7rem', color: '#86868b' }}
-                      title={isOwner ? t('folderList.sharing') : t('folderList.sharedWithYou')}
-                    />
+                  {isSubfolder ? (
+                    isSubfolderLoading ? (
+                      <Spinner
+                        animation="border"
+                        size="sm"
+                        variant="secondary"
+                        style={{ width: '0.6rem', height: '0.6rem', flexShrink: 0 }}
+                      />
+                    ) : (
+                      <span className="finder-chevron" onClick={() => toggleSubfolder(kbId, row.id)}>
+                        <i className={`bi bi-chevron-${isSubfolderExpanded ? 'down' : 'right'}`} />
+                      </span>
+                    )
                   ) : (
-                    <i
-                      className="bi bi-person-fill"
-                      style={{ fontSize: '0.7rem', color: '#86868b' }}
-                      title={t('folderList.private')}
-                    />
+                    <span className="finder-chevron-spacer" />
                   )}
-                  {!isOwner && (
-                    <span className="finder-row__badge">{isEditor ? t('badges.editor') : t('badges.viewer')}</span>
-                  )}
-                  {kbFileStates.get(kb.kb_id)?.truncated && (
-                    <i
-                      className="bi bi-exclamation-triangle-fill"
-                      style={{ fontSize: '0.7rem', color: '#eab308' }}
-                      title={t('search.truncatedTooltip')}
-                    />
-                  )}
+                  <i
+                    className={`bi ${isSubfolder ? 'bi-folder-fill finder-icon--folder' : 'bi-file-earmark finder-icon--file'} finder-icon`}
+                  />
+                  <span className="finder-name">{row.displayName || row.name}</span>
                 </div>
-                <div className="finder-row__meta finder-row__meta--type">{tKb('fileExplorer.table.typeFolder')}</div>
-                <div className="finder-row__meta d-none d-lg-block"></div>
-                <div className="finder-row__meta d-none d-md-block"></div>
+                <div className="finder-row__meta finder-row__meta--type">
+                  {isSubfolder
+                    ? tKb('fileExplorer.table.typeFolder')
+                    : row.name.includes('.')
+                      ? (row.name.split('.').pop()?.toUpperCase() ?? '')
+                      : ''}
+                </div>
+                <div className="finder-row__meta d-none d-lg-block">{!isSubfolder ? row.uploadedBy || '' : ''}</div>
+                <div className="finder-row__meta d-none d-md-block">{!isSubfolder ? row.uploadDate : ''}</div>
                 <div className="finder-row__meta d-none d-sm-block">
-                  {(() => {
-                    const s = kbFileStates.get(kb.kb_id);
-                    // Use the in-cache count once the KB has been deep-loaded
-                    // (recursive + accurate). Fall back to the backend's
-                    // root-level document_count before that.
-                    const cached = s?.deepLoaded ? s.files.filter((f) => !f.Key.endsWith('/')).length : null;
-                    const count = cached ?? kb.document_count ?? 0;
-                    return count > 0 ? tKb('fileExplorer.table.items', { count }) : '';
-                  })()}
+                  {isSubfolder
+                    ? (() => {
+                        const state = kbFileStates.get(kbId);
+                        if (!state) return '';
+                        const prefix = row.id.endsWith('/') ? row.id : `${row.id}/`;
+                        const count = state.files.filter(
+                          (f) => f.Key.startsWith(prefix) && !f.Key.endsWith('/')
+                        ).length;
+                        return count > 0 ? tKb('fileExplorer.table.items', { count }) : '';
+                      })()
+                    : row.size}
                 </div>
                 <div className="finder-row__actions">
-                  {canEdit && (
+                  {!isSubfolder && row.originalKey && (
                     <>
-                      <button onClick={(e) => openUploadForKb(kb, e)} title={t('actions.uploadFiles')}>
-                        <i className="bi bi-upload" />
+                      <button
+                        onClick={() => {
+                          const filename = row.name;
+                          const isWc =
+                            row.originalKey?.includes('web-crawler/') || row.originalKey?.includes('scraped-content/');
+                          const ext = isWc ? 'md' : filename.includes('.') ? filename.split('.').pop() || '' : '';
+                          handleOpenFilePreview({
+                            filename,
+                            fullPath: row.originalKey!,
+                            relativePath: row.originalKey!,
+                            extension: ext,
+                          });
+                        }}
+                        title={tKb('fileExplorer.actions.previewInPanel')}
+                      >
+                        <i className="bi bi-eye" />
                       </button>
-                      <button onClick={(e) => openSettings(kb, e)} title={t('folderList.settings')}>
-                        <i className="bi bi-gear" />
+                      <button
+                        onClick={() => handleDownloadFile(row.originalKey!, row.name)}
+                        title={tKb('fileExplorer.actions.downloadFile')}
+                      >
+                        <i className="bi bi-download" />
                       </button>
+                      {rowCanEdit && (
+                        <button onClick={() => openRename(kbId, row.originalKey!, row.name)} title={t('rename.title')}>
+                          <i className="bi bi-pencil" />
+                        </button>
+                      )}
+                      {rowCanEdit && (
+                        <button
+                          onClick={() => confirmDeleteFiles(kbId, [row.originalKey!])}
+                          title={t('delete.confirm', { count: 1 })}
+                        >
+                          <i className="bi bi-trash" />
+                        </button>
+                      )}
                     </>
+                  )}
+                  {isSubfolder && rowCanEdit && (
+                    <button
+                      onClick={() => confirmDeleteSubfolder(kbId, row.id, row.displayName || row.name)}
+                      title={t('delete.confirm', { count: 1 })}
+                    >
+                      <i className="bi bi-trash" />
+                    </button>
                   )}
                 </div>
               </div>
             );
-          }
-
-          // Child rows (files and subfolders)
-          const isSubfolder = isFolder;
-          const isSubfolderExpanded = isSubfolder && (kbState?.expandedFolders.has(row.id) ?? false);
-          const isSubfolderLoading = isSubfolder && (kbState?.loadingFolders.has(row.id) ?? false);
-          const rowCanEdit = canEditKb(kbId);
-          const isFileSelected = !isSubfolder && !!row.originalKey && selectedKeys.has(row.originalKey);
-          const isRowDropTarget = isSubfolder && dragOverTarget === row.id;
-
-          return (
-            <div
-              key={row.id}
-              className={[
-                'finder-row',
-                'finder-grid-6',
-                isSubfolder ? 'finder-row--folder' : '',
-                `finder-row--depth-${row.depth}`,
-                isFileSelected ? 'finder-row--selected' : '',
-                isRowDropTarget ? 'finder-row--drop-over' : '',
-                !isSubfolder ? 'finder-row--file-selectable' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              draggable={!isSubfolder && !!row.originalKey && rowCanEdit}
-              onDragStart={(e) => {
-                if (!isSubfolder && row.originalKey) onFileDragStart(e, kbId, row.originalKey);
-              }}
-              onDragEnd={() => {
-                if (!isSubfolder) onFileDragEnd();
-              }}
-              onDragOver={(e) => {
-                if (isSubfolder) onTargetDragOver(e, row.id, rowCanEdit);
-              }}
-              onDragLeave={() => {
-                if (isSubfolder) onTargetDragLeave(row.id);
-              }}
-              onDrop={(e) => {
-                if (isSubfolder && rowCanEdit) onDropOnSubfolder(e, kbId, row.id);
-              }}
-              onContextMenu={(e) => {
-                if (isSubfolder) {
-                  openFolderContextMenu(e, {
-                    kind: 'subfolder',
-                    kbId,
-                    folderId: row.id,
-                    folderName: row.displayName || row.name,
-                  });
-                }
-              }}
-              onClick={(e) => {
-                if (!isSubfolder && row.originalKey) handleFileClick(row.originalKey, e);
-              }}
-              onDoubleClick={() => {
-                if (isSubfolder) {
-                  navigateIntoSubfolder(kbId, row.id, row.displayName || row.name);
-                } else if (row.originalKey) {
-                  const filename = row.name;
-                  const isWc =
-                    row.originalKey?.includes('web-crawler/') || row.originalKey?.includes('scraped-content/');
-                  const ext = isWc ? 'md' : filename.includes('.') ? filename.split('.').pop() || '' : '';
-                  handleOpenFilePreview({
-                    filename,
-                    fullPath: row.originalKey!,
-                    relativePath: row.originalKey!,
-                    extension: ext,
-                  });
-                }
-              }}
-              style={{ cursor: 'pointer' }}
-            >
-              <div className="finder-row__name-content">
-                {isSubfolder ? (
-                  isSubfolderLoading ? (
-                    <Spinner
-                      animation="border"
-                      size="sm"
-                      variant="secondary"
-                      style={{ width: '0.6rem', height: '0.6rem', flexShrink: 0 }}
-                    />
-                  ) : (
-                    <span className="finder-chevron" onClick={() => toggleSubfolder(kbId, row.id)}>
-                      <i className={`bi bi-chevron-${isSubfolderExpanded ? 'down' : 'right'}`} />
-                    </span>
-                  )
-                ) : (
-                  <span className="finder-chevron-spacer" />
-                )}
-                <i
-                  className={`bi ${isSubfolder ? 'bi-folder-fill finder-icon--folder' : 'bi-file-earmark finder-icon--file'} finder-icon`}
-                />
-                <span className="finder-name">{row.displayName || row.name}</span>
-              </div>
-              <div className="finder-row__meta finder-row__meta--type">
-                {isSubfolder
-                  ? tKb('fileExplorer.table.typeFolder')
-                  : row.name.includes('.')
-                    ? (row.name.split('.').pop()?.toUpperCase() ?? '')
-                    : ''}
-              </div>
-              <div className="finder-row__meta d-none d-lg-block">{!isSubfolder ? row.uploadedBy || '' : ''}</div>
-              <div className="finder-row__meta d-none d-md-block">{!isSubfolder ? row.uploadDate : ''}</div>
-              <div className="finder-row__meta d-none d-sm-block">
-                {isSubfolder
-                  ? (() => {
-                      const state = kbFileStates.get(kbId);
-                      if (!state) return '';
-                      const prefix = row.id.endsWith('/') ? row.id : `${row.id}/`;
-                      const count = state.files.filter((f) => f.Key.startsWith(prefix) && !f.Key.endsWith('/')).length;
-                      return count > 0 ? tKb('fileExplorer.table.items', { count }) : '';
-                    })()
-                  : row.size}
-              </div>
-              <div className="finder-row__actions">
-                {!isSubfolder && row.originalKey && (
-                  <>
-                    <button
-                      onClick={() => {
-                        const filename = row.name;
-                        const isWc =
-                          row.originalKey?.includes('web-crawler/') || row.originalKey?.includes('scraped-content/');
-                        const ext = isWc ? 'md' : filename.includes('.') ? filename.split('.').pop() || '' : '';
-                        handleOpenFilePreview({
-                          filename,
-                          fullPath: row.originalKey!,
-                          relativePath: row.originalKey!,
-                          extension: ext,
-                        });
-                      }}
-                      title={tKb('fileExplorer.actions.previewInPanel')}
-                    >
-                      <i className="bi bi-eye" />
-                    </button>
-                    <button
-                      onClick={() => handleDownloadFile(row.originalKey!, row.name)}
-                      title={tKb('fileExplorer.actions.downloadFile')}
-                    >
-                      <i className="bi bi-download" />
-                    </button>
-                    {rowCanEdit && (
-                      <button onClick={() => openRename(kbId, row.originalKey!, row.name)} title={t('rename.title')}>
-                        <i className="bi bi-pencil" />
-                      </button>
-                    )}
-                    {rowCanEdit && (
-                      <button
-                        onClick={() => confirmDeleteFiles(kbId, [row.originalKey!])}
-                        title={t('delete.confirm', { count: 1 })}
-                      >
-                        <i className="bi bi-trash" />
-                      </button>
-                    )}
-                  </>
-                )}
-                {isSubfolder && rowCanEdit && (
-                  <button
-                    onClick={() => confirmDeleteSubfolder(kbId, row.id, row.displayName || row.name)}
-                    title={t('delete.confirm', { count: 1 })}
-                  >
-                    <i className="bi bi-trash" />
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+          })
+        )}
       </div>
 
       {/* Modals */}
@@ -2072,6 +2210,8 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   selectedFolder={selectedFolder}
                   enableFolderUpload
                   rejectFolders={!!rootKB && uploadTargetKb.kb_id === rootKB.kb_id && !selectedFolder}
+                  preloadedFiles={droppedUploadBatch}
+                  autoUploadPreloaded
                 />
               </div>
             </div>

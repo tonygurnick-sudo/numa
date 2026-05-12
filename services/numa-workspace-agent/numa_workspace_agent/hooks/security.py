@@ -12,6 +12,7 @@ Hook return values:
 import logging
 import os
 import re
+import shlex
 from datetime import datetime, timezone
 from typing import Any
 
@@ -46,6 +47,18 @@ BLOCKED_FILE_PATTERNS = [
     ".env.production",
     ".env.development",
 ]
+
+# Harmless device paths commonly used in shell redirection (`> /dev/null`, etc.).
+# These are read-only character devices with no exfiltration or info-disclosure
+# risk — skip them in the outside-workspace path scan.
+ALLOWED_DEVICE_PATHS = {
+    "/dev/null",
+    "/dev/stderr",
+    "/dev/stdout",
+    "/dev/zero",
+    "/dev/random",
+    "/dev/urandom",
+}
 
 # Dangerous bash command patterns
 DANGEROUS_COMMANDS = [
@@ -153,8 +166,12 @@ ENV_VAR_PATTERNS = [
     r"\$\((?:whoami|id|hostname|uname|groups)\)",
     # Standalone 'id' command (special case - common substring)
     r"(?:^|\||;|&&)\s*id\s*(?:$|\||;|&&|>|\s+-)",
-    # Standalone 'df' command (disk free) - uses regex to avoid matching "pdf", "--format pdf", etc.
-    r"(?:^|\||;|&&)\s*df(?:\s|$|-)",
+    # Note: standalone `df` (disk free) was previously blocked here. Removed —
+    # the regex trailing `(?:\s|$|-)` false-positived on the canonical pandas
+    # variable name in `python3 -c "...; df = pd.read_excel(...)"` (df followed
+    # by whitespace). Disk-layout disclosure in a per-conversation MicroVM is
+    # not a meaningful boundary (the container has no special mounts), so the
+    # cost of the false positive outweighs the protection.
 ]
 
 # Protected directories that should be completely hidden (no listing, no access)
@@ -228,19 +245,20 @@ DANGEROUS_NODE_PATTERNS = [
     r"from\s+['\"]dgram['\"]",
     r"from\s+['\"]dns['\"]",
     r"from\s+['\"]tls['\"]",
-    # System info / sandbox escape
-    r"require\s*\(\s*['\"]os['\"]",
+    # Sandbox escape (vm) / cluster forking
+    # Note: 'os' module is read-only system info — not a boundary. Removed.
     r"require\s*\(\s*['\"]vm['\"]",
     r"require\s*\(\s*['\"]cluster['\"]",
-    r"from\s+['\"]os['\"]",
     r"from\s+['\"]vm['\"]",
     r"from\s+['\"]cluster['\"]",
     # Environment variable access (leaks AWS secrets, Cognito tokens, etc.)
+    # Note: bare process.exit() is flow-control, not security — removed.
     r"process\.env",
-    r"process\.exit",
     # Dynamic code execution
+    # Note: only `new Function(...)` is the eval-equivalent; bare Function() is a
+    # constructor call common in legitimate code (PptxGenJS, regex builders).
     r"\beval\s*\(",
-    r"\bFunction\s*\(",
+    r"\bnew\s+Function\s*\(",
     # Global process access bypasses
     r"\bglobalThis\b",
     r"\bReflect\s*\.",
@@ -263,7 +281,10 @@ DANGEROUS_PYTHON_PATTERNS = [
     # NOTE: ^\s* anchors to start-of-line (with re.MULTILINE) so that "import os"
     # inside string literals (e.g. HTML test descriptions) does not trigger a false
     # positive. Real import statements always start at the beginning of a line.
-    r"^\s*import\s+os\b",
+    # Note: bare `os`, `shutil`, `signal`, `code` are stdlib and have legitimate
+    # workspace uses (os.path.getsize, shutil.copy within /workdir, etc.). The
+    # actually-dangerous calls (os.environ, os.system, os.popen, shutil.rmtree('/etc'))
+    # are caught separately below.
     r"^\s*import\s+subprocess\b",
     r"^\s*import\s+socket\b",
     r"^\s*import\s+urllib\b",
@@ -271,17 +292,12 @@ DANGEROUS_PYTHON_PATTERNS = [
     r"^\s*import\s+http\b",
     r"^\s*import\s+sys\b",
     r"^\s*import\s+pty\b",
-    r"^\s*import\s+shutil\b",
-    r"^\s*import\s+signal\b",
-    r"^\s*import\s+code\b",
     r"^\s*import\s+marshal\b",
     r"^\s*import\s+antigravity\b",
     r"^\s*import\s+webbrowser\b",
-    r"^\s*from\s+os\s+import",
     r"^\s*from\s+subprocess\s+import",
     r"^\s*from\s+socket\s+import",
     r"^\s*from\s+sys\s+import",
-    r"^\s*from\s+shutil\s+import",
     r"^\s*from\s+marshal\s+import",
     # Import bypasses
     r"__import__\s*\(",
@@ -330,24 +346,19 @@ DANGEROUS_PYTHON_PATTERNS = [
     r"open\s*\(\s*['\"]\/(?!workdir)",  # open('/etc...')
     r"open\s*\(\s*['\"]\.\.\/",  # open('../...')
     r"open\s*\(\s*f['\"].*\/(?!workdir)",  # open(f'/etc...')
-    # Path construction that escapes workdir
-    r"['\"]\/etc",
-    r"['\"]\/proc",
-    r"['\"]\/sys",
-    r"['\"]\/dev",
-    r"['\"]\/root",
-    r"['\"]\/home",
-    r"['\"]\/var",
-    r"['\"]\/tmp",
-    r"['\"]\/usr",
-    r"['\"]\/opt",
-    r"['\"]\/run",
-    r"['\"]\/boot",
-    # Byte/encoding tricks to hide paths
-    r"bytes\s*\(\s*\[",  # bytes([47, 101, ...])
-    r"\.decode\s*\(\s*\)",  # .decode() after bytes
-    r"base64\.b64decode",
-    r"codecs\.decode",
+    # Sensitive system path passed as argument to a function/constructor call.
+    # Matches: open('/etc/...'), Path('/proc/...'), subprocess.run(['/etc/...']),
+    # os.chdir('/var/...'), shutil.copy('/usr/...'), etc.
+    # Requires `(` immediately before the string literal, so this does NOT match
+    # path strings in comments, docstrings, or unrelated data. Replaces 12 separate
+    # standalone-literal regexes (`'/etc`, `'/proc`, ...) that fired on every
+    # docstring containing those substrings.
+    r"\(\s*\[?\s*[bfru]*['\"]\/(?:tmp|var|opt|etc|proc|sys|dev|root|home|usr|run|boot)\b",
+    # Note: bytes([...]) / .decode() / base64.b64decode / codecs.decode were
+    # previously blocked as "path-hiding" tricks. Removed — they have many
+    # legitimate uses (PDF/image parsing, base64 in API responses, decoded email
+    # bodies). The boundary holds via the function-call-with-sensitive-path regex
+    # above and the path-string-at-open() check higher up.
     # Environment variable access
     r"os\.environ",
     r"os\.getenv",
@@ -392,13 +403,32 @@ def normalize_path(path: str, cwd: str = WORKSPACE_ROOT) -> str:
     return os.path.realpath(path)
 
 
-def is_blocked_path(path: str, cwd: str = WORKSPACE_ROOT) -> tuple[bool, str | None]:
+# SDK-persisted tool-result overflow lives under /workdir/.system/.claude/projects/.
+# When a tool's output is too large for inline return, the Claude Agent SDK persists
+# the full payload here and tells the model to Read it. Pre-allowlist these paths
+# so the SDK and the hook don't contradict each other; everything else under
+# /workdir/.system/ stays blocked (memory paths, trace files, session state).
+SDK_TOOL_RESULT_ALLOWLIST = re.compile(
+    r"^/workdir/\.system/\.claude/projects/[^/]+/tool-results/[^/]+\.json$"
+)
+
+
+def is_blocked_path(
+    path: str,
+    cwd: str = WORKSPACE_ROOT,
+    *,
+    allow_sdk_tool_results: bool = False,
+) -> tuple[bool, str | None]:
     """
     Check if a path should be blocked.
 
     Security model:
     1. Block EVERYTHING outside /workdir (no exceptions)
     2. Block sensitive paths within /workdir (.system/, secrets/, .env)
+    3. If `allow_sdk_tool_results` is True, narrowly permit reading the SDK's
+       persisted tool-result JSON sidecars (only set by Read in security_hook;
+       Write/Edit/Glob/Grep keep their full blocklist semantics so the model
+       can't enumerate or modify the directory).
 
     Returns:
         (is_blocked, reason) tuple
@@ -411,6 +441,14 @@ def is_blocked_path(path: str, cwd: str = WORKSPACE_ROOT) -> tuple[bool, str | N
     # Block EVERYTHING outside /workdir - simple and secure
     if not normalized.startswith(WORKSPACE_ROOT + "/") and normalized != WORKSPACE_ROOT:
         return True, f"Access outside workspace '{WORKSPACE_ROOT}' is blocked"
+
+    # SDK-persisted tool-result files: pre-allowlist for Read only. The SDK
+    # writes these when a tool result exceeds the inline size cap and tells
+    # the model to Read the resulting JSON sidecar. Everything else under
+    # .system/ — memory paths, trace files, session state — stays blocked
+    # by BLOCKED_PATH_PATTERNS below.
+    if allow_sdk_tool_results and SDK_TOOL_RESULT_ALLOWLIST.match(normalized):
+        return False, None
 
     # Check against blocked path patterns within workspace (.system/, secrets/, .env)
     for pattern in BLOCKED_PATH_PATTERNS:
@@ -431,13 +469,17 @@ def is_blocked_path(path: str, cwd: str = WORKSPACE_ROOT) -> tuple[bool, str | N
 
 def check_python_command(command: str) -> tuple[bool, str | None]:
     """
-    Check Python command for dangerous patterns.
+    Check Python command for dangerous patterns in inline code.
 
-    Scans BOTH:
-    - Inline code via -c flag: python3 -c "code"
-    - Python files: python3 /workdir/script.py
+    Scans inline code passed via the -c flag (`python3 -c "code"`).
 
-    Catches common bypasses like __import__, exec(), eval(), network access, etc.
+    Does NOT scan the content of referenced `.py` files. The threat model is
+    subprocess egress (network, /etc access, env vars, package install), and
+    those are caught by patterns at command-invocation time (DANGEROUS_COMMANDS,
+    ENV_VAR_PATTERNS, the path scan in check_bash_command). File content scanning
+    previously produced cost-amplifying false positives — e.g. legitimate `import
+    os` for `os.path.getsize`, `process.exit(1)` in a `.catch` block — and the
+    model learned to bypass the Bash hook by routing through execute_script.
     """
     # Check inline code passed via -c flag
     # Handles: python -c "code", python3 -c 'code', etc.
@@ -450,37 +492,22 @@ def check_python_command(command: str) -> tuple[bool, str | None]:
                 if re.search(pattern, python_code, re.IGNORECASE | re.MULTILINE):
                     return True, f"Dangerous Python pattern detected: {pattern}"
 
-    # Check Python file content when executing .py files
-    # Match: python3 /workdir/script.py, python /workdir/foo.py, etc.
-    # Security: Only scans files within /workdir (workspace jail applies)
-    file_match = re.search(r'python3?\s+["\']?(/workdir/[^\s"\']+\.py)["\']?', command)
-    if file_match:
-        script_path = file_match.group(1)
-        try:
-            with open(script_path, "r") as f:
-                file_content = f.read()
-            for pattern in DANGEROUS_PYTHON_PATTERNS:
-                if re.search(pattern, file_content, re.IGNORECASE | re.MULTILINE):
-                    return True, f"Dangerous pattern in {script_path}: {pattern}"
-        except FileNotFoundError:
-            # File doesn't exist yet, will fail at execution anyway
-            pass
-        except Exception as e:
-            logger.warning(f"Could not scan Python file {script_path}: {e}")
-
     return False, None
 
 
 def check_node_command(command: str) -> tuple[bool, str | None]:
     """
-    Check Node.js command for dangerous patterns.
+    Check Node.js command for dangerous patterns in inline code.
 
-    Scans BOTH:
-    - Inline code via -e flag: node -e "code"
-    - JS files: node /workdir/script.js
-
+    Scans inline code passed via the -e flag (`node -e "code"`).
     Blocks shell escape (child_process), env access, network modules, etc.
     Allows: require('fs'), require('path'), require('pptxgenjs'), require('sharp').
+
+    Does NOT scan the content of referenced `.js`/`.mjs`/`.cjs` files. The threat
+    model is subprocess egress, which is caught at invocation time. File-content
+    scanning previously produced cost-amplifying false positives — e.g. legitimate
+    `process.exit(1)` in a `.catch` block, or `Function(args, body)` constructor
+    usage in PptxGenJS — and the model learned to bypass via execute_script.
     """
     # Check inline code passed via -e flag
     if " -e " in command:
@@ -490,25 +517,6 @@ def check_node_command(command: str) -> tuple[bool, str | None]:
             for pattern in DANGEROUS_NODE_PATTERNS:
                 if re.search(pattern, node_code, re.IGNORECASE):
                     return True, f"Dangerous Node.js pattern detected: {pattern}"
-
-    # Check JS file content when executing .js/.mjs/.cjs files
-    # Match: node /workdir/script.js, node /workdir/outputs/gen.cjs, etc.
-    file_match = re.search(
-        r'node\s+["\']?(/workdir/[^\s"\']+\.(?:js|mjs|cjs))["\']?', command
-    )
-    if file_match:
-        script_path = file_match.group(1)
-        try:
-            with open(script_path, "r") as f:
-                file_content = f.read()
-            for pattern in DANGEROUS_NODE_PATTERNS:
-                if re.search(pattern, file_content, re.IGNORECASE):
-                    return True, f"Dangerous pattern in {script_path}: {pattern}"
-        except FileNotFoundError:
-            # File doesn't exist yet, will fail at execution anyway
-            pass
-        except Exception as e:
-            logger.warning(f"Could not scan Node.js file {script_path}: {e}")
 
     return False, None
 
@@ -627,21 +635,37 @@ def check_bash_command(
         if blocked:
             return True, reason
 
-    # Strip data content (heredocs, -c/-e inline code) before path scanning.
-    # This prevents false positives where content strings like "loan/credit"
-    # in JSON are mistaken for file paths like "/credit".
-    command_structure = strip_data_content(command)
-
-    # Block any command referencing paths outside /workdir
-    # Use regex to find path-like strings in the command structure (not data content)
-    path_pattern = r'["\']?(\/[a-zA-Z0-9_\-\.\/]+)'
-    for match in re.finditer(path_pattern, command_structure):
-        path = match.group(1)
-        # Skip if it's a workdir path
-        if path.startswith(WORKSPACE_ROOT):
-            continue
-        # Block paths outside workspace
-        return True, f"Command references path outside workspace: {path}"
+    # Block any command referencing paths outside /workdir.
+    # Use shlex to tokenize: this correctly handles quoted strings (so `echo
+    # "outputs empty/missing"` becomes one data token, not a path scan against
+    # `/missing`) and -c/-e bodies (so `\n#` inside an inline Python snippet
+    # doesn't break path detection). On malformed quoting we fall back to the
+    # legacy strip-then-regex scan.
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        logger.debug("shlex.split failed for command; falling back to legacy path scan")
+        command_structure = strip_data_content(command)
+        path_pattern = r'["\']?(\/[a-zA-Z0-9_\-\.\/]+)'
+        for match in re.finditer(path_pattern, command_structure):
+            path = match.group(1)
+            if path.startswith(WORKSPACE_ROOT):
+                continue
+            return True, f"Command references path outside workspace: {path}"
+    else:
+        for token in tokens:
+            # Only inspect tokens that look like absolute paths.
+            # Skip data tokens (no leading /), flags, command names, redirect
+            # residue like "2>/dev/null", and shell operators.
+            if not token.startswith("/"):
+                continue
+            # Skip workspace paths
+            if token == WORKSPACE_ROOT or token.startswith(WORKSPACE_ROOT + "/"):
+                continue
+            # Allow common harmless device paths used in shell redirection
+            if token in ALLOWED_DEVICE_PATHS:
+                continue
+            return True, f"Command references path outside workspace: {token}"
 
     # Check for blocked paths in the command string
     for pattern in BLOCKED_PATH_PATTERNS:
@@ -679,13 +703,103 @@ def check_task_input(
     return False, None
 
 
+def _remediation_hint(reason: str) -> str:
+    """Produce a remediation hint tailored to the reason category.
+
+    The reason string is the upstream message from check_bash_command /
+    is_blocked_path. We branch on its prefix to give the model an actionable
+    next step instead of the same generic "/etc, /home, /tmp blocked" boilerplate
+    that previously misled the model into wrong remediations.
+    """
+    if reason.startswith("Dangerous Python pattern"):
+        return (
+            "Legitimate Python imports (os.path, pandas, openpyxl, pptxgenjs, "
+            "shutil against /workdir paths) are allowed. Blocked: subprocess, "
+            "socket, pickle, exec/eval/compile, os.environ/os.system/os.popen, "
+            "and string literals targeting system paths (/etc, /proc, /var, ...). "
+            "If you need to run a longer script, Write it to /workdir/tmp/<name>.py "
+            "and execute with `python3 /workdir/tmp/<name>.py`."
+        )
+    if reason.startswith("Dangerous Node.js pattern"):
+        return (
+            "Legitimate Node modules (fs, path, pptxgenjs, sharp) are allowed. "
+            "Blocked: child_process, network modules (net/http/https/dns/tls/dgram), "
+            "vm/cluster, process.env, eval, `new Function(...)`. If you need to run a "
+            "longer script, Write it to /workdir/tmp/<name>.js and execute with "
+            "`node /workdir/tmp/<name>.js`."
+        )
+    if reason.startswith("Dangerous command blocked"):
+        return (
+            "Network egress (curl/wget/nc), package installers (pip/npm/apt), "
+            "privilege escalation (sudo/su), and shell wrappers (bash -c, sh -c) "
+            "are blocked. The workspace has no network egress — for HTTP needs, "
+            "use the integrations or KB tools instead."
+        )
+    if reason.startswith("Environment variable access"):
+        return (
+            "Reading environment variables is blocked to protect AWS/Cognito/"
+            "service credentials. If you need a config value, ask the user to "
+            "paste it explicitly or read it from a /workdir/ file."
+        )
+    if reason.startswith("Access to protected directories"):
+        return (
+            "/workdir/.system/ and /workdir/secrets/ are hidden from listing "
+            "and access. SDK-persisted tool results under "
+            "/workdir/.system/.claude/projects/*/tool-results/*.json can be Read "
+            "directly when the SDK gives you that path."
+        )
+    if reason.startswith("Direct execution of Numa CLI"):
+        return ""  # The reason already contains its own remediation.
+    if reason.startswith("Command references path outside workspace"):
+        return (
+            "Only paths within /workdir/ are accessible. Use /workdir/tmp/ for "
+            "scratch files and /workdir/outputs/ for user-facing artefacts. "
+            "Redirects to /dev/null and similar harmless device paths are allowed."
+        )
+    if reason.startswith("Access to '") and ".system" in reason:
+        # Same path the Bash `ls -la /workdir` branch uses — keep the two
+        # consistent so the model gets the same remediation regardless of
+        # which tool surfaced the block.
+        return (
+            "/workdir/.system/ and /workdir/secrets/ are hidden from listing "
+            "and access. SDK-persisted tool results under "
+            "/workdir/.system/.claude/projects/*/tool-results/*.json can be Read "
+            "directly when the SDK gives you that path."
+        )
+    if reason.startswith("Access outside workspace") or reason.startswith(
+        "Access to '"
+    ):
+        return (
+            "Only paths within /workdir/ are accessible. Protected: .system/, "
+            "secrets/, .env files."
+        )
+    if reason.startswith("Bash command references blocked"):
+        return (
+            "/workdir/.system/, /workdir/secrets/, and .env files cannot be "
+            "accessed via Bash. Use Read for SDK-persisted tool-result JSON files "
+            "under /workdir/.system/.claude/projects/*/tool-results/ if the SDK "
+            "directed you there."
+        )
+    if reason.startswith("Task references blocked"):
+        return "Sub-agent tasks must not reference .system/, secrets/, or .env."
+    return (
+        "Only paths within /workdir/ are accessible.\n"
+        "Protected paths include: .system/, secrets/, .env files.\n"
+        "System paths (/etc, /home, /tmp, etc.) are blocked."
+    )
+
+
 def deny_response(reason: str) -> dict[str, Any]:
-    """Create a deny response for the hook."""
+    """Create a deny response for the hook with a category-aware remediation hint."""
+    hint = _remediation_hint(reason)
+    message = f"SECURITY_POLICY_VIOLATION: {reason}"
+    if hint:
+        message = f"{message}\n\n{hint}"
     return {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
+            "permissionDecisionReason": message,
         }
     }
 
@@ -718,10 +832,17 @@ async def security_hook(
     blocked = False
     reason = None
 
-    # Check tools that use file_path field (Read, Write, Edit)
+    # Check tools that use file_path field (Read, Write, Edit).
+    # Read gets the SDK-tool-results allowlist so the model can pick up the
+    # JSON sidecars the SDK persists for oversized tool outputs; Write/Edit do
+    # NOT — the directory is read-only from the model's perspective.
     if tool_name in FILE_PATH_TOOLS:
         file_path = tool_input.get("file_path", "")
-        blocked, reason = is_blocked_path(file_path, cwd)
+        blocked, reason = is_blocked_path(
+            file_path,
+            cwd,
+            allow_sdk_tool_results=(tool_name == "Read"),
+        )
 
     # Check MultiEdit tool (has edits array with file_path in each)
     elif tool_name == "MultiEdit":
@@ -758,13 +879,7 @@ async def security_hook(
                 "reason": reason,
             },
         )
-        return deny_response(
-            f"SECURITY_POLICY_VIOLATION: {reason}\n\n"
-            "This path/resource is protected and cannot be accessed.\n"
-            "- Only paths within /workdir/ are accessible\n"
-            "- Protected paths include: .system/, secrets/, .env files\n"
-            "- System paths (/etc, /home, /tmp, etc.) are blocked"
-        )
+        return deny_response(reason)
 
     return {}
 

@@ -38,7 +38,11 @@ export class AdjustToken extends Construct {
           },
           {
             effect: 'Allow',
-            actions: ['cognito-idp:AdminGetUser', 'cognito-idp:DescribeUserPool'],
+            actions: [
+              'cognito-idp:AdminGetUser',
+              'cognito-idp:DescribeUserPool',
+              'cognito-idp:AdminUpdateUserAttributes',
+            ],
             // We cannot use the exact pool ID here because the pool depends on
             // this Lambda (circular — the pool references our ARN in lambdaConfig).
             // Each client account has only one user pool, so scoping to all pools

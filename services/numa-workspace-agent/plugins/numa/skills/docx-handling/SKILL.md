@@ -185,6 +185,8 @@ python -m markitdown /workdir/uploads/document.docx
 
 This outputs the document content as markdown — great for quick review or processing.
 
+> **For richer extraction** (full body, tables, more accurate structure) and for legacy/template formats (`.doc`, `.dot`, `.dotx`) where markitdown often returns empty or truncated content, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+
 ### Extract All Text with python-docx
 
 ```python
@@ -604,6 +606,8 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown r
 ## Document Conversion (PDF ↔ DOCX)
 
 Use the `convert_document` tool (via `numa_tool` MCP) for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion.
+
+> `convert_document` accepts legacy Word binary formats (`.doc`, `.dot`) and the modern template variant (`.dotx`) in addition to `.docx` — same `mode="file"` call.
 
 ```
 # DOCX → PDF
