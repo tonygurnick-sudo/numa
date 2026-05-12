@@ -1697,6 +1697,9 @@ function handleResultEvent(
         if (seg.kind === 'tool_card' && (seg as WorkspaceChatToolCardSegment).isLoading) {
           return { ...seg, isLoading: false };
         }
+        if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
+          return { ...seg, status: event.is_error ? 'failed' : 'complete' };
+        }
         return seg;
       });
     }
@@ -2541,6 +2544,9 @@ export function handleSDKStreamComplete(context: SDKEventContext, helpers: Works
         if (seg.kind === 'tool_card' && (seg as WorkspaceChatToolCardSegment).isLoading) {
           return { ...seg, isLoading: false };
         }
+        if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
+          return { ...seg, status: 'complete' };
+        }
         return seg;
       });
     }
@@ -2886,6 +2892,14 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
             currentAssistantMessage.cacheReadTokens = resultEvent.usage.cache_read_input_tokens;
           if (resultEvent.usage.cache_creation_input_tokens != null)
             currentAssistantMessage.cacheCreationTokens = resultEvent.usage.cache_creation_input_tokens;
+        }
+        if (currentAssistantMessage.segments) {
+          currentAssistantMessage.segments = currentAssistantMessage.segments.map((seg) => {
+            if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
+              return { ...seg, status: resultEvent.is_error ? 'failed' : 'complete' };
+            }
+            return seg;
+          });
         }
       }
       continue;

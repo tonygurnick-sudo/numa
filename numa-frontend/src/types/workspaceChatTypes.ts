@@ -397,8 +397,8 @@ export interface WorkspaceChatInlineThinkingSegment {
  */
 export interface WorkspaceChatCompactionSegment {
   kind: 'compaction';
-  /** Current status: 'summarizing' while in progress, 'complete' when done */
-  status: 'summarizing' | 'complete';
+  /** Current status: 'summarizing' while in progress, 'complete' when done, 'failed' if compaction could not finish */
+  status: 'summarizing' | 'complete' | 'failed';
   /** The summary text when compaction is complete */
   summary?: string;
   /** Number of tokens before compaction (from compact_boundary metadata) */
@@ -1236,10 +1236,12 @@ export function isSDKThinkingBlock(block: SDKContentBlock): block is SDKThinking
  * This indicates the start of conversation summarization.
  */
 export function isCompactionStatusEvent(event: SDKEvent): boolean {
+  const status = (event as SDKSystemEvent).data?.status;
   return (
     event.type === 'system' &&
     (event as SDKSystemEvent).subtype === 'status' &&
-    (event as SDKSystemEvent).data?.status === 'compacting'
+    typeof status === 'string' &&
+    status.toLowerCase().includes('compact')
   );
 }
 

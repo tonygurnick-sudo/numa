@@ -5,6 +5,7 @@
  * and Claude Agent SDK automatically summarizes it. Shows:
  * - "Summarizing..." spinner while in progress
  * - Collapsible summary content when complete
+ * - Failure state when the SDK cannot compact before hitting context limits
  */
 import { useState } from 'react';
 import { Spinner } from 'react-bootstrap';
@@ -21,6 +22,7 @@ export function WorkspaceChatCompactionBlock({ segment }: Props) {
   const [collapsed, setCollapsed] = useState(true);
 
   const isSummarizing = status === 'summarizing';
+  const isFailed = status === 'failed';
 
   // Format token count for display (e.g., 124977 -> "125K")
   const formatTokens = (tokens: number): string => {
@@ -31,20 +33,27 @@ export function WorkspaceChatCompactionBlock({ segment }: Props) {
   };
 
   return (
-    <div className={`workspace-chat-compaction-block ${isSummarizing ? 'summarizing' : 'complete'}`}>
+    <div
+      className={`workspace-chat-compaction-block ${isSummarizing ? 'summarizing' : isFailed ? 'failed' : 'complete'}`}
+    >
       {/* Header */}
       <div
         className="compaction-header"
-        onClick={() => !isSummarizing && setCollapsed(!collapsed)}
-        role={isSummarizing ? undefined : 'button'}
-        tabIndex={isSummarizing ? undefined : 0}
-        onKeyDown={(e) => !isSummarizing && e.key === 'Enter' && setCollapsed(!collapsed)}
+        onClick={() => !isSummarizing && !isFailed && setCollapsed(!collapsed)}
+        role={isSummarizing || isFailed ? undefined : 'button'}
+        tabIndex={isSummarizing || isFailed ? undefined : 0}
+        onKeyDown={(e) => !isSummarizing && !isFailed && e.key === 'Enter' && setCollapsed(!collapsed)}
       >
         <div className="compaction-title">
           {isSummarizing ? (
             <>
               <Spinner animation="border" size="sm" className="compaction-spinner" />
               <span className="compaction-label">{t('workspace.compaction.summarizing')}</span>
+            </>
+          ) : isFailed ? (
+            <>
+              <i className="bi bi-exclamation-triangle compaction-icon" />
+              <span className="compaction-label">{t('workspace.compaction.failed')}</span>
             </>
           ) : (
             <>
@@ -58,7 +67,7 @@ export function WorkspaceChatCompactionBlock({ segment }: Props) {
             </>
           )}
         </div>
-        {!isSummarizing && (
+        {!isSummarizing && !isFailed && (
           <div className="compaction-chevron">
             <i className={`bi bi-chevron-${collapsed ? 'down' : 'up'}`} />
           </div>
