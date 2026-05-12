@@ -28,6 +28,95 @@ from numa_workspace_agent.mcp_tools.lambda_client import (
 logger = structlog.get_logger()
 
 
+# ── Upstream-error detection ─────────────────────────────────────────────────
+# Pipedream's invoke_workspace_tool returns `status: success` whenever it
+# successfully forwarded a request to the upstream — even if the upstream
+# (Gmail, LinkedIn, Microsoft Graph, etc.) returned a 4xx/5xx. The real error
+# is logged in the observability stream (`result.os[].k == "error"`) or as a
+# top-level `result.error` object. Without inspection here the model thinks
+# the action worked and only discovers the failure if it Reads the response
+# payload — costing turns. Confirmed across multiple clients in the cost-spike
+# investigation (LinkedIn canonical: ddconsulting; Gmail confirmed on nd-labs).
+
+
+def _extract_error_message(err: Any) -> str | None:
+    """Pull a concise error message from a nested upstream error structure.
+
+    Tries common shapes from Pipedream, Google APIs, and Microsoft Graph.
+    Truncates to 300 chars so the message stays useful for the model without
+    bloating tool_result content.
+    """
+    if isinstance(err, str):
+        return err[:300]
+    if not isinstance(err, dict):
+        return None
+    # Flat shapes: { message: "..." } etc.
+    for key in ("message", "error_description", "detail", "reason"):
+        if isinstance(err.get(key), str):
+            return err[key][:300]
+    # Google API shape: { error: { code: 400, message: "...", status: "..." } }
+    nested = err.get("error")
+    if isinstance(nested, dict) and isinstance(nested.get("message"), str):
+        code = nested.get("code", "?")
+        return f"{code}: {nested['message']}"[:300]
+    # Pipedream sometimes wraps the upstream response under `response.body`
+    response = err.get("response")
+    if isinstance(response, dict):
+        body = response.get("body")
+        if isinstance(body, dict):
+            body_err = body.get("error")
+            if isinstance(body_err, dict) and isinstance(body_err.get("message"), str):
+                code = body_err.get("code", "?")
+                return f"{code}: {body_err['message']}"[:300]
+    return None
+
+
+def _detect_upstream_error(result: Any) -> tuple[bool, str | None]:
+    """Inspect a Pipedream Connect (or proxy_request) result for upstream
+    failures that the wrapper layer would otherwise mask as 'success'.
+
+    Returns:
+        (has_error, summary): summary is a short message suitable for
+        surfacing to the model, or None if no error detected.
+    """
+    if not isinstance(result, dict):
+        return False, None
+
+    # invoke_workspace_tool wraps the upstream response inside `result.result`.
+    # The outer `result.status` is wrapper-level (always "success" if we got
+    # here); inspect the inner payload.
+    inner = result.get("result", result)
+    if not isinstance(inner, dict):
+        return False, None
+
+    # Pattern 1: Pipedream observability stream has an error event.
+    os_events = inner.get("os")
+    if isinstance(os_events, list):
+        for event in os_events:
+            if isinstance(event, dict) and event.get("k") == "error":
+                msg = (
+                    _extract_error_message(event.get("err"))
+                    or "upstream error logged in os[]"
+                )
+                return True, msg
+
+    # Pattern 2: top-level error object in the upstream payload.
+    err = inner.get("error")
+    if err:
+        msg = _extract_error_message(err) or "upstream error in result.error"
+        return True, msg
+
+    # Pattern 3: HTTP-style status code from proxy_request paths.
+    status_code = inner.get("status_code") or inner.get("statusCode")
+    if isinstance(status_code, int) and not 200 <= status_code < 300:
+        # Try to surface the response body if useful.
+        body_msg = _extract_error_message(inner.get("body"))
+        suffix = f" — {body_msg}" if body_msg else ""
+        return True, f"upstream returned HTTP {status_code}{suffix}"
+
+    return False, None
+
+
 @tool(
     name="run_action",
     description=(
@@ -225,6 +314,31 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
 
         # Save result to file
         file_path, preview = save_result(result, action_key, description)
+
+        # Detect upstream errors masked by wrapper "success" (e.g. Gmail
+        # returns 400 in the response body but Pipedream's proxy reports
+        # the call as completed).
+        has_error, error_msg = _detect_upstream_error(result)
+        if has_error:
+            logger.info(
+                "Pipedream upstream error detected",
+                action_key=action_key,
+                error_msg=error_msg,
+            )
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Action failed: {action_key}\n"
+                            f"Upstream error: {error_msg}\n"
+                            f"Full result saved to: {file_path}\n\nPreview:\n{preview}"
+                        ),
+                    }
+                ],
+                "is_error": True,
+                "isError": True,
+            }
 
         return {
             "content": [
@@ -504,6 +618,32 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
 
         # Save result to file
         file_path, preview = save_result(result, f"proxy_{method}", description)
+
+        # Detect upstream errors masked by wrapper "success" — same pattern
+        # as run_action above (Pipedream reports the proxy hop succeeded
+        # even when the upstream API returned a non-2xx).
+        has_error, error_msg = _detect_upstream_error(result)
+        if has_error:
+            logger.info(
+                "Proxy request upstream error detected",
+                method=method,
+                upstream_url=upstream_url,
+                error_msg=error_msg,
+            )
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Proxy request failed: {method} {upstream_url}\n"
+                            f"Upstream error: {error_msg}\n"
+                            f"Full result saved to: {file_path}\n\nPreview:\n{preview}"
+                        ),
+                    }
+                ],
+                "is_error": True,
+                "isError": True,
+            }
 
         return {
             "content": [

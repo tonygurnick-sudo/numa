@@ -555,19 +555,27 @@ async def _handle_convert_document(params: dict[str, Any]) -> dict[str, Any]:
     if mode not in ("markdown", "file"):
         return _err(f"Invalid mode '{mode}'. Must be 'markdown' or 'file'.")
 
-    # For file mode, validate input format (matches document-converter Lambda)
+    # For file mode, validate input format (matches document-converter Lambda).
+    # MUST stay in sync with VALID_INPUT_FORMATS in
+    # lambdas/python/workspace-chat-tools/tools/convert_document.py and the
+    # LIBREOFFICE_EXTENSIONS allowlist in lambdas/node/document-converter/index.ts.
     _SUPPORTED_INPUT_FORMATS = {
         "pdf",
         "docx",
         "doc",
+        "dotx",
         "pptx",
         "ppt",
+        "potx",
+        "pot",
         "xlsx",
         "xls",
         "odp",
         "ods",
         "odt",
         "rtf",
+        "html",
+        "htm",
         "key",
         "numbers",
         "pages",
