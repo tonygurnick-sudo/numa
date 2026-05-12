@@ -427,13 +427,21 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
         // sit in `prev.files` and get kept by the preserve-deep-entries
         // branch since they're absent from the new shallow listing.
         const mapping = new Map(result.successful.map((s) => [s.sourceKey, s.destKey]));
+        const movedFolderPrefixes = toMove.filter((k) => k.endsWith('/'));
+        const isMovedFolderMarker = (key: string) =>
+          key.endsWith('/') && movedFolderPrefixes.some((prefix) => key === prefix || key.startsWith(prefix));
+        const keepFolderState = (id: string) =>
+          !movedFolderPrefixes.some((prefix) => id === prefix || id.startsWith(prefix));
         if (mapping.size > 0) {
           setFileState((prev) => ({
             ...prev,
-            files: prev.files.map((f) => {
+            files: prev.files.flatMap((f) => {
               const dest = mapping.get(f.Key);
-              return dest ? { ...f, Key: dest } : f;
+              if (dest) return [{ ...f, Key: dest }];
+              return isMovedFolderMarker(f.Key) ? [] : [f];
             }),
+            expandedFolders: new Set([...prev.expandedFolders].filter(keepFolderState)),
+            loadedFolders: new Set([...prev.loadedFolders].filter(keepFolderState)),
           }));
         }
         if (result.failed.length > 0) {

@@ -556,6 +556,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         // the old keys linger until the refetch completes and the
         // preserve-deep-entries branch in `fetchKbFiles` keeps them.
         const mapping = new Map(result.successful.map((s) => [s.sourceKey, s.destKey]));
+        const movedFolderPrefixes = toMove.filter((k) => k.endsWith('/'));
+        const isMovedFolderMarker = (key: string) =>
+          key.endsWith('/') && movedFolderPrefixes.some((prefix) => key === prefix || key.startsWith(prefix));
+        const keepFolderState = (id: string) =>
+          !movedFolderPrefixes.some((prefix) => id === prefix || id.startsWith(prefix));
         if (mapping.size > 0) {
           setKbFileStates((prev) => {
             const next = new Map(prev);
@@ -564,10 +569,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             if (sourceKbId === destKbId) {
               next.set(sourceKbId, {
                 ...source,
-                files: source.files.map((f) => {
+                files: source.files.flatMap((f) => {
                   const dest = mapping.get(f.Key);
-                  return dest ? { ...f, Key: dest } : f;
+                  if (dest) return [{ ...f, Key: dest }];
+                  return isMovedFolderMarker(f.Key) ? [] : [f];
                 }),
+                expandedFolders: new Set([...source.expandedFolders].filter(keepFolderState)),
+                loadedFolders: new Set([...source.loadedFolders].filter(keepFolderState)),
               });
             } else {
               const moved: S3Object[] = [];
@@ -577,9 +585,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   moved.push({ ...f, Key: dest });
                   return false;
                 }
-                return true;
+                return !isMovedFolderMarker(f.Key);
               });
-              next.set(sourceKbId, { ...source, files: remaining });
+              next.set(sourceKbId, {
+                ...source,
+                files: remaining,
+                expandedFolders: new Set([...source.expandedFolders].filter(keepFolderState)),
+                loadedFolders: new Set([...source.loadedFolders].filter(keepFolderState)),
+              });
               const destState = prev.get(destKbId);
               if (destState && moved.length > 0) {
                 next.set(destKbId, { ...destState, files: [...destState.files, ...moved] });
