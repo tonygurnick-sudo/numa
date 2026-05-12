@@ -301,7 +301,46 @@ export function getRenderPayload(result: ToolResultLike): RenderPayload | null {
   }
 }
 
-// -------- Shared S3 file result hook --------
+// -------- Shared S3 file result helpers --------
+/**
+ * One-shot fetch of a JSON file from S3 by its /workdir/ path. Same key
+ * construction as useS3FileResult — kept separate so non-hook callers
+ * (like the export flow) can await the result.
+ */
+export async function fetchS3WorkspaceJson<T = unknown>(
+  filePath: string,
+  conversationId: string,
+  sub: string,
+  getCredentials: () => Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken: string }>,
+  options?: { maxRetries?: number; retryDelayMs?: number }
+): Promise<T | null> {
+  const relativePath = filePath.replace(/^\/workdir\//, '');
+  const bucket = window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
+  const region = window.sessionStorage.getItem('REGION');
+  if (!bucket || !region) return null;
+
+  const s3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${relativePath}`;
+  const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+  const credentials = await getCredentials();
+  const client = new S3Client({ region, credentials });
+
+  const maxRetries = options?.maxRetries ?? 3;
+  const retryDelayMs = options?.retryDelayMs ?? 1000;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
+      const text = await resp.Body?.transformToString();
+      if (text) return JSON.parse(text) as T;
+    } catch {
+      if (attempt < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, retryDelayMs));
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Fetch a file from S3 by its /workdir/ path.
  *
@@ -322,41 +361,14 @@ export function useS3FileResult(
 
   useEffect(() => {
     if (!filePath || !conversationId || !sub) return;
-    const relativePath = filePath.replace(/^\/workdir\//, '');
-    const bucket = window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
-    const region = window.sessionStorage.getItem('REGION');
-    if (!bucket || !region) return;
-
-    const s3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${relativePath}`;
     let cancelled = false;
     setLoading(true);
 
     (async () => {
-      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const credentials = await stableGetCredentials();
-      const client = new S3Client({ region, credentials });
-
-      const MAX_RETRIES = 3;
-      const RETRY_DELAY_MS = 1000;
-
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        if (cancelled) return;
-        try {
-          const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
-          const text = await resp.Body?.transformToString();
-          if (text && !cancelled) {
-            setFileData(JSON.parse(text));
-            setLoading(false);
-            return;
-          }
-        } catch {
-          if (attempt < MAX_RETRIES - 1) {
-            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-          }
-        }
-      }
-
-      if (!cancelled) setLoading(false);
+      const data = await fetchS3WorkspaceJson(filePath, conversationId, sub, stableGetCredentials);
+      if (cancelled) return;
+      if (data) setFileData(data);
+      setLoading(false);
     })();
 
     return () => {
