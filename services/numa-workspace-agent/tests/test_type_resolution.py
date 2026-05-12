@@ -45,6 +45,12 @@ class TestCreateAgentOptionsDefaults:
         options = create_agent_options()
         assert options.max_turns == 50
 
+    def test_max_output_tokens_env_set(self):
+        # Per-API-call output cap is held to 32k by default so chat sessions get
+        # more breathing room before auto-compaction triggers.
+        options = create_agent_options()
+        assert options.env.get("CLAUDE_CODE_MAX_OUTPUT_TOKENS") == "32000"
+
 
 class TestCreateAgentOptionsWithType:
     """Test that agent type config overrides are applied correctly."""
