@@ -799,10 +799,6 @@ async def move_kb_files(request: Request, kb_id: str) -> Response:
                     {"error": f"Key '{k}' is outside source KB prefix"},
                     status_code=400,
                 )
-            if k.endswith("/"):
-                return JSONResponse(
-                    {"error": "Folder moves are not supported yet"}, status_code=400
-                )
 
         dest_folder_prefix = (
             f"{dest_prefix}{dest_path}/".replace("//", "/")
@@ -812,14 +808,53 @@ async def move_kb_files(request: Request, kb_id: str) -> Response:
 
         s3 = prm_client("s3", region=REGION)
 
+        def _list_folder_objects(prefix: str) -> List[str]:
+            objects: List[str] = []
+            paginator = s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=DATA_BUCKET, Prefix=prefix):
+                for item in page.get("Contents", []) or []:
+                    key = item.get("Key")
+                    if key:
+                        objects.append(key)
+            return objects
+
+        def _append_pair(source_key: str, dest_key: str) -> None:
+            if source_key.endswith(".metadata.json"):
+                return
+            if dest_key == source_key:
+                return
+            pairs.append((source_key, dest_key))
+
         # Build (source -> destination) pairs, filtering out no-op self-moves.
+        # Folder keys preserve the folder name and all descendants.
         pairs: List[Tuple[str, str]] = []
         for key in keys:
-            filename = key.split("/")[-1]
-            new_key = f"{dest_folder_prefix}{filename}"
-            if new_key == key:
-                continue
-            pairs.append((key, new_key))
+            if key.endswith("/"):
+                folder_prefix = key
+                if dest_folder_prefix.startswith(folder_prefix):
+                    return JSONResponse(
+                        {"error": "Cannot move a folder into itself"},
+                        status_code=400,
+                    )
+
+                folder_name = folder_prefix.rstrip("/").split("/")[-1]
+                dest_base = f"{dest_folder_prefix}{folder_name}/".replace("//", "/")
+                folder_objects = _list_folder_objects(folder_prefix)
+
+                # Empty marker folders still move even if list_objects only
+                # returns the marker itself. If there is no marker and no
+                # children, the move is a no-op.
+                for source_key in folder_objects:
+                    if source_key == folder_prefix:
+                        _append_pair(source_key, dest_base)
+                        continue
+                    relative = source_key[len(folder_prefix) :]
+                    _append_pair(
+                        source_key, f"{dest_base}{relative}".replace("//", "/")
+                    )
+            else:
+                filename = key.split("/")[-1]
+                _append_pair(key, f"{dest_folder_prefix}{filename}")
 
         if not pairs:
             return JSONResponse(
