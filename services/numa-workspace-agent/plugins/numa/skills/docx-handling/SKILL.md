@@ -605,6 +605,8 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown r
 
 Use the `convert_document` tool (via `numa_tool` MCP) for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion.
 
+> `convert_document` accepts legacy Word binary formats (`.doc`, `.dot`) and the modern template variant (`.dotx`) in addition to `.docx` — same `mode="file"` call.
+
 ```
 # DOCX → PDF
 numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})

@@ -1,6 +1,6 @@
 ---
 name: spreadsheet-handling
-description: 'Read, write, and analyze spreadsheet files (Excel, CSV, TSV). Use when working with .xlsx, .xls, .xlsm, .csv, .tsv files, data analysis, pivot tables, or format conversion.'
+description: 'Read, write, and analyze spreadsheet files (Excel, CSV, TSV). Use when working with .xlsx, .xls, .xlsm, .xlt, .xltx, .csv, .tsv files, data analysis, pivot tables, or format conversion.'
 ---
 
 # Spreadsheet Handling Skill

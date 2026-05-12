@@ -176,6 +176,8 @@ numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/presen
 Bash(command="pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide")
 ```
 
+> `convert_document` accepts legacy PowerPoint binary formats (`.ppt`, `.pot`) and the modern template variant (`.potx`) in addition to `.pptx` — same `mode="file"` call.
+
 ### Content QA
 
 ```bash
