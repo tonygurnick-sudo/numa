@@ -212,7 +212,8 @@ export function getToolCategoryAndIcon(
     const inputObj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
     const subTool = (inputObj.name as string) || '';
     const NUMA_SUB_TOOL_ICONS: Record<string, string> = {
-      knowledge_base: 'bi-folder2-open',
+      numa_files: 'bi-folder2-open',
+      knowledge_base: 'bi-folder2-open', // legacy alias
       web_search: 'bi-search',
       extract_content: 'bi-file-earmark-text',
       convert_document: 'bi-file-earmark-arrow-down',
@@ -1042,7 +1043,11 @@ function addCompactionSegment(helpers: WorkspaceChatMessageHelpers): void {
     const updated = ensureAssistantMessage(prev);
     const lastIdx = updated.length - 1;
     const lastMsg = { ...updated[lastIdx] };
-    const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
+    const segments = ([...(lastMsg.segments || [])] as WorkspaceChatSegment[]).filter(
+      (s) => s.kind !== 'inline_thinking'
+    );
+
+    lastMsg.status = 'streaming';
 
     // Check if there's already a compaction segment
     const existingIdx = segments.findIndex((s) => s.kind === 'compaction');
@@ -1570,6 +1575,8 @@ function handleSystemEvent(
   if (isCompactBoundaryEvent(event)) {
     const data = event.data as { compact_metadata?: { pre_tokens?: number; trigger?: string } } | undefined;
     const metadata = data?.compact_metadata;
+    context.isCompacting = true;
+    addCompactionSegment(helpers);
     if (metadata) {
       context.compactionMetadata = {
         preTokens: metadata.pre_tokens,
@@ -2819,6 +2826,23 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
       if (isCompactBoundaryEvent(event)) {
         const data = systemEvent.data as { compact_metadata?: { pre_tokens?: number; trigger?: string } } | undefined;
         const metadata = data?.compact_metadata;
+        if (!currentAssistantMessage) {
+          currentAssistantMessage = {
+            role: 'assistant',
+            content: '',
+            segments: [],
+          };
+        }
+        currentAssistantMessage.status = 'streaming';
+        currentAssistantMessage.segments = (currentAssistantMessage.segments || []).filter(
+          (s) => s.kind !== 'inline_thinking'
+        );
+        if (!currentAssistantMessage.segments.some((s) => s.kind === 'compaction')) {
+          currentAssistantMessage.segments.push({
+            kind: 'compaction',
+            status: 'summarizing',
+          });
+        }
         if (metadata) {
           compactionMetadata = {
             preTokens: metadata.pre_tokens,

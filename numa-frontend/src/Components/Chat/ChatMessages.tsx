@@ -725,7 +725,8 @@ const ChatMessages = ({
                       const displayText = numaInput?.description || sc.steps?.[0] || sc.label || 'Numa Tool';
                       const subTool = numaInput?.name;
                       const NUMA_ICONS: Record<string, string> = {
-                        knowledge_base: 'bi-folder2-open',
+                        numa_files: 'bi-folder2-open',
+                        knowledge_base: 'bi-folder2-open', // legacy alias
                         web_search: 'bi-search',
                         extract_content: 'bi-file-earmark-text',
                         convert_document: 'bi-file-earmark-arrow-down',
