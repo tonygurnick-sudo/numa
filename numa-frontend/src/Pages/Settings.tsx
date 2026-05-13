@@ -11,10 +11,7 @@ import { SubHeaderTabBar } from '../Components/SubHeaderTabBar';
 import { StyledTabs } from '../Components/StyledTabs';
 import { useAuth } from '../Providers/AuthProvider';
 import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
-import {
-  AdminDataConnectorsService,
-  type GlobalDataConnectorSettingsMap,
-} from '../Services/AdminDataConnectorsService';
+import { AdminDataConnectorsService, type DataConnectorAdminSettings } from '../Services/AdminDataConnectorsService';
 import { DataConnectorsTab } from '../Components/DataConnectors/DataConnectorsTab';
 import { DisasterRecoveryTab } from '../Components/DisasterRecovery/DisasterRecoveryTab';
 import { CapabilitiesService, type CapabilitySettingsMap } from '../Services/CapabilitiesService';
@@ -159,7 +156,10 @@ export default function SettingsPage() {
     () => AdminIntegrationsService.getCached() ?? {}
   );
   const [capabilitySettings, setCapabilitySettings] = useState<CapabilitySettingsMap>({});
-  const [dataConnectorSettings, setDataConnectorSettings] = useState<GlobalDataConnectorSettingsMap>({});
+  const [dataConnectorAdmin, setDataConnectorAdmin] = useState<DataConnectorAdminSettings>({
+    settings: {},
+    apiDocsAvailableSlugs: new Set(),
+  });
   const [capabilities, setCapabilities] = useState<CapabilityItem[]>([]);
   const [loadingSettings, setLoadingSettings] = useState<boolean>(() => !AdminIntegrationsService.getCached());
   const [error, setError] = useState<string | null>(null);
@@ -337,8 +337,13 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!isAdmin || !dataConnectorsEnabled || !user) return;
     AdminDataConnectorsService.listWithNuma(numaGet)
-      .then(setDataConnectorSettings)
-      .catch(() => setDataConnectorSettings({ synergy: { status: 'disabled' } }));
+      .then(setDataConnectorAdmin)
+      .catch(() =>
+        setDataConnectorAdmin({
+          settings: { synergy: { status: 'disabled' } },
+          apiDocsAvailableSlugs: new Set(),
+        })
+      );
   }, [isAdmin, dataConnectorsEnabled, user, numaGet]);
 
   // Load Agents settings
@@ -1938,7 +1943,10 @@ export default function SettingsPage() {
                     </span>
                   }
                 >
-                  <DataConnectorsTab adminSettings={dataConnectorSettings} />
+                  <DataConnectorsTab
+                    adminSettings={dataConnectorAdmin.settings}
+                    apiDocsAvailableSlugs={dataConnectorAdmin.apiDocsAvailableSlugs}
+                  />
                 </Tab>
               )}
               <Tab

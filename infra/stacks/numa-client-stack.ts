@@ -644,6 +644,8 @@ export class NumaClientStack extends TerraformStack {
       chatSettingsTableName: core.chatSettingsTable.name,
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
+      extApiDocBucketName: core.extApiDocBucket.bucket.bucket,
+      extApiDocBucketArn: core.extApiDocBucket.bucket.arn,
       capabilitiesTableName: core.capabilitiesTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
       connectorEventsTableName: core.connectorEventsTable.name,

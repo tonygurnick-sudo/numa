@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button, Dropdown, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { Link2, MoreVertical, Settings, Trash2, Zap } from 'lucide-react';
+import { Link2, MoreVertical, Settings, Trash2 } from 'lucide-react';
 import { AuthTypeBadge } from './AuthTypeBadge';
 import type { ConnectorTemplate } from './connectorRegistry';
 
@@ -13,9 +13,12 @@ type OAuthConnectorCardProps = {
   authType?: ConnectorTemplate['authType'];
   credentialConfigured: boolean;
   onConfigure: () => void;
-  onTest: () => void;
   isLoading: boolean;
   adminDisabled?: boolean;
+  /** True when this connector requires per-slug ext-api-doc files which are
+   *  not present in the client's bucket. Renders fully monochrome and
+   *  disables every action button. */
+  docsUnavailable?: boolean;
   onDisconnect?: () => void;
   isDisconnecting?: boolean;
   extraStatus?: ReactNode;
@@ -30,9 +33,9 @@ export const OAuthConnectorCard = ({
   authType,
   credentialConfigured,
   onConfigure,
-  onTest,
   isLoading,
   adminDisabled = false,
+  docsUnavailable = false,
   onDisconnect,
   isDisconnecting = false,
   extraStatus,
@@ -40,14 +43,16 @@ export const OAuthConnectorCard = ({
 }: OAuthConnectorCardProps) => {
   const { t } = useTranslation('integrations');
 
+  // docsUnavailable is a stronger disable than adminDisabled: full grayscale,
+  // every button locked, tooltip explains why. adminDisabled keeps its
+  // existing softer treatment.
+  const allActionsDisabled = isLoading || adminDisabled || isDisconnecting || docsUnavailable;
+  const opacity = docsUnavailable ? 0.45 : adminDisabled ? 0.55 : 1;
+  const filter = docsUnavailable ? 'grayscale(100%)' : adminDisabled ? 'grayscale(20%)' : 'none';
+  const tooltip = docsUnavailable ? t('dataConnectors.oauth.docsUnavailable') : undefined;
+
   return (
-    <div
-      className="integrations-row-card"
-      style={{
-        opacity: adminDisabled ? 0.55 : 1,
-        filter: adminDisabled ? 'grayscale(20%)' : 'none',
-      }}
-    >
+    <div className="integrations-row-card" title={tooltip} style={{ opacity, filter }}>
       <div className="integrations-row-card__inner">
         <div className="integrations-row-card__identity">
           <div className="integrations-row-card__app-icon d-flex align-items-center justify-content-center">
@@ -82,18 +87,8 @@ export const OAuthConnectorCard = ({
                 <Button
                   variant="light"
                   size="sm"
-                  onClick={onTest}
-                  disabled={isLoading || adminDisabled || isDisconnecting}
-                  className="integrations-row-btn integrations-row-btn--primary"
-                >
-                  <Zap size={14} className="integrations-row-btn__icon" />
-                  <span className="integrations-row-btn__label">{t('dataConnectors.actions.test')}</span>
-                </Button>
-                <Button
-                  variant="light"
-                  size="sm"
                   onClick={onConfigure}
-                  disabled={isLoading || adminDisabled || isDisconnecting}
+                  disabled={allActionsDisabled}
                   className="integrations-row-btn integrations-row-btn--secondary"
                 >
                   <Settings size={14} className="integrations-row-btn__icon" />
@@ -105,7 +100,7 @@ export const OAuthConnectorCard = ({
                       variant="light"
                       size="sm"
                       className="integrations-row-btn integrations-row-btn--secondary"
-                      disabled={isDisconnecting}
+                      disabled={allActionsDisabled}
                     >
                       {isDisconnecting ? <Spinner size="sm" /> : <MoreVertical size={14} />}
                     </Dropdown.Toggle>
@@ -123,7 +118,7 @@ export const OAuthConnectorCard = ({
                 variant="light"
                 size="sm"
                 onClick={onConfigure}
-                disabled={isLoading || adminDisabled}
+                disabled={allActionsDisabled}
                 className="integrations-row-btn integrations-row-btn--primary"
               >
                 {isLoading ? (
