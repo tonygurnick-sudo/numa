@@ -20,6 +20,7 @@ from numa_workspace_agent.hooks import (
     audit_hook,
     compaction_hook,
     image_resize_hook,
+    param_aliases_hook,
     security_hook,
 )
 from numa_workspace_agent.mcp_tools import (
@@ -790,12 +791,19 @@ def create_agent_options(
         "setting_sources": ["project"],
         # Python hooks for security (can be disabled for closed pipelines).
         # Order matters in PreToolUse: security_hook denies first to avoid
-        # wasted work; image_resize_hook may rewrite tool input; audit_hook
-        # logs the rewritten path for forensics.
+        # wasted work; param_aliases_hook + image_resize_hook may rewrite
+        # tool input; audit_hook logs the rewritten path for forensics.
         "hooks": (
             {
                 "PreToolUse": [
-                    HookMatcher(hooks=[security_hook, image_resize_hook, audit_hook]),
+                    HookMatcher(
+                        hooks=[
+                            security_hook,
+                            param_aliases_hook,
+                            image_resize_hook,
+                            audit_hook,
+                        ]
+                    ),
                 ],
                 "PostToolUse": [
                     HookMatcher(hooks=[audit_hook]),
@@ -807,7 +815,9 @@ def create_agent_options(
             if type_config.enable_security_hooks
             else {
                 "PreToolUse": [
-                    HookMatcher(hooks=[image_resize_hook, audit_hook]),
+                    HookMatcher(
+                        hooks=[param_aliases_hook, image_resize_hook, audit_hook]
+                    ),
                 ],
                 "PostToolUse": [
                     HookMatcher(hooks=[audit_hook]),
