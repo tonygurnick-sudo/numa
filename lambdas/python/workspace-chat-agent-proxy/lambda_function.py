@@ -18,6 +18,7 @@ import logging
 import mimetypes
 import os
 import queue as queue_mod
+import re
 import time as time_mod
 from typing import Any, AsyncGenerator, Dict
 
@@ -536,8 +537,33 @@ async def list_conversation_files(
 
 
 # Cap on artifacts returned in a single /artifacts response — protects the
-# Lambda payload size and keeps the frontend cache footprint sane.
+# Lambda payload size and keeps the frontend cache footprint sane. When the
+# total exceeds the cap we keep the most recently modified items so users
+# always see their latest work first (S3 ListObjectsV2 returns lexicographic
+# order, so without sorting the cap throws away whichever conversations sort
+# last alphabetically — typically the user's newest chats).
 ARTIFACTS_MAX_ITEMS = 5000
+
+# Bookkeeping JSON files written by tools that aren't user-facing artifacts.
+# Hidden from the Chat Artifacts UI so the list isn't drowned in noise.
+#
+#   - integrations-results/: Pipedream tool result JSONs (per mcp_tools/lambda_client.py)
+#   - <action>-YYYYMMDD-HHMMSS.json: legacy droppings from when tool results
+#     were written to outputs/ root (bug since fixed; files remain in S3)
+#   - .status.json: extract-content-from-file Lambda sidecars
+#   - .preview.json: inline-preview sidecars
+_TOOL_RESULT_TIMESTAMP_RE = re.compile(r"-\d{8}-\d{6}\.json$")
+
+
+def _is_internal_artifact(rel_path: str) -> bool:
+    """True for tool-bookkeeping files that shouldn't surface in the UI."""
+    if "integrations-results/" in rel_path:
+        return True
+    if _TOOL_RESULT_TIMESTAMP_RE.search(rel_path):
+        return True
+    if rel_path.endswith(".status.json") or rel_path.endswith(".preview.json"):
+        return True
+    return False
 
 
 @app.get(f"{PREFIX}/artifacts")
@@ -550,8 +576,13 @@ async def list_artifacts(
     """List artifacts generated across all the user's workspace conversations.
 
     Includes files at the conversation workspace root and under ``outputs/``;
-    skips ``tmp/``, ``uploads/`` (user-supplied inputs, not generated), and
-    ``_system/`` (traces, SDK archives).
+    skips ``tmp/``, ``uploads/`` (user-supplied inputs, not generated),
+    ``_system/`` (traces, SDK archives), and internal tool-result bookkeeping
+    JSONs (see ``_is_internal_artifact``).
+
+    Results are sorted by ``lastModified`` descending before applying the
+    ``ARTIFACTS_MAX_ITEMS`` cap, so when the cap kicks in the user keeps their
+    most recent items.
 
     Implemented as a direct S3 ListObjectsV2 — does not call AgentCore.
     """
@@ -563,7 +594,6 @@ async def list_artifacts(
 
     prefix = f"numa-chat/workspace/{user_sub}/conversations/"
     artifacts: list[dict] = []
-    truncated = False
 
     paginator = s3_client.get_paginator("list_objects_v2")
     pages = paginator.paginate(Bucket=OUTPUTS_BUCKET_NAME, Prefix=prefix)
@@ -596,6 +626,10 @@ async def list_artifacts(
             if "/" in rel_path and rel_path.split("/", 1)[0] != "outputs":
                 continue
 
+            # Skip tool-bookkeeping JSONs (integrations results, status/preview sidecars)
+            if _is_internal_artifact(rel_path):
+                continue
+
             last_modified = obj.get("LastModified")
             artifacts.append(
                 {
@@ -610,11 +644,13 @@ async def list_artifacts(
                 }
             )
 
-            if len(artifacts) >= ARTIFACTS_MAX_ITEMS:
-                truncated = True
-                break
-        if truncated:
-            break
+    # Sort newest first so the cap (if hit) keeps the user's most recent work.
+    # ISO-8601 strings sort lexicographically the same as chronologically.
+    artifacts.sort(key=lambda a: a.get("lastModified") or "", reverse=True)
+
+    truncated = len(artifacts) > ARTIFACTS_MAX_ITEMS
+    if truncated:
+        artifacts = artifacts[:ARTIFACTS_MAX_ITEMS]
 
     return JSONResponse(content={"artifacts": artifacts, "truncated": truncated})
 
