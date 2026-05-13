@@ -399,11 +399,6 @@
       "connectFailed": "Failed to connect to Synergy 12d.",
       "disconnectFailed": "Failed to disconnect {{name}}."
     },
-    "signup": {
-      "noAccount": "Don't have an account yet?",
-      "signUp": "Sign up at {{provider}}",
-      "setupGuide": "View setup guide"
-    },
     "synergy": {
       "iconAlt": "Synergy 12d Icon",
       "pat": {
@@ -475,6 +470,7 @@
       "configuring": "Configuring...",
       "notConfigured": "Not configured",
       "credentialsMissing": "Admin must configure OAuth client credentials.",
+      "docsUnavailable": "API docs not deployed for this client — re-deploy to enable",
       "configureTitle": "Configure {{provider}}",
       "clientId": "Client ID",
       "clientIdPlaceholder": "Paste your client ID",
@@ -482,7 +478,6 @@
       "clientSecretPlaceholder": "Paste your client secret",
       "redirectUri": "Redirect URI",
       "redirectUriHint": "Copy this URI into your provider's OAuth redirect configuration.",
-      "helpLink": "Setup instructions",
       "saveCredentials": "Save Credentials",
       "saving": "Saving...",
       "updateCredentials": "Update Credentials",
@@ -561,16 +556,13 @@
       "genericStep4": "Copy the Client ID and Client Secret",
       "genericStep5": "Paste them in the fields below",
       "scopesLabel": "Permissions",
-      "scopesHint": "Select the access permissions this connector needs.",
+      "scopesHint": "Select the OAuth scopes this connector should request. These choices only ask for the listed access — the OAuth provider has the final say. Anything beyond what the provider's app configuration allows will be denied at consent time.",
       "scopesRawLabel": "Scopes",
       "scopesRawPlaceholder": "scope1 scope2",
       "scopesRawHintSpaces": "Space-separated, in the format shown in the provider's docs (e.g. Google, Microsoft, Dropbox).",
       "scopesRawHintCommas": "Comma-separated, in the format shown in the provider's docs (e.g. Zoho, Xero).",
       "scopesRawHintAuto": "Separator matches what's pre-filled for this provider — don't switch between commas and spaces.",
       "advancedOauth": "Advanced OAuth Settings",
-      "apiDocsUrlLabel": "API Documentation URL",
-      "apiDocsUrlPlaceholder": "https://docs.provider.com/api/v1",
-      "apiDocsUrlHint": "A link to the provider's API documentation, Swagger spec, or MCP definition. Helps the AI assistant understand how to use this connector.",
       "rateLimitsLabel": "Rate Limits",
       "rateLimitRpmLabel": "Requests per minute",
       "rateLimitRpmPlaceholder": "60",
@@ -585,7 +577,6 @@
       "reviewCredentials": "Credentials",
       "reviewScopes": "Permissions",
       "reviewOauthConfig": "OAuth Configuration",
-      "reviewApiDocs": "API Documentation",
       "reviewRateLimits": "Rate Limits",
       "reviewCustomHeaders": "Custom Headers",
       "reviewMasked": "••••••••",
@@ -653,24 +644,7 @@
       "doneHint": "Your connector credentials are stored securely. The AI assistant can now use this connector when configured."
     },
     "apiReference": {
-      "title": "API Reference",
-      "autoConfigured": "Auto-configured",
-      "customize": "Customize",
-      "dataTypesLabel": "Data Types",
-      "capabilitiesLabel": "Capabilities",
-      "docsUrl": "API Documentation URL",
-      "docsUrlPlaceholder": "https://docs.provider.com/api/v1",
-      "openApiUrl": "OpenAPI / Swagger URL",
-      "openApiUrlPlaceholder": "https://api.provider.com/swagger.json",
-      "postmanUrl": "Postman Collection URL",
-      "postmanUrlPlaceholder": "https://www.postman.com/collection/...",
-      "mcpServerRef": "MCP Server Reference",
-      "mcpServerRefPlaceholder": "@modelcontextprotocol/server-name",
-      "purposeHint": "Purpose / Description",
-      "purposeHintPlaceholder": "What this platform does and what data it exposes...",
-      "purposeHintDesc": "Helps the AI assistant understand how to use this connector.",
-      "endpointCategories": "Endpoint Categories",
-      "exampleRequests": "Example API Requests"
+      "customize": "Customize"
     },
     "events": {
       "title": "Events",

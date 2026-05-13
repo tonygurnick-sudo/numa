@@ -48,9 +48,13 @@ import type { ConnectorTemplate } from './connectorRegistry';
 
 type DataConnectorsTabProps = {
   adminSettings?: GlobalDataConnectorSettingsMap;
+  /** Set of connector slugs whose `ext-api-doc/<slug>/` files are present in
+   *  the client's bucket. Any connector whose slug is NOT in this set renders
+   *  greyed-out and unclickable. */
+  apiDocsAvailableSlugs?: Set<string>;
 };
 
-export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => {
+export const DataConnectorsTab = ({ adminSettings, apiDocsAvailableSlugs }: DataConnectorsTabProps) => {
   const { t } = useTranslation('integrations');
   const { t: tCommon } = useTranslation('common');
   const confirm = useConfirm();
@@ -268,11 +272,6 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     await loadCompanySecrets();
   };
 
-  const handleOAuthTest = async (providerId: string) => {
-    // Test button on OAuth rows triggers the OAuth authorize flow.
-    await ConnectorsService.connect(providerId);
-  };
-
   const handleOAuthDisconnect = async (providerId: string, displayName: string) => {
     const confirmed = await confirm({
       message: t('dataConnectors.confirm.disconnect', { name: displayName }),
@@ -435,9 +434,9 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
               authType="oauth2"
               credentialConfigured
               onConfigure={() => openOAuthWizardExisting(provider.id)}
-              onTest={() => handleOAuthTest(provider.id)}
               isLoading={false}
               adminDisabled={false}
+              docsUnavailable={false}
               onDisconnect={isAdmin ? () => handleOAuthDisconnect(provider.id, provider.display_name) : undefined}
               isDisconnecting={disconnectingId === provider.id}
             />
@@ -463,12 +462,9 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
                 setApiKeyWizardConnector(connector);
                 setApiKeyWizardOpen(true);
               }}
-              onTest={() => {
-                setApiKeyWizardConnector(connector);
-                setApiKeyWizardOpen(true);
-              }}
               isLoading={false}
               adminDisabled={false}
+              docsUnavailable={false}
               onDisconnect={isAdmin ? () => handleConnectorDelete(connector.id, connector.displayName) : undefined}
               isDisconnecting={disconnectingId === connector.id}
               hasError={getConnectorStatus(connector.id)?.status === 'auth_error'}
@@ -483,6 +479,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
         onHide={() => setPlatformPickerOpen(false)}
         onSelect={handlePlatformSelected}
         configuredIds={configuredIds}
+        apiDocsAvailableSlugs={apiDocsAvailableSlugs}
       />
 
       {/* OAuth Configuration Wizard */}

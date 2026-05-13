@@ -12,18 +12,33 @@ interface PlatformPickerModalProps {
   onHide: () => void;
   onSelect: (connector: ConnectorTemplate) => void;
   configuredIds: Set<string>;
+  /** Set of connector slugs whose `ext-api-doc/<slug>/` files are deployed.
+   *  Cards for any connector whose slug is NOT in this set render
+   *  greyed-out and unclickable. */
+  apiDocsAvailableSlugs?: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export const PlatformPickerModal = ({ show, onHide, onSelect, configuredIds }: PlatformPickerModalProps) => {
+export const PlatformPickerModal = ({
+  show,
+  onHide,
+  onSelect,
+  configuredIds,
+  apiDocsAvailableSlugs,
+}: PlatformPickerModalProps) => {
   const { t } = useTranslation('integrations');
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const categories = useMemo(() => getConnectorCategories(), []);
+
+  // Connectors built on Google/Microsoft/Apple platforms are exempt from the
+  // ext-api-doc gating: the LLM has strong native knowledge of these APIs, so
+  // their behaviour is reliable without bundled API docs.
+  const DOCS_GATING_EXEMPT: ReadonlySet<string> = useMemo(() => new Set(['googledrive', 'gmail', 'onedrive']), []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -100,17 +115,37 @@ export const PlatformPickerModal = ({ show, onHide, onSelect, configuredIds }: P
           )}
           {filtered.map((connector) => {
             const isConfigured = configuredIds.has(connector.id);
+            // Universal docs gating: a connector is selectable only if its
+            // slug has docs in the client's ext-api-doc bucket. Before the
+            // parent loads the set we don't grey anything out (avoids a flash).
+            const docsUnavailable =
+              !!apiDocsAvailableSlugs &&
+              !apiDocsAvailableSlugs.has(connector.id) &&
+              !DOCS_GATING_EXEMPT.has(connector.id);
+            const tooltip = docsUnavailable ? t('dataConnectors.oauth.docsUnavailable') : undefined;
             return (
               <div key={connector.id} className="col-md-6 col-lg-4">
                 <div
-                  className="border rounded p-3 h-100 d-flex flex-column cursor-pointer"
-                  style={{ cursor: 'pointer', transition: 'border-color 0.15s' }}
-                  onClick={() => handleSelect(connector)}
-                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#0d6efd')}
-                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = '')}
+                  className="border rounded p-3 h-100 d-flex flex-column"
+                  style={{
+                    cursor: docsUnavailable ? 'not-allowed' : 'pointer',
+                    transition: 'border-color 0.15s',
+                    opacity: docsUnavailable ? 0.45 : 1,
+                    filter: docsUnavailable ? 'grayscale(100%)' : 'none',
+                    pointerEvents: docsUnavailable ? 'none' : 'auto',
+                  }}
+                  title={tooltip}
+                  onClick={() => !docsUnavailable && handleSelect(connector)}
+                  onMouseEnter={(e) => {
+                    if (!docsUnavailable) e.currentTarget.style.borderColor = '#0d6efd';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!docsUnavailable) e.currentTarget.style.borderColor = '';
+                  }}
                   role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSelect(connector)}
+                  aria-disabled={docsUnavailable}
+                  tabIndex={docsUnavailable ? -1 : 0}
+                  onKeyDown={(e) => !docsUnavailable && e.key === 'Enter' && handleSelect(connector)}
                 >
                   <div className="d-flex align-items-center gap-2 mb-2">
                     <i className={connector.icon} style={{ fontSize: '1.25rem' }} />

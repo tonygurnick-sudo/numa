@@ -420,14 +420,28 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSettingsTableName}`],
       },
     ];
+    // GET also lists the ext-api-doc bucket to report which connectors have
+    // their per-slug docs deployed. PUT doesn't need this.
+    const adminDataConnectorGetEnv = {
+      ...adminDataConnectorEnv,
+      EXT_API_DOC_BUCKET_NAME: props.extApiDocBucketName,
+    };
+    const adminDataConnectorGetPolicy = [
+      ...adminDataConnectorPolicy,
+      {
+        effect: 'Allow',
+        actions: ['s3:ListBucket'],
+        resources: [props.extApiDocBucketArn],
+      },
+    ];
 
     this.addLambdaFunction(this, 'admin-data-connector-settings-get', {
       addAuthorizer: true,
       lambdaDirectory: 'node/admin-data-connector-settings',
       runtime: 'nodejs22.x',
       handler: 'index.handler',
-      environment: adminDataConnectorEnv,
-      additionalPolicyStatements: adminDataConnectorPolicy,
+      environment: adminDataConnectorGetEnv,
+      additionalPolicyStatements: adminDataConnectorGetPolicy,
       route: { verb: 'GET', path: 'settings/data-connectors' },
     });
     this.addLambdaFunction(this, 'admin-data-connector-settings-put', {
@@ -2700,6 +2714,12 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   dataConnectorsTableName: string;
   /** Data connector settings table name for admin feature flags. */
   dataConnectorsSettingsTableName: string;
+  /** ext-api-doc bucket name — admin-data-connector-settings-get reads it to
+   *  tell the frontend which per-slug docs are deployed and therefore which
+   *  connectors can be enabled. */
+  extApiDocBucketName: string;
+  /** ext-api-doc bucket ARN — used to grant the GET lambda s3:ListBucket. */
+  extApiDocBucketArn: string;
   /** Capabilities table name for admin feature flag overrides. */
   capabilitiesTableName: string;
   /** Data connector selection configs table name. */

@@ -74,19 +74,23 @@ export const ConnectorWizardModal = ({
           </div>
         ) : (
           <>
-            {/* Step indicator */}
-            <div className="d-flex justify-content-center mb-2 gap-2">
-              {steps.map((step, i) => (
-                <span
-                  key={step.id}
-                  className={`badge rounded-pill ${i + 1 <= currentStep ? 'bg-primary' : 'bg-secondary'}`}
-                  style={{ width: 28, height: 28, lineHeight: '20px', textAlign: 'center' }}
-                >
-                  {i + 1}
-                </span>
-              ))}
+            {/* Step indicator + label, centered as a single block */}
+            <div className="d-flex flex-column align-items-center mb-3">
+              <div className="d-flex gap-2 mb-2">
+                {steps.map((step, i) => (
+                  <span
+                    key={step.id}
+                    className={`badge rounded-pill d-inline-flex align-items-center justify-content-center ${
+                      i + 1 <= currentStep ? 'bg-primary' : 'bg-secondary'
+                    }`}
+                    style={{ width: 28, height: 28 }}
+                  >
+                    {i + 1}
+                  </span>
+                ))}
+              </div>
+              <h6 className="text-muted mb-0">{steps[currentStep - 1]?.label}</h6>
             </div>
-            <h6 className="text-center text-muted mb-3">{steps[currentStep - 1]?.label}</h6>
 
             {children}
           </>
