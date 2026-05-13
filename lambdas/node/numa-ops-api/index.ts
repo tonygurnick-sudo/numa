@@ -211,6 +211,38 @@ const now = (): string => new Date().toISOString();
 
 const padOrder = (order: number): string => String(order).padStart(ORDER_PAD, '0');
 
+// ─── Board heartbeat ────────────────────────────────────────────────────────────
+//
+// Every board-visible mutation bumps `boardVersion` on the TEAM META row and
+// sets `lastChangedAt`. Clients poll a tiny `/ops/boards/{boardId}/heartbeat`
+// endpoint and only re-fetch tickets when the version increases.
+
+/** TransactItem that atomically bumps boardVersion + lastChangedAt on TEAM META. */
+const buildBoardBumpItem = (teamId: string, ts: string): Record<string, unknown> => ({
+  Update: {
+    TableName: OPS_TABLE,
+    Key: { PK: `TEAM#${teamId}`, SK: 'META' },
+    UpdateExpression: 'SET lastChangedAt = :ts ADD boardVersion :inc',
+    ExpressionAttributeValues: { ':ts': ts, ':inc': 1 },
+  },
+});
+
+/** Best-effort side-effect bump for code paths that don't use TransactWrite. */
+const bumpBoardVersion = async (teamId: string, ts: string = now()): Promise<void> => {
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: OPS_TABLE,
+        Key: { PK: `TEAM#${teamId}`, SK: 'META' },
+        UpdateExpression: 'SET lastChangedAt = :ts ADD boardVersion :inc',
+        ExpressionAttributeValues: { ':ts': ts, ':inc': 1 },
+      })
+    );
+  } catch (err) {
+    console.warn(`Failed to bump boardVersion for ${teamId}`, (err as Error).message);
+  }
+};
+
 // ─── DynamoDB Query Helpers ─────────────────────────────────────────────────────
 
 const queryGSI1 = async (
@@ -382,6 +414,20 @@ const handleBoards = async (
     return jsonResponse(200, { teams: visibleTeams });
   }
 
+  // GET /ops/teams/{teamId}/heartbeat — cheap polling endpoint, returns
+  // boardVersion + lastChangedAt so clients can detect remote changes without
+  // re-fetching tickets. Single GetItem on the TEAM META row.
+  if (method === 'GET' && segments.length === 2 && segments[1] === 'heartbeat') {
+    const teamId = segments[0];
+    const meta = await getItem(`TEAM#${teamId}`, 'META');
+    if (!meta) return errorResponse(404, 'Board not found');
+    if (!hasTeamAccess(meta, auth)) return errorResponse(403, 'You do not have access to this board');
+    return jsonResponse(200, {
+      boardVersion: (meta.boardVersion as number) ?? 0,
+      lastChangedAt: meta.lastChangedAt ?? meta.updatedAt ?? null,
+    });
+  }
+
   // GET /ops/teams/{teamId} — with access control
   if (method === 'GET' && segments.length === 1) {
     const teamId = segments[0];
@@ -500,6 +546,8 @@ const handleBoards = async (
       createdBy: auth.sub,
       createdAt: ts,
       updatedAt: ts,
+      boardVersion: 0,
+      lastChangedAt: ts,
     };
 
     // Create zones and their stages
@@ -577,6 +625,7 @@ const handleBoards = async (
 
     if (!isAdmin(auth) && !isTeamOwner(meta, auth)) return errorResponse(403, 'Admin or board owner access required');
 
+    const ts = now();
     const updated: Record<string, unknown> = {
       ...meta,
       ...body,
@@ -585,7 +634,9 @@ const handleBoards = async (
       GSI1PK: meta.GSI1PK,
       GSI1SK: meta.GSI1SK,
       id: teamId,
-      updatedAt: now(),
+      updatedAt: ts,
+      lastChangedAt: ts,
+      boardVersion: ((meta.boardVersion as number) ?? 0) + 1,
     };
     await putItem(updated);
     return jsonResponse(200, { team: updated });
@@ -647,6 +698,7 @@ const handleBoards = async (
       });
     });
     await Promise.all(ops);
+    await bumpBoardVersion(teamId, ts);
     return jsonResponse(200, { updated: true });
   }
 
@@ -685,6 +737,7 @@ const handleBoards = async (
       ...stagesToDelete.map((s) => deleteItem(`TEAM#${teamId}`, String(s.SK))),
     ];
     await Promise.all(deleteOps);
+    await bumpBoardVersion(teamId);
     return jsonResponse(200, { deleted: true });
   }
 
@@ -742,6 +795,7 @@ const handleBoards = async (
       });
     });
     await Promise.all(ops);
+    await bumpBoardVersion(teamId, ts);
     return jsonResponse(200, { updated: true });
   }
 
@@ -788,6 +842,7 @@ const handleBoards = async (
       updatedAt: ts,
     };
     await putItem(item);
+    await bumpBoardVersion(teamId, ts);
     return jsonResponse(201, { workUnit: item });
   }
 
@@ -1015,6 +1070,7 @@ const handleBoards = async (
     }
 
     await putItem(updated);
+    await bumpBoardVersion(teamId);
 
     return jsonResponse(200, { workUnit: updated, movedCount, rolloverCount });
   }
@@ -1054,6 +1110,7 @@ const handleBoards = async (
     }
 
     await deleteItem(`TEAM#${teamId}`, `WORKUNIT#${id}`);
+    await bumpBoardVersion(teamId);
     return jsonResponse(200, { deleted: true });
   }
 
@@ -1332,6 +1389,7 @@ const handleTickets = async (
       } catch (e) {
         console.warn('Failed to increment commentCount', (e as Error).message);
       }
+      if (ticket.teamId) await bumpBoardVersion(String(ticket.teamId));
     }
 
     return jsonResponse(201, { comment: commentItem });
@@ -1381,6 +1439,7 @@ const handleTickets = async (
       } catch (e) {
         console.warn('Failed to decrement commentCount', (e as Error).message);
       }
+      await bumpBoardVersion(String(body.boardId));
     }
 
     return jsonResponse(200, { deleted: true });
@@ -1476,6 +1535,12 @@ const handleTickets = async (
       });
     }
 
+    // Bump heartbeat on both boards (deduped) so polling clients pick up the new link badge
+    const bumpedTeams = new Set<string>();
+    if (srcTeamId) bumpedTeams.add(srcTeamId);
+    if (linkedTeamId) bumpedTeams.add(linkedTeamId);
+    for (const tid of bumpedTeams) transactItems.push(buildBoardBumpItem(tid, ts));
+
     await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems as never }));
 
     return jsonResponse(201, { created: true });
@@ -1532,6 +1597,8 @@ const handleTickets = async (
       } catch (e) {
         console.warn('Failed to decrement linkCount', (e as Error).message);
       }
+      const bumpedTeams = new Set<string>([teamId, linkedTeamId]);
+      await Promise.all([...bumpedTeams].map((tid) => bumpBoardVersion(tid)));
     }
 
     return jsonResponse(200, { deleted: true });
@@ -1564,6 +1631,7 @@ const handleTickets = async (
 
     const ts = now();
     const results: Record<string, unknown>[] = [];
+    const bumpedTeams = new Set<string>();
 
     for (const tid of ticketIds as string[]) {
       const teamId = String((changes as Record<string, unknown>).boardId ?? '');
@@ -1605,9 +1673,11 @@ const handleTickets = async (
       updated.GSI1SK = `STAGE#${stageId}#ORDER#${padOrder(order)}#${tid}`;
 
       await putItem(updated);
+      bumpedTeams.add(teamId);
       results.push({ ticketId: tid, success: true });
     }
 
+    await Promise.all([...bumpedTeams].map((tid) => bumpBoardVersion(tid, ts)));
     return jsonResponse(200, { results });
   }
 
@@ -1875,6 +1945,7 @@ const handleTickets = async (
       { Put: { TableName: OPS_TABLE, Item: ticketItem } },
       { Put: { TableName: OPS_TABLE, Item: auditItem } },
       ...indexItems.map((item) => ({ Put: { TableName: OPS_TABLE, Item: item } })),
+      buildBoardBumpItem(teamId, ts),
     ];
 
     await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems as never }));
@@ -2076,6 +2147,9 @@ const handleTickets = async (
         ...newIndexItems.map((item) => ({ Put: { TableName: OPS_TABLE, Item: item } })),
         // Audit entry
         { Put: { TableName: OPS_TABLE, Item: auditItem } },
+        // Bump heartbeat on both boards so clients on either side see the move
+        buildBoardBumpItem(currentTeamId, ts),
+        buildBoardBumpItem(targetTeamId, ts),
       ];
 
       try {
@@ -2200,6 +2274,7 @@ const handleTickets = async (
     indexOps.push(putItem(auditItem));
     if (indexOps.length > 0) await Promise.all(indexOps);
 
+    await bumpBoardVersion(targetTeamId, ts);
     return jsonResponse(200, { ticket: updated });
   }
 
@@ -2223,6 +2298,7 @@ const handleTickets = async (
     };
     await putItem(updated);
     await putItem(buildAuditItem(ticketId, auth, 'deleted'));
+    await bumpBoardVersion(teamId, ts);
 
     return jsonResponse(200, { deleted: true });
   }
@@ -2267,6 +2343,7 @@ const handleTickets = async (
     };
     await putItem(updated);
     await putItem(buildAuditItem(ticketId, auth, 'restored'));
+    await bumpBoardVersion(teamId, ts);
 
     return jsonResponse(200, { ticket: updated });
   }

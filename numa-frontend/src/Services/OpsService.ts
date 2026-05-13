@@ -149,6 +149,14 @@ export const getBoard = async (numaGet: NumaGet, boardId: string): Promise<Board
   return response;
 };
 
+export type BoardHeartbeat = { boardVersion: number; lastChangedAt: string | null };
+
+/** Cheap polling endpoint — returns the board's monotonic version counter. */
+export const getBoardHeartbeat = async (numaGet: NumaGet, boardId: string): Promise<BoardHeartbeat> => {
+  const response = (await numaGet(`${BASE_URL}/boards/${encodeURIComponent(boardId)}/heartbeat`)) as BoardHeartbeat;
+  return response;
+};
+
 export const createBoard = async (numaPost: NumaPost, payload: CreateBoardPayload): Promise<Board> => {
   const response = (await numaPost(`${BASE_URL}/boards`, payload)) as { board: Board };
   return response.board;
