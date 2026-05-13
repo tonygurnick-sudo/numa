@@ -3,7 +3,9 @@
     "ok": "OK",
     "cancel": "Cancel",
     "close": "Close",
-    "delete": "Delete"
+    "delete": "Delete",
+    "search": "Search...",
+    "noResults": "No matches"
   },
   "confirm": {
     "defaultTitle": "Confirm",

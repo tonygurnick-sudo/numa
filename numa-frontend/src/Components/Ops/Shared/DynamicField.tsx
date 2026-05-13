@@ -11,6 +11,7 @@ import type {
   WorkUnit,
   Project,
 } from '../../../types/ops';
+import { SidebarDropdown, type DropdownOption } from './SidebarDropdown';
 
 interface DynamicFieldProps {
   field: FieldDefinition;
@@ -372,39 +373,39 @@ function renderEditControl(
         <Form.Check type="switch" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} style={style} />
       );
 
-    case 'customer':
+    case 'customer': {
+      const customerOptions: DropdownOption[] = [
+        { value: '', label: t('tickets.selectCustomer') },
+        ...(customers?.map((c) => ({ value: c.id, label: c.companyName })) ?? []),
+      ];
       return (
-        <Form.Select
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value || null)}
-          required={isRequired}
-          style={style}
-        >
-          <option value="">{t('tickets.selectCustomer')}</option>
-          {customers?.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.companyName}
-            </option>
-          ))}
-        </Form.Select>
+        <div style={style}>
+          <SidebarDropdown
+            value={String(value ?? '')}
+            onChange={(v) => onChange(v || null)}
+            options={customerOptions}
+            placeholder={t('tickets.selectCustomer')}
+          />
+        </div>
       );
+    }
 
-    case 'supplier':
+    case 'supplier': {
+      const supplierOptions: DropdownOption[] = [
+        { value: '', label: t('tickets.selectSupplier') },
+        ...(suppliers?.map((s) => ({ value: s.id, label: s.companyName })) ?? []),
+      ];
       return (
-        <Form.Select
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value || null)}
-          required={isRequired}
-          style={style}
-        >
-          <option value="">{t('tickets.selectSupplier')}</option>
-          {suppliers?.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.companyName}
-            </option>
-          ))}
-        </Form.Select>
+        <div style={style}>
+          <SidebarDropdown
+            value={String(value ?? '')}
+            onChange={(v) => onChange(v || null)}
+            options={supplierOptions}
+            placeholder={t('tickets.selectSupplier')}
+          />
+        </div>
       );
+    }
 
     case 'workunit':
       return (
