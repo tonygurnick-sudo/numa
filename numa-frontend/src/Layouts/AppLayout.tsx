@@ -23,8 +23,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     typeof window !== 'undefined' ? window.innerWidth : SIDEBAR_COLLAPSE_BREAKPOINT
   );
 
-  // Skip auto-collapse on initial mount so localStorage preference is respected
-  const hasMounted = useRef(false);
+  // Track previous width so we only act on actual breakpoint crossings,
+  // not on initial mount (which would clobber the stored preference,
+  // especially under StrictMode's effect double-invoke in dev).
+  const prevWidthRef = useRef(windowWidth);
 
   // Handle window resize
   useEffect(() => {
@@ -36,16 +38,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Auto-collapse/expand only on actual window resizes (not initial mount)
+  // Auto-collapse only when the viewport crosses INTO the narrow range.
+  // No auto-expand on widen — the user's toggle/localStorage wins from there.
   useEffect(() => {
-    if (!hasMounted.current) {
-      hasMounted.current = true;
-      return;
-    }
-    if (windowWidth < SIDEBAR_COLLAPSE_BREAKPOINT && windowWidth > 768) {
+    const prev = prevWidthRef.current;
+    prevWidthRef.current = windowWidth;
+    if (prev >= SIDEBAR_COLLAPSE_BREAKPOINT && windowWidth < SIDEBAR_COLLAPSE_BREAKPOINT && windowWidth > 768) {
       setIsCollapsed(true);
-    } else if (windowWidth >= SIDEBAR_COLLAPSE_BREAKPOINT) {
-      setIsCollapsed(false);
     }
   }, [windowWidth]);
 
@@ -53,15 +52,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   useEffect(() => {
     localStorage.setItem(SIDEBAR_COLLAPSE_KEY, String(isCollapsed));
   }, [isCollapsed]);
-
-  // Listen for custom collapse event (e.g., when opening file preview)
-  useEffect(() => {
-    const handleCollapseEvent = () => {
-      setIsCollapsed(true);
-    };
-    window.addEventListener('numa-collapse-sidebar', handleCollapseEvent);
-    return () => window.removeEventListener('numa-collapse-sidebar', handleCollapseEvent);
-  }, []);
 
   const toggleCollapse = () => {
     setIsCollapsed(!isCollapsed);
