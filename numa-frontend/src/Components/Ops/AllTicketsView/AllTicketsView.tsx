@@ -256,7 +256,7 @@ export function AllTicketsView(): React.JSX.Element {
     let cancelled = false;
     setAllBoardsLoading(true);
 
-    Promise.all(boards.map((tm) => OpsService.listTickets(numaGet, { boardId: tm.id })))
+    Promise.all(boards.map((tm) => OpsService.listTickets(numaGet, { boardId: tm.id, includeArchived: true })))
       .then((responses) => {
         if (cancelled) return;
         const combined = responses.flatMap((r) => r.tickets);
