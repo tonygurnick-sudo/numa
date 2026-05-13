@@ -223,7 +223,7 @@ def _create_bedrock_client():
             # botocore Session, so the Bedrock client created below picks up
             # the refreshable creds and self-heals on expiry.
             botocore_session = BotocoreSession()
-            botocore_session._credentials = refreshable  # noqa: SLF001
+            botocore_session._credentials = refreshable  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]  # noqa: SLF001
             logger.info(
                 "Using cross-account Bedrock credentials (refreshable)",
                 bedrock_account=_BEDROCK_ACCOUNT,
