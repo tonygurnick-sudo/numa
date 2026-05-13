@@ -122,9 +122,9 @@ class SecurityValidator:
             parsed_url = urlparse(sts_proof_url)
             query_params = parse_qs(parsed_url.query)
 
-            # Check expiration (max 60 seconds)
+            # Check expiration (max 120 seconds — matches the age check below).
             expires_list = query_params.get("X-Amz-Expires", [])
-            if expires_list and int(expires_list[0]) > 60:
+            if expires_list and int(expires_list[0]) > 120:
                 raise SecurityValidationError("STS proof URL expires too far in future")
 
             # Check age (max 2 minutes)

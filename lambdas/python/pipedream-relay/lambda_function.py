@@ -101,13 +101,16 @@ def _get_global_settings(app_name: str) -> dict:
 logger = structlog.get_logger()
 
 
-def generate_sts_proof_url(region: str = "us-east-1", expires: int = 60) -> str:
+def generate_sts_proof_url(region: str = "us-east-1", expires: int = 120) -> str:
     """
     Generate STS presigned GetCallerIdentity URL for identity verification.
 
     Args:
         region: AWS region for STS endpoint (default: us-east-1 for lowest proxy latency)
-        expires: URL expiration in seconds (default: 60, max allowed)
+        expires: URL expiration in seconds (default: 120). Matches the proxy's
+            X-Amz-Date age check (also 120s) so the two limits are consistent —
+            previously the proxy capped X-Amz-Expires at 60s but allowed URLs
+            up to 120s old, which meant STS itself was the actual constraint.
 
     Returns:
         str: Presigned STS GetCallerIdentity URL
