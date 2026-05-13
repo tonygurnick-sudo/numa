@@ -22,12 +22,11 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
     boardData,
     workUnits,
     tickets,
-    selectedWorkUnitId,
     selectWorkUnit,
+    activeZoneId,
     refreshBoard,
     refreshTickets,
     refreshWorkUnits,
-    setActiveZone,
   } = useOps();
 
   // ── Modal state ──────────────────────────────────────────────────────────
@@ -60,8 +59,16 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
     return map;
   }, [workUnits, tickets]);
 
-  const selectedWorkUnit: WorkUnit | null = workUnits.find((wu) => wu.id === selectedWorkUnitId) ?? null;
-  const activeWorkUnit = workUnits.find((wu) => wu.status === 'active') ?? null;
+  // The "selected" sprint under the zone-bound model is whatever sprint the
+  // current zone is running. The user can no longer toggle this off.
+  const activeWorkUnit = useMemo(() => {
+    const zone = boardData?.zones?.find((z) => z.id === activeZoneId);
+    if (zone?.activeWorkUnitId) {
+      return workUnits.find((wu) => wu.id === zone.activeWorkUnitId) ?? null;
+    }
+    return null;
+  }, [boardData?.zones, activeZoneId, workUnits]);
+  const selectedWorkUnit: WorkUnit | null = activeWorkUnit;
 
   const { incompleteCount, completedCount } = useMemo(() => {
     if (!activeWorkUnit) return { incompleteCount: 0, completedCount: 0 };
@@ -110,20 +117,19 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
 
   if (!hasWorkUnits) return null;
 
+  // Under the zone-bound sprint model the active sprint of the current zone is
+  // a fixed property of the board, not a filter the user toggles. Render it as
+  // a static indicator (no onClick).
+  const activeZone = zones.find((z) => z.id === activeZoneId);
+  const zoneActiveSprintId = activeZone?.activeWorkUnitId ?? null;
   const sprintPills = workUnits
-    .filter((wu) => wu.status === 'active')
+    .filter((wu) => wu.status === 'active' && wu.id === zoneActiveSprintId)
     .map((wu) => {
       const stats = workUnitStats.get(wu.id) ?? { done: 0, total: 0 };
-      const isSelected = selectedWorkUnitId === wu.id;
       const ticketPct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
 
       return (
-        <button
-          key={wu.id}
-          type="button"
-          className={`ops-pill ops-pill--sprint ${isSelected ? 'active' : ''}`}
-          onClick={() => selectWorkUnit(isSelected ? null : wu.id)}
-        >
+        <div key={wu.id} className="ops-pill ops-pill--sprint active" aria-label={`Active sprint: ${wu.name}`}>
           <span className="ops-sprint-dot" style={{ backgroundColor: statusDotColor(wu.status) }} />
           {wu.name}
           <span className="ops-sprint-fraction">{t('sprints.progress', { done: stats.done, total: stats.total })}</span>
@@ -136,7 +142,7 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
               }}
             />
           </span>
-        </button>
+        </div>
       );
     });
 
@@ -235,6 +241,7 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
         boardId={boardId}
         tickets={tickets}
         zones={zones}
+        defaultZoneId={activeZoneId}
         onHide={() => setShowStart(false)}
         onStarted={async () => {
           setShowStart(false);
@@ -244,12 +251,9 @@ const SprintBoardBar = ({ inline = false }: { inline?: boolean }) => {
             setSuccessAction('started');
             setShowSuccess(true);
           }
-          const beforeZoneIds = new Set(zones.map((z) => z.id));
-          const updated = await refreshBoard();
-          if (updated) {
-            const newZone = updated.zones.find((z) => !beforeZoneIds.has(z.id));
-            if (newZone) setActiveZone(newZone.id);
-          }
+          // Zone-bound model: the active sprint is applied to an existing zone.
+          // No new zone is created on start, so we don't need to switch zones.
+          await refreshBoard();
           await Promise.all([refreshTickets(), refreshWorkUnits()]);
         }}
       />

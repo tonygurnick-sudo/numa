@@ -746,6 +746,19 @@ def _resolve_names_in_params(
             )
         params["zoneId"] = _resolve_zone(cache, board_id, zone_name)
 
+    # ── targetZoneName → targetZoneId (sprint activation: which board zone to run in)
+    if not has_id("targetZoneId", "target_zone_id"):
+        target_zone_name = _pop_first(params, "targetZoneName", "target_zone_name")
+        if target_zone_name:
+            if not board_id:
+                raise ValueError(
+                    f'Cannot resolve targetZoneName "{target_zone_name}" without a '
+                    "boardId or boardName."
+                )
+            params["targetZoneId"] = _resolve_zone(cache, board_id, target_zone_name)
+    else:
+        _drop_keys(params, "targetZoneName", "target_zone_name")
+
     # ── workUnitName / sprintName → workUnitId
     if not has_id("workUnitId", "work_unit_id"):
         wu_name = _pop_first(
@@ -1589,6 +1602,11 @@ def _resolve_lambda_and_request(
                 ("endDate", "endDate", "end_date"),
                 ("status", "status"),
                 ("capacity", "capacity"),
+                # Required when activating (status=active): which board zone to run in.
+                ("targetZoneId", "targetZoneId", "target_zone_id"),
+                # On completion (status=completed): where to roll incomplete tickets.
+                # 'next' resolves to the next planning sprint by order.
+                ("rolloverToWorkUnitId", "rolloverToWorkUnitId", "rollover_to_work_unit_id"),
             ],
         )
         return (

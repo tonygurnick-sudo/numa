@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -218,17 +218,6 @@ const BoardView = () => {
     searchQuery,
   ]);
 
-  // ── Unsorted tickets: board zone tickets with no sprint assignment ──
-  const unsortedCount = useMemo(() => {
-    if (!hasWorkUnitSeries || !activeZone || selectedWorkUnitId !== null) return 0;
-    return filteredTickets.filter((tk) => !tk.workUnitId).length;
-  }, [hasWorkUnitSeries, activeZone, selectedWorkUnitId, filteredTickets]);
-
-  const planningUnits = useMemo(
-    () => workUnits.filter((wu) => wu.status === 'planning' || wu.status === 'active'),
-    [workUnits]
-  );
-
   // ── Zone progress for toolbar ──────────────────
   const progressPercent = useMemo(() => {
     const total = filteredTickets.length;
@@ -249,59 +238,12 @@ const BoardView = () => {
     return `${wu.name}: ${t('sprints.sprintProgress', { done, total })} (${pct}%)`;
   }, [hasWorkUnitSeries, selectedWorkUnitId, workUnits, filteredTickets, t]);
 
-  const [showAssignDropdown, setShowAssignDropdown] = useState(false);
-  const [assigningToSprint, setAssigningToSprint] = useState(false);
-  const assignRef = useRef<HTMLDivElement>(null);
-  const dismissKey = activeZone ? `ops-unsorted-dismissed-${team?.id}-${activeZone.id}` : '';
-  const [unsortedDismissed, setUnsortedDismissed] = useState(() => {
-    if (!dismissKey) return false;
-    return localStorage.getItem(dismissKey) === '1';
-  });
-
   // ── Announcement dismiss state (per-session via sessionStorage) ──
   const announcementDismissKey = team ? `ops-announcement-dismissed-${team.id}` : '';
   const [announcementDismissed, setAnnouncementDismissed] = useState(() => {
     if (!announcementDismissKey) return false;
     return sessionStorage.getItem(announcementDismissKey) === '1';
   });
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!showAssignDropdown) return;
-    const handler = (e: MouseEvent) => {
-      if (assignRef.current && !assignRef.current.contains(e.target as Node)) {
-        setShowAssignDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showAssignDropdown]);
-
-  const handleAssignToSprint = useCallback(
-    async (workUnitId: string) => {
-      if (!activeZone || assigningToSprint) return;
-      setAssigningToSprint(true);
-      try {
-        const unsortedTickets = filteredTickets.filter((tk) => !tk.workUnitId);
-        await Promise.all(
-          unsortedTickets.map((tk) =>
-            OpsService.updateTicket(numaPut, tk.id, {
-              boardId: tk.boardId,
-              workUnitId,
-              version: tk.version,
-            })
-          )
-        );
-        await refreshTickets();
-        setShowAssignDropdown(false);
-      } catch (err) {
-        console.error('[BoardView] Assign to sprint failed:', err);
-      } finally {
-        setAssigningToSprint(false);
-      }
-    },
-    [activeZone, assigningToSprint, filteredTickets, numaPut, refreshTickets]
-  );
 
   /** Map: stageId -> zoneId (for resolving zone when dropping into a stage) */
   const stageZoneMap = useMemo(() => {
@@ -764,62 +706,9 @@ const BoardView = () => {
         onDragEnd={handleDragEnd}
       >
         <div className="p-3 d-flex flex-column" style={{ minHeight: '100%' }}>
-          {/* Unsorted tickets bar */}
-          {unsortedCount > 0 && !unsortedDismissed && (
-            <div
-              className="d-flex align-items-center gap-2 px-3 py-2 mb-3 rounded border"
-              style={{ backgroundColor: '#f8f9fa', fontSize: '0.85rem' }}
-            >
-              <i className="bi bi-info-circle text-primary" />
-              <span className="text-muted">{t('sprints.unsortedTickets', { count: unsortedCount })}</span>
-              <div ref={assignRef} className="position-relative">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-primary"
-                  disabled={planningUnits.length === 0 || assigningToSprint}
-                  onClick={() => setShowAssignDropdown((prev) => !prev)}
-                >
-                  {t('sprints.assignToSprint')}
-                </button>
-                {showAssignDropdown && planningUnits.length > 0 && (
-                  <div
-                    className="position-absolute bg-white border rounded shadow-sm py-1"
-                    style={{ top: '100%', left: 0, minWidth: 180, zIndex: 1050, marginTop: 4 }}
-                  >
-                    {planningUnits.map((wu) => (
-                      <button
-                        key={wu.id}
-                        type="button"
-                        className="dropdown-item d-flex align-items-center gap-2 px-3 py-2"
-                        disabled={assigningToSprint}
-                        onClick={() => handleAssignToSprint(wu.id)}
-                      >
-                        <span
-                          className="d-inline-block rounded-circle"
-                          style={{
-                            width: 8,
-                            height: 8,
-                            backgroundColor: wu.status === 'active' ? '#198754' : '#0d6efd',
-                          }}
-                        />
-                        {wu.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                className="btn btn-sm btn-link text-muted ms-auto p-0"
-                onClick={() => {
-                  setUnsortedDismissed(true);
-                  if (dismissKey) localStorage.setItem(dismissKey, '1');
-                }}
-              >
-                {t('sprints.dismiss')}
-              </button>
-            </div>
-          )}
+          {/* Note: the legacy "Assign to sprint" banner was removed when sprints
+              became zone-bound -- workUnitId is now auto-derived from the active
+              zone, so tickets in a sprint zone never lack a workUnitId. */}
           <BoardToolbar
             members={boardMembers}
             assigneeFilter={assigneeFilter}

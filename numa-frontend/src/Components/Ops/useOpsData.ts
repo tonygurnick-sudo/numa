@@ -288,10 +288,10 @@ export const useOpsData = (): OpsDataState => {
     async (boardId: string) => {
       try {
         setTicketsLoading(true);
-        // Always pull archived tickets so the All Tickets "Show Archived" toggle
-        // and sprint-history filters have data to work with. BoardView filters
-        // archived out client-side.
-        const response = await OpsService.listTickets(numaGet, { boardId, includeArchived: true });
+        // Default load excludes archived tickets. Views that want to surface
+        // archived data (e.g. AllTicketsView's "Show Archived" toggle) re-fetch
+        // with includeArchived=true explicitly.
+        const response = await OpsService.listTickets(numaGet, { boardId });
         setTickets(response.tickets);
         setCache(`tickets_${boardId}`, response.tickets);
       } catch (err) {

@@ -396,6 +396,39 @@ const buildAuditItem = (
   };
 };
 
+// ─── Sprint zone backwards-compat ────────────────────────────────────────────────
+//
+// Legacy data (pre zone-bound sprint model) has work units with status='active'
+// but no zone carries an `activeWorkUnitId`. To keep that data working under the
+// new derivation rule without a one-shot migration, we apply a read-time
+// fallback: if a team has exactly one active work unit, treat the first board
+// zone (by order) as running it. Once a sprint is started/completed through the
+// new lifecycle handlers the zone fields become explicit and the fallback is
+// a no-op.
+//
+// Mutates the zone rows in-place so downstream code can read `activeWorkUnitId`
+// without thinking about pre-migration data.
+const applyLegacyActiveSprintFallback = (
+  zones: Record<string, unknown>[],
+  workUnitItems: Record<string, unknown>[]
+): void => {
+  const activeUnits = workUnitItems.filter((w) => String(w.status ?? '') === 'active');
+  if (activeUnits.length !== 1) return; // ambiguous or none — leave zones as-is
+  const activeId = String(activeUnits[0].id ?? '');
+  if (!activeId) return;
+
+  const anyZoneClaims = zones.some((z) => String(z.activeWorkUnitId ?? '') === activeId);
+  if (anyZoneClaims) return; // already migrated
+
+  const boardZones = zones
+    .filter((z) => String(z.zoneType) === 'board')
+    .sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0));
+  const firstBoardZone = boardZones[0];
+  if (firstBoardZone && !firstBoardZone.activeWorkUnitId) {
+    firstBoardZone.activeWorkUnitId = activeId;
+  }
+};
+
 // ─── Teams ───────────────────────────────────────────────────────────────────────
 
 const handleBoards = async (
@@ -450,6 +483,8 @@ const handleBoards = async (
         if (zoneCompare !== 0) return zoneCompare;
         return Number(a.order ?? 0) - Number(b.order ?? 0);
       });
+    const workUnitItems = items.filter((i) => String(i.SK ?? '').startsWith('WORKUNIT#'));
+    applyLegacyActiveSprintFallback(zones, workUnitItems);
     return jsonResponse(200, { team: meta, zones, stages });
   }
 
@@ -678,9 +713,12 @@ const handleBoards = async (
     if (!Array.isArray(zones)) return errorResponse(400, 'Missing required field: zones (array)');
 
     const ts = now();
-    const ops = zones.map((zone: Record<string, unknown>) => {
+    // activeWorkUnitId is owned by the sprint lifecycle handlers (start/complete).
+    // Reading existing zone rows here preserves it across generic zone updates.
+    const ops = zones.map(async (zone: Record<string, unknown>) => {
       const zoneId = zone.id ? String(zone.id) : randomUUID();
       const order = typeof zone.order === 'number' ? zone.order : ORDER_GAP;
+      const existingZone = zone.id ? await getItem(`TEAM#${teamId}`, `ZONE#${zoneId}`) : undefined;
       return putItem({
         PK: `TEAM#${teamId}`,
         SK: `ZONE#${zoneId}`,
@@ -693,6 +731,7 @@ const handleBoards = async (
         zoneType: zone.zoneType ? String(zone.zoneType) : 'board',
         order,
         color: zone.color ? String(zone.color) : '#6B7280',
+        activeWorkUnitId: existingZone?.activeWorkUnitId ?? null,
         createdAt: zone.createdAt ? String(zone.createdAt) : ts,
         updatedAt: ts,
       });
@@ -847,6 +886,22 @@ const handleBoards = async (
   }
 
   // PUT /ops/teams/{teamId}/work-units/{id} — update work unit
+  //
+  // Sprint model: a sprint is "applied" to exactly one board zone via
+  // `zone.activeWorkUnitId`. While applied, every ticket in that zone has its
+  // workUnitId derived from the zone (see ticket update handler). This handler
+  // is the only writer of zone.activeWorkUnitId.
+  //
+  // Activation (planning → active): requires `targetZoneId`. The chosen zone
+  // gets `activeWorkUnitId` set, backlog-staged tickets are pulled in, and any
+  // tickets already in the zone with null workUnitId are auto-assigned.
+  //
+  // Completion (active → completed) with rollover to a planning sprint: the
+  // target auto-activates into the SAME zone. Incomplete tickets keep their
+  // stage/order; the zone hands off its activeWorkUnitId from source → target.
+  //
+  // Completion without rollover: incomplete tickets move to the backlog zone's
+  // first stage (current behavior). Zone activeWorkUnitId cleared.
   if (method === 'PUT' && segments.length === 3 && segments[1] === 'work-units') {
     const teamId = segments[0];
     const id = segments[2];
@@ -857,17 +912,64 @@ const handleBoards = async (
     const unitStatus = body.status ? String(body.status) : prevStatus;
     const order = typeof body.order === 'number' ? body.order : ((existing.order as number) ?? ORDER_GAP);
 
+    // Resolve sprint ticket entities by scanning team items for tickets whose
+    // `workUnitId` matches. Entity-based (not GSI2-index-based) so we don't miss
+    // tickets where the IDX_WORKUNIT row is stale or never got created — a
+    // history of inconsistent index maintenance means the entity is the only
+    // reliable source of truth.
+    const filterSprintTicketsFromItems = (
+      items: Record<string, unknown>[],
+      workUnitId: string
+    ): Record<string, unknown>[] => {
+      return items.filter(
+        (i) =>
+          String(i.entityType ?? '') === 'TICKET' &&
+          String(i.workUnitId ?? '') === workUnitId &&
+          String(i.statusType ?? '') !== 'deleted'
+      );
+    };
+
+    // Helper: set a ticket's workUnitId (entity field + GSI2 IDX_WORKUNIT row).
+    const assignTicketWorkUnit = async (
+      ticket: Record<string, unknown>,
+      newWorkUnitId: string | null,
+      ts: string
+    ): Promise<void> => {
+      const ticketId = String(ticket.id);
+      const ticketTeamId = String(ticket.teamId ?? teamId);
+      const prevWuId = ticket.workUnitId ? String(ticket.workUnitId) : null;
+      if (prevWuId === (newWorkUnitId ?? null)) return;
+      await putItem({ ...ticket, workUnitId: newWorkUnitId, updatedAt: ts });
+      try {
+        await deleteItem(`TEAM#${ticketTeamId}`, `TICKET#${ticketId}#IDX_WORKUNIT`);
+      } catch {
+        /* may not exist */
+      }
+      if (newWorkUnitId) {
+        await putItem({
+          PK: `TEAM#${ticketTeamId}`,
+          SK: `TICKET#${ticketId}#IDX_WORKUNIT`,
+          GSI2PK: `WORKUNIT#${newWorkUnitId}`,
+          GSI2SK: `TICKET#${ts}#${ticketId}`,
+          entityType: 'TICKET_INDEX',
+          indexType: 'IDX_WORKUNIT',
+          ticketId,
+          teamId: ticketTeamId,
+          workUnitId: newWorkUnitId,
+        });
+      }
+    };
+
     // ── Sprint Activation: planning → active ──────────────────────────────
     let movedCount = 0;
     let ticketCountAtStart = 0;
+    let activatedZoneId: string | undefined;
     if (prevStatus === 'planning' && unitStatus === 'active') {
-      // Enforce single active sprint
-      const allUnits = await queryGSI1(`TEAM#${teamId}`, 'WORKUNIT#STATUS#active#');
-      if (allUnits.items.length > 0) {
-        return errorResponse(409, 'Another sprint is already active. Complete it first.');
+      const targetZoneId = body.targetZoneId ? String(body.targetZoneId) : undefined;
+      if (!targetZoneId) {
+        return errorResponse(400, 'targetZoneId is required when activating a sprint');
       }
 
-      // Load team zones and stages to find the target (first board zone, first stage)
       const teamItems = await queryGSI1(`TEAM#${teamId}`);
       const zones = teamItems.items
         .filter((i) => String(i.SK ?? '').startsWith('ZONE#'))
@@ -875,54 +977,59 @@ const handleBoards = async (
       const stages = teamItems.items
         .filter((i) => String(i.SK ?? '').startsWith('STAGE#'))
         .sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0));
+      const workUnitItems = teamItems.items.filter((i) => String(i.SK ?? '').startsWith('WORKUNIT#'));
+      applyLegacyActiveSprintFallback(zones, workUnitItems);
 
-      const backlogZoneIds = new Set(zones.filter((z) => z.zoneType === 'backlog').map((z) => String(z.id)));
-      const boardZone = zones.find((z) => z.zoneType === 'board');
-
-      // Count total tickets assigned to this sprint at activation
-      const activationIndexItems = await queryGSI2(`WORKUNIT#${id}`, 'TICKET#');
-      ticketCountAtStart = activationIndexItems.items.filter(
-        (idx) => String(idx.entityType ?? '') === 'TICKET_INDEX'
-      ).length;
-
-      if (boardZone) {
-        const boardZoneId = String(boardZone.id);
-        const firstKanbanStage = stages.find((s) => String(s.zoneId) === boardZoneId);
-
-        if (firstKanbanStage) {
-          const targetStageId = String(firstKanbanStage.id);
-          const targetStatusType = String(firstKanbanStage.statusType ?? 'queued');
-
-          // Find all tickets assigned to this sprint that are in backlog zones
-          // GSI2 returns TICKET_INDEX items — resolve to actual ticket entities
-          const sprintTicketEntities = (
-            await Promise.all(
-              activationIndexItems.items
-                .filter((idx) => String(idx.entityType ?? '') === 'TICKET_INDEX')
-                .map((idx) => getItem(`TEAM#${String(idx.teamId)}`, `TICKET#${String(idx.ticketId)}`))
-            )
-          ).filter(Boolean) as Record<string, unknown>[];
-          const ticketsToMove = sprintTicketEntities.filter((t) => backlogZoneIds.has(String(t.zoneId)));
-
-          // Batch-update tickets to move to the board zone
-          const ts = now();
-          for (const ticket of ticketsToMove) {
-            const ticketId = String(ticket.id);
-            const ticketOrder = (ticket.order as number) ?? ORDER_GAP;
-            const updatedTicket: Record<string, unknown> = {
-              ...ticket,
-              zoneId: boardZoneId,
-              stageId: targetStageId,
-              statusType: targetStatusType,
-              startedAt: ticket.startedAt ?? ts,
-              GSI1SK: `STAGE#${targetStageId}#ORDER#${padOrder(ticketOrder)}#${ticketId}`,
-              updatedAt: ts,
-            };
-            await putItem(updatedTicket);
-          }
-          movedCount = ticketsToMove.length;
-        }
+      const targetZone = zones.find((z) => String(z.id) === targetZoneId);
+      if (!targetZone) return errorResponse(404, 'Target zone not found');
+      if (String(targetZone.zoneType) !== 'board') {
+        return errorResponse(400, 'Sprints can only be activated into board zones');
       }
+      if (targetZone.activeWorkUnitId && String(targetZone.activeWorkUnitId) !== id) {
+        return errorResponse(409, 'This zone already has an active sprint. Complete it first.');
+      }
+
+      const firstStage = stages.find((s) => String(s.zoneId) === targetZoneId);
+      if (!firstStage) return errorResponse(400, 'Target zone has no stages');
+
+      const targetStageId = String(firstStage.id);
+      const targetStatusType = String(firstStage.statusType ?? 'queued');
+      const backlogZoneIds = new Set(zones.filter((z) => z.zoneType === 'backlog').map((z) => String(z.id)));
+
+      // 1. Pull in tickets that were pre-assigned to this sprint and sitting in backlog
+      const sprintTickets = filterSprintTicketsFromItems(teamItems.items, id);
+      ticketCountAtStart = sprintTickets.length;
+      const ticketsToMove = sprintTickets.filter((t) => backlogZoneIds.has(String(t.zoneId)));
+
+      const ts = now();
+      for (const ticket of ticketsToMove) {
+        const ticketId = String(ticket.id);
+        const ticketOrder = (ticket.order as number) ?? ORDER_GAP;
+        await putItem({
+          ...ticket,
+          zoneId: targetZoneId,
+          stageId: targetStageId,
+          statusType: targetStatusType,
+          startedAt: ticket.startedAt ?? ts,
+          GSI1SK: `STAGE#${targetStageId}#ORDER#${padOrder(ticketOrder)}#${ticketId}`,
+          updatedAt: ts,
+        });
+      }
+      movedCount = ticketsToMove.length;
+
+      // 2. Auto-assign workUnitId to tickets already sitting in the target zone with null workUnitId
+      const zoneTicketItems = await queryByPK(`TEAM#${teamId}`, 'TICKET#');
+      const orphansInZone = zoneTicketItems.filter(
+        (t) => String(t.zoneId) === targetZoneId && !t.workUnitId && String(t.statusType ?? '') !== 'deleted'
+      );
+      for (const ticket of orphansInZone) {
+        await assignTicketWorkUnit(ticket, id, ts);
+        ticketCountAtStart += 1;
+      }
+
+      // 3. Mark the zone as running this sprint
+      await putItem({ ...targetZone, activeWorkUnitId: id, updatedAt: ts });
+      activatedZoneId = targetZoneId;
     }
 
     // ── Sprint Completion: active → completed ─────────────────────────────
@@ -930,8 +1037,9 @@ const handleBoards = async (
     let completedCount = 0;
     let incompleteCount = 0;
     let addedDuringSprint = 0;
+    let resolvedRolloverWuId: string | undefined;
+    let rolloverTargetActivated = false;
     if (prevStatus === 'active' && unitStatus === 'completed') {
-      // Load team zones to find the backlog zone
       const teamItems = await queryGSI1(`TEAM#${teamId}`);
       const zones = teamItems.items
         .filter((i) => String(i.SK ?? '').startsWith('ZONE#'))
@@ -939,105 +1047,124 @@ const handleBoards = async (
       const stages = teamItems.items
         .filter((i) => String(i.SK ?? '').startsWith('STAGE#'))
         .sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0));
+      const workUnitItems = teamItems.items.filter((i) => String(i.SK ?? '').startsWith('WORKUNIT#'));
+      applyLegacyActiveSprintFallback(zones, workUnitItems);
 
-      const backlogZone = zones.find((z) => z.zoneType === 'backlog') ?? zones[0];
-      const backlogZoneId = backlogZone ? String(backlogZone.id) : undefined;
-      const firstBacklogStage = backlogZoneId ? stages.find((s) => String(s.zoneId) === backlogZoneId) : undefined;
+      const sourceZone = zones.find((z) => String(z.activeWorkUnitId ?? '') === id);
+      const sourceZoneId = sourceZone ? String(sourceZone.id) : undefined;
 
-      // Find all tickets for this sprint via GSI2 index items, then resolve to entities
-      const sprintIndexItems = await queryGSI2(`WORKUNIT#${id}`, 'TICKET#');
-      const allSprintTickets = (
-        await Promise.all(
-          sprintIndexItems.items
-            .filter((idx) => String(idx.entityType ?? '') === 'TICKET_INDEX')
-            .map((idx) => getItem(`TEAM#${String(idx.teamId)}`, `TICKET#${String(idx.ticketId)}`))
-        )
-      ).filter(Boolean) as Record<string, unknown>[];
-
+      const allSprintTickets = filterSprintTicketsFromItems(teamItems.items, id);
       const incompleteTickets = allSprintTickets.filter(
         (t) => t.statusType !== 'completed' && t.statusType !== 'ended'
       );
       const doneTickets = allSprintTickets.filter((t) => t.statusType === 'completed' || t.statusType === 'ended');
-
-      // Sprint metadata
       completedCount = doneTickets.length;
       incompleteCount = incompleteTickets.length;
       const startCount = (existing.ticketCountAtStart as number) ?? 0;
       addedDuringSprint = startCount > 0 ? Math.max(0, allSprintTickets.length - startCount) : 0;
 
+      const ts = now();
+
       // Archive completed/ended tickets
-      if (doneTickets.length > 0) {
-        const ts = now();
-        for (const ticket of doneTickets) {
-          await putItem({
-            ...ticket,
-            archived: true,
-            updatedAt: ts,
-          });
-        }
+      for (const ticket of doneTickets) {
+        await putItem({ ...ticket, archived: true, updatedAt: ts });
       }
 
-      if (incompleteTickets.length > 0 && backlogZoneId && firstBacklogStage) {
-        const targetStageId = String(firstBacklogStage.id);
-        const targetStatusType = String(firstBacklogStage.statusType ?? 'backlog');
-        const rolloverToWorkUnitId = body.rolloverToWorkUnitId ? String(body.rolloverToWorkUnitId) : undefined;
+      // Resolve rollover target
+      const rolloverInput = body.rolloverToWorkUnitId ? String(body.rolloverToWorkUnitId) : undefined;
+      if (rolloverInput === 'next') {
+        const planning = await queryGSI1(`TEAM#${teamId}`, 'WORKUNIT#STATUS#planning#');
+        const nextPlanning = planning.items.sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0))[0];
+        resolvedRolloverWuId = nextPlanning ? String(nextPlanning.id) : undefined;
+      } else if (rolloverInput && rolloverInput !== 'backlog') {
+        resolvedRolloverWuId = rolloverInput;
+      }
 
-        // Resolve 'next' sentinel to the next planning sprint
-        let resolvedRolloverWuId: string | undefined;
-        if (rolloverToWorkUnitId === 'next') {
-          const allUnits = await queryGSI1(`TEAM#${teamId}`, 'WORKUNIT#STATUS#planning#');
-          const nextPlanning = allUnits.items.sort(
-            (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0)
-          )[0];
-          resolvedRolloverWuId = nextPlanning ? String(nextPlanning.id) : undefined;
-        } else if (rolloverToWorkUnitId) {
-          resolvedRolloverWuId = rolloverToWorkUnitId;
+      if (resolvedRolloverWuId && sourceZoneId) {
+        // Rollover into the same zone: target auto-activates, incomplete tickets stay in place.
+        const targetUnit = await getItem(`TEAM#${teamId}`, `WORKUNIT#${resolvedRolloverWuId}`);
+        if (!targetUnit) {
+          return errorResponse(404, 'Rollover target sprint not found');
+        }
+        const targetPrevStatus = String(targetUnit.status ?? 'planning');
+        const targetOrder = (targetUnit.order as number) ?? ORDER_GAP;
+
+        // Pull in any tickets pre-assigned to the target sprint sitting in backlog
+        const backlogZoneIds = new Set(zones.filter((z) => z.zoneType === 'backlog').map((z) => String(z.id)));
+        const firstStageInZone = stages.find((s) => String(s.zoneId) === sourceZoneId);
+        const targetStageId = firstStageInZone ? String(firstStageInZone.id) : undefined;
+        const targetStatusType = firstStageInZone ? String(firstStageInZone.statusType ?? 'queued') : 'queued';
+        const targetSprintTickets = filterSprintTicketsFromItems(teamItems.items, resolvedRolloverWuId);
+        const targetBacklogTickets = targetSprintTickets.filter((t) => backlogZoneIds.has(String(t.zoneId)));
+        if (targetStageId) {
+          for (const ticket of targetBacklogTickets) {
+            const ticketId = String(ticket.id);
+            const ticketOrder = (ticket.order as number) ?? ORDER_GAP;
+            await putItem({
+              ...ticket,
+              zoneId: sourceZoneId,
+              stageId: targetStageId,
+              statusType: targetStatusType,
+              startedAt: ticket.startedAt ?? ts,
+              GSI1SK: `STAGE#${targetStageId}#ORDER#${padOrder(ticketOrder)}#${ticketId}`,
+              updatedAt: ts,
+            });
+          }
         }
 
-        const ts = now();
+        // Re-point incomplete source tickets to the target sprint (stages preserved).
         for (const ticket of incompleteTickets) {
-          const ticketId = String(ticket.id);
-          const ticketOrder = (ticket.order as number) ?? ORDER_GAP;
-          const updatedTicket: Record<string, unknown> = {
-            ...ticket,
-            zoneId: backlogZoneId,
-            stageId: targetStageId,
-            statusType: targetStatusType,
-            workUnitId: resolvedRolloverWuId ?? null,
-            GSI1SK: `STAGE#${targetStageId}#ORDER#${padOrder(ticketOrder)}#${ticketId}`,
-            updatedAt: ts,
-          };
-          await putItem(updatedTicket);
+          await assignTicketWorkUnit(ticket, resolvedRolloverWuId, ts);
+        }
 
-          // Update the work unit index item
-          if (resolvedRolloverWuId) {
-            // Delete old index, create new one
-            try {
-              await deleteItem(`TEAM#${teamId}`, `TICKET#${ticketId}#IDX_WORKUNIT`);
-            } catch {
-              /* may not exist */
-            }
+        // Activate the target sprint and hand off the zone
+        if (targetPrevStatus === 'planning') {
+          await putItem({
+            ...targetUnit,
+            status: 'active',
+            startedAt: ts,
+            ticketCountAtStart: incompleteTickets.length + targetBacklogTickets.length,
+            GSI1SK: `WORKUNIT#STATUS#active#${padOrder(targetOrder)}`,
+            updatedAt: ts,
+          });
+          rolloverTargetActivated = true;
+        }
+        await putItem({ ...sourceZone, activeWorkUnitId: resolvedRolloverWuId, updatedAt: ts });
+        rolloverCount = incompleteTickets.length;
+      } else {
+        // No rollover (or rollover target was 'backlog'): move incomplete to backlog zone.
+        const backlogZone = zones.find((z) => z.zoneType === 'backlog') ?? zones[0];
+        const backlogZoneId = backlogZone ? String(backlogZone.id) : undefined;
+        const firstBacklogStage = backlogZoneId ? stages.find((s) => String(s.zoneId) === backlogZoneId) : undefined;
+
+        if (incompleteTickets.length > 0 && backlogZoneId && firstBacklogStage) {
+          const targetStageId = String(firstBacklogStage.id);
+          const targetStatusType = String(firstBacklogStage.statusType ?? 'backlog');
+          for (const ticket of incompleteTickets) {
+            const ticketId = String(ticket.id);
+            const ticketOrder = (ticket.order as number) ?? ORDER_GAP;
             await putItem({
-              PK: `TEAM#${teamId}`,
-              SK: `TICKET#${ticketId}#IDX_WORKUNIT`,
-              GSI2PK: `WORKUNIT#${resolvedRolloverWuId}`,
-              GSI2SK: `TICKET#${ts}#${ticketId}`,
-              entityType: 'TICKET_INDEX',
-              indexType: 'IDX_WORKUNIT',
-              ticketId,
-              teamId,
-              workUnitId: resolvedRolloverWuId,
+              ...ticket,
+              zoneId: backlogZoneId,
+              stageId: targetStageId,
+              statusType: targetStatusType,
+              workUnitId: null,
+              GSI1SK: `STAGE#${targetStageId}#ORDER#${padOrder(ticketOrder)}#${ticketId}`,
+              updatedAt: ts,
             });
-          } else {
-            // Clear work unit - delete the index
             try {
               await deleteItem(`TEAM#${teamId}`, `TICKET#${ticketId}#IDX_WORKUNIT`);
             } catch {
               /* may not exist */
             }
           }
+          rolloverCount = incompleteTickets.length;
         }
-        rolloverCount = incompleteTickets.length;
+
+        // Clear activeWorkUnitId on the source zone
+        if (sourceZone) {
+          await putItem({ ...sourceZone, activeWorkUnitId: null, updatedAt: ts });
+        }
       }
     }
 
@@ -1055,11 +1182,14 @@ const handleBoards = async (
       order,
       updatedAt: now(),
     };
+    // Don't persist transient request fields onto the work unit row
+    delete updated.targetZoneId;
+    delete updated.rolloverToWorkUnitId;
 
-    // Sprint metadata: snapshot counts at activation and completion
     if (prevStatus === 'planning' && unitStatus === 'active') {
       updated.startedAt = now();
       updated.ticketCountAtStart = ticketCountAtStart;
+      if (activatedZoneId) updated.activeZoneId = activatedZoneId;
     }
     if (prevStatus === 'active' && unitStatus === 'completed') {
       updated.completedAt = now();
@@ -1072,7 +1202,12 @@ const handleBoards = async (
     await putItem(updated);
     await bumpBoardVersion(teamId);
 
-    return jsonResponse(200, { workUnit: updated, movedCount, rolloverCount });
+    return jsonResponse(200, {
+      workUnit: updated,
+      movedCount,
+      rolloverCount,
+      ...(resolvedRolloverWuId && { rolloverTargetId: resolvedRolloverWuId, rolloverTargetActivated }),
+    });
   }
 
   // DELETE /ops/teams/{teamId}/work-units/{id} — delete a planning work unit
@@ -1870,6 +2005,17 @@ const handleTickets = async (
     const zoneId = rawZoneId ? String(rawZoneId) : stageRecord?.zoneId ? String(stageRecord.zoneId) : undefined;
     const statusType = stageRecord?.statusType ? String(stageRecord.statusType) : 'backlog';
 
+    // workUnitId derivation: if placing the new ticket into a board zone with an
+    // active sprint, force workUnitId to that sprint. Backlog zones honour the
+    // caller-supplied workUnitId (planning workflow).
+    let resolvedWorkUnitId: string | undefined = workUnitId ? String(workUnitId) : undefined;
+    if (zoneId) {
+      const zoneRecord = await getItem(`TEAM#${teamId}`, `ZONE#${zoneId}`);
+      if (zoneRecord && String(zoneRecord.zoneType) === 'board') {
+        resolvedWorkUnitId = zoneRecord.activeWorkUnitId ? String(zoneRecord.activeWorkUnitId) : undefined;
+      }
+    }
+
     // Resolve prefix from ticket type
     const prefix = ticketTypeId ? await resolveTicketTypePrefix(String(ticketTypeId)) : 'TKT';
 
@@ -1906,7 +2052,7 @@ const handleTickets = async (
       customerName: customerName ? String(customerName) : undefined,
       supplierId: supplierId ? String(supplierId) : undefined,
       supplierName: supplierName ? String(supplierName) : undefined,
-      workUnitId: workUnitId ? String(workUnitId) : undefined,
+      workUnitId: resolvedWorkUnitId,
       projectId: projectId ? String(projectId) : undefined,
       tags: Array.isArray(tags) ? tags : [],
       fields: fields ?? {},
@@ -1932,7 +2078,7 @@ const handleTickets = async (
       ticketId,
       assigneeId ? String(assigneeId) : undefined,
       customerId ? String(customerId) : undefined,
-      workUnitId ? String(workUnitId) : undefined,
+      resolvedWorkUnitId,
       projectId ? String(projectId) : undefined,
       ts
     );
@@ -2038,42 +2184,41 @@ const handleTickets = async (
       }
     }
 
-    // scopedAt: also triggered by workUnitId being assigned for the first time
-    const workUnitBeingAssigned = !existing.workUnitId && body.workUnitId && body.workUnitId !== null;
-    if (workUnitBeingAssigned && !existing.scopedAt && !lifecycleUpdates.scopedAt) {
-      lifecycleUpdates.scopedAt = ts;
-    }
     let zoneIdOverride: string | undefined;
     const order = typeof body.order === 'number' ? body.order : ((existing.order as number) ?? ORDER_GAP);
 
+    // Load target team zones/stages once: used by auto-move below AND by the
+    // workUnitId derivation rule (sprint applied to the destination zone).
+    const targetTeamItems = await queryGSI1(`TEAM#${targetTeamId}`);
+    const targetZones = targetTeamItems.items
+      .filter((i) => String(i.SK ?? '').startsWith('ZONE#'))
+      .sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0));
+    const targetStages = targetTeamItems.items
+      .filter((i) => String(i.SK ?? '').startsWith('STAGE#'))
+      .sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0));
+    const targetWorkUnits = targetTeamItems.items.filter((i) => String(i.SK ?? '').startsWith('WORKUNIT#'));
+    applyLegacyActiveSprintFallback(targetZones, targetWorkUnits);
+
     // ── Auto-move logic: if statusType changed, check zone compatibility ───
     if (statusType !== existing.statusType && !isCrossTeamMove) {
-      const teamItems = await queryGSI1(`TEAM#${targetTeamId}`);
-      const allZones = teamItems.items
-        .filter((i) => String(i.SK ?? '').startsWith('ZONE#'))
-        .sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0));
-      const allStages = teamItems.items
-        .filter((i) => String(i.SK ?? '').startsWith('STAGE#'))
-        .sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0));
-
       // Find the current zone
       const currentZoneId = body.zoneId ? String(body.zoneId) : (existing.zoneId as string);
-      const currentZone = allZones.find((z) => String(z.id) === currentZoneId);
+      const currentZone = targetZones.find((z) => String(z.id) === currentZoneId);
       const currentZoneType = currentZone ? (String(currentZone.zoneType) as ZoneType) : undefined;
 
       if (currentZoneType && !isStatusTypeAllowedInZone(statusType as StatusType, currentZoneType)) {
         // Status type is NOT allowed in current zone — auto-move to the correct zone
         const targetZoneType = STATUS_TYPE_TO_ZONES[statusType as StatusType]?.[0];
         if (targetZoneType) {
-          const targetZone = allZones.find((z) => String(z.zoneType) === targetZoneType);
+          const targetZone = targetZones.find((z) => String(z.zoneType) === targetZoneType);
           if (targetZone) {
             zoneIdOverride = String(targetZone.id);
             // Find the first stage in the target zone that matches the statusType
-            const matchingStage = allStages.find(
+            const matchingStage = targetStages.find(
               (s) => String(s.zoneId) === zoneIdOverride && String(s.statusType) === statusType
             );
             // Fallback: first stage in the target zone
-            const fallbackStage = allStages.find((s) => String(s.zoneId) === zoneIdOverride);
+            const fallbackStage = targetStages.find((s) => String(s.zoneId) === zoneIdOverride);
             const autoStage = matchingStage ?? fallbackStage;
             if (autoStage) {
               stageId = String(autoStage.id);
@@ -2084,6 +2229,40 @@ const handleTickets = async (
     }
 
     const finalZoneId = zoneIdOverride ?? (body.zoneId ? String(body.zoneId) : (existing.zoneId as string));
+
+    // ── workUnitId derivation rule ────────────────────────────────────────
+    // For board zones with an active sprint, the ticket inherits that sprint.
+    // For board zones without one, workUnitId is cleared.
+    // For backlog zones, workUnitId is independent (planning workflow owns it).
+    const finalZone = targetZones.find((z) => String(z.id) === finalZoneId);
+    const finalZoneType = finalZone ? String(finalZone.zoneType) : undefined;
+    const finalZoneActiveWuId = finalZone?.activeWorkUnitId ? String(finalZone.activeWorkUnitId) : null;
+    let derivedWorkUnitId: string | null | undefined;
+    if (finalZoneType === 'board') {
+      derivedWorkUnitId = finalZoneActiveWuId;
+    } else if (finalZoneType === 'backlog') {
+      derivedWorkUnitId =
+        body.workUnitId !== undefined
+          ? body.workUnitId === null
+            ? null
+            : String(body.workUnitId)
+          : ((existing.workUnitId as string | null | undefined) ?? null);
+    } else {
+      derivedWorkUnitId =
+        body.workUnitId !== undefined
+          ? body.workUnitId === null
+            ? null
+            : String(body.workUnitId)
+          : ((existing.workUnitId as string | null | undefined) ?? null);
+    }
+
+    // scopedAt: also triggered by workUnitId being assigned for the first time
+    // (now considers derivation — auto-assignment via active sprint zone counts).
+    const workUnitBeingAssigned = !existing.workUnitId && !!derivedWorkUnitId;
+    if (workUnitBeingAssigned && !existing.scopedAt && !lifecycleUpdates.scopedAt) {
+      lifecycleUpdates.scopedAt = ts;
+    }
+
     const updated: Record<string, unknown> = {
       ...existing,
       ...body,
@@ -2100,6 +2279,7 @@ const handleTickets = async (
       stageId,
       order,
       statusType,
+      workUnitId: derivedWorkUnitId,
       version: newVersion,
       updatedAt: ts,
       updatedBy: auth.sub,
@@ -2187,8 +2367,9 @@ const handleTickets = async (
       body.assigneeId !== undefined && String(body.assigneeId ?? '') !== String(existing.assigneeId ?? '');
     const customerChanged =
       body.customerId !== undefined && String(body.customerId ?? '') !== String(existing.customerId ?? '');
-    const workUnitChanged =
-      body.workUnitId !== undefined && String(body.workUnitId ?? '') !== String(existing.workUnitId ?? '');
+    // Compare against the derived workUnitId, not just what the caller sent, since
+    // zone-based derivation may have changed it without an explicit body.workUnitId.
+    const workUnitChanged = String(derivedWorkUnitId ?? '') !== String(existing.workUnitId ?? '');
 
     const indexOps: Promise<void>[] = [];
 
@@ -2233,18 +2414,18 @@ const handleTickets = async (
 
     if (workUnitChanged) {
       indexOps.push(deleteItem(`TEAM#${targetTeamId}`, `TICKET#${ticketId}#IDX_WORKUNIT`));
-      if (body.workUnitId) {
+      if (derivedWorkUnitId) {
         indexOps.push(
           putItem({
             PK: `TEAM#${targetTeamId}`,
             SK: `TICKET#${ticketId}#IDX_WORKUNIT`,
-            GSI2PK: `WORKUNIT#${String(body.workUnitId)}`,
+            GSI2PK: `WORKUNIT#${derivedWorkUnitId}`,
             GSI2SK: `TICKET#${ts}#${ticketId}`,
             entityType: 'TICKET_INDEX',
             indexType: 'IDX_WORKUNIT',
             ticketId,
             teamId: targetTeamId,
-            workUnitId: String(body.workUnitId),
+            workUnitId: derivedWorkUnitId,
           })
         );
       }
