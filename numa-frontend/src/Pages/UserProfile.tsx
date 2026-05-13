@@ -31,6 +31,7 @@ import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 import { PageHeader } from '../Components/PageHeader';
 import { StyledTabs } from '../Components/StyledTabs';
 import { manifestService } from '../Services/manifestService';
+import { CHAT_SUGGESTIONS_DISABLED } from '../hooks/useChatSuggestions';
 import { applyLanguagePreference, LANGUAGE_BROWSER_DEFAULT } from '../utils/languagePreference';
 import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
 import ProfileAvatar from '../Components/ProfileAvatar';
@@ -1559,7 +1560,7 @@ export default function UserProfilePage({
               </div>
             </div>
 
-            {getFlag('CHAT_SUGGESTIONS') && (
+            {!CHAT_SUGGESTIONS_DISABLED && getFlag('CHAT_SUGGESTIONS') && (
               <div className="profile-section">
                 <div className="profile-section__title">{t('userProfile.defaults.chatSuggestions.label')}</div>
                 <p className="profile-section__description">{t('userProfile.defaults.chatSuggestions.help')}</p>

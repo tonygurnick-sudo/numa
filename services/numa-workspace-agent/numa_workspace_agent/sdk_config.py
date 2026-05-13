@@ -20,6 +20,7 @@ from numa_workspace_agent.hooks import (
     audit_hook,
     compaction_hook,
     image_resize_hook,
+    param_aliases_hook,
     security_hook,
 )
 from numa_workspace_agent.mcp_tools import (
@@ -531,6 +532,21 @@ def create_agent_options(
         # is readable by the model directly when TaskOutput returns
         # "no task found" for a task that completed between turns.
         "CLAUDE_CODE_TMPDIR": str(LOCAL_ROOT / "tmp"),
+        # Force TCP keepalive on every outbound socket the Node subprocess
+        # opens. Bedrock streaming connections silently die after ~360s of
+        # network idle (fleet-wide ceiling observed across 1,132 healthy
+        # messages and 7 customer accounts). The bundled CLI does not set
+        # SO_KEEPALIVE with sub-360s timing on its own. The shim wraps
+        # connect(2) and applies SO_KEEPALIVE + TCP_KEEPIDLE=60 +
+        # TCP_KEEPINTVL=30 + TCP_KEEPCNT=5 to every TCP socket. Built into
+        # the image at /usr/local/lib/tcp_keepalive.so by the Dockerfile.
+        # Skipped automatically when the .so isn't present (local dev
+        # without the container), so the Python wrapper still runs.
+        **(
+            {"LD_PRELOAD": "/usr/local/lib/tcp_keepalive.so"}
+            if Path("/usr/local/lib/tcp_keepalive.so").exists()
+            else {}
+        ),
         # ────────────────────────────────────────────────────────────────
         # Workspace tools Lambda for custom tools (KB queries, etc.)
         "WORKSPACE_TOOLS_LAMBDA_NAME": workspace_tools_lambda,
@@ -775,12 +791,19 @@ def create_agent_options(
         "setting_sources": ["project"],
         # Python hooks for security (can be disabled for closed pipelines).
         # Order matters in PreToolUse: security_hook denies first to avoid
-        # wasted work; image_resize_hook may rewrite tool input; audit_hook
-        # logs the rewritten path for forensics.
+        # wasted work; param_aliases_hook + image_resize_hook may rewrite
+        # tool input; audit_hook logs the rewritten path for forensics.
         "hooks": (
             {
                 "PreToolUse": [
-                    HookMatcher(hooks=[security_hook, image_resize_hook, audit_hook]),
+                    HookMatcher(
+                        hooks=[
+                            security_hook,
+                            param_aliases_hook,
+                            image_resize_hook,
+                            audit_hook,
+                        ]
+                    ),
                 ],
                 "PostToolUse": [
                     HookMatcher(hooks=[audit_hook]),
@@ -792,7 +815,9 @@ def create_agent_options(
             if type_config.enable_security_hooks
             else {
                 "PreToolUse": [
-                    HookMatcher(hooks=[image_resize_hook, audit_hook]),
+                    HookMatcher(
+                        hooks=[param_aliases_hook, image_resize_hook, audit_hook]
+                    ),
                 ],
                 "PostToolUse": [
                     HookMatcher(hooks=[audit_hook]),

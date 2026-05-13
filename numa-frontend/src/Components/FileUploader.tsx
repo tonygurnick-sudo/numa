@@ -38,6 +38,13 @@ interface FileUploaderProps {
    * folders correspond to knowledge bases and must be created explicitly.
    */
   rejectFolders?: boolean;
+  /**
+   * When true, folders can be added to the upload batch, but the Upload button
+   * is disabled while any folder is in the selection. Used at the User Files
+   * root: files-to-root are fine, but a folder upload first needs the caller
+   * to pick a destination KB (which clears this flag by switching kb_id).
+   */
+  requireFolderDestination?: boolean;
   preloadedFiles?: DroppedUploadBatch | null;
   autoUploadPreloaded?: boolean;
 }
@@ -71,6 +78,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   selectedFolder,
   enableFolderUpload = false,
   rejectFolders = false,
+  requireFolderDestination = false,
   preloadedFiles = null,
   autoUploadPreloaded = false,
 }) => {
@@ -918,7 +926,21 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 </div>
               )}
 
-              <Button variant="primary" onClick={handleUpload} disabled={!fileStructure.files.length || isUploading}>
+              {requireFolderDestination && fileStructure.folders.size > 0 && (
+                <Alert variant="warning" className="mb-3 text-start">
+                  <i className="bi bi-exclamation-triangle me-2" />
+                  {t('fileUploader.folderDestinationRequired')}
+                </Alert>
+              )}
+              <Button
+                variant="primary"
+                onClick={handleUpload}
+                disabled={
+                  !fileStructure.files.length ||
+                  isUploading ||
+                  (requireFolderDestination && fileStructure.folders.size > 0)
+                }
+              >
                 {isUploading ? (
                   <>
                     <span className="spinner-border spinner-border-sm me-2" />

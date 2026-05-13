@@ -5,10 +5,11 @@ import { generateChatSuggestions, isToolOnlyTurn } from '../utils/chatSuggestion
 
 // Global kill switch for the chat-suggestions feature. Flip to `false` to
 // re-enable. When `true`, the hook returns an inert no-op regardless of the
-// CHAT_SUGGESTIONS feature flag or per-user opt-in — keeps the code in place
-// for fast re-enablement without disturbing the flag system or the per-user
-// preference UI.
-const CHAT_SUGGESTIONS_DISABLED = true;
+// CHAT_SUGGESTIONS feature flag or per-user opt-in. Also hides the admin
+// Capabilities toggle and the User Profile setting so neither surface
+// presents a control that wouldn't actually do anything while the kill
+// switch is engaged. Re-enable everywhere by flipping this single constant.
+export const CHAT_SUGGESTIONS_DISABLED = true;
 
 // Haiku 4.5 pricing (USD per token)
 const HAIKU_INPUT_PRICE_PER_TOKEN = 1.0 / 1_000_000;

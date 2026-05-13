@@ -248,6 +248,7 @@ export type WorkZone = {
   boardId: string;
   name: string;
   zoneType: ZoneType;
+  activeWorkUnitId?: string | null;
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -703,6 +704,10 @@ export type UpdateWorkUnitPayload = {
   status?: WorkUnitStatus;
   startDate?: string | null;
   endDate?: string | null;
+  // Required when transitioning planning -> active: which board zone the sprint runs in.
+  targetZoneId?: string;
+  // For active -> completed: where to roll incomplete tickets.
+  // 'next' resolves to the next planning sprint by order on the server.
   rolloverToWorkUnitId?: string;
 };
 

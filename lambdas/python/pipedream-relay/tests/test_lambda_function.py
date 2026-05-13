@@ -85,7 +85,7 @@ class TestLambdaFunction(unittest.TestCase):
         mock_sts_client.generate_presigned_url.assert_called_once_with(
             "get_caller_identity",
             Params={},
-            ExpiresIn=60,
+            ExpiresIn=120,
             HttpMethod="GET",
         )
 

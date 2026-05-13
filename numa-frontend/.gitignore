@@ -25,6 +25,10 @@ dist-ssr
 
 # Configuration files
 public/config.json
+# Capabilities metadata — generated at deploy time by numa-client-stack.ts.
+# Drop a local copy of CAPABILITIES_METADATA here so the admin Capabilities
+# tab shows nice names + icons instead of raw flag fallbacks.
+public/capabilities.json
 
 # Playwright
 **/test-results/

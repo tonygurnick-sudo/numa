@@ -45,6 +45,7 @@ Anywhere an operation accepts an entity ID, you can pass the entity's name inste
 | `stageName`                                   | `stageId`                               | Requires `boardId` or `boardName`. Add `zoneName` if the same stage name appears in multiple zones.                                                                                                                          |
 | `zoneName`                                    | `zoneId`                                | Requires `boardId` or `boardName`.                                                                                                                                                                                           |
 | `workUnitName` / `sprintName`                 | `workUnitId`                            | Requires `boardId` or `boardName`. Active sprint wins on tie.                                                                                                                                                                |
+| `targetZoneName`                              | `targetZoneId`                          | Sprint activation only. Requires `boardId` or `boardName`. Resolves to the named board zone the sprint runs in.                                                                                                              |
 | `projectName`                                 | `projectId`                             | Case-insensitive match.                                                                                                                                                                                                      |
 | `ticketTypeName`                              | `ticketTypeId`                          | Matches name (e.g. "Bug") or prefix (e.g. "BUG").                                                                                                                                                                            |
 | `assigneeName` / `reporterName` / `ownerName` | `assigneeId` / `reporterId` / `ownerId` | Matches the staff member's full name; falls back to substring match against name and email.                                                                                                                                  |
@@ -378,11 +379,15 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 
 ### Work Units (Sprints)
 
+**Sprint model:** a sprint runs inside exactly one board zone. While a sprint is active, every ticket sitting in its zone has `workUnitId` auto-derived from `zone.activeWorkUnitId` — you do not assign workUnitId on board-zone tickets manually; moving a ticket into the zone implicitly adds it to the active sprint, moving it out implicitly removes it. Multiple board zones can each run their own sprint in parallel.
+
+A sprint's lifecycle is `planning -> active -> completed`. Activation requires a `targetZoneId` (or `targetZoneName`) — which board zone the sprint runs in. Completion supports rollover: pass `rolloverToWorkUnitId` to auto-activate a planning sprint into the same zone with all incomplete tickets keeping their stages.
+
 | Operation          | Description                        | Approval |
 | ------------------ | ---------------------------------- | -------- |
 | `list_work_units`  | List sprints for a board           | No       |
 | `create_work_unit` | Create a new sprint                | Yes      |
-| `update_work_unit` | Update an existing sprint          | Yes      |
+| `update_work_unit` | Update / start / complete a sprint | Yes      |
 | `delete_work_unit` | Delete a sprint (admin/owner only) | Yes      |
 
 #### list_work_units
@@ -405,16 +410,20 @@ Get the audit trail (change history) for a ticket. You can identify the ticket b
 
 #### update_work_unit
 
-| Parameter    | Type   | Required | Description    |
-| ------------ | ------ | -------- | -------------- |
-| `boardId`    | string | Yes      | Board ID       |
-| `workUnitId` | string | Yes      | Work unit ID   |
-| `name`       | string | No       | New name       |
-| `goal`       | string | No       | New goal       |
-| `startDate`  | string | No       | New start date |
-| `endDate`    | string | No       | New end date   |
-| `status`     | string | No       | New status     |
-| `capacity`   | number | No       | New capacity   |
+| Parameter              | Type   | Required                  | Description                                                                                                       |
+| ---------------------- | ------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `boardId`              | string | Yes                       | Board ID                                                                                                          |
+| `workUnitId`           | string | Yes                       | Work unit ID                                                                                                      |
+| `name`                 | string | No                        | New name                                                                                                          |
+| `goal`                 | string | No                        | New goal                                                                                                          |
+| `startDate`            | string | No                        | New start date                                                                                                    |
+| `endDate`              | string | No                        | New end date                                                                                                      |
+| `status`               | string | No                        | New status (planning / active / completed)                                                                        |
+| `capacity`             | number | No                        | New capacity                                                                                                      |
+| `targetZoneId`         | string | When activating           | Required when transitioning `planning -> active`. Which board zone the sprint runs in. Pass `targetZoneName` and the bridge resolves it. |
+| `rolloverToWorkUnitId` | string | When completing, optional | On `active -> completed`, where to roll incomplete tickets. `'next'` auto-resolves to the next planning sprint by order. Omit (or pass `'backlog'`) to send incomplete tickets back to the backlog zone. When set to a planning sprint, that sprint auto-activates into the same zone and incomplete tickets keep their stages. |
+
+**Sprint guidance for ticket operations:** Do NOT pass `workUnitId` on `update_ticket` or `create_ticket` when the destination is a board zone. The server derives it from the zone's active sprint. Explicit `workUnitId` on board-zone moves is ignored. `workUnitId` is only honoured when the ticket is being placed in a backlog zone (planning workflow).
 
 #### delete_work_unit
 

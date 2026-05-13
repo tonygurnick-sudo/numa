@@ -246,6 +246,31 @@ export const AuthProvider = ({ children, initialTokens }) => {
     await decodeTokens();
   };
 
+  // Pull the latest tokens from localStorage into the in-memory refs. Used to
+  // recover from cross-tab races where another tab rotated tokens / the device
+  // key while this tab's tokensRef still holds the old refresh token. Returns
+  // true if anything was updated.
+  // Why: tokensRef is initialised once at mount and only mutated by updateTokens()
+  // during refresh — without this, a stale ref + a freshly-rotated device key in
+  // localStorage causes Cognito to reject the refresh with "Invalid Refresh Token".
+  // Only syncs when localStorage still carries a full token set — if another tab
+  // cleared storage (logout), we leave this tab's refs alone to avoid a zombie
+  // UI state (user object set, but tokens null). The next refresh attempt will
+  // surface the auth failure cleanly.
+  const syncTokensFromStorage = async (): Promise<boolean> => {
+    const accessToken = localStorage.getItem('accessToken');
+    const idToken = localStorage.getItem('idToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!accessToken || !idToken || !refreshToken) return false;
+    const current = tokensRef.current;
+    if (accessToken === current.accessToken && idToken === current.idToken && refreshToken === current.refreshToken) {
+      return false;
+    }
+    tokensRef.current = { accessToken, idToken, refreshToken };
+    await decodeTokens();
+    return true;
+  };
+
   const [qAppsClient, setQAppsClient] = useState(null);
   const [qBusinessClient, setQBusinessClient] = useState(null);
   const [bedrockRuntimeClient, setBedrockRuntimeClient] = useState(null);
@@ -473,10 +498,18 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const refreshOperation = async () => {
       const MAX_RETRIES = 3;
       const BASE_DELAY_MS = 1000;
+      // One-shot recovery: if Cognito returns NotAuthorizedException, another tab
+      // may have rotated the device key + refresh token in localStorage while
+      // ours stayed stale. Reload from localStorage and retry exactly once.
+      let storageResyncRetryUsed = false;
 
       try {
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           try {
+            // Pull the latest refresh token from localStorage on every attempt —
+            // cheap, and catches any cross-tab rotation that landed since the
+            // last refresh.
+            await syncTokensFromStorage();
             const refreshToken = tokensRef.current.refreshToken;
             const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
             const REGION = window.sessionStorage.getItem('REGION');
@@ -700,6 +733,31 @@ export const AuthProvider = ({ children, initialTokens }) => {
                 refreshTokens();
               }, 30_000);
               return false;
+            }
+
+            // Cross-tab recovery: NotAuthorizedException usually means our
+            // refresh token / device-key pair is stale because another tab
+            // rotated them in localStorage. Reload from storage once and
+            // retry the current attempt — if localStorage actually carries
+            // a newer refresh token, that retry will succeed. Only attempted
+            // once per refreshOperation, and runs even on the last attempt.
+            const isNotAuthorized =
+              error &&
+              typeof error === 'object' &&
+              (error as Record<string, unknown>).name === 'NotAuthorizedException';
+            if (isNotAuthorized && !storageResyncRetryUsed) {
+              storageResyncRetryUsed = true;
+              const updated = await syncTokensFromStorage();
+              if (updated && tokensRef.current.refreshToken) {
+                console.warn(
+                  '⚠️ Refresh rejected; localStorage carried newer tokens (likely cross-tab rotation) — retrying once'
+                );
+                // Re-run the same attempt with the freshly-synced tokens.
+                // Decrement so the for-loop's attempt++ lands us back on the
+                // same iteration index — works even when attempt === MAX_RETRIES.
+                attempt--;
+                continue;
+              }
             }
 
             // Permanent error — Cognito explicitly rejected the token
@@ -1395,9 +1453,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
         localStorage.setItem('lastTokenValidation', now.toString());
       }
 
-      // Check for group changes every 30 seconds by refreshing tokens
+      // Check for group changes by forcing a token refresh. Capped at one
+      // forced refresh per 5 minutes — group changes are admin-driven and
+      // not latency-sensitive, and a tight cadence here was burning through
+      // Cognito refreshes on every alt-tab (visibilitychange fires this
+      // function after a 2s debounce), increasing the surface area for
+      // cross-tab token-rotation races that end in "Invalid Refresh Token".
       const lastGroupCheck = localStorage.getItem('lastGroupCheck');
-      const shouldCheckGroups = !lastGroupCheck || now - parseInt(lastGroupCheck) > 30000;
+      const shouldCheckGroups = !lastGroupCheck || now - parseInt(lastGroupCheck) > 5 * 60 * 1000;
 
       if (shouldCheckGroups) {
         // Skip the first group check to avoid unnecessary refresh when tokens are already valid
@@ -1477,6 +1540,24 @@ export const AuthProvider = ({ children, initialTokens }) => {
       }
     };
   }, [checkAndRefreshTokens]);
+
+  // Cross-tab token sync: when another tab rotates tokens or the device key in
+  // localStorage, mirror the change into this tab's in-memory refs immediately.
+  // Without this, a tab can keep using an old refresh token alongside the new
+  // device key written by another tab and get rejected with "Invalid Refresh
+  // Token", causing a spurious logout.
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage) return;
+      const watched = ['accessToken', 'idToken', 'refreshToken', 'numa_device_key'];
+      if (event.key !== null && !watched.includes(event.key)) return;
+      // event.key === null means localStorage was cleared (e.g. logout in
+      // another tab); resync to pick that up too.
+      void syncTokensFromStorage();
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   // Track user activity for idle timeout enforcement
   useEffect(() => {

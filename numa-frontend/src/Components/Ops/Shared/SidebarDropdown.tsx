@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,13 @@ interface SidebarDropdownProps {
   renderValue?: (option: DropdownOption | undefined) => React.ReactNode;
   placeholder?: string;
   disabled?: boolean;
+  /**
+   * Show a search input at the top of the menu. Defaults to `true`; pass
+   * `false` to suppress (e.g. for very short fixed lists like Yes/No).
+   */
+  searchable?: boolean;
+  /** Placeholder text for the search input. */
+  searchPlaceholder?: string;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -33,10 +41,32 @@ export function SidebarDropdown({
   renderValue,
   placeholder = 'Select...',
   disabled = false,
+  searchable,
+  searchPlaceholder,
 }: SidebarDropdownProps): React.JSX.Element {
+  const { t } = useTranslation('common');
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const selected = options.find((o) => o.value === value);
+
+  // Default: always show search. Suppress only if explicitly disabled or if
+  // there's at most one option (where searching is pointless).
+  const isSearchable = searchable ?? options.length > 1;
+
+  // Reset search when menu closes; focus input when it opens.
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+      return;
+    }
+    if (isSearchable) {
+      // Defer focus to next paint so the input is mounted.
+      const id = requestAnimationFrame(() => searchInputRef.current?.focus());
+      return () => cancelAnimationFrame(id);
+    }
+  }, [open, isSearchable]);
 
   // Close on outside click
   useEffect(() => {
@@ -60,10 +90,16 @@ export function SidebarDropdown({
     return () => document.removeEventListener('keydown', handleKey);
   }, [open]);
 
+  const filteredOptions = useMemo(() => {
+    if (!isSearchable || !query.trim()) return options;
+    const q = query.trim().toLowerCase();
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, query, isSearchable]);
+
   // Group options
   const groups: { key: string; label: string | null; items: DropdownOption[] }[] = [];
   const seen = new Set<string>();
-  for (const opt of options) {
+  for (const opt of filteredOptions) {
     const groupKey = opt.group ?? '__none__';
     if (!seen.has(groupKey)) {
       seen.add(groupKey);
@@ -96,6 +132,27 @@ export function SidebarDropdown({
       {/* Menu */}
       {open && (
         <div className="sidebar-dropdown-menu">
+          {isSearchable && (
+            <div className="sidebar-dropdown-search">
+              <i className="bi bi-search sidebar-dropdown-search-icon" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="sidebar-dropdown-search-input"
+                placeholder={searchPlaceholder ?? t('common.search')}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    if (query) setQuery('');
+                    else setOpen(false);
+                  }
+                }}
+              />
+            </div>
+          )}
+          {groups.length === 0 && <div className="sidebar-dropdown-empty">{t('common.noResults')}</div>}
           {groups.map((group) => (
             <React.Fragment key={group.key}>
               {group.label && <div className="sidebar-dropdown-group-label">{group.label}</div>}

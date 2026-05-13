@@ -12,6 +12,10 @@ const LS_TOP_VIEW = 'numa_ops_top_view';
 const LS_SELECTED_WORK_UNIT = 'numa_ops_selected_work_unit';
 const LS_MY_WORK_FILTER = 'numa_ops_my_work_filter';
 
+// Polling cadence for the board heartbeat. 20s is the sweet spot for an
+// internal kanban — snappy enough to feel ~live without being noisy.
+const HEARTBEAT_INTERVAL_MS = 20_000;
+
 // ── One-shot localStorage migration ────────────────────────────────────────
 // The team→board rename moved a few keys around. Run once on module load so
 // subsequent reads get the new key name even if the user had the old one set.
@@ -209,6 +213,11 @@ export const useOpsData = (): OpsDataState => {
   // ── Refs ─────────────────────────────────────────────────────────────────
   const initialLoadDone = useRef(false);
 
+  // Per-board last seen boardVersion. The heartbeat poller compares against
+  // this; an increase means another tab/user mutated the board and we should
+  // re-fetch. Keyed by boardId so switching boards starts a fresh baseline.
+  const lastSeenVersionRef = useRef<Map<string, number>>(new Map());
+
   // ── localStorage Persistence ──────────────────────────────────────────
   const persistBoard = useCallback((boardId: string) => {
     try {
@@ -279,6 +288,9 @@ export const useOpsData = (): OpsDataState => {
     async (boardId: string) => {
       try {
         setTicketsLoading(true);
+        // Default load excludes archived tickets. Views that want to surface
+        // archived data (e.g. AllTicketsView's "Show Archived" toggle) re-fetch
+        // with includeArchived=true explicitly.
         const response = await OpsService.listTickets(numaGet, { boardId });
         setTickets(response.tickets);
         setCache(`tickets_${boardId}`, response.tickets);
@@ -390,6 +402,66 @@ export const useOpsData = (): OpsDataState => {
     setSelectedWorkUnitId(null);
   }, [selectedBoardId, loadBoardData, loadTickets, loadWorkUnits]);
 
+  // ── Board Heartbeat Polling ───────────────────────────────────────────
+  //
+  // Polls /ops/boards/{id}/heartbeat every HEARTBEAT_INTERVAL_MS while the tab
+  // is visible. Also fires immediately on tab focus / visibility change to
+  // close the "switched away for a few minutes" gap. If the server's
+  // boardVersion is higher than our local baseline, refetch board + tickets +
+  // work units. The poll itself is a single ~0.5 RRU GetItem.
+
+  useEffect(() => {
+    if (!selectedBoardId) return;
+
+    let cancelled = false;
+
+    const checkHeartbeat = async (): Promise<void> => {
+      if (cancelled || document.visibilityState !== 'visible') return;
+      try {
+        const hb = await OpsService.getBoardHeartbeat(numaGet, selectedBoardId);
+        if (cancelled) return;
+        const lastSeen = lastSeenVersionRef.current.get(selectedBoardId);
+        if (lastSeen === undefined) {
+          // First poll for this board — adopt the current version silently.
+          // The board-selection effect above already fetched the data, so we
+          // don't need to refetch here.
+          lastSeenVersionRef.current.set(selectedBoardId, hb.boardVersion);
+          return;
+        }
+        if (hb.boardVersion > lastSeen) {
+          lastSeenVersionRef.current.set(selectedBoardId, hb.boardVersion);
+          await Promise.all([
+            loadBoardData(selectedBoardId),
+            loadTickets(selectedBoardId),
+            loadWorkUnits(selectedBoardId),
+          ]);
+        }
+      } catch (err) {
+        // Best-effort; a failed poll just delays detection until the next tick.
+        console.warn('[useOpsData] heartbeat poll failed', err);
+      }
+    };
+
+    // Fire immediately so we establish the baseline right after mount instead
+    // of waiting up to a full interval.
+    void checkHeartbeat();
+
+    const intervalId = window.setInterval(() => void checkHeartbeat(), HEARTBEAT_INTERVAL_MS);
+
+    const onVisibilityOrFocus = (): void => {
+      if (document.visibilityState === 'visible') void checkHeartbeat();
+    };
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
+    window.addEventListener('focus', onVisibilityOrFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+    };
+  }, [selectedBoardId, numaGet, loadBoardData, loadTickets, loadWorkUnits]);
+
   // ── Auto-select zone when zones change ──────────────────────────────────
   //
   // If the active zone is null or no longer exists in the current zones,
@@ -479,18 +551,32 @@ export const useOpsData = (): OpsDataState => {
     }
   }, [selectedBoardId, loadWorkUnits]);
 
+  // After any locally-driven refresh, re-sync the heartbeat baseline so the
+  // polling loop doesn't see the bump we just caused as a remote change.
+  const syncHeartbeatBaseline = useCallback(
+    async (boardId: string): Promise<void> => {
+      try {
+        const hb = await OpsService.getBoardHeartbeat(numaGet, boardId);
+        lastSeenVersionRef.current.set(boardId, hb.boardVersion);
+      } catch {
+        /* best-effort — at worst we get one redundant refetch on the next poll */
+      }
+    },
+    [numaGet]
+  );
+
   const refreshBoard = useCallback(async (): Promise<BoardResponse | null> => {
-    if (selectedBoardId) {
-      return loadBoardData(selectedBoardId);
-    }
-    return null;
-  }, [selectedBoardId, loadBoardData]);
+    if (!selectedBoardId) return null;
+    const result = await loadBoardData(selectedBoardId);
+    void syncHeartbeatBaseline(selectedBoardId);
+    return result;
+  }, [selectedBoardId, loadBoardData, syncHeartbeatBaseline]);
 
   const refreshTickets = useCallback(async () => {
-    if (selectedBoardId) {
-      await loadTickets(selectedBoardId);
-    }
-  }, [selectedBoardId, loadTickets]);
+    if (!selectedBoardId) return;
+    await loadTickets(selectedBoardId);
+    void syncHeartbeatBaseline(selectedBoardId);
+  }, [selectedBoardId, loadTickets, syncHeartbeatBaseline]);
 
   const refreshBoards = useCallback(async () => {
     await loadBoards();

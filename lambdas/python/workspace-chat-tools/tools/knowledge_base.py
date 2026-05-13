@@ -725,14 +725,14 @@ def verify_kb_write_access(user_sub: str, kb_id: str) -> bool:
             ]
         created_by = item.get("created_by", {}).get("S", "")
 
-        has_access = user_sub in editors or user_sub == created_by
+        has_access = "*" in editors or user_sub in editors or user_sub == created_by
 
         logger.info(
             "KB write access check completed",
             kb_id=kb_id,
             user_sub=user_sub[:8] + "...",
             has_access=has_access,
-            is_editor=user_sub in editors,
+            is_editor=("*" in editors or user_sub in editors),
             is_creator=user_sub == created_by,
         )
 

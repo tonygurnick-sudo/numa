@@ -27,6 +27,9 @@ export function UnifiedFilesPage(): React.JSX.Element {
 
   const canViewCompany = Boolean(user?.features?.includes('useCompanyData'));
   const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
+  const sharingEnabled = getFlag('NUMA_SHARING');
+  const dropZonesEnabled = getFlag('NUMA_DROP_ZONES');
+  const externalShareEnabled = sharingEnabled || dropZonesEnabled;
 
   const handleTabChange = useCallback(
     (key: string) => {
@@ -51,9 +54,11 @@ export function UnifiedFilesPage(): React.JSX.Element {
       items.push({ key: 'remote', label: t('tabs.remote'), iconClassName: 'bi bi-cloud' });
     }
     items.push({ key: 'crawler', label: t('tabs.webCrawler'), iconClassName: 'bi bi-globe2' });
-    items.push({ key: 'shared', label: t('tabs.shared'), iconClassName: 'bi bi-people' });
+    if (externalShareEnabled) {
+      items.push({ key: 'shared', label: t('tabs.shared'), iconClassName: 'bi bi-people' });
+    }
     return items;
-  }, [t, canViewCompany, dataConnectorsEnabled]);
+  }, [t, canViewCompany, dataConnectorsEnabled, externalShareEnabled]);
 
   return (
     <div className="dashboard unified-files-page">
@@ -73,7 +78,7 @@ export function UnifiedFilesPage(): React.JSX.Element {
       <LayoutDashboard>
         {activeTab === 'user' && <UserFilesTab onActionChange={handleActionChange} />}
         {activeTab === 'company' && <CompanyFilesTab onActionChange={handleActionChange} />}
-        {activeTab === 'shared' && <SharedFoldersTab onActionChange={handleActionChange} />}
+        {activeTab === 'shared' && externalShareEnabled && <SharedFoldersTab onActionChange={handleActionChange} />}
         {activeTab === 'remote' && <RemoteTab onActionChange={handleActionChange} />}
         {activeTab === 'crawler' && <WebCrawlerTab />}
         {activeTab === 'chatArtifacts' && <ChatArtifactsTab onActionChange={handleActionChange} />}

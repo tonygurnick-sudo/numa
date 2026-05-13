@@ -277,6 +277,10 @@ export const workZoneSchema = z.object({
   boardId: z.string(),
   name: z.string().min(1),
   zoneType: zoneTypeSchema,
+  // Active sprint applied to this zone. Only set for board zones with a running sprint.
+  // Managed exclusively by work-unit lifecycle handlers (start/complete/rollover),
+  // not by the generic zone update endpoint.
+  activeWorkUnitId: z.string().nullable().optional(),
   order: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -668,6 +672,9 @@ export const updateWorkUnitRequestSchema = z.object({
   status: workUnitStatusSchema.optional(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
+  // Required when transitioning planning -> active: which board zone the sprint runs in.
+  targetZoneId: z.string().optional(),
+  // For active -> completed: where to roll incomplete tickets. 'next' resolves to next planning sprint.
   rolloverToWorkUnitId: z.string().optional(),
 });
 
