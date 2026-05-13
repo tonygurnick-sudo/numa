@@ -57,6 +57,12 @@ import type { CapabilityItem } from '../utils/capabilityRegistry';
 import { getFlagRegistry } from '../utils/featureFlags';
 import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
 import { loadAdminCapabilityGating, DEFAULT_DISABLED_FLAGS } from '../utils/adminCapabilityGating';
+import { CHAT_SUGGESTIONS_DISABLED } from '../hooks/useChatSuggestions';
+
+// Capability flags hidden by a code-level kill switch. When the corresponding
+// kill switch is engaged, the capability is removed from the admin Capabilities
+// list so we don't show a toggle that wouldn't actually do anything.
+const KILLED_CAPABILITY_FLAGS = new Set<string>([...(CHAT_SUGGESTIONS_DISABLED ? ['CHAT_SUGGESTIONS'] : [])]);
 
 const useNavigationConfirm = (when: boolean, message: string) => {
   const navigationContext = useContext(UNSAFE_NavigationContext);
@@ -287,8 +293,10 @@ export default function SettingsPage() {
     loadCapabilities().then((meta) => {
       if (meta.length > 0) {
         // New path: capabilities.json exists (post-deploy with metadata).
-        // Only show capabilities in BOTH the metadata AND deployed as true.
+        // Only show capabilities in BOTH the metadata AND deployed as true,
+        // and not currently behind a code-level kill switch.
         const items = meta.filter((cap) => {
+          if (KILLED_CAPABILITY_FLAGS.has(cap.flag)) return false;
           const deployValue = sessionStorage.getItem(`DEPLOY_${cap.flag}`);
           // Also check raw flag for backward compat (older deployments without DEPLOY_ prefix)
           const rawValue = sessionStorage.getItem(cap.flag);
@@ -303,6 +311,7 @@ export default function SettingsPage() {
           const key = sessionStorage.key(i);
           if (!key?.startsWith('DEPLOY_')) continue;
           const flag = key.slice(7);
+          if (KILLED_CAPABILITY_FLAGS.has(flag)) continue;
           const deployValue = sessionStorage.getItem(key);
           if (deployValue === 'false') continue;
           items.push({
@@ -322,6 +331,7 @@ export default function SettingsPage() {
         }
 
         for (const flag of allKnownFlags) {
+          if (KILLED_CAPABILITY_FLAGS.has(flag)) continue;
           if (items.some((c) => c.flag === flag)) continue;
           if (sessionStorage.getItem(`DEPLOY_${flag}`) === 'false') continue;
           items.push({

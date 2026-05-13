@@ -13,14 +13,18 @@ from threading import Semaphore
 from typing import Any, Dict, List, Sequence, Union
 from urllib.parse import urlparse
 
+import boto3
 import fitz  # type: ignore[import-untyped]  # PyMuPDF
 import structlog
 from botocore.config import Config
+from botocore.credentials import RefreshableCredentials
 from botocore.exceptions import ClientError
+from botocore.session import Session as BotocoreSession
 from opentelemetry import trace
 from opentelemetry.instrumentation.threading import ThreadingInstrumentor
 from PIL import Image
 
+from prm import PRM_UA
 from prm import client as prm_client
 
 tracer = trace.get_tracer(__name__)
@@ -177,35 +181,61 @@ s3_client = prm_client("s3", config=Config(max_pool_connections=CONNECTION_POOL_
 _BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
 
 
+def _assume_bedrock_role_metadata() -> dict:
+    """Assume the cross-account Bedrock role and return credentials in the
+    metadata shape botocore's RefreshableCredentials expects.
+
+    Called once at client construction and again by botocore whenever the
+    cached credentials approach expiry, so warm Lambda containers don't
+    blow up with ExpiredTokenException after the 1-hour STS TTL elapses.
+    """
+    sts = prm_client("sts", region=AWS_REGION)
+    response = sts.assume_role(
+        RoleArn=f"arn:aws:iam::{_BEDROCK_ACCOUNT}:role/bedrock-quota-sharing",
+        RoleSessionName="extract-content-lambda",
+    )
+    creds = response["Credentials"]
+    return {
+        "access_key": creds["AccessKeyId"],
+        "secret_key": creds["SecretAccessKey"],
+        "token": creds["SessionToken"],
+        "expiry_time": creds["Expiration"].isoformat(),
+    }
+
+
 def _create_bedrock_client():
     """Create a Bedrock runtime client, optionally using cross-account credentials."""
-    bedrock_config = Config(max_pool_connections=CONNECTION_POOL_SIZE)
+    bedrock_config = Config(
+        user_agent_extra=PRM_UA,
+        max_pool_connections=CONNECTION_POOL_SIZE,
+    )
 
     if _BEDROCK_ACCOUNT:
         try:
-            sts = prm_client("sts", region=AWS_REGION)
-            response = sts.assume_role(
-                RoleArn=f"arn:aws:iam::{_BEDROCK_ACCOUNT}:role/bedrock-quota-sharing",
-                RoleSessionName="extract-content-lambda",
+            refreshable = RefreshableCredentials.create_from_metadata(
+                metadata=_assume_bedrock_role_metadata(),
+                refresh_using=_assume_bedrock_role_metadata,
+                method="sts-assume-role",
             )
-            creds = response["Credentials"]
+            # The `_credentials` attribute on a botocore Session is private but
+            # this is the canonical pattern for plugging in custom refreshable
+            # credentials (no public setter exists). boto3.Session wraps the
+            # botocore Session, so the Bedrock client created below picks up
+            # the refreshable creds and self-heals on expiry.
+            botocore_session = BotocoreSession()
+            botocore_session._credentials = refreshable  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]  # noqa: SLF001
             logger.info(
-                "Using cross-account Bedrock credentials",
+                "Using cross-account Bedrock credentials (refreshable)",
                 bedrock_account=_BEDROCK_ACCOUNT,
             )
-            import boto3
-
-            return boto3.client(
+            return boto3.Session(botocore_session=botocore_session).client(
                 "bedrock-runtime",
                 region_name=AWS_REGION,
-                aws_access_key_id=creds["AccessKeyId"],
-                aws_secret_access_key=creds["SecretAccessKey"],
-                aws_session_token=creds["SessionToken"],
                 config=bedrock_config,
             )
         except Exception as e:
             logger.error(
-                "Failed to assume cross-account role, falling back to default credentials",
+                "Failed to set up refreshable Bedrock credentials, falling back to default",
                 bedrock_account=_BEDROCK_ACCOUNT,
                 error=str(e),
             )

@@ -3,7 +3,9 @@
     "ok": "OK",
     "cancel": "Cancel",
     "close": "Close",
-    "delete": "Delete"
+    "delete": "Delete",
+    "search": "Search...",
+    "noResults": "No matches"
   },
   "confirm": {
     "defaultTitle": "Confirm",
@@ -293,7 +295,8 @@
       "uploadFailed": "Error uploading files"
     },
     "foldersRejected": "Folders can't be uploaded to the root. Top-level folders have their own access controls that determine what's searchable in chat, so they must be created through the UI. Click + Create folder to make one, then upload files or nested folders inside it.",
-    "foldersRejectedFilesAdded": "Any loose files in your drop were added."
+    "foldersRejectedFilesAdded": "Any loose files in your drop were added.",
+    "folderDestinationRequired": "Folder uploads need a destination. Pick an existing folder above, or create a new one — files on their own can still be uploaded to the root."
   },
   "uploads": {
     "dragAndDrop": "Drag and drop your file(s) here, or",

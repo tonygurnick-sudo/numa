@@ -121,6 +121,7 @@ interface StartWorkUnitModalProps {
   tickets: Ticket[];
   zones: WorkZone[];
   preselectedId?: string | null;
+  defaultZoneId?: string | null;
   onHide: () => void;
   onStarted: () => void;
 }
@@ -132,6 +133,7 @@ export function StartWorkUnitModal({
   tickets,
   zones,
   preselectedId,
+  defaultZoneId,
   onHide,
   onStarted,
 }: StartWorkUnitModalProps): React.JSX.Element {
@@ -140,13 +142,17 @@ export function StartWorkUnitModal({
 
   const [selectedId, setSelectedId] = useState('');
   const [sprintName, setSprintName] = useState('');
+  const [targetZoneId, setTargetZoneId] = useState('');
   const [durationWeeks, setDurationWeeks] = useState(2);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const planningUnits = useMemo(() => workUnits.filter((wu) => wu.status === 'planning'), [workUnits]);
 
-  const hasActiveUnit = useMemo(() => workUnits.some((wu) => wu.status === 'active'), [workUnits]);
+  // All board zones get listed in the picker. Zones already running a sprint
+  // are shown but disabled, so the user can see why they can't pick them.
+  const boardZones = useMemo(() => zones.filter((z) => z.zoneType === 'board'), [zones]);
+  const eligibleZones = useMemo(() => boardZones.filter((z) => !z.activeWorkUnitId), [boardZones]);
 
   // Auto-select when modal opens with a preselected sprint
   useEffect(() => {
@@ -157,13 +163,20 @@ export function StartWorkUnitModal({
         setSprintName(wu.name);
       }
     }
-    if (!show) {
+    if (show) {
+      // Default the target zone to the currently-viewed one if it's eligible,
+      // otherwise the first eligible board zone.
+      const fallback =
+        (defaultZoneId && eligibleZones.find((z) => z.id === defaultZoneId)?.id) ?? eligibleZones[0]?.id ?? '';
+      setTargetZoneId(fallback);
+    } else {
       setSelectedId('');
       setSprintName('');
+      setTargetZoneId('');
       setDurationWeeks(2);
       setError(null);
     }
-  }, [show, preselectedId, planningUnits]);
+  }, [show, preselectedId, planningUnits, defaultZoneId, eligibleZones]);
 
   // When a sprint is selected, populate its name
   const selectedUnit = useMemo(
@@ -211,19 +224,21 @@ export function StartWorkUnitModal({
   }, [selectedId, tickets, zones]);
 
   const handleStart = useCallback(async () => {
-    if (!selectedId) return;
+    if (!selectedId || !targetZoneId) return;
     try {
       setSaving(true);
       setError(null);
-      // Update name (if changed) and set dates + status
+      // Update name (if changed) and set dates + status + target zone
       await OpsService.updateWorkUnit(numaPut, boardId, selectedId, {
         status: 'active',
         name: sprintName.trim() || selectedUnit?.name,
         startDate,
         endDate,
+        targetZoneId,
       });
       setSelectedId('');
       setSprintName('');
+      setTargetZoneId('');
       setDurationWeeks(2);
       onStarted();
     } catch (err) {
@@ -231,7 +246,7 @@ export function StartWorkUnitModal({
     } finally {
       setSaving(false);
     }
-  }, [selectedId, sprintName, selectedUnit, startDate, endDate, boardId, numaPut, onStarted, t]);
+  }, [selectedId, sprintName, selectedUnit, startDate, endDate, targetZoneId, boardId, numaPut, onStarted, t]);
 
   return (
     <Modal show={show} onHide={onHide} centered>
@@ -246,11 +261,15 @@ export function StartWorkUnitModal({
           </div>
         )}
 
-        {hasActiveUnit && <div className="alert alert-warning mb-3">{t('sprints.completeCurrentFirst')}</div>}
+        {eligibleZones.length === 0 && <div className="alert alert-warning mb-3">{t('sprints.noEligibleZones')}</div>}
 
         <Form.Group className="mb-3">
           <Form.Label>{t('sprints.selectWorkUnit')}</Form.Label>
-          <Form.Select value={selectedId} onChange={(e) => handleSelectSprint(e.target.value)} disabled={hasActiveUnit}>
+          <Form.Select
+            value={selectedId}
+            onChange={(e) => handleSelectSprint(e.target.value)}
+            disabled={eligibleZones.length === 0}
+          >
             <option value="">{t('common.selectOption')}</option>
             {planningUnits.map((wu) => (
               <option key={wu.id} value={wu.id}>
@@ -265,6 +284,23 @@ export function StartWorkUnitModal({
             <Form.Group className="mb-3">
               <Form.Label>{t('sprints.sprintName')}</Form.Label>
               <Form.Control type="text" value={sprintName} onChange={(e) => setSprintName(e.target.value)} />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>{t('sprints.targetZone')}</Form.Label>
+              <Form.Select value={targetZoneId} onChange={(e) => setTargetZoneId(e.target.value)}>
+                <option value="">{t('common.selectOption')}</option>
+                {boardZones.map((z) => {
+                  const occupied = !!z.activeWorkUnitId;
+                  return (
+                    <option key={z.id} value={z.id} disabled={occupied}>
+                      {z.name}
+                      {occupied ? ` (${t('sprints.zoneAlreadyActive')})` : ''}
+                    </option>
+                  );
+                })}
+              </Form.Select>
+              <Form.Text className="text-muted">{t('sprints.targetZoneHint')}</Form.Text>
             </Form.Group>
 
             <Form.Group className="mb-3">
@@ -305,7 +341,11 @@ export function StartWorkUnitModal({
         <Button variant="secondary" onClick={onHide}>
           {t('common.cancel')}
         </Button>
-        <Button variant="success" disabled={!selectedId || hasActiveUnit || saving} onClick={handleStart}>
+        <Button
+          variant="success"
+          disabled={!selectedId || !targetZoneId || eligibleZones.length === 0 || saving}
+          onClick={handleStart}
+        >
           {saving ? t('common.loading') : t('sprints.start')}
         </Button>
       </Modal.Footer>
@@ -416,20 +456,23 @@ export function CompleteWorkUnitModal({
               className="mb-2"
             />
             {rolloverChoice === 'sprint' && planningUnits.length > 0 && (
-              <Form.Select
-                size="sm"
-                className="ms-4 mb-2"
-                style={{ width: 'auto' }}
-                value={selectedTargetId}
-                onChange={(e) => setSelectedTargetId(e.target.value)}
-              >
-                <option value="">{t('sprints.selectTargetSprint')}</option>
-                {planningUnits.map((wu) => (
-                  <option key={wu.id} value={wu.id}>
-                    {wu.name}
-                  </option>
-                ))}
-              </Form.Select>
+              <>
+                <Form.Select
+                  size="sm"
+                  className="ms-4 mb-2"
+                  style={{ width: 'auto' }}
+                  value={selectedTargetId}
+                  onChange={(e) => setSelectedTargetId(e.target.value)}
+                >
+                  <option value="">{t('sprints.selectTargetSprint')}</option>
+                  {planningUnits.map((wu) => (
+                    <option key={wu.id} value={wu.id}>
+                      {wu.name}
+                    </option>
+                  ))}
+                </Form.Select>
+                <p className="text-muted small ms-4 mb-2">{t('sprints.rolloverAutoActivateNote')}</p>
+              </>
             )}
             {planningUnits.length === 0 && (
               <p className="text-muted small ms-4 mb-2">{t('sprints.noPlanningSprints')}</p>

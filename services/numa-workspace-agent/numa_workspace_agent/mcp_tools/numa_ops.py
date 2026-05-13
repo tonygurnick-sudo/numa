@@ -267,10 +267,15 @@ def _save_ops_result(result: Any, operation: str) -> str:
                     "PREFER passing names instead of IDs -- the bridge resolves "
                     "boardName, stageName, zoneName, ticketTypeName, "
                     "assigneeName/reporterName/ownerName, customerName, supplierName, "
-                    "projectName, workUnitName/sprintName, and lifecycleStageName "
-                    "to their corresponding IDs automatically. NEVER invent IDs -- "
-                    "if you don't already know one, pass the name. "
-                    "See the ops skill for required/optional params per operation."
+                    "projectName, workUnitName/sprintName, targetZoneName, and "
+                    "lifecycleStageName to their corresponding IDs automatically. "
+                    "NEVER invent IDs -- if you don't already know one, pass the name. "
+                    "Sprint model: a sprint runs inside one board zone. Activating a "
+                    "sprint (update_work_unit with status=active) REQUIRES targetZoneId "
+                    "(or targetZoneName). On completion, pass rolloverToWorkUnitId to "
+                    "auto-activate the next sprint into the same zone with stages "
+                    "preserved. See the ops skill for required/optional params per "
+                    "operation."
                 ),
             },
             "description": {

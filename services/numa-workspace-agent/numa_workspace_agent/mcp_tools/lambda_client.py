@@ -19,8 +19,73 @@ logger = structlog.get_logger()
 # Results directory for tool outputs
 RESULTS_DIR = "/workdir/outputs/integrations-results"
 
-# Preview length for truncated results shown inline
+# Preview length for truncated results shown inline. Below this, the raw
+# JSON fits in the response and we send it verbatim. Above this, we send
+# a schema preview instead (see _build_schema_preview) so the model gets
+# the full shape of the result in <5KB rather than the first ~500 chars
+# of a 1MB blob — and can then jq/python over the file on disk.
 PREVIEW_LENGTH = 500
+
+# Caps on the schema walker. The integration-result files we see in the
+# wild are homogeneous arrays of records (50 emails, 20 messages, etc.),
+# so first-item sampling captures the shape; depth/key caps are belt-and-
+# braces guards against pathological inputs.
+_SCHEMA_MAX_DEPTH = 8
+_SCHEMA_MAX_DICT_KEYS = 50
+_SCHEMA_STRING_SAMPLE_LEN = 80
+
+
+def _build_schema_preview(value: Any, depth: int = 0) -> Any:
+    """
+    Compact schema-with-samples of a JSON value for inline model consumption.
+
+    Conventions: keys prefixed with `_` are metadata about the shape; every
+    other key is a real key from the source data, so the model can match
+    them up directly with `jq` paths.
+    """
+    if depth >= _SCHEMA_MAX_DEPTH:
+        return {"_truncated": "max_depth"}
+
+    if value is None:
+        return {"_type": "null"}
+
+    if isinstance(value, bool):
+        return {"_type": "bool", "_example": value}
+
+    if isinstance(value, (int, float)):
+        return {"_type": type(value).__name__, "_example": value}
+
+    if isinstance(value, str):
+        if len(value) <= _SCHEMA_STRING_SAMPLE_LEN:
+            return {"_type": "string", "_example": value}
+        return {
+            "_type": "string",
+            "_length": len(value),
+            "_example": value[:_SCHEMA_STRING_SAMPLE_LEN] + "…",
+        }
+
+    if isinstance(value, list):
+        if not value:
+            return {"_type": "array", "_length": 0}
+        return {
+            "_type": "array",
+            "_length": len(value),
+            "_item": _build_schema_preview(value[0], depth + 1),
+        }
+
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        keys = list(value.keys())
+        for k in keys[:_SCHEMA_MAX_DICT_KEYS]:
+            out[str(k)] = _build_schema_preview(value[k], depth + 1)
+        if len(keys) > _SCHEMA_MAX_DICT_KEYS:
+            out["_more_keys"] = len(keys) - _SCHEMA_MAX_DICT_KEYS
+        return out
+
+    return {
+        "_type": type(value).__name__,
+        "_example": str(value)[:_SCHEMA_STRING_SAMPLE_LEN],
+    }
 
 
 def pop_approval_id(action_key: str) -> str:
@@ -251,14 +316,27 @@ def save_result(
     else:
         size_str = f"{file_size / 1024:.1f} KB"
 
-    # Create preview
-    result_str = json.dumps(output["result"], indent=2, default=str)
-    result_lines = result_str.count("\n") + 1
+    # Create preview. For small results, send the raw JSON inline (model can
+    # work with it directly). For large results, send a schema-with-samples
+    # preview that captures the full shape in <5KB — model uses jq/python to
+    # extract specific fields from the full file rather than Reading it (which
+    # would crowd context and may exceed the SDK's 256KB Read cap entirely).
+    #
+    # Both paths preview the full saved file (including the action_key /
+    # status / result wrapper) so the model's jq paths match the on-disk
+    # structure on the first try — previewing only output["result"] makes
+    # it write `.ret` when the file actually wants `.result.ret`.
+    result_str = json.dumps(output, indent=2, default=str)
     if len(result_str) > PREVIEW_LENGTH:
-        preview_lines = result_str[:PREVIEW_LENGTH].count("\n") + 1
+        schema = _build_schema_preview(output)
+        schema_json = json.dumps(schema, indent=2, default=str)
+        preview_path = results_dir / f"{action_key}-{timestamp}.preview.json"
+        preview_path.write_text(schema_json)
         preview = (
-            result_str[:PREVIEW_LENGTH]
-            + f"\n... (truncated, showing ~{preview_lines}/{result_lines} lines — see file for full result)"
+            "Full result on disk — schema preview below "
+            "(use jq or python on the full file to extract specific fields):\n\n"
+            f"{schema_json}\n\n"
+            f"Schema sidecar (machine-readable): {preview_path}"
         )
     else:
         preview = result_str

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Modal from 'react-bootstrap/Modal';
 import Button from 'react-bootstrap/Button';
 import Badge from 'react-bootstrap/Badge';
@@ -38,6 +38,13 @@ import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { SidebarDropdown } from '../Shared/SidebarDropdown';
 import type { DropdownOption } from '../Shared/SidebarDropdown';
 import { getPriorityColor } from '../Shared/colorUtils';
+import {
+  formatAuditFieldLabel,
+  formatAuditValue,
+  shouldIgnoreAuditField,
+  expandCustomFieldChanges,
+  type AuditLookups,
+} from '../Shared/auditFormatters';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -191,6 +198,20 @@ export function TicketDetailModal({
   const [showHistory, setShowHistory] = useState(false);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Lookups for resolving raw IDs in audit entries to human-readable names.
+  const auditLookups: AuditLookups = useMemo(
+    () => ({
+      config,
+      customers,
+      suppliers,
+      workUnits,
+      zones: ticketTeamData?.zones ?? boardData?.zones ?? [],
+      stages: ticketTeamData?.stages ?? boardData?.stages ?? [],
+      boards,
+    }),
+    [config, customers, suppliers, workUnits, ticketTeamData, boardData, boards]
+  );
 
   // ── Share / copy link feedback ────────────────────────────────────────
   const [copied, setCopied] = useState(false);
@@ -1421,11 +1442,11 @@ export function TicketDetailModal({
                 const actionKey = `tickets.historyAction.${entry.action}` as const;
                 const actionLabel = t(actionKey, entry.action);
 
-                // Build change descriptions
+                // Build change descriptions with ID->name resolution
                 const changeDescriptions: string[] = [];
                 if (entry.changes && typeof entry.changes === 'object') {
                   // changes can be Record<string, { from, to }> or AuditChange[]
-                  const changesObj = Array.isArray(entry.changes)
+                  const rawChanges = Array.isArray(entry.changes)
                     ? entry.changes
                     : Object.entries(entry.changes).map(([field, val]) => ({
                         field,
@@ -1433,26 +1454,40 @@ export function TicketDetailModal({
                         to: (val as { to?: unknown })?.to,
                       }));
 
-                  for (const change of changesObj) {
-                    const fieldName = String(change.field);
-                    const fromVal = change.from;
-                    const toVal = change.to;
+                  // Expand the custom `fields` blob into per-field rows so each
+                  // custom field shows up with its own label.
+                  const expandedChanges: Array<{ field: string; from: unknown; to: unknown }> = [];
+                  for (const change of rawChanges) {
+                    if (change.field === 'fields') {
+                      expandedChanges.push(...expandCustomFieldChanges(change.from, change.to, config?.fields));
+                    } else if (!shouldIgnoreAuditField(change.field)) {
+                      expandedChanges.push(change);
+                    }
+                  }
 
-                    if (fromVal != null && toVal != null) {
+                  for (const change of expandedChanges) {
+                    const fieldLabel = formatAuditFieldLabel(change.field, t);
+                    const fromVal = formatAuditValue(change.field, change.from, auditLookups, t);
+                    const toVal = formatAuditValue(change.field, change.to, auditLookups, t);
+
+                    if (fromVal && toVal) {
                       changeDescriptions.push(
-                        t('tickets.historyFieldChange', {
-                          field: fieldName,
-                          from: String(fromVal),
-                          to: String(toVal),
-                        })
+                        t('tickets.historyFieldChange', { field: fieldLabel, from: fromVal, to: toVal })
                       );
-                    } else if (toVal != null) {
-                      changeDescriptions.push(t('tickets.historyFieldSet', { field: fieldName, to: String(toVal) }));
-                    } else if (fromVal != null) {
-                      changeDescriptions.push(t('tickets.historyFieldCleared', { field: fieldName }));
+                    } else if (toVal) {
+                      changeDescriptions.push(t('tickets.historyFieldSet', { field: fieldLabel, to: toVal }));
+                    } else if (fromVal) {
+                      changeDescriptions.push(t('tickets.historyFieldCleared', { field: fieldLabel }));
                     }
                   }
                 }
+
+                const displayUserName =
+                  entry.userName ||
+                  (entry.userId
+                    ? (config?.staff?.find((s) => s.id === entry.userId)?.name ??
+                      config?.staff?.find((s) => s.id === entry.userId)?.email)
+                    : null);
 
                 return (
                   <div key={entry.id} className="d-flex align-items-start gap-3">
@@ -1482,10 +1517,10 @@ export function TicketDetailModal({
                           ))}
                         </div>
                       )}
-                      {entry.userName && (
+                      {displayUserName && (
                         <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: 2 }}>
                           <i className="bi bi-person me-1" />
-                          {entry.userName}
+                          {displayUserName}
                         </div>
                       )}
                     </div>

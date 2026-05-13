@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Spinner, Alert, Modal } from 'react-bootstrap';
+import { Spinner, Alert, Form, Modal } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import {
@@ -147,6 +147,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const [droppedUploadBatch, setDroppedUploadBatch] = useState<DroppedUploadBatch | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [folderOptions, setFolderOptions] = useState<string[]>([]);
+  // Destination KB chosen from the picker shown at My Files root. Does NOT
+  // switch uploadTargetKb (that would morph the modal into a subfolder picker
+  // view), it just redirects the upload to a folder KB while keeping the
+  // user's selection visible.
+  const [destinationKbId, setDestinationKbId] = useState<string | null>(null);
   const [loadingFolders, setLoadingFolders] = useState(false);
 
   // Delete (files or subfolders — discriminated by `kind`)
@@ -901,13 +906,19 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     }
   }
 
+  const closeUploadModal = useCallback(() => {
+    setShowUploadModal(false);
+    setDestinationKbId(null);
+  }, []);
+
   function handleUploadSuccess(): void {
     setShowNotificationModal(false);
     setPendingLargeFiles([]);
-    setShowUploadModal(false);
+    const kbIdToRefresh = destinationKbId ?? uploadTargetKb?.kb_id;
+    closeUploadModal();
     setUploadSuccess(true);
     setTimeout(() => setUploadSuccess(false), 3000);
-    if (uploadTargetKb) fetchKbFiles(uploadTargetKb.kb_id);
+    if (kbIdToRefresh) fetchKbFiles(kbIdToRefresh);
   }
 
   const handleFolderCreated = useCallback(() => refreshKBs(), [refreshKBs]);
@@ -934,6 +945,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     setUploadTargetKb(kb);
     setUploadInitialFolder(initialFolder);
     setDroppedUploadBatch(null);
+    setDestinationKbId(null);
     setShowUploadModal(true);
   }, []);
 
@@ -2149,75 +2161,89 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         />
       )}
 
-      {showUploadModal && uploadTargetKb && (
-        <div className="modal show d-block kb-upload-modal-backdrop" onClick={() => setShowUploadModal(false)}>
-          <div
-            className="modal-dialog modal-dialog-centered modal-lg kb-upload-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">
-                  <i className="bi bi-upload me-2" />
-                  {t('upload.title', { name: uploadTargetKb.kb_name })}
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowUploadModal(false)}
-                  aria-label="Close"
-                />
-              </div>
-              <div className="modal-body">
-                <p className="text-muted small mb-3">
-                  {t('upload.body')}
-                  <br />
-                  <strong>{t('upload.noteLabel')}</strong> {t('upload.note')}
-                </p>
-                <FolderSelector
-                  selectedFolder={selectedFolder}
-                  onFolderChange={setSelectedFolder}
-                  folderOptions={folderOptions}
-                  disabled={loadingFolders}
-                  label={t('upload.folderLabel')}
-                />
-                {!!rootKB && uploadTargetKb.kb_id === rootKB.kb_id && !selectedFolder && (
-                  <Alert variant="info" className="d-flex align-items-start gap-2 mb-3">
-                    <i className="bi bi-info-circle mt-1" style={{ flexShrink: 0 }} />
-                    <div className="flex-grow-1">
-                      <div>
-                        <strong>{t('upload.folderHintTitle')}</strong> {t('upload.folderHintBody')}
+      {(() => {
+        if (!showUploadModal || !uploadTargetKb) return null;
+        const isAtMyFilesRoot = !!rootKB && uploadTargetKb.kb_id === rootKB.kb_id && !selectedFolder;
+        const destinationKb = destinationKbId ? (allUserKBs.find((k) => k.kb_id === destinationKbId) ?? null) : null;
+        const effectiveKbId = destinationKb?.kb_id ?? uploadTargetKb.kb_id;
+        const effectiveKbName = destinationKb?.kb_name ?? uploadTargetKb.kb_name;
+        return (
+          <div className="modal show d-block kb-upload-modal-backdrop" onClick={closeUploadModal}>
+            <div
+              className="modal-dialog modal-dialog-centered modal-lg kb-upload-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">
+                    <i className="bi bi-upload me-2" />
+                    {t('upload.title', { name: effectiveKbName })}
+                  </h5>
+                  <button type="button" className="btn-close" onClick={closeUploadModal} aria-label="Close" />
+                </div>
+                <div className="modal-body">
+                  <p className="text-muted small mb-3">
+                    {t('upload.body')}
+                    <br />
+                    <strong>{t('upload.noteLabel')}</strong> {t('upload.note')}
+                  </p>
+                  {isAtMyFilesRoot ? (
+                    <Form.Group className="mb-3">
+                      <Form.Label>{t('upload.destinationLabel')}</Form.Label>
+                      <div className="d-flex align-items-center gap-2">
+                        <Form.Select
+                          value={destinationKbId ?? ''}
+                          onChange={(e) => setDestinationKbId(e.target.value || null)}
+                        >
+                          <option value="">{t('upload.destinationPlaceholder')}</option>
+                          {allUserKBs
+                            .filter((kb) => kb.role === 'OWNER' || kb.role === 'EDITOR')
+                            .map((kb) => (
+                              <option key={kb.kb_id} value={kb.kb_id}>
+                                {kb.kb_name}
+                              </option>
+                            ))}
+                        </Form.Select>
+                        <button
+                          type="button"
+                          className="btn btn-outline-primary btn-sm text-nowrap"
+                          onClick={() => {
+                            closeUploadModal();
+                            setShowCreateModal(true);
+                          }}
+                        >
+                          <i className="bi bi-folder-plus me-1" />
+                          {t('upload.folderHintButton')}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm mt-2"
-                        onClick={() => {
-                          setShowUploadModal(false);
-                          setShowCreateModal(true);
-                        }}
-                      >
-                        <i className="bi bi-folder-plus me-1" />
-                        {t('upload.folderHintButton')}
-                      </button>
-                    </div>
-                  </Alert>
-                )}
-                <FileUploader
-                  onUploadSuccess={handleUploadSuccess}
-                  onFileSelect={handleFileSelect}
-                  clearFiles={clearFileUploader}
-                  kb_id={uploadTargetKb.kb_id}
-                  selectedFolder={selectedFolder}
-                  enableFolderUpload
-                  rejectFolders={!!rootKB && uploadTargetKb.kb_id === rootKB.kb_id && !selectedFolder}
-                  preloadedFiles={droppedUploadBatch}
-                  autoUploadPreloaded
-                />
+                      <Form.Text className="text-muted">{t('upload.destinationHelp')}</Form.Text>
+                    </Form.Group>
+                  ) : (
+                    <FolderSelector
+                      selectedFolder={selectedFolder}
+                      onFolderChange={setSelectedFolder}
+                      folderOptions={folderOptions}
+                      disabled={loadingFolders}
+                      label={t('upload.folderLabel')}
+                    />
+                  )}
+                  <FileUploader
+                    onUploadSuccess={handleUploadSuccess}
+                    onFileSelect={handleFileSelect}
+                    clearFiles={clearFileUploader}
+                    kb_id={effectiveKbId}
+                    selectedFolder={selectedFolder}
+                    enableFolderUpload
+                    requireFolderDestination={isAtMyFilesRoot && !destinationKbId}
+                    preloadedFiles={droppedUploadBatch}
+                    autoUploadPreloaded
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {showNotificationModal && (
         <NotificationModal

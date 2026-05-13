@@ -397,8 +397,6 @@ const NumaWorkspaceChatAgents = () => {
       closeDocument();
       setInlinePreviewContent(null);
       openFilePreview(ref);
-      // Collapse main nav sidebar to give more room for preview
-      window.dispatchEvent(new CustomEvent('numa-collapse-sidebar'));
       if (isMobile) {
         setShowFilePreviewModal(true);
       }
@@ -413,8 +411,6 @@ const NumaWorkspaceChatAgents = () => {
       setIsHistoryPanelOpen(false);
       setIsAgentsPanelOpen(false);
       openFolderPreview(ref);
-      // Collapse main nav sidebar to give more room for preview
-      window.dispatchEvent(new CustomEvent('numa-collapse-sidebar'));
       if (isMobile) {
         setShowFilePreviewModal(true);
       }

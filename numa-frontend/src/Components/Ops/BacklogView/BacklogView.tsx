@@ -646,7 +646,13 @@ const BacklogView = () => {
   const [showSprintSuccess, setShowSprintSuccess] = useState(false);
   const [successWorkUnit, setSuccessWorkUnit] = useState<WorkUnit | null>(null);
 
-  const hasActiveWu = useMemo(() => workUnits.some((wu) => wu.status === 'active'), [workUnits]);
+  // A planning sprint can be started while another sprint is active, as long
+  // as there is a board zone with no sprint currently bound to it. (Zone-bound
+  // sprint model: multiple board zones can each run their own sprint.)
+  const noEligibleZones = useMemo(
+    () => !(boardData?.zones ?? []).some((z) => z.zoneType === 'board' && !z.activeWorkUnitId),
+    [boardData?.zones]
+  );
   const boardId = boardData?.board?.id ?? '';
   const workUnitsEnabled = Boolean(boardData?.board?.workUnitSeries);
   const defaultSprintName = useMemo(() => {
@@ -1574,8 +1580,8 @@ const BacklogView = () => {
                             type="button"
                             className="btn btn-sm btn-outline-success ms-1"
                             style={{ fontSize: '0.72rem', padding: '2px 8px' }}
-                            disabled={hasActiveWu}
-                            title={hasActiveWu ? t('sprints.completeCurrentFirst') : t('sprints.start')}
+                            disabled={noEligibleZones}
+                            title={noEligibleZones ? t('sprints.noEligibleZones') : t('sprints.start')}
                             onClick={(e) => {
                               e.stopPropagation();
                               setStartSprintId(wu.id);

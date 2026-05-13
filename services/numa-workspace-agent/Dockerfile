@@ -20,6 +20,19 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry export -f requirements.txt --without-hashes --only main > requirements.txt || \
     poetry lock && poetry export -f requirements.txt --without-hashes --only main > requirements.txt
 
+# ───────────────────────────────────────────────────────────────────
+# tcp_keepalive shim builder
+# Compiles an LD_PRELOAD-able .so that forces SO_KEEPALIVE + tuned timing
+# on every outbound TCP socket. Loaded into the Claude Agent SDK Node
+# subprocess via the LD_PRELOAD env var in sdk_config.py. See
+# scripts/tcp_keepalive/tcp_keepalive.c for rationale.
+# ───────────────────────────────────────────────────────────────────
+FROM --platform=linux/arm64 python:3.13-slim AS keepalive-builder
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY scripts/tcp_keepalive/tcp_keepalive.c /tmp/tcp_keepalive.c
+RUN gcc -O2 -fPIC -shared -Wall -o /tmp/tcp_keepalive.so /tmp/tcp_keepalive.c -ldl
+
 # Production image - ARM64 for AgentCore
 FROM --platform=linux/arm64 python:3.13-slim
 
@@ -107,6 +120,12 @@ WORKDIR /app
 # Install Python dependencies
 COPY --from=builder /app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install the tcp_keepalive LD_PRELOAD shim. Loaded into the Claude Agent SDK
+# Node subprocess at runtime via the LD_PRELOAD env var in sdk_config.py.
+# See scripts/tcp_keepalive/tcp_keepalive.c for rationale.
+COPY --from=keepalive-builder /tmp/tcp_keepalive.so /usr/local/lib/tcp_keepalive.so
+RUN chmod 0755 /usr/local/lib/tcp_keepalive.so
 
 # Copy application code
 COPY numa_workspace_agent/ ./numa_workspace_agent/
