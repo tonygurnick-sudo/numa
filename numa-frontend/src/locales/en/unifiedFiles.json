@@ -162,9 +162,10 @@
     "note": "Maximum file size is 50MB per file.",
     "folderLabel": "Upload to subfolder",
     "success": "Files uploaded successfully!",
-    "folderHintTitle": "Want to upload a folder?",
-    "folderHintBody": "Folders at the root level have their own access controls that determine what's searchable in chat, so they must be created through the UI first. Once a folder exists, you can upload files or nested folders inside it.",
-    "folderHintButton": "Create folder"
+    "folderHintButton": "Create folder",
+    "destinationLabel": "Upload destination",
+    "destinationPlaceholder": "Root — files only (pick a folder to upload folders)",
+    "destinationHelp": "Each folder has its own sharing controls."
   },
   "largeFile": {
     "title": "Large Raw Data File Detected",
