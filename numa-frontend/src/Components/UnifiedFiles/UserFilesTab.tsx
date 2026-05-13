@@ -338,8 +338,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   const ensureKbLoaded = useCallback(
     (kbId: string) => {
+      // Always fire a background shallow refresh on expansion (SWR pattern).
+      // Hydration seeds kbFileStates from localStorage on mount, so a cache-miss
+      // guard would skip the fetch and never pick up server-side changes (e.g.
+      // a folder created from chat or another session would stay invisible).
+      // fetchKbFiles uses a functional setter that merges cleanly with existing
+      // state, so this is safe to call unconditionally.
+      fetchKbFiles(kbId);
       if (!kbFileStates.has(kbId)) {
-        fetchKbFiles(kbId);
         fetchKBDetails(kbId);
       }
     },
