@@ -46,6 +46,10 @@ const statusAccent = (status: DerivedAutomationStatus): string => {
       return '#198754';
     case 'paused':
       return '#ffc107';
+    case 'pending':
+      return '#0dcaf0';
+    case 'locked':
+      return '#dc3545';
     case 'completed':
       return '#6c757d';
   }

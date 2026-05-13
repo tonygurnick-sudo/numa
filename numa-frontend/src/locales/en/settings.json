@@ -26,7 +26,7 @@
     "capabilities": "Capabilities",
     "companyProfile": "Company Profile",
     "mfa": "MFA & Devices",
-    "scheduling": "Scheduling",
+    "scheduling": "Automations",
     "usageAnalytics": "Usage Analytics",
     "developer": "Developer",
     "audit": "Audit",
@@ -135,8 +135,8 @@
     }
   },
   "schedulingSettings": {
-    "title": "Scheduling Minimum Interval",
-    "description": "Set the minimum interval between scheduled agent runs for your organisation. This prevents agents from being scheduled too frequently. You cannot set a value lower than what your platform administrator has configured.",
+    "title": "Automation Minimum Interval",
+    "description": "Set the minimum interval between scheduled automation runs for your organisation. This prevents automations from being scheduled too frequently. You cannot set a value lower than what your platform administrator has configured.",
     "arcanumFloor": "Platform minimum: {{minutes}} minute(s)",
     "currentEffective": "Effective minimum: {{minutes}} minute(s)",
     "minInterval": {

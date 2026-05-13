@@ -1,12 +1,36 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { withPRM } from '../../../lib/prm-node/prm';
 import { DynamoDBDocumentClient, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const TABLE_NAME = process.env.GLOBAL_TABLE_NAME as string;
 const CLIENT_NAME = process.env.CLIENT_NAME as string;
+const EXT_API_DOC_BUCKET_NAME = process.env.EXT_API_DOC_BUCKET_NAME as string | undefined;
 
 const ddbDoc = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}));
+const s3 = withPRM(S3Client, {});
+
+// Lists the top-level "folders" in the ext-api-doc bucket. Each folder name
+// is a connector slug (e.g. 'fergus', 'netsuite'); its presence indicates
+// the per-slug API investigation docs are deployed for this client.
+//
+// Failures here are non-fatal — if the bucket is missing or unreadable we
+// return an empty list, which causes connectors that require docs to render
+// as unavailable. That's the correct degraded behaviour.
+async function listAvailableApiDocSlugs(): Promise<string[]> {
+  if (!EXT_API_DOC_BUCKET_NAME) return [];
+  try {
+    const res = await s3.send(new ListObjectsV2Command({ Bucket: EXT_API_DOC_BUCKET_NAME, Delimiter: '/' }));
+    return (res.CommonPrefixes || [])
+      .map((p) => (p.Prefix || '').replace(/\/$/, ''))
+      .filter((slug) => slug && !slug.startsWith('.') && !slug.startsWith('_'))
+      .sort();
+  } catch (err) {
+    console.warn('admin-data-connector-settings: failed to list ext-api-doc bucket', err);
+    return [];
+  }
+}
 
 type ConnectorItem = {
   connector: string;
@@ -56,14 +80,21 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     if (method === 'GET' && /\/settings\/data-connectors\/?$/.test(path)) {
-      const scan = await ddbDoc.send(new ScanCommand({ TableName: TABLE_NAME }));
+      const [scan, apiDocsAvailableSlugs] = await Promise.all([
+        ddbDoc.send(new ScanCommand({ TableName: TABLE_NAME })),
+        listAvailableApiDocSlugs(),
+      ]);
       const items = (scan.Items || []).map((i) => ({
         connector: i.connector,
         status: (i.status as string) || 'disabled',
         ...(i.devOnly !== undefined && { devOnly: i.devOnly }),
         ...(i.requiresDeploy !== undefined && { requiresDeploy: i.requiresDeploy }),
       }));
-      return { statusCode: 200, headers, body: JSON.stringify(items) };
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ items, apiDocsAvailableSlugs }),
+      };
     }
 
     if (method === 'PUT' && /\/settings\/data-connectors\//.test(path)) {

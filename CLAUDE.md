@@ -227,6 +227,18 @@ CloudFront routes `/api/*` to API Gateway and `/api/numa-chat-agent/*` directly 
 - **Chat history:** DynamoDB `numa-<client>-chat-history` — conversation turns, tool use, results frames.
 - **Workspace chat traces:** S3 at `s3://numa-<client>-outputs/numa-chat/workspace/<user_sub>/conversations/<conversation_id>/_system/trace.jsonl` — NDJSON event log of the full conversation (user messages, assistant messages, StreamEvents, tool use, completions). Loaded on page refresh to reconstruct chat state.
 
+### ⚠️ outputsBucket lifecycle ownership
+
+The per-client `outputs` bucket is shared across **multiple consumers**: chat uploads, app artifacts, V2 app outputs, scheduled-run logs, etc. Terraform's `aws_s3_bucket_lifecycle_configuration` resource **fully replaces** the bucket's lifecycle config — it is NOT additive. Today only one rule exists (`expire-scheduled-runs-90d` in `app-agnostic-api-gateway-lambda-collection.ts`, prefixed to `numa-chat/scheduled-runs/`).
+
+**If you need to add a lifecycle rule to `outputsBucket` (e.g. expiring old chat artifacts, KB temp files):**
+
+- ❌ Do **not** create a second `S3BucketLifecycleConfiguration` resource targeting the same bucket — Terraform will silently last-applied-wins, and one of the rules disappears with no error.
+- ✅ Add your rule to the existing `S3BucketLifecycleConfiguration` block in `app-agnostic-api-gateway-lambda-collection.ts:scheduled-runs-lifecycle`, alongside the FEAT-105 rule. Use a distinct `id`, `filter.prefix`, and `expiration` per rule.
+- ✅ Or refactor the existing block into a centralised `OutputsBucketLifecycle` construct that takes an array of rules — worth doing once we have ≥ 2 consumers.
+
+**Other buckets (`data`, `binary-cache`, `racetech-*`, `recovery-*`)** each have their own lifecycle blocks and don't currently conflict — but the same rule applies if you ever add a second one to the same bucket.
+
 ---
 
 ## Configuration and Multi-Tenant Model

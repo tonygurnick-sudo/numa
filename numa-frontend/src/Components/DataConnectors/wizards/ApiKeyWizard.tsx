@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Col, Collapse, Form, Row } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { ConnectorWizardModal } from './ConnectorWizardModal';
 import type { WizardStep } from './ConnectorWizardModal';
 import {
@@ -23,17 +23,8 @@ interface ApiKeyFormState {
   displayName: string;
   icon: string;
   description: string;
-  apiDocsUrl: string;
-  openApiUrl: string;
-  postmanUrl: string;
-  mcpServerRef: string;
   rateLimitRpm: string;
   rateLimitDaily: string;
-  purposeHint: string;
-  cacheTtl: string;
-  cacheStaleWhileRevalidate: boolean;
-  cachePrefetch: boolean;
-  cacheBackgroundRefresh: string;
   /** Optional admin-configured base URL for connectors whose API lives at a
    *  customer-hosted / per-instance location (e.g. Synergy 12d). If empty,
    *  runtime falls back to whatever the connector registry / backend has
@@ -70,17 +61,8 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       displayName: connector.displayName,
       icon: connector.icon,
       description: connector.description,
-      apiDocsUrl: connector.apiReference?.docsUrl || '',
-      openApiUrl: connector.apiReference?.openApiUrl || '',
-      postmanUrl: connector.apiReference?.postmanUrl || '',
-      mcpServerRef: connector.apiReference?.mcpServerRef || '',
       rateLimitRpm: connector.rateLimitRpm?.toString() || '',
       rateLimitDaily: connector.rateLimitDaily?.toString() || '',
-      purposeHint: connector.apiReference?.purpose || '',
-      cacheTtl: String(connector.cachingPolicy?.ttl ?? 300),
-      cacheStaleWhileRevalidate: (connector.cachingPolicy?.staleWhileRevalidate ?? 600) > 0,
-      cachePrefetch: connector.cachingPolicy?.prefetch ?? true,
-      cacheBackgroundRefresh: String(connector.cachingPolicy?.backgroundRefresh ?? 0),
       // No default — always optional. If the registry has a baseUrl it's used at
       // runtime when this is blank; we don't pre-fill to avoid forking the value.
       instanceUrl: '',
@@ -120,24 +102,8 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         displayName: fields.display_name || connector.displayName,
         icon: fields.icon || connector.icon,
         description: fields.description || connector.description,
-        apiDocsUrl: fields.api_docs_url || connector.apiReference?.docsUrl || '',
-        openApiUrl: fields.open_api_url || connector.apiReference?.openApiUrl || '',
-        postmanUrl: fields.postman_url || connector.apiReference?.postmanUrl || '',
-        mcpServerRef: fields.mcp_server_ref || connector.apiReference?.mcpServerRef || '',
         rateLimitRpm: fields.rate_limit_rpm || connector.rateLimitRpm?.toString() || '',
         rateLimitDaily: fields.rate_limit_daily || connector.rateLimitDaily?.toString() || '',
-        purposeHint: fields.purpose_hint || connector.apiReference?.purpose || '',
-        cacheTtl: fields.cache_ttl || String(connector.cachingPolicy?.ttl ?? 300),
-        cacheStaleWhileRevalidate:
-          fields.cache_stale_while_revalidate != null
-            ? fields.cache_stale_while_revalidate === 'true'
-            : (connector.cachingPolicy?.staleWhileRevalidate ?? 600) > 0,
-        cachePrefetch:
-          fields.cache_prefetch != null
-            ? fields.cache_prefetch === 'true'
-            : (connector.cachingPolicy?.prefetch ?? true),
-        cacheBackgroundRefresh:
-          fields.cache_background_refresh || String(connector.cachingPolicy?.backgroundRefresh ?? 0),
         instanceUrl: fields.instance_url || '',
       });
     },
@@ -198,19 +164,9 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         connector_type: connector.authType,
       };
 
-      if (form.apiDocsUrl.trim()) fields.api_docs_url = form.apiDocsUrl.trim();
-      if (form.openApiUrl.trim()) fields.open_api_url = form.openApiUrl.trim();
-      if (form.postmanUrl.trim()) fields.postman_url = form.postmanUrl.trim();
-      if (form.mcpServerRef.trim()) fields.mcp_server_ref = form.mcpServerRef.trim();
       if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
       if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
-      if (form.purposeHint.trim()) fields.purpose_hint = form.purposeHint.trim();
       if (form.instanceUrl.trim()) fields.instance_url = form.instanceUrl.trim();
-
-      fields.cache_ttl = form.cacheTtl;
-      fields.cache_stale_while_revalidate = form.cacheStaleWhileRevalidate ? 'true' : 'false';
-      fields.cache_prefetch = form.cachePrefetch ? 'true' : 'false';
-      fields.cache_background_refresh = form.cacheBackgroundRefresh;
 
       // Persist the credential-field schema so the backend can emit the right
       // `needs_credential` error shape when a user has no stored credential
@@ -227,19 +183,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         );
       }
 
-      const apiRef = connector.apiReference;
-      if (apiRef) {
-        const refBlob = {
-          ...apiRef,
-          purpose: form.purposeHint.trim() || apiRef.purpose,
-          docsUrl: form.apiDocsUrl.trim() || apiRef.docsUrl,
-          openApiUrl: form.openApiUrl.trim() || apiRef.openApiUrl,
-          postmanUrl: form.postmanUrl.trim() || apiRef.postmanUrl,
-          mcpServerRef: form.mcpServerRef.trim() || apiRef.mcpServerRef,
-        };
-        fields.api_reference = JSON.stringify(refBlob);
-      }
-
       const targetAlreadyNamedConfig = existingSecretName === configSecretName;
       if (targetAlreadyNamedConfig) {
         await updateCompanySecret(configSecretName, { fields });
@@ -250,7 +193,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
           category: 'Connector Config',
           type: 'custom',
           fields,
-          help_url: connector.helpUrl || undefined,
         });
       }
 
@@ -304,92 +246,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
   const handleHide = () => {
     resetState();
     onHide();
-  };
-
-  const signupLink = connector.signupUrl || connector.helpUrl;
-  const apiRef = connector.apiReference;
-
-  const renderApiReferenceSummary = () => {
-    if (!apiRef) return null;
-    return (
-      <div className="border rounded p-3 mb-3">
-        <div className="d-flex align-items-center gap-2 mb-2">
-          <h6 className="fw-semibold small text-muted mb-0">{t('dataConnectors.apiReference.title')}</h6>
-          <span className="badge bg-success-subtle text-success small">
-            <i className="bi bi-check-circle me-1"></i>
-            {t('dataConnectors.apiReference.autoConfigured')}
-          </span>
-        </div>
-        {apiRef.purpose && <p className="small text-muted mb-2">{apiRef.purpose}</p>}
-        {apiRef.dataTypes && apiRef.dataTypes.length > 0 && (
-          <div className="mb-2">
-            <span className="small text-muted me-2">{t('dataConnectors.apiReference.dataTypesLabel')}:</span>
-            {apiRef.dataTypes.map((dt) => (
-              <span key={dt} className="badge bg-light text-dark me-1" style={{ fontSize: '0.7rem' }}>
-                {dt}
-              </span>
-            ))}
-          </div>
-        )}
-        {apiRef.capabilities && apiRef.capabilities.length > 0 && (
-          <div className="mb-2">
-            <span className="small text-muted me-2">{t('dataConnectors.apiReference.capabilitiesLabel')}:</span>
-            {apiRef.capabilities.map((cap) => (
-              <span key={cap} className="badge bg-primary-subtle text-primary me-1" style={{ fontSize: '0.7rem' }}>
-                {cap}
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="d-flex flex-wrap gap-2">
-          {(form.apiDocsUrl || apiRef.docsUrl) && (
-            <a
-              href={form.apiDocsUrl || apiRef.docsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="small d-inline-flex align-items-center gap-1"
-            >
-              <ExternalLink size={12} />
-              {t('dataConnectors.apiReference.docsUrl')}
-            </a>
-          )}
-          {(form.openApiUrl || apiRef.openApiUrl) && (
-            <a
-              href={form.openApiUrl || apiRef.openApiUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="small d-inline-flex align-items-center gap-1"
-            >
-              <ExternalLink size={12} />
-              {t('dataConnectors.apiReference.openApiUrl')}
-            </a>
-          )}
-          {(form.postmanUrl || apiRef.postmanUrl) && (
-            <a
-              href={form.postmanUrl || apiRef.postmanUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="small d-inline-flex align-items-center gap-1"
-            >
-              <ExternalLink size={12} />
-              {t('dataConnectors.apiReference.postmanUrl')}
-            </a>
-          )}
-        </div>
-        {(connector.rateLimitRpm || connector.rateLimitDaily) && (
-          <div className="mt-2 small text-muted">
-            {connector.rateLimitRpm && (
-              <span className="me-3">
-                {t('dataConnectors.oauthWizard.reviewRpm', { count: connector.rateLimitRpm })}
-              </span>
-            )}
-            {connector.rateLimitDaily && (
-              <span>{t('dataConnectors.oauthWizard.reviewDaily', { count: connector.rateLimitDaily })}</span>
-            )}
-          </div>
-        )}
-      </div>
-    );
   };
 
   const wizardTitle = t('dataConnectors.apiKeyWizard.title', { connector: connector.displayName });
@@ -446,34 +302,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
               </div>
             </Col>
           </Row>
-
-          {signupLink && (
-            <Alert variant="light" className="py-2 small border d-flex align-items-center gap-2">
-              <i className="bi bi-info-circle"></i>
-              <span>{t('dataConnectors.signup.noAccount')}</span>
-              <a
-                href={signupLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="d-inline-flex align-items-center gap-1"
-              >
-                <ExternalLink size={12} />
-                {t('dataConnectors.signup.signUp', { provider: connector.displayName })}
-              </a>
-            </Alert>
-          )}
-
-          {connector.helpUrl && (
-            <a
-              href={connector.helpUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="d-inline-flex align-items-center gap-1 small"
-            >
-              <ExternalLink size={14} />
-              {t('dataConnectors.oauth.helpLink')}
-            </a>
-          )}
         </div>
       )}
 
@@ -540,8 +368,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
             </Form.Group>
           </div>
 
-          {renderApiReferenceSummary()}
-
           <div
             className="d-flex align-items-center gap-2 cursor-pointer mb-2"
             onClick={() => setCustomizeExpanded(!customizeExpanded)}
@@ -555,52 +381,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
           <Collapse in={customizeExpanded}>
             <div>
               <Row className="g-3">
-                <Col md={12}>
-                  <Form.Group>
-                    <Form.Label className="small fw-semibold">{t('dataConnectors.apiReference.docsUrl')}</Form.Label>
-                    <Form.Control
-                      type="url"
-                      placeholder={t('dataConnectors.apiReference.docsUrlPlaceholder')}
-                      value={form.apiDocsUrl}
-                      onChange={(e) => updateForm({ apiDocsUrl: e.target.value })}
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label className="small fw-semibold">{t('dataConnectors.apiReference.openApiUrl')}</Form.Label>
-                    <Form.Control
-                      type="url"
-                      placeholder={t('dataConnectors.apiReference.openApiUrlPlaceholder')}
-                      value={form.openApiUrl}
-                      onChange={(e) => updateForm({ openApiUrl: e.target.value })}
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label className="small fw-semibold">{t('dataConnectors.apiReference.postmanUrl')}</Form.Label>
-                    <Form.Control
-                      type="url"
-                      placeholder={t('dataConnectors.apiReference.postmanUrlPlaceholder')}
-                      value={form.postmanUrl}
-                      onChange={(e) => updateForm({ postmanUrl: e.target.value })}
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={12}>
-                  <Form.Group>
-                    <Form.Label className="small fw-semibold">
-                      {t('dataConnectors.apiReference.mcpServerRef')}
-                    </Form.Label>
-                    <Form.Control
-                      type="text"
-                      placeholder={t('dataConnectors.apiReference.mcpServerRefPlaceholder')}
-                      value={form.mcpServerRef}
-                      onChange={(e) => updateForm({ mcpServerRef: e.target.value })}
-                    />
-                  </Form.Group>
-                </Col>
                 <Col md={12}>
                   <Form.Label className="small fw-semibold">
                     {t('dataConnectors.oauthWizard.rateLimitsLabel')}
@@ -633,74 +413,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
                       min={0}
                     />
                   </Form.Group>
-                </Col>
-                <Col md={12}>
-                  <Form.Group>
-                    <Form.Label className="small fw-semibold">
-                      {t('dataConnectors.apiReference.purposeHint')}
-                    </Form.Label>
-                    <Form.Control
-                      as="textarea"
-                      rows={2}
-                      placeholder={t('dataConnectors.apiReference.purposeHintPlaceholder')}
-                      value={form.purposeHint}
-                      onChange={(e) => updateForm({ purposeHint: e.target.value })}
-                    />
-                    <Form.Text className="text-muted">{t('dataConnectors.apiReference.purposeHintDesc')}</Form.Text>
-                  </Form.Group>
-                </Col>
-
-                <Col md={12} className="mt-3">
-                  <h6 className="fw-semibold small text-muted mb-2">
-                    {t('dataConnectors.oauth.cachingSettings', 'Caching Settings')}
-                  </h6>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label className="small fw-semibold">
-                      {t('dataConnectors.oauth.cacheTtl', 'Cache Duration')}
-                    </Form.Label>
-                    <Form.Select value={form.cacheTtl} onChange={(e) => updateForm({ cacheTtl: e.target.value })}>
-                      <option value="60">{t('dataConnectors.cache.1min', '1 minute (email)')}</option>
-                      <option value="300">{t('dataConnectors.cache.5min', '5 minutes (files)')}</option>
-                      <option value="1800">{t('dataConnectors.cache.30min', '30 minutes (projects)')}</option>
-                      <option value="3600">{t('dataConnectors.cache.1hr', '1 hour')}</option>
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label className="small fw-semibold">
-                      {t('dataConnectors.oauth.backgroundRefresh', 'Background Refresh')}
-                    </Form.Label>
-                    <Form.Select
-                      value={form.cacheBackgroundRefresh}
-                      onChange={(e) => updateForm({ cacheBackgroundRefresh: e.target.value })}
-                    >
-                      <option value="0">{t('dataConnectors.cache.off', 'Off')}</option>
-                      <option value="60">{t('dataConnectors.cache.every1min', 'Every 1 minute')}</option>
-                      <option value="300">{t('dataConnectors.cache.every5min', 'Every 5 minutes')}</option>
-                      <option value="1800">{t('dataConnectors.cache.every30min', 'Every 30 minutes')}</option>
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Check
-                    type="checkbox"
-                    label={t('dataConnectors.oauth.staleWhileRevalidate', 'Serve stale while refreshing')}
-                    checked={form.cacheStaleWhileRevalidate}
-                    onChange={(e) => updateForm({ cacheStaleWhileRevalidate: e.target.checked })}
-                    className="mt-2"
-                  />
-                </Col>
-                <Col md={6}>
-                  <Form.Check
-                    type="checkbox"
-                    label={t('dataConnectors.oauth.prefetch', 'Auto-prefetch subfolders')}
-                    checked={form.cachePrefetch}
-                    onChange={(e) => updateForm({ cachePrefetch: e.target.checked })}
-                    className="mt-2"
-                  />
                 </Col>
               </Row>
             </div>
