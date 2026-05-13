@@ -321,9 +321,14 @@ def save_result(
     # preview that captures the full shape in <5KB — model uses jq/python to
     # extract specific fields from the full file rather than Reading it (which
     # would crowd context and may exceed the SDK's 256KB Read cap entirely).
-    result_str = json.dumps(output["result"], indent=2, default=str)
+    #
+    # Both paths preview the full saved file (including the action_key /
+    # status / result wrapper) so the model's jq paths match the on-disk
+    # structure on the first try — previewing only output["result"] makes
+    # it write `.ret` when the file actually wants `.result.ret`.
+    result_str = json.dumps(output, indent=2, default=str)
     if len(result_str) > PREVIEW_LENGTH:
-        schema = _build_schema_preview(output["result"])
+        schema = _build_schema_preview(output)
         schema_json = json.dumps(schema, indent=2, default=str)
         preview_path = results_dir / f"{action_key}-{timestamp}.preview.json"
         preview_path.write_text(schema_json)
