@@ -531,6 +531,21 @@ def create_agent_options(
         # is readable by the model directly when TaskOutput returns
         # "no task found" for a task that completed between turns.
         "CLAUDE_CODE_TMPDIR": str(LOCAL_ROOT / "tmp"),
+        # Force TCP keepalive on every outbound socket the Node subprocess
+        # opens. Bedrock streaming connections silently die after ~360s of
+        # network idle (fleet-wide ceiling observed across 1,132 healthy
+        # messages and 7 customer accounts). The bundled CLI does not set
+        # SO_KEEPALIVE with sub-360s timing on its own. The shim wraps
+        # connect(2) and applies SO_KEEPALIVE + TCP_KEEPIDLE=60 +
+        # TCP_KEEPINTVL=30 + TCP_KEEPCNT=5 to every TCP socket. Built into
+        # the image at /usr/local/lib/tcp_keepalive.so by the Dockerfile.
+        # Skipped automatically when the .so isn't present (local dev
+        # without the container), so the Python wrapper still runs.
+        **(
+            {"LD_PRELOAD": "/usr/local/lib/tcp_keepalive.so"}
+            if Path("/usr/local/lib/tcp_keepalive.so").exists()
+            else {}
+        ),
         # ────────────────────────────────────────────────────────────────
         # Workspace tools Lambda for custom tools (KB queries, etc.)
         "WORKSPACE_TOOLS_LAMBDA_NAME": workspace_tools_lambda,
