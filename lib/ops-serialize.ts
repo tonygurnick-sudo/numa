@@ -67,6 +67,37 @@ export const dbToApi = <T>(value: T): T => {
   return value;
 };
 
+export const API_TO_DB_KEYS: Record<string, string> = Object.fromEntries(
+  Object.entries(DB_TO_API_KEYS).map(([db, api]) => [api, db])
+);
+
+/**
+ * Inverse of `dbToApi`: walks an API-shape object/array and renames matched
+ * keys back to their DB-shape equivalents (e.g. `boardId` -> `teamId`).
+ *
+ * Use this when an incoming request body needs to be compared against or
+ * merged into a DB item -- without normalization, alias keys like `boardId`
+ * look like brand-new fields versus the DB's `teamId`, producing phantom
+ * diffs and duplicate columns in the stored item.
+ */
+export const apiToDb = <T>(value: T): T => {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => apiToDb(item)) as unknown as T;
+  }
+  if (typeof value === 'object') {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return value;
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      const newKey = API_TO_DB_KEYS[key] ?? key;
+      out[newKey] = apiToDb(val);
+    }
+    return out as T;
+  }
+  return value;
+};
+
 /**
  * Translate "team" / "Team" / "teams" / "Teams" inside a single string,
  * preserving case. Used on error messages so callers see "Board not found"

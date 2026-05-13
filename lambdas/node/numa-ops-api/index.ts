@@ -22,7 +22,7 @@ import {
 } from '../../../lib/ops-constants';
 import type { PresetZone } from '../../../lib/ops-constants';
 import type { ZoneType, StatusType } from '../../../lib/ops-schemas';
-import { dbToApi, translateTeamString } from '../../../lib/ops-serialize';
+import { dbToApi, translateTeamString, API_TO_DB_KEYS } from '../../../lib/ops-serialize';
 
 const client = withPRM(DynamoDBClient, {});
 
@@ -2285,11 +2285,16 @@ const handleTickets = async (
       updatedBy: auth.sub,
     };
 
-    // Track field changes for audit
+    // Track field changes for audit. Look up `existing` using the DB-shape
+    // key so API aliases (e.g. body.boardId vs existing.teamId) don't show
+    // up as phantom changes. Skip request-only / bookkeeping fields.
+    const AUDIT_SKIP_FIELDS = new Set(['version', 'currentBoardId', 'currentTeamId']);
     const changes: Record<string, unknown> = {};
     for (const key of Object.keys(body)) {
-      if (body[key] !== existing[key]) {
-        changes[key] = { from: existing[key], to: body[key] };
+      if (AUDIT_SKIP_FIELDS.has(key)) continue;
+      const dbKey = API_TO_DB_KEYS[key] ?? key;
+      if (body[key] !== existing[dbKey]) {
+        changes[key] = { from: existing[dbKey], to: body[key] };
       }
     }
 
