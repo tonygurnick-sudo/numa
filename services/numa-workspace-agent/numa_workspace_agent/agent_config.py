@@ -45,7 +45,6 @@ class AgentToolsConfig:
     query_data_sources: bool = False
     web_search_enabled: bool = True
     create_agent_enabled: bool = False
-    data_connectors_enabled: bool = True
     enabled_connections: list[str] = field(default_factory=list)
     # Multi-KB support:
     # None = all KBs (backwards compat)
@@ -107,12 +106,15 @@ def _parse_tools_config(raw_config: Optional[dict]) -> AgentToolsConfig:
         else:
             parsed_modes["integrations"] = None
 
+    # Legacy `dataConnectorsEnabled` on agent records is silently dropped here.
+    # Per-integration enablement (in the unified `enabledConnections` /
+    # native enabled list) replaces the whole-feature toggle. Old agent
+    # records keep the field in DDB but it has no effect at load time.
     return AgentToolsConfig(
         auto_tools_enabled=raw_config.get("autoToolsEnabled", True),
         query_data_sources=raw_config.get("queryDataSources", False),
         web_search_enabled=raw_config.get("webSearchEnabled", True),
         create_agent_enabled=raw_config.get("createAgentEnabled", False),
-        data_connectors_enabled=raw_config.get("dataConnectorsEnabled", True),
         enabled_connections=raw_config.get("enabledConnections", []),
         allowed_knowledge_bases=raw_config.get("allowedKnowledgeBases"),
         approval_mode=raw_config.get("approvalMode"),
@@ -693,21 +695,28 @@ def resolve_all_approval_modes(
         **user_modes,
     }
 
-    if not agent_config:
-        return result
+    if agent_config:
+        tc = agent_config.tools_config
 
-    tc = agent_config.tools_config
+        # New per-category overrides take priority
+        if tc.approval_modes:
+            for cat, mode in tc.approval_modes.items():
+                if mode and mode in VALID_APPROVAL_MODES:
+                    result[cat] = mode
 
-    # New per-category overrides take priority
-    if tc.approval_modes:
-        for cat, mode in tc.approval_modes.items():
-            if mode and mode in VALID_APPROVAL_MODES:
-                result[cat] = mode
+        # Legacy: single approvalMode applies to integrations only
+        # (only if approvalModes doesn't already override integrations)
+        elif tc.approval_mode and tc.approval_mode in VALID_APPROVAL_MODES:
+            result["integrations"] = tc.approval_mode
 
-    # Legacy: single approvalMode applies to integrations only
-    # (only if approvalModes doesn't already override integrations)
-    elif tc.approval_mode and tc.approval_mode in VALID_APPROVAL_MODES:
-        result["integrations"] = tc.approval_mode
+    # Unify Pipedream + native: a single "Integrations" approval setting
+    # drives both the Pipedream `integrations` category and the native
+    # `connectors` category. Users only ever see one row in the UI ("Google
+    # Drive, Slack, Gmail, etc.") — having two backend categories let user
+    # intent silently desync (e.g. setting Integrations to non_destructive
+    # didn't auto-approve native Gmail reads because connectors stayed at
+    # its own default). Make connectors a derived mirror, always.
+    result["connectors"] = result["integrations"]
 
     logger.info(
         "Resolved all approval modes",

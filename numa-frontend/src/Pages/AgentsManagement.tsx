@@ -30,6 +30,12 @@ import { ScheduleService } from '../Services/ScheduleService';
 import type { AgentSchedule } from '../types/agentSchedules';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
+import { ConnectorsService } from '../Services/ConnectorsService';
+import { AdminIntegrationsService } from '../Services/AdminIntegrationsService';
+import {
+  connectorSlugForPipedream,
+  pipedreamSlugForConnector,
+} from '../Components/Integrations/integrationCatalogHelpers';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
 import { isScheduleCompleted, calculateNextRun } from '../utils/cronUtils';
@@ -551,27 +557,83 @@ export const AgentsManagement = () => {
   const handleStartChat = async (agent: AgentSummary) => {
     const needs = agent.requiredIntegrations || [];
     const hasPipedreamFeature = getFlag('PIPEDREAM_INTEGRATIONS');
-    if (!hasPipedreamFeature || needs.length === 0) {
+    const dataConnectorsFeatureEnabled = getFlag('DATA_CONNECTORS_ENABLED');
+    if (needs.length === 0) {
       initiateChat(agent);
       return;
     }
-    // Open modal in loading state while we resolve connections
-    setMissingModal({ show: true, loading: true, agent, missing: [], error: null });
 
+    // Resolve connections silently first. Previously the modal was opened
+    // up-front in a "loading" state and dismissed if nothing was missing,
+    // which flashed the dialog for half a second on every click even when
+    // everything was already connected. Only open the modal once we know
+    // something is actually missing.
     try {
-      if (!user || !lambdaClient) {
+      if (!user) {
+        // Can't resolve without auth — fall through and let the user see
+        // the unresolved list so they can act.
         setMissingModal({ show: true, loading: false, agent, missing: needs, error: null });
         return;
       }
 
-      const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
-      const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
-        ttlMs: 30 * 60 * 1000,
-      });
-      const connected = new Set((status.connected_apps || []).map((n) => String(n)));
-      const missing = needs.filter((n) => !connected.has(n));
+      // A required slug is satisfied when the user has EITHER method authed.
+      // Build a single "satisfied" set covering both Pipedream and native,
+      // including cross-method pairings (Pipedream `google_drive` covers
+      // native `googledrive` and vice versa). Mirrors the chat page's
+      // dual-method check so users connected via either method aren't
+      // falsely blocked.
+      const satisfied = new Set<string>();
+
+      // Pipedream side
+      if (hasPipedreamFeature && lambdaClient) {
+        try {
+          const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+          const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
+            ttlMs: 30 * 60 * 1000,
+          });
+          (status.connected_apps || []).forEach((name) => {
+            const slug = String(name);
+            satisfied.add(slug);
+            const pairedNative = connectorSlugForPipedream(slug);
+            if (pairedNative) satisfied.add(pairedNative);
+          });
+        } catch (err) {
+          console.warn('[AgentsManagement] Pipedream status lookup failed', err);
+        }
+      }
+
+      // Native side — query each admin-enabled connector in the unified
+      // catalog for the current user's auth state. Cross-pair so a
+      // required Pipedream slug is satisfied by a connected native.
+      if (dataConnectorsFeatureEnabled) {
+        try {
+          const catalog = await AdminIntegrationsService.catalogWithNuma(numaGet);
+          const candidates = catalog
+            .filter((e) => e.connectorSlug && e.connectorEnabled === true)
+            .map((e) => e.connectorSlug as string);
+          const results = await Promise.all(
+            candidates.map(async (slug) => {
+              try {
+                const st = await ConnectorsService.getStatus(slug);
+                return st.status === 'connected' ? slug : null;
+              } catch {
+                return null;
+              }
+            })
+          );
+          for (const slug of results) {
+            if (!slug) continue;
+            satisfied.add(slug);
+            const pairedPd = pipedreamSlugForConnector(slug);
+            if (pairedPd) satisfied.add(pairedPd);
+          }
+        } catch (err) {
+          console.warn('[AgentsManagement] native catalog lookup failed', err);
+        }
+      }
+
+      const missing = needs.filter((n) => !satisfied.has(n));
       if (missing.length === 0) {
-        setMissingModal({ show: false, loading: false, agent: null, missing: [] });
         initiateChat(agent);
         return;
       }

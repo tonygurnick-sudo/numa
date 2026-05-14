@@ -127,6 +127,97 @@ _DEFAULT_S3_PREFIX_TEMPLATE = (
 )
 
 
+def _normalise_integrations_payload(
+    body: dict,
+) -> tuple[list[dict], list[dict]]:
+    """Soft-window adapter for the integrations chat payload.
+
+    Returns ``(enabled, available)`` where each item is
+    ``{"slug": str, "method": "pipedream"|"native", "name": str}``.
+
+    Accepts BOTH:
+    * **New shape** — ``enabledIntegrations`` / ``availableIntegrations`` as
+      ``list[{slug, method, name}]``. Method-tagged at the source.
+    * **Legacy shape** — ``enabledConnections`` (Pipedream slugs, list[str]),
+      ``availableIntegrations`` (Pipedream items, list[{id, name}]),
+      ``connectedDataConnectors`` / ``availableDataConnectors`` (native items,
+      list[{id, name}]).
+
+    The legacy four-field payload is detected when ``availableIntegrations``
+    items lack a ``method`` field. We can drop this branch after one release.
+    """
+
+    def _is_new_shape(items: list) -> bool:
+        return bool(items) and isinstance(items[0], dict) and "method" in items[0]
+
+    enabled_new = body.get("enabledIntegrations") or []
+    available_new = body.get("availableIntegrations") or []
+
+    new_shape = _is_new_shape(enabled_new) or _is_new_shape(available_new)
+
+    def _normalise_item(it: object) -> Optional[dict]:
+        if not isinstance(it, dict):
+            return None
+        slug = it.get("slug") or it.get("id") or ""
+        if not slug:
+            return None
+        method = it.get("method")
+        if method not in ("pipedream", "native"):
+            method = "pipedream"
+        return {
+            "slug": slug,
+            "method": method,
+            "name": it.get("name") or slug,
+        }
+
+    if new_shape:
+        enabled = [x for x in (_normalise_item(it) for it in enabled_new) if x]
+        available = [x for x in (_normalise_item(it) for it in available_new) if x]
+        return enabled, available
+
+    # Legacy: stitch four separate fields back into the unified shape.
+    raw_enabled_slugs = body.get("enabledConnections") or []
+    raw_available = body.get("availableIntegrations") or []  # Pipedream
+    raw_connected_dc = body.get("connectedDataConnectors") or []
+    raw_available_dc = body.get("availableDataConnectors") or []
+
+    enabled: list[dict] = []
+    for s in raw_enabled_slugs:
+        if isinstance(s, str) and s:
+            enabled.append({"slug": s, "method": "pipedream", "name": s})
+    for it in raw_connected_dc:
+        if isinstance(it, dict) and it.get("id"):
+            enabled.append(
+                {
+                    "slug": it["id"],
+                    "method": "native",
+                    "name": it.get("name") or it["id"],
+                }
+            )
+
+    available: list[dict] = []
+    for it in raw_available:
+        if isinstance(it, dict) and it.get("id"):
+            available.append(
+                {
+                    "slug": it["id"],
+                    "method": "pipedream",
+                    "name": it.get("name") or it["id"],
+                }
+            )
+    for it in raw_available_dc:
+        if isinstance(it, dict) and it.get("id"):
+            available.append(
+                {
+                    "slug": it["id"],
+                    "method": "native",
+                    "name": it.get("name") or it["id"],
+                }
+            )
+
+    return enabled, available
+
+
 def _resolve_s3_prefix(
     agent_type_config: Optional[AgentTypeConfig],
     user_sub: str,
@@ -1565,17 +1656,34 @@ async def _handle_chat(
         )
     request_id = body.get("requestId") or str(uuid.uuid4())
 
-    # Pipedream integrations - construct external_user_id for the relay
-    # Format: "{client_name}_{user_sub}" matching what the frontend uses
-    enabled_integrations = body.get("enabledConnections", [])
-    available_integrations = body.get("availableIntegrations", [])
-    connected_data_connectors = body.get("connectedDataConnectors", [])
+    # Unified integrations payload — `enabled_unified` / `available_unified`
+    # are list[{slug, method, name}]. The adapter accepts both the new shape
+    # and the legacy four-field payload (enabledConnections + availableIntegrations
+    # + connectedDataConnectors + availableDataConnectors).
+    enabled_unified, available_unified = _normalise_integrations_payload(body)
 
-    # Apply agent type restrictions on integrations
+    # Derived Pipedream-only slug list. Used internally for schema sync,
+    # external_user_id, enabled_tools tagging — those paths remain Pipedream-
+    # specific because they're tied to the Pipedream relay/proxy.
+    enabled_integrations = [
+        it["slug"] for it in enabled_unified if it["method"] == "pipedream"
+    ]
+
+    # Apply agent type restrictions on integrations. agent_type_config holds
+    # legacy Pipedream slug lists; if the agent type restricts integrations we
+    # also rebuild the unified list from those defaults.
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []
+        enabled_unified = [
+            {"slug": s, "method": "pipedream", "name": s} for s in enabled_integrations
+        ]
     elif agent_type_config.default_integrations and not enabled_integrations:
         enabled_integrations = agent_type_config.default_integrations
+        enabled_unified = enabled_unified + [
+            {"slug": s, "method": "pipedream", "name": s}
+            for s in enabled_integrations
+            if s not in {it["slug"] for it in enabled_unified}
+        ]
 
     external_user_id = f"{CLIENT_NAME}_{user_sub}" if enabled_integrations else None
 
@@ -1593,11 +1701,11 @@ async def _handle_chat(
         _name="INTEGRATION_TOOLS_CONFIGURED",
         phase="request",
         enabled_tools=enabled_tools,
-        enabled_integrations=enabled_integrations,
-        external_user_id=external_user_id,
-        connected_data_connectors=[
-            c.get("id") for c in connected_data_connectors if isinstance(c, dict)
+        enabled_pipedream=enabled_integrations,
+        enabled_native=[
+            it["slug"] for it in enabled_unified if it["method"] == "native"
         ],
+        external_user_id=external_user_id,
     )
 
     # V1 to V2 migration flag - frontend sets this when loading a V1 conversation
@@ -1653,11 +1761,8 @@ async def _handle_chat(
 
     async def _load_ext_api_docs():
         connector_names = [
-            c.get("id") or c.get("name", "")
-            for c in connected_data_connectors
-            if isinstance(c, dict)
+            it["slug"] for it in enabled_unified if it["method"] == "native"
         ]
-        connector_names = [s for s in connector_names if s]
         return await asyncio.to_thread(
             sync_ext_api_docs_for_connectors, connector_names
         )
@@ -1865,9 +1970,8 @@ async def _handle_chat(
                 agent_config=agent_config,  # Agent configuration (custom prompt, restrictions)
                 agent_file_paths=agent_file_paths,  # Downloaded agent reference files
                 external_user_id=external_user_id,  # Pipedream integrations user ID
-                enabled_integrations=enabled_integrations,  # Connected integration app slugs
-                available_integrations=available_integrations,  # All connected integrations (for agent creation context)
-                connected_data_connectors=connected_data_connectors,  # Connected data connectors (OAuth/token)
+                enabled_integrations=enabled_unified,  # Unified [{slug, method, name}]
+                available_integrations=available_unified,  # Unified [{slug, method, name}]
                 approval_mode=effective_approval_mode,  # Integration approval mode
                 numa_tool_approval_mode=numa_tool_approval_mode,  # Per-category numa tool approval
                 email_signature=email_signature,  # Email signature settings
@@ -1988,14 +2092,24 @@ async def _handle_sync(
     elif agent_type_config.default_kbs and not available_kbs:
         available_kbs = agent_type_config.default_kbs
 
-    # Integrations
-    enabled_integrations = body.get("enabledConnections", [])
-    available_integrations = body.get("availableIntegrations", [])
-    connected_data_connectors = body.get("connectedDataConnectors", [])
+    # Integrations — unified payload via the shared adapter
+    enabled_unified, available_unified = _normalise_integrations_payload(body)
+    enabled_integrations = [
+        it["slug"] for it in enabled_unified if it["method"] == "pipedream"
+    ]
+
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []
+        enabled_unified = [
+            {"slug": s, "method": "pipedream", "name": s} for s in enabled_integrations
+        ]
     elif agent_type_config.default_integrations and not enabled_integrations:
         enabled_integrations = agent_type_config.default_integrations
+        enabled_unified = enabled_unified + [
+            {"slug": s, "method": "pipedream", "name": s}
+            for s in enabled_integrations
+            if s not in {it["slug"] for it in enabled_unified}
+        ]
 
     external_user_id = f"{CLIENT_NAME}_{user_sub}" if enabled_integrations else None
 
@@ -2074,11 +2188,9 @@ async def _handle_sync(
             force_refresh=is_cold_start,
         )
 
-    # Sync ext API docs for connected data connectors (instant if already synced)
+    # Sync ext API docs for any enabled native connectors (instant if cached)
     _connector_names_sync = [
-        c.get("id") or c.get("name", "")
-        for c in connected_data_connectors
-        if isinstance(c, dict)
+        it["slug"] for it in enabled_unified if it["method"] == "native"
     ]
     sync_ext_api_docs_for_connectors(_connector_names_sync)
 
@@ -2147,9 +2259,8 @@ async def _handle_sync(
             request_id=request_id,
             agent_config=agent_config,
             external_user_id=external_user_id,
-            enabled_integrations=enabled_integrations,
-            available_integrations=available_integrations,
-            connected_data_connectors=connected_data_connectors,
+            enabled_integrations=enabled_unified,
+            available_integrations=available_unified,
             approval_mode=effective_approval_mode,
             numa_tool_approval_mode=numa_tool_approval_mode_sync,
             agent_type_config=agent_type_config,
@@ -2303,13 +2414,22 @@ async def _handle_fire_and_forget(
     elif agent_type_config.default_kbs and not available_kbs:
         available_kbs = agent_type_config.default_kbs
 
-    enabled_integrations = body.get("enabledConnections", [])
-    available_integrations = body.get("availableIntegrations", [])
-    connected_data_connectors = body.get("connectedDataConnectors", [])
+    enabled_unified, available_unified = _normalise_integrations_payload(body)
+    enabled_integrations = [
+        it["slug"] for it in enabled_unified if it["method"] == "pipedream"
+    ]
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []
+        enabled_unified = [
+            {"slug": s, "method": "pipedream", "name": s} for s in enabled_integrations
+        ]
     elif agent_type_config.default_integrations and not enabled_integrations:
         enabled_integrations = agent_type_config.default_integrations
+        enabled_unified = enabled_unified + [
+            {"slug": s, "method": "pipedream", "name": s}
+            for s in enabled_integrations
+            if s not in {it["slug"] for it in enabled_unified}
+        ]
 
     external_user_id = f"{CLIENT_NAME}_{user_sub}" if enabled_integrations else None
 
@@ -2380,11 +2500,9 @@ async def _handle_fire_and_forget(
             force_refresh=is_cold_start,
         )
 
-    # Sync ext API docs for connected data connectors (instant if already synced)
+    # Sync ext API docs for any enabled native connectors (instant if cached)
     _connector_names_async = [
-        c.get("id") or c.get("name", "")
-        for c in connected_data_connectors
-        if isinstance(c, dict)
+        it["slug"] for it in enabled_unified if it["method"] == "native"
     ]
     sync_ext_api_docs_for_connectors(_connector_names_async)
 
@@ -2472,9 +2590,8 @@ async def _handle_fire_and_forget(
                     request_id=request_id,
                     agent_config=agent_config,
                     external_user_id=external_user_id,
-                    enabled_integrations=enabled_integrations,
-                    available_integrations=available_integrations,
-                    connected_data_connectors=connected_data_connectors,
+                    enabled_integrations=enabled_unified,
+                    available_integrations=available_unified,
                     approval_mode=effective_approval_mode,
                     numa_tool_approval_mode=numa_tool_approval_mode_async,
                     agent_type_config=agent_type_config,

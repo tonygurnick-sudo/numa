@@ -718,12 +718,12 @@ export default function UpdateClientConfig() {
                           helpText="Enable external API integrations"
                         />
                         <ConfigField
-                          label="Data Connectors"
+                          label="Native Integrations"
                           value={dataConnectorsEnabled}
                           defaultValue={defaults.dataConnectorsEnabled}
                           onChange={setDataConnectorsEnabled}
                           type="switch"
-                          helpText="Show data connectors in the frontend"
+                          helpText="Surface Arcanum's native (first-party OAuth/PAT) integrations alongside Pipedream-backed ones in the unified Integrations surface"
                         />
                         <ConfigField
                           label="Agents"

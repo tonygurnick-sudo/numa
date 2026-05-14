@@ -473,7 +473,7 @@ export const GoogleCloudSetupWizard = ({ show, onHide, onComplete, isConfigured 
                       size="sm"
                       onClick={() => {
                         onHide();
-                        window.location.href = '/data-connectors';
+                        window.location.href = '/integrations';
                       }}
                     >
                       {t('dataConnectors.googleCloudSetup.signIn.goToConnectors')}

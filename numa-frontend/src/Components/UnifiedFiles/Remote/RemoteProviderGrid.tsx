@@ -1,6 +1,7 @@
 import React from 'react';
 import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import type { OAuthProviderType, OAuthProviderInfo, OAuthConnectionStatus } from '../../../types/oauthProviders';
 import { OAuthProvidersService } from '../../../Services/internal/OAuthProvidersService';
 
@@ -8,11 +9,8 @@ interface RemoteProviderGridProps {
   providers: OAuthProviderInfo[];
   statuses: Record<string, OAuthConnectionStatus>;
   statusLoading: Record<string, boolean>;
-  connectingProvider: OAuthProviderType | null;
-  connecting: boolean;
   viewMode: 'list' | 'grid';
   onProviderClick: (providerId: OAuthProviderType) => void;
-  onConnect: (providerId: OAuthProviderType) => void;
   onRefreshStatuses: () => void;
 }
 
@@ -20,26 +18,18 @@ export function RemoteProviderGrid({
   providers,
   statuses,
   statusLoading,
-  connectingProvider,
-  connecting,
   viewMode,
   onProviderClick,
-  onConnect,
   onRefreshStatuses,
 }: RemoteProviderGridProps): React.JSX.Element {
   const { t } = useTranslation('files');
+  const navigate = useNavigate();
 
-  if (providers.length === 0) {
-    return (
-      <div className="finder-empty" style={{ padding: '3rem' }}>
-        <i className="bi bi-cloud" style={{ fontSize: '2rem', color: '#86868b' }} />
-        <h6 className="mt-2">{t('remote.noProviders', 'No providers configured')}</h6>
-        <p className="text-muted small">
-          {t('remote.noProvidersMessage', 'Enable data connectors to browse remote files.')}
-        </p>
-      </div>
-    );
-  }
+  // Empty grid is now handled by the parent (RemoteTab) so it can render a
+  // unified "go to /integrations" prompt that also accounts for Synergy.
+  // Render nothing here when there are no providers — the parent decides
+  // what to show in that case.
+  if (providers.length === 0) return <></>;
 
   if (viewMode === 'grid') {
     return (
@@ -48,7 +38,6 @@ export function RemoteProviderGrid({
           {providers.map((provider) => {
             const status = statuses[provider.id] ?? { status: 'disconnected' as const };
             const loading = statusLoading[provider.id];
-            const isConnecting = connectingProvider === provider.id;
             const connected = status.status === 'connected';
             const hasError = status.status === 'error';
 
@@ -77,7 +66,9 @@ export function RemoteProviderGrid({
                             className="btn btn-sm btn-outline-danger text-nowrap"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onConnect(provider.id as OAuthProviderType);
+                              // Reconnect lives on /integrations — single
+                              // setup surface (FEAT-143).
+                              navigate(`/integrations#${provider.id}`);
                             }}
                           >
                             <i className="bi bi-arrow-repeat me-1" />
@@ -103,28 +94,7 @@ export function RemoteProviderGrid({
                             <i className="bi bi-x-circle" />
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          className="btn btn-sm btn-primary text-nowrap"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onConnect(provider.id as OAuthProviderType);
-                          }}
-                          disabled={connecting}
-                        >
-                          {isConnecting ? (
-                            <>
-                              <Spinner animation="border" size="sm" className="me-1" />
-                              {t('remote.connecting')}
-                            </>
-                          ) : (
-                            <>
-                              <i className="bi bi-plug me-1" />
-                              {t('remote.connect')}
-                            </>
-                          )}
-                        </button>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -148,7 +118,6 @@ export function RemoteProviderGrid({
         {providers.map((provider) => {
           const status = statuses[provider.id] ?? { status: 'disconnected' as const };
           const loading = statusLoading[provider.id];
-          const isConnecting = connectingProvider === provider.id;
           const connected = status.status === 'connected';
           const hasError = status.status === 'error';
 
@@ -165,31 +134,18 @@ export function RemoteProviderGrid({
               <div className="finder-row__name-content">
                 <i className={`${provider.icon} finder-icon`} style={{ color: '#0d6efd' }} />
                 <span className="finder-name fw-semibold">{provider.display_name}</span>
-                {!loading && !connected && (
+                {!loading && hasError && (
                   <button
-                    className={`btn btn-sm ms-2 text-nowrap ${hasError ? 'btn-outline-danger' : 'btn-primary'}`}
+                    className="btn btn-sm ms-2 text-nowrap btn-outline-danger"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onConnect(provider.id as OAuthProviderType);
+                      // Reconnect lives on /integrations — single setup
+                      // surface (FEAT-143).
+                      navigate(`/integrations#${provider.id}`);
                     }}
-                    disabled={connecting}
                   >
-                    {isConnecting ? (
-                      <>
-                        <Spinner animation="border" size="sm" className="me-1" />
-                        {t('remote.connecting')}
-                      </>
-                    ) : hasError ? (
-                      <>
-                        <i className="bi bi-arrow-repeat me-1" />
-                        {t('remote.reconnect')}
-                      </>
-                    ) : (
-                      <>
-                        <i className="bi bi-plug me-1" />
-                        {t('remote.connect')}
-                      </>
-                    )}
+                    <i className="bi bi-arrow-repeat me-1" />
+                    {t('remote.reconnect')}
                   </button>
                 )}
               </div>

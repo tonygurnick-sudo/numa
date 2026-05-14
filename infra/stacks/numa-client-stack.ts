@@ -648,6 +648,16 @@ export class NumaClientStack extends TerraformStack {
       extApiDocBucketArn: core.extApiDocBucket.bucket.arn,
       capabilitiesTableName: core.capabilitiesTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
+      // Admin-side gate. When false, the unified integrations catalog skips
+      // every native row so users never see them; when true, admins can
+      // manage native connectors and they surface alongside Pipedream.
+      dataConnectorsEnabled: clientConfig.dataConnectorsEnabled ?? false,
+      // Forwarded to scheduled runs as featureFlags on the workspace-agent
+      // request body, so the SDK config registers the `connectors` MCP and
+      // `vault` MCP in unattended runs. Without these the schedule runner
+      // can't use native connectors at all (the MCP server isn't registered).
+      oauthIntegrationsEnabled: clientConfig.oauthIntegrationsEnabled ?? false,
+      secretsVaultEnabled: clientConfig.secretsVaultEnabled ?? false,
       connectorEventsTableName: core.connectorEventsTable.name,
       connectorEventConfigsTableName: core.connectorEventConfigsTable.name,
       connectorEventBusName: core.connectorEventBusName,

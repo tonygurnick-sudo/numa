@@ -37,6 +37,9 @@ export type ChatSettings = {
   memoriesEnabled: boolean;
   dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
+  /** Default per-chat-enable list for NATIVE connectors. Mirrors
+   *  defaultConnectionIds for Pipedream. Empty = "none enabled by default". */
+  defaultNativeConnectorIds: string[];
   language: string | null;
   approvalMode: ApprovalMode;
   numaToolApprovalMode: NumaToolApprovalMode;
@@ -202,6 +205,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   memoriesEnabled: true,
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
+  defaultNativeConnectorIds: [],
   language: 'browser',
   approvalMode: 'non_destructive',
   numaToolApprovalMode: { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE },
@@ -296,6 +300,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       memoriesEnabled: DEFAULT_SETTINGS.memoriesEnabled,
       dataAnalysisEnabled: DEFAULT_SETTINGS.dataAnalysisEnabled,
       defaultConnectionIds: DEFAULT_SETTINGS.defaultConnectionIds,
+      defaultNativeConnectorIds: DEFAULT_SETTINGS.defaultNativeConnectorIds,
       language: DEFAULT_SETTINGS.language,
       approvalMode: DEFAULT_SETTINGS.approvalMode,
       numaToolApprovalMode: DEFAULT_SETTINGS.numaToolApprovalMode,
@@ -336,6 +341,11 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
     defaultConnectionIds: Array.isArray(item?.defaultConnectionIds)
       ? item!.defaultConnectionIds
       : DEFAULT_SETTINGS.defaultConnectionIds,
+    defaultNativeConnectorIds: Array.isArray((item as Record<string, unknown>)?.defaultNativeConnectorIds)
+      ? ((item as Record<string, unknown>).defaultNativeConnectorIds as unknown[]).filter(
+          (id): id is string => typeof id === 'string'
+        )
+      : DEFAULT_SETTINGS.defaultNativeConnectorIds,
     language: DEFAULT_SETTINGS.language,
     approvalMode,
     numaToolApprovalMode: validateNumaToolApprovalMode(item?.numaToolApprovalMode),
@@ -399,6 +409,9 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
   const defaultConnectionIds = Array.isArray(userItem?.defaultConnectionIds)
     ? (userItem!.defaultConnectionIds as unknown[]).filter((id): id is string => typeof id === 'string')
     : globalSettings.defaultConnectionIds;
+  const defaultNativeConnectorIds = Array.isArray(userItem?.defaultNativeConnectorIds)
+    ? (userItem!.defaultNativeConnectorIds as unknown[]).filter((id): id is string => typeof id === 'string')
+    : globalSettings.defaultNativeConnectorIds;
   const language =
     typeof userItem?.language === 'string' || userItem?.language === null
       ? (userItem!.language as string | null)
@@ -439,6 +452,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     memoriesEnabled,
     dataAnalysisEnabled,
     defaultConnectionIds,
+    defaultNativeConnectorIds,
     language,
     approvalMode,
     numaToolApprovalMode,
@@ -531,6 +545,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
               ? body.defaultConnectionIds.filter((id): id is string => typeof id === 'string')
               : currentGlobal.defaultConnectionIds
             : currentGlobal.defaultConnectionIds,
+        defaultNativeConnectorIds:
+          'defaultNativeConnectorIds' in body
+            ? Array.isArray((body as Record<string, unknown>).defaultNativeConnectorIds)
+              ? ((body as Record<string, unknown>).defaultNativeConnectorIds as unknown[]).filter(
+                  (id): id is string => typeof id === 'string'
+                )
+              : currentGlobal.defaultNativeConnectorIds
+            : currentGlobal.defaultNativeConnectorIds,
         language: DEFAULT_SETTINGS.language,
         approvalMode:
           'approvalMode' in body &&
@@ -574,6 +596,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         memoriesEnabled: updatedSettings.memoriesEnabled,
         dataAnalysisEnabled: updatedSettings.dataAnalysisEnabled,
         defaultConnectionIds: updatedSettings.defaultConnectionIds,
+        defaultNativeConnectorIds: updatedSettings.defaultNativeConnectorIds,
         language: updatedSettings.language,
         approvalMode: updatedSettings.approvalMode,
         numaToolApprovalMode: updatedSettings.numaToolApprovalMode,
@@ -627,6 +650,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         memoriesEnabled: merged.memoriesEnabled,
         dataAnalysisEnabled: merged.dataAnalysisEnabled,
         defaultConnectionIds: merged.defaultConnectionIds,
+        defaultNativeConnectorIds: merged.defaultNativeConnectorIds,
         language: merged.language,
         approvalMode: merged.approvalMode,
         numaToolApprovalMode: merged.numaToolApprovalMode,
@@ -655,6 +679,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         memoriesEnabled: useUserChatDefaults ? merged.memoriesEnabled : globalSettings.memoriesEnabled,
         dataAnalysisEnabled: useUserChatDefaults ? merged.dataAnalysisEnabled : globalSettings.dataAnalysisEnabled,
         defaultConnectionIds: useUserChatDefaults ? merged.defaultConnectionIds : globalSettings.defaultConnectionIds,
+        defaultNativeConnectorIds: useUserChatDefaults
+          ? merged.defaultNativeConnectorIds
+          : globalSettings.defaultNativeConnectorIds,
         language: merged.language,
         approvalMode: merged.approvalMode,
         numaToolApprovalMode: merged.numaToolApprovalMode,
@@ -686,6 +713,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'memoriesEnabled',
         'dataAnalysisEnabled',
         'defaultConnectionIds',
+        'defaultNativeConnectorIds',
         'userDefaultsEnabled',
       ];
       const hasChatDefaultFields = CHAT_DEFAULT_KEYS.some((k) => k in body);
@@ -783,6 +811,18 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }
       } else if (Array.isArray(current.defaultConnectionIds)) {
         next.defaultConnectionIds = current.defaultConnectionIds;
+      }
+
+      // defaultNativeConnectorIds — mirrors defaultConnectionIds for natives.
+      if ('defaultNativeConnectorIds' in body) {
+        const incoming = (body as Record<string, unknown>).defaultNativeConnectorIds;
+        if (incoming === null) {
+          // clear override
+        } else {
+          next.defaultNativeConnectorIds = mergeArray(incoming) ?? [];
+        }
+      } else if (Array.isArray((current as Record<string, unknown>).defaultNativeConnectorIds)) {
+        next.defaultNativeConnectorIds = (current as UserChatSettings).defaultNativeConnectorIds;
       }
 
       // language
@@ -901,6 +941,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'memoriesEnabled' in next ||
         'dataAnalysisEnabled' in next ||
         'defaultConnectionIds' in next ||
+        'defaultNativeConnectorIds' in next ||
         'language' in next ||
         'approvalMode' in next ||
         'numaToolApprovalMode' in next ||

@@ -112,7 +112,7 @@ the `data-bucket` (internal S3) rejects the request operation outright.
 
 ### What to tell users when not connected
 
-| Connector                                        | Where to connect                               |
-| ------------------------------------------------ | ---------------------------------------------- |
-| OAuth providers (googledrive, onedrive, dropbox) | Navigate to `/files?tab=remote` in the Numa UI |
-| synergy                                          | Navigate to `/data-connectors` in the Numa UI  |
+| Connector                                        | Where to connect                                                                                |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| OAuth providers (googledrive, onedrive, dropbox) | Navigate to `/integrations` in the Numa UI (or deep-link `/integrations#<slug>` for that card)  |
+| synergy                                          | Navigate to `/integrations` in the Numa UI (or deep-link `/integrations#synergy` for that card) |

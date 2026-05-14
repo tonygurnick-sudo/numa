@@ -108,8 +108,9 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
   },
   {
     flag: 'DATA_CONNECTORS_ENABLED',
-    title: 'Data Connectors',
-    description: 'Connect external data sources for knowledge base sync.',
+    title: 'Native Integrations',
+    description:
+      'Admin-side gate. When on, admins can add native OAuth/token connectors (Google Drive, OneDrive, Synergy etc.) to the unified Integrations list alongside Pipedream. When off, no native rows surface to users.',
     icon: 'bi-cloud-download',
     system_only: false,
     dev_only: false,

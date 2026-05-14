@@ -700,10 +700,6 @@
         "title": "Update Memory",
         "help": "Allow Numa to save and update memories about you and your integrations."
       },
-      "dataConnectors": {
-        "title": "Data Connectors",
-        "help": "Access external data sources like Google Drive, OneDrive, and Dropbox from chat."
-      },
       "integrations": {
         "label": "Default integrations",
         "disabled": "Integrations are not enabled in this environment.",

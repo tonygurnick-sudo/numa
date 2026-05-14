@@ -88,9 +88,9 @@ Ask the user to paste:
 
 Once they provide the Client ID and Client Secret, guide them to:
 
-1. Go to Numa > Integrations > Data Connectors
-2. Find Gmail (or Google Drive)
-3. Click "Configure"
+1. Go to Numa > Settings > Integrations (Admin)
+2. Find Gmail (or Google Drive); if it isn't on the list yet, click **Add integration** and pick it
+3. In the Manage modal, switch to the **Native** method card and click **Set up** / **Reconfigure**
 4. Paste the Client ID and Client Secret
 5. Save
 
@@ -117,9 +117,9 @@ If the user wants real-time Gmail notifications:
 
 Help them verify the setup:
 
-1. Go back to Numa Data Connectors
-2. Click "Test Connection" on the Gmail connector
-3. Should show their email address if successful
+1. Go to the user-facing Numa Integrations page (`/integrations`)
+2. Find the Gmail card and click **Connect**
+3. Complete the Google sign-in; once back, the card should show **Connected** with their email visible
 
 ## Error Handling
 

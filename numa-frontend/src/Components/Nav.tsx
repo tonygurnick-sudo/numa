@@ -638,9 +638,6 @@ function getPlannedNavIcon(item, interfaceMode) {
       break;
   }
 
-  if (item?.to === '/data-connectors') {
-    return Database;
-  }
   if (item?.to === '/ops') {
     return ClipboardList;
   }

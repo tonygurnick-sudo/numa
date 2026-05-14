@@ -65,9 +65,10 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
   },
   {
     key: 'dataConnectorsEnabled',
-    label: 'Data Connectors',
+    label: 'Native Integrations',
     type: 'boolean',
-    description: 'Show data connectors in the frontend',
+    description:
+      "Surface Arcanum's native (first-party OAuth/PAT) integrations alongside Pipedream-backed ones in the unified Integrations surface",
   },
   {
     key: 'numaWorkspaceChat',
