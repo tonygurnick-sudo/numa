@@ -126,7 +126,7 @@ class TestDetectUpstreamErrorOutlookSentinel:
     """microsoft_outlook-download-attachment returns sentinel filePath when
     the upstream component fails to derive a filename. Verified live
     2026-05-14 — the wrapper still reports success and silently overwrites
-    prior downloads at /workdir/outputs/integrations-results/undefined."""
+    prior downloads at /workdir/tmp/integrations-results/undefined."""
 
     def test_filepath_tmp_undefined(self):
         result = {

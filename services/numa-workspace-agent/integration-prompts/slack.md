@@ -63,7 +63,7 @@ Slack messages (from `find-message`, `list-replies`, etc.) may contain a `files`
 - `id` — unique file ID (e.g. `F0ACCBWBC83`)
 - `mimetype` — file type
 
-To download these files, use `proxy_request` with GET on the `url_private_download` URL. The proxy returns binary files as a JSON object with `{"binary": true, "base64_body": "..."}`. After getting the result, decode and save the file using bash:
+To download these files, use `proxy_request` with GET on the `url_private_download` URL. The proxy returns binary files as a JSON object with `{"binary": true, "base64_body": "..."}`. After getting the result, decode and save the file using bash. Default to `/workdir/tmp/integrations-results/` (scratch — hidden from the user's Files page); promote to `/workdir/outputs/` only if the user asked for the file as a deliverable:
 
 ```bash
 python3 -c "
@@ -76,7 +76,7 @@ if result.get('binary') and result.get('base64_body'):
     print(f'Saved {sys.argv[2]}')
 else:
     print('Response is not binary')
-" /path/to/proxy-result.json /workdir/outputs/integrations-results/filename.png
+" /path/to/proxy-result.json /workdir/tmp/integrations-results/filename.png
 ```
 
 When multiple files share the same name (common with `image.png`), deduplicate by appending the file ID: `image_F0ACCBWBC83.png`.

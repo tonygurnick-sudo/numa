@@ -45,7 +45,7 @@ Use `proxy_request` with `DELETE` method to delete contacts (`/me/contacts/{id}`
 
 ## Download Attachment Requires `stash_id`
 
-Always include `stash_id: "NEW"` when calling `download-attachment`. Files are saved to `/workdir/outputs/integrations-results/`.
+Always include `stash_id: "NEW"` when calling `download-attachment`. Files land in `/workdir/tmp/integrations-results/` (scratch — hidden from the user's Files page). If the user asked for the attachment as a deliverable, `cp` it to `/workdir/outputs/`.
 
 ## Business/Organization Accounts
 

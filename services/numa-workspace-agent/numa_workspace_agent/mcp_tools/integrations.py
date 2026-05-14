@@ -6,10 +6,13 @@ Connect API via the workspace-chat-tools Lambda. Actions requiring
 side effects (run_action, proxy_request) go through human-in-the-loop
 approval before execution.
 
-Results are saved to files in /workdir/outputs/integrations-results/ to
+Results are saved to files in /workdir/tmp/integrations-results/ to
 avoid flooding the agent's context window with large API responses.
-Files returned via Pipedream's file stash are automatically downloaded
-into the same directory.
+Files returned via Pipedream's file stash are also downloaded into
+the same directory. /workdir/tmp/ is scratch space — synced to S3 for
+the model's continuity but hidden from the user's Files UI. If the
+user actually wants a downloaded file, the model should `cp` it to
+/workdir/outputs/ explicitly.
 """
 
 import json

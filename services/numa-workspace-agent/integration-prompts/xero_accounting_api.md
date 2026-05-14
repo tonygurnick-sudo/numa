@@ -88,7 +88,7 @@ mcp__integrations__run_action(
 )
 ```
 
-The PDF is saved to `/workdir/outputs/integrations-results/{invoiceId}.pdf`.
+The PDF lands in `/workdir/tmp/integrations-results/{invoiceId}.pdf` (scratch — hidden from the user's Files page). If the user asked for the PDF as a deliverable, `cp` it to `/workdir/outputs/`.
 
 ### Contact Finder Actions Use String Not Boolean
 

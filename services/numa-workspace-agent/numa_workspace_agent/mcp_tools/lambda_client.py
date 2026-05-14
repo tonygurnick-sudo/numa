@@ -16,8 +16,18 @@ import structlog
 
 logger = structlog.get_logger()
 
-# Results directory for tool outputs
-RESULTS_DIR = "/workdir/outputs/integrations-results"
+# Results directory for tool outputs.
+#
+# Lives under /workdir/tmp/ rather than /workdir/outputs/ because:
+#  - JSON response blobs and intermediate downloads are scratch — the user
+#    didn't ask for raw API payloads to appear in their Files page.
+#  - /workdir/tmp/ still syncs to S3 (root-level rglob in s3_workspace.py)
+#    so the model has continuity across requests, compaction, and restarts.
+#  - The Files UI lists only uploads/ and outputs/, so scratch stays hidden.
+#
+# When the model wants the user to see a downloaded file (attachment, export,
+# transcript, etc.) it should `cp` or `mv` it from here into /workdir/outputs/.
+RESULTS_DIR = "/workdir/tmp/integrations-results"
 
 # Preview length for truncated results shown inline. Below this, the raw
 # JSON fits in the response and we send it verbatim. Above this, we send

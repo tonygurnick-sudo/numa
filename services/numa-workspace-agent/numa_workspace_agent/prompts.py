@@ -919,8 +919,9 @@ To get dynamic dropdown options for a prop:
 Important notes:
 - run_action and proxy_request require user approval before execution
 - configure_props does NOT require approval (read-only metadata)
-- Results are saved to files in /workdir/outputs/integrations-results/ to avoid flooding context
-- Files returned via file stash (e.g., downloaded files) are automatically saved to /workdir/outputs/integrations-results/
+- Integration tool results (JSON response blobs AND downloaded files like attachments) land in /workdir/tmp/integrations-results/
+- /workdir/tmp/ is scratch — synced for your continuity but invisible to the user. /workdir/outputs/ is what the user sees in their Files page
+- If the user asks for a file (download/save/give me X), `cp` or `mv` it from /workdir/tmp/integrations-results/ into /workdir/outputs/ before reporting done. Otherwise leave it in tmp and reference it inline
 - Use the annotations (readOnlyHint, destructiveHint) from schemas to gauge risk
 - The "authProvisionId":"auto" value is injected automatically — do not look up account IDs
 - Always read the action schema first to understand required and optional props

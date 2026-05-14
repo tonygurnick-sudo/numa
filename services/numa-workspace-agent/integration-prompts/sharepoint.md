@@ -45,9 +45,9 @@ Always resolve in sequence using `configure_props`.
   - The `filename` prop (even though not marked optional in schema)
   - `stash_id="NEW"` in the `run_action` call to enable file stashing
 
-  Downloaded files are saved to `/workdir/outputs/integrations-results/__stash/{filename}` and are immediately available for reading or further processing.
+  Downloaded files land in `/workdir/tmp/integrations-results/__stash/{filename}` (scratch — hidden from the user's Files page) and are immediately available for reading or further processing. If the user asked for the file as a deliverable, `cp` it to `/workdir/outputs/`.
 
-- **File uploads accept workspace paths:** The `filePath` prop for `upload-file` accepts workspace paths (e.g., `/workdir/outputs/file.txt`) which are automatically converted to presigned URLs.
+- **File uploads accept workspace paths:** The `filePath` prop for `upload-file` accepts workspace paths (e.g., `/workdir/uploads/file.txt` or `/workdir/outputs/file.txt`) which are automatically converted to presigned URLs.
 
 - **Global vs site-scoped search:**
   - `search-files` searches across ALL sites (no siteId required)

@@ -141,16 +141,21 @@ When downloading files from integrations:
 
 1. In props, specify `"filePath": "/tmp/filename.ext"` (Pipedream convention — use `/tmp/` prefix)
 2. Include `stash_id="NEW"` in the `run_action` call
-3. The file is automatically saved to `/workdir/outputs/integrations-results/`
-4. Read it from there: `Read /workdir/outputs/integrations-results/filename.ext`
+3. The file is automatically saved to `/workdir/tmp/integrations-results/`
+4. Read it from there: `Read /workdir/tmp/integrations-results/filename.ext`
+5. **If the user asked for the file** (download, save, "give me X"), copy it into `/workdir/outputs/` so it appears in their Files page:
+   `Bash("cp /workdir/tmp/integrations-results/filename.ext /workdir/outputs/")`
+   Otherwise leave it in tmp and reference it inline — the user doesn't want raw attachments cluttering their Files page when they only asked you to read or summarize them.
 
 ---
 
 ## Result Handling
 
-- Results are saved to `/workdir/outputs/integrations-results/` to avoid flooding context
-- Downloaded files also appear in that directory
+- Integration JSON results land in `/workdir/tmp/integrations-results/` to avoid flooding context
+- Downloaded files (attachments, exports, transcripts) also land in that directory
+- `/workdir/tmp/` is scratch: synced to S3 for your continuity but hidden from the user's Files UI. `/workdir/outputs/` is what the user sees
 - For large results: read the file, extract what's needed, summarize for the user
+- Move/copy files to `/workdir/outputs/` only when the user actually wants them as a deliverable
 
 ---
 
@@ -231,7 +236,7 @@ mcp__integrations__run_action(
 )
 
 # 5. Read and summarize the result
-Read /workdir/outputs/integrations-results/result-{timestamp}.json
+Read /workdir/tmp/integrations-results/result-{timestamp}.json
 ```
 
 ---
