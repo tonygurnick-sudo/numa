@@ -162,6 +162,7 @@
   },
   "history": {
     "title": "Chat History",
+    "viewAll": "View all chat history",
     "closeAria": "Close chat history",
     "loading": "Loading conversations...",
     "loadFailed": "Failed to load conversation history",

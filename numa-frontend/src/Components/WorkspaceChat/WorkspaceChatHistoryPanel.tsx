@@ -1,7 +1,8 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { Bot, Pencil, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bot, History, Pencil, Trash2 } from 'lucide-react';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import i18n from '../../i18n';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -99,6 +100,7 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
     const { user, numaChatDynamoUtils } = useAuth();
     const confirm = useConfirm();
     const prompt = usePrompt();
+    const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [localError, setLocalError] = useState<string | null>(null);
@@ -285,6 +287,10 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
     return (
       <div className="workspace-chat-history-panel workspace-settings-modern-panel">
         <div className="workspace-chat-history-panel-body workspace-settings-modern-body">
+          <button type="button" className="workspace-history-view-all-btn" onClick={() => navigate('/chat-history')}>
+            <History size={14} />
+            <span>{t('history.viewAll')}</span>
+          </button>
           {isLoading ? (
             <div className="text-muted small d-flex align-items-center gap-2 py-2">
               <Spinner animation="border" size="sm" />

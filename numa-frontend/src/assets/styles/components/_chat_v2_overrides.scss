@@ -1907,6 +1907,37 @@
   display: none;
 }
 
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-history-view-all-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: #ffffff;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  color: #3f3f46;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-history-view-all-btn:hover {
+  background: #fafafa;
+  border-color: #d4d4d8;
+  color: #18181b;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-history-view-all-btn svg {
+  flex-shrink: 0;
+}
+
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-history-list {
   display: flex;
   flex-direction: column;
