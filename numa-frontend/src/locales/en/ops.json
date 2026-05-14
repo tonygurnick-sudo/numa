@@ -915,6 +915,7 @@
     "addCustomField": "Add Custom Field",
     "addField": "Add Field",
     "editField": "Edit Field",
+    "builtinFieldEditHint": "Built-in fields keep their underlying type; you can only rename the label. Clear the name to restore the default.",
     "fieldType": "Field Type",
     "category": "Category",
     "options": "Options",

@@ -195,6 +195,10 @@ export const crmConfigSchema = z.object({
   defaultStageId: z.string().optional(),
   customerRecord: customerRecordConfigSchema.optional(),
   layout: customerRecordLayoutSchema.optional(),
+  // Per-client label overrides for built-in customer fields, keyed by
+  // built-in field id (e.g. "companyName"). Empty/missing → fall back to
+  // the i18n default label.
+  builtinFieldLabels: z.record(z.string()).optional(),
   updatedAt: z.string(),
 });
 
