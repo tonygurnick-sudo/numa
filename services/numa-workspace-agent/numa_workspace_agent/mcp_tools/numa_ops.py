@@ -24,6 +24,7 @@ import structlog
 from claude_agent_sdk import tool
 from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
 from numa_workspace_agent.mcp_tools.s3_helpers import sync_file_to_s3
+from numa_workspace_agent.mcp_tools.schema_preview import build_schema_preview
 
 logger = structlog.get_logger()
 
@@ -468,11 +469,16 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
         # Compact JSON — no indent (saves tokens)
         result_text = json.dumps(result, default=str, separators=(",", ":"))
 
-        # Large results → save to file, return lightweight summary
+        # Large results → save to file, return schema-with-samples preview.
+        # Schema (<5KB) gives the model every key, types, array lengths, and
+        # example values so it can jq the file on disk for specific fields
+        # rather than Reading the whole thing.
         if len(result_text) > MAX_INLINE:
             file_path = _save_ops_result(result, operation)
             summary = _build_summary(result, operation)
             count = _count_items(result, operation)
+            schema = build_schema_preview(result)
+            schema_json = json.dumps(schema, indent=2, default=str)
             parts = [
                 f"Ops operation completed: {operation}",
                 f"Description: {description}",
@@ -483,7 +489,9 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                 parts.append(f"Items found: {count}")
             parts.append(f"\nFull results saved to: {file_path}")
             parts.append(
-                "Read the file with execute_script if you need specific details."
+                "Schema preview below (use jq or python on the full file to "
+                "extract specific fields):\n\n"
+                f"{schema_json}"
             )
             return _ok("\n".join(parts))
 

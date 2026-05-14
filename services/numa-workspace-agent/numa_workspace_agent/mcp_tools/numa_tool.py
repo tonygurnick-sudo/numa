@@ -38,11 +38,45 @@ from numa_workspace_agent.mcp_tools.s3_helpers import (
     sync_file_to_s3,
     upload_to_presigned_url,
 )
+from numa_workspace_agent.mcp_tools.schema_preview import build_schema_preview
 
 logger = structlog.get_logger()
 
 # Upload size limit for KB uploads (matches knowledge_base.py threshold for presigned URLs)
 PRESIGNED_URL_THRESHOLD = int(3.5 * 1024 * 1024)
+
+# Size threshold (compact JSON chars) above which numa_files query/list results
+# are spilled to a file and replaced with a schema-with-samples preview in the
+# tool response. Big KB returns (folders with hundreds of files, queries with
+# long snippets) otherwise dump verbatim into the model's context.
+_KB_INLINE_LIMIT = 5000
+_KB_RESULTS_DIR = Path("/workdir/tmp/numa-files")
+
+
+def _save_kb_result(result: Any, operation: str) -> str:
+    """Spill a large numa_files result to /workdir/tmp/numa-files/ and sync to S3."""
+    from datetime import datetime, timezone
+
+    _KB_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    file_path = _KB_RESULTS_DIR / f"{operation}-{timestamp}.json"
+    content = json.dumps(result, indent=2, default=str)
+    file_path.write_text(content)
+    sync_file_to_s3(str(file_path), content)
+    return str(file_path)
+
+
+def _kb_overflow_response(result: Any, operation: str) -> dict[str, Any]:
+    """Build the file-save + schema-preview response for an oversize KB result."""
+    file_path = _save_kb_result(result, operation)
+    schema = build_schema_preview(result)
+    schema_json = json.dumps(schema, indent=2, default=str)
+    return _ok(
+        f"{operation} returned a large result — full JSON saved to: {file_path}\n\n"
+        "Schema preview below (use jq or python on the full file to extract "
+        "specific fields):\n\n"
+        f"{schema_json}"
+    )
 
 
 # ── Helper: build MCP response ──────────────────────────────────────────────
@@ -165,6 +199,7 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
         results_count = result.get(
             "results_count", result.get("total_results_count", 0)
         )
+        schema = build_schema_preview(result)
         return _ok(
             json.dumps(
                 {
@@ -172,10 +207,16 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
                     "message": f"Results written to {output_path}",
                     "file_path": str(output_path),
                     "results_count": results_count,
+                    "schema_preview": schema,
                 },
                 indent=2,
             )
         )
+
+    # Large results → spill to file + schema preview, keep context lean.
+    compact = json.dumps(result, default=str, separators=(",", ":"))
+    if len(compact) > _KB_INLINE_LIMIT:
+        return _kb_overflow_response(result, "query")
 
     return _ok(json.dumps(result, indent=2))
 
@@ -973,6 +1014,11 @@ async def _handle_kb_list(params: dict[str, Any]) -> dict[str, Any]:
     # Handle approval denial/timeout from Lambda
     if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
         return _ok(json.dumps(result, indent=2))
+
+    # Large listings (folders with 100+ files) → spill to file + schema preview.
+    compact = json.dumps(result, default=str, separators=(",", ":"))
+    if len(compact) > _KB_INLINE_LIMIT:
+        return _kb_overflow_response(result, "list")
 
     return _ok(json.dumps(result, indent=2))
 

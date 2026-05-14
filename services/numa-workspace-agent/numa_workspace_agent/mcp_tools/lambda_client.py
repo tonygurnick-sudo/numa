@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from numa_workspace_agent.mcp_tools.schema_preview import build_schema_preview
 
 logger = structlog.get_logger()
 
@@ -31,71 +32,13 @@ RESULTS_DIR = "/workdir/tmp/integrations-results"
 
 # Preview length for truncated results shown inline. Below this, the raw
 # JSON fits in the response and we send it verbatim. Above this, we send
-# a schema preview instead (see _build_schema_preview) so the model gets
+# a schema preview instead (see build_schema_preview) so the model gets
 # the full shape of the result in <5KB rather than the first ~500 chars
 # of a 1MB blob — and can then jq/python over the file on disk.
 PREVIEW_LENGTH = 500
 
-# Caps on the schema walker. The integration-result files we see in the
-# wild are homogeneous arrays of records (50 emails, 20 messages, etc.),
-# so first-item sampling captures the shape; depth/key caps are belt-and-
-# braces guards against pathological inputs.
-_SCHEMA_MAX_DEPTH = 8
-_SCHEMA_MAX_DICT_KEYS = 50
-_SCHEMA_STRING_SAMPLE_LEN = 80
-
-
-def _build_schema_preview(value: Any, depth: int = 0) -> Any:
-    """
-    Compact schema-with-samples of a JSON value for inline model consumption.
-
-    Conventions: keys prefixed with `_` are metadata about the shape; every
-    other key is a real key from the source data, so the model can match
-    them up directly with `jq` paths.
-    """
-    if depth >= _SCHEMA_MAX_DEPTH:
-        return {"_truncated": "max_depth"}
-
-    if value is None:
-        return {"_type": "null"}
-
-    if isinstance(value, bool):
-        return {"_type": "bool", "_example": value}
-
-    if isinstance(value, (int, float)):
-        return {"_type": type(value).__name__, "_example": value}
-
-    if isinstance(value, str):
-        if len(value) <= _SCHEMA_STRING_SAMPLE_LEN:
-            return {"_type": "string", "_example": value}
-        return {
-            "_type": "string",
-            "_length": len(value),
-            "_example": value[:_SCHEMA_STRING_SAMPLE_LEN] + "…",
-        }
-
-    if isinstance(value, list):
-        if not value:
-            return {"_type": "array", "_length": 0}
-        return {
-            "_type": "array",
-            "_length": len(value),
-            "_item": _build_schema_preview(value[0], depth + 1),
-        }
-
-    if isinstance(value, dict):
-        out: dict[str, Any] = {}
-        keys = list(value.keys())
-        for k in keys[:_SCHEMA_MAX_DICT_KEYS]:
-            out[str(k)] = _build_schema_preview(value[k], depth + 1)
-        if len(keys) > _SCHEMA_MAX_DICT_KEYS:
-            out["_more_keys"] = len(keys) - _SCHEMA_MAX_DICT_KEYS
-        return out
-
-    return {
-        "_type": type(value).__name__,
-        "_example": str(value)[:_SCHEMA_STRING_SAMPLE_LEN],
-    }
+# Schema walker for large integration results lives in schema_preview.py
+# so numa_ops and numa_files can reuse it.
 
 
 def pop_approval_id(action_key: str) -> str:
@@ -339,7 +282,7 @@ def save_result(
     # it write `.ret` when the file actually wants `.result.ret`.
     result_str = json.dumps(output, indent=2, default=str)
     if len(result_str) > PREVIEW_LENGTH:
-        schema = _build_schema_preview(output)
+        schema = build_schema_preview(output)
         schema_json = json.dumps(schema, indent=2, default=str)
         preview_path = results_dir / f"{action_key}-{timestamp}.preview.json"
         preview_path.write_text(schema_json)
