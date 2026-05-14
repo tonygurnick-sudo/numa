@@ -168,12 +168,14 @@ async def _handle_request_secret(params: dict[str, Any]) -> dict[str, Any]:
                     {
                         "type": "text",
                         "text": (
-                            f"Approval timed out for secret '{secret_name}'. "
-                            "The user did not respond before the approval window expired. "
-                            "You can offer to try again if the user is ready to approve."
+                            f"Approval window expired for secret '{secret_name}'. "
+                            "An approval card was shown to the user but they did not respond before it timed out. "
+                            "Do NOT retry this access automatically. Wait for the user to ask before trying again."
                         ),
                     }
                 ],
+                "is_error": True,
+                "isError": True,
             }
 
         if status == "not_found":

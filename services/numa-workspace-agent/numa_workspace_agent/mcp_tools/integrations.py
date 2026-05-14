@@ -265,13 +265,14 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                     {
                         "type": "text",
                         "text": (
-                            f"Approval timed out for: {action_key}. "
-                            "This workspace has human-in-the-loop approval enabled for integration tools. "
-                            "An approval card was shown to the user but they did not respond "
-                            "before the approval window expired. You can offer to try again if the user is ready to approve."
+                            f"Approval window expired for: {action_key}. "
+                            "An approval card was shown to the user but they did not respond before it timed out. "
+                            "Do NOT retry this action automatically. Wait for the user to ask before trying again."
                         ),
                     }
                 ],
+                "is_error": True,
+                "isError": True,
             }
         if status in ("execution_timeout", "execution_failed"):
             # Pass through the real error message from the relay/proxy
@@ -570,13 +571,14 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                     {
                         "type": "text",
                         "text": (
-                            f"Approval timed out for proxy request: {method} {upstream_url}. "
-                            "This workspace has human-in-the-loop approval enabled for integration tools. "
-                            "An approval card was shown to the user but they did not respond "
-                            "before the approval window expired. You can offer to try again if the user is ready to approve."
+                            f"Approval window expired for proxy request: {method} {upstream_url}. "
+                            "An approval card was shown to the user but they did not respond before it timed out. "
+                            "Do NOT retry this request automatically. Wait for the user to ask before trying again."
                         ),
                     }
                 ],
+                "is_error": True,
+                "isError": True,
             }
         if status in ("execution_timeout", "execution_failed"):
             error_message = result.get("message", "")

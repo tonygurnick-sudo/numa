@@ -374,10 +374,10 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
             if status == "denied":
                 return _ok(f"Operation denied by user: {operation}. {description}")
             if status == "timeout":
-                return _ok(
-                    f"Approval timed out for: {operation}. "
-                    "The user did not respond before the approval window expired. "
-                    "You can offer to try again if the user is ready."
+                return _err(
+                    f"Approval window expired for: {operation}. "
+                    "An approval card was shown to the user but they did not respond before it timed out. "
+                    "Do NOT retry this operation automatically. Wait for the user to ask before trying again."
                 )
 
         if (
