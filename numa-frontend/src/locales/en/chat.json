@@ -518,7 +518,17 @@
     "connectors": "Connectors",
     "noneConnected": "None connected",
     "connectorsConnectedCount": "{{count}}/{{total}} connected",
-    "connectorAlreadyConnected": "Already connected"
+    "connectorAlreadyConnected": "Already connected",
+    "expand": "Expand",
+    "expandedTitleChatUploads": "Chat Uploads",
+    "expandedTitleOutputFiles": "Output Files",
+    "expandedClose": "Close",
+    "expandedColName": "Name",
+    "expandedColType": "Type",
+    "expandedColSize": "Size",
+    "expandedColModified": "Modified",
+    "expandedColActions": "Actions",
+    "expandedEmpty": "No files yet"
   },
   "connectorsPanel": {
     "connectTo": "Connect to {{name}}",

@@ -13,7 +13,13 @@ import {
   type CachedConversationMeta,
   type ChatArtifact,
 } from '../../Services/chatArtifactsService';
-import { formatFileSize, getFileIconClass, getFileTypeCategory, type FileTypeCategory } from '../../utils/fileUtils';
+import {
+  formatFileSize,
+  getFileIconClass,
+  getFileIconColorClass,
+  getFileTypeCategory,
+  type FileTypeCategory,
+} from '../../utils/fileUtils';
 import { downloadFileFromS3 } from '../../utils/s3Utils';
 import { formatRelativeTime } from '../../utils/automationUtils';
 import { useFilePreviewProcessor, type FileReference } from '../../hooks/useFilePreviewProcessor';
@@ -545,7 +551,10 @@ function ArtifactRowItem({
   return (
     <div className="finder-row finder-row--file-selectable finder-grid-artifacts" onDoubleClick={() => onPreview(row)}>
       <div className="finder-row__name-content">
-        <i className={`${getFileIconClass(row.artifact.name)} finder-icon finder-icon--file`} aria-hidden="true" />
+        <i
+          className={`${getFileIconClass(row.artifact.name)} finder-icon finder-icon--file ${getFileIconColorClass(row.artifact.name)}`}
+          aria-hidden="true"
+        />
         <span className="finder-name" title={row.artifact.relPath}>
           {row.artifact.name}
         </span>

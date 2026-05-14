@@ -230,6 +230,34 @@ export const getFileIconClass = (filename: string): string => {
   return iconMap[extension || ''] || 'bi bi-file-earmark';
 };
 
+/**
+ * Map a filename to a CSS class that colours its file-type icon to match the
+ * conventional colour for that format (PDF red, Word blue, Excel green, etc.).
+ * Returns an empty string if no colour applies.
+ *
+ * Classes are defined globally in `_finder_files.scss`.
+ */
+export const getFileIconColorClass = (filename: string | undefined): string => {
+  if (!filename) return '';
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+
+  if (ext === 'pdf') return 'file-color--pdf';
+  if (['doc', 'docx', 'rtf', 'odt'].includes(ext)) return 'file-color--word';
+  if (['xls', 'xlsx', 'csv', 'tsv', 'ods'].includes(ext)) return 'file-color--excel';
+  if (['ppt', 'pptx', 'odp', 'key'].includes(ext)) return 'file-color--powerpoint';
+  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp', 'tiff', 'tif', 'ico', 'heic'].includes(ext))
+    return 'file-color--image';
+  if (['mp4', 'mov', 'avi', 'webm', 'mkv'].includes(ext)) return 'file-color--video';
+  if (['mp3', 'wav', 'm4a', 'm4p', 'flac', 'ogg'].includes(ext)) return 'file-color--audio';
+  if (['json', 'jsonl', 'xml', 'yaml', 'yml'].includes(ext)) return 'file-color--data';
+  if (['html', 'htm'].includes(ext)) return 'file-color--html';
+  if (['py', 'js', 'jsx', 'ts', 'tsx', 'sh', 'java', 'cpp', 'c', 'h', 'hpp', 'go', 'rb', 'php'].includes(ext))
+    return 'file-color--code';
+  if (['md', 'markdown', 'txt', 'log'].includes(ext)) return 'file-color--text';
+  if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext)) return 'file-color--archive';
+  return '';
+};
+
 export type FileTypeCategory = 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'text' | 'image' | 'other';
 
 /** Group a file into a coarse category used by the files-page type filter. */
@@ -283,5 +311,6 @@ export default {
   shouldShowLargeDataFileWarning,
   formatFileSize,
   getFileIconClass,
+  getFileIconColorClass,
   getFileTypeCategory,
 };

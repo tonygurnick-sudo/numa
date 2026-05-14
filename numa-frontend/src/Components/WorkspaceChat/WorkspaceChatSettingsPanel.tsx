@@ -11,6 +11,7 @@ import {
   Code2,
   Cpu,
   Download,
+  Expand,
   Eye,
   FileText,
   FolderOpen,
@@ -34,7 +35,8 @@ import {
 import { getConnectorById } from '../DataConnectors/connectorRegistry';
 import { ConnectorsService } from '../../Services/ConnectorsService';
 import { ConnectCredentialsModal } from './ConnectCredentialsModal';
-import { getFileIconClass, formatFileSize } from '../../utils/fileUtils';
+import { WorkspaceChatFilesExpandedModal } from './WorkspaceChatFilesExpandedModal';
+import { getFileIconClass, getFileIconColorClass, formatFileSize } from '../../utils/fileUtils';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
 import { getFlag } from '../../utils/featureFlags';
@@ -220,6 +222,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     show: false,
     connectorId: '',
   });
+  const [expandedFilesModal, setExpandedFilesModal] = useState<null | 'uploads' | 'outputs'>(null);
   const sortedConnectors = useMemo(
     () => [...adminConfiguredConnectors].sort((a, b) => a.name.localeCompare(b.name)),
     [adminConfiguredConnectors]
@@ -817,6 +820,26 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     {uploadsFiles.length > 0 ? `${uploadsFiles.length}` : t('workspaceSettings.noneSelected')}
                   </span>
                 )}
+                {uploadsFiles.length > 0 && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="workspace-settings-icon-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedFilesModal('uploads');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.stopPropagation();
+                        setExpandedFilesModal('uploads');
+                      }
+                    }}
+                    title={t('workspaceSettings.expand')}
+                  >
+                    <Expand size={14} />
+                  </span>
+                )}
                 <span
                   role="button"
                   tabIndex={0}
@@ -887,6 +910,26 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     {outputFiles.length > 0 ? `${outputFiles.length}` : t('workspaceSettings.noneSelected')}
                   </span>
                 )}
+                {outputFiles.length > 0 && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="workspace-settings-icon-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedFilesModal('outputs');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.stopPropagation();
+                        setExpandedFilesModal('outputs');
+                      }
+                    }}
+                    title={t('workspaceSettings.expand')}
+                  >
+                    <Expand size={14} />
+                  </span>
+                )}
                 <span
                   role="button"
                   tabIndex={0}
@@ -940,6 +983,19 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
         onHide={() => setCredentialModal({ show: false, connectorId: '' })}
         connectorId={credentialModal.connectorId}
         onConnected={onConnectorConnected}
+      />
+      <WorkspaceChatFilesExpandedModal
+        show={expandedFilesModal !== null}
+        onHide={() => setExpandedFilesModal(null)}
+        title={
+          expandedFilesModal === 'outputs'
+            ? t('workspaceSettings.expandedTitleOutputFiles')
+            : t('workspaceSettings.expandedTitleChatUploads')
+        }
+        files={expandedFilesModal === 'outputs' ? outputFiles : uploadsFiles}
+        rootPrefix={expandedFilesModal === 'outputs' ? 'outputs/' : 'uploads/'}
+        onOpen={onOpenFile}
+        onDownload={onDownloadFile}
       />
     </div>
   );
@@ -1000,14 +1056,19 @@ const WorkspaceSettingsFileList: React.FC<WorkspaceSettingsFileListProps> = ({
     <div className="workspace-settings-file-list">
       {sortedFiles.map((file) => {
         const iconClass = getFileIconClass(file.displayName);
+        const colorClass = getFileIconColorClass(file.displayName);
         const modifiedLabel = formatFileModifiedDate(file.modifiedAt);
 
         return (
           <div key={file.path} className="workspace-settings-file-row">
-            <i className={`${iconClass} workspace-settings-file-icon`} />
+            <i className={`${iconClass} workspace-settings-file-icon ${colorClass}`} />
             <div className="workspace-settings-file-main" title={file.relativePath}>
-              <div className="workspace-settings-file-top-row">
-                <span className="workspace-settings-file-name">{file.displayName}</span>
+              <span className="workspace-settings-file-name">{file.displayName}</span>
+              <div className="workspace-settings-file-bottom-row">
+                <span className="workspace-settings-file-meta">
+                  <span className="workspace-settings-file-size">{formatFileSize(file.size)}</span>
+                  {modifiedLabel && <span className="workspace-settings-file-modified">{modifiedLabel}</span>}
+                </span>
                 <div className="workspace-settings-file-actions">
                   {onOpen && (
                     <Button
@@ -1033,10 +1094,6 @@ const WorkspaceSettingsFileList: React.FC<WorkspaceSettingsFileListProps> = ({
                   )}
                 </div>
               </div>
-              <span className="workspace-settings-file-meta">
-                <span className="workspace-settings-file-size">{formatFileSize(file.size)}</span>
-                {modifiedLabel && <span className="workspace-settings-file-modified">{modifiedLabel}</span>}
-              </span>
             </div>
           </div>
         );

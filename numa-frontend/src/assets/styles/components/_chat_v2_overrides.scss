@@ -2130,13 +2130,17 @@
   gap: 0.45rem;
 }
 
+// Chat input/output file rows: name on its own line (full width, ellipsis
+// only when truly too long), with size · date and action buttons on a
+// second row. Gives the filename far more room than the old icon-name-
+// actions-on-one-line layout.
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-row {
   display: flex;
   align-items: flex-start;
-  gap: 0.45rem;
+  gap: 0.5rem;
   width: 100%;
   min-width: 0;
-  padding: 0.52rem 0.58rem;
+  padding: 0.55rem 0.6rem;
   border: 1px solid #e4e4e7;
   border-radius: 9px;
   background: #fafafa;
@@ -2153,9 +2157,9 @@
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-icon {
   flex-shrink: 0;
   color: #71717a;
-  font-size: 0.88rem;
+  font-size: 1rem;
   line-height: 1;
-  margin-top: 0.15rem;
+  margin-top: 0.1rem;
 }
 
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-main {
@@ -2163,26 +2167,25 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-}
-
-.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-top-row {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
+  gap: 0.25rem;
 }
 
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-name {
   min-width: 0;
-  flex: 1;
   color: #3f3f46;
   font-size: 0.8rem;
   font-weight: 500;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.25;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-bottom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-meta {
@@ -2192,6 +2195,10 @@
   color: #a1a1aa;
   font-size: 0.67rem;
   line-height: 1.1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-modified::before {
@@ -2215,6 +2222,80 @@
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-action-btn:hover:not(:disabled) {
   color: #71717a;
   background: #efeff1;
+}
+
+// Expanded files modal — opened from the chat uploads / output files
+// section headers. Mirrors the chat-artifacts layout so users get full
+// filenames, types, sizes, and modified dates without leaving the chat.
+.workspace-chat-files-expanded-modal {
+  .workspace-chat-files-expanded-modal__content {
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .workspace-chat-files-expanded-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid #e4e4e7;
+    background: #fff;
+  }
+
+  .workspace-chat-files-expanded-modal__title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-family: 'Metropolis Semi Bold', 'Metropolis Medium', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #18181b;
+  }
+
+  .workspace-chat-files-expanded-modal__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 0.4rem;
+    background: #f4f4f5;
+    border: 1px solid #e4e4e7;
+    border-radius: 999px;
+    color: #71717a;
+    font-size: 0.72rem;
+    font-weight: 500;
+  }
+
+  .workspace-chat-files-expanded-modal__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    color: #71717a;
+    cursor: pointer;
+    transition: background 0.1s;
+
+    &:hover {
+      background: #f4f4f5;
+      color: #18181b;
+    }
+  }
+
+  .workspace-chat-files-expanded-modal__body {
+    padding: 0;
+    max-height: 70vh;
+    overflow: auto;
+    background: #fff;
+  }
 }
 
 @include mobile {
