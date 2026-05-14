@@ -92,7 +92,7 @@ def sync_file_to_s3(file_path: str, content: str | bytes) -> None:
     construct the S3 key from the relative path.
 
     Args:
-        file_path: Absolute path under /workdir/ (e.g. /workdir/outputs/render/foo.html)
+        file_path: Absolute path under /workdir/ (e.g. /workdir/tmp/render/foo.html)
         content: File content (str or bytes)
     """
     bucket = os.environ.get("OUTPUTS_BUCKET_NAME", "")

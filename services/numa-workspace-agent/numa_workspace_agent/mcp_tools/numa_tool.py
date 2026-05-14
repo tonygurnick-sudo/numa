@@ -182,7 +182,7 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
 
 FETCH_URL_FILE_THRESHOLD = 5000  # chars -- save to file if content exceeds this
 FETCH_URL_PREVIEW_LENGTH = 500  # chars -- inline preview when saving to file
-FETCH_URL_OUTPUT_DIR = Path("/workdir/outputs/web_fetch")
+FETCH_URL_OUTPUT_DIR = Path("/workdir/tmp/web_fetch")
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MiB cap on direct PDF downloads
 
 
@@ -435,14 +435,17 @@ async def _handle_extract_content_async(
     if not outputs_bucket:
         return _err("OUTPUTS_BUCKET_NAME not configured.")
 
-    # Compute the expected output S3 key (must match extract_content.py logic)
+    # Compute the expected output S3 key (must match extract_content.py logic).
+    # extract_content writes to /workdir/tmp/extracted_<file>.txt -- it's raw
+    # tool data the model reads back, not a deliverable, so it lives in tmp/
+    # and stays out of the user-facing Files page.
     filename_stem = Path(file_path).stem
     safe_filename = re.sub(r"[^a-zA-Z0-9_-]", "_", filename_stem)
     output_s3_key = (
         f"{_S3_PREFIX}/{user_sub}/conversations/{conversation_id}"
-        f"/outputs/extracted_{safe_filename}.txt"
+        f"/tmp/extracted_{safe_filename}.txt"
     )
-    output_workspace_path = f"{_WORKSPACE_ROOT}/outputs/extracted_{safe_filename}.txt"
+    output_workspace_path = f"{_WORKSPACE_ROOT}/tmp/extracted_{safe_filename}.txt"
 
     # Create S3 client for polling
     session = boto3.Session(
@@ -1482,10 +1485,14 @@ async def _handle_render(params: dict[str, Any]) -> dict[str, Any]:
 
     # Large content: save to file and sync to S3 so the frontend can
     # fetch it during streaming without waiting for end-of-turn sync.
+    # Lives under /workdir/tmp/ so the streaming-backing scratch file
+    # does not show up in the user-facing Files page (which lists only
+    # uploads/ and outputs/). tmp/ still syncs to S3 so the frontend
+    # can fetch by relative path the same way it does for outputs/.
     if len(content) > _RENDER_MAX_INLINE:
         from datetime import datetime, timezone
 
-        results_dir = Path("/workdir/outputs/render")
+        results_dir = Path("/workdir/tmp/render")
         results_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         ext = ".html" if render_type == "html" else ".json"

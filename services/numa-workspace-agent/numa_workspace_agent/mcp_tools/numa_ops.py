@@ -203,12 +203,17 @@ def _build_summary(result: Any, operation: str) -> str | None:
 
 
 def _save_ops_result(result: Any, operation: str) -> str:
-    """Save full ops result to /workdir/outputs/ops/ and sync to S3.
+    """Save full ops result to /workdir/tmp/ops/ and sync to S3.
 
-    The file is uploaded to S3 immediately so the frontend can fetch it
-    during live streaming (before the full workspace sync runs).
+    Lives under /workdir/tmp/ rather than /workdir/outputs/ because this
+    is raw tool data the model uses for continuity, not a deliverable.
+    /workdir/outputs/ is the user-facing Files page; raw ops JSON should
+    not appear there. /workdir/tmp/ still syncs to S3 (root-level rglob
+    in s3_workspace.py catches it -- not in the protected_dirs exclusion
+    list) so the frontend can fetch it during live streaming and the
+    model retains access across compaction/restart.
     """
-    results_dir = Path("/workdir/outputs/ops")
+    results_dir = Path("/workdir/tmp/ops")
     results_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
