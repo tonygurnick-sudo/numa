@@ -142,6 +142,7 @@ export type CrmConfig = {
   useAutoColors?: boolean;
   customerRecord?: CustomerRecordConfig;
   layout?: CustomerRecordLayout;
+  builtinFieldLabels?: Record<string, string>;
 };
 
 export type SupplierFlag = {

@@ -58,6 +58,23 @@ export const isBuiltinField = (fieldId: string): boolean =>
   Object.prototype.hasOwnProperty.call(BUILTIN_CUSTOMER_FIELDS, fieldId);
 
 /**
+ * Resolves the display label for a built-in customer field. Returns the
+ * admin-set override when present and non-empty; otherwise the i18n
+ * default for the field. `overrides` is `crmConfig.builtinFieldLabels`.
+ */
+export const resolveBuiltinFieldLabel = (
+  overrides: Record<string, string> | null | undefined,
+  fieldId: string,
+  t: (key: string) => string
+): string => {
+  const meta = BUILTIN_CUSTOMER_FIELDS[fieldId];
+  if (!meta) return fieldId;
+  const override = overrides?.[fieldId];
+  if (typeof override === 'string' && override.trim() !== '') return override;
+  return t(meta.labelKey);
+};
+
+/**
  * Default customer record layout — used when the CRM config predates
  * the customerRecord feature (existing clients). Mirrors
  * seed-ops-config DEFAULT_CRM_CONFIG.customerRecord.
