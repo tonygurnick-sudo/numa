@@ -74,7 +74,9 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
         query (str, required): Natural language search query
         user_intent (str, required): What the user is trying to accomplish
         max_results (int, default=6, max=15): Number of results
-        kb_id (str, default="company"): KB to query - "company" or user KB UUID
+        kb_id (str, default="company"): KB to query — "company" (Numa Files
+            company folder), a user/folder KB UUID, or "sharepoint" (Q Business
+            SharePoint connector, when provisioned for the workspace).
         summarise_results (bool, default=False): When true, summarize retrieved chunks
             using Nova Lite. Default is off — raw chunks are returned so the calling
             agent can reason over the original retrieved content.
@@ -178,24 +180,27 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
 def _query_single_kb(
     query: str, max_results: int, kb_id: str, id_token: str = ""
 ) -> Dict[str, Any]:
-    """Query a single knowledge base (Q Business or Bedrock)."""
-    # Determine which backend to use
-    # User KBs (non-company) MUST use Bedrock (Q Business doesn't support metadata filtering)
-    provider = PREFERRED_KNOWLEDGE_BASE
-    if kb_id != "company" and provider == "q":
-        if BEDROCK_KNOWLEDGE_BASE_ID:
-            logger.info("Using Bedrock for user KB (Q doesn't support kb isolation)")
-            provider = "bedrock"
-        else:
-            raise ValueError("User KBs require Bedrock KB which is not configured")
+    """Query a single knowledge base.
 
-    # Query the appropriate backend
-    if provider == "q" and QB_APPLICATION_ID and QB_RETRIEVER_ID:
+    Routing:
+    - kb_id == "sharepoint" → Q Business (queries the SharePoint connector +
+      any other data sources attached to the QB retriever, with per-user ACL
+      filtering via the federated OIDC session). Only available when the
+      client has provisionQResources: true.
+    - kb_id == "company" or any UUID → Bedrock KB with metadata filter on
+      kb_id (tenant_id + kb_id, isolated per Numa Files folder).
+    """
+    if kb_id == "sharepoint":
+        if not (QB_APPLICATION_ID and QB_RETRIEVER_ID):
+            raise ValueError(
+                "SharePoint KB is not enabled for this workspace. "
+                "Query a Numa Files folder by id, or use kb_id='company'."
+            )
         return _query_qbusiness(query, max_results, id_token=id_token)
-    elif provider == "bedrock" and BEDROCK_KNOWLEDGE_BASE_ID:
+
+    if BEDROCK_KNOWLEDGE_BASE_ID:
         return _query_bedrock(query, max_results, kb_id)
-    else:
-        raise ValueError(f"Knowledge base provider '{provider}' not configured")
+    raise ValueError("Bedrock knowledge base is not configured")
 
 
 def _handle_all_kbs_query(

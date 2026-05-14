@@ -8,7 +8,14 @@ import { UserKB, KnowledgeBase } from '../Services/knowledgeBaseService';
 import i18n from '../i18n';
 import { useAuth } from './AuthProvider';
 import { useNumaRequest } from './NumaRequestContext';
-import { COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SYSTEM_KB_IDS, sortKnowledgeBases } from '../constants/knowledgeBase';
+import {
+  COMPANY_KB_ID,
+  NUMA_SUPPORT_KB_ID,
+  SHAREPOINT_KB_ID,
+  SYSTEM_KB_IDS,
+  sortKnowledgeBases,
+} from '../constants/knowledgeBase';
+import { getFlag } from '../utils/featureFlags';
 import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 const KB_LIST_SWR_KEY = 'kbList';
@@ -51,6 +58,21 @@ function getDefaultNumaSupportKB(): UserKB {
   return {
     kb_id: NUMA_SUPPORT_KB_ID,
     kb_name: i18n.t('knowledgeBase:selector.numaSupportKbName'),
+    role: 'VIEWER',
+  };
+}
+
+/**
+ * SharePoint KB (Q Business with identity-aware ACL filtering) — only for
+ * workspaces with `provisionQResources: true` AND a SharePoint connector wired
+ * into their Q Business application. Most workspaces do NOT have this; the
+ * standard SharePoint access path for them is the Pipedream `sharepoint-*`
+ * integration, which is unrelated.
+ */
+function getDefaultSharePointKB(): UserKB {
+  return {
+    kb_id: SHAREPOINT_KB_ID,
+    kb_name: i18n.t('knowledgeBase:selector.sharepointKbName'),
     role: 'VIEWER',
   };
 }
@@ -180,12 +202,20 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       // is temporarily stale or missing.
       const hasCompanyKb = sanitizedKbs.some((kb) => kb.kb_id === COMPANY_KB_ID);
       const hasNumaSupportKb = sanitizedKbs.some((kb) => kb.kb_id === NUMA_SUPPORT_KB_ID);
+      const hasSharepointKb = sanitizedKbs.some((kb) => kb.kb_id === SHAREPOINT_KB_ID);
       const systemKbsToAdd: UserKB[] = [];
       if (!hasCompanyKb) {
         systemKbsToAdd.push(getDefaultCompanyKB());
       }
       if (!hasNumaSupportKb) {
         systemKbsToAdd.push(getDefaultNumaSupportKB());
+      }
+      // SharePoint is only surfaced for workspaces where Q Business is provisioned
+      // (i.e. the customer has a SharePoint connector indexed via Q). Without the
+      // flag, the kb_id="sharepoint" route returns an error from the backend, so
+      // hiding it from the picker keeps the UX honest.
+      if (!hasSharepointKb && getFlag('PROVISION_Q_RESOURCES')) {
+        systemKbsToAdd.push(getDefaultSharePointKB());
       }
       const augmentedKbs: UserKB[] = sortKnowledgeBases([...systemKbsToAdd, ...sanitizedKbs]);
 

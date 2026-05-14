@@ -73,6 +73,9 @@ export const ChatSettingsPanel = ({
     if (kb.kb_id === 'company') {
       return t('input.kb.companyName', { defaultValue: kb.kb_name || kb.kb_id });
     }
+    if (kb.kb_id === 'sharepoint') {
+      return t('input.kb.sharepointName', { defaultValue: kb.kb_name || 'SharePoint' });
+    }
     return kb.kb_name || kb.kb_id;
   };
 
