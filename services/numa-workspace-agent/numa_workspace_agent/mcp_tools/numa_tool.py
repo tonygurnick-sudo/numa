@@ -165,7 +165,7 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
         "user_intent": user_intent,
         "max_results": max_results,
         "kb_id": raw_kb_id,
-        "summarise_results": params.get("summarise_results", True),
+        "summarise_results": params.get("summarise_results", False),
         "all_kbs": params.get("all_kbs", False),
     }
 

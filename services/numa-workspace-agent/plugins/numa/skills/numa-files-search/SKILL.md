@@ -47,7 +47,7 @@ Search inside the user's Numa Files folders, with optional AI summarization.
 | `user_intent`       | Yes      | -         | What the user is trying to accomplish                                                                                       |
 | `max_results`       | No       | 6         | Max results (max: 15)                                                                                                       |
 | `kb_id`             | No       | "company" | Folder ID: `"company"` (Company Files), a folder UUID, or `"sharepoint"` (workspace's connected SharePoint, when available) |
-| `summarise_results` | No       | true      | Summarize results (default)                                                                                                 |
+| `summarise_results` | No       | false     | Set to true to summarize results via Nova Lite. Default returns raw retrieved chunks (higher fidelity for reasoning).       |
 | `all_kbs`           | No       | false     | Query all enabled folders and synthesize results                                                                            |
 | `output_file`       | No       | -         | Write results to file instead of returning inline                                                                           |
 
@@ -114,19 +114,22 @@ JSON response with:
 
 ### When to Use Summarized vs Raw Results
 
-**Use AI Summary (default)** when:
-
-- User wants a quick answer or conceptual understanding
-- Explaining policies, procedures, or general information
-- First pass to understand what's available in the user's folders
-- User is non-technical or wants digestible information
-
-**Use Raw Results (`summarise_results: false`)** when:
+**Use Raw Results (default)** when:
 
 - User needs exact values: specific numbers, limits, thresholds, dates
 - Extracting code examples, API parameters, or technical specifications
 - User will quote or cite specific passages
 - Creating documentation or reports requiring precision
+- Any task where fidelity matters more than digestibility — raw chunks are strictly higher-fidelity input for reasoning
+
+**Use AI Summary (`summarise_results: true`)** when:
+
+- User explicitly asks for a paraphrased digest or "in plain English" summary
+- Audience is non-technical and a wall of raw chunks would be unhelpful
+- You're confident the question is purely conceptual and exact values aren't needed
+
+Raw results add one Bedrock retrieval; opting into summarisation adds a second Nova Lite pass on top, which has historically caused read-timeout hangs in customer sessions on long results. Default to raw unless you have a clear reason not to.
+
 - Troubleshooting with exact error codes or configuration details
 - User explicitly asks for "exact", "verbatim", or "word-for-word" information
 
