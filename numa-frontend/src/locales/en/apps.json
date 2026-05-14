@@ -123,6 +123,7 @@
       "favorites": "Your favorite apps at a glance",
       "all": "Get started uncovering insights from your data with Numa."
     },
+    "viewJobHistory": "Job History",
     "header": {
       "summary": "{{appsCount}} apps across {{categoriesCount}} categories",
       "stats": {

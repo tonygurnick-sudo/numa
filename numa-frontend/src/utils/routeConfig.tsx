@@ -141,14 +141,9 @@ export const ROUTE_CONFIG = [
   {
     path: '/job-history',
     element: () => <JobHistoryManager />,
-    nav: {
-      label: 'Job History',
-      labelKey: 'nav.items.jobHistory',
-      icon: 'bi bi-clock-history',
-      section: 'timeline',
-      sectionKey: 'nav.sections.timeline',
-      order: 6,
-    },
+    // Job history no longer has a main-nav entry — it's surfaced as a button
+    // in the Apps page header (Dash.tsx). The route stays mounted for the
+    // button + direct URL.
   },
   // Legacy scheduling route — kept for backward compatibility, no longer in nav
   {
