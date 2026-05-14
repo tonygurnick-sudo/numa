@@ -46,6 +46,7 @@ USER_POOL_ID = os.getenv("USER_POOL_ID", "")
 PREFERRED_KNOWLEDGE_BASE = os.getenv("PREFERRED_KNOWLEDGE_BASE", "bedrock").lower()
 QB_APPLICATION_ID = os.getenv("Q_APPLICATION_ID")
 QB_RETRIEVER_ID = os.getenv("Q_RETRIEVER_ID")
+QBUSINESS_USER_ROLE_ARN = os.getenv("QBUSINESS_USER_ROLE_ARN", "")
 BEDROCK_KNOWLEDGE_BASE_ID = os.getenv("BEDROCK_KNOWLEDGE_BASE_ID")
 FAST_MODEL_ID = os.getenv("FAST_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
 SYSTEM_KB_IDS = {"company", "numa-support"}
@@ -118,6 +119,9 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     allowed_kbs = params.get("__allowed_kbs")
     allowed_kbs_with_names = params.get("__allowed_kbs_with_names", [])
 
+    # Raw Cognito JWT — required by _query_qbusiness for OIDC-federated calls.
+    id_token = params.get("__id_token", "")
+
     # Handle all_kbs mode: query all enabled KBs
     if all_kbs:
         return _handle_all_kbs_query(
@@ -126,6 +130,7 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
             max_results=max_results,
             summarise_results=summarise_results,
             allowed_kbs_with_names=allowed_kbs_with_names,
+            id_token=id_token,
         )
 
     # Single KB mode: validate KB access
@@ -142,7 +147,7 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # Query single KB
-    kb_result = _query_single_kb(query, max_results, kb_id)
+    kb_result = _query_single_kb(query, max_results, kb_id, id_token=id_token)
 
     # Combine content
     all_content = "\n\n".join(kb_result["content_pieces"])
@@ -170,7 +175,9 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _query_single_kb(query: str, max_results: int, kb_id: str) -> Dict[str, Any]:
+def _query_single_kb(
+    query: str, max_results: int, kb_id: str, id_token: str = ""
+) -> Dict[str, Any]:
     """Query a single knowledge base (Q Business or Bedrock)."""
     # Determine which backend to use
     # User KBs (non-company) MUST use Bedrock (Q Business doesn't support metadata filtering)
@@ -184,7 +191,7 @@ def _query_single_kb(query: str, max_results: int, kb_id: str) -> Dict[str, Any]
 
     # Query the appropriate backend
     if provider == "q" and QB_APPLICATION_ID and QB_RETRIEVER_ID:
-        return _query_qbusiness(query, max_results)
+        return _query_qbusiness(query, max_results, id_token=id_token)
     elif provider == "bedrock" and BEDROCK_KNOWLEDGE_BASE_ID:
         return _query_bedrock(query, max_results, kb_id)
     else:
@@ -197,6 +204,7 @@ def _handle_all_kbs_query(
     max_results: int,
     summarise_results: bool,
     allowed_kbs_with_names: List[Dict[str, str]],
+    id_token: str = "",
 ) -> Dict[str, Any]:
     """
     Query all enabled KBs sequentially and synthesize results.
@@ -231,7 +239,7 @@ def _handle_all_kbs_query(
 
         try:
             logger.info("Querying KB", kb_id=kb_id, kb_name=kb_name)
-            kb_result = _query_single_kb(query, max_results, kb_id)
+            kb_result = _query_single_kb(query, max_results, kb_id, id_token=id_token)
 
             # Add KB attribution to each content piece
             attributed_content = []
@@ -322,8 +330,64 @@ def _handle_all_kbs_query(
     }
 
 
-def _query_qbusiness(query: str, max_results: int) -> Dict[str, Any]:
-    """Query Q Business knowledge base."""
+def _get_authenticated_qbusiness_client(id_token: str):
+    """
+    Build a Q Business client federated with the calling user's Cognito identity.
+
+    The Q Business application is configured as `AWS_IAM_IDP_OIDC` with the
+    client's Cognito User Pool registered as the OIDC provider — so
+    `search_relevant_content` requires a session that carries the user's email
+    claim in order to apply the per-document SharePoint ACLs that the
+    identityCrawler indexed at sync time. We get that by exchanging the raw
+    Cognito ID token for credentials via AssumeRoleWithWebIdentity against the
+    pre-deployed `numa-<client>-standard-role` (whose trust policy is keyed to
+    the Cognito User Pool and audience).
+
+    Returns None if the env isn't configured or the assume-role fails; callers
+    must handle that by short-circuiting with a clear is_error result rather
+    than retrying with the Lambda service-role creds.
+    """
+    if not id_token:
+        logger.warning(
+            "No user JWT available for Q Business call — caller is unauthenticated"
+        )
+        return None
+    if not QBUSINESS_USER_ROLE_ARN:
+        logger.error(
+            "QBUSINESS_USER_ROLE_ARN is not configured; cannot federate Q Business call"
+        )
+        return None
+
+    try:
+        sts = prm_client("sts", region=REGION)
+        resp = sts.assume_role_with_web_identity(
+            RoleArn=QBUSINESS_USER_ROLE_ARN,
+            RoleSessionName="numa-workspace-agent-qbusiness",
+            WebIdentityToken=id_token,
+            DurationSeconds=3600,
+        )
+        creds = resp["Credentials"]
+        return prm_client(
+            "qbusiness",
+            region=REGION,
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        )
+    except Exception as exc:
+        logger.error(
+            "AssumeRoleWithWebIdentity failed for Q Business",
+            role_arn=QBUSINESS_USER_ROLE_ARN,
+            error=str(exc),
+            exc_info=True,
+        )
+        return None
+
+
+def _query_qbusiness(
+    query: str, max_results: int, id_token: str = ""
+) -> Dict[str, Any]:
+    """Query Q Business knowledge base as the calling user (per-doc ACL filtering)."""
     start_time = time.time()
     logger.info(
         "Starting Q Business query",
@@ -331,9 +395,17 @@ def _query_qbusiness(query: str, max_results: int) -> Dict[str, Any]:
         retriever_id=QB_RETRIEVER_ID,
         query_length=len(query),
         max_results=max_results,
+        federated=bool(id_token),
     )
 
-    qb_client = prm_client("qbusiness", region=REGION)
+    qb_client = _get_authenticated_qbusiness_client(id_token)
+    if qb_client is None:
+        raise PermissionError(
+            "Q Business knowledge base requires a logged-in user — agent cannot "
+            "query it without forwarding the caller's Cognito JWT. If this is a "
+            "scheduled / system run, the SharePoint KB is unavailable; use a "
+            "Bedrock folder KB instead."
+        )
 
     resp = qb_client.search_relevant_content(
         applicationId=QB_APPLICATION_ID,

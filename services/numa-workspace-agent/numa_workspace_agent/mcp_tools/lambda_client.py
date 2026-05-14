@@ -206,6 +206,7 @@ def invoke_workspace_tool(
         "user_sub": os.environ.get("NUMA_USER_SUB", ""),
         "user_email": os.environ.get("NUMA_USER_EMAIL", ""),
         "user_name": os.environ.get("NUMA_USER_NAME", ""),
+        "id_token": os.environ.get("NUMA_USER_ID_TOKEN", ""),
         "conversation_id": os.environ.get("NUMA_CONVERSATION_ID", ""),
         "external_user_id": os.environ.get("NUMA_EXTERNAL_USER_ID", ""),
         "params": params,

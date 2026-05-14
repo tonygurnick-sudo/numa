@@ -175,6 +175,9 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     )  # Full objects for attribution
     user_sub = event.get("user_sub", "")  # For server-side KB permission verification
     conversation_id = event.get("conversation_id", "")  # For workspace file S3 paths
+    id_token = event.get(
+        "id_token", ""
+    )  # Raw Cognito JWT for AssumeRoleWithWebIdentity
     params = event.get("params", {})
 
     # Auto-inject root KB (user_sub) into allowed_kbs so users can always
@@ -741,6 +744,8 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     # Pass allowed_kbs to handler for defensive validation
     params["__allowed_kbs"] = allowed_kbs
     params["__allowed_kbs_with_names"] = allowed_kbs_with_names
+    # Pass raw JWT for tools that need identity-aware AWS access (Q Business).
+    params["__id_token"] = id_token
     # Inject auth context for ops handlers (user_sub/email/name/groups from top-level event)
     if tool_name and tool_name.startswith("ops_"):
         params["user_sub"] = user_sub
