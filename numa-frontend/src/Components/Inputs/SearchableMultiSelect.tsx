@@ -69,6 +69,14 @@ export const SearchableMultiSelect = ({
     onChange([]);
   };
 
+  const selectAllVisible = () => {
+    if (disabled) return;
+    const next = Array.from(new Set([...selectedValues, ...filtered.map((o) => o.value)]));
+    onChange(next);
+  };
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every((o) => selectedSet.has(o.value));
+
   // Map values to labels for the selected pills (so we show "codespace" not "C0AG75CUDRR").
   const labelByValue = useMemo(() => {
     const m = new Map<string, string>();
@@ -95,6 +103,21 @@ export const SearchableMultiSelect = ({
         placeholder={resolvedPlaceholder}
         disabled={disabled}
       />
+
+      {!loading && options.length > 0 && (
+        <div className="d-flex justify-content-end mt-1">
+          <button
+            type="button"
+            className="select-all-action-link"
+            onClick={selectAllVisible}
+            disabled={disabled || filtered.length === 0 || allVisibleSelected}
+          >
+            {query.trim()
+              ? t('searchableMultiSelect.selectAllMatching', { defaultValue: 'Select all matching' })
+              : t('searchableMultiSelect.selectAll', { defaultValue: 'Select all' })}
+          </button>
+        </div>
+      )}
 
       <div
         className="border rounded mt-2 bg-white"
@@ -153,11 +176,7 @@ export const SearchableMultiSelect = ({
               })}
             </Form.Text>
             {!disabled && (
-              <button
-                type="button"
-                className="btn btn-link btn-sm p-0 small text-muted text-decoration-none"
-                onClick={clearAll}
-              >
+              <button type="button" className="select-all-action-link is-muted" onClick={clearAll}>
                 {t('searchableMultiSelect.clearAll', { defaultValue: 'Clear all' })}
               </button>
             )}

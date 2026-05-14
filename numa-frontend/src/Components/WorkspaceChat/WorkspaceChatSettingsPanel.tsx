@@ -577,53 +577,77 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     {t('workspaceSettings.noIntegrations')}
                   </div>
                 ) : (
-                  <div className="workspace-settings-list workspace-settings-integrations-list">
-                    {connectedIntegrations
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((conn) => {
-                        const iconSrc = getConnectionIcon(conn.id);
-                        const fallbackIcon = getConnectionFallbackIcon(conn.id);
-                        const displayName = getConnectionDisplayName(conn.id);
-                        const isEnabled = enabledConnections.includes(conn.id);
+                  <>
+                    {connectedIntegrations.length > 1 && (
+                      <div className="workspace-settings-kb-actions">
+                        <button
+                          type="button"
+                          className="workspace-settings-kb-action-link"
+                          onClick={() => setEnabledConnections(connectedIntegrations.map((c) => c.id))}
+                          disabled={isDisabled || connectedIntegrations.every((c) => enabledConnections.includes(c.id))}
+                        >
+                          {t('workspaceSettings.selectAll')}
+                        </button>
+                        {enabledConnections.length > 0 && (
+                          <button
+                            type="button"
+                            className="workspace-settings-kb-action-link"
+                            onClick={() => setEnabledConnections([])}
+                            disabled={isDisabled}
+                          >
+                            {t('workspaceSettings.clear')}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <div className="workspace-settings-list workspace-settings-integrations-list">
+                      {connectedIntegrations
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((conn) => {
+                          const iconSrc = getConnectionIcon(conn.id);
+                          const fallbackIcon = getConnectionFallbackIcon(conn.id);
+                          const displayName = getConnectionDisplayName(conn.id);
+                          const isEnabled = enabledConnections.includes(conn.id);
 
-                        return (
-                          <div key={conn.id} className="workspace-settings-integration-item">
-                            <div className="workspace-settings-integration-main">
-                              <span className="workspace-settings-integration-label">
-                                {iconSrc ? (
-                                  <img
-                                    src={iconSrc}
-                                    alt={displayName}
-                                    style={{ width: 18, height: 18, objectFit: 'contain' }}
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                    }}
-                                  />
+                          return (
+                            <div key={conn.id} className="workspace-settings-integration-item">
+                              <div className="workspace-settings-integration-main">
+                                <span className="workspace-settings-integration-label">
+                                  {iconSrc ? (
+                                    <img
+                                      src={iconSrc}
+                                      alt={displayName}
+                                      style={{ width: 18, height: 18, objectFit: 'contain' }}
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  ) : (
+                                    <i className={fallbackIcon} />
+                                  )}
+                                  {displayName}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className={`workspace-settings-integration-state ${isEnabled ? 'is-connected' : 'is-connect'}`}
+                                onClick={() => handleIntegrationToggle(conn.id, !isEnabled)}
+                                disabled={isDisabled}
+                              >
+                                {isEnabled ? (
+                                  <>
+                                    <Check size={12} />
+                                    {t('workspaceSettings.connected')}
+                                  </>
                                 ) : (
-                                  <i className={fallbackIcon} />
+                                  t('workspaceSettings.connect')
                                 )}
-                                {displayName}
-                              </span>
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              className={`workspace-settings-integration-state ${isEnabled ? 'is-connected' : 'is-connect'}`}
-                              onClick={() => handleIntegrationToggle(conn.id, !isEnabled)}
-                              disabled={isDisabled}
-                            >
-                              {isEnabled ? (
-                                <>
-                                  <Check size={12} />
-                                  {t('workspaceSettings.connected')}
-                                </>
-                              ) : (
-                                t('workspaceSettings.connect')
-                              )}
-                            </button>
-                          </div>
-                        );
-                      })}
-                  </div>
+                          );
+                        })}
+                    </div>
+                  </>
                 )}
               </div>
             )}

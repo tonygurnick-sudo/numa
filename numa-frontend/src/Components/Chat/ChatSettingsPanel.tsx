@@ -111,14 +111,51 @@ export const ChatSettingsPanel = ({
     }
   };
 
+  const handleKBSelectAll = () => {
+    setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
+  };
+  const handleKBClearAll = () => {
+    setEnabledKBIds([]);
+  };
+  const handleIntegrationSelectAll = () => {
+    setEnabledConnections(connectedIntegrations.map((c) => c.id));
+  };
+  const handleIntegrationClearAll = () => {
+    setEnabledConnections([]);
+  };
+
   return (
     <div className="chat-settings-panel">
       {/* Numa Files / folders section */}
       <div className="settings-section">
-        <Form.Label className="fw-semibold text-muted small text-uppercase mb-2">
-          <i className="bi bi-folder2-open me-2" />
-          {t('settingsPanel.knowledgeBases')}
-        </Form.Label>
+        <div className="d-flex align-items-center justify-content-between mb-2">
+          <Form.Label className="fw-semibold text-muted small text-uppercase mb-0">
+            <i className="bi bi-folder2-open me-2" />
+            {t('settingsPanel.knowledgeBases')}
+          </Form.Label>
+          {availableKBs.length > 1 && !isLoadingKBs && (
+            <div className="d-flex gap-2">
+              <button
+                type="button"
+                className="select-all-action-link"
+                disabled={isDisabled || enabledKBIds.length === availableKBs.length}
+                onClick={handleKBSelectAll}
+              >
+                {t('settingsPanel.selectAll')}
+              </button>
+              {enabledKBIds.length > 0 && (
+                <button
+                  type="button"
+                  className="select-all-action-link is-muted"
+                  disabled={isDisabled}
+                  onClick={handleKBClearAll}
+                >
+                  {t('settingsPanel.clearAll')}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         {isLoadingKBs ? (
           <div className="text-muted small d-flex align-items-center gap-2">
@@ -218,10 +255,34 @@ export const ChatSettingsPanel = ({
       {/* Integrations Section (only if feature enabled) */}
       {hasPipedreamFeature && (
         <div className="settings-section">
-          <Form.Label className="fw-semibold text-muted small text-uppercase mb-2">
-            <i className="bi bi-link-45deg me-2" />
-            {t('settingsPanel.integrations')}
-          </Form.Label>
+          <div className="d-flex align-items-center justify-content-between mb-2">
+            <Form.Label className="fw-semibold text-muted small text-uppercase mb-0">
+              <i className="bi bi-link-45deg me-2" />
+              {t('settingsPanel.integrations')}
+            </Form.Label>
+            {connectedIntegrations.length > 1 && !connectionsLoading && (
+              <div className="d-flex gap-2">
+                <button
+                  type="button"
+                  className="select-all-action-link"
+                  disabled={isDisabled || enabledConnections.length === connectedIntegrations.length}
+                  onClick={handleIntegrationSelectAll}
+                >
+                  {t('settingsPanel.selectAll')}
+                </button>
+                {enabledConnections.length > 0 && (
+                  <button
+                    type="button"
+                    className="select-all-action-link is-muted"
+                    disabled={isDisabled}
+                    onClick={handleIntegrationClearAll}
+                  >
+                    {t('settingsPanel.clearAll')}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {connectionsLoading ? (
             <div className="text-muted small d-flex align-items-center gap-2">

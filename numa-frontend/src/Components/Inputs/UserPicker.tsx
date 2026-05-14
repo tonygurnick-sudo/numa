@@ -12,6 +12,7 @@ interface UserPickerProps {
   placeholder?: string;
   disabled?: boolean;
   excludeIds?: string[];
+  allowSelectAll?: boolean;
 }
 
 /**
@@ -19,6 +20,10 @@ interface UserPickerProps {
  *
  * Multi-mode: selected users appear as removable pills above the input (visible while picking).
  * Single-mode: selected user shows inline; clicking clears and re-opens the dropdown.
+ *
+ * allowSelectAll (multi-mode only): shows a header row with "Select all" / "Clear all".
+ * Select-all operates on currently-visible options (respects search + excludeIds + isActive),
+ * so it composes with the search filter.
  */
 export function UserPicker({
   staff,
@@ -28,6 +33,7 @@ export function UserPicker({
   placeholder,
   disabled = false,
   excludeIds = [],
+  allowSelectAll = false,
 }: UserPickerProps): React.JSX.Element {
   const { t } = useTranslation('common');
   const [search, setSearch] = useState('');
@@ -80,6 +86,17 @@ export function UserPicker({
     onChange(selectedIds.filter((id) => id !== userId));
   };
 
+  const showSelectAll = allowSelectAll && mode === 'multi';
+  const handleSelectAll = () => {
+    if (options.length === 0) return;
+    const next = Array.from(new Set([...selectedIds, ...options.map((o) => o.id)]));
+    onChange(next);
+    setSearch('');
+  };
+  const handleClearAll = () => {
+    onChange([]);
+  };
+
   return (
     <div ref={wrapperRef} className="position-relative">
       {/* Selected users (pills) — above the input so dropdown doesn't cover them */}
@@ -123,8 +140,34 @@ export function UserPicker({
       {open && !disabled && (
         <div
           className="position-absolute w-100 bg-white border rounded shadow-sm mt-1"
-          style={{ zIndex: 1050, maxHeight: 200, overflowY: 'auto' }}
+          style={{ zIndex: 1050, maxHeight: 240, overflowY: 'auto' }}
         >
+          {showSelectAll && (options.length > 0 || selectedIds.length > 0) && (
+            <div
+              className="d-flex align-items-center justify-content-between px-3 py-1 border-bottom bg-light"
+              style={{ position: 'sticky', top: 0, zIndex: 1 }}
+            >
+              <button
+                type="button"
+                className="select-all-action-link"
+                disabled={options.length === 0}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleSelectAll}
+              >
+                {search.trim() ? t('userPicker.selectAllMatching') : t('userPicker.selectAll')}
+              </button>
+              {selectedIds.length > 0 && (
+                <button
+                  type="button"
+                  className="select-all-action-link is-muted"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleClearAll}
+                >
+                  {t('userPicker.clearAll')}
+                </button>
+              )}
+            </div>
+          )}
           {options.length === 0 ? (
             <div className="px-3 py-2 text-muted small">{t('userPicker.noResults')}</div>
           ) : (

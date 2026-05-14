@@ -218,7 +218,9 @@
     "integrations": "Integrations",
     "loadingIntegrations": "Loading integrations...",
     "noIntegrations": "No integrations connected. Visit the Integrations page to connect apps.",
-    "enableIntegrations": "Enable integrations to use during this chat"
+    "enableIntegrations": "Enable integrations to use during this chat",
+    "selectAll": "Select all",
+    "clearAll": "Clear all"
   },
   "fileUpload": {
     "csvWarning": "CSV support is limited when Data Analysis is off. Enable Data Analysis in chat tools to analyze CSV files.",

@@ -320,6 +320,7 @@ export function FolderSettingsDrawer({
                   placeholder={t('folderSettings.searchUsers')}
                   disabled={saving}
                   excludeIds={ownerSub ? [ownerSub] : []}
+                  allowSelectAll
                 />
               </div>
             )}
@@ -340,6 +341,7 @@ export function FolderSettingsDrawer({
                   placeholder={t('folderSettings.searchUsers')}
                   disabled={saving}
                   excludeIds={ownerSub ? [ownerSub] : []}
+                  allowSelectAll
                 />
               </div>
             )}
