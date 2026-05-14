@@ -37,6 +37,7 @@ import { getCachedUserProfile } from '../utils/userProfileCache';
 import { VersionDisplay } from './VersionDisplay';
 import { CAPABILITIES_CHANGED_EVENT } from '../utils/adminCapabilityGating';
 import { getFlag } from '../utils/featureFlags';
+import { useNotificationStream } from '../hooks/useNotificationStream';
 
 interface NavProps {
   isCollapsed?: boolean;
@@ -123,6 +124,14 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
   // Get user email from decoded token
   const userEmail = user?.decoded_tokens?.idToken?.email || 'user@example.com';
   const { numaGet } = useNumaRequest();
+  const schedulingEnabled = getFlag('SCHEDULING');
+  const { unreadCount, refreshUnreadCount } = useNotificationStream();
+
+  useEffect(() => {
+    if (schedulingEnabled) {
+      refreshUnreadCount(numaGet);
+    }
+  }, [schedulingEnabled, refreshUnreadCount, numaGet]);
 
   // Stale-while-revalidate: show cached profile instantly, then update if the
   // API returns something different.  This eliminates the "User" fallback flash.
@@ -305,6 +314,24 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
             </div>
           </div>
           <div className="d-flex align-items-center">
+            {schedulingEnabled && (
+              <button
+                type="button"
+                className="mobile-nav-notification-btn"
+                onClick={() => {
+                  navigate('/notifications');
+                  closeMobileDropdownForNavigation();
+                }}
+                aria-label={t('notifications.title')}
+              >
+                <Bell size={20} aria-hidden="true" />
+                {unreadCount > 0 && (
+                  <span className="mobile-nav-notification-badge" aria-hidden="true">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
+            )}
             <Button
               variant="link"
               className="navbar-toggler"
@@ -565,6 +592,22 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
                 <div className="user-name">{displayName}</div>
                 <div className="user-email">{userEmail}</div>
               </div>
+            )}
+            {schedulingEnabled && (
+              <button
+                type="button"
+                className={`user-notification-btn ${isNavActive(location.pathname, '/notifications') ? 'is-active' : ''}`}
+                onClick={() => navigate('/notifications')}
+                aria-label={t('notifications.title')}
+                title={t('notifications.title')}
+              >
+                <Bell size={18} aria-hidden="true" />
+                {unreadCount > 0 && (
+                  <span className="user-notification-badge" aria-hidden="true">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
             )}
           </div>
         </footer>
