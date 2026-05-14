@@ -261,10 +261,20 @@ Valid `statusType` values per zone type:
 
 #### search_tickets
 
+> **`boardId` is required — do not attempt the call without it.** Search is scoped per-board; there is no cross-board search. If the user hasn't told you which board they mean, call `list_boards` first and either pick the obvious one from context or ask them. Don't try `search_tickets` "to see what happens" — it just 400s and wastes a turn.
+
 | Parameter | Type   | Required | Description                                                                                                                                                                  |
 | --------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `query`   | string | Yes      | Search text. Matches `displayId` (e.g. `FEAT-010` or prefix like `FEAT`), `title`, or `description`. Multi-word queries use AND across words in any order, case-insensitive. |
-| `boardId` | string | Yes      | Board to search within. Cross-board search is not supported — if the user hasn't named a board, call `list_boards` first and ask, or scope per-board explicitly.             |
+| `boardId` | string | Yes      | Board to search within. If you don't already have it, run `list_boards` first.                                                                                               |
+
+**Example flow** when the user says _"find tickets about SSO"_ and you don't already know the board:
+
+```
+1. list_boards                       → returns user's accessible boards
+2. (pick obvious board from chat context, or ask: "Which board?")
+3. search_tickets(query="SSO", boardId=<id-or-name-from-step-2>)
+```
 
 #### create_ticket
 
@@ -410,17 +420,17 @@ A sprint's lifecycle is `planning -> active -> completed`. Activation requires a
 
 #### update_work_unit
 
-| Parameter              | Type   | Required                  | Description                                                                                                       |
-| ---------------------- | ------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `boardId`              | string | Yes                       | Board ID                                                                                                          |
-| `workUnitId`           | string | Yes                       | Work unit ID                                                                                                      |
-| `name`                 | string | No                        | New name                                                                                                          |
-| `goal`                 | string | No                        | New goal                                                                                                          |
-| `startDate`            | string | No                        | New start date                                                                                                    |
-| `endDate`              | string | No                        | New end date                                                                                                      |
-| `status`               | string | No                        | New status (planning / active / completed)                                                                        |
-| `capacity`             | number | No                        | New capacity                                                                                                      |
-| `targetZoneId`         | string | When activating           | Required when transitioning `planning -> active`. Which board zone the sprint runs in. Pass `targetZoneName` and the bridge resolves it. |
+| Parameter              | Type   | Required                  | Description                                                                                                                                                                                                                                                                                                                     |
+| ---------------------- | ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boardId`              | string | Yes                       | Board ID                                                                                                                                                                                                                                                                                                                        |
+| `workUnitId`           | string | Yes                       | Work unit ID                                                                                                                                                                                                                                                                                                                    |
+| `name`                 | string | No                        | New name                                                                                                                                                                                                                                                                                                                        |
+| `goal`                 | string | No                        | New goal                                                                                                                                                                                                                                                                                                                        |
+| `startDate`            | string | No                        | New start date                                                                                                                                                                                                                                                                                                                  |
+| `endDate`              | string | No                        | New end date                                                                                                                                                                                                                                                                                                                    |
+| `status`               | string | No                        | New status (planning / active / completed)                                                                                                                                                                                                                                                                                      |
+| `capacity`             | number | No                        | New capacity                                                                                                                                                                                                                                                                                                                    |
+| `targetZoneId`         | string | When activating           | Required when transitioning `planning -> active`. Which board zone the sprint runs in. Pass `targetZoneName` and the bridge resolves it.                                                                                                                                                                                        |
 | `rolloverToWorkUnitId` | string | When completing, optional | On `active -> completed`, where to roll incomplete tickets. `'next'` auto-resolves to the next planning sprint by order. Omit (or pass `'backlog'`) to send incomplete tickets back to the backlog zone. When set to a planning sprint, that sprint auto-activates into the same zone and incomplete tickets keep their stages. |
 
 **Sprint guidance for ticket operations:** Do NOT pass `workUnitId` on `update_ticket` or `create_ticket` when the destination is a board zone. The server derives it from the zone's active sprint. Explicit `workUnitId` on board-zone moves is ignored. `workUnitId` is only honoured when the ticket is being placed in a backlog zone (planning workflow).
