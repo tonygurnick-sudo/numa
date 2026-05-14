@@ -2,8 +2,9 @@
  * Native (non-Pipedream) data connectors that participate in the unified
  * Integrations catalog. Mirrors the user-facing entries in
  * `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts` —
- * limited to connectable connectors (Tier 3 contact-required entries are
- * marketing-only and excluded from the catalog).
+ * limited to self-service auth methods (OAuth, API key, PAT token). Tier 3
+ * contact-required and username/password entries are excluded — neither has
+ * a viable admin self-service flow.
  *
  * Used by the catalog endpoint in `admin-integration-settings` so the backend
  * can reason about native connectors without depending on the frontend bundle.
@@ -37,11 +38,6 @@ export const NATIVE_CONNECTORS = [
   'synergy',
   'workbench',
   'fergus',
-
-  // Username/password
-  'filemaker',
-  'flowingly',
-  'printiq',
 ] as const;
 
 export type NativeConnector = (typeof NATIVE_CONNECTORS)[number];

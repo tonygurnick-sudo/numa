@@ -101,6 +101,10 @@ function buildPickerEntries(
       // surfacing them in the admin picker just leads to a dead click. Discovery
       // of these belongs in marketing/docs, not in the add-integration modal.
       if (c.authType === 'contact-required') continue;
+      // Username/password connectors aren't viable for self-service: the
+      // credentials we'd collect at this step are user-level, not admin-level,
+      // and the supported auth methods are OAuth, API key, and PAT token.
+      if (c.authType === 'username-password') continue;
       out.push({
         key: c.id,
         name: c.displayName,
