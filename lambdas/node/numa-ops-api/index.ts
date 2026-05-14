@@ -1883,6 +1883,17 @@ const handleTickets = async (
     if (qp.priority) {
       filtered = filtered.filter((t) => t.priority === qp.priority);
     }
+    if (qp.search) {
+      const term = qp.search.trim().toLowerCase();
+      if (term) {
+        filtered = filtered.filter((t) => {
+          const title = String(t.title ?? '').toLowerCase();
+          const descHtml = String(t.description ?? '');
+          const descText = descHtml.replace(/<[^>]+>/g, ' ').toLowerCase();
+          return title.includes(term) || descText.includes(term);
+        });
+      }
+    }
 
     return jsonResponse(200, {
       tickets: filtered,
