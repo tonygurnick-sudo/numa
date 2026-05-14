@@ -615,6 +615,16 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       additionalPolicyStatements: adminMfaPolicy,
       route: { verb: 'POST', path: 'settings/mfa/validate-device' },
     });
+    // Device trust: clear (public — called mid-login when DEVICE_SRP fails with a stale device)
+    this.addLambdaFunction(this, 'admin-mfa-clear-device-trust', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/clear-device-trust' },
+    });
     // Device trust: batch validate (authenticated — called from Security tab to filter device list)
     this.addLambdaFunction(this, 'admin-mfa-validate-devices', {
       addAuthorizer: true,

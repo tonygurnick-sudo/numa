@@ -17,7 +17,13 @@ import type { S3Object, TableRow, SortColumn, SortDirection } from './KBFileExpl
 import { FileUploader } from '../FileUploader';
 import { NotificationModal } from '../NotificationModal';
 import FolderSelector from './FolderSelector';
-import { shouldShowLargeDataFileWarning, formatFileSize, getFileTypeCategory } from '../../utils/fileUtils';
+import {
+  shouldShowLargeDataFileWarning,
+  formatFileSize,
+  getFileTypeCategory,
+  getFileIconClass,
+  getFileIconColorClass,
+} from '../../utils/fileUtils';
 import type { FileTypeCategory } from '../../utils/fileUtils';
 import { listFoldersInKB, downloadFileFromS3 } from '../../utils/s3Utils';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -1248,9 +1254,13 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                   ) : (
                     <span className="finder-chevron-spacer" />
                   )}
-                  <i
-                    className={`bi ${isFolder ? 'bi-folder-fill finder-icon--folder' : 'bi-file-earmark finder-icon--file'} finder-icon`}
-                  />
+                  {isFolder ? (
+                    <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
+                  ) : (
+                    <i
+                      className={`${getFileIconClass(row.name)} finder-icon finder-icon--file ${getFileIconColorClass(row.name)}`}
+                    />
+                  )}
                   <span className="finder-name">{row.displayName || row.name}</span>
                 </div>
                 <div className="finder-row__meta finder-row__meta--type">

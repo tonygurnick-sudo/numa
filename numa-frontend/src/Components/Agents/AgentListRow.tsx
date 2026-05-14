@@ -1,5 +1,5 @@
 import { Badge } from 'react-bootstrap';
-import { Copy, Eye, EyeOff, Heart, MessageSquare, Share2, Trash2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, Heart, Pencil, Share2, Trash2 } from 'lucide-react';
 import { AgentAvatar } from './AgentAvatar';
 import type { AgentSummary } from '../../types/agents';
 import { useTranslation } from 'react-i18next';
@@ -52,11 +52,11 @@ export const AgentListRow = ({
     <div
       className={`d-flex align-items-center gap-3 p-2 px-3 border rounded-3 bg-white ${isHidden ? 'opacity-50' : ''}`}
       style={{ cursor: 'pointer', transition: 'all 0.15s' }}
-      onClick={() => onEdit?.(agent)}
+      onClick={() => onChat?.(agent)}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') onEdit?.(agent);
+        if (e.key === 'Enter') onChat?.(agent);
       }}
     >
       <AgentAvatar agent={agent} size={34} />
@@ -148,14 +148,14 @@ export const AgentListRow = ({
             <Trash2 size={14} />
           </button>
         )}
-        {onChat && (
+        {onEdit && (
           <button
             className="btn btn-sm btn-primary"
-            onClick={() => onChat(agent)}
+            onClick={() => onEdit(agent)}
             style={{ padding: '4px 10px', fontSize: '0.8rem' }}
           >
-            <MessageSquare size={13} className="me-1" />
-            {t('management.actions.chat')}
+            <Pencil size={13} className="me-1" />
+            {t('management.actions.edit')}
           </button>
         )}
       </div>

@@ -45,9 +45,9 @@ Always resolve in sequence using `configure_props`.
   - The `filename` prop (even though not marked optional in schema)
   - `stash_id="NEW"` in the `run_action` call to enable file stashing
 
-  Downloaded files are saved to `/workdir/outputs/integrations-results/__stash/{filename}` and are immediately available for reading or further processing.
+  Downloaded files land in `/workdir/tmp/integrations-results/__stash/{filename}` (scratch — hidden from the user's Files page) and are immediately available for reading or further processing. If the user asked for the file as a deliverable, `cp` it to `/workdir/outputs/`.
 
-- **File uploads accept workspace paths:** The `filePath` prop for `upload-file` accepts workspace paths (e.g., `/workdir/outputs/file.txt`) which are automatically converted to presigned URLs.
+- **File uploads accept workspace paths:** The `filePath` prop for `upload-file` accepts workspace paths (e.g., `/workdir/uploads/file.txt` or `/workdir/outputs/file.txt`) which are automatically converted to presigned URLs.
 
 - **Global vs site-scoped search:**
   - `search-files` searches across ALL sites (no siteId required)
@@ -152,6 +152,15 @@ fields/Modified gt '2024-01-01'
   "scope": "organization"
 }
 ```
+
+## Pagination — Follow `@odata.nextLink`, Never Iterate `$skip`
+
+For bulk Graph fetches via `proxy_request` (drive items, list items, users, etc.), follow the `@odata.nextLink` URL returned on each response until it's absent.
+
+- **Never iterate `$skip=0, 100, 200, ...` manually** — it's a linear scan that costs one approval + one round-trip per page.
+- **Built-in actions strip pagination tokens** — `@odata.nextLink` does not survive `run_action`. Use `proxy_request` directly for multi-page fetches.
+- **Decide your `$select` set up front** so you don't have to re-walk the same window with different fields.
+- **Use `$top` to control page size** (typically 200 for drive items, max 5000 for list items).
 
 ## Proxy API for Missing Operations
 

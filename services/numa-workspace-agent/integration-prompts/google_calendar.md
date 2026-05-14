@@ -21,7 +21,7 @@ Auth key is `googleCalendar` (camelCase):
   {"calendarId": "primary"}     // Wrong
   ```
 - **`orderBy="startTime"`:** Requires `singleEvents: true` or it will fail.
-- **`maxResults` default:** 250 events. Max 2500. Use pagination for more.
+- **`maxResults` default:** 250 events. Max 2500. For larger pulls, use `proxy_request` against `https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events` and follow `nextPageToken` (pass it back as `pageToken=...`) until it's absent. Built-in `list-events` strips `nextPageToken`, so it can't be paginated past one page. Never re-walk a date range from the start with different params — decide your full field set up front.
 
 ## Resolving Attendee Emails
 

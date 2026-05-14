@@ -81,6 +81,15 @@ Use `search-people` to find recent collaborators; use `search-contacts` for expl
 
 Use `orderBy` (e.g., `start/dateTime`) and `maxResults` to control results. The `filter` parameter also works for date range queries.
 
+## Pagination — Follow `@odata.nextLink`, Never Iterate `$skip`
+
+For bulk calendar fetches (e.g. a full year of `calendarView`), use `proxy_request` against the raw Graph endpoint and follow `@odata.nextLink` until it's absent.
+
+- **Never re-walk a date window from `$skip=0`.** If you discover you need an extra `$select` field after starting, that's expensive — decide the full `$select` set up front (e.g. `subject,start,end,attendees,organizer,location,isOnlineMeeting`) before issuing the first page.
+- **Never iterate `$skip=0, 100, 200, ...` manually.** Use `@odata.nextLink` instead.
+- **Built-in actions (`list-events`, etc.) strip pagination tokens** — `@odata.nextLink` does not survive `run_action`. Use `proxy_request` for multi-page fetches.
+- For `calendarView` specifically: query `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=...&endDateTime=...&$select=...&$top=200` and then follow the `@odata.nextLink` from each response.
+
 ## Event IDs Are Required for Updates/Deletes
 
 Get the event `id` (long base64 string) from `list-events` or `create-calendar-event` response, then pass it to `update-calendar-event` or `delete-calendar-event`.

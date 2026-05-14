@@ -432,6 +432,27 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) };
     }
 
+    // Clear device trust (public — called mid-login when DEVICE_SRP fails with a
+    // stale device). The device key is the secret (a Cognito-issued random UUID), so
+    // anyone holding it could already authenticate with it; allowing self-revoke
+    // pre-login lets the client recover from cross-tab / cross-session state drift
+    // where a DDB trust record outlives Cognito's view of the device.
+    // Returns 200 unconditionally to avoid leaking which keys exist.
+    if (method === 'POST' && /\/settings\/mfa\/clear-device-trust\/?$/.test(path)) {
+      const body = JSON.parse(event.body || '{}');
+      const deviceKey = body.deviceKey;
+      if (!deviceKey || typeof deviceKey !== 'string' || deviceKey.length > 256) {
+        return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ ok: false }) };
+      }
+      try {
+        await ddb.send(new DeleteCommand({ TableName: TABLE_NAME, Key: { setting: `device-trust#${deviceKey}` } }));
+      } catch {
+        // Swallow — caller is mid-login, can't recover from a delete failure and the
+        // local clearDeviceTrust() will still force MFA on next attempt.
+      }
+      return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) };
+    }
+
     // Validate device trust (public — called mid-login before tokens are available).
     // Reads the trust record and admin duration, returns { valid: true/false }. No sensitive data is leaked.
     if (method === 'POST' && /\/settings\/mfa\/validate-device\/?$/.test(path)) {

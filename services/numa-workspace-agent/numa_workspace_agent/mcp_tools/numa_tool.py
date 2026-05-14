@@ -38,11 +38,45 @@ from numa_workspace_agent.mcp_tools.s3_helpers import (
     sync_file_to_s3,
     upload_to_presigned_url,
 )
+from numa_workspace_agent.mcp_tools.schema_preview import build_schema_preview
 
 logger = structlog.get_logger()
 
 # Upload size limit for KB uploads (matches knowledge_base.py threshold for presigned URLs)
 PRESIGNED_URL_THRESHOLD = int(3.5 * 1024 * 1024)
+
+# Size threshold (compact JSON chars) above which numa_files query/list results
+# are spilled to a file and replaced with a schema-with-samples preview in the
+# tool response. Big KB returns (folders with hundreds of files, queries with
+# long snippets) otherwise dump verbatim into the model's context.
+_KB_INLINE_LIMIT = 5000
+_KB_RESULTS_DIR = Path("/workdir/tmp/numa-files")
+
+
+def _save_kb_result(result: Any, operation: str) -> str:
+    """Spill a large numa_files result to /workdir/tmp/numa-files/ and sync to S3."""
+    from datetime import datetime, timezone
+
+    _KB_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    file_path = _KB_RESULTS_DIR / f"{operation}-{timestamp}.json"
+    content = json.dumps(result, indent=2, default=str)
+    file_path.write_text(content)
+    sync_file_to_s3(str(file_path), content)
+    return str(file_path)
+
+
+def _kb_overflow_response(result: Any, operation: str) -> dict[str, Any]:
+    """Build the file-save + schema-preview response for an oversize KB result."""
+    file_path = _save_kb_result(result, operation)
+    schema = build_schema_preview(result)
+    schema_json = json.dumps(schema, indent=2, default=str)
+    return _ok(
+        f"{operation} returned a large result — full JSON saved to: {file_path}\n\n"
+        "Schema preview below (use jq or python on the full file to extract "
+        "specific fields):\n\n"
+        f"{schema_json}"
+    )
 
 
 # ── Helper: build MCP response ──────────────────────────────────────────────
@@ -131,7 +165,7 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
         "user_intent": user_intent,
         "max_results": max_results,
         "kb_id": raw_kb_id,
-        "summarise_results": params.get("summarise_results", True),
+        "summarise_results": params.get("summarise_results", False),
         "all_kbs": params.get("all_kbs", False),
     }
 
@@ -165,6 +199,7 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
         results_count = result.get(
             "results_count", result.get("total_results_count", 0)
         )
+        schema = build_schema_preview(result)
         return _ok(
             json.dumps(
                 {
@@ -172,17 +207,23 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
                     "message": f"Results written to {output_path}",
                     "file_path": str(output_path),
                     "results_count": results_count,
+                    "schema_preview": schema,
                 },
                 indent=2,
             )
         )
+
+    # Large results → spill to file + schema preview, keep context lean.
+    compact = json.dumps(result, default=str, separators=(",", ":"))
+    if len(compact) > _KB_INLINE_LIMIT:
+        return _kb_overflow_response(result, "query")
 
     return _ok(json.dumps(result, indent=2))
 
 
 FETCH_URL_FILE_THRESHOLD = 5000  # chars -- save to file if content exceeds this
 FETCH_URL_PREVIEW_LENGTH = 500  # chars -- inline preview when saving to file
-FETCH_URL_OUTPUT_DIR = Path("/workdir/outputs/web_fetch")
+FETCH_URL_OUTPUT_DIR = Path("/workdir/tmp/web_fetch")
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MiB cap on direct PDF downloads
 
 
@@ -435,14 +476,17 @@ async def _handle_extract_content_async(
     if not outputs_bucket:
         return _err("OUTPUTS_BUCKET_NAME not configured.")
 
-    # Compute the expected output S3 key (must match extract_content.py logic)
+    # Compute the expected output S3 key (must match extract_content.py logic).
+    # extract_content writes to /workdir/tmp/extracted_<file>.txt -- it's raw
+    # tool data the model reads back, not a deliverable, so it lives in tmp/
+    # and stays out of the user-facing Files page.
     filename_stem = Path(file_path).stem
     safe_filename = re.sub(r"[^a-zA-Z0-9_-]", "_", filename_stem)
     output_s3_key = (
         f"{_S3_PREFIX}/{user_sub}/conversations/{conversation_id}"
-        f"/outputs/extracted_{safe_filename}.txt"
+        f"/tmp/extracted_{safe_filename}.txt"
     )
-    output_workspace_path = f"{_WORKSPACE_ROOT}/outputs/extracted_{safe_filename}.txt"
+    output_workspace_path = f"{_WORKSPACE_ROOT}/tmp/extracted_{safe_filename}.txt"
 
     # Create S3 client for polling
     session = boto3.Session(
@@ -971,6 +1015,11 @@ async def _handle_kb_list(params: dict[str, Any]) -> dict[str, Any]:
     if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
         return _ok(json.dumps(result, indent=2))
 
+    # Large listings (folders with 100+ files) → spill to file + schema preview.
+    compact = json.dumps(result, default=str, separators=(",", ":"))
+    if len(compact) > _KB_INLINE_LIMIT:
+        return _kb_overflow_response(result, "list")
+
     return _ok(json.dumps(result, indent=2))
 
 
@@ -1482,10 +1531,14 @@ async def _handle_render(params: dict[str, Any]) -> dict[str, Any]:
 
     # Large content: save to file and sync to S3 so the frontend can
     # fetch it during streaming without waiting for end-of-turn sync.
+    # Lives under /workdir/tmp/ so the streaming-backing scratch file
+    # does not show up in the user-facing Files page (which lists only
+    # uploads/ and outputs/). tmp/ still syncs to S3 so the frontend
+    # can fetch by relative path the same way it does for outputs/.
     if len(content) > _RENDER_MAX_INLINE:
         from datetime import datetime, timezone
 
-        results_dir = Path("/workdir/outputs/render")
+        results_dir = Path("/workdir/tmp/render")
         results_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         ext = ".html" if render_type == "html" else ".json"

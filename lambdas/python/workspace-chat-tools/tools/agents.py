@@ -231,11 +231,13 @@ def _resolve_and_copy_reference_files(
             warnings.append(f"Failed to copy {file_path} to agent storage: {str(e)}")
             continue
 
-        # Look for extracted content file (e.g., outputs/extracted_document.txt)
+        # Look for extracted content file (e.g., tmp/extracted_document.txt).
+        # extract_content writes to tmp/ -- it's raw tool data, not a
+        # deliverable, so it does not show up in the Files page.
         extracted_content_key: Optional[str] = None
         stem = Path(filename).stem
         safe_stem = re.sub(r"[^a-zA-Z0-9_-]", "_", stem)
-        extracted_rel_path = f"outputs/extracted_{safe_stem}.txt"
+        extracted_rel_path = f"tmp/extracted_{safe_stem}.txt"
         extracted_source_key = _get_s3_key_for_workspace_file(
             extracted_rel_path, user_sub, conversation_id
         )

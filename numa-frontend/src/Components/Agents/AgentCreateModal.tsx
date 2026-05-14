@@ -1182,10 +1182,34 @@ export const AgentCreateModal = ({
                     {/* Team assignment — shown whenever the agent is not purely workspace-public. */}
                     {visibilityMode !== 'public' && teams.length > 0 && (
                       <Form.Group className="mb-3">
-                        <Form.Label className="fw-semibold">
-                          {t('createModal.teamAssignment.label')}
-                          {visibilityMode === 'team' && <span className="text-danger ms-1">*</span>}
-                        </Form.Label>
+                        <div className="d-flex align-items-center justify-content-between mb-1">
+                          <Form.Label className="fw-semibold mb-0">
+                            {t('createModal.teamAssignment.label')}
+                            {visibilityMode === 'team' && <span className="text-danger ms-1">*</span>}
+                          </Form.Label>
+                          {teams.length > 1 && (
+                            <div className="d-flex gap-2">
+                              <button
+                                type="button"
+                                className="select-all-action-link"
+                                disabled={saving || selectedTeamIds.size === teams.length}
+                                onClick={() => setSelectedTeamIds(new Set(teams.map((tm) => tm.teamId)))}
+                              >
+                                {t('createModal.teamAssignment.selectAll')}
+                              </button>
+                              {selectedTeamIds.size > 0 && (
+                                <button
+                                  type="button"
+                                  className="select-all-action-link is-muted"
+                                  disabled={saving}
+                                  onClick={() => setSelectedTeamIds(new Set())}
+                                >
+                                  {t('createModal.teamAssignment.clearAll')}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         <div className="d-flex gap-2 flex-wrap">
                           {teams.map((team) => {
                             const isSelected = selectedTeamIds.has(team.teamId);
@@ -1392,32 +1416,65 @@ export const AgentCreateModal = ({
                               {availableKBs.length === 0 ? (
                                 <small className="text-muted">{t('createModal.tools.kbAccess.noneAvailable')}</small>
                               ) : (
-                                availableKBs.map((kb) => (
-                                  <Form.Check
-                                    key={kb.kb_id}
-                                    type="checkbox"
-                                    id={`kb-select-${kb.kb_id}`}
-                                    label={
-                                      <span>
-                                        {kb.kb_name}
-                                        {kb.kb_id === 'company' && (
-                                          <span className="badge bg-secondary ms-2" style={{ fontSize: '0.7rem' }}>
-                                            {t('createModal.tools.kbAccess.defaultBadge')}
-                                          </span>
-                                        )}
-                                        {kb.is_shared && kb.kb_id !== 'company' && (
-                                          <span className="badge bg-info ms-2" style={{ fontSize: '0.7rem' }}>
-                                            {t('createModal.tools.kbAccess.sharedBadge')}
-                                          </span>
-                                        )}
-                                      </span>
-                                    }
-                                    checked={(formState.toolsConfig?.allowedKnowledgeBases ?? []).includes(kb.kb_id)}
-                                    disabled={saving}
-                                    onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
-                                    className="mb-2"
-                                  />
-                                ))
+                                <>
+                                  {availableKBs.length > 1 && (
+                                    <div className="d-flex gap-2 mb-2">
+                                      <button
+                                        type="button"
+                                        className="select-all-action-link"
+                                        disabled={
+                                          saving ||
+                                          (formState.toolsConfig?.allowedKnowledgeBases?.length ?? 0) ===
+                                            availableKBs.length
+                                        }
+                                        onClick={() =>
+                                          handleToolsChange(
+                                            'allowedKnowledgeBases',
+                                            availableKBs.map((kb) => kb.kb_id)
+                                          )
+                                        }
+                                      >
+                                        {t('createModal.teamAssignment.selectAll')}
+                                      </button>
+                                      {(formState.toolsConfig?.allowedKnowledgeBases?.length ?? 0) > 0 && (
+                                        <button
+                                          type="button"
+                                          className="select-all-action-link is-muted"
+                                          disabled={saving}
+                                          onClick={() => handleToolsChange('allowedKnowledgeBases', [])}
+                                        >
+                                          {t('createModal.teamAssignment.clearAll')}
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                  {availableKBs.map((kb) => (
+                                    <Form.Check
+                                      key={kb.kb_id}
+                                      type="checkbox"
+                                      id={`kb-select-${kb.kb_id}`}
+                                      label={
+                                        <span>
+                                          {kb.kb_name}
+                                          {kb.kb_id === 'company' && (
+                                            <span className="badge bg-secondary ms-2" style={{ fontSize: '0.7rem' }}>
+                                              {t('createModal.tools.kbAccess.defaultBadge')}
+                                            </span>
+                                          )}
+                                          {kb.is_shared && kb.kb_id !== 'company' && (
+                                            <span className="badge bg-info ms-2" style={{ fontSize: '0.7rem' }}>
+                                              {t('createModal.tools.kbAccess.sharedBadge')}
+                                            </span>
+                                          )}
+                                        </span>
+                                      }
+                                      checked={(formState.toolsConfig?.allowedKnowledgeBases ?? []).includes(kb.kb_id)}
+                                      disabled={saving}
+                                      onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
+                                      className="mb-2"
+                                    />
+                                  ))}
+                                </>
                               )}
                             </div>
                           )}

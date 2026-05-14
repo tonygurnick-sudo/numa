@@ -18,7 +18,13 @@ import type { S3Object, TableRow, SortColumn, SortDirection } from './KBFileExpl
 import { FileUploader } from '../FileUploader';
 import { NotificationModal } from '../NotificationModal';
 import FolderSelector from './FolderSelector';
-import { shouldShowLargeDataFileWarning, formatFileSize, getFileTypeCategory } from '../../utils/fileUtils';
+import {
+  shouldShowLargeDataFileWarning,
+  formatFileSize,
+  getFileTypeCategory,
+  getFileIconClass,
+  getFileIconColorClass,
+} from '../../utils/fileUtils';
 import type { FileTypeCategory } from '../../utils/fileUtils';
 import { listFoldersInKB, downloadFileFromS3 } from '../../utils/s3Utils';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -338,8 +344,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   const ensureKbLoaded = useCallback(
     (kbId: string) => {
+      // Always fire a background shallow refresh on expansion (SWR pattern).
+      // Hydration seeds kbFileStates from localStorage on mount, so a cache-miss
+      // guard would skip the fetch and never pick up server-side changes (e.g.
+      // a folder created from chat or another session would stay invisible).
+      // fetchKbFiles uses a functional setter that merges cleanly with existing
+      // state, so this is safe to call unconditionally.
+      fetchKbFiles(kbId);
       if (!kbFileStates.has(kbId)) {
-        fetchKbFiles(kbId);
         fetchKBDetails(kbId);
       }
     },
@@ -1988,9 +2000,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   ) : (
                     <span className="finder-chevron-spacer" />
                   )}
-                  <i
-                    className={`bi ${isSubfolder ? 'bi-folder-fill finder-icon--folder' : 'bi-file-earmark finder-icon--file'} finder-icon`}
-                  />
+                  {isSubfolder ? (
+                    <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
+                  ) : (
+                    <i
+                      className={`${getFileIconClass(row.name)} finder-icon finder-icon--file ${getFileIconColorClass(row.name)}`}
+                    />
+                  )}
                   <span className="finder-name">{row.displayName || row.name}</span>
                 </div>
                 <div className="finder-row__meta finder-row__meta--type">

@@ -17,6 +17,7 @@
     },
     "collapse": "Collapse agent",
     "collapseAria": "Collapse agent details",
+    "expandAria": "Expand agent details",
     "noDescription": "No description provided.",
     "labels": {
       "tools": "TOOLS",
@@ -143,7 +144,9 @@
     "teamAssignment": {
       "label": "Team assignment",
       "help": "Assign this agent to one or more teams.",
-      "helpTeam": "Select at least one team. Team members can chat with and edit this agent."
+      "helpTeam": "Select at least one team. Team members can chat with and edit this agent.",
+      "selectAll": "Select all",
+      "clearAll": "Clear all"
     },
     "timeSaved": {
       "label": "Estimated time saved",

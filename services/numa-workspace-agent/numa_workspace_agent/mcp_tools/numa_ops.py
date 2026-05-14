@@ -24,6 +24,7 @@ import structlog
 from claude_agent_sdk import tool
 from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
 from numa_workspace_agent.mcp_tools.s3_helpers import sync_file_to_s3
+from numa_workspace_agent.mcp_tools.schema_preview import build_schema_preview
 
 logger = structlog.get_logger()
 
@@ -203,12 +204,17 @@ def _build_summary(result: Any, operation: str) -> str | None:
 
 
 def _save_ops_result(result: Any, operation: str) -> str:
-    """Save full ops result to /workdir/outputs/ops/ and sync to S3.
+    """Save full ops result to /workdir/tmp/ops/ and sync to S3.
 
-    The file is uploaded to S3 immediately so the frontend can fetch it
-    during live streaming (before the full workspace sync runs).
+    Lives under /workdir/tmp/ rather than /workdir/outputs/ because this
+    is raw tool data the model uses for continuity, not a deliverable.
+    /workdir/outputs/ is the user-facing Files page; raw ops JSON should
+    not appear there. /workdir/tmp/ still syncs to S3 (root-level rglob
+    in s3_workspace.py catches it -- not in the protected_dirs exclusion
+    list) so the frontend can fetch it during live streaming and the
+    model retains access across compaction/restart.
     """
-    results_dir = Path("/workdir/outputs/ops")
+    results_dir = Path("/workdir/tmp/ops")
     results_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -374,10 +380,10 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
             if status == "denied":
                 return _ok(f"Operation denied by user: {operation}. {description}")
             if status == "timeout":
-                return _ok(
-                    f"Approval timed out for: {operation}. "
-                    "The user did not respond before the approval window expired. "
-                    "You can offer to try again if the user is ready."
+                return _err(
+                    f"Approval window expired for: {operation}. "
+                    "An approval card was shown to the user but they did not respond before it timed out. "
+                    "Do NOT retry this operation automatically. Wait for the user to ask before trying again."
                 )
 
         if (
@@ -463,11 +469,16 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
         # Compact JSON — no indent (saves tokens)
         result_text = json.dumps(result, default=str, separators=(",", ":"))
 
-        # Large results → save to file, return lightweight summary
+        # Large results → save to file, return schema-with-samples preview.
+        # Schema (<5KB) gives the model every key, types, array lengths, and
+        # example values so it can jq the file on disk for specific fields
+        # rather than Reading the whole thing.
         if len(result_text) > MAX_INLINE:
             file_path = _save_ops_result(result, operation)
             summary = _build_summary(result, operation)
             count = _count_items(result, operation)
+            schema = build_schema_preview(result)
+            schema_json = json.dumps(schema, indent=2, default=str)
             parts = [
                 f"Ops operation completed: {operation}",
                 f"Description: {description}",
@@ -478,7 +489,9 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                 parts.append(f"Items found: {count}")
             parts.append(f"\nFull results saved to: {file_path}")
             parts.append(
-                "Read the file with execute_script if you need specific details."
+                "Schema preview below (use jq or python on the full file to "
+                "extract specific fields):\n\n"
+                f"{schema_json}"
             )
             return _ok("\n".join(parts))
 

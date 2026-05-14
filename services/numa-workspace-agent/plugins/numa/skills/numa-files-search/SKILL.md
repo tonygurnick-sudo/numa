@@ -40,16 +40,28 @@ Search inside the user's Numa Files folders, with optional AI summarization.
 
 ### Parameters
 
-| Parameter           | Required | Default   | Description                                           |
-| ------------------- | -------- | --------- | ----------------------------------------------------- |
-| `operation`         | Yes      | -         | `"query"`                                             |
-| `query`             | Yes      | -         | Natural language search query                         |
-| `user_intent`       | Yes      | -         | What the user is trying to accomplish                 |
-| `max_results`       | No       | 6         | Max results (max: 15)                                 |
-| `kb_id`             | No       | "company" | Folder ID: `"company"` (Company Files) or folder UUID |
-| `summarise_results` | No       | true      | Summarize results (default)                           |
-| `all_kbs`           | No       | false     | Query all enabled folders and synthesize results      |
-| `output_file`       | No       | -         | Write results to file instead of returning inline     |
+| Parameter           | Required | Default   | Description                                                                                                                 |
+| ------------------- | -------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `operation`         | Yes      | -         | `"query"`                                                                                                                   |
+| `query`             | Yes      | -         | Natural language search query                                                                                               |
+| `user_intent`       | Yes      | -         | What the user is trying to accomplish                                                                                       |
+| `max_results`       | No       | 6         | Max results (max: 15)                                                                                                       |
+| `kb_id`             | No       | "company" | Folder ID: `"company"` (Company Files), a folder UUID, or `"sharepoint"` (workspace's connected SharePoint, when available) |
+| `summarise_results` | No       | false     | Set to true to summarize results via Nova Lite. Default returns raw retrieved chunks (higher fidelity for reasoning).       |
+| `all_kbs`           | No       | false     | Query all enabled folders and synthesize results                                                                            |
+| `output_file`       | No       | -         | Write results to file instead of returning inline                                                                           |
+
+### `kb_id="sharepoint"` — only for select workspaces (do not confuse with the Pipedream SharePoint integration)
+
+**Two completely separate things are both called "SharePoint" in this system. Do not mix them up.**
+
+1. **`kb_id="sharepoint"` (this skill)** — only exists on workspaces where the customer has paid for Amazon Q Business with a SharePoint data source indexed at the **workspace** level. Most workspaces do NOT have this. To check: look for `"sharepoint"` in `__allowed_kbs` for the current conversation. If it's not there, the option is unavailable — passing `kb_id="sharepoint"` will fail with an error. Just don't.
+
+2. **The Pipedream `sharepoint-*` integration actions** (`sharepoint-search-files`, `sharepoint-get-file`, etc., invoked via `mcp__integrations__run_action`) — this is the standard, widely-enabled path. Use it for any SharePoint work on a normal workspace, and for write operations (upload, create, move) on any workspace.
+
+**When `"sharepoint"` IS in `__allowed_kbs`:** prefer `kb_id="sharepoint"` for read / search / "find this content" intents — the query runs with the calling user's own SharePoint ACLs applied automatically (filtered server-side via Q Business identity federation, so the user only sees documents they can already see in SharePoint). Still use the Pipedream `sharepoint-*` actions for writes. For broad "search everything we know" intents, run both `kb_id="company"` and `kb_id="sharepoint"` (or set `all_kbs: true`).
+
+**When `"sharepoint"` is NOT in `__allowed_kbs`:** the workspace does not have Q Business SharePoint provisioned. Use the Pipedream `sharepoint-*` integration actions instead. Never pass `kb_id="sharepoint"` on this kind of workspace.
 
 ### Examples
 
@@ -68,7 +80,14 @@ mcp__numa__numa_tool(
   params={"operation": "query", "query": "project requirements", "user_intent": "find project specs", "kb_id": "abc-123-uuid"}
 )
 
-# Search all enabled folders at once
+# Search the connected SharePoint (ACL-filtered to what the caller can see)
+mcp__numa__numa_tool(
+  name="numa_files",
+  description="Searching SharePoint for the latest pricing deck",
+  params={"operation": "query", "query": "Q4 pricing deck", "user_intent": "find the latest SharePoint pricing deck", "kb_id": "sharepoint"}
+)
+
+# Search all enabled folders at once (includes SharePoint if enabled)
 mcp__numa__numa_tool(
   name="numa_files",
   description="Searching all folders for annual leave policy",
@@ -95,19 +114,22 @@ JSON response with:
 
 ### When to Use Summarized vs Raw Results
 
-**Use AI Summary (default)** when:
-
-- User wants a quick answer or conceptual understanding
-- Explaining policies, procedures, or general information
-- First pass to understand what's available in the user's folders
-- User is non-technical or wants digestible information
-
-**Use Raw Results (`summarise_results: false`)** when:
+**Use Raw Results (default)** when:
 
 - User needs exact values: specific numbers, limits, thresholds, dates
 - Extracting code examples, API parameters, or technical specifications
 - User will quote or cite specific passages
 - Creating documentation or reports requiring precision
+- Any task where fidelity matters more than digestibility — raw chunks are strictly higher-fidelity input for reasoning
+
+**Use AI Summary (`summarise_results: true`)** when:
+
+- User explicitly asks for a paraphrased digest or "in plain English" summary
+- Audience is non-technical and a wall of raw chunks would be unhelpful
+- You're confident the question is purely conceptual and exact values aren't needed
+
+Raw results add one Bedrock retrieval; opting into summarisation adds a second Nova Lite pass on top, which has historically caused read-timeout hangs in customer sessions on long results. Default to raw unless you have a clear reason not to.
+
 - Troubleshooting with exact error codes or configuration details
 - User explicitly asks for "exact", "verbatim", or "word-for-word" information
 

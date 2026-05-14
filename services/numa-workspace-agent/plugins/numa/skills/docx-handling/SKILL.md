@@ -660,7 +660,7 @@ mcp__numa__numa_tool(name="extract_content", description="Extracting content fro
 
 ```bash
 # Step 2: Convert extracted text to DOCX (local pandoc)
-pandoc /workdir/outputs/extracted_scanned_document.txt -o /workdir/outputs/document.docx
+pandoc /workdir/tmp/extracted_scanned_document.txt -o /workdir/outputs/document.docx
 ```
 
 ---

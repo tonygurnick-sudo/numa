@@ -22,7 +22,7 @@ Auth key is `googleDrive` (camelCase):
 
 - **Drive prop defaults to "My Drive" string:** The `drive` prop accepts either the literal string `"My Drive"` for personal drive, or a shared drive ID (e.g., `"0AExf2ajwdD-cUk9PVA"`) from `configure_props`.
 
-- **Downloading files requires stash_id:** Always include `stash_id="NEW"` when calling `google_drive-download-file`. The downloaded file will be saved to `/workdir/outputs/integrations-results/`.
+- **Downloading files requires stash_id:** Always include `stash_id="NEW"` when calling `google_drive-download-file`. The downloaded file lands in `/workdir/tmp/integrations-results/` (scratch — invisible to the user). If the user asked for the file as a deliverable, `cp` it to `/workdir/outputs/`.
 
 - **Google Workspace files need export format:** When downloading Google Docs, Sheets, or Slides, resolve `mimeType` via `configure_props` (with `fileId` set) to see available export formats. Common options:
   - `application/pdf`

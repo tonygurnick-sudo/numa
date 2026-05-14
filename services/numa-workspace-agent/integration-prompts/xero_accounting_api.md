@@ -1,5 +1,13 @@
 # Xero Accounting API Integration
 
+## Action Keys
+
+All action keys use the form `xero_accounting_api-{name}`. Do not invent or paraphrase action keys. If an operation you need is not named explicitly in this prompt, read `/workdir/tools/integrations/xero_accounting_api/_index.json` to find the exact key. Common keys that the model frequently gets wrong:
+
+- Create a sales invoice → `xero_accounting_api-xero-create-sales-invoice` (the `xero-` prefix is part of the key, not a typo)
+- Upload a file attachment → `xero_accounting_api-upload-file` (not `upload-file-to-xero`)
+- Direct REST passthrough → `xero_accounting_api-make-an-api-call`
+
 ## Essential First Step
 
 Before performing Xero operations, establish context:
@@ -80,7 +88,7 @@ mcp__integrations__run_action(
 )
 ```
 
-The PDF is saved to `/workdir/outputs/integrations-results/{invoiceId}.pdf`.
+The PDF lands in `/workdir/tmp/integrations-results/{invoiceId}.pdf` (scratch — hidden from the user's Files page). If the user asked for the PDF as a deliverable, `cp` it to `/workdir/outputs/`.
 
 ### Contact Finder Actions Use String Not Boolean
 
@@ -209,14 +217,15 @@ Supported endpoints: BankTransactions, BatchPayments, Contacts, CreditNotes, Inv
 
 ### Uploading File Attachments
 
+**Action key:** `xero_accounting_api-upload-file`. The variant `upload-file-to-xero` does not exist in Pipedream and will return 404.
+
 Use workspace paths directly in `filePathOrUrl` — they're automatically converted:
 
-```json
-{
-  "filePathOrUrl": "/workdir/uploads/receipt.pdf",
-  "documentType": "Invoices",
-  "documentId": "invoice-uuid-here"
-}
+```python
+mcp__integrations__run_action(
+  action_key="xero_accounting_api-upload-file",
+  props='{"xeroAccountingApi":{"authProvisionId":"auto"},"tenantId":"...","filePathOrUrl":"/workdir/outputs/invoice.pdf","documentType":"Invoices","documentId":"invoice-uuid-here"}'
+)
 ```
 
 ### Creating Invoices with New Contacts

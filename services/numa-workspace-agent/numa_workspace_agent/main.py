@@ -1061,6 +1061,26 @@ async def invocations(request: Request):
     conversation_id = body.get("conversationId") or str(uuid.uuid4())
     user_email = body.get("userEmail", "unknown")
 
+    # Pull the raw Cognito JWT (already signature-verified by the proxy). Downstream
+    # tools that hit identity-aware AWS services — currently Q Business via
+    # AssumeRoleWithWebIdentity — need the original token, not just the sub claim.
+    auth_header = (payload_headers or {}).get("authorization") or request.headers.get(
+        "authorization", ""
+    )
+    id_token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+    if id_token and user_email in ("", "unknown"):
+        try:
+            jwt_payload = id_token.split(".")[1]
+            padding = 4 - len(jwt_payload) % 4
+            if padding != 4:
+                jwt_payload += "=" * padding
+            user_email = (
+                json.loads(base64.urlsafe_b64decode(jwt_payload)).get("email")
+                or user_email
+            )
+        except Exception:
+            pass
+
     # Resolve agent type config (defaults to "numa-chat")
     agent_type_id = body.get("type", "numa-chat")
     agent_type_config = get_agent_type_config(agent_type_id)
@@ -1068,6 +1088,7 @@ async def invocations(request: Request):
     # Export user context to environment for tools (they read from env vars)
     os.environ["NUMA_USER_SUB"] = user_sub or "unknown"
     os.environ["NUMA_USER_EMAIL"] = user_email or ""
+    os.environ["NUMA_USER_ID_TOKEN"] = id_token
     os.environ["NUMA_CONVERSATION_ID"] = conversation_id
 
     logger.info(

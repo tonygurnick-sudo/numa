@@ -122,6 +122,47 @@ class TestDetectUpstreamErrorProxyRequest:
             assert has_error is False, f"HTTP {code} should not be an error"
 
 
+class TestDetectUpstreamErrorOutlookSentinel:
+    """microsoft_outlook-download-attachment returns sentinel filePath when
+    the upstream component fails to derive a filename. Verified live
+    2026-05-14 — the wrapper still reports success and silently overwrites
+    prior downloads at /workdir/tmp/integrations-results/undefined."""
+
+    def test_filepath_tmp_undefined(self):
+        result = {
+            "status": "success",
+            "result": {
+                "ret": {"contentType": False, "filePath": "/tmp/undefined"},
+                "exports": {
+                    "$filestash_uploads": [
+                        {"path": "undefined", "get_url": "https://x.example/u"}
+                    ]
+                },
+            },
+        }
+        has_error, msg = _detect_upstream_error(result)
+        assert has_error is True
+        assert msg is not None and "sentinel" in msg.lower()
+
+    def test_content_type_false_alone(self):
+        result = {"result": {"ret": {"contentType": False, "filePath": "/tmp/x.pdf"}}}
+        has_error, msg = _detect_upstream_error(result)
+        assert has_error is True
+
+    def test_real_filepath_not_flagged(self):
+        result = {
+            "result": {
+                "ret": {
+                    "contentType": "application/pdf",
+                    "filePath": "/tmp/invoice.pdf",
+                }
+            }
+        }
+        has_error, msg = _detect_upstream_error(result)
+        assert has_error is False
+        assert msg is None
+
+
 class TestDetectUpstreamErrorClean:
     """No false positives on successful payloads."""
 

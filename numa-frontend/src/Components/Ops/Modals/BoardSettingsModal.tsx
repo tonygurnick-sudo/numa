@@ -646,6 +646,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                       }
                       excludeIds={[...(team.createdBy ? [team.createdBy] : []), ...ownerIds]}
                       mode="multi"
+                      allowSelectAll
                     />
                   </div>
                 )}
