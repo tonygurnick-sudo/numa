@@ -189,7 +189,16 @@
   "agentsPanel": {
     "title": "Your Agents",
     "loading": "Loading agents...",
-    "empty": "No agents yet"
+    "empty": "No agents yet",
+    "noResults": "No agents match your search.",
+    "searchPlaceholder": "Search agents...",
+    "favoriteAria": "Favourite agent",
+    "unfavoriteAria": "Remove from favourites",
+    "sections": {
+      "favourites": "Favourites",
+      "personal": "Personal",
+      "company": "Company"
+    }
   },
   "settingsPanel": {
     "knowledgeBases": "Files",

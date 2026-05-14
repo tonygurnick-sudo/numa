@@ -815,10 +815,8 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 )}
               </div>
               <div className="workspace-settings-card-header-right">
-                {collapsedSections.chatUploads && (
-                  <span className="workspace-settings-collapsed-summary">
-                    {uploadsFiles.length > 0 ? `${uploadsFiles.length}` : t('workspaceSettings.noneSelected')}
-                  </span>
+                {collapsedSections.chatUploads && uploadsFiles.length === 0 && (
+                  <span className="workspace-settings-collapsed-summary">{t('workspaceSettings.noneSelected')}</span>
                 )}
                 {uploadsFiles.length > 0 && (
                   <span
@@ -905,10 +903,8 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 {outputFiles.length > 0 && <span className="workspace-settings-count-badge">{outputFiles.length}</span>}
               </div>
               <div className="workspace-settings-card-header-right">
-                {collapsedSections.outputFiles && (
-                  <span className="workspace-settings-collapsed-summary">
-                    {outputFiles.length > 0 ? `${outputFiles.length}` : t('workspaceSettings.noneSelected')}
-                  </span>
+                {collapsedSections.outputFiles && outputFiles.length === 0 && (
+                  <span className="workspace-settings-collapsed-summary">{t('workspaceSettings.noneSelected')}</span>
                 )}
                 {outputFiles.length > 0 && (
                   <span

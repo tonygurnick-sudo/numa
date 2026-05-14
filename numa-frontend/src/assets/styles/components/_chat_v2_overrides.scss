@@ -2155,6 +2155,105 @@
   margin-top: 0.1rem;
 }
 
+// Agents panel — search + sections + favourites overhaul
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-agents-search {
+  position: relative;
+  margin-bottom: 0.75rem;
+
+  .workspace-agents-search-icon {
+    position: absolute;
+    left: 0.6rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #71717a;
+    pointer-events: none;
+  }
+
+  .form-control {
+    padding-left: 1.85rem;
+  }
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-agents-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-agents-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-agents-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.3rem 0.45rem;
+  background: transparent;
+  border: none;
+  color: #52525b;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: #f4f4f5;
+  }
+
+  .workspace-agents-section-icon {
+    color: #71717a;
+  }
+
+  .workspace-agents-section-label {
+    flex: 1 1 auto;
+    text-align: left;
+  }
+
+  .workspace-agents-section-count {
+    color: #a1a1aa;
+    font-weight: 500;
+    font-size: 0.68rem;
+  }
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-agents-section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-agents-fav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  color: #a1a1aa;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+
+  &:hover {
+    color: #f59e0b;
+    background-color: #fffbeb;
+  }
+
+  &.is-fav {
+    color: #f59e0b;
+  }
+}
+
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-list {
   display: flex;
   flex-direction: column;

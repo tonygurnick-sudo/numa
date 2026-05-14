@@ -137,6 +137,20 @@
     "deleteFailed": "פאילהד טו דהלהטה כונבהרסאטיונ",
     "deleteAria": "דהלהטה כונבהרסאטיונ"
   },
+  "agentsPanel": {
+    "title": "יוור אגהנטס",
+    "loading": "לואדינג אגהנטס...",
+    "empty": "נו אגהנטס יהט",
+    "noResults": "נו אגהנטס מאטכח יוור סהארכח.",
+    "searchPlaceholder": "סהארכח אגהנטס...",
+    "favoriteAria": "פאבוריטה אגהנט",
+    "unfavoriteAria": "רהמובה פרומ פאבוריטהס",
+    "sections": {
+      "favourites": "פאבוריטהס",
+      "personal": "פהרסונאל",
+      "company": "כומפאני"
+    }
+  },
   "settingsPanel": {
     "knowledgeBases": "פילהס",
     "loadingKnowledgeBases": "לואדינג קנוולהדגה באסהס...",
