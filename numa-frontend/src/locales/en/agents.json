@@ -17,6 +17,7 @@
     },
     "collapse": "Collapse agent",
     "collapseAria": "Collapse agent details",
+    "expandAria": "Expand agent details",
     "noDescription": "No description provided.",
     "labels": {
       "tools": "TOOLS",
