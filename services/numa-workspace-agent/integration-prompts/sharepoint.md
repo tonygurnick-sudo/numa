@@ -153,6 +153,15 @@ fields/Modified gt '2024-01-01'
 }
 ```
 
+## Pagination — Follow `@odata.nextLink`, Never Iterate `$skip`
+
+For bulk Graph fetches via `proxy_request` (drive items, list items, users, etc.), follow the `@odata.nextLink` URL returned on each response until it's absent.
+
+- **Never iterate `$skip=0, 100, 200, ...` manually** — it's a linear scan that costs one approval + one round-trip per page.
+- **Built-in actions strip pagination tokens** — `@odata.nextLink` does not survive `run_action`. Use `proxy_request` directly for multi-page fetches.
+- **Decide your `$select` set up front** so you don't have to re-walk the same window with different fields.
+- **Use `$top` to control page size** (typically 200 for drive items, max 5000 for list items).
+
 ## Proxy API for Missing Operations
 
 Use `proxy_request` with `integration_slug: "sharepoint"` for operations not covered by built-in actions:

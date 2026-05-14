@@ -925,6 +925,7 @@ Important notes:
 - Use the annotations (readOnlyHint, destructiveHint) from schemas to gauge risk
 - The "authProvisionId":"auto" value is injected automatically — do not look up account IDs
 - Always read the action schema first to understand required and optional props
+- **Bulk / paginated fetches:** Use `proxy_request` directly and follow the API's pagination token (`@odata.nextLink` for Microsoft Graph, `nextPageToken` for Google APIs, `next` URLs for most REST APIs). NEVER iterate `$skip` / `offset` / `pageNumber` manually — that's a linear scan that costs one round-trip + one approval per page. Pipedream's built-in actions strip pagination tokens before returning, so you cannot paginate past page 1 via `run_action` — only `proxy_request` preserves them. Decide your full field selection (`$select` etc.) up front so you don't have to re-walk the same window with different params.
 """
 
     # Append per-integration prompt files if they exist

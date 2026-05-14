@@ -11,6 +11,15 @@ Before performing Outlook operations, establish context:
 
 The `find-email` action supports both `search` and `filter` params, but they **cannot be used together**. Additionally, combining `filter` with `orderBy` causes `InefficientFilter` errors. Use `search` for keyword lookups (supports `subject:`, `from:`, `to:` prefixes), or `filter` alone for OData queries like `contains(subject, 'keyword')`.
 
+## Pagination — Follow `@odata.nextLink`, Never Iterate `$skip`
+
+For bulk fetches that span more than one page, use `proxy_request` against the raw Graph endpoint (e.g. `https://graph.microsoft.com/v1.0/me/messages`) and follow the `@odata.nextLink` URL returned in each response. Keep following until the field is absent.
+
+- **Never iterate `$skip=0, 100, 200, ...` manually.** That's a linear scan that costs one approval + one round-trip per page (real example: 91 calls to walk one inbox).
+- **Built-in actions (`find-email`, etc.) strip pagination tokens** — `@odata.nextLink` does not survive `run_action`. If the user needs more than `find-email`'s default page, you have to use `proxy_request`.
+- **Decide your full `$select` field set up front** (e.g. `subject,from,receivedDateTime,bodyPreview,hasAttachments`). Re-walking the same window with a different `$select` doubles the cost.
+- **Use `$top` to control page size** (max 1000 for messages).
+
 ## Attachments Require Two-Step Lookup
 
 The `find-email` response includes `hasAttachments: true/false` but **NOT** the `attachments[]` array. To download attachments:

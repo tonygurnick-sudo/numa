@@ -57,6 +57,7 @@ Pipedream's Gmail actions default to returning only **20 messages**. Be precise 
 - **Time-bound requests need search filters.** If the user asks for "emails today" or "emails this week", use the `q` parameter with time operators (e.g., `newer_than:1d`, `newer_than:7d`) so the results genuinely reflect that time range.
 - You can increase `maxResults` (up to 500) when the user needs a broader view, but 20 is fine for casual "check my recent emails" requests — just describe it accurately.
 - If the response includes a `nextPageToken`, mention that more results are available.
+- **Pagination past page 1 requires `proxy_request`.** Pipedream's built-in Gmail actions strip `nextPageToken` from the response, so you can't follow it through `run_action`. For multi-page pulls, call `https://gmail.googleapis.com/gmail/v1/users/me/messages` via `proxy_request` and follow `nextPageToken` (pass it back as `pageToken=...`) until it's absent.
 
 ## Search Query Syntax
 
