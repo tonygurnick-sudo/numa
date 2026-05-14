@@ -1886,11 +1886,20 @@ const handleTickets = async (
     if (qp.search) {
       const term = qp.search.trim().toLowerCase();
       if (term) {
+        // Split on whitespace so multi-word queries match in any order
+        // ("network interruptions" and "interruptions network" both hit).
+        const words = term.split(/\s+/).filter(Boolean);
         filtered = filtered.filter((t) => {
+          const displayId = String(t.displayId ?? '').toLowerCase();
+          // Display-ID lookup: users naturally type "FEAT-010" expecting that
+          // ticket. A prefix match like "FEAT" also surfaces all tickets of
+          // that type, which is useful for narrowing by ticket-type prefix.
+          if (displayId && displayId.includes(term)) return true;
           const title = String(t.title ?? '').toLowerCase();
           const descHtml = String(t.description ?? '');
           const descText = descHtml.replace(/<[^>]+>/g, ' ').toLowerCase();
-          return title.includes(term) || descText.includes(term);
+          const haystack = `${title} ${descText}`;
+          return words.every((w) => haystack.includes(w));
         });
       }
     }

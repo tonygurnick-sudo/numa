@@ -261,10 +261,10 @@ Valid `statusType` values per zone type:
 
 #### search_tickets
 
-| Parameter | Type   | Required | Description                              |
-| --------- | ------ | -------- | ---------------------------------------- |
-| `query`   | string | Yes      | Search text (matches title, description) |
-| `boardId` | string | No       | Limit search to a specific board         |
+| Parameter | Type   | Required | Description                                                                                                                                                                  |
+| --------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`   | string | Yes      | Search text. Matches `displayId` (e.g. `FEAT-010` or prefix like `FEAT`), `title`, or `description`. Multi-word queries use AND across words in any order, case-insensitive. |
+| `boardId` | string | Yes      | Board to search within. Cross-board search is not supported — if the user hasn't named a board, call `list_boards` first and ask, or scope per-board explicitly.             |
 
 #### create_ticket
 
