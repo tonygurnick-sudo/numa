@@ -425,12 +425,20 @@ def save_result(
                 if get_url:
                     break
 
-            # Try multiple filename field names with UUID fallback
-            filename = (
-                upload.get("path")
-                or upload.get("fileName")
-                or f"download-{uuid.uuid4().hex[:8]}"
-            )
+            # Try multiple filename field names with UUID fallback.
+            # Pipedream's microsoft_outlook-download-attachment returns
+            # `path: "undefined"` (literal string) when its internal filename
+            # derivation fails — verified live 2026-05-14. Treat known
+            # sentinel values as missing so each download lands at a unique
+            # path instead of silently overwriting prior ones.
+            raw_name = upload.get("path") or upload.get("fileName")
+            if isinstance(raw_name, str) and raw_name.strip().lower() in (
+                "undefined",
+                "null",
+                "",
+            ):
+                raw_name = None
+            filename = raw_name or f"download-{uuid.uuid4().hex[:8]}"
 
             if not get_url:
                 continue
