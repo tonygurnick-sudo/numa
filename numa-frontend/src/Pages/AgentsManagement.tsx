@@ -953,113 +953,10 @@ export const AgentsManagement = () => {
 
   return (
     <div className="dashboard agents-page">
-      <PageHeader title={t('management.title')} subtitle={t('management.subtitle')} actions={headerActions} />
+      <PageHeader title={t('management.title')} subtitle={t('management.subtitle')} />
 
       <LayoutDashboard>
-        {agentsFeatureEnabled && (
-          <Container fluid className="px-0">
-            <Row className="g-3 mb-4">
-              {(
-                [
-                  { key: 'all' as FilterOption, label: t('management.stats.total'), count: totalAgents, Icon: Bot },
-                  {
-                    key: 'personal' as FilterOption,
-                    label: t('management.stats.personal'),
-                    count: personalCount,
-                    Icon: User,
-                  },
-                  { key: 'team' as FilterOption, label: t('management.stats.team'), count: teamCount, Icon: Users },
-                  {
-                    key: 'public' as FilterOption,
-                    label: t('management.stats.company'),
-                    count: publicCount,
-                    Icon: Store,
-                  },
-                  {
-                    key: 'favourites' as FilterOption,
-                    label: t('management.stats.favourites'),
-                    count: favouriteCount,
-                    Icon: Star,
-                  },
-                ] as const
-              ).map(({ key, label, count, Icon }) => (
-                <Col key={key}>
-                  <div
-                    className="p-3 rounded-3 border bg-white"
-                    role="button"
-                    onClick={() => setFilter(key)}
-                    style={{
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      borderColor: filter === key ? brandPrimaryColor : '#e8ecf2',
-                      borderWidth: filter === key ? '2px' : '1px',
-                      backgroundColor: filter === key ? brandPrimarySoftBackground : '#ffffff',
-                      boxShadow: filter === key ? `0 0 0 1px ${brandPrimaryColor}20` : 'none',
-                    }}
-                  >
-                    <div className="d-flex align-items-center justify-content-between">
-                      <div>
-                        <div className="text-muted small mb-1">{label}</div>
-                        <div className="fs-4 fw-bold" style={{ color: filter === key ? brandPrimaryColor : undefined }}>
-                          {count}
-                        </div>
-                      </div>
-                      <div
-                        className="rounded-circle d-flex align-items-center justify-content-center"
-                        style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
-                      >
-                        <Icon size={20} style={{ color: brandPrimaryColor }} aria-hidden="true" />
-                      </div>
-                    </div>
-                  </div>
-                </Col>
-              ))}
-            </Row>
-          </Container>
-        )}
-
-        {/* Admin Panel (admin users only) -- above tag filter */}
-        {agentsFeatureEnabled && user?.groups?.includes('admin') && (
-          <Container fluid className="px-0 mb-3">
-            <AgentAdminPanel onAgentDeleted={loadAgents} onAgentDuplicated={loadAgents} />
-          </Container>
-        )}
-
-        {/* Tag filter bar */}
-        {availableFilterTags.length > 0 && (
-          <Container fluid className="px-0 mb-3">
-            <CollapsibleTagRow
-              tags={availableFilterTags}
-              gap="0.35rem"
-              prefix={<span className="text-muted small fw-semibold me-1">{t('management.filters.tags')}</span>}
-              renderTag={(tag) => (
-                <Badge
-                  bg=""
-                  role="button"
-                  onClick={() => toggleTag(tag)}
-                  style={{
-                    backgroundColor: selectedTags.includes(tag) ? brandPrimaryColor : '#f0f0f0',
-                    color: selectedTags.includes(tag) ? brandPrimaryContrast : '#333',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                    padding: '0.35em 0.7em',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  {tag}
-                </Badge>
-              )}
-            />
-            {selectedTags.length > 0 && (
-              <Button variant="link" size="sm" className="p-0 text-muted mt-1" onClick={() => setSelectedTags([])}>
-                <X size={14} className="me-1" />
-                {t('management.filters.clearTags')}
-              </Button>
-            )}
-          </Container>
-        )}
-
-        {/* Upcoming Schedules Banner */}
+        {/* Upcoming Schedules Banner — top of page for at-a-glance context */}
         {schedulingEnabled && activeSchedules.length > 0 && (
           <Container fluid className="px-0 mb-4">
             <div
@@ -1132,6 +1029,113 @@ export const AgentsManagement = () => {
             </div>
           </Container>
         )}
+
+        {agentsFeatureEnabled && (
+          <Container fluid className="px-0">
+            <Row className="g-3 mb-4">
+              {(
+                [
+                  { key: 'all' as FilterOption, label: t('management.stats.total'), count: totalAgents, Icon: Bot },
+                  {
+                    key: 'personal' as FilterOption,
+                    label: t('management.stats.personal'),
+                    count: personalCount,
+                    Icon: User,
+                  },
+                  { key: 'team' as FilterOption, label: t('management.stats.team'), count: teamCount, Icon: Users },
+                  {
+                    key: 'public' as FilterOption,
+                    label: t('management.stats.company'),
+                    count: publicCount,
+                    Icon: Store,
+                  },
+                  {
+                    key: 'favourites' as FilterOption,
+                    label: t('management.stats.favourites'),
+                    count: favouriteCount,
+                    Icon: Star,
+                  },
+                ] as const
+              ).map(({ key, label, count, Icon }) => (
+                <Col key={key}>
+                  <div
+                    className="p-3 rounded-3 border bg-white"
+                    role="button"
+                    onClick={() => setFilter(key)}
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      borderColor: filter === key ? brandPrimaryColor : '#e8ecf2',
+                      borderWidth: filter === key ? '2px' : '1px',
+                      backgroundColor: filter === key ? brandPrimarySoftBackground : '#ffffff',
+                      boxShadow: filter === key ? `0 0 0 1px ${brandPrimaryColor}20` : 'none',
+                    }}
+                  >
+                    <div className="d-flex align-items-center justify-content-between">
+                      <div>
+                        <div className="text-muted small mb-1">{label}</div>
+                        <div className="fs-4 fw-bold" style={{ color: filter === key ? brandPrimaryColor : undefined }}>
+                          {count}
+                        </div>
+                      </div>
+                      <div
+                        className="rounded-circle d-flex align-items-center justify-content-center"
+                        style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
+                      >
+                        <Icon size={20} style={{ color: brandPrimaryColor }} aria-hidden="true" />
+                      </div>
+                    </div>
+                  </div>
+                </Col>
+              ))}
+            </Row>
+          </Container>
+        )}
+
+        {/* Admin Panel (admin users only) -- above tag filter */}
+        {agentsFeatureEnabled && user?.groups?.includes('admin') && (
+          <Container fluid className="px-0 mb-3">
+            <AgentAdminPanel onAgentDeleted={loadAgents} onAgentDuplicated={loadAgents} />
+          </Container>
+        )}
+
+        {/* Tools row — search / view / sort / create + tag filter — sits directly
+            above the agent list so the controls are co-located with what they filter. */}
+        <Container fluid className="px-0 mb-3">
+          {headerActions}
+          {availableFilterTags.length > 0 && (
+            <div className="mt-2">
+              <CollapsibleTagRow
+                tags={availableFilterTags}
+                gap="0.35rem"
+                prefix={<span className="text-muted small fw-semibold me-1">{t('management.filters.tags')}</span>}
+                renderTag={(tag) => (
+                  <Badge
+                    bg=""
+                    role="button"
+                    onClick={() => toggleTag(tag)}
+                    style={{
+                      backgroundColor: selectedTags.includes(tag) ? brandPrimaryColor : '#f0f0f0',
+                      color: selectedTags.includes(tag) ? brandPrimaryContrast : '#333',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      padding: '0.35em 0.7em',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {tag}
+                  </Badge>
+                )}
+              />
+              {selectedTags.length > 0 && (
+                <Button variant="link" size="sm" className="p-0 text-muted mt-1" onClick={() => setSelectedTags([])}>
+                  <X size={14} className="me-1" />
+                  {t('management.filters.clearTags')}
+                </Button>
+              )}
+            </div>
+          )}
+        </Container>
 
         <Container fluid className="px-0 pt-0 pb-4">
           {!agentsFeatureEnabled && (
