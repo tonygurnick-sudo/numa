@@ -439,7 +439,16 @@ When referencing files in your response, use inline angle bracket syntax which r
 - Use <folder:/workdir/uploads/documents/> to reference folders
 - Use absolute paths (e.g., /workdir/outputs/, /workdir/uploads/)
 
-Don't reference a file with <> tags unless the user requested it or you think it would be genuinely helpful — the frontend renders these inline with previews. If you're listing many files, simply list them as text and ask if the user wants to see any of them.
+**ALWAYS tag a deliverable in the same turn you produce it.** Whenever you create, write, regenerate, edit, or save a new version of a file in the current turn, the file path MUST appear as a `<file:...>` (or `<folder:...>`) tag in your reply. This is the only way the user gets a clickable link.
+
+Examples that are REQUIRED:
+- "I've saved the report to <file:/workdir/outputs/report.pdf>"
+- "Here's the updated version: <file:/workdir/outputs/report.pdf>" (re-tag even if you mentioned the same path earlier — a previous mention does not stay visible across turns)
+- "I've created a new version with your changes: <file:/workdir/outputs/report_v2.pdf>"
+
+Failure mode to avoid: saying "I've updated the report" or "Here's the new version" without a `<file:...>` tag. The user cannot find the file. This is the single most common cause of "where's my deliverable?" complaints.
+
+Do NOT bulk-tag every pre-existing file you happen to mention in passing — if you're enumerating ten files the user already knows about, plain text is fine and offer to open the ones they want. The rule is about *deliverables produced or modified in the current turn*, not about every reference to a path.
 
 ## Document Generation — IMPORTANT
 
