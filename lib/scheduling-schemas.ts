@@ -68,12 +68,38 @@ const validateCronExpression = (expression: string): boolean => {
 const VALID_TIMEZONES = new Set(Intl.supportedValuesOf('timeZone'));
 VALID_TIMEZONES.add('UTC');
 
+// Unified integrations shape — mirrors the workspace-agent wire format
+// (workspaceChatTypes.ts:IntegrationListItem). Each row carries a `method`
+// tag so the runner doesn't have to re-derive native vs. Pipedream at wire
+// time. Source of truth for the method-routing pattern is FEAT-143.
+export const IntegrationMethodSchema = z.enum(['native', 'pipedream']);
+export const IntegrationListItemSchema = z.object({
+  slug: z.string().min(1),
+  method: IntegrationMethodSchema,
+  name: z.string().min(1),
+});
+
 // Base schemas
 export const ScheduledRunConfigSchema = z.object({
   systemPrompt: z.string().optional(),
   modelId: z.string().optional(),
   enabledTools: z.array(z.string()).optional(),
+  /**
+   * @deprecated since FEAT-143 — use `enabledIntegrations` (method-tagged).
+   * Still read at run time for legacy schedule records; the runner derives
+   * the method per slug from live per-user auth state. Records written by
+   * older save paths continue to populate this; new writers SHOULD populate
+   * `enabledIntegrations` instead.
+   */
   enabledConnections: z.array(z.string()).optional(),
+  /**
+   * Per-schedule integrations override. Each row tagged with the delivery
+   * method (`native` vs `pipedream`) so the workspace agent registers the
+   * right MCP family. When absent the runner falls back to (a) the agent
+   * snapshot's `toolsConfig.enabledConnections` (legacy slug list), then
+   * (b) `enabledConnections` above — see runner `buildUnifiedIntegrationsPayload`.
+   */
+  enabledIntegrations: z.array(IntegrationListItemSchema).optional(),
   enabledKBIds: z.array(z.string()).optional(),
   autoToolsEnabled: z.boolean().optional(),
   webSearchEnabled: z.boolean().optional(),
@@ -553,6 +579,8 @@ export type CreateSchedulePayload = z.infer<typeof CreateSchedulePayloadSchema>;
 export type UpdateSchedulePayload = z.infer<typeof UpdateSchedulePayloadSchema>;
 export type ScheduledRunConfig = z.infer<typeof ScheduledRunConfigSchema>;
 export type AgentSnapshot = z.infer<typeof AgentSnapshotSchema>;
+export type IntegrationMethod = z.infer<typeof IntegrationMethodSchema>;
+export type IntegrationListItem = z.infer<typeof IntegrationListItemSchema>;
 export type EmailFilter = z.infer<typeof EmailFilterSchema>;
 export type GmailEventTrigger = z.infer<typeof GmailEventTriggerSchema>;
 export type PipedreamEventTrigger = z.infer<typeof PipedreamEventTriggerSchema>;

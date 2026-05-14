@@ -291,9 +291,7 @@ export const AutomationWorkflowBuilder = ({
       }
       setName(editingAutomation.label || '');
       setPrompt(editingAutomation.promptText || '');
-      // Cap at 100 even when loading legacy schedules saved with higher /
-      // unlimited values, so the input never displays an out-of-range value.
-      setMaxRuns(Math.min(100, Math.max(1, editingAutomation.maxRuns || 100)));
+      setMaxRuns(editingAutomation.maxRuns ?? 0);
       // emailNotifications has no UI surface in this builder — saves always
       // pass `true` (see handleSave below). The legacy `setEmailNotifications`
       // load that lived here was a rebase-merge artefact; the state pair

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { getFlag } from '../../../utils/featureFlags';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useToast } from '../../../Providers/ToastContext';
@@ -17,7 +18,6 @@ import type { RemoteFileItem } from '../../Files/FileContextMenu';
 import { RemoteBreadcrumbs } from './RemoteBreadcrumbs';
 import { RemoteProviderGrid } from './RemoteProviderGrid';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
-import { SynergyConnectModal } from './SynergyConnectModal';
 
 type ViewMode = 'list' | 'grid';
 
@@ -27,6 +27,7 @@ interface RemoteTabProps {
 
 export function RemoteTab({ onActionChange }: RemoteTabProps): React.JSX.Element {
   const { t } = useTranslation('files');
+  const navigate = useNavigate();
   const { numaGet } = useNumaRequest();
   const { showToast } = useToast();
 
@@ -39,13 +40,10 @@ export function RemoteTab({ onActionChange }: RemoteTabProps): React.JSX.Element
   const [enabledOAuthProviders, setEnabledOAuthProviders] = useState<OAuthProviderInfo[]>([]);
   const [oauthProviderStatuses, setOauthProviderStatuses] = useState<Record<string, OAuthConnectionStatus>>({});
   const [oauthStatusLoading, setOauthStatusLoading] = useState<Record<string, boolean>>({});
-  const [connectingOauthProvider, setConnectingOauthProvider] = useState<OAuthProviderType | null>(null);
-  const [connecting, setConnecting] = useState(false);
 
   // Synergy
   const [synergyStatus, setSynergyStatus] = useState<DataConnectorStatus | null>(null);
   const synergyConnected = synergyStatus?.status === 'connected';
-  const [showSynergyModal, setShowSynergyModal] = useState(false);
 
   // Modals
   const [composeEmailOpen, setComposeEmailOpen] = useState(false);
@@ -114,6 +112,20 @@ export function RemoteTab({ onActionChange }: RemoteTabProps): React.JSX.Element
       ? ('synergy-jobs' as const)
       : ('synergy-folders' as const);
 
+  // Connection setup lives on /integrations (FEAT-143). Files Remote only
+  // shows providers the user has ALREADY set up — i.e. connected, or
+  // errored (token expired but the connection was previously established).
+  // Disconnected/never-authed providers are hidden; users get an empty-state
+  // hint pointing them at the Integrations page.
+  const setUpOAuthProviders = enabledOAuthProviders.filter((p) => {
+    const s = oauthProviderStatuses[p.id]?.status;
+    return s === 'connected' || s === 'error';
+  });
+  const hasAnySetUp = setUpOAuthProviders.length > 0 || synergyConnected;
+  const statusesLoaded =
+    enabledOAuthProviders.length === 0 ||
+    enabledOAuthProviders.every((p) => oauthProviderStatuses[p.id] && !oauthStatusLoading[p.id]);
+
   // ── Data loading ────────────────────────────────────────────
 
   const loadSynergyStatus = useCallback(async () => {
@@ -170,37 +182,10 @@ export function RemoteTab({ onActionChange }: RemoteTabProps): React.JSX.Element
     if (enabledOAuthProviders.length > 0) loadOAuthProviderStatuses();
   }, [enabledOAuthProviders, loadOAuthProviderStatuses]);
 
-  // ── Connection handlers ─────────────────────────────────────
-
-  const handleOAuthConnect = useCallback(
-    async (provider: OAuthProviderType) => {
-      const connector = getConnectorById(provider);
-      if (connector && connector.authType !== 'oauth2') {
-        const providerInfo = enabledOAuthProviders.find((p) => p.id === provider);
-        setTokenConnectProvider({
-          id: provider,
-          name: providerInfo?.display_name || connector.displayName,
-        });
-        return;
-      }
-      setConnectingOauthProvider(provider);
-      try {
-        const result = await OAuthProvidersService.connect(provider);
-        if (result.success) {
-          await loadOAuthProviderStatuses();
-          showToast({ message: `Successfully connected to ${provider}`, variant: 'success' });
-        } else {
-          showToast({ message: result.error || 'Connection failed', variant: 'error' });
-        }
-      } catch (error) {
-        console.error(`OAuth connect error for ${provider}:`, error);
-        showToast({ message: `Failed to connect to ${provider}`, variant: 'error' });
-      } finally {
-        setConnectingOauthProvider(null);
-      }
-    },
-    [enabledOAuthProviders, loadOAuthProviderStatuses, showToast]
-  );
+  // Connection setup lives entirely on /integrations (FEAT-143). Files
+  // Remote only browses providers the user has already set up; there's no
+  // longer a Connect button here. The empty-state below points users to
+  // /integrations when nothing is set up.
 
   // ── File download handlers ──────────────────────────────────
 
@@ -313,17 +298,31 @@ export function RemoteTab({ onActionChange }: RemoteTabProps): React.JSX.Element
 
       {/* Content */}
       {isAtRootLevel ? (
-        <RemoteProviderGrid
-          providers={enabledOAuthProviders}
-          statuses={oauthProviderStatuses}
-          statusLoading={oauthStatusLoading}
-          connectingProvider={connectingOauthProvider}
-          connecting={connecting}
-          viewMode={viewMode}
-          onProviderClick={(id) => handleOAuthProviderClick(id)}
-          onConnect={handleOAuthConnect}
-          onRefreshStatuses={loadOAuthProviderStatuses}
-        />
+        statusesLoaded && !hasAnySetUp ? (
+          <div className="finder-empty" style={{ padding: '3rem', textAlign: 'center' }}>
+            <i className="bi bi-cloud" style={{ fontSize: '2rem', color: '#86868b' }} />
+            <h6 className="mt-2">{t('remote.nothingSetUpTitle', 'No integrations connected yet')}</h6>
+            <p className="text-muted small mb-3">
+              {t(
+                'remote.nothingSetUpMessage',
+                'Connect an integration (Gmail, Google Drive, OneDrive, Synergy 12d, etc.) to browse its files here.'
+              )}
+            </p>
+            <button className="btn btn-sm btn-primary" onClick={() => navigate('/integrations')}>
+              <i className="bi bi-arrow-right me-1" />
+              {t('remote.goToIntegrations', 'Go to Integrations')}
+            </button>
+          </div>
+        ) : (
+          <RemoteProviderGrid
+            providers={setUpOAuthProviders}
+            statuses={oauthProviderStatuses}
+            statusLoading={oauthStatusLoading}
+            viewMode={viewMode}
+            onProviderClick={(id) => handleOAuthProviderClick(id)}
+            onRefreshStatuses={loadOAuthProviderStatuses}
+          />
+        )
       ) : (
         <RemoteFileBrowser
           mode={browserMode}
@@ -356,11 +355,8 @@ export function RemoteTab({ onActionChange }: RemoteTabProps): React.JSX.Element
       )}
 
       {/* Modals */}
-      <SynergyConnectModal
-        show={showSynergyModal}
-        onHide={() => setShowSynergyModal(false)}
-        onConnected={loadSynergyStatus}
-      />
+      {/* SynergyConnectModal removed — setShowSynergyModal(true) was never
+          called, and Synergy connection setup now lives on /integrations. */}
 
       <ComposeEmailModal
         show={composeEmailOpen}

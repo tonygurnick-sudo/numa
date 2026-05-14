@@ -146,6 +146,9 @@ function validateGlobal(data: unknown): GlobalChatSettings {
     defaultConnectionIds: Array.isArray(obj.defaultConnectionIds)
       ? obj.defaultConnectionIds.filter((id): id is string => typeof id === 'string')
       : DEFAULT_GLOBAL_CHAT_SETTINGS.defaultConnectionIds,
+    defaultNativeConnectorIds: Array.isArray(obj.defaultNativeConnectorIds)
+      ? obj.defaultNativeConnectorIds.filter((id): id is string => typeof id === 'string')
+      : DEFAULT_GLOBAL_CHAT_SETTINGS.defaultNativeConnectorIds,
     language:
       typeof obj.language === 'string' || obj.language === null
         ? (obj.language as string | null)

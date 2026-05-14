@@ -220,12 +220,30 @@ async def _handle_status(params: dict[str, Any]) -> dict[str, Any]:
             ],
         }
 
+    # Per-chat enable filter: only surface connectors the user has enabled
+    # for THIS conversation. Without this filter the status output lists
+    # every admin-configured connector, which misleads the agent into
+    # trying disabled ones (and then we have to reject each call). The
+    # var is always set by sdk_config.py — empty string means
+    # "no native connectors enabled" (i.e. the whole tool family is off).
+    _enabled_raw = os.environ.get("NUMA_ENABLED_NATIVE_CONNECTORS", "")
+    try:
+        _enabled_native = json.loads(_enabled_raw) if _enabled_raw else []
+    except json.JSONDecodeError:
+        _enabled_native = []
+    _enabled_set = set(_enabled_native)
+
     lines = ["Connector Status:\n"]
     credential_markers: list[str] = []
 
     for connector_id, info in status_data.items():
         # Skip data-bucket — it's in numa_tool files now
         if connector_id == "data-bucket":
+            continue
+        # Hide connectors not enabled for this chat. Tells the agent the
+        # truth about what it CAN call — anything else gets rejected at
+        # the dispatch layer anyway.
+        if connector_id not in _enabled_set:
             continue
         display_name = info.get("display_name", connector_id.replace("-", " ").title())
         status = info.get("status", "unknown")
@@ -279,6 +297,24 @@ async def _handle_status(params: dict[str, Any]) -> dict[str, Any]:
             error_msg = info.get("error", "")
             lines.append(f"  {display_name}{auth_label}: {status} - {error_msg}")
 
+    # If the filter dropped everything, the header alone is confusing.
+    # Give the agent a clear "nothing usable" signal so it doesn't keep
+    # trying connector calls that will all be rejected.
+    if len(lines) == 1:
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "No native connectors are enabled for this chat session. "
+                        "The user has them turned off in the Integrations panel of "
+                        "the chat sidebar. Tell them to enable a connector there if "
+                        "they want you to use one."
+                    ),
+                }
+            ],
+        }
+
     text = "\n".join(lines)
     if credential_markers:
         text = "\n".join(credential_markers) + "\n" + text
@@ -297,7 +333,7 @@ def _check_auth_error(result: dict[str, Any]) -> dict[str, Any] | None:
                     "type": "text",
                     "text": (
                         "The user's Synergy 12d access token has expired or been revoked. "
-                        "They need to reconnect with new credentials in Files > Remote. "
+                        "They need to reconnect with new credentials on the Integrations page. "
                         "Do not retry this operation until they confirm reconnection."
                     ),
                 }
@@ -825,6 +861,60 @@ async def connectors(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
             "isError": True,
         }
+
+    # Honour the admin's per-service preferred_method choice. When admin has
+    # chosen Pipedream for a service that exists as both, refuse the native
+    # connector call and let the agent fall through to the integrations tools.
+    connector = params.get("connector", "") if isinstance(params, dict) else ""
+    if connector:
+        from numa_workspace_agent.mcp_tools.integration_preferences import (
+            is_native_allowed,
+        )
+
+        if not is_native_allowed(connector):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"This workspace uses Pipedream for '{connector}', not the native "
+                            "Numa connector. Use the integration tools (mcp__integrations__*) instead."
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+
+        # Per-chat enable check — fail-CLOSED to mirror the Pipedream
+        # enforcement in mcp_tools/integrations.py exactly: if the env var
+        # is unset, empty, or doesn't list this connector, refuse the call.
+        # sdk_config.py always sets NUMA_ENABLED_NATIVE_CONNECTORS (at
+        # minimum to "[]") for any container shipping this code path, so
+        # there is no legitimate scenario where the var is missing — only
+        # disabled chats. The prompt already lists only enabled connectors,
+        # but the agent can still try a disabled one from memory, from a
+        # `status` call's output, or from the user's own context, and we
+        # don't want that to succeed.
+        enabled_raw = os.environ.get("NUMA_ENABLED_NATIVE_CONNECTORS", "")
+        try:
+            enabled_native = json.loads(enabled_raw) if enabled_raw else []
+        except json.JSONDecodeError:
+            enabled_native = []
+        if not enabled_native or connector not in enabled_native:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"The '{connector}' connector is not enabled for this chat session. "
+                            "The user has it turned off in the Integrations panel of the chat "
+                            "sidebar. Tell them to enable it there if they want you to use it; "
+                            "do not retry."
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
 
     # Gate unsafe operations behind approval (fail-closed)
     if not is_safe_connector_operation(name):

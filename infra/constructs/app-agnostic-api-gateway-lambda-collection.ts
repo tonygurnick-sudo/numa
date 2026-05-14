@@ -375,16 +375,28 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       });
     }
 
-    // Admin Integration Settings API (GET list, PUT single)
+    // Admin Integration Settings API (GET list, PUT single, GET catalog)
+    // The catalog endpoint merges Pipedream + native connector state into a
+    // single canonical service list, so the lambda also needs read access to
+    // the data-connector settings table.
     const adminIntegrationEnv = {
       CLIENT_NAME: props.clientName,
       GLOBAL_TABLE_NAME: `${props.clientName}-global-integration-settings`,
+      CONNECTOR_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
+      // Admin-side native-availability gate. The catalog handler reads
+      // this and suppresses native rows entirely when off.
+      DATA_CONNECTORS_ENABLED: String(props.dataConnectorsEnabled ?? false),
     } as Record<string, string>;
     const adminIntegrationPolicy = [
       {
         effect: 'Allow',
         actions: ['dynamodb:GetItem', 'dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
         resources: [`arn:aws:dynamodb:*:*:table/${props.clientName}-global-integration-settings`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:Scan'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSettingsTableName}`],
       },
     ];
 
@@ -397,6 +409,15 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: adminIntegrationEnv,
       additionalPolicyStatements: adminIntegrationPolicy,
       route: { verb: 'GET', path: 'settings/integrations' },
+    });
+    this.addLambdaFunction(this, 'admin-integration-settings-catalog', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-integration-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminIntegrationEnv,
+      additionalPolicyStatements: adminIntegrationPolicy,
+      route: { verb: 'GET', path: 'settings/integrations/catalog' },
     });
     this.addLambdaFunction(this, 'admin-integration-settings-put', {
       addAuthorizer: true,
@@ -1088,7 +1109,17 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     const dataConnectorsPolicy = [
       {
         effect: 'Allow',
-        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:Query',
+          // DeleteItem needed by the per-user disconnect route
+          // (DELETE /api/data-connectors/{connector_id}) so users can
+          // actually clear their connection rows from the unified
+          // Integrations page.
+          'dynamodb:DeleteItem',
+          'dynamodb:UpdateItem',
+        ],
         resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
       },
       {
@@ -1103,6 +1134,9 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           'secretsmanager:PutSecretValue',
           'secretsmanager:DescribeSecret',
           'secretsmanager:GetSecretValue',
+          // DeleteSecret needed by the disconnect route so the SM payload
+          // is cleaned up alongside the DDB row.
+          'secretsmanager:DeleteSecret',
         ],
         resources: ['*'],
       },
@@ -1140,6 +1174,19 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: dataConnectorsEnv,
       additionalPolicyStatements: dataConnectorsPolicy,
       route: { verb: 'POST', path: 'data-connectors/connect' },
+    });
+
+    // Per-user disconnect: removes the user's row + cleans up the secret in
+    // SM. Used by the unified Integrations page so a user-side disconnect
+    // actually clears the data-connector row (otherwise the row keeps the
+    // connector "connected" in the UI even after OAuth revoke / PAT delete).
+    this.addLambdaFunction(this, 'data-connectors-disconnect', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'DELETE', path: 'data-connectors/{connector_id}' },
     });
 
     this.addLambdaFunction(this, 'data-connectors-synergy-jobs', {
@@ -1685,6 +1732,21 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         // Agent tables for refreshing stale snapshots before each scheduled run
         WORKSPACE_AGENTS_TABLE_NAME: props.workspaceAgentsTableName,
         USER_AGENTS_TABLE_NAME: props.userAgentsTableName,
+        // FEAT-143 — unified integrations payload needs admin preferred_method,
+        // user native connector state, and the pipedream relay arn to resolve
+        // per-slug method at run time. Mirrors workspace-agent-construct wiring.
+        GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME: `${props.clientName}-global-integration-settings`,
+        DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
+        DATA_CONNECTORS_ENABLED: String(props.dataConnectorsEnabled ?? false),
+        // Mirrored into the workspace-agent request body's `featureFlags`
+        // so scheduled runs register the same MCP servers (connectors, vault)
+        // that chat does. Without these, native connector tools are
+        // unavailable in scheduled runs even when the user has them authed.
+        OAUTH_INTEGRATIONS_ENABLED: String(props.oauthIntegrationsEnabled ?? false),
+        SECRETS_VAULT_ENABLED: String(props.secretsVaultEnabled ?? false),
+        ...(props.pipedreamRelayLambdaArn && {
+          PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn,
+        }),
         // Centralized email sender (deployer account, cross-account invocation)
         ...(props.emailSenderLambdaArn && {
           EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn,
@@ -1789,6 +1851,19 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           effect: 'Allow',
           actions: ['dynamodb:Query'],
           resources: [`arn:aws:dynamodb:*:*:table/numa-${props.clientName}-knowledge-bases`],
+        },
+        // FEAT-143 — unified integrations payload reads admin preferred_method
+        // from the global-integration-settings table (Scan) and per-user native
+        // connector rows from data-connectors (Query keyed by user_id).
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Scan'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.clientName}-global-integration-settings`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
         },
         // GetItem for Level-3 admin overrides (read on each invocation so
         // admin toggle changes apply immediately). UpdateItem for the
@@ -2724,6 +2799,19 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   capabilitiesTableName: string;
   /** Data connector selection configs table name. */
   dataConnectorsSyncConfigsTableName: string;
+  /** Admin-side gate. When false, the unified integrations catalog returns
+   *  no native rows; admins can't add them and users don't see them. The
+   *  flag is the only way to suppress natives entirely — there's no
+   *  per-chat user toggle anymore (per-integration enable replaces it). */
+  dataConnectorsEnabled?: boolean;
+  /** Forwarded as `featureFlags.OAUTH_INTEGRATIONS_ENABLED` on the
+   *  workspace-agent request body fired by the schedule runner. The
+   *  `connectors` MCP in `sdk_config.py` is gated on this flag, so leaving
+   *  it false silently breaks native connector tools in scheduled runs. */
+  oauthIntegrationsEnabled?: boolean;
+  /** Forwarded as `featureFlags.SECRETS_VAULT_ENABLED` on the workspace-agent
+   *  request body fired by the schedule runner. Gates the `vault` MCP. */
+  secretsVaultEnabled?: boolean;
   /** Connector events table name (permanent event records). */
   connectorEventsTableName: string;
   /** Connector event configs table name (admin toggle/tags per event type). */

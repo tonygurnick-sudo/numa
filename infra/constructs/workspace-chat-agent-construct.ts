@@ -465,6 +465,17 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                 },
               ]
             : []),
+          // DynamoDB Scan for the unified integrations preferences (preferred_method per service).
+          // Used by the agent to honour the admin's "native vs Pipedream" choice when filtering
+          // tools at runtime. Read-only; admin writes go through admin-integration-settings.
+          {
+            sid: 'DynamoDBGlobalIntegrationSettingsRead',
+            effect: 'Allow',
+            actions: ['dynamodb:Scan'],
+            resources: [
+              `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.clientName}-global-integration-settings`,
+            ],
+          },
           // V2 app runs table - update run status on completion
           ...(props.v2AppRunsTableArn
             ? [
@@ -703,6 +714,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         ...(props.integrationsApprovalTableName && {
           INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName,
         }),
+        // Global integration settings table — used by the agent at runtime to
+        // honour the admin's preferred_method choice (native vs Pipedream) per
+        // service when filtering Pipedream / connector MCP tool calls.
+        GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME: `${props.clientName}-global-integration-settings`,
         // Chat settings table (for reading user approval mode preferences)
         ...(props.chatSettingsTableName && {
           CHAT_SETTINGS_TABLE_NAME: props.chatSettingsTableName,

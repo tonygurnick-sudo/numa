@@ -12,19 +12,19 @@ Routes are defined in `src/utils/routeConfig.tsx` and rendered in `src/Routes.ts
 
 Key routes:
 
-| Route              | Page                      | Notes                             |
-| ------------------ | ------------------------- | --------------------------------- |
-| `/chat`            | `NumaWorkspaceChatAgents` | Primary chat (workspace agent)    |
-| `/dash`            | `Dash`                    | App marketplace/launcher          |
-| `/agents`          | `AgentsManagement`        | Agent builder & management        |
-| `/ops`             | `OpsPage`                 | Numa Ops (tickets/projects/teams) |
-| `/files`           | `Files`                   | File manager (remote + workspace) |
-| `/knowledge-bases` | `CompanyKnowledgeBase`    | KB admin                          |
-| `/data-connectors` | `DataConnectorsPage`      | OAuth data connectors             |
-| `/scheduling`      | `SchedulingPage`          | Agent scheduling                  |
-| `/integrations`    | `NumaIntegrations`        | Pipedream integrations            |
-| `/settings`        | `Settings`                | Admin settings                    |
-| `/shared/:uuid`    | Shared doc Q&A            | **No auth required**              |
+| Route              | Page                      | Notes                                                                                   |
+| ------------------ | ------------------------- | --------------------------------------------------------------------------------------- |
+| `/chat`            | `NumaWorkspaceChatAgents` | Primary chat (workspace agent)                                                          |
+| `/dash`            | `Dash`                    | App marketplace/launcher                                                                |
+| `/agents`          | `AgentsManagement`        | Agent builder & management                                                              |
+| `/ops`             | `OpsPage`                 | Numa Ops (tickets/projects/teams)                                                       |
+| `/files`           | `Files`                   | File manager (remote + workspace)                                                       |
+| `/knowledge-bases` | `CompanyKnowledgeBase`    | KB admin                                                                                |
+| `/integrations`    | `UnifiedIntegrationsPage` | Unified Integrations surface — Pipedream + native connectors, deep-linkable via `#slug` |
+| `/data-connectors` | _redirect_                | 301-style `Navigate` to `/integrations` (FEAT-143)                                      |
+| `/scheduling`      | `SchedulingPage`          | Agent scheduling                                                                        |
+| `/settings`        | `Settings`                | Admin settings                                                                          |
+| `/shared/:uuid`    | Shared doc Q&A            | **No auth required**                                                                    |
 
 Routes are gated by feature flags (`featureFlag`) and required features (`requiredFeature`) from config.
 

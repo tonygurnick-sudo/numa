@@ -21,6 +21,28 @@
     "title": "Numa Integrations",
     "subtitle": "Connect external tools and services to enhance your Numa experience"
   },
+  "methodBadge": {
+    "native": "Native",
+    "pipedream": "Pipedream",
+    "nativeTooltip": "Connected via Numa native connector",
+    "pipedreamTooltip": "Connected via Pipedream"
+  },
+  "methodPicker": {
+    "label": "Connection method",
+    "help": "When both methods are available for a service, choose which one users connect through. Leaving this blank lets users pick at connect time.",
+    "native": "Native",
+    "pipedream": "Pipedream",
+    "letUserChoose": "Let user choose",
+    "infoNative": "Direct OAuth with this service. Tighter scopes, simpler permissions, surfaced through Numa's connectors and Files Remote.",
+    "infoPipedream": "Pipedream-managed OAuth with a broad pre-built action library. Best when you want lots of ready-made actions without building them yourself.",
+    "infoLetUserChoose": "Each user picks their preferred method when connecting. Use this when both options are valid and you want the user's circumstances to decide."
+  },
+  "hiddenByMethod": {
+    "pipedreamHidden_one": "{{count}} integration hidden — admin chose the native connector",
+    "pipedreamHidden_other": "{{count}} integrations hidden — admin chose the native connector",
+    "nativeHidden_one": "{{count}} connector hidden — admin chose the Pipedream integration",
+    "nativeHidden_other": "{{count}} connectors hidden — admin chose the Pipedream integration"
+  },
   "connections": {
     "defaults": {
       "exampleQuery": "Test my connection to this service"
@@ -343,7 +365,83 @@
     "refresh": "Refresh",
     "refreshing": "Refreshing",
     "saveChanges": "Save Changes",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "switch": "Switch",
+    "confirmSwitch": "Switch connection method for {{name}}? Your current connection will be disconnected first.",
+    "done": "Done",
+    "disconnectConfirmIntro": "Disconnect {{name}}?",
+    "disconnectWarnTitle": "This may break things that depend on it",
+    "disconnectWarnAgents": "Agents that use this integration will stop working until you reconnect.",
+    "disconnectWarnAutomations": "Automations (triggers and scheduled agents) wired to this integration will fail to run."
+  },
+  "errors": {
+    "switchFailed": "Switch failed"
+  },
+  "addModal": {
+    "title": "Add integration",
+    "methodTitle": "Choose connection method",
+    "back": "Back",
+    "intro": "Pick a service to add. Services with multiple connection options will ask you which to use next.",
+    "methodIntro": "This service is available through both Numa's native connector and Pipedream. Pick the method that fits this workspace.",
+    "searchPlaceholder": "Search integrations...",
+    "noResults": "No integrations match your search.",
+    "alreadyAdded": "Added",
+    "dualMethod": "2 methods",
+    "nativeHeading": "Native connector",
+    "nativeBody": "Direct OAuth with the service. Tighter scopes, surfaced in Files Remote, simpler permissions for your users.",
+    "nativeSetup": "Setup required: you'll register an OAuth app with this service and paste the client ID + secret. Takes a few minutes.",
+    "pipedreamHeading": "Pipedream",
+    "pipedreamBody": "Pipedream-managed OAuth. Numa's shared OAuth app, broad pre-built action library users can call from chat.",
+    "pipedreamSetup": "No setup required — enables immediately on this workspace.",
+    "userChoiceBadge": "User choice",
+    "userChoiceHeading": "Let users pick",
+    "userChoiceBody": "Enable both methods. Users see both options at connect time and pick the one that fits them — no default forced.",
+    "userChoiceSetup": "Enables Pipedream immediately, then opens the native setup wizard so both methods are available."
+  },
+  "methodChooser": {
+    "title": "Choose connection method",
+    "intro": "This service is available through both Numa's native connector and Pipedream. Pick whichever fits your needs.",
+    "switchTitle": "Switch connection method",
+    "switchIntro": "Your existing connection will be disconnected first. Any agents or automations relying on it will need to be reconnected.",
+    "nativeHeading": "Connect natively",
+    "nativeBody": "Direct OAuth with the service. Tighter scopes, simpler permissions.",
+    "pipedreamHeading": "Connect via Pipedream",
+    "pipedreamBody": "Pipedream-managed OAuth with a broad pre-built action library.",
+    "userPicks": "Choose method"
+  },
+  "manage": {
+    "title": "Manage {{name}}",
+    "methodHeading": "Connection method",
+    "toolsHeading": "Tools",
+    "method": {
+      "pipedreamHeading": "Pipedream",
+      "pipedreamBody": "Pipedream-managed OAuth. Numa's shared OAuth app, broad pre-built action library users can call from chat.",
+      "nativeHeading": "Native connector",
+      "nativeBody": "Direct OAuth with the service. Tighter scopes, surfaced in Files Remote, simpler permissions for users.",
+      "nativeSetupNeeded": "Setup required: register an OAuth app with this service and paste the client ID + secret. Takes a few minutes.",
+      "active": "Active",
+      "available": "Available",
+      "useThis": "Use this method",
+      "makeDefault": "Make default",
+      "setUp": "Set up",
+      "reconfigure": "Reconfigure",
+      "activate": "Activate",
+      "letUserChoose": "Let users pick at connect time",
+      "letUserChooseHelp": "Users see both connection options and pick when they connect to this service.",
+      "userChoiceBadge": "User choice",
+      "userChoiceBadgeTooltip": "Users pick the connection method at connect time",
+      "userChoiceHeading": "Let users pick",
+      "userChoiceBody": "Users see both connection options at connect time and pick the one that fits them. No method is forced as the default."
+    }
+  },
+  "patCredentials": {
+    "title": "Connect {{name}}",
+    "intro": "Enter your credentials. They are stored securely and only used to access this service on your behalf."
+  },
+  "view": {
+    "viewMode": "View mode",
+    "grid": "Grid view",
+    "list": "List view"
   },
   "toolPolicy": {
     "applying": "Applying default tool policy...",

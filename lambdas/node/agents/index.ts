@@ -44,12 +44,25 @@ const AGENT_SCHEDULES_TABLE = process.env.AGENT_SCHEDULES_TABLE_NAME;
 type AgentVisibility = 'personal' | 'public';
 type AgentScope = 'workspace' | 'user';
 
+type IntegrationMethod = 'native' | 'pipedream';
+
+type IntegrationListItem = {
+  slug: string;
+  method: IntegrationMethod;
+  name: string;
+};
+
 type AgentToolsConfig = {
   autoToolsEnabled?: boolean;
   queryDataSources?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  /** @deprecated Pre-FEAT-143 flat slug list. New agents write
+   *  `enabledIntegrations` instead; we still persist this in parallel for
+   *  one release so older chat/runner code paths keep working. */
   enabledConnections?: string[];
+  /** Unified method-tagged integrations list — single source of truth. */
+  enabledIntegrations?: IntegrationListItem[];
   // Multi-KB support: which knowledge bases the agent can access
   // null/undefined = all KBs (backwards compat with queryDataSources: true)
   // [] = no KB access
@@ -251,6 +264,21 @@ export const generateDuplicateTitle = (originalTitle: string | undefined, existi
   return candidate;
 };
 
+const normaliseIntegrationRows = (rows: unknown): IntegrationListItem[] | undefined => {
+  if (!Array.isArray(rows)) return undefined;
+  const out: IntegrationListItem[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    const slug = typeof r.slug === 'string' ? r.slug.trim() : '';
+    const method = r.method === 'native' || r.method === 'pipedream' ? r.method : undefined;
+    const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim() : slug;
+    if (!slug || !method) continue;
+    out.push({ slug, method, name });
+  }
+  return out;
+};
+
 const normaliseToolsConfig = (config?: AgentToolsConfig | null): AgentToolsConfig => {
   if (!config) return {};
   return {
@@ -259,6 +287,7 @@ const normaliseToolsConfig = (config?: AgentToolsConfig | null): AgentToolsConfi
     webSearchEnabled: config.webSearchEnabled ?? false,
     createAgentEnabled: config.createAgentEnabled ?? false,
     enabledConnections: Array.isArray(config.enabledConnections) ? config.enabledConnections : [],
+    enabledIntegrations: normaliseIntegrationRows(config.enabledIntegrations),
     // Preserve allowedKnowledgeBases: null means all KBs, [] means none, array means specific
     allowedKnowledgeBases:
       config.allowedKnowledgeBases === null

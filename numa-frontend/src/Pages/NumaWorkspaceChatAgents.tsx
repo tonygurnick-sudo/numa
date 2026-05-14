@@ -19,6 +19,13 @@ import ResizableSplitView from '../Components/ResizableSplitView';
 import { generateSystemPrompt, getEnabledTools } from '../utils/chatSystemPromptUtils';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { ConnectorsService } from '../Services/ConnectorsService';
+import { DataConnectorsService } from '../Services/DataConnectorsService';
+import { AdminIntegrationsService } from '../Services/AdminIntegrationsService';
+import {
+  connectorSlugForPipedream,
+  pipedreamSlugForConnector,
+} from '../Components/Integrations/integrationCatalogHelpers';
+import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
 import { getModelId, MODEL_TYPES, isInFallbackMode } from '../utils/bedrockModelConfig';
 // Note: streamingProcessors imports moved to useWorkspaceStreaming hook
 import { loadConversation } from '../utils/conversationLoader';
@@ -80,6 +87,7 @@ import {
   extractFolderMetadata,
 } from '../utils/workspaceChatStagedUploads';
 import type {
+  IntegrationListItem,
   StagedItem,
   StagedFile,
   UploadingFile,
@@ -95,9 +103,15 @@ type ConversationChatConfig = {
   createAgentEnabled?: boolean;
   memoriesEnabled?: boolean;
   numaOpsEnabled?: boolean;
+  /** Legacy whole-feature toggle for native data connectors. Replaced by
+   *  per-row enable list (`enabledNativeConnectorIds`); kept on the type
+   *  so we can read old persisted configs without TS errors. */
   dataConnectorsEnabled?: boolean;
   enabledKBIds?: string[];
   enabledConnectionIds?: string[];
+  /** Per-chat enable list for native connectors (mirror of
+   *  enabledConnectionIds for Pipedream). */
+  enabledNativeConnectorIds?: string[];
 };
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
@@ -148,7 +162,14 @@ const NumaWorkspaceChatAgents = () => {
   // IDs of data connectors the CURRENT user has personal credentials for.
   // Populated by loadUserConnectorStatus (hits /api/oauth/{id}/status per provider).
   const [userConnectedConnectorIds, setUserConnectedConnectorIds] = useState<string[]>([]);
-  const [dataConnectorsEnabled, setDataConnectorsEnabled] = useState(true);
+  // Per-chat enable list for native connectors — mirrors `enabledConnections`
+  // for Pipedream. Defaults to "all user-connected connectors enabled" so
+  // users don't have to toggle every native connector individually after
+  // setting them up.
+  const [enabledNativeConnectorIds, setEnabledNativeConnectorIds] = useState<string[]>([]);
+  // Admin-side gate. When false, the catalog surfaces no native rows to the
+  // user — there's no per-chat dataConnectorsEnabled toggle anymore (it was
+  // replaced by per-integration enable/disable in the integrations list).
   const [dataConnectorsFeatureEnabled] = useState(() => getFlag('DATA_CONNECTORS_ENABLED'));
   const [autoToolsEnabled, setAutoToolsEnabled] = useState(true); // Default to auto mode
   const [buttonStatus, setButtonStatus] = useState('idle');
@@ -423,6 +444,50 @@ const NumaWorkspaceChatAgents = () => {
     [availableConnections]
   );
 
+  // ── Unified integrations payload ──────────────────────────────────────
+  //
+  // Single labeled list combining Pipedream + native, used for the chat
+  // payload and (eventually) the chat settings panel. Each row carries a
+  // `method` tag so the agent knows which MCP family to use. Source state
+  // (availableConnections, connectedDataConnectors, userConnectedConnectorIds,
+  // enabledConnections, enabledNativeConnectorIds, dataConnectorsEnabled)
+  // still drives the existing sidebars — this memo is the wire shape.
+  const availableIntegrationsUnified = useMemo<IntegrationListItem[]>(() => {
+    const rows: IntegrationListItem[] = [];
+    for (const conn of availableConnections) {
+      if (!conn.isConnected) continue;
+      rows.push({ slug: conn.id, method: 'pipedream', name: conn.name || conn.id });
+    }
+    if (dataConnectorsFeatureEnabled) {
+      for (const c of connectedDataConnectors) {
+        if (!userConnectedConnectorIds.includes(c.id)) continue;
+        rows.push({ slug: c.id, method: 'native', name: c.name || c.id });
+      }
+    }
+    return rows;
+  }, [availableConnections, connectedDataConnectors, userConnectedConnectorIds, dataConnectorsFeatureEnabled]);
+
+  const enabledIntegrationsUnified = useMemo<IntegrationListItem[]>(() => {
+    const rows: IntegrationListItem[] = [];
+    const pipedreamByName = new Map(availableConnections.map((c) => [c.id, c.name || c.id]));
+    for (const slug of enabledConnections) {
+      rows.push({ slug, method: 'pipedream', name: pipedreamByName.get(slug) || slug });
+    }
+    if (dataConnectorsFeatureEnabled) {
+      const nativeByName = new Map(connectedDataConnectors.map((c) => [c.id, c.name || c.id]));
+      for (const slug of enabledNativeConnectorIds) {
+        rows.push({ slug, method: 'native', name: nativeByName.get(slug) || slug });
+      }
+    }
+    return rows;
+  }, [
+    enabledConnections,
+    enabledNativeConnectorIds,
+    availableConnections,
+    connectedDataConnectors,
+    dataConnectorsFeatureEnabled,
+  ]);
+
   const applyConversationChatConfig = useCallback(
     (config: unknown) => {
       if (!config || typeof config !== 'object') return;
@@ -445,9 +510,8 @@ const NumaWorkspaceChatAgents = () => {
       if (typeof parsed.numaOpsEnabled === 'boolean') {
         setNumaOpsEnabled(numaOpsFeatureEnabled ? parsed.numaOpsEnabled : false);
       }
-      if (typeof parsed.dataConnectorsEnabled === 'boolean') {
-        setDataConnectorsEnabled(dataConnectorsFeatureEnabled ? parsed.dataConnectorsEnabled : false);
-      }
+      // `dataConnectorsEnabled` on stored configs is silently ignored — the
+      // unified per-integration enable list replaces the whole-feature toggle.
 
       if (Array.isArray(parsed.enabledKBIds)) {
         if (availableKBs.length > 0) {
@@ -463,11 +527,19 @@ const NumaWorkspaceChatAgents = () => {
         }
       }
 
+      if (Array.isArray(parsed.enabledNativeConnectorIds)) {
+        // Filter to currently-connected native connectors so a stale saved
+        // list (e.g. a connector the user has since disconnected) doesn't
+        // resurrect.
+        const connectedNativeSet = new Set(userConnectedConnectorIds);
+        setEnabledNativeConnectorIds(parsed.enabledNativeConnectorIds.filter((id) => connectedNativeSet.has(id)));
+      }
+
       window.setTimeout(() => {
         isApplyingConversationChatConfigRef.current = false;
       }, 0);
     },
-    [agentsFeatureEnabled, numaOpsFeatureEnabled, availableConnections, availableKBs]
+    [agentsFeatureEnabled, numaOpsFeatureEnabled, availableConnections, availableKBs, userConnectedConnectorIds]
   );
 
   useEffect(() => {
@@ -523,6 +595,19 @@ const NumaWorkspaceChatAgents = () => {
     [markUserSettingsModified]
   );
 
+  // Mirror handleUserSetEnabledConnections for native connectors. Without
+  // marking-modified, the per-chat persistence effect won't fire (it gates
+  // on `userSettingsModified`), so a user-side toggle would never save and
+  // the next applyAgentConfiguration / page refresh would snap the state
+  // back to defaults — which is exactly what was happening before this fix.
+  const handleUserSetEnabledNativeConnectorIds = useCallback(
+    (value: SetStateAction<string[]>) => {
+      markUserSettingsModified();
+      setEnabledNativeConnectorIds(value);
+    },
+    [markUserSettingsModified]
+  );
+
   const handleUserSetEnabledKBIds = useCallback(
     (value: SetStateAction<string[]>) => {
       markUserSettingsModified();
@@ -552,9 +637,9 @@ const NumaWorkspaceChatAgents = () => {
         createAgentEnabled: agentsFeatureEnabled ? createAgentEnabled : false,
         memoriesEnabled,
         numaOpsEnabled: numaOpsFeatureEnabled ? numaOpsEnabled : false,
-        dataConnectorsEnabled: dataConnectorsFeatureEnabled ? dataConnectorsEnabled : false,
         enabledKBIds,
         enabledConnectionIds: enabledConnections,
+        enabledNativeConnectorIds,
       };
 
       numaChatDynamoUtils
@@ -574,12 +659,11 @@ const NumaWorkspaceChatAgents = () => {
     createAgentEnabled,
     memoriesEnabled,
     numaOpsEnabled,
-    dataConnectorsEnabled,
     enabledConnections,
+    enabledNativeConnectorIds,
     enabledKBIds,
     agentsFeatureEnabled,
     numaOpsFeatureEnabled,
-    dataConnectorsFeatureEnabled,
     isConversationLoading,
     numaChatDynamoUtils,
     sub,
@@ -602,6 +686,15 @@ const NumaWorkspaceChatAgents = () => {
     [connectedSet, userChatSettings.defaultConnectionIds]
   );
 
+  // Mirror of defaultConnectionIdsFromSettings for native connectors: take
+  // the admin/user-configured default list and intersect with the user's
+  // currently-connected set so we never enable a connector that isn't
+  // actually wired up.
+  const defaultNativeConnectorIdsFromSettings = useMemo(
+    () => (userChatSettings.defaultNativeConnectorIds ?? []).filter((id) => userConnectedConnectorIds.includes(id)),
+    [userChatSettings.defaultNativeConnectorIds, userConnectedConnectorIds]
+  );
+
   const applyAgentConfiguration = useCallback(
     (agent: AgentSummary | null) => {
       if (!agent) {
@@ -613,8 +706,34 @@ const NumaWorkspaceChatAgents = () => {
         setCreateAgentEnabled(autoTools || userChatSettings.createAgentEnabled);
         setMemoriesEnabled(autoTools || userChatSettings.memoriesEnabled);
         setNumaOpsEnabled(autoTools || (userChatSettings.numaOpsEnabled ?? false));
-        setDataConnectorsEnabled(autoTools || (userChatSettings.dataConnectorsEnabled ?? true));
-        setEnabledConnections(defaultConnectionIdsFromSettings);
+
+        // Integrations: re-resolve method per slug against the user's CURRENT
+        // auth state. Same walk as the agent path below — handles the case
+        // where the user originally saved Gmail as a default when it was
+        // native, then switched to Pipedream. The profile UI keeps Gmail
+        // checked as a "service-level" default; this loop routes it to
+        // whichever method the user has authed now.
+        const pdAuthedDef = new Set(availableConnections.filter((c) => c.isConnected).map((c) => c.id));
+        const nativeAuthedDef = new Set(userConnectedConnectorIds);
+        const defaultSlugSet = new Set<string>([
+          ...userChatSettings.defaultConnectionIds,
+          ...(userChatSettings.defaultNativeConnectorIds ?? []),
+        ]);
+        const defaultPdSlugs: string[] = [];
+        const defaultNativeSlugs: string[] = [];
+        for (const slug of defaultSlugSet) {
+          const pdSlug = pipedreamSlugForConnector(slug) ?? slug;
+          const nativeSlug = connectorSlugForPipedream(slug) ?? slug;
+          if (pdAuthedDef.has(pdSlug)) {
+            defaultPdSlugs.push(pdSlug);
+          } else if (nativeAuthedDef.has(nativeSlug)) {
+            defaultNativeSlugs.push(nativeSlug);
+          }
+          // Neither authed → silently drop (consistent with agent path).
+        }
+        setEnabledConnections(defaultPdSlugs);
+        setEnabledNativeConnectorIds(defaultNativeSlugs);
+
         // Apply user's default KB selection, filtered by what's available
         setEnabledKBIds(defaultKBIdsFromSettings);
         return;
@@ -628,8 +747,72 @@ const NumaWorkspaceChatAgents = () => {
       setCreateAgentEnabled(autoTools || (config.createAgentEnabled ?? false));
       setMemoriesEnabled(autoTools || (config.memoriesEnabled ?? true));
       setNumaOpsEnabled(autoTools || (config.numaOpsEnabled ?? false));
-      setDataConnectorsEnabled(autoTools || (config.dataConnectorsEnabled ?? true));
-      setEnabledConnections(config.enabledConnections ?? []);
+
+      // Integrations: the agent's selection is the SOLE source of truth for
+      // WHAT services are enabled. The METHOD per service (Pipedream vs
+      // native) is re-resolved here against the user's current auth state
+      // — so an agent saved with `{gmail, native}` automatically routes to
+      // Pipedream if the user has since unhooked native gmail and connected
+      // Pipedream gmail (and vice versa). Mirrors the schedule runner's
+      // `decideMethod` walk in `lambdas/node/agent-schedule-runner/
+      // integrations-payload.ts`.
+      //
+      // Note: admin `preferred_method` is NOT consulted here yet — the
+      // workspace-agent's connect tool refuses native calls when admin
+      // prefers Pipedream, so the worst case today is a graceful "not
+      // available" error. Adding the admin-pref hop client-side is a
+      // follow-up.
+      const pdAuthed = new Set(availableConnections.filter((c) => c.isConnected).map((c) => c.id));
+      const nativeAuthed = new Set(userConnectedConnectorIds);
+
+      type InputRow = { slug: string; method?: 'native' | 'pipedream' };
+      const inputRows: InputRow[] = [];
+      const tagged = config.enabledIntegrations;
+      if (Array.isArray(tagged) && tagged.length > 0) {
+        for (const row of tagged) inputRows.push({ slug: row.slug, method: row.method });
+      } else {
+        // Legacy: flat slug list, no method tags.
+        for (const slug of config.enabledConnections ?? []) inputRows.push({ slug });
+      }
+
+      const pdSlugs: string[] = [];
+      const nativeSlugs: string[] = [];
+      const droppedSlugs: string[] = [];
+      for (const row of inputRows) {
+        // Canonicalise: figure out which Pipedream slug and which native
+        // slug this row could route through.
+        const pdSlug = row.method === 'pipedream' ? row.slug : (pipedreamSlugForConnector(row.slug) ?? row.slug);
+        const nativeSlug = row.method === 'native' ? row.slug : (connectorSlugForPipedream(row.slug) ?? row.slug);
+
+        const pdOk = pdAuthed.has(pdSlug);
+        const nativeOk = nativeAuthed.has(nativeSlug);
+
+        // 1. Honour explicit method when user has that method authed.
+        if (row.method === 'pipedream' && pdOk) {
+          pdSlugs.push(pdSlug);
+          continue;
+        }
+        if (row.method === 'native' && nativeOk) {
+          nativeSlugs.push(nativeSlug);
+          continue;
+        }
+        // 2. Fallback — Pipedream preferred (richer tool surface), then native.
+        if (pdOk) {
+          pdSlugs.push(pdSlug);
+          continue;
+        }
+        if (nativeOk) {
+          nativeSlugs.push(nativeSlug);
+          continue;
+        }
+        // 3. Neither authed — drop.
+        droppedSlugs.push(row.slug);
+      }
+      if (droppedSlugs.length > 0) {
+        console.warn('[CHAT] dropping integrations the user has not authed', droppedSlugs);
+      }
+      setEnabledConnections(pdSlugs);
+      setEnabledNativeConnectorIds(nativeSlugs);
 
       // Apply KB constraints from agent
       const allowedKBs = config.allowedKnowledgeBases;
@@ -654,7 +837,16 @@ const NumaWorkspaceChatAgents = () => {
         setEnabledKBIds(availableKBs.filter((kb) => allowedSet.has(kb.kb_id)).map((kb) => kb.kb_id));
       }
     },
-    [availableKBs, defaultConnectionIdsFromSettings, defaultKBIdsFromSettings, userChatSettings]
+    [
+      availableKBs,
+      availableConnections,
+      connectedDataConnectors,
+      userConnectedConnectorIds,
+      defaultConnectionIdsFromSettings,
+      defaultNativeConnectorIdsFromSettings,
+      defaultKBIdsFromSettings,
+      userChatSettings,
+    ]
   );
 
   const resetAgentState = useCallback(() => {
@@ -849,8 +1041,29 @@ const NumaWorkspaceChatAgents = () => {
   const getMissingIntegrations = (agent: AgentSummary): string[] => {
     const required = agent.requiredIntegrations ?? [];
     if (required.length === 0) return [];
-    const connectedIds = new Set(availableConnections.map((conn) => conn.id));
-    return required.filter((integration) => !connectedIds.has(integration));
+
+    // A required slug is satisfied if the user has EITHER method connected:
+    //   - Pipedream connection for that slug, OR the paired Pipedream slug
+    //     of a native connector they've authed (e.g. required="google_drive"
+    //     satisfied by native "googledrive").
+    //   - Native connector for that slug, OR the paired native of a
+    //     Pipedream connection (e.g. required="googledrive" satisfied by
+    //     Pipedream "google_drive").
+    // Legacy agents store Pipedream slugs in `requiredIntegrations`; new
+    // dual-method awareness means a user who only authed the native variant
+    // is no longer falsely blocked from launching the agent.
+    const pipedreamConnected = new Set(availableConnections.map((c) => c.id));
+    const nativeConnected = new Set(userConnectedConnectorIds);
+
+    return required.filter((slug) => {
+      if (pipedreamConnected.has(slug)) return false;
+      if (nativeConnected.has(slug)) return false;
+      const pairedPd = pipedreamSlugForConnector(slug);
+      if (pairedPd && pipedreamConnected.has(pairedPd)) return false;
+      const pairedNative = connectorSlugForPipedream(slug);
+      if (pairedNative && nativeConnected.has(pairedNative)) return false;
+      return true;
+    });
   };
 
   const resolveUserWelcomeMessage = (agent: AgentSummary): string | undefined =>
@@ -963,27 +1176,6 @@ const NumaWorkspaceChatAgents = () => {
       .finally(() => setQueuedPreselectedAgent(null));
   }, [queuedPreselectedAgent, connectionsLoading]);
 
-  // Load global admin integration settings once
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!user) return;
-        const items = (await numaGet('/api/settings/integrations')) as Array<{
-          integration: string;
-          status: 'enabled' | 'disabled';
-          denyTools: string[];
-        }>;
-        const map: Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }> = {};
-        for (const item of items || []) {
-          map[item.integration] = { status: item.status, denyTools: item.denyTools || [] };
-        }
-        setGlobalIntegrationSettings(map);
-      } catch {
-        /* ignore: default is empty */
-      }
-    })();
-  }, [user, numaGet]);
-
   // Apply preselected agent from Agents page - start a fresh chat
   useEffect(() => {
     if (preselectHandledRef.current) return;
@@ -1082,12 +1274,8 @@ const NumaWorkspaceChatAgents = () => {
             prompt: message,
             conversationId: draftCid,
             enabledTools,
-            enabledConnections,
-            availableIntegrations: availableConnections
-              .filter((conn) => conn.isConnected)
-              .map((conn) => ({ id: conn.id, name: conn.name })),
-            connectedDataConnectors: dataConnectorsEnabled ? connectedDataConnectors : [],
-            dataConnectorsEnabled,
+            enabledIntegrations: enabledIntegrationsUnified,
+            availableIntegrations: availableIntegrationsUnified,
             enabledKBIds,
             availableKBs,
             attachments,
@@ -1103,74 +1291,135 @@ const NumaWorkspaceChatAgents = () => {
     }
   }, []);
 
-  // Load connections via proxy
-  const loadConnectionStatus = async () => {
-    if (!lambdaClient || !user) return;
+  // ── Atomic connector + integrations loader ────────────────────────────
+  //
+  // Everything the sidebar "Integrations" section needs (Pipedream
+  // connections, admin-configured natives, and per-user native status)
+  // resolves through ONE flag — `connectionsLoading` — so the panel
+  // renders both kinds together. Three independent effects previously
+  // staggered: Pipedream landed first, the sidebar showed only that, then
+  // natives popped in a moment later. Now `Promise.all` runs every fetch
+  // in parallel and only flips loading=false after all signals + per-user
+  // statuses have landed.
+  //
+  // The reusable `loadAll` / `loadUserStatusesOnly` helpers cover the
+  // refocus path (tab regains focus → re-check user state) and the
+  // post-connect path (a connect modal completes → re-check everything).
+  const loadAllConnectorStatuses = useCallback(async () => {
+    if (!user) return;
+    setConnectionsLoading(true);
     try {
-      setConnectionsLoading(true);
-      const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
-      const response = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
-        ttlMs: 30 * 60 * 1000, // 30 minutes cache for chat page
-      });
+      const wantsPipedream = !!lambdaClient && hasPipedreamFeature && !!relayLambdaArn;
+      const externalUserId = wantsPipedream ? PipedreamProxyService.deriveExternalUserId(user) : null;
 
-      // Transform the connection objects to the format expected by the UI
-      const allConnections = (response.connections || []).map((conn) => ({
-        id: conn.app_name,
-        name: conn.app_name,
-        isConnected: conn.status === 'connected',
-        mcpServerUrl: undefined,
-      }));
+      // Four parallel fetches — Pipedream proxy, catalog + DDB rows,
+      // admin-configured connector list, admin integration settings.
+      // Each path silently returns its empty shape on failure so a single
+      // misbehaving service doesn't empty the whole sidebar.
+      //
+      // Admin settings are fetched here (not in a separate effect) so that
+      // the disabled-filter is applied on the FIRST render. Splitting them
+      // out caused a visible double-load: the sidebar rendered once with
+      // an empty filter, then re-rendered after settings landed.
+      const [pipedreamStatus, catalog, nativeRows, configured, adminSettings] = await Promise.all([
+        wantsPipedream && lambdaClient && externalUserId
+          ? PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
+              ttlMs: 30 * 60 * 1000,
+            }).catch(() => null)
+          : Promise.resolve(null),
+        AdminIntegrationsService.catalogWithNuma(numaGet).catch(() => []),
+        DataConnectorsService.listStatus(numaGet).catch(() => [] as Array<{ connector_id: string; status?: string }>),
+        ConnectorsService.listConfigured().catch(
+          () =>
+            ({
+              oauth: [] as Array<{ id: string; displayName: string }>,
+              pat: [] as Array<{ id: string; displayName: string }>,
+            }) as {
+              oauth: Array<{ id: string; displayName: string }>;
+              pat: Array<{ id: string; displayName: string }>;
+            }
+        ),
+        numaGet('/api/settings/integrations').catch(
+          () => [] as Array<{ integration: string; status: 'enabled' | 'disabled'; denyTools: string[] }>
+        ) as Promise<Array<{ integration: string; status: 'enabled' | 'disabled'; denyTools: string[] }>>,
+      ]);
 
-      // Only show connected integrations as available for selection, and enabled by admin
-      const connected = allConnections
-        .filter((conn) => conn.isConnected)
-        .filter((conn) => globalIntegrationSettings[conn.id]?.status !== 'disabled');
+      const adminSettingsMap: Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }> = {};
+      for (const item of adminSettings || []) {
+        adminSettingsMap[item.integration] = { status: item.status, denyTools: item.denyTools || [] };
+      }
 
-      setAvailableConnections(connected);
+      // Build Pipedream "available connections" — only ones the user
+      // actually connected AND that admin hasn't disabled.
+      const pipedreamConnections = pipedreamStatus
+        ? (pipedreamStatus.connections || [])
+            .map((conn) => ({
+              id: conn.app_name,
+              name: conn.app_name,
+              isConnected: conn.status === 'connected',
+              mcpServerUrl: undefined as string | undefined,
+            }))
+            .filter((c) => c.isConnected)
+            .filter((c) => adminSettingsMap[c.id]?.status !== 'disabled')
+        : [];
+
+      // Build the native candidate set — every connector the workspace
+      // has, via either admin listConfigured OR a DDB row. Catches legacy-
+      // vault PAT connectors (Synergy etc.) that listConfigured misses.
+      const candidates = new Map<string, string>();
+      for (const c of configured.oauth) candidates.set(c.id, c.displayName);
+      for (const c of configured.pat) candidates.set(c.id, c.displayName);
+      for (const row of nativeRows) {
+        if (!candidates.has(row.connector_id)) {
+          const entry = catalog.find((e) => e.connectorSlug === row.connector_id);
+          const tmpl = getConnectorById(row.connector_id);
+          candidates.set(row.connector_id, tmpl?.displayName ?? entry?.connectorSlug ?? row.connector_id);
+        }
+      }
+      const nativeList = [...candidates.entries()].map(([id, name]) => ({ id, name }));
+
+      // Per-user status for each native candidate — one request per
+      // connector, all in parallel. We do this here (still inside the
+      // single loading window) so user-connected state is known by the
+      // time the sidebar renders, instead of trickling in after.
+      const userStatusResults = await Promise.all(
+        nativeList.map(async (c) => {
+          try {
+            const st = await ConnectorsService.getStatus(c.id);
+            return st.status === 'connected' ? c.id : null;
+          } catch {
+            return null;
+          }
+        })
+      );
+      const userConnected = userStatusResults.filter((x): x is string => Boolean(x));
+
+      // Single state commit — sidebar renders ONCE with the complete,
+      // correct picture for both Pipedream and native.
+      setGlobalIntegrationSettings(adminSettingsMap);
+      setAvailableConnections(pipedreamConnections);
+      setConnectedDataConnectors(nativeList);
+      setUserConnectedConnectorIds(userConnected);
+      // Drop stale enabled-native ids the user has since disconnected.
+      // Adding new ones is owned by the defaults flow.
+      setEnabledNativeConnectorIds((prev) => prev.filter((id) => userConnected.includes(id)));
     } catch (e) {
-      console.error('Failed to load connection status via proxy:', e);
+      console.error('Failed to load connector statuses:', e);
       setAvailableConnections([]);
+      setConnectedDataConnectors([]);
+      setUserConnectedConnectorIds([]);
     } finally {
       setConnectionsLoading(false);
     }
-  };
+  }, [lambdaClient, user, hasPipedreamFeature, relayLambdaArn, numaGet]);
 
-  useEffect(() => {
-    if (lambdaClient && hasPipedreamFeature && relayLambdaArn) loadConnectionStatus();
-  }, [lambdaClient]);
-
-  // Fetch admin-configured data connectors (OAuth + token/api-key/user-pass).
-  // The agent's system prompt needs EVERY connector the admin has set up for
-  // this workspace, not just ones the current user has personally connected —
-  // otherwise it has no way to know (e.g.) Fergus is a data connector when the
-  // user asks "list my fergus jobs" before connecting, and it defaults to
-  // Pipedream integrations or refuses. Per-user connection state is checked at
-  // runtime by the agent via the connectors tool's `status` operation.
-  const loadDataConnectorStatus = useCallback(async () => {
-    try {
-      // ConnectorsService.listConfigured returns pre-split {oauth, pat} arrays.
-      // We merge into a flat id+name list for the widget; classification is
-      // already done, so no per-entry authType checks needed here.
-      const { oauth, pat } = await ConnectorsService.listConfigured();
-      setConnectedDataConnectors([...oauth, ...pat].map((c) => ({ id: c.id, name: c.displayName })));
-    } catch (e) {
-      console.error('Failed to load data connector status:', e);
-      setConnectedDataConnectors([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (sessionStorage.getItem('OAUTH_AVAILABLE') === 'true') {
-      loadDataConnectorStatus();
-    }
-  }, [loadDataConnectorStatus]);
-
-  // Per-user connection state for the sidebar Connectors widget. Routing to
-  // the right endpoint per auth stream happens inside ConnectorsService —
-  // this loop just asks "is this id connected" and doesn't care how.
+  // Lighter refresh — just re-check per-user statuses for the connectors
+  // we've already discovered. Used on tab refocus + after a connect modal
+  // completes; no need to re-fetch the catalog or admin-config lists.
   const loadUserConnectorStatus = useCallback(async () => {
     if (connectedDataConnectors.length === 0) {
       setUserConnectedConnectorIds([]);
+      setEnabledNativeConnectorIds([]);
       return;
     }
     try {
@@ -1180,7 +1429,9 @@ const NumaWorkspaceChatAgents = () => {
           return st.status === 'connected' ? c.id : null;
         })
       );
-      setUserConnectedConnectorIds(results.filter((x): x is string => Boolean(x)));
+      const connected = results.filter((x): x is string => Boolean(x));
+      setUserConnectedConnectorIds(connected);
+      setEnabledNativeConnectorIds((prev) => prev.filter((id) => connected.includes(id)));
     } catch (e) {
       console.error('Failed to load per-user connector status:', e);
       setUserConnectedConnectorIds([]);
@@ -1188,19 +1439,13 @@ const NumaWorkspaceChatAgents = () => {
   }, [connectedDataConnectors]);
 
   useEffect(() => {
-    if (sessionStorage.getItem('OAUTH_AVAILABLE') === 'true') {
-      loadUserConnectorStatus();
-    }
-  }, [loadUserConnectorStatus]);
+    loadAllConnectorStatuses();
+  }, [loadAllConnectorStatuses]);
 
-  // Re-check status when the tab regains focus — catches OAuth redirects
-  // returning in the same tab and PAT saves from the modal.
+  // Re-check user status when the tab regains focus — catches OAuth
+  // redirects returning in the same tab and PAT saves from the modal.
   useEffect(() => {
-    const onFocus = () => {
-      if (sessionStorage.getItem('OAUTH_AVAILABLE') === 'true') {
-        loadUserConnectorStatus();
-      }
-    };
+    const onFocus = () => loadUserConnectorStatus();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [loadUserConnectorStatus]);
@@ -1321,13 +1566,11 @@ const NumaWorkspaceChatAgents = () => {
     // Use the hook's new chat handler
     await handleNewChat();
 
-    // Refresh integration connection status so availableConnections is up-to-date.
-    // Once loadConnectionStatus resolves and updates availableConnections, the
-    // defaults-application useEffect will re-apply user defaults with the fresh
-    // connected set (since userSettingsModified is now false).
-    if (lambdaClient && hasPipedreamFeature && relayLambdaArn) {
-      loadConnectionStatus();
-    }
+    // Refresh ALL connector status (Pipedream + native + per-user) so the
+    // defaults-application useEffect re-applies user defaults against the
+    // fresh connected set. Single atomic load so the sidebar doesn't flash
+    // a stale state between conversations.
+    loadAllConnectorStatuses();
   }
 
   const handleHeaderNewChat = async () => {
@@ -2181,12 +2424,8 @@ const NumaWorkspaceChatAgents = () => {
         prompt: userMsg,
         conversationId: cid,
         enabledTools,
-        enabledConnections,
-        availableIntegrations: availableConnections
-          .filter((conn) => conn.isConnected)
-          .map((conn) => ({ id: conn.id, name: conn.name })),
-        connectedDataConnectors: dataConnectorsEnabled ? connectedDataConnectors : [],
-        dataConnectorsEnabled,
+        enabledIntegrations: enabledIntegrationsUnified,
+        availableIntegrations: availableIntegrationsUnified,
         enabledKBIds,
         availableKBs,
         attachments,
@@ -2477,7 +2716,7 @@ const NumaWorkspaceChatAgents = () => {
     !createAgentEnabled &&
     !memoriesEnabled &&
     !numaOpsEnabled &&
-    !dataConnectorsEnabled;
+    enabledNativeConnectorIds.length === 0;
 
   // Derived active agent for header display (pending takes priority during transitions)
   const activeAgent = pendingAgent || currentAgent;
@@ -3198,8 +3437,6 @@ const NumaWorkspaceChatAgents = () => {
             numaOpsEnabled={numaOpsFeatureEnabled ? numaOpsEnabled : false}
             setNumaOpsEnabled={handleUserSetNumaOpsEnabled}
             numaOpsFeatureEnabled={numaOpsFeatureEnabled}
-            dataConnectorsEnabled={dataConnectorsFeatureEnabled ? dataConnectorsEnabled : false}
-            setDataConnectorsEnabled={setDataConnectorsEnabled}
             dataConnectorsFeatureEnabled={dataConnectorsFeatureEnabled}
             agentsFeatureEnabled={agentsFeatureEnabled}
             enabledKBIds={enabledKBIds}
@@ -3213,7 +3450,8 @@ const NumaWorkspaceChatAgents = () => {
             hasPipedreamFeature={hasPipedreamFeature}
             adminConfiguredConnectors={connectedDataConnectors}
             userConnectedConnectorIds={userConnectedConnectorIds}
-            onConnectorConnected={loadUserConnectorStatus}
+            enabledNativeConnectorIds={enabledNativeConnectorIds}
+            setEnabledNativeConnectorIds={handleUserSetEnabledNativeConnectorIds}
             isDisabled={buttonStatus === 'streaming' || isFileProcessing || hasUploadsInProgress}
             showModelSelector={workspaceModelSelectionEnabled}
             selectedModelId={selectedModelId}

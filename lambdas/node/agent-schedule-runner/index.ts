@@ -22,6 +22,7 @@ import {
   parseQuotasFromSettingsItem,
   resolveEffectiveQuotas,
 } from '../../../lib/schedule-load';
+import { buildUnifiedIntegrationsPayload, type IntegrationListItem } from './integrations-payload';
 
 // Long-poll dispatcher for the workspace-agent sync invocation. Node's built-in
 // fetch (undici) defaults `headersTimeout` to 300s, so any agent run > 5 min
@@ -46,6 +47,15 @@ const CLIENT_NAME = process.env.CLIENT_NAME ?? '';
 const EMAIL_SENDER_LAMBDA_ARN = process.env.EMAIL_SENDER_LAMBDA_ARN ?? '';
 const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
 const SCHEDULING_SETTINGS_TABLE = process.env.SCHEDULING_SETTINGS_TABLE_NAME ?? '';
+const GLOBAL_INTEGRATION_SETTINGS_TABLE = process.env.GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME ?? '';
+const DATA_CONNECTORS_TABLE = process.env.DATA_CONNECTORS_TABLE_NAME ?? '';
+const DATA_CONNECTORS_ENABLED = (process.env.DATA_CONNECTORS_ENABLED ?? '').toLowerCase() === 'true';
+const PIPEDREAM_RELAY_LAMBDA_ARN = process.env.PIPEDREAM_RELAY_LAMBDA_ARN ?? '';
+// Workspace-agent featureFlags forwarded into scheduled-run request bodies.
+// These gate MCP-server registration in `sdk_config.py`: missing flags ⇒ no
+// connectors/vault tool family in the sandbox, even when the user is authed.
+const OAUTH_INTEGRATIONS_ENABLED = (process.env.OAUTH_INTEGRATIONS_ENABLED ?? '').toLowerCase() === 'true';
+const SECRETS_VAULT_ENABLED = (process.env.SECRETS_VAULT_ENABLED ?? '').toLowerCase() === 'true';
 
 /**
  * Level-2 (per-client) quota overrides parsed at cold start. Used by the
@@ -330,7 +340,10 @@ type AuthContext = {
 type ScheduledRunConfig = {
   modelId?: string;
   enabledTools?: string[];
+  /** @deprecated since FEAT-143 — see enabledIntegrations. Still read for legacy records. */
   enabledConnections?: string[];
+  /** Method-tagged integrations override. Resolved by buildUnifiedIntegrationsPayload. */
+  enabledIntegrations?: IntegrationListItem[];
   enabledKBIds?: string[];
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
@@ -344,6 +357,8 @@ type AgentToolsConfig = {
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
   enabledConnections?: string[];
+  /** Future-shape: agents storing method-tagged integrations directly. */
+  enabledIntegrations?: IntegrationListItem[];
   allowedKnowledgeBases?: string[] | null;
 };
 
@@ -2325,6 +2340,23 @@ const invokeWorkspaceAgent = async ({
   // V2 handles the agent's system prompt natively via agentId — we only add the scheduled-run context.
   const prompt = scheduledRun ? `${SCHEDULED_RUN_PREAMBLE}${runPrompt}` : runPrompt;
 
+  // FEAT-143 — build the unified integrations payload server-side. Resolves
+  // per-slug method (native vs Pipedream) from the user's live auth state +
+  // admin preferred_method. Drops the legacy `enabledConnections` wire field;
+  // the workspace-agent soft adapter prefers the new shape when present.
+  const { enabledIntegrations, availableIntegrations } = await buildUnifiedIntegrationsPayload({
+    dynamo,
+    lambdaClient,
+    globalIntegrationSettingsTableName: GLOBAL_INTEGRATION_SETTINGS_TABLE,
+    dataConnectorsTableName: DATA_CONNECTORS_TABLE,
+    dataConnectorsEnabled: DATA_CONNECTORS_ENABLED,
+    pipedreamRelayLambdaArn: PIPEDREAM_RELAY_LAMBDA_ARN,
+    clientName: CLIENT_NAME,
+    userSub: auth.sub,
+    agentSnapshot,
+    runConfig,
+  });
+
   const requestBody = {
     action: 'chat',
     responseMode: 'sync',
@@ -2339,7 +2371,16 @@ const invokeWorkspaceAgent = async ({
     enabledTools: mapToolsToCanonical(runConfig?.enabledTools),
     // Map V1 KB IDs to V2 availableKBs format
     availableKBs: mapKBsToV2(runConfig?.enabledKBIds),
-    enabledConnections: runConfig?.enabledConnections,
+    enabledIntegrations,
+    availableIntegrations,
+    // Mirror the chat-side payload — `sdk_config.py` registers the
+    // `connectors` and `vault` MCP families ONLY when these flags are
+    // truthy. Scheduled runs were getting an empty featureFlags object
+    // and silently losing native-connector tool access.
+    featureFlags: {
+      OAUTH_INTEGRATIONS_ENABLED,
+      SECRETS_VAULT_ENABLED,
+    },
     timezone: 'UTC',
     userEmail: auth.email ?? '',
     todayString: buildTodayString(),
@@ -2615,6 +2656,15 @@ const mergeRunConfig = (
     ...(agentSnapshot?.requiredIntegrations ?? []),
   ]);
 
+  // FEAT-143 — propagate the method-tagged shape when present on either side.
+  // The runner's `buildUnifiedIntegrationsPayload` consumes this preferentially;
+  // when absent it falls back to the legacy `enabledConnections` list above and
+  // infers the method from per-user auth state at wire time.
+  const enabledIntegrationsMerged = mergeIntegrationRows([
+    ...(base.enabledIntegrations ?? []),
+    ...(toolsConfig.enabledIntegrations ?? []),
+  ]);
+
   // Merge KB IDs from both the run config and the agent snapshot's allowedKnowledgeBases.
   // allowedKnowledgeBases semantics:
   //   null      = "All knowledge bases" (user explicitly selected this)
@@ -2685,12 +2735,27 @@ const mergeRunConfig = (
     ...base,
     enabledTools,
     enabledConnections,
+    enabledIntegrations: enabledIntegrationsMerged.length > 0 ? enabledIntegrationsMerged : undefined,
     enabledKBIds,
     allKBsAllowed,
     autoToolsEnabled,
     webSearchEnabled,
     createAgentEnabled,
   };
+};
+
+/** Dedupe method-tagged integration rows on (method, slug). */
+const mergeIntegrationRows = (rows: IntegrationListItem[]): IntegrationListItem[] => {
+  const seen = new Set<string>();
+  const out: IntegrationListItem[] = [];
+  for (const row of rows) {
+    if (!row?.slug || !row?.method) continue;
+    const key = `${row.method}:${row.slug}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ slug: row.slug, method: row.method, name: row.name ?? row.slug });
+  }
+  return out;
 };
 
 /**

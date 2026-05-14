@@ -20,7 +20,14 @@ type Bar = {
   unit?: string;
 };
 
-export const QuotaUsageStrip: React.FC = () => {
+/** Bumping `refreshKey` re-fetches the quota summary. Parents that mutate
+ *  schedules (toggle, create, delete) bump it so the bars reflect the new
+ *  cron projection / active-count without a page reload. */
+type Props = {
+  refreshKey?: number | string;
+};
+
+export const QuotaUsageStrip: React.FC<Props> = ({ refreshKey }) => {
   const { numaGet } = useNumaRequest();
   const [summary, setSummary] = useState<QuotaSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,7 +48,7 @@ export const QuotaUsageStrip: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [numaGet]);
+  }, [numaGet, refreshKey]);
 
   // Hide the strip if the response is malformed (missing the parent
   // `user`/`quotas` objects). Without this guard, accessing

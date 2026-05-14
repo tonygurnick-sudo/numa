@@ -1,8 +1,13 @@
+import type { IntegrationListItem } from './workspaceChatTypes';
+
 export type ScheduledRunConfig = {
   systemPrompt?: string;
   modelId?: string;
   enabledTools?: string[];
+  /** @deprecated since FEAT-143 — use `enabledIntegrations` (method-tagged). */
   enabledConnections?: string[];
+  /** Unified integrations row list — see workspaceChatTypes.IntegrationListItem. */
+  enabledIntegrations?: IntegrationListItem[];
   enabledKBIds?: string[];
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
@@ -60,7 +65,6 @@ export type TypedScheduleError = {
   resource?: string;
   remediationPath?: string;
 };
-
 
 export type AgentSchedule = {
   scheduleId: string;

@@ -183,6 +183,12 @@ export class OAuthProvidersService {
     assertOAuthAtRuntime(provider, 'disconnect');
     try {
       const endpoint = getApiEndpoint();
+      // Per-connector revoke URL: user tokens are stored under
+      // `oauth-{connectorId}` in the consolidated vault (connect-time uses
+      // `session.connector || provider` when writing), so we need the
+      // connector slug in the URL, NOT the OAuth platform. Sharing a platform
+      // (e.g. google -> gmail + googledrive) only affects the *client*
+      // credentials, not the per-user token storage.
       const response = await fetch(`${endpoint}/oauth/${provider}/revoke`, {
         method: 'POST',
         headers: getAuthHeaders(),

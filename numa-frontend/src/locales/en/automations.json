@@ -213,7 +213,7 @@
     },
     "maxRuns": {
       "label": "Max runs per month",
-      "help": "The automation pauses when this many runs is hit. Resume it manually any time after the 1st of next month when your quota resets. Maximum 100.",
+      "help": "The automation pauses when this many runs is hit. Resume it manually any time after the 1st of next month when your quota resets. Set to 0 for unlimited.",
       "unlimited": "Unlimited"
     },
     "emailNotifications": {
@@ -241,6 +241,7 @@
     "timezoneLabel": "Timezone",
     "emailLabel": "Email notifications",
     "noPrompt": "No additional instructions",
+    "unlimited": "Unlimited",
     "enabled": "Enabled",
     "disabled": "Disabled",
     "edit": "Edit"

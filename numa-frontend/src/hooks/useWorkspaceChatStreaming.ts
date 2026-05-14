@@ -21,7 +21,7 @@ import {
 } from '../utils/workspaceChatEventHandlers';
 import { extractSingleDocBlock } from '../utils/streamingProcessors';
 import { parseRawTraceToMessages } from '../utils/workspaceChatEventHandlers';
-import type { SDKEventContext, WorkspaceChatModelId } from '../types/workspaceChatTypes';
+import type { IntegrationListItem, SDKEventContext, WorkspaceChatModelId } from '../types/workspaceChatTypes';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 
 type Message = {
@@ -53,10 +53,14 @@ type StreamConfig = {
   prompt: string;
   conversationId: string;
   enabledTools: string[];
-  enabledConnections: string[];
-  availableIntegrations: Array<{ id: string; name: string }>;
-  connectedDataConnectors?: Array<{ id: string; name: string }>;
-  dataConnectorsEnabled?: boolean;
+  /** Integrations ENABLED for this chat — the agent can call these. Each
+   *  row carries a method tag so the agent knows which MCP family (Pipedream
+   *  vs native) to route to. */
+  enabledIntegrations: IntegrationListItem[];
+  /** Integrations AVAILABLE (connected but not necessarily enabled). Lets
+   *  the agent suggest flipping something on rather than claim nothing is
+   *  connected. */
+  availableIntegrations: IntegrationListItem[];
   enabledKBIds: string[];
   availableKBs: Array<{ kb_id: string; kb_name: string }>;
   /** File and folder attachments */
@@ -205,10 +209,8 @@ export function useWorkspaceChatStreaming({
         prompt,
         conversationId,
         enabledTools,
-        enabledConnections,
+        enabledIntegrations,
         availableIntegrations,
-        connectedDataConnectors,
-        dataConnectorsEnabled,
         enabledKBIds,
         availableKBs,
         attachments,
@@ -261,10 +263,8 @@ export function useWorkspaceChatStreaming({
           timezone,
           availableKBs: workspaceChatKBs,
           enabledTools,
-          enabledConnections,
+          enabledIntegrations,
           availableIntegrations,
-          connectedDataConnectors,
-          dataConnectorsEnabled,
           modelId,
           attachments,
           hasUploads: !!attachments?.files && attachments.files.length > 0,

@@ -161,6 +161,10 @@ export const SchedulingPage: React.FC = () => {
   const [agentFilter, setAgentFilter] = useState('all');
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  // Bumped on every successful schedule reload so the QuotaUsageStrip
+  // re-fetches its summary — toggles, create, delete all flow through
+  // loadSchedules, which makes this the single bump point.
+  const [quotaRefreshKey, setQuotaRefreshKey] = useState(0);
   const [showDebugIds, setShowDebugIds] = useState(false);
 
   // Run history expansion state
@@ -181,6 +185,11 @@ export const SchedulingPage: React.FC = () => {
       setError(null);
       const scheduleEvents = await ScheduleService.getActiveSchedules(numaGet);
       setSchedules(scheduleEvents);
+      // Trigger a quota strip refresh — the cron projection and active
+      // automation count both change when a schedule is toggled, created,
+      // or deleted. Bumping after each list reload covers every code path
+      // without us having to remember to call it from each handler.
+      setQuotaRefreshKey((k) => k + 1);
     } catch (err) {
       console.error('Failed to load schedules:', err);
       setError((err as Error)?.message ?? t('scheduling.errors.load'));
@@ -654,7 +663,7 @@ export const SchedulingPage: React.FC = () => {
             </Alert>
           )}
 
-          <QuotaUsageStrip />
+          <QuotaUsageStrip refreshKey={quotaRefreshKey} />
 
           <Row className="g-0">
             <Col>

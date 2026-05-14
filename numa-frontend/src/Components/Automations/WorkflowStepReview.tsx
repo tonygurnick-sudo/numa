@@ -235,7 +235,8 @@ export const WorkflowStepReview = ({
                   <span className="fw-medium">{t('review.promptLabel')}:</span> {prompt || t('review.noPrompt')}
                 </div>
                 <div>
-                  <span className="fw-medium">{t('review.maxRunsLabel')}:</span> {maxRuns}
+                  <span className="fw-medium">{t('review.maxRunsLabel')}:</span>{' '}
+                  {maxRuns > 0 ? maxRuns : t('review.unlimited')}
                 </div>
               </div>
             </div>
