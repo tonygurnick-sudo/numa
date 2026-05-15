@@ -382,6 +382,8 @@
     "deleteZoneConfirm": "Are you sure? This will also delete all stages in this zone.",
     "cannotDeleteLastZone": "Cannot delete the last zone.",
     "cannotDeleteZoneWithTickets": "Move or delete tickets in this zone before removing it.",
+    "moveZoneUp": "Move zone up",
+    "moveZoneDown": "Move zone down",
     "newZoneName": "New Zone",
     "newZoneNamePlaceholder": "Zone name...",
     "addZoneStagesHint": "configure stages after creation via the edit button.",
@@ -517,6 +519,8 @@
     "addStage": "Add Stage",
     "newStageName": "Stage name...",
     "noBoards": "No boards yet. Create one to get started.",
+    "noPinnedBoards": "No boards pinned to this view. Use the selector to choose which boards appear here.",
+    "showInStrip": "Show in All Boards view",
     "welcome": {
       "headline": "Welcome to Ops",
       "subtitle": "Your workspace for managing work, from tasks to full projects.",
@@ -673,7 +677,9 @@
     "selected": "{{count}} selected",
     "deselectAll": "Deselect All",
     "keepAsIs": "Keep as is",
-    "bulkDelete": "Bulk Delete"
+    "bulkDelete": "Bulk Delete",
+    "addToSprint": "Add to Sprint",
+    "draggingCount": "+{{count}}"
   },
   "archive": {
     "archive": "Archive",

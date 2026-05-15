@@ -232,7 +232,12 @@ const queryGSI2 = async (
   return { items: (result.Items ?? []) as Item[], lastKey: result.LastEvaluatedKey as Item | undefined };
 };
 
-// Check linked tickets for a customer/supplier via GSI2 on the ops table
+// Check linked tickets for a customer/supplier via GSI2 on the ops table.
+// GSI is eventually consistent — for live counts immediately after a link
+// operation, prefer the denormalised openTicketCount maintained by the ops
+// API. This is used as the convergence path on detail GETs and as the only
+// path during customer/supplier delete (where the denormalised value cannot
+// be trusted as the sole gate against orphaning tickets).
 const getLinkedTicketCount = async (entityType: string, entityId: string): Promise<number> => {
   const result = await dynamo.send(
     new QueryCommand({
@@ -244,6 +249,35 @@ const getLinkedTicketCount = async (entityType: string, entityId: string): Promi
     })
   );
   return result.Count ?? 0;
+};
+
+// Reconcile the denormalised openTicketCount on a customer/supplier META item
+// with the live GSI count. Lazy convergence path for entities created or
+// linked before atomic counter maintenance was introduced (BUG-075). Returns
+// the authoritative count and mutates the meta item in-place if it differed.
+const reconcileOpenTicketCount = async (
+  entityType: 'CUSTOMER' | 'SUPPLIER',
+  entityId: string,
+  meta: Item
+): Promise<number> => {
+  const live = await getLinkedTicketCount(entityType, entityId);
+  if ((meta.openTicketCount as number | undefined) !== live) {
+    try {
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: OPS_CRM_TABLE,
+          Key: { PK: `${entityType}#${entityId}`, SK: 'META' },
+          UpdateExpression: 'SET openTicketCount = :v',
+          ExpressionAttributeValues: { ':v': live },
+          ConditionExpression: 'attribute_exists(PK)',
+        })
+      );
+      meta.openTicketCount = live;
+    } catch (err) {
+      if ((err as Error).name !== 'ConditionalCheckFailedException') throw err;
+    }
+  }
+  return live;
 };
 
 // Page through IDX_CUSTOMER items on the ops table. Each row carries the ticket's
@@ -351,7 +385,11 @@ const handleCustomers = async (
     ]);
     if (!meta) return errorResponse(404, 'Customer not found');
 
-    const ticketCount = await getLinkedTicketCount('CUSTOMER', customerId);
+    // Recompute openTicketCount from the live GSI and persist if it drifted.
+    // Detail-modal opens become the convergence trigger for customers created
+    // before atomic counter maintenance, so the list view's card count catches
+    // up the next time loadCustomers fires.
+    const ticketCount = await reconcileOpenTicketCount('CUSTOMER', customerId, meta);
     await presignLogos([meta]);
 
     return jsonResponse(200, {
@@ -528,7 +566,7 @@ const handleSuppliers = async (
     ]);
     if (!meta) return errorResponse(404, 'Supplier not found');
 
-    const ticketCount = await getLinkedTicketCount('SUPPLIER', supplierId);
+    const ticketCount = await reconcileOpenTicketCount('SUPPLIER', supplierId, meta);
 
     return jsonResponse(200, {
       supplier: meta,

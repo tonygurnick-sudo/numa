@@ -1727,6 +1727,21 @@
   }
 }
 
+// "My Files" row in the chat folder picker — distinct tinted background to
+// signal "your personal default folder, on by default".
+.workspace-chat-v2
+  .workspace-chat-settings-drawer
+  .workspace-settings-list
+  .workspace-settings-list-item.workspace-settings-kb-list-item--my-files {
+  background-color: rgba(124, 58, 237, 0.06);
+  border-radius: 0.35rem;
+  margin-bottom: 0.2rem;
+
+  .workspace-settings-kb-label svg:first-of-type {
+    color: rgba(124, 58, 237, 0.85);
+  }
+}
+
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-integrations-list {
   gap: 0.45rem;
 }

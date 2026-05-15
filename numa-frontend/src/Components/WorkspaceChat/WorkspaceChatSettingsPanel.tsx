@@ -24,6 +24,7 @@ import {
   Plug,
   RefreshCw,
   Upload,
+  UserCircle,
   User as UserIcon,
   Wrench,
 } from 'lucide-react';
@@ -41,11 +42,14 @@ import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
 import { getFlag } from '../../utils/featureFlags';
 import { useShowChatCost } from '../../hooks/useShowChatCost';
+import { sortKnowledgeBases } from '../../constants/knowledgeBase';
 
 type KnowledgeBase = {
   kb_id: string;
   kb_name: string;
   role?: string;
+  is_root?: boolean;
+  is_shared?: boolean;
 };
 
 type ConnectionOption = {
@@ -214,6 +218,10 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   // Connected integrations only
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
 
+  // Pin My Files first, then company / numa-support / shared KBs. Stable
+  // sort preserves the backend's alphabetical order within the user KB tier.
+  const sortedKBs = useMemo(() => sortKnowledgeBases(availableKBs), [availableKBs]);
+
   // Data connectors — per-user connection state + Connect click handling.
   // OAuth connectors route through ConnectorsService.connect (browser redirect
   // back via PKCE callback). PAT/token connectors open an inline modal.
@@ -331,13 +339,13 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 <div className="text-muted small fst-italic">{t('workspaceSettings.noKBs')}</div>
               ) : (
                 <>
-                  {availableKBs.length > 1 && (
+                  {sortedKBs.length > 1 && (
                     <div className="workspace-settings-kb-actions">
                       <button
                         type="button"
                         className="workspace-settings-kb-action-link"
-                        onClick={() => setEnabledKBIds(availableKBs.map((kb) => kb.kb_id))}
-                        disabled={isDisabled || availableKBs.every((kb) => enabledKBIds.includes(kb.kb_id))}
+                        onClick={() => setEnabledKBIds(sortedKBs.map((kb) => kb.kb_id))}
+                        disabled={isDisabled || sortedKBs.every((kb) => enabledKBIds.includes(kb.kb_id))}
                       >
                         {t('workspaceSettings.selectAll')}
                       </button>
@@ -354,15 +362,19 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     </div>
                   )}
                   <div className="workspace-settings-list">
-                    {availableKBs.map((kb) => (
+                    {sortedKBs.map((kb) => (
                       <Form.Check
                         type="checkbox"
                         key={kb.kb_id}
                         id={`panel-kb-${kb.kb_id}`}
-                        className="workspace-settings-list-item workspace-settings-kb-list-item"
+                        className={`workspace-settings-list-item workspace-settings-kb-list-item${
+                          kb.is_root ? ' workspace-settings-kb-list-item--my-files' : ''
+                        }`}
                         label={
                           <span className="workspace-settings-kb-label">
-                            {kb.kb_id === 'company' ? (
+                            {kb.is_root ? (
+                              <UserCircle size={14} />
+                            ) : kb.kb_id === 'company' ? (
                               <Building2 size={14} />
                             ) : kb.kb_id === 'numa-support' ? (
                               <LifeBuoy size={14} />

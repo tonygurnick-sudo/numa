@@ -100,6 +100,7 @@ function sanitizeUserKB(kb: UserKB | null | undefined): UserKB | null {
             : kbId,
     role: kb.role === 'EDITOR' || kb.role === 'OWNER' ? kb.role : 'VIEWER',
     is_shared: isShared,
+    is_root: kb.is_root === true,
     document_count: kb.document_count,
   };
 }

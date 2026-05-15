@@ -12,18 +12,22 @@ type BoardSelectorProps = {
   currentBoard: BoardSummaryItem | null;
   boards: BoardSummaryItem[];
   isAllBoards: boolean;
+  pinnedBoardIds: string[] | null;
   onSelectBoard: (boardId: string) => void;
   onSelectAllBoards: () => void;
   onCreateBoard: () => void;
+  onToggleBoardPin: (boardId: string) => void;
 };
 
 const BoardSelector = ({
   currentBoard,
   boards,
   isAllBoards,
+  pinnedBoardIds,
   onSelectBoard,
   onSelectAllBoards,
   onCreateBoard,
+  onToggleBoardPin,
 }: BoardSelectorProps) => {
   const { t } = useTranslation('ops');
 
@@ -59,21 +63,37 @@ const BoardSelector = ({
 
         {boards.length > 0 && <Dropdown.Divider />}
 
-        {boards.map((board) => (
-          <Dropdown.Item
-            key={board.id}
-            active={!isAllBoards && board.id === currentBoard?.id}
-            onClick={() => onSelectBoard(board.id)}
-          >
-            <span className="d-flex align-items-center gap-2">
+        {boards.map((board) => {
+          const isPinned = pinnedBoardIds === null || pinnedBoardIds.includes(board.id);
+          return (
+            <Dropdown.Item
+              as="div"
+              key={board.id}
+              active={!isAllBoards && board.id === currentBoard?.id}
+              className="d-flex align-items-center gap-2"
+              style={{ cursor: 'pointer', paddingTop: 6, paddingBottom: 6 }}
+              onClick={() => onSelectBoard(board.id)}
+            >
+              <input
+                type="checkbox"
+                className="form-check-input flex-shrink-0 mt-0"
+                checked={isPinned}
+                onChange={() => {}}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleBoardPin(board.id);
+                }}
+                title={t('boards.showInStrip')}
+                style={{ cursor: 'pointer' }}
+              />
               <span
-                className="d-inline-block rounded-circle"
+                className="d-inline-block rounded-circle flex-shrink-0"
                 style={{ width: 8, height: 8, backgroundColor: board.color ?? '#6c757d' }}
               />
-              {board.name}
-            </span>
-          </Dropdown.Item>
-        ))}
+              <span className="flex-grow-1">{board.name}</span>
+            </Dropdown.Item>
+          );
+        })}
 
         {boards.length > 0 && <Dropdown.Divider />}
         <Dropdown.Item onClick={onCreateBoard}>

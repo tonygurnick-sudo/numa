@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useOps } from './OpsContext';
@@ -16,10 +16,11 @@ import { getCached, setCache } from '../../utils/opsCache';
 interface AllBoardsStripProps {
   canManage?: boolean;
   currentUserSub?: string;
+  pinnedBoardIds: string[] | null;
   onOpenBoardSettings?: (boardId: string) => void;
 }
 
-const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllBoardsStripProps) => {
+const AllBoardsStrip = ({ canManage, currentUserSub, pinnedBoardIds, onOpenBoardSettings }: AllBoardsStripProps) => {
   const { t } = useTranslation('ops');
   const { numaGet } = useNumaRequest();
   const { boards, selectedBoardId, selectBoard, boardData, activeZoneId, setActiveZone } = useOps();
@@ -30,24 +31,23 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllB
     const cached = getCached<Record<string, BoardResponse>>('allBoardsZones');
     return cached ? new Map(Object.entries(cached)) : new Map();
   });
-  const fetchedRef = useRef<Set<string>>(
-    new Set(
-      (() => {
-        const cached = getCached<Record<string, BoardResponse>>('allBoardsZones');
-        return cached ? Object.keys(cached) : [];
-      })()
-    )
-  );
 
-  // Fetch zone data for all teams that aren't currently selected
+  // Refresh zone data for every non-selected board on mount and whenever the
+  // boards list changes. The cache provides instant first render via
+  // localStorage; this background refresh corrects any drift (zones
+  // renamed/deleted on other boards, sprints completed elsewhere) — without
+  // it, stale entries persisted across sessions, e.g. showing a Backlog zone
+  // that was deleted weeks ago.
   useEffect(() => {
     let cancelled = false;
 
-    const fetchMissing = async () => {
-      const toFetch = boards.filter((tm) => tm.id !== selectedBoardId && !fetchedRef.current.has(tm.id));
-      if (toFetch.length === 0) return;
+    const refreshAll = async () => {
+      const toFetch = boards.filter((tm) => tm.id !== selectedBoardId);
+      const validIds = new Set(boards.map((b) => b.id));
 
-      const results = await Promise.allSettled(toFetch.map((tm) => OpsService.getBoard(numaGet, tm.id)));
+      const results = toFetch.length
+        ? await Promise.allSettled(toFetch.map((tm) => OpsService.getBoard(numaGet, tm.id)))
+        : [];
 
       if (cancelled) return;
 
@@ -57,10 +57,12 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllB
           const result = results[i];
           if (result.status === 'fulfilled') {
             next.set(tm.id, result.value);
-            fetchedRef.current.add(tm.id);
           }
         });
-        // Persist to localStorage for instant rendering on remount
+        // Evict cache entries for boards that no longer exist
+        for (const k of [...next.keys()]) {
+          if (!validIds.has(k)) next.delete(k);
+        }
         const obj: Record<string, BoardResponse> = {};
         next.forEach((v, k) => {
           obj[k] = v;
@@ -70,12 +72,30 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllB
       });
     };
 
-    fetchMissing();
+    refreshAll();
 
     return () => {
       cancelled = true;
     };
   }, [boards, selectedBoardId, numaGet]);
+
+  // Mirror the currently-selected board's fresh data into the cache so that
+  // when the user navigates away, the strip immediately shows up-to-date
+  // zones without waiting for the next refresh cycle.
+  useEffect(() => {
+    if (!boardData?.board?.id) return;
+    const id = boardData.board.id;
+    setBoardDataCache((prev) => {
+      const next = new Map(prev);
+      next.set(id, boardData);
+      const obj: Record<string, BoardResponse> = {};
+      next.forEach((v, k) => {
+        obj[k] = v;
+      });
+      setCache('allBoardsZones', obj);
+      return next;
+    });
+  }, [boardData]);
 
   // Helper: get zones for a team (use context data for selected, cache for others)
   const getZonesForBoard = useCallback(
@@ -117,6 +137,8 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllB
     [selectBoard]
   );
 
+  const visibleBoards = pinnedBoardIds === null ? boards : boards.filter((b) => pinnedBoardIds.includes(b.id));
+
   if (boards.length === 0) {
     return (
       <div className="d-flex align-items-center gap-3 flex-grow-1">
@@ -127,12 +149,22 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllB
     );
   }
 
+  if (visibleBoards.length === 0) {
+    return (
+      <div className="d-flex align-items-center gap-3 flex-grow-1">
+        <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+          {t('boards.noPinnedBoards')}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className="d-flex align-items-stretch gap-3 flex-grow-1 ops-hide-scrollbar pb-2 pb-md-0 px-3 px-md-0"
       style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
     >
-      {boards.map((team) => {
+      {visibleBoards.map((team) => {
         const isSelected = team.id === selectedBoardId;
         const zones = getZonesForBoard(team.id);
         const activeSprintName = getActiveSprintName(team.id);

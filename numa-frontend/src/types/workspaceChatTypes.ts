@@ -508,6 +508,13 @@ export interface WorkspaceChatRequest {
   todayString?: string;
   // Parity with ChatAgentRequest
   availableKBs?: Array<{ id: string; name: string }>;
+  /**
+   * All folders the user can toggle on for this chat (the same set shown in
+   * the chat folder picker). Sent so the agent knows which folders the user
+   * has access to but has not enabled, and can suggest enabling them.
+   * Disabled folders remain non-queryable -- enforcement is via availableKBs.
+   */
+  accessibleKBs?: Array<{ id: string; name: string }>;
   enabledTools?: string[];
   enabledConnections?: string[];
   availableIntegrations?: Array<{ id: string; name: string }>;

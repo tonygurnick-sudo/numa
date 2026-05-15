@@ -314,10 +314,11 @@ const handleTicketTypes = async (
     return jsonResponse(200, { ticketTypes: items });
   }
 
-  // Admin-only from here
-  if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
-
-  // POST /config/ticket-types
+  // POST /config/ticket-types — any authenticated user may create.
+  // Boards are user-creatable (POST /ops/teams) and the Create Board wizard
+  // auto-stages new ticket types from preset suggestions, so gating creation
+  // on admin breaks non-admin board creation. Edits/deletes stay admin-only
+  // since they affect types other boards may already depend on.
   if (method === 'POST' && segments.length === 0) {
     const { name, prefix, icon, color, defaultFields } = body;
     if (!name || !prefix || !color) return errorResponse(400, 'Missing required fields: name, prefix, color');
@@ -350,6 +351,9 @@ const handleTicketTypes = async (
     await putConfigItem(item);
     return jsonResponse(201, item);
   }
+
+  // Admin-only from here (PUT/DELETE)
+  if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
 
   // PUT /config/ticket-types/{id}
   if (method === 'PUT' && segments.length === 1) {

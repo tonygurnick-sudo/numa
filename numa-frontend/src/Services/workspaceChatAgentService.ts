@@ -226,6 +226,7 @@ async function streamWorkspaceChatAttempt(
     todayString: request.todayString || generateTodayString(),
     // Parity with ChatAgentRequest
     availableKBs: request.availableKBs,
+    accessibleKBs: request.accessibleKBs,
     enabledTools: request.enabledTools,
     enabledConnections: request.enabledConnections,
     availableIntegrations: request.availableIntegrations,
@@ -991,6 +992,7 @@ export async function invokeWorkspaceAgentSync(
     userEmail: request.userEmail || getUserEmailFromToken(),
     todayString: request.todayString || generateTodayString(),
     availableKBs: request.availableKBs,
+    accessibleKBs: request.accessibleKBs,
     enabledTools: request.enabledTools,
     enabledConnections: request.enabledConnections,
     availableIntegrations: request.availableIntegrations,

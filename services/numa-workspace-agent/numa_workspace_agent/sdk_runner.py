@@ -481,6 +481,7 @@ async def stream_claude_sdk(
     feature_flags: Optional[dict[str, bool]] = None,
     voice_recordings: Optional[list[str]] = None,
     thinking_override: Optional[str] = None,
+    accessible_kbs: Optional[list[dict]] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -690,6 +691,7 @@ async def stream_claude_sdk(
         attached_folders,
         v1_migration_context,
         today_string=today_string,
+        accessible_kbs=accessible_kbs,
     )
 
     # 4. Create SDK options with validated model (with quota fallback pre-check)
@@ -1704,6 +1706,7 @@ async def run_claude_sdk(
     feature_flags: Optional[dict[str, bool]] = None,
     system_dir: Optional[Path] = None,
     thinking_override: Optional[str] = None,
+    accessible_kbs: Optional[list[dict]] = None,
 ) -> dict[str, Any]:
     """Run Claude SDK to completion and return the collected result.
 
@@ -1785,6 +1788,7 @@ async def run_claude_sdk(
         attached_folders,
         v1_migration_context,
         today_string=today_string,
+        accessible_kbs=accessible_kbs,
     )
 
     # 3b. Default approval mode env var — overridden per tool call in the

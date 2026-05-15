@@ -3,14 +3,26 @@ export const NUMA_SUPPORT_KB_ID = 'numa-support';
 export const SHAREPOINT_KB_ID = 'sharepoint';
 export const SYSTEM_KB_IDS = new Set<string>([COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SHAREPOINT_KB_ID]);
 
-/** Sort KBs: company first, sharepoint next, support, then user KBs. */
-export function sortKnowledgeBases<T extends { kb_id: string }>(kbs: T[]): T[] {
+/**
+ * Sentinel value used in persisted chat-settings `defaultKBIds` to mean
+ * "this user's My Files KB". The actual kb_id (the user's Cognito sub) is
+ * unknown at module-load time, so the sentinel is expanded against the
+ * current user when defaults are applied.
+ */
+export const MY_FILES_SENTINEL = '__my_files__';
+
+/** Sort KBs: My Files first, then company, then sharepoint, then support, then user KBs. */
+export function sortKnowledgeBases<T extends { kb_id: string; is_root?: boolean }>(kbs: T[]): T[] {
   const order: Record<string, number> = {
-    [COMPANY_KB_ID]: 0,
-    [SHAREPOINT_KB_ID]: 1,
-    [NUMA_SUPPORT_KB_ID]: 2,
+    [COMPANY_KB_ID]: 1,
+    [SHAREPOINT_KB_ID]: 2,
+    [NUMA_SUPPORT_KB_ID]: 3,
   };
-  return [...kbs].sort((a, b) => (order[a.kb_id] ?? 3) - (order[b.kb_id] ?? 3));
+  return [...kbs].sort((a, b) => {
+    const aRank = a.is_root ? 0 : (order[a.kb_id] ?? 4);
+    const bRank = b.is_root ? 0 : (order[b.kb_id] ?? 4);
+    return aRank - bRank;
+  });
 }
 
 export function isSystemKnowledgeBase(kbId: string | null | undefined): boolean {
@@ -32,4 +44,13 @@ export function isRootKB(kbId: string, userSub: string): boolean {
 /** Get the root KB ID for a user (same as their Cognito sub). */
 export function getRootKBId(userSub: string): string {
   return userSub;
+}
+
+/**
+ * Expand the My Files sentinel in a list of KB ids to the user's actual
+ * Cognito sub. Pass-through for any other id. Returns a new array.
+ */
+export function expandMyFilesSentinel(ids: string[], userSub: string | null | undefined): string[] {
+  if (!userSub) return ids.filter((id) => id !== MY_FILES_SENTINEL);
+  return ids.map((id) => (id === MY_FILES_SENTINEL ? userSub : id));
 }

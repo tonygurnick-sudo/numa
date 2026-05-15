@@ -1170,12 +1170,19 @@ export function TicketDetailModal({
                 </span>
               </>
             )}
-            {boardData?.board?.name && (
-              <>
-                <i className="bi bi-chevron-right" style={{ fontSize: '0.5rem' }} />
-                <span>{boardData.board.name}</span>
-              </>
-            )}
+            {(() => {
+              // For cross-board deep-links the ticket lives on a different
+              // board than the one currently open in the workspace. Always
+              // show the ticket's own board name in the breadcrumb so the
+              // header isn't lying about where the ticket lives.
+              const ticketBoardName = boards.find((b) => b.id === ticket.boardId)?.name ?? boardData?.board?.name;
+              return ticketBoardName ? (
+                <>
+                  <i className="bi bi-chevron-right" style={{ fontSize: '0.5rem' }} />
+                  <span>{ticketBoardName}</span>
+                </>
+              ) : null;
+            })()}
 
             {ticket.archived && (
               <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem', marginLeft: 6 }}>

@@ -280,6 +280,7 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
         CLIENT_NAME: clientName,
         OPS_TABLE: this.opsTable.name,
         OPS_CONFIG_TABLE: this.opsConfigTable.name,
+        OPS_CRM_TABLE: this.opsCrmTable.name,
         OUTPUTS_BUCKET_NAME: props.outputsBucketName,
         REGION: props.region,
         OTEL_METRICS_EXPORTER: 'none',
@@ -295,6 +296,13 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
           effect: 'Allow',
           actions: ['dynamodb:Query', 'dynamodb:GetItem'],
           resources: [this.opsConfigTable.arn],
+        },
+        // Atomic openTicketCount maintenance on customer/supplier META items
+        // when ticket.customerId / ticket.supplierId changes.
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:UpdateItem'],
+          resources: [this.opsCrmTable.arn],
         },
         {
           effect: 'Allow',

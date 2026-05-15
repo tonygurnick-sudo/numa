@@ -1,14 +1,19 @@
 """
 Email templates for the centralized email sender.
 
-Reuses the BASE_TEMPLATE from cognito-email-handler for consistent Numa branding.
 Templates are Jinja2 strings rendered with caller-provided context variables.
+Two Jinja environments are used:
+- html_jinja_env (autoescape=True) for HTML bodies. Interpolated values are
+  escaped by default; fields that contain pre-rendered HTML must be wrapped
+  in Markup() before rendering or referenced with the |safe filter.
+- text_jinja_env (autoescape=False) for plain-text bodies and subjects.
 """
 
 from typing import Dict, Optional, TypedDict
 
 import structlog
-from jinja2 import Environment
+from jinja2 import Environment, select_autoescape
+from markupsafe import Markup
 
 logger = structlog.get_logger()
 
@@ -148,8 +153,16 @@ BASE_TEMPLATE = """<!DOCTYPE html>
 </body>
 </html>"""
 
-jinja_env = Environment(autoescape=False)
-base_template = jinja_env.from_string(BASE_TEMPLATE)
+# HTML rendering escapes interpolated values by default to defend against XSS
+# in user-controlled fields (schedule names, comment authors, error summaries,
+# etc.). Templates that need to inject pre-rendered HTML reference fields with
+# the |safe filter or wrap values in Markup() at the call site.
+#
+# Plain-text rendering (subjects, text bodies) must NOT escape — entities like
+# `&amp;` would render literally in the user's inbox.
+html_jinja_env = Environment(autoescape=select_autoescape(["html"]))
+text_jinja_env = Environment(autoescape=False)
+base_template = html_jinja_env.from_string(BASE_TEMPLATE)
 
 
 class TemplateConfig(TypedDict):
@@ -164,7 +177,7 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
         "subject": "{{agent_name|default(schedule_name)}} - completed",
         "title": "Automation Completed",
         "html": (
-            '<div class="status-icon status-icon-success">\u2713</div>'
+            '<div class="status-icon status-icon-success">✓</div>'
             '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
             '<span style="font-weight:600;color:#333;">{{schedule_name}}</span>'
             "{% if agent_name and agent_name != schedule_name %}"
@@ -191,6 +204,11 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "</tr></table>{% endif %}"
             '{% if run_url %}<a href="{{run_url}}" class="button">'
             "View Results &rarr;</a>{% endif %}"
+            "{% if manage_url %}"
+            '<p style="margin:24px 0 0;font-size:12px;color:#888;text-align:center;">'
+            "Don't want these? "
+            '<a href="{{manage_url}}" style="color:#666;text-decoration:underline;">Pause or manage this schedule</a>.'
+            "</p>{% endif %}"
         ),
         "text": (
             "{{schedule_name}} completed successfully."
@@ -200,13 +218,14 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "{% if duration %}\nDuration: {{duration}}{% endif %}"
             "{% if run_count %}\nRun: {{run_count}}{% endif %}"
             "{% if run_url %}\n\nView results: {{run_url}}{% endif %}"
+            "{% if manage_url %}\nPause or manage this schedule: {{manage_url}}{% endif %}"
         ),
     },
     "schedule_failed": {
         "subject": "{{agent_name|default(schedule_name)}} - failed",
         "title": "Automation Failed",
         "html": (
-            '<div class="status-icon status-icon-failed">\u2717</div>'
+            '<div class="status-icon status-icon-failed">✗</div>'
             '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
             '<span style="font-weight:600;color:#333;">{{schedule_name}}</span>'
             "{% if agent_name and agent_name != schedule_name %}"
@@ -229,6 +248,11 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "</tr></table>{% endif %}"
             '{% if run_url %}<a href="{{run_url}}" class="button">'
             "View Details &rarr;</a>{% endif %}"
+            "{% if manage_url %}"
+            '<p style="margin:24px 0 0;font-size:12px;color:#888;text-align:center;">'
+            "Want this to stop? "
+            '<a href="{{manage_url}}" style="color:#666;text-decoration:underline;">Pause or manage this schedule</a>.'
+            "</p>{% endif %}"
         ),
         "text": (
             "{{schedule_name}} failed."
@@ -237,13 +261,14 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "{% if summary %}\n\nError: {{summary}}{% endif %}"
             "{% if duration %}\nDuration: {{duration}}{% endif %}"
             "{% if run_url %}\n\nView details: {{run_url}}{% endif %}"
+            "{% if manage_url %}\nPause or manage this schedule: {{manage_url}}{% endif %}"
         ),
     },
     "schedule_partial": {
         "subject": "{{agent_name|default(schedule_name)}} - completed with warnings",
         "title": "Automation Completed with Warnings",
         "html": (
-            '<div class="status-icon status-icon-warning">\u26a0</div>'
+            '<div class="status-icon status-icon-warning">⚠</div>'
             '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
             '<span style="font-weight:600;color:#333;">{{schedule_name}}</span>'
             "{% if agent_name and agent_name != schedule_name %}"
@@ -270,6 +295,11 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "</tr></table>{% endif %}"
             '{% if run_url %}<a href="{{run_url}}" class="button">'
             "View Results &rarr;</a>{% endif %}"
+            "{% if manage_url %}"
+            '<p style="margin:24px 0 0;font-size:12px;color:#888;text-align:center;">'
+            "Don't want these? "
+            '<a href="{{manage_url}}" style="color:#666;text-decoration:underline;">Pause or manage this schedule</a>.'
+            "</p>{% endif %}"
         ),
         "text": (
             "{{schedule_name}} completed with warnings."
@@ -279,12 +309,153 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "{% if duration %}\nDuration: {{duration}}{% endif %}"
             "{% if run_count %}\nRun: {{run_count}}{% endif %}"
             "{% if run_url %}\n\nView results: {{run_url}}{% endif %}"
+            "{% if manage_url %}\nPause or manage this schedule: {{manage_url}}{% endif %}"
+        ),
+    },
+    "schedule_quota_warning": {
+        "subject": "Scheduled agents — approaching {{scope}} quota ({{percent}}%)",
+        "title": "Scheduled agents quota warning",
+        "html": (
+            '<div class="status-icon status-icon-warning">⚠</div>'
+            '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
+            "{{scope_label}} is at <strong>{{percent}}%</strong> of its monthly scheduled-run quota."
+            "</p>"
+            '<div class="summary">'
+            '<p style="margin:0 0 8px;font-weight:600;color:#333;font-size:13px;">Current usage</p>'
+            '<p style="margin:0;color:#555;">'
+            "{{current}} of {{limit}} projected runs/month "
+            "{% if active_count %}across {{active_count}} active schedules{% endif %}."
+            "</p>"
+            "</div>"
+            '<p style="font-size:14px;color:#555;line-height:1.55;margin:20px 0 0;">'
+            "Once the cap is reached, new schedules above the user limit will need admin approval, "
+            "and high-frequency schedules may be auto-paused. Review the list and pause anything you don't need."
+            "</p>"
+            '{% if manage_url %}<a href="{{manage_url}}" class="button">Review schedules &rarr;</a>{% endif %}'
+        ),
+        "text": (
+            "{{scope_label}} is at {{percent}}% of its monthly scheduled-run quota.\n\n"
+            "Current usage: {{current}} of {{limit}} projected runs/month"
+            "{% if active_count %} across {{active_count}} active schedules{% endif %}.\n\n"
+            "Review and pause anything you don't need:"
+            "{% if manage_url %} {{manage_url}}{% endif %}"
+        ),
+    },
+    "schedule_trigger_quota_blocked": {
+        "subject": "{{schedule_name}} — trigger blocked, monthly cap reached",
+        "title": "Trigger blocked: monthly cap reached",
+        "html": (
+            '<div class="status-icon status-icon-failed">✗</div>'
+            '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
+            "Your automation "
+            '<span style="font-weight:600;color:#333;">{{schedule_name}}</span> '
+            "won't fire for the rest of this month — the monthly trigger cap has been reached."
+            "</p>"
+            '<div class="summary">'
+            '<p style="margin:0 0 8px;font-weight:600;color:#333;font-size:13px;">Reason</p>'
+            '<p style="margin:0;color:#555;">'
+            "{{scope_label}} hit the monthly trigger cap of <strong>{{cap}}</strong>. Pause or remove existing triggers to free up budget — an admin can also raise the cap."
+            "</p>"
+            "</div>"
+            '<p style="font-size:14px;color:#555;line-height:1.55;margin:20px 0 0;">'
+            "If this is unexpected, an admin can raise the cap. You'll get this email once per month per scope, not on every blocked fire."
+            "</p>"
+            '{% if manage_url %}<a href="{{manage_url}}" class="button">View automation &rarr;</a>{% endif %}'
+        ),
+        "text": (
+            "Your automation '{{schedule_name}}' won't fire for the rest of this month.\n\n"
+            "{{scope_label}} hit the monthly trigger cap of {{cap}}. Pause or remove existing triggers to free up budget — an admin can also raise the cap.\n\n"
+            "If this is unexpected, an admin can raise the cap."
+            "{% if manage_url %}\n\nView automation: {{manage_url}}{% endif %}"
+        ),
+    },
+    "schedule_paused_by_admin": {
+        "subject": "{{schedule_name}} — paused by an admin",
+        "title": "Automation paused by admin",
+        "html": (
+            '<div class="status-icon status-icon-warning">⚠</div>'
+            '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
+            "An admin has {{action_label}} your automation "
+            '<span style="font-weight:600;color:#333;">{{schedule_name}}</span>.'
+            "</p>"
+            "{% if reason %}"
+            '<div class="summary">'
+            '<p style="margin:0 0 8px;font-weight:600;color:#333;font-size:13px;">Reason</p>'
+            '<p style="margin:0;color:#555;">{{reason}}</p>'
+            "</div>"
+            "{% endif %}"
+            '<p style="font-size:14px;color:#555;line-height:1.55;margin:20px 0 0;">'
+            "{{next_steps}}"
+            "</p>"
+            '{% if manage_url %}<a href="{{manage_url}}" class="button">View automation &rarr;</a>{% endif %}'
+        ),
+        "text": (
+            "An admin has {{action_label}} your automation '{{schedule_name}}'.\n"
+            "{% if reason %}\nReason: {{reason}}\n{% endif %}"
+            "\n{{next_steps}}"
+            "{% if manage_url %}\n\nView automation: {{manage_url}}{% endif %}"
+        ),
+    },
+    # Ops mention notification — fired when a Numa Ops comment @-mentions a user.
+    # Structured fields (no raw HTML body) keep autoescape protection intact.
+    # The single trusted field is comment_html_safe, which the caller MUST
+    # sanitize before sending; this template marks it |safe at render time.
+    "ops_mention": {
+        "subject": "{{mentioner_name}} mentioned you on {{ticket_display_id}}",
+        "title": "You were mentioned",
+        "html": (
+            # Mentioner strip
+            '<div style="display:flex;align-items:center;gap:12px;margin:0 0 20px;text-align:left;">'
+            "{% if mentioner_avatar_url %}"
+            '<img src="{{mentioner_avatar_url}}" alt="" '
+            'style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">'
+            "{% else %}"
+            '<div style="width:36px;height:36px;border-radius:50%;background-color:#6b7280;'
+            "color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;"
+            'font-size:14px;flex-shrink:0;">{{mentioner_initials}}</div>'
+            "{% endif %}"
+            '<div style="line-height:1.3;">'
+            '<div style="font-weight:600;color:#111827;font-size:14px;">{{mentioner_name}}</div>'
+            '<div style="color:#6b7280;font-size:12px;">mentioned you in a comment</div>'
+            "</div>"
+            "</div>"
+            # Ticket context card
+            '<div style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;'
+            'padding:14px 16px;margin:0 0 16px;text-align:left;">'
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+            "<span style=\"display:inline-block;background-color:{{ticket_type_color|default('#6b7280')}};"
+            "color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;"
+            "text-transform:uppercase;letter-spacing:0.4px;\">{{ticket_type_label|default('Ticket')}}</span>"
+            '<span style="color:#6b7280;font-size:12px;font-weight:600;">{{ticket_display_id}}</span>'
+            "</div>"
+            '<div style="color:#111827;font-size:15px;font-weight:600;">{{ticket_title}}</div>'
+            "</div>"
+            # Comment quote
+            "<div style=\"border-left:3px solid {{primary_color|default('#5e43cb')}};padding:4px 16px;"
+            "margin:0 0 24px;color:#374151;font-size:14px;line-height:1.55;text-align:left;"
+            'word-break:break-word;">'
+            "{{comment_html_safe|safe}}"
+            "</div>"
+            # CTA
+            '<a href="{{ticket_url}}" class="button">View ticket &rarr;</a>'
+            # Footer note
+            '<p style="margin:24px 0 0;font-size:12px;color:#9ca3af;text-align:center;">'
+            "You're getting this because you were @-mentioned in a Numa Ops comment."
+            "</p>"
+        ),
+        "text": (
+            "{{mentioner_name}} mentioned you in a comment on {{ticket_display_id}}: {{ticket_title}}\n\n"
+            "{{comment_text}}\n\n"
+            "View ticket: {{ticket_url}}"
         ),
     },
     "generic": {
         "subject": "{{subject}}",
         "title": "{{title}}",
-        "html": "{{body_html}}",
+        # body_html is treated as already-rendered HTML provided by the caller;
+        # |safe stops Jinja from entity-encoding the tags. The caller is
+        # responsible for sanitizing any user-supplied content first.
+        "html": "{{body_html|safe}}",
         "text": "{{body_text}}",
     },
 }
@@ -313,16 +484,26 @@ def render_template(
     config = EMAIL_TEMPLATES[template_name]
 
     try:
-        subject = jinja_env.from_string(config["subject"]).render(**template_data)
-        title = jinja_env.from_string(config["title"]).render(**template_data)
-        content_html = jinja_env.from_string(config["html"]).render(**template_data)
-        text = jinja_env.from_string(config["text"]).render(**template_data)
+        subject = text_jinja_env.from_string(config["subject"]).render(**template_data)
+        text = text_jinja_env.from_string(config["text"]).render(**template_data)
+        # title and content_html are already-rendered HTML — wrap as Markup so
+        # the base template doesn't double-escape them when injecting via
+        # {{title}} / {{content}}.
+        title = Markup(
+            html_jinja_env.from_string(config["title"]).render(**template_data)
+        )
+        content_html = Markup(
+            html_jinja_env.from_string(config["html"]).render(**template_data)
+        )
 
         html = base_template.render(
             title=title,
             content=content_html,
             logo_url=template_data.get("logo_url", ""),
-            primary_color=template_data.get("primary_color", ""),
+            # Empty strings are truthy enough that Jinja's |default filter
+            # won't substitute, so coalesce here to keep the BASE_TEMPLATE
+            # styles intact when callers omit primary_color.
+            primary_color=template_data.get("primary_color") or "#5e43cb",
         )
 
         return {"subject": subject, "html": html, "text": text}

@@ -2831,6 +2831,26 @@ body:has(.backlog-bulk-bar) .ask-numa-fab {
   display: none !important;
 }
 
+/* Multi-drag count badge on the DragOverlay card */
+.backlog-multi-drag-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    List View (CRM & Suppliers) — Responsive Table-to-Card
    ═══════════════════════════════════════════════════════════════════════════ */
