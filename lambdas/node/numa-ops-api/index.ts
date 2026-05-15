@@ -396,6 +396,134 @@ const buildAuditItem = (
   };
 };
 
+// ─── Mention notification helpers ───────────────────────────────────────────────
+//
+// Used by POST /tickets/{ticketId}/comments to assemble the `ops_mention`
+// email payload sent to the centralised numa-email-sender. The sanitization
+// helpers are intentionally narrow — they target the output shape of the
+// in-app RichTextEditor, not arbitrary HTML.
+
+const MENTION_AVATAR_PRESIGN_EXPIRY = 60 * 60 * 24 * 7; // 7 days
+const URL_REGEX = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;!?)]/g;
+
+const parseS3Url = (url: string): { bucket: string; key: string } | null => {
+  const match = url.match(/^s3:\/\/([^/]+)\/(.+)$/);
+  return match ? { bucket: match[1], key: match[2] } : null;
+};
+
+/**
+ * Find a ticket by its UUID by probing every accessible team board in
+ * parallel. Tickets are stored as TEAM#{teamId} / TICKET#{ticketId}, so a
+ * lookup that doesn't know which board owns the ticket has to fan out.
+ */
+const findTicketByUuid = async (ticketId: string): Promise<Record<string, unknown> | undefined> => {
+  const { items: allTeams } = await queryGSI1('TENANT', 'TEAM#');
+  const probes = await Promise.all(
+    allTeams.map((team) => getItem(`TEAM#${String(team.id ?? '')}`, `TICKET#${ticketId}`))
+  );
+  return probes.find((t): t is Record<string, unknown> => Boolean(t));
+};
+
+/**
+ * Sanitize RichTextEditor HTML for inclusion in email bodies. The RTE emits a
+ * narrow tag set plus the occasional `<div><br></div>` paragraph-break artefact
+ * and bare URLs that aren't wrapped in <a>. We:
+ *   - strip script/style/iframe/object/embed (defence in depth — the in-app
+ *     surface already trusts this content, but email clients are less forgiving)
+ *   - drop event handlers and javascript: hrefs
+ *   - collapse empty <div><br></div> blocks
+ *   - auto-link bare URLs so they don't get half-parsed by clients
+ */
+const sanitizeCommentHtml = (html: string): string => {
+  let out = String(html);
+
+  // Strip dangerous block-level tags including content
+  out = out.replace(/<(script|style|iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  // Strip standalone dangerous tags
+  out = out.replace(/<\/?(script|style|iframe|object|embed)\b[^>]*>/gi, '');
+  // Strip inline event handlers (onclick=..., onerror=..., etc.)
+  out = out.replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  // Strip javascript: and data: hrefs/srcs
+  out = out.replace(/(href|src)\s*=\s*(["'])\s*(?:javascript|data):[^"']*\2/gi, '$1="#"');
+  // Collapse empty paragraph-break artefacts produced by the RTE
+  out = out.replace(/<div>\s*<br\s*\/?\s*>\s*<\/div>/gi, '');
+  out = out.replace(/<p>\s*<br\s*\/?\s*>\s*<\/p>/gi, '');
+
+  // Auto-link bare URLs outside of existing anchors. Cheap approach: split on
+  // <a>...</a> spans, only transform the non-anchor segments. This avoids the
+  // classic "linking URLs that are already inside href" mistake.
+  const parts = out.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/i);
+  out = parts
+    .map((part, idx) => {
+      if (idx % 2 === 1) return part; // already an anchor — leave alone
+      return part.replace(URL_REGEX, (url) => `<a href="${url}">${url}</a>`);
+    })
+    .join('');
+
+  return out.trim();
+};
+
+/**
+ * Convert HTML to a single-string plain text representation. Used for the
+ * email's text/plain fallback so recipients on text-only clients see the
+ * comment without HTML markup leaking through.
+ */
+const htmlToPlainText = (html: string): string => {
+  let out = String(html);
+  // Drop tags entirely; preserve href contents by keeping the text between
+  // <a>...</a>. The RTE's bare-URL output (now auto-linked) survives because
+  // the URL text is identical to the href.
+  out = out.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  out = out.replace(/<br\s*\/?\s*>/gi, '\n');
+  out = out.replace(/<\/(p|div|li|h[1-6])>/gi, '\n');
+  out = out.replace(/<[^>]+>/g, '');
+  // Decode the most common entities — &nbsp; is the main one the RTE emits
+  out = out
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  // Collapse runs of whitespace and excess blank lines
+  return out
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line, idx, arr) => line || (idx > 0 && arr[idx - 1]))
+    .join('\n')
+    .trim();
+};
+
+const computeInitials = (name: string): string => {
+  const words = String(name).trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+};
+
+/**
+ * Generate a long-lived presigned GET URL for a staff member's avatar so the
+ * email recipient (who has no auth into the Numa account) can render the
+ * image inline. Returns null on any failure — the template falls back to
+ * initials in that case.
+ */
+const presignAvatarUrl = async (avatarUrl: string | undefined): Promise<string | null> => {
+  if (!avatarUrl) return null;
+  const parsed = parseS3Url(avatarUrl);
+  if (!parsed) return null;
+  try {
+    const s3 = withPRM(S3Client, { region: REGION });
+    const url = await getSignedUrl(
+      s3 as unknown as Parameters<typeof getSignedUrl>[0],
+      new GetObjectCommand({ Bucket: parsed.bucket, Key: parsed.key }),
+      { expiresIn: MENTION_AVATAR_PRESIGN_EXPIRY }
+    );
+    return url;
+  } catch {
+    return null;
+  }
+};
+
 // ─── Sprint zone backwards-compat ────────────────────────────────────────────────
 //
 // Legacy data (pre zone-bound sprint model) has work units with status='active'
@@ -1442,53 +1570,79 @@ const handleTickets = async (
       }
     }
 
-    if (mentions.size > 0 && process.env.EMAIL_SENDER_LAMBDA_ARN) {
-      try {
-        const staffResp = await dynamo.send(
-          new QueryCommand({
-            TableName: process.env.OPS_CONFIG_TABLE,
-            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-            ExpressionAttributeValues: { ':pk': 'CONFIG', ':sk': 'STAFF#' },
-          })
-        );
-        const staffList = staffResp.Items ?? [];
+    // Look up the ticket up-front — we need its title/displayId/type for the
+    // mention email, and we need to bump commentCount on it afterwards.
+    const ticket = await findTicketByUuid(ticketId);
 
-        const origin =
-          event.headers.origin ??
-          (event.headers.referer ? event.headers.referer.replace(/\/$/, '') : `https://${event.headers.host}`);
-        const ticketUrl = `${origin}/ops?ticketId=${ticketId}`;
+    if (mentions.size > 0 && ticket && process.env.EMAIL_SENDER_LAMBDA_ARN) {
+      try {
+        const [staffResp, ticketTypeResp] = await Promise.all([
+          dynamo.send(
+            new QueryCommand({
+              TableName: process.env.OPS_CONFIG_TABLE,
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+              ExpressionAttributeValues: { ':pk': 'CONFIG', ':sk': 'STAFF#' },
+            })
+          ),
+          ticket.ticketTypeId
+            ? dynamo.send(
+                new GetCommand({
+                  TableName: process.env.OPS_CONFIG_TABLE,
+                  Key: { PK: 'CONFIG', SK: `TICKET_TYPE#${String(ticket.ticketTypeId)}` },
+                })
+              )
+            : Promise.resolve(undefined),
+        ]);
+        const staffList = staffResp.Items ?? [];
+        const ticketType = ticketTypeResp?.Item;
+
+        // Strip any trailing slash from every fallback — origin headers
+        // sometimes arrive as `https://host/` which produced `host//ops` in
+        // the email link and broke the deep-link route on click.
+        const rawOrigin = event.headers.origin ?? event.headers.referer ?? `https://${event.headers.host}`;
+        const origin = String(rawOrigin).replace(/\/+$/, '');
+        const displayId = String(ticket.displayId ?? '');
+        const ticketUrl = displayId
+          ? `${origin}/ops?ticket=${encodeURIComponent(displayId)}`
+          : `${origin}/ops?ticketId=${ticketId}`;
 
         const authorStaff = staffList.find((s) => s.id === auth.sub || s.SK === `STAFF#${auth.sub}`);
-        const authorName = authorStaff?.name;
-        const authorEmail = authorStaff?.email;
-        const displayAuthor = authorName
-          ? String(authorName)
-          : authorEmail
-            ? String(authorEmail).split('@')[0]
-            : 'Someone';
+        const authorName = authorStaff?.name
+          ? String(authorStaff.name)
+          : authorStaff?.email
+            ? String(authorStaff.email).split('@')[0]
+            : auth.name || 'Someone';
+        const authorAvatarUrl = await presignAvatarUrl(authorStaff?.avatarUrl as string | undefined);
 
-        for (const sub of mentions) {
-          const mentionedStaff = staffList.find((s) => s.id === sub || s.SK === `STAFF#${sub}`);
-          if (mentionedStaff && mentionedStaff.email) {
+        const sanitizedHtml = sanitizeCommentHtml(contentStr);
+        const plainText = htmlToPlainText(sanitizedHtml);
+        const emailLambdaClient = withPRM(LambdaClient, { region: 'us-east-1' });
+
+        await Promise.all(
+          [...mentions].map(async (sub) => {
+            const mentionedStaff = staffList.find((s) => s.id === sub || s.SK === `STAFF#${sub}`);
+            if (!mentionedStaff?.email) return;
+
             const emailPayload = {
               sts_proof_url: await generateStsProofUrl(),
               client_name: process.env.CLIENT_NAME || 'unknown',
-              to: [mentionedStaff.email],
-              template: 'generic',
+              to: [String(mentionedStaff.email)],
+              template: 'ops_mention',
               template_data: {
-                subject: `${displayAuthor} mentioned you in Ops Ticket #${ticketId.split('-')[0] || ticketId.slice(0, 8)}`,
-                title: 'You Were Mentioned',
-                body_html: `<p>You were mentioned in a comment by <strong>${displayAuthor}</strong>:</p>
-                            <blockquote style="border-left: 4px solid #ccc; padding-left: 1rem; color: #555; margin-left: 0; word-break: break-word;">
-                              ${contentStr}
-                            </blockquote>
-                            <p><a href="${ticketUrl}" style="display: inline-block; padding: 10px 20px; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 5px;">View Ticket</a></p>`,
-                body_text: `You were mentioned in a comment by ${displayAuthor}: ${contentStr}\nView Ticket: ${ticketUrl}`,
+                mentioner_name: authorName,
+                mentioner_initials: computeInitials(authorName),
+                ...(authorAvatarUrl ? { mentioner_avatar_url: authorAvatarUrl } : {}),
+                ticket_display_id: displayId || ticketId.slice(0, 8),
+                ticket_title: String(ticket.title ?? 'Untitled ticket'),
+                ticket_type_label: String(ticketType?.name ?? 'Ticket'),
+                ticket_type_color: String(ticketType?.color ?? '#6b7280'),
+                comment_html_safe: sanitizedHtml,
+                comment_text: plainText,
+                ticket_url: ticketUrl,
                 primary_color: '#0d6efd',
               },
             };
 
-            const emailLambdaClient = withPRM(LambdaClient, { region: 'us-east-1' });
             await emailLambdaClient.send(
               new InvokeCommand({
                 FunctionName: process.env.EMAIL_SENDER_LAMBDA_ARN,
@@ -1496,21 +1650,13 @@ const handleTickets = async (
                 Payload: Buffer.from(JSON.stringify(emailPayload)),
               })
             );
-          }
-        }
+          })
+        );
       } catch (err) {
         console.error('Failed to process mentions', err);
       }
     }
 
-    // Increment commentCount on the ticket — need to find the ticket first
-    const ticketItems = await queryByPK(`TEAM#${String(body.boardId ?? '')}`, `TICKET#${ticketId}`);
-    // Fallback: scan for ticket by looking at GSI3
-    let ticket = ticketItems.find((t) => String(t.SK) === `TICKET#${ticketId}`);
-    if (!ticket) {
-      const found = await queryGSI3(`TID#${String(body.displayId ?? '')}`, 'TICKET');
-      ticket = found;
-    }
     if (ticket) {
       try {
         await dynamo.send(
