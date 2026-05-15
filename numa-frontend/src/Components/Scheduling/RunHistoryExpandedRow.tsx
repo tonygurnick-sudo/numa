@@ -4,20 +4,31 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { RunHistoryItem } from '../../types/scheduledRuns';
 import { MarkdownContent } from '../Renderers/MarkdownContent';
+import { OpenInChatButton } from './OpenInChatButton';
+import { useBranding } from '../../Providers/BrandingContext';
 
 export interface RunHistoryExpandedRowProps {
   run: RunHistoryItem;
   onDownloadArtifact?: (conversationId: string, userId: string, artifact: string) => void;
   /** When true, conversation messages are shown expanded by default. */
   defaultMessagesOpen?: boolean;
+  /**
+   * Schedule-level prompt text. Used as a fallback "user" message when the run
+   * log itself doesn't carry one — event-triggered runs and older runs where
+   * the backend skipped writing the user message into messages[].
+   */
+  schedulePrompt?: string;
 }
 
 export const RunHistoryExpandedRow: React.FC<RunHistoryExpandedRowProps> = ({
   run,
   onDownloadArtifact,
   defaultMessagesOpen = false,
+  schedulePrompt,
 }) => {
   const { t } = useTranslation('agents');
+  const { t: tChat } = useTranslation('chat');
+  const { branding } = useBranding();
   const [messagesOpen, setMessagesOpen] = useState(defaultMessagesOpen);
 
   if (run.loading) {
@@ -41,7 +52,20 @@ export const RunHistoryExpandedRow: React.FC<RunHistoryExpandedRowProps> = ({
     return <div className="text-center py-3 text-muted">{t('scheduling.details.runHistory.clickToLoad')}</div>;
   }
 
-  const messageCount = run.log.messages?.length ?? 0;
+  // Build the message list for rendering. The schedule runner only writes the
+  // user message into messages[] when runPrompt is non-empty — event-triggered
+  // runs (and the older conditional code path) leave it out. Fall back to
+  // run.log.prompt, then to the schedule-level prompt template, so the prompt
+  // is always visible.
+  const rawMessages = run.log.messages ?? [];
+  const hasUserMessage = rawMessages.some((m) => m.role === 'user');
+  const fallbackUserContent = !hasUserMessage ? run.log.prompt || schedulePrompt || '' : '';
+  const displayMessages =
+    !hasUserMessage && fallbackUserContent
+      ? [{ role: 'user', content: fallbackUserContent }, ...rawMessages]
+      : rawMessages;
+  const messageCount = displayMessages.length;
+  const conversationId = run.log.conversationId;
 
   return (
     <>
@@ -157,26 +181,46 @@ export const RunHistoryExpandedRow: React.FC<RunHistoryExpandedRowProps> = ({
             </span>
           </button>
           {messagesOpen && (
-            <div className="mt-2">
-              {run.log.messages!.map((msg, idx) => (
-                <div key={idx} className="mb-3">
-                  <div className="fw-bold text-uppercase small text-muted mb-1">{msg.role}</div>
-                  <div className="p-2 rounded" style={{ backgroundColor: msg.role === 'user' ? '#e3f2fd' : '#ffffff' }}>
-                    {msg.role === 'assistant' ? (
-                      <MarkdownContent content={msg.content || t('scheduling.details.runHistory.noContent')} />
-                    ) : (
-                      <div style={{ whiteSpace: 'pre-wrap' }}>
-                        {msg.content || t('scheduling.details.runHistory.noContent')}
-                      </div>
-                    )}
+            // .chat-messages wrapper makes the nested .message.user / .message.assistant
+            // pick up the same role-coloured backgrounds, padding, and header styling
+            // used in /chat (see _chat_components.scss + message-background mixin).
+            <div className="chat-messages mt-2">
+              {displayMessages.map((msg, idx) => {
+                const roleLabel =
+                  msg.role === 'user'
+                    ? tChat('messages.roles.you')
+                    : msg.role === 'assistant'
+                      ? branding.name || tChat('messages.roles.assistant')
+                      : tChat('messages.roles.system');
+                return (
+                  <div key={idx} className={`message ${msg.role}`}>
+                    <div className="message-header">
+                      <strong className="message-role">{roleLabel}:</strong>
+                    </div>
+                    <div className="message-content markdown-content">
+                      {msg.role === 'assistant' ? (
+                        <MarkdownContent content={msg.content || t('scheduling.details.runHistory.noContent')} />
+                      ) : (
+                        <div style={{ whiteSpace: 'pre-wrap' }}>
+                          {msg.content || t('scheduling.details.runHistory.noContent')}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       ) : (
         !run.log.agentStatus && <p className="text-muted mb-0">{t('scheduling.details.runHistory.noMessages')}</p>
+      )}
+
+      {/* Continue in Chat — at the bottom, after the user has read the transcript */}
+      {conversationId && (
+        <div className="d-flex justify-content-end mt-3">
+          <OpenInChatButton conversationId={conversationId} variant="primary" />
+        </div>
       )}
     </>
   );

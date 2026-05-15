@@ -25,6 +25,7 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { ScheduleService } from '../Services/ScheduleService';
 import { getAgent } from '../Services/AgentsService';
 import { RunHistoryExpandedRow } from '../Components/Scheduling/RunHistoryExpandedRow';
+import { OpenInChatButton } from '../Components/Scheduling/OpenInChatButton';
 import { AgentAvatar } from '../Components/Agents/AgentAvatar';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
@@ -961,6 +962,7 @@ export const AutomationDetailPage: React.FC = () => {
                         <th>{t('detail.history.completed')}</th>
                         <th>{t('detail.history.duration')}</th>
                         <th>{t('detail.history.status')}</th>
+                        <th style={{ width: 48 }} aria-label="" />
                       </tr>
                     </thead>
                     <tbody>
@@ -1018,19 +1020,28 @@ export const AutomationDetailPage: React.FC = () => {
                                 <Badge bg="secondary">{'\u2014'}</Badge>
                               )}
                             </td>
+                            <td className="align-middle text-end">
+                              <OpenInChatButton conversationId={run.log?.conversationId} variant="icon" />
+                            </td>
                           </tr>
                           {expandedRun === run.runId && (
                             <tr>
                               <td
-                                colSpan={5}
+                                colSpan={6}
                                 className="p-0 border-0"
-                                style={{ backgroundColor: '#f8f9fa' } as React.CSSProperties}
+                                style={
+                                  {
+                                    backgroundColor: '#f8f9fa',
+                                    '--bs-table-hover-bg': '#f8f9fa',
+                                  } as React.CSSProperties
+                                }
                               >
                                 <div className="p-3">
                                   <RunHistoryExpandedRow
                                     run={run}
                                     onDownloadArtifact={handleDownloadArtifact}
                                     defaultMessagesOpen
+                                    schedulePrompt={automation.promptText}
                                   />
                                 </div>
                               </td>

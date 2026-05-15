@@ -852,6 +852,8 @@
           "inProgress": "In Progress"
         },
         "loadingDetails": "Loading run details...",
+        "continueInChat": "Continue in Chat",
+        "openInChat": "Open in Chat",
         "noContent": "No content",
         "noMessages": "No messages in this run",
         "showMessages": "Conversation ({{count}} messages)",

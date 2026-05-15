@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight, RefreshCw, Clock } from 'lucide-react';
 import { AgentAvatar } from '../Agents/AgentAvatar';
 import { RunHistoryExpandedRow } from '../Scheduling/RunHistoryExpandedRow';
+import { OpenInChatButton } from '../Scheduling/OpenInChatButton';
 import { useAuth } from '../../Providers/AuthProvider';
 import { listObjectsInFolder, fetchFileFromS3 } from '../../utils/s3Utils';
 import { formatDuration, extractUserIdFromS3Key } from '../../utils/automationUtils';
@@ -299,6 +300,7 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
             <th>{t('runs.runAt')}</th>
             <th>{t('runs.duration')}</th>
             <th>{t('runs.status')}</th>
+            <th style={{ width: 48 }} aria-label="" />
           </tr>
         </thead>
         <tbody>
@@ -306,6 +308,7 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
             const agent = agentMap.get(run.agentId);
             const duration = formatDuration(run.log?.startedAt, run.log?.completedAt);
             const displayTime = getRunDisplayTime(run);
+            const automation = automations.find((a) => a.scheduleId === run.automationId);
             return (
               <React.Fragment key={`${run.automationId}-${run.runId}`}>
                 <tr
@@ -361,11 +364,18 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
                       <Badge bg="secondary">{'\u2014'}</Badge>
                     )}
                   </td>
+                  <td className="align-middle text-end">
+                    <OpenInChatButton conversationId={run.log?.conversationId} variant="icon" />
+                  </td>
                 </tr>
                 {expandedRun === run.runId && (
                   <tr>
-                    <td colSpan={6} className="p-3 bg-light">
-                      <RunHistoryExpandedRow run={run} />
+                    <td
+                      colSpan={7}
+                      className="p-3 bg-light"
+                      style={{ '--bs-table-hover-bg': '#f8f9fa' } as React.CSSProperties}
+                    >
+                      <RunHistoryExpandedRow run={run} schedulePrompt={automation?.promptText} />
                     </td>
                   </tr>
                 )}

@@ -25,6 +25,7 @@ import type { AgentSchedule } from '../types/agentSchedules';
 import type { RunHistoryItem, ScheduledRunLog } from '../types/scheduledRuns';
 import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
 import { RunHistoryExpandedRow } from '../Components/Scheduling/RunHistoryExpandedRow';
+import { OpenInChatButton } from '../Components/Scheduling/OpenInChatButton';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
 import { getNextRunTimes, describeCronExpression } from '../utils/cronUtils';
@@ -993,11 +994,18 @@ export const SchedulingPage: React.FC = () => {
                                                       </small>
                                                     )}
                                                     {duration && <small className="text-muted">{duration}</small>}
+                                                    <div className="ms-auto">
+                                                      <OpenInChatButton
+                                                        conversationId={run.log?.conversationId}
+                                                        variant="icon"
+                                                      />
+                                                    </div>
                                                   </Card.Header>
                                                   <Card.Body className="py-2 px-3">
                                                     <RunHistoryExpandedRow
                                                       run={run}
                                                       onDownloadArtifact={handleDownloadArtifact}
+                                                      schedulePrompt={schedule.promptText}
                                                     />
                                                   </Card.Body>
                                                 </Card>
