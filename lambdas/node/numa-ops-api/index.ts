@@ -2059,8 +2059,6 @@ const handleTickets = async (
   // ── GET /ops/tickets/{ticketId} — get single ticket ─────────────────────────
   if (method === 'GET' && segments.length === 1) {
     const ticketId = segments[0];
-    // We need to find the ticket; use GSI3 lookup with a scan over known boards
-    // or the caller can provide teamId as query param
     const teamId = qp.boardId;
     let ticket: Record<string, unknown> | undefined;
 
@@ -2068,11 +2066,12 @@ const handleTickets = async (
       ticket = await getItem(`TEAM#${teamId}`, `TICKET#${ticketId}`);
     }
 
-    if (!ticket) {
-      // Fallback: try to find via all boards (expensive, but works)
-      // For efficiency, caller should provide teamId
-      return errorResponse(400, 'Please provide boardId as query parameter for single ticket lookup');
-    }
+    // Fallback: ticket lives on a different board (common for deep-links from
+    // Slack/email when the user is on the wrong board). Probe every accessible
+    // board in parallel rather than 400ing.
+    if (!ticket) ticket = await findTicketByUuid(ticketId);
+
+    if (!ticket) return errorResponse(404, 'Ticket not found');
 
     // Fetch links and recent comments
     const [links, comments] = await Promise.all([

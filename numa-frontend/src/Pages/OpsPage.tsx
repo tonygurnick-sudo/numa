@@ -296,6 +296,7 @@ const DeepLinkHandler: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [ticketId, setTicketId] = useState<string | null>(null);
+  const [resolvedBoardId, setResolvedBoardId] = useState<string | null>(null);
   const [show, setShow] = useState(false);
   const processingRef = useRef<string | null>(null);
 
@@ -316,6 +317,7 @@ const DeepLinkHandler: React.FC = () => {
     if (local) {
       processingRef.current = displayId;
       setTicketId(local.id);
+      setResolvedBoardId(local.boardId ?? null);
       setShow(true);
       searchParams.delete('ticket');
       setSearchParams(searchParams, { replace: true });
@@ -334,6 +336,10 @@ const DeepLinkHandler: React.FC = () => {
     OpsService.getTicketByDisplayId(numaGet, displayId)
       .then((response) => {
         setTicketId(response.ticket.id);
+        // Cross-board deep link: keep the ticket's real boardId so the detail
+        // modal queries the right DynamoDB partition instead of the user's
+        // currently-open board.
+        setResolvedBoardId(response.ticket.boardId ?? null);
         setShow(true);
       })
       .catch((err) => {
@@ -345,13 +351,16 @@ const DeepLinkHandler: React.FC = () => {
     <TicketDetailModal
       show={show}
       ticketId={ticketId}
+      boardIdOverride={resolvedBoardId}
       onHide={() => {
         setShow(false);
         setTicketId(null);
+        setResolvedBoardId(null);
       }}
       onDeleted={() => {
         setShow(false);
         setTicketId(null);
+        setResolvedBoardId(null);
         refreshTickets();
       }}
     />
