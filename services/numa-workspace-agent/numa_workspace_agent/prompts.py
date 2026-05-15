@@ -1515,25 +1515,62 @@ def build_folder_context(attached_folders: Optional[list[dict]] = None) -> str:
 def build_kb_context(
     available_kbs: Optional[list[dict]] = None,
     kb_listings: Optional[dict[str, dict]] = None,
+    accessible_kbs: Optional[list[dict]] = None,
 ) -> str:
     """
     Build context about available Numa Files folders including file listings.
 
     Args:
-        available_kbs: List of available folders with 'id' and optional 'name' fields.
-                       None or empty list means no folders are enabled.
+        available_kbs: List of folders enabled for this conversation, with 'id'
+                       and optional 'name' fields. None or empty list means no
+                       folders are enabled.
         kb_listings: Optional dict mapping kb_id -> {files, folders, total_count, truncated}
                      from the list_kb_files Lambda handler.
+        accessible_kbs: List of all folders the user can toggle on for this chat
+                        (the same set shown in the chat folder picker). Used to
+                        surface folders the user has access to but has not enabled
+                        for this conversation, so the agent can suggest enabling
+                        them. None means the frontend did not provide the list.
 
     Returns:
         Context string for the prompt
     """
+    enabled_ids = {kb.get("id") for kb in (available_kbs or []) if kb.get("id")}
+    disabled_kbs = [
+        kb
+        for kb in (accessible_kbs or [])
+        if kb.get("id") and kb.get("id") not in enabled_ids
+    ]
+
+    def _render_disabled_section() -> str:
+        if not disabled_kbs:
+            return ""
+        lines = [
+            "",
+            "**Available Numa Files folders (available to the user but not selected for this conversation):**",
+        ]
+        user_sub = os.environ.get("NUMA_USER_SUB", "")
+        for kb in disabled_kbs:
+            kb_id = kb.get("id", "unknown")
+            kb_name = kb.get("name", kb_id)
+            if user_sub and kb_id == user_sub:
+                lines.append(f"- {kb_name} (the user's personal folder)")
+            else:
+                lines.append(f"- {kb_name}")
+        lines.append(
+            "You cannot search these folders until the user enables them in the "
+            "chat folder picker. If one looks relevant to the user's request, "
+            "suggest they enable it."
+        )
+        return "\n".join(lines)
+
     if not available_kbs:
-        return (
+        base = (
             "**Numa Files:** No folders are currently enabled. "
             "The user can enable them in the chat settings. "
             "Do not attempt to use the numa_files tool until a folder is enabled."
         )
+        return base + _render_disabled_section()
 
     lines = ["**Available Numa Files folders:**"]
 
@@ -1594,6 +1631,10 @@ def build_kb_context(
     # Mention all_kbs when multiple folders are available
     if len(available_kbs) > 1:
         lines.append("Set `all_kbs: true` to search every enabled folder at once.")
+
+    disabled_section = _render_disabled_section()
+    if disabled_section:
+        lines.append(disabled_section)
 
     return "\n".join(lines)
 
@@ -1659,6 +1700,7 @@ def augment_prompt_with_context(
     attached_folders: Optional[list[dict]] = None,
     v1_migration_context: Optional[str] = None,
     today_string: Optional[str] = None,
+    accessible_kbs: Optional[list[dict]] = None,
 ) -> str:
     """
     Augment user prompt with additional context.
@@ -1677,6 +1719,10 @@ def augment_prompt_with_context(
         today_string: Frontend-provided date/time string. Prepended to user message
                       instead of system prompt so the system prompt stays stable
                       for prompt caching.
+        accessible_kbs: All folders the user can toggle on for this chat (the same
+                        set shown in the chat folder picker). Used so the agent
+                        knows which folders the user has access to but has not
+                        enabled, and can suggest enabling them.
 
     Returns:
         Augmented prompt string
@@ -1703,7 +1749,7 @@ def augment_prompt_with_context(
 
     # Always add Numa Files context - tells Claude which folders are available or that none are
     # This ensures Claude knows not to try the tool when no folders are enabled
-    parts.append(build_kb_context(available_kbs, kb_listings))
+    parts.append(build_kb_context(available_kbs, kb_listings, accessible_kbs))
 
     # Add user prompt
     parts.append(user_prompt.strip())
