@@ -228,15 +228,12 @@ async function streamWorkspaceChatAttempt(
     availableKBs: request.availableKBs,
     accessibleKBs: request.accessibleKBs,
     enabledTools: request.enabledTools,
-    enabledConnections: request.enabledConnections,
+    enabledIntegrations: request.enabledIntegrations,
     availableIntegrations: request.availableIntegrations,
-    connectedDataConnectors: request.connectedDataConnectors,
     // Feature flags for conditional tool registration in the workspace agent
     featureFlags: {
       OAUTH_INTEGRATIONS_ENABLED: sessionStorage.getItem('OAUTH_AVAILABLE') === 'true',
       SECRETS_VAULT_ENABLED: sessionStorage.getItem('SECRETS_VAULT_ENABLED') === 'true',
-      // Data connectors toggle — when false, the connectors MCP server is NOT registered
-      DATA_CONNECTORS_CHAT_ENABLED: request.dataConnectorsEnabled ?? false,
     },
     // Model selection (global cross-region inference profile)
     modelId: request.modelId,
@@ -994,14 +991,11 @@ export async function invokeWorkspaceAgentSync(
     availableKBs: request.availableKBs,
     accessibleKBs: request.accessibleKBs,
     enabledTools: request.enabledTools,
-    enabledConnections: request.enabledConnections,
+    enabledIntegrations: request.enabledIntegrations,
     availableIntegrations: request.availableIntegrations,
-    connectedDataConnectors: request.connectedDataConnectors,
     featureFlags: {
       OAUTH_INTEGRATIONS_ENABLED: sessionStorage.getItem('OAUTH_AVAILABLE') === 'true',
       SECRETS_VAULT_ENABLED: sessionStorage.getItem('SECRETS_VAULT_ENABLED') === 'true',
-      // Data connectors toggle — when false, the connectors MCP server is NOT registered
-      DATA_CONNECTORS_CHAT_ENABLED: request.dataConnectorsEnabled ?? false,
     },
     modelId: request.modelId,
     attachments: request.attachments,

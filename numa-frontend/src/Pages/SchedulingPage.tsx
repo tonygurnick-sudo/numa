@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, ChevronDown, ChevronRight, Check, RefreshCw } from 'lucide-react';
 import { PageHeader } from '../Components/PageHeader';
 import { StickyToolbar } from '../Components/StickyToolbar';
+import { QuotaUsageStrip } from '../Components/Scheduling/QuotaUsageStrip';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { ScheduleService } from '../Services/ScheduleService';
 import type { AgentSchedule } from '../types/agentSchedules';
@@ -39,6 +40,10 @@ const getStatusBadgeVariant = (status: string) => {
       return 'warning';
     case 'deleted':
       return 'danger';
+    case 'pending_approval':
+      // FEAT-105 — pending admin approval. Blue stands out from active/paused
+      // and matches the audit panel's badge variant for consistency.
+      return 'info';
     case 'inactive':
       return 'secondary';
     default:
@@ -156,6 +161,10 @@ export const SchedulingPage: React.FC = () => {
   const [agentFilter, setAgentFilter] = useState('all');
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  // Bumped on every successful schedule reload so the QuotaUsageStrip
+  // re-fetches its summary — toggles, create, delete all flow through
+  // loadSchedules, which makes this the single bump point.
+  const [quotaRefreshKey, setQuotaRefreshKey] = useState(0);
   const [showDebugIds, setShowDebugIds] = useState(false);
 
   // Run history expansion state
@@ -176,6 +185,11 @@ export const SchedulingPage: React.FC = () => {
       setError(null);
       const scheduleEvents = await ScheduleService.getActiveSchedules(numaGet);
       setSchedules(scheduleEvents);
+      // Trigger a quota strip refresh — the cron projection and active
+      // automation count both change when a schedule is toggled, created,
+      // or deleted. Bumping after each list reload covers every code path
+      // without us having to remember to call it from each handler.
+      setQuotaRefreshKey((k) => k + 1);
     } catch (err) {
       console.error('Failed to load schedules:', err);
       setError((err as Error)?.message ?? t('scheduling.errors.load'));
@@ -207,7 +221,15 @@ export const SchedulingPage: React.FC = () => {
   }, []);
 
   const handleUpdateSchedule = useCallback(
-    async (payload: { promptText: string; cronExpression: string; timezone: string; label?: string }) => {
+    async (payload: {
+      promptText: string;
+      cronExpression: string;
+      timezone: string;
+      label?: string;
+      expiresAt?: number | null;
+      runConfig?: AgentSchedule['runConfig'];
+      agentSnapshot?: NonNullable<Parameters<typeof ScheduleService.update>[2]>['agentSnapshot'];
+    }) => {
       if (!editingSchedule) return;
 
       await ScheduleService.update(numaPut, editingSchedule.scheduleId, {
@@ -215,6 +237,11 @@ export const SchedulingPage: React.FC = () => {
         cronExpression: payload.cronExpression,
         timezone: payload.timezone,
         label: payload.label,
+        expiresAt: payload.expiresAt,
+        // FEAT-105 round-2 — forward the freshly-built runConfig so the
+        // schedule record's cached tool config stays in sync with the agent.
+        runConfig: payload.runConfig,
+        agentSnapshot: payload.agentSnapshot,
       });
 
       await loadSchedules();
@@ -222,19 +249,34 @@ export const SchedulingPage: React.FC = () => {
     [editingSchedule, numaPut, loadSchedules]
   );
 
+  /**
+   * Optimistic toggle — flip the switch immediately and roll back on failure.
+   * Previously waited for `await ScheduleService.update` + `await loadSchedules()`
+   * before the UI changed, which made the switch lag noticeably.
+   */
   const handleTogglePause = useCallback(
     async (e: React.MouseEvent, schedule: AgentSchedule) => {
       e.stopPropagation();
+      // Capture the FULL object for rollback. Status alone is OK today but
+      // any future field that contributes to derived state (badge variant,
+      // next-run label, quota chip) would silently diverge on rollback if
+      // we only restored status.
+      const previousSchedule = schedule;
       const newStatus = schedule.status === 'active' ? 'paused' : 'active';
-      setActionLoading(schedule.scheduleId);
+
+      setSchedules((prev) => prev.map((s) => (s.scheduleId === schedule.scheduleId ? { ...s, status: newStatus } : s)));
+
       try {
         await ScheduleService.update(numaPut, schedule.scheduleId, { status: newStatus });
-        await loadSchedules();
+        // Server confirmed; refresh in background to pick up server-derived
+        // fields (next run time, etc) without blocking the UI.
+        void loadSchedules();
       } catch (err) {
+        // Restore the entire previous object so derived state stays consistent.
+        setSchedules((prev) => prev.map((s) => (s.scheduleId === schedule.scheduleId ? previousSchedule : s)));
+        const responseError = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+        setError(responseError || (err as Error)?.message || t('scheduling.errors.updateStatus'));
         console.error('Failed to update schedule status:', err);
-        setError((err as Error)?.message ?? t('scheduling.errors.updateStatus'));
-      } finally {
-        setActionLoading(null);
       }
     },
     [numaPut, loadSchedules, t]
@@ -620,6 +662,8 @@ export const SchedulingPage: React.FC = () => {
               {error}
             </Alert>
           )}
+
+          <QuotaUsageStrip refreshKey={quotaRefreshKey} />
 
           <Row className="g-0">
             <Col>

@@ -295,23 +295,62 @@ export const PROVIDER_SCOPES: Record<string, ScopeOption[]> = {
       default: true,
     },
   ],
+  'zoho-crm': [
+    {
+      id: 'modules',
+      label: 'CRM records',
+      scope: 'ZohoCRM.modules.ALL',
+      description: 'Read and write all CRM modules — leads, contacts, accounts, deals, tasks',
+      default: true,
+    },
+    {
+      id: 'users',
+      label: 'Users (read)',
+      scope: 'ZohoCRM.users.READ',
+      description: 'View user records in the org',
+      default: true,
+    },
+    {
+      id: 'org',
+      label: 'Org metadata (read)',
+      scope: 'ZohoCRM.org.READ',
+      description: 'View organisation profile and settings',
+      default: true,
+    },
+    {
+      id: 'settings',
+      label: 'Settings (read)',
+      scope: 'ZohoCRM.settings.READ',
+      description: 'View module layouts, fields, pipelines and other configuration',
+      default: false,
+    },
+  ],
 };
 
-/** Build space-separated scope string from selected scope IDs for a given provider */
+// Providers that expect a comma-separated scope string instead of the
+// OAuth-2-default space-separated form. Zoho and Xero are the notable cases.
+const COMMA_SEPARATED_PROVIDERS: ReadonlySet<string> = new Set(['zoho-crm', 'xero']);
+
+const separatorFor = (providerId: string): ',' | ' ' => (COMMA_SEPARATED_PROVIDERS.has(providerId) ? ',' : ' ');
+
+/** Build the scope string from selected scope IDs, using the provider's
+ *  expected separator (space for OAuth default, comma for Zoho/Xero). */
 export const buildScopeString = (providerId: string, selectedIds: string[]): string => {
+  const sep = separatorFor(providerId);
   const defs = PROVIDER_SCOPES[providerId];
-  if (!defs) return selectedIds.join(' ');
+  if (!defs) return selectedIds.join(sep);
   return defs
     .filter((s) => selectedIds.includes(s.id))
     .map((s) => s.scope)
-    .join(' ');
+    .join(sep);
 };
 
-/** Parse a scope string back into selected scope IDs for a given provider */
+/** Parse a scope string back into selected scope IDs for a given provider.
+ *  Splits on whitespace OR commas so it tolerates both providers' formats. */
 export const parseScopeString = (providerId: string, scopeString: string): string[] => {
   const defs = PROVIDER_SCOPES[providerId];
   if (!defs) return [];
-  const scopes = scopeString.split(/\s+/).filter(Boolean);
+  const scopes = scopeString.split(/[\s,]+/).filter(Boolean);
   return defs.filter((s) => scopes.includes(s.scope)).map((s) => s.id);
 };
 

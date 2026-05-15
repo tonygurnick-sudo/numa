@@ -21,6 +21,7 @@ from typing import Any
 
 import structlog
 from claude_agent_sdk import tool
+from numa_workspace_agent.mcp_tools.integration_preferences import is_pipedream_allowed
 from numa_workspace_agent.mcp_tools.lambda_client import (
     extract_status,
     invoke_workspace_tool,
@@ -209,6 +210,23 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                     }
                 ],
                 "is_error": True,
+                "isError": True,
+            }
+
+        # Honour the admin's per-service preferred_method choice. When admin has
+        # chosen the native connector for this service, refuse the Pipedream call
+        # and let the agent fall through to the connector tools.
+        if not is_pipedream_allowed(integration_slug):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"This workspace uses the native Numa connector for '{integration_slug}', "
+                            "not Pipedream. Use the connector tools (mcp__connectors__*) instead."
+                        ),
+                    }
+                ],
                 "isError": True,
             }
 
@@ -420,6 +438,21 @@ async def configure_props(args: dict[str, Any]) -> dict[str, Any]:
     prop_name = args.get("prop_name", "")
     configured_props_str = args.get("configured_props", "{}")
 
+    integration_slug = action_key.split("-")[0] if action_key else ""
+    if integration_slug and not is_pipedream_allowed(integration_slug):
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        f"This workspace uses the native Numa connector for '{integration_slug}', "
+                        "not Pipedream. Use the connector tools (mcp__connectors__*) instead."
+                    ),
+                }
+            ],
+            "isError": True,
+        }
+
     try:
         configured_props = json.loads(configured_props_str)
     except json.JSONDecodeError as e:
@@ -544,6 +577,21 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                     }
                 ],
                 "is_error": True,
+                "isError": True,
+            }
+
+        # Honour the admin's per-service preferred_method choice.
+        if not is_pipedream_allowed(integration_slug):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"This workspace uses the native Numa connector for '{integration_slug}', "
+                            "not Pipedream. Use the connector tools (mcp__connectors__*) instead."
+                        ),
+                    }
+                ],
                 "isError": True,
             }
 

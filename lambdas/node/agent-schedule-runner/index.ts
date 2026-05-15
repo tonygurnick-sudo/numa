@@ -3,11 +3,26 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { CognitoIdentityProviderClient, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  UpdateCommand,
+  TransactWriteCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
 import { NotificationService } from '../../../lib/notification-service';
 import { v4 as uuidv4 } from 'uuid';
 import { Agent, fetch as undiciFetch } from 'undici';
+import {
+  projectMonthlyRuns,
+  currentMonthKey,
+  parseQuotasFromEnv,
+  parseQuotasFromSettingsItem,
+  resolveEffectiveQuotas,
+} from '../../../lib/schedule-load';
+import { buildUnifiedIntegrationsPayload, type IntegrationListItem } from './integrations-payload';
 
 // Long-poll dispatcher for the workspace-agent sync invocation. Node's built-in
 // fetch (undici) defaults `headersTimeout` to 300s, so any agent run > 5 min
@@ -31,6 +46,24 @@ const USER_AGENTS_TABLE = process.env.USER_AGENTS_TABLE_NAME ?? '';
 const CLIENT_NAME = process.env.CLIENT_NAME ?? '';
 const EMAIL_SENDER_LAMBDA_ARN = process.env.EMAIL_SENDER_LAMBDA_ARN ?? '';
 const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
+const SCHEDULING_SETTINGS_TABLE = process.env.SCHEDULING_SETTINGS_TABLE_NAME ?? '';
+const GLOBAL_INTEGRATION_SETTINGS_TABLE = process.env.GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME ?? '';
+const DATA_CONNECTORS_TABLE = process.env.DATA_CONNECTORS_TABLE_NAME ?? '';
+const DATA_CONNECTORS_ENABLED = (process.env.DATA_CONNECTORS_ENABLED ?? '').toLowerCase() === 'true';
+const PIPEDREAM_RELAY_LAMBDA_ARN = process.env.PIPEDREAM_RELAY_LAMBDA_ARN ?? '';
+// Workspace-agent featureFlags forwarded into scheduled-run request bodies.
+// These gate MCP-server registration in `sdk_config.py`: missing flags ⇒ no
+// connectors/vault tool family in the sandbox, even when the user is authed.
+const OAUTH_INTEGRATIONS_ENABLED = (process.env.OAUTH_INTEGRATIONS_ENABLED ?? '').toLowerCase() === 'true';
+const SECRETS_VAULT_ENABLED = (process.env.SECRETS_VAULT_ENABLED ?? '').toLowerCase() === 'true';
+
+/**
+ * Level-2 (per-client) quota overrides parsed at cold start. Used by the
+ * trigger-quota enforcement at run time — see `enforceTriggerQuotaOrBail`.
+ * Must mirror the env block wired into the dispatcher's construct so
+ * `resolveEffectiveQuotas` doesn't throw on missing fields.
+ */
+const LEVEL_2_QUOTAS = parseQuotasFromEnv(process.env);
 const SCHEDULED_RUNS_PREFIX = 'numa-chat/scheduled-runs';
 
 const dynamo = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, { region: REGION }), {
@@ -158,7 +191,12 @@ async function generateStsProofUrl(expiresIn = 60): Promise<string> {
  */
 async function sendEmailNotification(params: {
   to: string;
-  template: 'schedule_completed' | 'schedule_failed' | 'schedule_partial';
+  template:
+    | 'schedule_completed'
+    | 'schedule_failed'
+    | 'schedule_partial'
+    | 'schedule_trigger_quota_blocked'
+    | 'schedule_quota_warning';
   clientName: string;
   templateData: Record<string, string>;
 }): Promise<void> {
@@ -194,6 +232,97 @@ async function sendEmailNotification(params: {
   }
 }
 
+/**
+ * Dispatch the post-run email for a scheduled run, picking the right
+ * template (`schedule_completed` / `schedule_failed` / `schedule_partial`)
+ * and resolving recipients + branding. Fire-and-forget — never throws.
+ *
+ * Centralised so all four terminal-status paths (success, agent invocation
+ * failed, persist failed, outer catch) email the owner. Previously only
+ * the success path called this — failure paths just emitted an in-app
+ * NotificationService event, so the owner got nothing in their inbox when
+ * the run blew up.
+ */
+async function dispatchScheduleRunEmail(params: {
+  schedule: {
+    user_id: string;
+    schedule_id: string;
+    agent_title?: string;
+    max_runs?: number;
+    total_runs?: number;
+    timezone?: string;
+    email_notifications?: boolean;
+    notification_email?: string;
+    notification_emails?: string[];
+  };
+  status: 'success' | 'partial' | 'failed';
+  scheduleName: string;
+  summary: string;
+  runStartedAtMs: number;
+}): Promise<void> {
+  const { schedule, status, scheduleName, summary, runStartedAtMs } = params;
+  // Default ON unless explicitly opted out — matches the success-path
+  // behaviour we used to gate this on.
+  if (schedule.email_notifications === false) return;
+
+  let recipientEmails: string[] = [];
+  if (schedule.notification_emails?.length) {
+    recipientEmails = schedule.notification_emails;
+  } else {
+    const fallbackEmail = schedule.notification_email || (await resolveUserEmail(schedule.user_id));
+    if (fallbackEmail) recipientEmails = [fallbackEmail];
+  }
+  if (recipientEmails.length === 0) return;
+
+  const template =
+    status === 'failed'
+      ? ('schedule_failed' as const)
+      : status === 'partial'
+        ? ('schedule_partial' as const)
+        : ('schedule_completed' as const);
+
+  const branding = await resolveClientBranding();
+
+  const durationMs = Date.now() - runStartedAtMs;
+  const durationSec = Math.round(durationMs / 1000);
+  const durationStr = durationSec >= 60 ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` : `${durationSec}s`;
+
+  const totalRuns = (schedule.total_runs ?? 0) + 1;
+  const runCountStr = schedule.max_runs ? `${totalRuns} of ${schedule.max_runs}` : `${totalRuns}`;
+
+  const userTimezone = schedule.timezone || 'UTC';
+  const ranAtStr = new Date().toLocaleString('en-US', {
+    timeZone: userTimezone,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  const tzAbbr = new Date().toLocaleString('en-US', { timeZone: userTimezone, timeZoneName: 'short' }).split(' ').pop();
+
+  const templateData: Record<string, string> = {
+    schedule_name: scheduleName,
+    agent_name: schedule.agent_title || scheduleName,
+    summary: summary || '',
+    run_url: `https://${CLIENT_NAME}.numa.arcanum.ai/automations/${schedule.schedule_id}`,
+    // Cognito-protected deep link to the schedule detail page. Both `/pause`
+    // and the bare `/scheduling/:id` work — the email-sender renders this as
+    // the "Pause or manage" CTA in the template.
+    manage_url: `https://${CLIENT_NAME}.numa.arcanum.ai/scheduling/${schedule.schedule_id}?action=pause`,
+    duration: durationStr,
+    run_count: runCountStr,
+    ran_at: `${ranAtStr} ${tzAbbr}`,
+    ...(branding.logoUrl && { logo_url: branding.logoUrl }),
+    ...(branding.primaryColor && { primary_color: branding.primaryColor }),
+  };
+
+  for (const email of recipientEmails) {
+    await sendEmailNotification({ to: email, template, clientName: CLIENT_NAME, templateData });
+  }
+}
+
 const HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'OPTIONS,POST',
@@ -211,7 +340,10 @@ type AuthContext = {
 type ScheduledRunConfig = {
   modelId?: string;
   enabledTools?: string[];
+  /** @deprecated since FEAT-143 — see enabledIntegrations. Still read for legacy records. */
   enabledConnections?: string[];
+  /** Method-tagged integrations override. Resolved by buildUnifiedIntegrationsPayload. */
+  enabledIntegrations?: IntegrationListItem[];
   enabledKBIds?: string[];
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
@@ -225,6 +357,8 @@ type AgentToolsConfig = {
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
   enabledConnections?: string[];
+  /** Future-shape: agents storing method-tagged integrations directly. */
+  enabledIntegrations?: IntegrationListItem[];
   allowedKnowledgeBases?: string[] | null;
 };
 
@@ -246,8 +380,11 @@ type ScheduleRecord = {
   schedule_id: string;
   conversation_id: string;
   prompt_text: string;
+  cron_expression?: string;
   timezone?: string;
-  status: 'active' | 'paused' | 'deleted';
+  trigger_type?: 'cron' | 'event';
+  status: 'active' | 'paused' | 'deleted' | 'pending_approval' | 'admin_locked';
+  expires_at?: number;
   agent_id: string;
   agent_title?: string;
   agent_snapshot?: AgentSnapshot;
@@ -255,6 +392,7 @@ type ScheduleRecord = {
   label?: string;
   max_runs?: number;
   total_runs?: number;
+  projected_runs_per_month?: number;
   email_notifications?: boolean;
   notification_email?: string;
   notification_emails?: string[];
@@ -263,6 +401,16 @@ type ScheduleRecord = {
   last_run_epoch?: number;
   last_run_conversation_id?: string;
   last_run_s3_key?: string;
+  /**
+   * Rolling per-day fire counter keyed `'YYYY-MM-DD'`. Used to enforce the
+   * monthly `max_runs` cap (sum entries with the current-month prefix).
+   */
+  recent_runs?: Record<string, number>;
+  /**
+   * `'YYYY-MM'` of the last month a monthly-cap notification was sent, so
+   * the user gets one ping per cap event, not one per skipped invocation.
+   */
+  last_quota_blocked_month?: string;
 };
 
 type RunnerEvent = {
@@ -271,6 +419,7 @@ type RunnerEvent = {
   runId?: string;
   event?: {
     source?: string;
+    // Gmail-specific payload (source === 'gmail').
     email?: {
       id?: string;
       from?: string;
@@ -280,9 +429,14 @@ type RunnerEvent = {
       has_attachment?: boolean;
       received_at?: string;
     };
-    // Pipedream-trigger fields. Shape: dispatcher's invokeRunnerPipedream
-    // spreads the per-app extractor's `fields` into the event object plus
-    // adds `app_slug`, `component_id`, `dedup_key`, and `raw`.
+    // Pipedream-specific payload (source === 'pipedream'). Shape: the
+    // dispatcher's invokeRunnerPipedream spreads the per-app extractor's
+    // `fields` into the event object plus adds `app_slug`, `component_id`,
+    // `dedup_key`, and `raw`. `dedup_key` is the stable per-event id (e.g.
+    // Slack message ts) — used for dedupe in `claimEventMessageSlot`
+    // exactly like gmail's email.id. The `[key: string]: unknown` index
+    // signature below covers the extractor-flattened fields, which vary
+    // per app.
     app_slug?: string;
     component_id?: string;
     dedup_key?: string;
@@ -580,97 +734,190 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
     console.error('Schedule runner missing configuration, skipping');
     return;
   }
-  try {
-    const event = parseRunnerEvent(rawEvent);
-    if (!event?.scheduleId) {
-      throw new Error('Missing scheduleId for scheduled run');
-    }
-    const schedule = await getSchedule(event.scheduleId);
-    if (!schedule) {
-      console.warn('Schedule not found for scheduled run', event.scheduleId);
-      return;
-    }
-    if (schedule.status !== 'active') {
-      console.info('Skipping schedule because status is not active', schedule.schedule_id, schedule.status);
-      return;
-    }
 
-    // maxRuns enforcement: skip if total_runs has reached the limit
-    if (schedule.max_runs && (schedule.total_runs ?? 0) >= schedule.max_runs) {
-      console.info(
-        'Skipping schedule because maxRuns reached',
-        schedule.schedule_id,
-        `${schedule.total_runs}/${schedule.max_runs}`
-      );
-      await pauseScheduleForMaxRuns(schedule);
-      return;
-    }
-
-    let interpolatedPrompt = schedule.prompt_text;
-    if (event.type === 'EVENT' && event.event?.source === 'gmail' && event.event.email) {
-      interpolatedPrompt = interpolateEmailVars(schedule.prompt_text, event.event.email);
-
-      // Auto-inject the email content as context unless explicitly disabled on the trigger
-      const trigger = (schedule as ScheduleRecord & { trigger?: { include_email_context?: boolean } }).trigger;
-      const includeContext = trigger?.include_email_context !== false;
-      if (includeContext) {
-        const e = event.event.email;
-        const contextBlock =
-          `<email_context>\n` +
-          `Message ID: ${e.id ?? ''}\n` +
-          `From: ${e.from ?? ''}\n` +
-          `To: ${e.to ?? ''}\n` +
-          `Subject: ${e.subject ?? ''}\n` +
-          `Received: ${e.received_at ?? ''}\n` +
-          `Has attachments: ${e.has_attachment ? 'yes' : 'no'}\n\n` +
-          `${e.body ?? ''}\n` +
-          `</email_context>\n\n`;
-        interpolatedPrompt = contextBlock + interpolatedPrompt;
-      }
-    } else if (event.type === 'EVENT' && event.event?.source === 'pipedream') {
-      // Pipedream trigger: substitute {{ event.<dotted.path> }} from the event
-      // object (which the dispatcher built from the per-app extractor + raw payload).
-      interpolatedPrompt = interpolateEventVars(schedule.prompt_text, event.event);
-
-      // Auto-inject a generic event context block unless the schedule's trigger
-      // explicitly opted out via `include_event_context: false`.
-      const trigger = (schedule as ScheduleRecord & { trigger?: { include_event_context?: boolean } }).trigger;
-      const includeContext = trigger?.include_event_context !== false;
-      if (includeContext) {
-        const evt = event.event;
-        // Render the canonical fields the per-app extractor surfaced. Skip
-        // the structural keys (source, app_slug, component_id, dedup_key, raw)
-        // — they're metadata, not content. JSON-encode complex values.
-        const HIDDEN = new Set(['source', 'app_slug', 'component_id', 'dedup_key', 'raw']);
-        const lines: string[] = [];
-        for (const [k, v] of Object.entries(evt)) {
-          if (HIDDEN.has(k) || v == null) continue;
-          const rendered = typeof v === 'string' ? v : JSON.stringify(v);
-          lines.push(`${k}: ${rendered}`);
-        }
-        const contextBlock =
-          `<event_context>\n` +
-          `Source: pipedream/${evt.app_slug ?? ''}\n` +
-          `Trigger: ${evt.component_id ?? ''}\n` +
-          (lines.length ? `\n${lines.join('\n')}\n` : '') +
-          `</event_context>\n\n`;
-        interpolatedPrompt = contextBlock + interpolatedPrompt;
-      }
-    }
-
-    await executeRun({
-      schedule,
-      prompt: interpolatedPrompt,
-      runConfig: schedule.run_config,
-      agentSnapshot: schedule.agent_snapshot,
-      auth: { sub: schedule.user_id, email: undefined, name: undefined, groups: [] },
-      adHoc: false,
-      triggeredBySchedule: true,
-      runId: event.runId,
-    });
-  } catch (error) {
-    console.error('Scheduled run failed', error);
+  // No outer try/catch by design. `executeRun` has its own internal failure
+  // handlers (agent invocation throw, persist failed, outer-catch — each
+  // marks the schedule failed, emails the owner, fires in-app notification).
+  // Anything that escapes those is an infra-level failure (DDB throttle,
+  // network, etc.) and SHOULD propagate so EventBridge Scheduler retries
+  // and the DLQ catches it. Swallowing here used to hide those silently.
+  const event = parseRunnerEvent(rawEvent);
+  if (!event?.scheduleId) {
+    throw new Error('Missing scheduleId for scheduled run');
   }
+  const schedule = await getSchedule(event.scheduleId);
+  if (!schedule) {
+    console.warn('Schedule not found for scheduled run', event.scheduleId);
+    return;
+  }
+  if (schedule.status !== 'active') {
+    console.info('Skipping schedule because status is not active', schedule.schedule_id, schedule.status);
+    return;
+  }
+
+  // Expiry check — pause + delete the EventBridge rule once expired so
+  // the runner stops being woken up. The owner can extend `expires_at`
+  // (or clear it) and resume from paused.
+  if (schedule.expires_at && Date.now() >= schedule.expires_at) {
+    console.info('[SCHEDULE_RUNNER] Schedule past expiry — auto-pausing', {
+      scheduleId: schedule.schedule_id,
+      expires_at: schedule.expires_at,
+    });
+    await autoPauseExpired(schedule);
+    return;
+  }
+
+  // Idempotent run dedupe. Two flavours:
+  //   - Cron / Run Now: time-window dedupe via `claimRunSlot` (60s).
+  //     EventBridge can double-fire the same scheduled time and async
+  //     self-invocation on Run Now can race with the next scheduled
+  //     fire — only one wins the slot.
+  //   - Event triggers (gmail OR pipedream): per-event dedupe via
+  //     `claimEventMessageSlot`, keyed on a stable per-event id:
+  //     - gmail: messageId (`event.event.email.id`)
+  //     - pipedream: per-app extractor's `dedup_key` (e.g. Slack message ts)
+  //     Three distinct events arriving within 60s are three legitimate
+  //     fires, not duplicates, so the time-window approach was rejecting
+  //     valid runs. Per-event dedupe is exact: same id → reject; different
+  //     ids → allow, regardless of timing.
+  const eventDedupId =
+    event.type === 'EVENT'
+      ? ((event.event?.email?.id as string | undefined) ?? (event.event?.dedup_key as string | undefined))
+      : undefined;
+  if (event.type === 'EVENT' && eventDedupId) {
+    const claimed = await claimEventMessageSlot(schedule, eventDedupId);
+    if (!claimed) {
+      console.info('[SCHEDULE_RUNNER] Skipping duplicate event fire — event already dispatched', {
+        scheduleId: schedule.schedule_id,
+        dedupId: eventDedupId,
+        source: (event.event as { source?: string } | undefined)?.source,
+      });
+      return;
+    }
+  } else if (event.type === 'EVENT') {
+    // Event with no dedup id — log loudly and fall back to the time-window
+    // claim so we still get *some* dedupe. This shouldn't happen with the
+    // current dispatcher (gmail always sets email.id, pipedream extractors
+    // always set dedup_key), but if a future trigger source bypasses both
+    // we want CloudWatch to flag it rather than silently double-fire.
+    console.warn('[SCHEDULE_RUNNER] Event missing dedup id — falling back to 60s time-window claim', {
+      scheduleId: schedule.schedule_id,
+      source: (event.event as { source?: string } | undefined)?.source,
+    });
+    const claimed = await claimRunSlot(schedule.user_id, schedule.schedule_id, 60_000);
+    if (!claimed) {
+      console.info('[SCHEDULE_RUNNER] Skipping duplicate fire — another invocation claimed this slot', {
+        scheduleId: schedule.schedule_id,
+      });
+      return;
+    }
+  } else {
+    const claimed = await claimRunSlot(schedule.user_id, schedule.schedule_id, 60_000);
+    if (!claimed) {
+      console.info('[SCHEDULE_RUNNER] Skipping duplicate fire — another invocation claimed this slot', {
+        scheduleId: schedule.schedule_id,
+      });
+      return;
+    }
+  }
+
+  // Trigger-quota enforcement (atomic counter + per-schedule recent_runs
+  // increment). Used to live in the dispatcher but the dispatcher's
+  // fire-and-forget invocation meant it incremented even when this
+  // runner's `claimRunSlot` rejected the fire — counter and run history
+  // would drift past actual runs. Now the increment only happens when
+  // we're definitely about to run the agent. Cron schedules have their
+  // quota checked at create-time so they don't go through this path;
+  // event-trigger fires do.
+  if (event.type === 'EVENT') {
+    const allowed = await enforceTriggerQuotaOrBail(schedule);
+    if (!allowed) return;
+  }
+
+  // Per-month maxRuns enforcement. `max_runs` is the monthly cap. When
+  // hit, the schedule is paused (status -> 'paused'); it does NOT
+  // auto-resume next month. The user manually re-enables after the 1st
+  // when their quota resets. Run counts are summed from `recent_runs`
+  // (date-keyed map maintained at fire time).
+  if (schedule.max_runs && schedule.recent_runs) {
+    const monthPrefix = `${currentMonthKey()}-`;
+    const monthRuns = Object.entries(schedule.recent_runs).reduce(
+      (sum, [day, count]) => (day.startsWith(monthPrefix) ? sum + (count ?? 0) : sum),
+      0
+    );
+    if (monthRuns >= schedule.max_runs) {
+      console.info(
+        'Pausing schedule — monthly max_runs reached, manual resume required',
+        schedule.schedule_id,
+        `${monthRuns}/${schedule.max_runs}`
+      );
+      await pauseScheduleForMonthlyCap(schedule, monthRuns);
+      return;
+    }
+  }
+
+  let interpolatedPrompt = schedule.prompt_text;
+  if (event.type === 'EVENT' && event.event?.source === 'gmail' && event.event.email) {
+    interpolatedPrompt = interpolateEmailVars(schedule.prompt_text, event.event.email);
+
+    // Auto-inject the email content as context unless explicitly disabled on the trigger
+    const trigger = (schedule as ScheduleRecord & { trigger?: { include_email_context?: boolean } }).trigger;
+    const includeContext = trigger?.include_email_context !== false;
+    if (includeContext) {
+      const e = event.event.email;
+      const contextBlock =
+        `<email_context>\n` +
+        `Message ID: ${e.id ?? ''}\n` +
+        `From: ${e.from ?? ''}\n` +
+        `To: ${e.to ?? ''}\n` +
+        `Subject: ${e.subject ?? ''}\n` +
+        `Received: ${e.received_at ?? ''}\n` +
+        `Has attachments: ${e.has_attachment ? 'yes' : 'no'}\n\n` +
+        `${e.body ?? ''}\n` +
+        `</email_context>\n\n`;
+      interpolatedPrompt = contextBlock + interpolatedPrompt;
+    }
+  } else if (event.type === 'EVENT' && event.event?.source === 'pipedream') {
+    // Pipedream trigger: substitute {{ event.<dotted.path> }} from the event
+    // object (which the dispatcher built from the per-app extractor + raw payload).
+    interpolatedPrompt = interpolateEventVars(schedule.prompt_text, event.event);
+
+    // Auto-inject a generic event context block unless the schedule's trigger
+    // explicitly opted out via `include_event_context: false`.
+    const trigger = (schedule as ScheduleRecord & { trigger?: { include_event_context?: boolean } }).trigger;
+    const includeContext = trigger?.include_event_context !== false;
+    if (includeContext) {
+      const evt = event.event;
+      // Render the canonical fields the per-app extractor surfaced. Skip the
+      // structural keys (source, app_slug, component_id, dedup_key, raw) —
+      // they're metadata, not content. JSON-encode complex values.
+      const HIDDEN = new Set(['source', 'app_slug', 'component_id', 'dedup_key', 'raw']);
+      const lines: string[] = [];
+      for (const [k, v] of Object.entries(evt)) {
+        if (HIDDEN.has(k) || v == null) continue;
+        const rendered = typeof v === 'string' ? v : JSON.stringify(v);
+        lines.push(`${k}: ${rendered}`);
+      }
+      const contextBlock =
+        `<event_context>\n` +
+        `Source: pipedream/${evt.app_slug ?? ''}\n` +
+        `Trigger: ${evt.component_id ?? ''}\n` +
+        (lines.length ? `\n${lines.join('\n')}\n` : '') +
+        `</event_context>\n\n`;
+      interpolatedPrompt = contextBlock + interpolatedPrompt;
+    }
+  }
+
+  await executeRun({
+    schedule,
+    prompt: interpolatedPrompt,
+    runConfig: schedule.run_config,
+    agentSnapshot: schedule.agent_snapshot,
+    auth: { sub: schedule.user_id, email: undefined, name: undefined, groups: [] },
+    adHoc: false,
+    triggeredBySchedule: true,
+    runId: event.runId,
+  });
 };
 
 const getSchedule = async (scheduleId: string): Promise<ScheduleRecord | null> => {
@@ -687,6 +934,444 @@ const getSchedule = async (scheduleId: string): Promise<ScheduleRecord | null> =
   );
   const record = (result.Items || [])[0] as ScheduleRecord | undefined;
   return record || null;
+};
+
+/**
+ * FEAT-105 round-2 — atomic run-slot claim for idempotent scheduling.
+ *
+ * Sets `last_run_started_epoch = now` only if there's no value yet OR the
+ * existing value is older than `windowMs`. Returns true when this invocation
+ * won the slot, false when another invocation already claimed it (in which
+ * case the caller should bail out without running).
+ *
+ * Used to dedupe EventBridge double-fires: two invocations for the same
+ * scheduled time race here, and only the first one proceeds.
+ */
+const claimRunSlot = async (userId: string, scheduleId: string, windowMs: number): Promise<boolean> => {
+  const now = Date.now();
+  const cutoff = now - windowMs;
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: SCHEDULES_TABLE,
+        Key: { user_id: userId, schedule_id: scheduleId },
+        UpdateExpression: 'SET last_run_started_epoch = :now',
+        ConditionExpression: 'attribute_not_exists(last_run_started_epoch) OR last_run_started_epoch < :cutoff',
+        ExpressionAttributeValues: { ':now': now, ':cutoff': cutoff },
+      })
+    );
+    return true;
+  } catch (err) {
+    const errorName = (err as { name?: string }).name;
+    if (errorName === 'ConditionalCheckFailedException') return false;
+    // Any other error — log and let the caller decide. Returning true here
+    // is the safer default: if the dedupe lookup itself is broken, we'd
+    // rather still run the schedule than silently drop it.
+    console.warn('[SCHEDULE_RUNNER] claimRunSlot non-conditional failure — allowing run', err);
+    return true;
+  }
+};
+
+/**
+ * Per-event dedupe for event-trigger fires (gmail + pipedream). Writes a
+ * marker into the schedule record's `processed_event_messages` map, keyed
+ * by a stable per-event id (gmail messageId, or pipedream extractor's
+ * dedup_key). The conditional update succeeds only when the id isn't
+ * already present — so a re-pushed event for the same (schedule, id)
+ * pair gets rejected without re-running the agent.
+ *
+ * Replaces `claimRunSlot`'s 60-second time-window dedupe for events:
+ * three distinct messages arriving within 60s are three legitimate fires,
+ * not duplicates, so the time-window approach was rejecting valid runs.
+ * Per-event dedupe is exact: same id → reject; different ids → allow,
+ * regardless of timing.
+ *
+ * The map can grow unbounded for high-volume triggers — accepted as v1
+ * trade-off. If it becomes a problem we can prune oldest entries on each
+ * write or add a DDB TTL on a separate per-(schedule, message) row.
+ */
+const claimEventMessageSlot = async (schedule: ScheduleRecord, messageId: string): Promise<boolean> => {
+  // Sanitise messageId for use as a DDB attribute path. Gmail IDs are
+  // hex/base32 so no problematic characters in practice, but defend
+  // against accidents.
+  const safeId = messageId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: SCHEDULES_TABLE,
+        Key: { user_id: schedule.user_id, schedule_id: schedule.schedule_id },
+        UpdateExpression: 'SET processed_event_messages.#mid = :now',
+        ConditionExpression: 'attribute_not_exists(processed_event_messages.#mid)',
+        ExpressionAttributeNames: { '#mid': safeId },
+        ExpressionAttributeValues: { ':now': Date.now() },
+      })
+    );
+    return true;
+  } catch (err) {
+    const errorName = (err as { name?: string }).name;
+    if (errorName === 'ConditionalCheckFailedException') return false;
+    // Nested-attribute SET fails when the parent Map doesn't exist yet —
+    // initialise it then retry. Mirrors the same pattern used elsewhere.
+    if (errorName === 'ValidationException') {
+      try {
+        await dynamo.send(
+          new UpdateCommand({
+            TableName: SCHEDULES_TABLE,
+            Key: { user_id: schedule.user_id, schedule_id: schedule.schedule_id },
+            UpdateExpression: 'SET processed_event_messages = :init',
+            ConditionExpression: 'attribute_not_exists(processed_event_messages)',
+            ExpressionAttributeValues: { ':init': { [safeId]: Date.now() } },
+          })
+        );
+        return true;
+      } catch (retryErr) {
+        // Lost the init race — another fire created the map. Retry the
+        // conditional add.
+        if ((retryErr as { name?: string }).name === 'ConditionalCheckFailedException') {
+          try {
+            await dynamo.send(
+              new UpdateCommand({
+                TableName: SCHEDULES_TABLE,
+                Key: { user_id: schedule.user_id, schedule_id: schedule.schedule_id },
+                UpdateExpression: 'SET processed_event_messages.#mid = :now',
+                ConditionExpression: 'attribute_not_exists(processed_event_messages.#mid)',
+                ExpressionAttributeNames: { '#mid': safeId },
+                ExpressionAttributeValues: { ':now': Date.now() },
+              })
+            );
+            return true;
+          } catch (finalErr) {
+            if ((finalErr as { name?: string }).name === 'ConditionalCheckFailedException') return false;
+            console.warn('[SCHEDULE_RUNNER] claimEventMessageSlot final retry failed — allowing run', finalErr);
+            return true;
+          }
+        }
+        console.warn('[SCHEDULE_RUNNER] claimEventMessageSlot init failed — allowing run', retryErr);
+        return true;
+      }
+    }
+    console.warn('[SCHEDULE_RUNNER] claimEventMessageSlot non-conditional failure — allowing run', err);
+    return true;
+  }
+};
+
+/**
+ * Resolve effective Level-1+2+3 quotas. Reads the Level-3 admin override
+ * from `scheduling-settings` on every call (no warm-container cache, so
+ * admin toggle changes apply within seconds).
+ */
+const resolveTriggerQuotas = async (): Promise<{
+  maxTriggerRunsPerCompanyPerMonth: number;
+  maxTriggerRunsPerUserPerMonth: number;
+}> => {
+  let level3 = undefined;
+  if (SCHEDULING_SETTINGS_TABLE) {
+    try {
+      const res = await dynamo.send(
+        new GetCommand({ TableName: SCHEDULING_SETTINGS_TABLE, Key: { setting: 'scheduling' } })
+      );
+      level3 = parseQuotasFromSettingsItem(res.Item);
+    } catch (err) {
+      console.warn('[SCHEDULE_RUNNER] Failed to read scheduling-settings; falling back to env-only', err);
+    }
+  }
+  const eff = resolveEffectiveQuotas(LEVEL_2_QUOTAS, level3);
+  return {
+    maxTriggerRunsPerCompanyPerMonth: eff.maxTriggerRunsPerCompanyPerMonth,
+    maxTriggerRunsPerUserPerMonth: eff.maxTriggerRunsPerUserPerMonth,
+  };
+};
+
+/**
+ * Atomic trigger-quota enforcement for event-trigger fires. Used to live in
+ * the dispatcher (`enforceAndIncrement`), but the dispatcher's
+ * fire-and-forget invocation meant the counter incremented even when the
+ * runner's own dedupe (`claimRunSlot`) ultimately rejected the fire.
+ * Counter and `recent_runs` would drift past actual run history.
+ *
+ * Now runs HERE inside the runner, AFTER `claimRunSlot` succeeds — so an
+ * increment only happens when we're definitely about to run the agent.
+ *
+ * Does the atomic conditional increment on the tenant + user counter
+ * rows (`scheduling-settings.setting = trigger_count_*_<YYYY-MM>`) via
+ * TransactWriteItems. Either both succeed or neither — no half-state.
+ *
+ * NOTE: per-schedule `recent_runs.<YYYY-MM-DD>` and `total_runs` are
+ * incremented downstream in `markScheduleStatus` (post-run, consistent
+ * across cron + event triggers). Don't touch them here — doing so was
+ * the cause of the +2 counter / +1 run drift after the dispatcher-to-
+ * runner move.
+ *
+ * Returns `true` when the run is allowed. Returns `false` when the cap is
+ * hit — the caller bails without running the agent. On a block we send
+ * BOTH an in-app notification and an email to the owner (deduped per
+ * month via `last_quota_blocked_month`), so silent quota-block can't
+ * surprise the owner two weeks later.
+ */
+const enforceTriggerQuotaOrBail = async (schedule: ScheduleRecord): Promise<boolean> => {
+  const quotas = await resolveTriggerQuotas();
+  const monthKey = currentMonthKey();
+  const companyKey = `trigger_count_company_${monthKey}`;
+  const userKey = `trigger_count_user_${schedule.user_id}_${monthKey}`;
+  const companyCap = quotas.maxTriggerRunsPerCompanyPerMonth;
+  const userCap = quotas.maxTriggerRunsPerUserPerMonth;
+
+  try {
+    await dynamo.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Update: {
+              TableName: SCHEDULING_SETTINGS_TABLE,
+              Key: { setting: companyKey },
+              UpdateExpression: 'SET #t = if_not_exists(#t, :zero) + :one',
+              ConditionExpression: 'attribute_not_exists(#t) OR #t < :cap',
+              ExpressionAttributeNames: { '#t': 'total' },
+              ExpressionAttributeValues: { ':zero': 0, ':one': 1, ':cap': companyCap },
+            },
+          },
+          {
+            Update: {
+              TableName: SCHEDULING_SETTINGS_TABLE,
+              Key: { setting: userKey },
+              UpdateExpression: 'SET #t = if_not_exists(#t, :zero) + :one',
+              ConditionExpression: 'attribute_not_exists(#t) OR #t < :cap',
+              ExpressionAttributeNames: { '#t': 'total' },
+              ExpressionAttributeValues: { ':zero': 0, ':one': 1, ':cap': userCap },
+            },
+          },
+        ],
+      })
+    );
+  } catch (err) {
+    const e = err as { name?: string; CancellationReasons?: Array<{ Code?: string }> };
+    if (e.name !== 'TransactionCanceledException') {
+      // Real DDB error — log and allow the run rather than silently drop.
+      console.error('[SCHEDULE_RUNNER] Trigger-quota TransactWrite failed (allowing run)', err);
+      return true;
+    }
+    const reasons = e.CancellationReasons ?? [];
+    const companyFailed = reasons[0]?.Code === 'ConditionalCheckFailed';
+    const scope: 'company' | 'user' = companyFailed ? 'company' : 'user';
+    const cap = companyFailed ? companyCap : userCap;
+    console.info('[SCHEDULE_RUNNER] Trigger blocked by quota', {
+      scheduleId: schedule.schedule_id,
+      scope,
+      cap,
+    });
+    // Rejection-path notification — re-uses the same dedupe slots as the
+    // post-fire path so we never double-email. When the fire that brought
+    // the counter to cap fired the block email, this call no-ops via the
+    // dedupe stamp. When that email was missed (e.g. cold-start race),
+    // this call is the safety net. We pass `forceBlockScope` because the
+    // TransactWrite was cancelled — the counter row was rolled back so
+    // re-reading shows `cap - 1`, which would silently downgrade us to the
+    // "approaching" tier. The cancellation reason already told us which
+    // scope tripped the cap.
+    await maybeFireTriggerQuotaWarning(schedule, companyKey, userKey, companyCap, userCap, monthKey, scope);
+    // Also fire in-app notification (separate from email — UI-side toast).
+    // Message matches the email's framing: this fire was skipped, the
+    // schedule is still active, and removing/pausing triggers won't refund
+    // this month's usage. Resets on the 1st.
+    try {
+      const whoLower = scope === 'company' ? 'your company is' : 'you are';
+      await NotificationService.notifyScheduleFailed(
+        schedule.user_id,
+        schedule.schedule_id,
+        'agent',
+        schedule.label || schedule.agent_title || schedule.agent_id || 'event trigger',
+        `Trigger fire skipped — ${whoLower} out of monthly trigger budget (cap ${cap}). Schedule stays active and resumes on the 1st when budget resets. Pausing or deleting existing triggers won't refund this month's usage; ask an admin to raise the cap if you need budget now.`
+      );
+    } catch (err2) {
+      console.warn('[SCHEDULE_RUNNER] In-app block notification failed', err2);
+    }
+    return false;
+  }
+  // Post-increment notifications. Read the just-written counter values
+  // and fire the right email tier based on where we landed:
+  //   - exactly at cap (e.g. 10/10): "you've hit the cap" — block email,
+  //     once per month per scope. Subsequent rejected attempts silently
+  //     skip thanks to the dedupe stamp.
+  //   - ≥80% but < cap (e.g. 8/10, 9/10): "approaching cap" — warning
+  //     email, also once per month per scope.
+  // Best-effort — failure doesn't block the run that just succeeded.
+  try {
+    await maybeFireTriggerQuotaWarning(schedule, companyKey, userKey, companyCap, userCap, monthKey);
+  } catch (err) {
+    console.warn('[SCHEDULE_RUNNER] Post-fire quota notifications failed (non-blocking)', err);
+  }
+  return true;
+};
+
+/**
+ * Threshold percentage at which we fire a "you're approaching the cap"
+ * email. Hard-coded to match the in-product `WARN_PCT` in QuotaPreflight
+ * and the cron warning in `agent-schedules:maybeFireQuotaWarning`.
+ */
+const TRIGGER_QUOTA_WARNING_THRESHOLD_PCT = 80;
+
+/**
+ * Post-fire quota emails. Reads the just-written counter values and fires
+ * the right email tier per scope:
+ *   - exactly at cap → block email ("you've hit the cap")
+ *   - ≥ 80% but < cap → warning email ("approaching cap")
+ *
+ * Each scope's email is sent at most once per month — deduped via
+ * conditional updates on `scheduling-settings` rows. The block tier uses
+ * `trigger_quota_block_<scope>_<YYYY-MM>`, the warn tier uses
+ * `trigger_quota_warn_<scope>_<YYYY-MM>`. Subsequent rejected fires
+ * (attempts past cap) silently skip thanks to the block dedupe stamp.
+ */
+const maybeFireTriggerQuotaWarning = async (
+  schedule: ScheduleRecord,
+  companyKey: string,
+  userKey: string,
+  companyCap: number,
+  userCap: number,
+  monthKey: string,
+  /**
+   * Optional scope override: when called from the rejected-fire branch the
+   * TransactWrite was cancelled, so the counter rows still hold the
+   * pre-increment value. Re-reading them returns `cap - 1`, which lands in
+   * the "approaching" tier and the block email never fires. The caller
+   * passes `forceBlockScope` so we treat that scope's total as `cap` and
+   * fire the correct block-tier email.
+   */
+  forceBlockScope?: 'company' | 'user'
+): Promise<void> => {
+  if (schedule.email_notifications === false) return;
+  const [companyTotalRead, userTotalRead] = await Promise.all([readCounter(companyKey), readCounter(userKey)]);
+  const companyTotal = forceBlockScope === 'company' ? companyCap : companyTotalRead;
+  const userTotal = forceBlockScope === 'user' ? userCap : userTotalRead;
+  const recipient = schedule.notification_email || (await resolveUserEmail(schedule.user_id));
+  if (!recipient) return;
+  const scheduleName = schedule.label || schedule.agent_title || schedule.agent_id || 'event trigger';
+  const manageUrl = `https://${CLIENT_NAME}.numa.arcanum.ai/automations/${schedule.schedule_id}`;
+  await Promise.all([
+    notifyForScope({
+      scope: 'user',
+      total: userTotal,
+      cap: userCap,
+      monthKey,
+      recipient,
+      scheduleName,
+      manageUrl,
+      dedupeKeyPrefix: `trigger_quota_${schedule.user_id}_`,
+    }),
+    notifyForScope({
+      scope: 'company',
+      total: companyTotal,
+      cap: companyCap,
+      monthKey,
+      recipient,
+      scheduleName,
+      manageUrl,
+      dedupeKeyPrefix: `trigger_quota_`,
+    }),
+  ]);
+};
+
+/**
+ * Single-scope post-fire notifier. Picks block / warn / nothing based on
+ * the post-increment counter value, claims a per-tier dedupe slot, and
+ * sends the right template.
+ */
+const notifyForScope = async (params: {
+  scope: 'user' | 'company';
+  total: number;
+  cap: number;
+  monthKey: string;
+  recipient: string;
+  scheduleName: string;
+  manageUrl: string;
+  dedupeKeyPrefix: string;
+}): Promise<void> => {
+  const { scope, total, cap, monthKey, recipient, scheduleName, manageUrl, dedupeKeyPrefix } = params;
+  if (cap <= 0) return;
+  const pct = Math.round((total / cap) * 100);
+  const scopeLabel = scope === 'company' ? 'Your company' : 'You';
+  // Lower-cased form for embedding mid-sentence (e.g. "your automation
+  // skipped — your company is out of monthly trigger budget"). The plain
+  // `scope_label` is sentence-initial so it stays capitalised.
+  const scopeLabelLower = scope === 'company' ? 'your company is' : 'you are';
+  // Cap reached → block tier.
+  if (total >= cap) {
+    const slot = `${dedupeKeyPrefix}block_${scope}_${monthKey}`;
+    if (await claimWarningSlot(slot, monthKey)) {
+      await sendEmailNotification({
+        to: recipient,
+        template: 'schedule_trigger_quota_blocked',
+        clientName: CLIENT_NAME,
+        templateData: {
+          scope,
+          scope_label: scopeLabel,
+          scope_label_lower: scopeLabelLower,
+          cap: cap.toLocaleString(),
+          schedule_name: scheduleName,
+          manage_url: manageUrl,
+        },
+      });
+    }
+    return;
+  }
+  // ≥80% but under cap → warning tier.
+  if (pct >= TRIGGER_QUOTA_WARNING_THRESHOLD_PCT) {
+    const slot = `${dedupeKeyPrefix}warn_${scope}_${monthKey}`;
+    if (await claimWarningSlot(slot, monthKey)) {
+      await sendEmailNotification({
+        to: recipient,
+        template: 'schedule_quota_warning',
+        clientName: CLIENT_NAME,
+        templateData: {
+          scope,
+          scope_label: scopeLabel,
+          percent: String(pct),
+          current: total.toLocaleString(),
+          limit: cap.toLocaleString(),
+          manage_url: manageUrl,
+          schedule_name: scheduleName,
+        },
+      });
+    }
+  }
+};
+
+/** Read an atomic counter row's `total`. Returns 0 if the row is missing. */
+const readCounter = async (settingKey: string): Promise<number> => {
+  if (!SCHEDULING_SETTINGS_TABLE) return 0;
+  try {
+    const res = await dynamo.send(
+      new GetCommand({ TableName: SCHEDULING_SETTINGS_TABLE, Key: { setting: settingKey } })
+    );
+    const total = res.Item?.total;
+    return typeof total === 'number' ? total : 0;
+  } catch {
+    return 0;
+  }
+};
+
+/**
+ * Claim a per-scope-per-month dedupe slot for warning emails. Returns true
+ * on first claim of the month, false if another fire already claimed it.
+ */
+const claimWarningSlot = async (settingKey: string, monthKey: string): Promise<boolean> => {
+  if (!SCHEDULING_SETTINGS_TABLE) return false;
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: SCHEDULING_SETTINGS_TABLE,
+        Key: { setting: settingKey },
+        UpdateExpression: 'SET last_warned_month = :m',
+        ConditionExpression: 'attribute_not_exists(last_warned_month) OR last_warned_month <> :m',
+        ExpressionAttributeValues: { ':m': monthKey },
+      })
+    );
+    return true;
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'ConditionalCheckFailedException') return false;
+    console.warn('[SCHEDULE_RUNNER] Failed to claim warning slot', { settingKey, err });
+    return false;
+  }
 };
 
 type ExecuteRunParams = {
@@ -724,6 +1409,33 @@ const executeRun = async ({
   // Notify schedule started and create job record
   if (!adHoc) {
     await NotificationService.notifyScheduleStarted(schedule.user_id, schedule.schedule_id, 'agent', scheduleName);
+
+    // Phase 0 telemetry: emit a structured `[SCHEDULE_METRIC]` log line per run.
+    // Used by the CW Logs Insights query in documentation/scheduled-agents/
+    // to chart load per scope and tune Level-2 quotas in the CS portal.
+    try {
+      const computeProjectedInterval = (): number | null => {
+        if (!schedule.cron_expression || (schedule as { trigger_type?: string }).trigger_type === 'event') {
+          return null;
+        }
+        const monthly = projectMonthlyRuns(schedule.cron_expression);
+        return monthly > 0 ? Math.round(43_800 / monthly) : null;
+      };
+      const projectedIntervalMinutes = computeProjectedInterval();
+      console.info('[SCHEDULE_METRIC] schedule_run_started', {
+        clientName: CLIENT_NAME,
+        userSub: schedule.user_id,
+        agentId: schedule.agent_id,
+        scheduleId: schedule.schedule_id,
+        cron: schedule.cron_expression ?? null,
+        triggerType: (schedule as { trigger_type?: string }).trigger_type ?? 'cron',
+        projectedIntervalMinutes,
+        projectedRunsPerMonth: (schedule as { projected_runs_per_month?: number }).projected_runs_per_month ?? null,
+        triggerSource: (schedule as { _runMode?: string })._runMode ?? 'eventbridge',
+      });
+    } catch (err) {
+      console.warn('[SCHEDULE_METRIC] failed to emit', err);
+    }
   }
 
   if (!adHoc) {
@@ -829,11 +1541,29 @@ const executeRun = async ({
         scheduleName,
         errorMessage
       );
+      // Email the owner on agent-invocation failure too — used to silently
+      // skip emails on this path (only the success path dispatched).
+      await dispatchScheduleRunEmail({
+        schedule,
+        status: 'failed',
+        scheduleName,
+        summary: errorMessage,
+        runStartedAtMs: now,
+      });
+      // FEAT-105 round-2 — auto-pause on N consecutive failures.
+      await maybeAutoPauseAfterFailure(schedule);
     }
     throw err instanceof Error ? err : new Error('Agent invocation failed');
   }
 
   let runLogKey: string | null = null;
+  // `markScheduleStatus` increments `total_runs` and `recent_runs.<today>`,
+  // so calling it twice on a single fire double-counts toward the monthly
+  // cap. The success-path mark at line ~1470 and the catch-path mark below
+  // can both fire if a post-mark step throws (notifications, email, etc.).
+  // Track once-only so the catch skips re-marking when the success branch
+  // already committed.
+  let statusMarked = false;
   try {
     const assistantTimestamp = Date.now();
     await appendMessage({
@@ -893,6 +1623,12 @@ const executeRun = async ({
         runConversationId,
         runLogKey
       );
+      statusMarked = true;
+
+      // FEAT-105 round-2 — auto-pause if this run pushed us past the consecutive-fail threshold.
+      if (effectiveStatus === 'failed') {
+        await maybeAutoPauseAfterFailure(schedule);
+      }
 
       // Notification metadata includes runId so the frontend can deeplink
       // directly to this specific run in the schedule detail page.
@@ -927,89 +1663,32 @@ const executeRun = async ({
         );
       }
 
-      // Email notification (non-blocking, default ON unless explicitly opted out)
-      const emailEnabled = schedule.email_notifications !== false;
-      if (emailEnabled) {
-        // Resolve recipients: notification_emails list > single notification_email > Cognito lookup
-        let recipientEmails: string[] = [];
-        if (schedule.notification_emails?.length) {
-          recipientEmails = schedule.notification_emails;
-        } else {
-          const fallbackEmail = schedule.notification_email || (await resolveUserEmail(schedule.user_id));
-          if (fallbackEmail) recipientEmails = [fallbackEmail];
-        }
-
-        if (recipientEmails.length > 0) {
-          const emailTemplate =
-            agentReportedStatus === 'failed'
-              ? ('schedule_failed' as const)
-              : agentReportedStatus === 'partial'
-                ? ('schedule_partial' as const)
-                : ('schedule_completed' as const);
-
-          // Resolve branding for email styling (non-blocking)
-          const branding = await resolveClientBranding();
-
-          const durationMs = Date.now() - now;
-          const durationSec = Math.round(durationMs / 1000);
-          const durationStr =
-            durationSec >= 60 ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` : `${durationSec}s`;
-
-          const totalRuns = (schedule.total_runs ?? 0) + 1;
-          const runCountStr = schedule.max_runs ? `${totalRuns} of ${schedule.max_runs}` : `${totalRuns}`;
-
-          // Format run timestamp in the user's timezone
-          const userTimezone = schedule.timezone || 'UTC';
-          const ranAtStr = new Date().toLocaleString('en-US', {
-            timeZone: userTimezone,
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
-          });
-          const tzAbbr = new Date()
-            .toLocaleString('en-US', { timeZone: userTimezone, timeZoneName: 'short' })
-            .split(' ')
-            .pop();
-
-          const templateData = {
-            schedule_name: scheduleName,
-            agent_name: schedule.agent_title || scheduleName,
-            summary: notificationMessage || '',
-            run_url: `https://${CLIENT_NAME}.numa.arcanum.ai/automations/${schedule.schedule_id}`,
-            duration: durationStr,
-            run_count: runCountStr,
-            ran_at: `${ranAtStr} ${tzAbbr}`,
-            ...(branding.logoUrl && { logo_url: branding.logoUrl }),
-            ...(branding.primaryColor && { primary_color: branding.primaryColor }),
-          };
-
-          // Send to all recipients (SES supports up to 50 per call)
-          for (const email of recipientEmails) {
-            await sendEmailNotification({
-              to: email,
-              template: emailTemplate,
-              clientName: CLIENT_NAME,
-              templateData,
-            });
-          }
-        }
-      }
+      // Run-completion email — fires for success, partial, and failed alike
+      // (the helper picks the right template). Async, never blocks.
+      await dispatchScheduleRunEmail({
+        schedule,
+        status: agentReportedStatus,
+        scheduleName,
+        summary: notificationMessage || '',
+        runStartedAtMs: now,
+      });
     }
   } catch (err) {
     console.error('Failed to persist assistant response', err);
     const errorMessage = 'Failed to persist chat output';
     if (!adHoc) {
-      await markScheduleStatus(
-        schedule.user_id,
-        schedule.schedule_id,
-        'failed',
-        errorMessage,
-        runConversationId,
-        runLogKey
-      );
+      // Only re-mark when the success branch hasn't already committed —
+      // otherwise we double-increment total_runs / recent_runs[today].
+      if (!statusMarked) {
+        await markScheduleStatus(
+          schedule.user_id,
+          schedule.schedule_id,
+          'failed',
+          errorMessage,
+          runConversationId,
+          runLogKey
+        );
+      }
       await NotificationService.notifyScheduleFailed(
         schedule.user_id,
         schedule.schedule_id,
@@ -1017,6 +1696,13 @@ const executeRun = async ({
         scheduleName,
         errorMessage
       );
+      await dispatchScheduleRunEmail({
+        schedule,
+        status: 'failed',
+        scheduleName,
+        summary: errorMessage,
+        runStartedAtMs: now,
+      });
     }
     throw err instanceof Error ? err : new Error('Unable to persist response');
   }
@@ -1028,6 +1714,46 @@ const executeRun = async ({
     runLogS3Key: runLogKey ?? undefined,
     triggeredBySchedule: Boolean(triggeredBySchedule),
   };
+};
+
+/**
+ * Build a typed error from a free-form invocation error message. Pattern
+ * matches against the message text for now — when the proxy / agent SDK
+ * starts emitting structured errors, replace these heuristics with direct
+ * checks.
+ *
+ * Mirrors `TypedScheduleErrorSchema.kind` enum from `lib/scheduling-schemas.ts`.
+ */
+const classifyTypedError = (message: string): { kind: string; resource?: string; remediationPath?: string } | null => {
+  const m = message.toLowerCase();
+  if (m.includes('approval timed out') && m.includes('integration')) {
+    // Pull integration name from "...for proxy request to <integration> API..."
+    const match = message.match(/integration ([a-z0-9_-]+)/i);
+    return {
+      kind: 'integration_not_connected',
+      resource: match?.[1],
+      remediationPath: '/integrations',
+    };
+  }
+  if (m.includes('integration') && (m.includes('not connected') || m.includes('not found'))) {
+    return { kind: 'integration_not_connected', remediationPath: '/integrations' };
+  }
+  // Post-rebrand: agent emits both "knowledge base" (legacy) and "folder"
+  // (new vocab). Match either so existing failures continue to classify.
+  // remediationPath updated to /numa-files (the post-rebrand unified page).
+  if (
+    (m.includes('knowledge base') || m.includes('folder')) &&
+    (m.includes('not enabled') || m.includes('not accessible'))
+  ) {
+    return { kind: 'kb_not_accessible', remediationPath: '/numa-files' };
+  }
+  if (m.includes('agent') && (m.includes('archived') || m.includes('not found'))) {
+    return { kind: 'agent_archived' };
+  }
+  if (m.includes('quota')) {
+    return { kind: 'quota_exceeded', remediationPath: '/scheduling' };
+  }
+  return null;
 };
 
 const markScheduleStatus = async (
@@ -1045,10 +1771,47 @@ const markScheduleStatus = async (
     ':err': error,
   };
 
-  // Increment total_runs counter on each completed or failed run
+  // Typed error — set when classifier matches, REMOVE otherwise so it doesn't
+  // linger from a previous failure. Run as a separate REMOVE expression below.
+  const removeExpressions: string[] = [];
+  if (status === 'failed' && error) {
+    const classified = classifyTypedError(error);
+    if (classified) {
+      const typed = {
+        kind: classified.kind,
+        message: error.substring(0, 500),
+        ...(classified.resource ? { resource: classified.resource } : {}),
+        ...(classified.remediationPath ? { remediationPath: classified.remediationPath } : {}),
+      };
+      updateExpressions.push('last_error_typed = :typed');
+      expressionAttributeValues[':typed'] = typed;
+    } else {
+      removeExpressions.push('last_error_typed');
+    }
+  } else if (status === 'success' || status === 'partial') {
+    // Clear stale typed error from a previous failed run.
+    removeExpressions.push('last_error_typed');
+  }
+
+  // Increment total_runs (lifetime) and recent_runs[today] (rolling daily
+  // counter used for the monthly max_runs cap).
   updateExpressions.push('total_runs = if_not_exists(total_runs, :zero) + :one');
+  const today = `${new Date().toISOString().slice(0, 10)}`; // 'YYYY-MM-DD' (UTC)
+  updateExpressions.push('recent_runs.#today = if_not_exists(recent_runs.#today, :zero) + :one');
   expressionAttributeValues[':zero'] = 0;
   expressionAttributeValues[':one'] = 1;
+
+  // FEAT-105 round-2 — track consecutive failures for the auto-pause guard.
+  // Failed runs increment. Only `success` resets to 0 — `partial` leaves the
+  // counter alone. A consistently-partial agent (e.g. one whose self-eval
+  // returns "partial" because one artifact is always missing) shouldn't
+  // mask a real failure pattern. If the user wants to clear the counter
+  // they can manually pause/resume.
+  if (status === 'failed') {
+    updateExpressions.push('consecutive_failures = if_not_exists(consecutive_failures, :zero) + :one');
+  } else if (status === 'success') {
+    updateExpressions.push('consecutive_failures = :zero');
+  }
 
   if (runConversationId) {
     updateExpressions.push('last_run_conversation_id = :conversationId');
@@ -1060,18 +1823,129 @@ const markScheduleStatus = async (
     expressionAttributeValues[':runLogKey'] = runLogKey;
   }
 
-  await dynamo.send(
-    new UpdateCommand({
-      TableName: SCHEDULES_TABLE,
-      Key: { user_id: userId, schedule_id: scheduleId },
-      UpdateExpression: `SET ${updateExpressions.join(', ')}`,
-      ExpressionAttributeValues: expressionAttributeValues,
-    })
-  );
+  const updateExpression =
+    `SET ${updateExpressions.join(', ')}` +
+    (removeExpressions.length > 0 ? ` REMOVE ${removeExpressions.join(', ')}` : '');
+
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: SCHEDULES_TABLE,
+        Key: { user_id: userId, schedule_id: scheduleId },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeNames: { '#today': today },
+        ExpressionAttributeValues: expressionAttributeValues,
+      })
+    );
+  } catch (err) {
+    // Nested-path SET fails when `recent_runs` doesn't yet exist on the
+    // record (first-ever fire, or pre-existing schedule from before the
+    // map was introduced). Initialise the map and retry without the nested
+    // increment — same fallback pattern the connector dispatcher uses.
+    if ((err as { name?: string })?.name === 'ValidationException') {
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: SCHEDULES_TABLE,
+          Key: { user_id: userId, schedule_id: scheduleId },
+          UpdateExpression: 'SET recent_runs = :rr',
+          ConditionExpression: 'attribute_not_exists(recent_runs)',
+          ExpressionAttributeValues: { ':rr': { [today]: 0 } },
+        })
+      );
+      // Retry the full update now that the map exists.
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: SCHEDULES_TABLE,
+          Key: { user_id: userId, schedule_id: scheduleId },
+          UpdateExpression: updateExpression,
+          ExpressionAttributeNames: { '#today': today },
+          ExpressionAttributeValues: expressionAttributeValues,
+        })
+      );
+    } else {
+      throw err;
+    }
+  }
 };
 
-/** Auto-pause a schedule that has reached its maxRuns limit. */
-const pauseScheduleForMaxRuns = async (schedule: ScheduleRecord): Promise<void> => {
+/**
+ * FEAT-105 round-2 — auto-pause when consecutive failures hit the threshold.
+ *
+ * Run as a side-effect after `markScheduleStatus`. Reads the just-updated
+ * record, and if it shows N+ consecutive failures pauses the schedule and
+ * notifies. Stops a broken schedule (bad cron, broken integration, prompt
+ * exception) from burning the user's quota indefinitely.
+ *
+ * Threshold default = 5. Configurable via SCHEDULE_AUTOPAUSE_AFTER_FAILURES
+ * env var if a particular tenant needs different behaviour.
+ */
+const AUTO_PAUSE_FAILURE_THRESHOLD = ((): number => {
+  const raw = process.env.SCHEDULE_AUTOPAUSE_AFTER_FAILURES;
+  if (!raw) return 5;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 5;
+})();
+
+const maybeAutoPauseAfterFailure = async (schedule: ScheduleRecord): Promise<void> => {
+  // Re-fetch the current count — we just incremented it via markScheduleStatus.
+  const fresh = await getSchedule(schedule.schedule_id);
+  if (!fresh) return;
+  const failures = (fresh as ScheduleRecord & { consecutive_failures?: number }).consecutive_failures ?? 0;
+  if (failures < AUTO_PAUSE_FAILURE_THRESHOLD) return;
+  if (fresh.status !== 'active') return; // already paused / deleted
+
+  console.warn('[SCHEDULE_RUNNER] Auto-pausing schedule after consecutive failures', {
+    scheduleId: schedule.schedule_id,
+    failures,
+    threshold: AUTO_PAUSE_FAILURE_THRESHOLD,
+  });
+  // Conditional update so two concurrent failed runs that both trip the
+  // threshold don't double-pause + double-notify. The first one wins; the
+  // second's UpdateCommand throws ConditionalCheckFailed and we skip the
+  // notification entirely.
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: SCHEDULES_TABLE,
+        Key: { user_id: schedule.user_id, schedule_id: schedule.schedule_id },
+        UpdateExpression: 'SET #status = :paused, updated_at = :ts',
+        ConditionExpression: '#status = :active',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: { ':paused': 'paused', ':active': 'active', ':ts': Date.now() },
+      })
+    );
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'ConditionalCheckFailedException') {
+      // Lost the race — another invocation already paused it. Skip the email
+      // so the owner doesn't receive duplicate "auto-paused" notifications.
+      return;
+    }
+    console.error('[SCHEDULE_RUNNER] Failed to auto-pause schedule', err);
+    return;
+  }
+  try {
+    const scheduleName = schedule.label || schedule.agent_title || schedule.agent_id || 'Unknown Schedule';
+    await NotificationService.notifyScheduleFailed(
+      schedule.user_id,
+      schedule.schedule_id,
+      'agent',
+      scheduleName,
+      `Schedule auto-paused after ${failures} consecutive failures. Fix the underlying issue and resume.`
+    );
+  } catch (err) {
+    console.error('[SCHEDULE_RUNNER] Failed to send auto-pause notification', err);
+  }
+};
+
+/**
+ * Auto-pause a schedule whose `expires_at` has passed. Same pattern as
+ * `maybeAutoPauseAfterFailure` — we flip status to `paused` in DynamoDB and
+ * fire a notification. The EventBridge rule keeps firing harmlessly until
+ * the owner re-edits or deletes (the runner returns immediately on
+ * non-active status). Cleaning up the EB rule from the runner would need
+ * SchedulerClient + IAM — TODO for a future cleanup round.
+ */
+const autoPauseExpired = async (schedule: ScheduleRecord): Promise<void> => {
   try {
     await dynamo.send(
       new UpdateCommand({
@@ -1079,10 +1953,7 @@ const pauseScheduleForMaxRuns = async (schedule: ScheduleRecord): Promise<void> 
         Key: { user_id: schedule.user_id, schedule_id: schedule.schedule_id },
         UpdateExpression: 'SET #status = :paused, updated_at = :ts',
         ExpressionAttributeNames: { '#status': 'status' },
-        ExpressionAttributeValues: {
-          ':paused': 'paused',
-          ':ts': Date.now(),
-        },
+        ExpressionAttributeValues: { ':paused': 'paused', ':ts': Date.now() },
       })
     );
     const scheduleName = schedule.label || schedule.agent_title || schedule.agent_id || 'Unknown Schedule';
@@ -1091,11 +1962,56 @@ const pauseScheduleForMaxRuns = async (schedule: ScheduleRecord): Promise<void> 
       schedule.schedule_id,
       'agent',
       scheduleName,
-      `Schedule paused: reached maximum of ${schedule.max_runs} runs.`
+      `Schedule paused — past its end date (${new Date(schedule.expires_at!).toISOString()}). Extend or clear the end date and resume to continue running.`
     );
-    console.info('Schedule auto-paused due to maxRuns limit', schedule.schedule_id);
   } catch (err) {
-    console.error('Failed to auto-pause schedule for maxRuns', err);
+    console.error('[SCHEDULE_RUNNER] Failed to auto-pause expired schedule', err);
+  }
+};
+
+/**
+ * Pause a schedule that has reached its monthly `max_runs` cap. Status is
+ * flipped to `paused` so EventBridge stops firing it (existing pause
+ * semantics). Quota window resets on the 1st of next month, but the
+ * schedule does NOT auto-resume — the owner must manually flip it back to
+ * active once quota is available again. Notification is deduped via a
+ * conditional update on `last_quota_blocked_month` so a re-pause within
+ * the same month doesn't double-notify.
+ */
+const pauseScheduleForMonthlyCap = async (schedule: ScheduleRecord, monthRuns: number): Promise<void> => {
+  const monthKey = currentMonthKey();
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: SCHEDULES_TABLE,
+        Key: { user_id: schedule.user_id, schedule_id: schedule.schedule_id },
+        UpdateExpression: 'SET #status = :paused, updated_at = :ts, last_quota_blocked_month = :m',
+        ConditionExpression: 'attribute_not_exists(last_quota_blocked_month) OR last_quota_blocked_month <> :m',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':paused': 'paused',
+          ':ts': Date.now(),
+          ':m': monthKey,
+        },
+      })
+    );
+  } catch (err) {
+    const name = (err as { name?: string })?.name;
+    if (name === 'ConditionalCheckFailedException') return; // already paused + notified this month
+    console.warn('Failed to pause schedule on monthly cap', err);
+    return;
+  }
+  try {
+    const scheduleName = schedule.label || schedule.agent_title || schedule.agent_id || 'Unknown Schedule';
+    await NotificationService.notifyScheduleCompleted(
+      schedule.user_id,
+      schedule.schedule_id,
+      'agent',
+      scheduleName,
+      `Schedule paused — monthly run cap reached (${monthRuns}/${schedule.max_runs}). Resume manually when you're ready, or raise the Max runs / month setting on this schedule to allow more.`
+    );
+  } catch (err) {
+    console.warn('Failed to send monthly-cap-hit notification', err);
   }
 };
 
@@ -1424,6 +2340,23 @@ const invokeWorkspaceAgent = async ({
   // V2 handles the agent's system prompt natively via agentId — we only add the scheduled-run context.
   const prompt = scheduledRun ? `${SCHEDULED_RUN_PREAMBLE}${runPrompt}` : runPrompt;
 
+  // FEAT-143 — build the unified integrations payload server-side. Resolves
+  // per-slug method (native vs Pipedream) from the user's live auth state +
+  // admin preferred_method. Drops the legacy `enabledConnections` wire field;
+  // the workspace-agent soft adapter prefers the new shape when present.
+  const { enabledIntegrations, availableIntegrations } = await buildUnifiedIntegrationsPayload({
+    dynamo,
+    lambdaClient,
+    globalIntegrationSettingsTableName: GLOBAL_INTEGRATION_SETTINGS_TABLE,
+    dataConnectorsTableName: DATA_CONNECTORS_TABLE,
+    dataConnectorsEnabled: DATA_CONNECTORS_ENABLED,
+    pipedreamRelayLambdaArn: PIPEDREAM_RELAY_LAMBDA_ARN,
+    clientName: CLIENT_NAME,
+    userSub: auth.sub,
+    agentSnapshot,
+    runConfig,
+  });
+
   const requestBody = {
     action: 'chat',
     responseMode: 'sync',
@@ -1438,7 +2371,16 @@ const invokeWorkspaceAgent = async ({
     enabledTools: mapToolsToCanonical(runConfig?.enabledTools),
     // Map V1 KB IDs to V2 availableKBs format
     availableKBs: mapKBsToV2(runConfig?.enabledKBIds),
-    enabledConnections: runConfig?.enabledConnections,
+    enabledIntegrations,
+    availableIntegrations,
+    // Mirror the chat-side payload — `sdk_config.py` registers the
+    // `connectors` and `vault` MCP families ONLY when these flags are
+    // truthy. Scheduled runs were getting an empty featureFlags object
+    // and silently losing native-connector tool access.
+    featureFlags: {
+      OAUTH_INTEGRATIONS_ENABLED,
+      SECRETS_VAULT_ENABLED,
+    },
     timezone: 'UTC',
     userEmail: auth.email ?? '',
     todayString: buildTodayString(),
@@ -1675,12 +2617,20 @@ const fetchAccessibleKBIds = async (userSub: string): Promise<string[]> => {
 };
 
 /**
- * Extract a list of strings from a DynamoDB attribute that may be stored as
- * a string array (DynamoDB document client unmarshalled) or other formats.
+ * Extract a list of strings from a DynamoDB attribute. Records can carry
+ * `viewers` / `editors` as either:
+ *   - a plain JS array (DocumentClient default for `L` typed attributes), or
+ *   - a `Set` instance (DocumentClient unmarshalls SS-typed attributes as
+ *     native Sets, NOT arrays). Records written by older Python code use SS.
+ * Without the Set branch, KB access checks silently fail for those records
+ * and the runner can't see KBs the user actually has access to.
  * Mirrors the _extract_string_list helper in kb_permissions.py.
  */
 const extractStringList = (attr: unknown): string[] => {
   if (Array.isArray(attr)) return attr.filter((v): v is string => typeof v === 'string');
+  if (attr instanceof Set) {
+    return Array.from(attr).filter((v): v is string => typeof v === 'string');
+  }
   return [];
 };
 
@@ -1704,6 +2654,15 @@ const mergeRunConfig = (
     ...(base.enabledConnections ?? []),
     ...(toolsConfig.enabledConnections ?? []),
     ...(agentSnapshot?.requiredIntegrations ?? []),
+  ]);
+
+  // FEAT-143 — propagate the method-tagged shape when present on either side.
+  // The runner's `buildUnifiedIntegrationsPayload` consumes this preferentially;
+  // when absent it falls back to the legacy `enabledConnections` list above and
+  // infers the method from per-user auth state at wire time.
+  const enabledIntegrationsMerged = mergeIntegrationRows([
+    ...(base.enabledIntegrations ?? []),
+    ...(toolsConfig.enabledIntegrations ?? []),
   ]);
 
   // Merge KB IDs from both the run config and the agent snapshot's allowedKnowledgeBases.
@@ -1737,6 +2696,17 @@ const mergeRunConfig = (
   // run (see refreshAgentSnapshot), so KB/tool changes made after the schedule was
   // created are reflected. The frozen enabledTools may be stale (e.g. missing
   // knowledge_base when KBs were added after the schedule was created).
+  //
+  // PRODUCT INTENT (FEAT-105): "auto pick up is good." When an agent owner
+  // adds a tool or KB to the agent, existing schedules of that agent should
+  // immediately benefit from the change without per-schedule edits. The
+  // boolean toggles on `run_config` (autoToolsEnabled, webSearchEnabled,
+  // createAgentEnabled) ARE honoured per-schedule via the `??` fallbacks
+  // above — what's NOT supported is granular per-schedule override of the
+  // enabledTools array itself. If a user wants a tool excluded for one
+  // schedule only, they must use the boolean toggle, not edit the array.
+  // Drift logged below so we can observe in CW Logs Insights how often the
+  // saved array diverges from the rebuilt one.
   const enabledTools = buildEnabledTools({
     autoToolsEnabled,
     webSearchEnabled,
@@ -1747,16 +2717,45 @@ const mergeRunConfig = (
     queryDataSources: toolsConfig.queryDataSources,
   });
 
+  if (Array.isArray(base.enabledTools) && base.enabledTools.length > 0) {
+    const saved = [...base.enabledTools].sort();
+    const rebuilt = [...enabledTools].sort();
+    if (saved.join(',') !== rebuilt.join(',')) {
+      console.info('[SCHEDULE_RUNNER] tool drift', {
+        _name: 'TOOL_DRIFT',
+        saved: base.enabledTools,
+        rebuilt: enabledTools,
+        addedByRebuild: enabledTools.filter((t) => !base.enabledTools!.includes(t)),
+        removedByRebuild: base.enabledTools.filter((t) => !enabledTools.includes(t)),
+      });
+    }
+  }
+
   return {
     ...base,
     enabledTools,
     enabledConnections,
+    enabledIntegrations: enabledIntegrationsMerged.length > 0 ? enabledIntegrationsMerged : undefined,
     enabledKBIds,
     allKBsAllowed,
     autoToolsEnabled,
     webSearchEnabled,
     createAgentEnabled,
   };
+};
+
+/** Dedupe method-tagged integration rows on (method, slug). */
+const mergeIntegrationRows = (rows: IntegrationListItem[]): IntegrationListItem[] => {
+  const seen = new Set<string>();
+  const out: IntegrationListItem[] = [];
+  for (const row of rows) {
+    if (!row?.slug || !row?.method) continue;
+    const key = `${row.method}:${row.slug}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ slug: row.slug, method: row.method, name: row.name ?? row.slug });
+  }
+  return out;
 };
 
 /**

@@ -1,3 +1,5 @@
+import type { IntegrationListItem } from './workspaceChatTypes';
+
 export type AgentScope = 'workspace' | 'user';
 export type AgentVisibility = 'personal' | 'public';
 
@@ -10,8 +12,19 @@ export type AgentToolsConfig = {
   createAgentEnabled?: boolean;
   memoriesEnabled?: boolean;
   numaOpsEnabled?: boolean;
+  /** Legacy whole-feature toggle for native data connectors. Replaced by
+   *  per-integration enable in `enabledConnections` / the unified
+   *  Integrations list. Kept on the type so we can read existing DDB
+   *  records without TS errors; new agents don't write it. */
   dataConnectorsEnabled?: boolean;
+  /** @deprecated Pre-FEAT-143 flat slug list (Pipedream-canonical). Method
+   *  ambiguous for dual-method services (Gmail, Google Drive). New agents
+   *  write `enabledIntegrations` instead; legacy reads still fall back here. */
   enabledConnections?: string[];
+  /** Unified, method-tagged integrations list. Single source of truth for
+   *  what the agent has access to — Pipedream and native rows live side by
+   *  side. The chat-page state and wire payload both derive from this. */
+  enabledIntegrations?: IntegrationListItem[];
   // Multi-KB support: which knowledge bases the agent can access
   // null/undefined = all KBs (backwards compat with queryDataSources: true)
   // [] = no KB access

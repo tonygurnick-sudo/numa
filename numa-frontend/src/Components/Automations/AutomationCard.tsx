@@ -5,6 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { Clock, MoreVertical, Play, Pencil, Trash2, Eye } from 'lucide-react';
 import { AgentAvatar } from '../Agents/AgentAvatar';
 import { describeCronExpression, getNextRunTimes } from '../../utils/cronUtils';
+import {
+  getDerivedAutomationStatus,
+  automationStatusBadgeVariant,
+  automationUsesCompanyQuota,
+} from '../../utils/automationUtils';
 import type { AgentSchedule } from '../../types/agentSchedules';
 import type { AgentSummary } from '../../types/agents';
 
@@ -71,6 +76,12 @@ export const AutomationCard = ({
   const nextRunLabel = getNextRunLabel(automation);
   const displayName = automation.label || automation.agentTitle || t('card.noSchedule');
   const isActive = automation.status === 'active';
+  const derivedStatus = getDerivedAutomationStatus(automation);
+  const usesCompanyQuota = automationUsesCompanyQuota(automation);
+  // Owner can only flip the toggle on schedules they actually control —
+  // pending_approval (awaiting admin) and admin_locked are not toggleable
+  // from this card. Showing the switch as off + disabled makes that obvious.
+  const canToggle = automation.status === 'active' || automation.status === 'paused';
 
   const handleCardClick = useCallback(() => {
     navigate(`/automations/${automation.scheduleId}`);
@@ -97,15 +108,26 @@ export const AutomationCard = ({
               <Clock size={12} />
               <span>{t('card.scheduled')}</span>
             </Badge>
-            <Badge bg={isActive ? 'success' : 'warning'} className="automation-card__status-badge">
-              {isActive ? t('status.active') : t('status.paused')}
+            <Badge bg={automationStatusBadgeVariant(derivedStatus)} className="automation-card__status-badge">
+              {t(`status.${derivedStatus}`)}
             </Badge>
+            {usesCompanyQuota && (
+              <span
+                className="text-muted small"
+                title={t('card.companyQuotaTooltip', {
+                  defaultValue: 'Admin-approved — runs against the company quota only, not your personal monthly cap.',
+                })}
+              >
+                {t('card.companyQuota', { defaultValue: 'company quota' })}
+              </span>
+            )}
           </div>
           <div className="d-flex align-items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <Form.Check
               type="switch"
               checked={isActive}
               onChange={() => onToggleStatus(automation)}
+              disabled={!canToggle}
               className="automation-card__toggle"
               aria-label={isActive ? t('actions.pause') : t('actions.resume')}
             />

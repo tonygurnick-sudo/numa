@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { getFlag } from '../utils/featureFlags';
-import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form, Table, Badge } from 'react-bootstrap';
+import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Bot } from 'lucide-react';
 import UserManagement from './UserManagement';
@@ -10,16 +10,40 @@ import { PageHeader } from '../Components/PageHeader';
 import { SubHeaderTabBar } from '../Components/SubHeaderTabBar';
 import { StyledTabs } from '../Components/StyledTabs';
 import { useAuth } from '../Providers/AuthProvider';
-import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
 import {
-  AdminDataConnectorsService,
-  type GlobalDataConnectorSettingsMap,
-} from '../Services/AdminDataConnectorsService';
-import { DataConnectorsTab } from '../Components/DataConnectors/DataConnectorsTab';
+  AdminIntegrationsService,
+  type GlobalIntegrationSettingsMap,
+  type CatalogEntry,
+  type IntegrationMethod,
+} from '../Services/AdminIntegrationsService';
+import { AddIntegrationModal, type AddIntegrationMethod } from '../Components/Integrations/AddIntegrationModal';
+import {
+  resolveServiceIcon,
+  connectorSlugForPipedream,
+  pipedreamSlugForConnector,
+  type IntegrationPickerEntry,
+} from '../Components/Integrations/integrationCatalogHelpers';
+import { MethodBadge } from '../Components/Integrations/MethodBadge';
+import { NativeConfigurationModal } from '../Components/Integrations/NativeConfigurationModal';
+import { listCompanySecrets } from '../Services/VaultService';
+import { ManageMethodCard } from '../Components/Integrations/ManageMethodCard';
+import { UserChoiceCard } from '../Components/Integrations/UserChoiceCard';
+import { SynergyPatBadge } from '../Components/DataConnectors/SynergyPatBadge';
+import { GoogleCloudSetupWizard } from '../Components/DataConnectors/wizards/GoogleCloudSetupWizard';
+import {
+  getConnectionDisplayName,
+  getConnectionDescription,
+  getConnectionIcon,
+  getConnectionFallbackIcon,
+} from '../config/integrationsConfig';
+import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+import { AdminDataConnectorsService, type DataConnectorAdminSettings } from '../Services/AdminDataConnectorsService';
+import { ConnectorsService } from '../Services/ConnectorsService';
 import { DisasterRecoveryTab } from '../Components/DisasterRecovery/DisasterRecoveryTab';
 import { CapabilitiesService, type CapabilitySettingsMap } from '../Services/CapabilitiesService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
-import { AdminSchedulingSettingsService } from '../Services/AdminSchedulingSettingsService';
+import { ScheduleQuotaAdminForm } from '../Components/Scheduling/ScheduleQuotaAdminForm';
+import { ScheduleAuditPanel } from '../Components/Scheduling/ScheduleAuditPanel';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
@@ -112,7 +136,9 @@ export default function SettingsPage() {
   const showAlert = useAlert();
   const { scope: urlScope, tab: urlTab } = useParams<{ scope?: string; tab?: string }>();
   const navigate = useNavigate();
-  const [activeKey, setActiveKey] = useState<string>(urlTab || 'users');
+  // The legacy `data-connectors` tab is now folded into the `integrations`
+  // tab — preserve any deep links by mapping the old key on initial mount.
+  const [activeKey, setActiveKey] = useState<string>(urlTab === 'data-connectors' ? 'integrations' : urlTab || 'users');
   const validScopes = ['user', 'admin', 'developer', 'services'] as const;
   type SettingsScope = (typeof validScopes)[number];
   const [settingsScope, setSettingsScope] = useState<SettingsScope>(
@@ -164,7 +190,10 @@ export default function SettingsPage() {
     () => AdminIntegrationsService.getCached() ?? {}
   );
   const [capabilitySettings, setCapabilitySettings] = useState<CapabilitySettingsMap>({});
-  const [dataConnectorSettings, setDataConnectorSettings] = useState<GlobalDataConnectorSettingsMap>({});
+  const [dataConnectorAdmin, setDataConnectorAdmin] = useState<DataConnectorAdminSettings>({
+    settings: {},
+    apiDocsAvailableSlugs: new Set(),
+  });
   const [capabilities, setCapabilities] = useState<CapabilityItem[]>([]);
   const [loadingSettings, setLoadingSettings] = useState<boolean>(() => !AdminIntegrationsService.getCached());
   const [error, setError] = useState<string | null>(null);
@@ -173,14 +202,6 @@ export default function SettingsPage() {
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   const [agentsLoading, setAgentsLoading] = useState<boolean>(true);
   const [agentsSaving, setAgentsSaving] = useState<boolean>(false);
-
-  // Scheduling admin settings (Level 3 — client-admin minimum interval)
-  const [schedulingMinInterval, setSchedulingMinInterval] = useState<string>('');
-  const [schedulingArcanumFloor, setSchedulingArcanumFloor] = useState<number>(5);
-  const [schedulingMinLoading, setSchedulingMinLoading] = useState<boolean>(true);
-  const [schedulingMinSaving, setSchedulingMinSaving] = useState<boolean>(false);
-  const [schedulingMinError, setSchedulingMinError] = useState<string | null>(null);
-  const [schedulingMinSuccess, setSchedulingMinSuccess] = useState<string | null>(null);
 
   const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
 
@@ -238,6 +259,20 @@ export default function SettingsPage() {
     }
   }, [dataAnalysisAvailable]);
 
+  const [integrationsCatalog, setIntegrationsCatalog] = useState<CatalogEntry[]>(
+    () => AdminIntegrationsService.getCachedCatalog() ?? []
+  );
+  // Native connectors with admin-configured credentials in vault (OAuth client
+  // secrets or PAT entries). Backwards compat: pre-this-PR, native setups
+  // never wrote to the data-connector-settings table — vault was the source
+  // of truth. We pull this list separately and merge it with the catalog so
+  // existing setups still appear in the unified Integrations list.
+  const [configuredNativeSlugs, setConfiguredNativeSlugs] = useState<Set<string>>(new Set());
+  // True when the shared Google OAuth client (`oauth-client-google`) has been
+  // saved to the company vault — the wizard reads this to render the "already
+  // configured" success state instead of walking the admin through full setup.
+  const [googleCloudConfigured, setGoogleCloudConfigured] = useState(false);
+
   const loadGlobal = async () => {
     try {
       // Only show spinner if we have no cached data
@@ -252,6 +287,28 @@ export default function SettingsPage() {
       if (!user) return;
       const data = await AdminIntegrationsService.listWithNuma(numaGet);
       setGlobalSettings(data);
+      // Catalog drives the per-service method picker; non-fatal on failure.
+      AdminIntegrationsService.catalogWithNuma(numaGet)
+        .then(setIntegrationsCatalog)
+        .catch(() => undefined);
+      // Vault-side configured native connectors. Used to surface existing
+      // setups that pre-date the data-connector-settings flag convention.
+      ConnectorsService.listConfigured()
+        .then(({ oauth, pat }) => {
+          setConfiguredNativeSlugs(new Set([...oauth.map((c) => c.id), ...pat.map((c) => c.id)]));
+        })
+        .catch(() => undefined);
+      // Whether the shared Google OAuth client has been provisioned. Drives
+      // the GoogleCloudSetupWizard's "already configured" branch. Non-fatal
+      // on failure (e.g. vault feature flag off) — we just default to false
+      // and the wizard runs full setup.
+      listCompanySecrets()
+        .then((secrets) =>
+          setGoogleCloudConfigured(
+            secrets.some((s) => s.name === 'oauth-client-google' || s.id === 'oauth-client-google')
+          )
+        )
+        .catch(() => undefined);
       setError(null);
     } catch (e) {
       setError((e as Error).message || t('errors.loadSettings'));
@@ -259,6 +316,332 @@ export default function SettingsPage() {
       setLoadingSettings(false);
     }
   };
+
+  /** Optimistically update both the catalog and globalSettings for a single
+   *  Pipedream slug — used so method-switching feels instantaneous in the
+   *  Manage modal while the API call runs in the background. */
+  const optimisticPreferredMethod = useCallback((pipedreamSlug: string, nextMethod: IntegrationMethod | null) => {
+    setGlobalSettings((prev) => ({
+      ...prev,
+      [pipedreamSlug]: {
+        status: prev[pipedreamSlug]?.status ?? 'disabled',
+        denyTools: prev[pipedreamSlug]?.denyTools ?? [],
+        preferred_method: nextMethod,
+      },
+    }));
+    setIntegrationsCatalog((prev) =>
+      prev.map((e) => (e.pipedreamSlug === pipedreamSlug ? { ...e, preferred_method: nextMethod } : e))
+    );
+  }, []);
+
+  const setPreferredMethod = async (integrationId: string, nextMethod: IntegrationMethod | null) => {
+    optimisticPreferredMethod(integrationId, nextMethod);
+    try {
+      const current = globalSettings[integrationId];
+      await AdminIntegrationsService.updateWithNuma(
+        integrationId,
+        {
+          status: current?.status ?? 'disabled',
+          denyTools: current?.denyTools ?? [],
+          preferred_method: nextMethod,
+        },
+        numaPut
+      );
+      // Re-sync from server so any divergence (e.g. concurrent admin edit)
+      // gets reconciled. Optimistic update + server reconcile = instant UI
+      // with eventual consistency.
+      await loadGlobal();
+    } catch (e) {
+      // Rollback by re-fetching the truth.
+      await loadGlobal();
+      setError((e as Error).message || t('errors.updateIntegration'));
+    }
+  };
+
+  // Lazy-add admin UX: only services the admin has explicitly added show up
+  // in the unified Integrations list. "Added" means at least one method
+  // (Pipedream-enable in global-integration-settings, or native enable in
+  // data-connector-settings) is on. Adding flips the relevant flag; removing
+  // turns both off.
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  // Google Cloud OAuth setup wizard. Optional one-time admin flow that
+  // provisions the shared Google OAuth client used by every Google-platform
+  // connector (Drive, Gmail, Sheets, etc.). The per-service Native setup
+  // path still works without this, but the wizard saves admins from
+  // pasting client_id/secret on every Google connector individually.
+  const [googleSetupWizardOpen, setGoogleSetupWizardOpen] = useState(false);
+  // Connector currently being configured for native OAuth/PAT credentials.
+  const [configuringConnector, setConfiguringConnector] = useState<string | null>(null);
+  // Why the configurator is open. 'reconfigure' keeps the current preferred
+  // method untouched (admin is just updating credentials); 'add' / 'switch'
+  // signal that admin wants native to become the active method post-save.
+  const [configuringIntent, setConfiguringIntent] = useState<'add' | 'switch' | 'reconfigure' | 'user_choice'>('add');
+  // Slugs being removed — kept locally so the row disappears instantly while
+  // the API call is in flight (rolled back on error).
+  const [removingSlugs, setRemovingSlugs] = useState<Set<string>>(new Set());
+
+  /** Pipedream-slug -> connector-slug map, for icon resolution and add routing. */
+  const pipedreamForConnector = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const entry of integrationsCatalog) {
+      if (entry.pipedreamSlug && entry.connectorSlug) {
+        map[entry.connectorSlug] = entry.pipedreamSlug;
+      }
+    }
+    return map;
+  }, [integrationsCatalog]);
+
+  /**
+   * Native counterpart is "available" when admin has either:
+   *   - explicitly enabled it via the new data-connector-settings flag, or
+   *   - configured credentials in vault (the legacy pre-PR setup convention),
+   * AND has NOT explicitly disabled it via the data-connector-settings flag.
+   *
+   * This keeps existing native setups visible in the unified list while still
+   * letting the trash icon hide a service.
+   */
+  const isNativeAvailable = useCallback(
+    (connectorSlug: string | null | undefined, catalogConnectorEnabled: boolean | null) => {
+      if (!connectorSlug) return false;
+      if (dataConnectorAdmin.settings[connectorSlug]?.status === 'disabled') return false;
+      return Boolean(catalogConnectorEnabled) || configuredNativeSlugs.has(connectorSlug);
+    },
+    [dataConnectorAdmin, configuredNativeSlugs]
+  );
+
+  /** Services that are currently CONNECTED for this workspace. A service
+   *  appears in the admin tab when it's actively enabled on either side:
+   *    - Pipedream row with `status='enabled'`, OR
+   *    - data-connector-settings row with `status='enabled'`, OR
+   *    - (legacy back-compat) vault has a per-service credential for
+   *      this native connector that pre-dates the flag-row convention
+   *
+   *  No more "added but disabled" intermediate state in the admin tab —
+   *  if you want to turn an integration off, click Remove (trash) and
+   *  re-add via the picker when you want it back. This eliminates the
+   *  confusion of rows piling up across testing sessions, and matches
+   *  what admins actually want to see: "what's live right now."
+   */
+  const addedServices = useMemo(() => {
+    return integrationsCatalog
+      .filter((entry) => {
+        if (removingSlugs.has(entry.slug)) return false;
+        const pdEnabled = entry.pipedreamSlug && globalSettings[entry.pipedreamSlug]?.status === 'enabled';
+        const cnEnabled = entry.connectorSlug && dataConnectorAdmin.settings[entry.connectorSlug]?.status === 'enabled';
+        const legacyVaultPresent = Boolean(
+          entry.connectorSlug &&
+          !dataConnectorAdmin.settings[entry.connectorSlug] &&
+          configuredNativeSlugs.has(entry.connectorSlug)
+        );
+        return pdEnabled || cnEnabled || legacyVaultPresent;
+      })
+      .map((entry) => {
+        const name = entry.pipedreamSlug
+          ? getConnectionDisplayName(entry.pipedreamSlug)
+          : (getConnectorById(entry.connectorSlug ?? '')?.displayName ?? entry.slug);
+        const description = entry.pipedreamSlug
+          ? getConnectionDescription(entry.pipedreamSlug)
+          : (getConnectorById(entry.connectorSlug ?? '')?.description ?? '');
+        return {
+          ...entry,
+          name,
+          description,
+          icon: resolveServiceIcon(entry.pipedreamSlug, entry.connectorSlug),
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [integrationsCatalog, removingSlugs, globalSettings, dataConnectorAdmin, configuredNativeSlugs]);
+
+  const addedKeys = useMemo(
+    () => new Set(addedServices.flatMap((s) => [s.pipedreamSlug, s.connectorSlug].filter(Boolean) as string[])),
+    [addedServices]
+  );
+
+  const handleAddService = useCallback(
+    async (entry: IntegrationPickerEntry, method: AddIntegrationMethod) => {
+      try {
+        if (method === 'pipedream' && entry.pipedreamSlug) {
+          // One-click: enable Pipedream side. Method preference is set so the
+          // user-facing page doesn't bounce between options.
+          const current = globalSettings[entry.pipedreamSlug];
+          await AdminIntegrationsService.updateWithNuma(
+            entry.pipedreamSlug,
+            {
+              status: 'enabled',
+              denyTools: current?.denyTools ?? [],
+              preferred_method: 'pipedream',
+            },
+            numaPut
+          );
+          setAddModalOpen(false);
+          await loadGlobal();
+        } else if (method === 'native' && entry.connectorSlug) {
+          // Native: launch the OAuth/PAT wizard. Once credentials are saved,
+          // handleConfiguredNative flips the enabled flag in the connector
+          // settings table so the row appears.
+          setAddModalOpen(false);
+          setConfiguringIntent('add');
+          setConfiguringConnector(entry.connectorSlug);
+        } else if (method === 'user_choice' && entry.pipedreamSlug && entry.connectorSlug) {
+          // Dual setup: enable Pipedream immediately with preferred_method=null,
+          // then launch the native wizard. handleConfiguredNative will see
+          // intent='user_choice' and leave preferred_method untouched, so once
+          // both sides are configured the service ends up in user-choice mode.
+          const current = globalSettings[entry.pipedreamSlug];
+          await AdminIntegrationsService.updateWithNuma(
+            entry.pipedreamSlug,
+            {
+              status: 'enabled',
+              denyTools: current?.denyTools ?? [],
+              preferred_method: null,
+            },
+            numaPut
+          );
+          setAddModalOpen(false);
+          setConfiguringIntent('user_choice');
+          setConfiguringConnector(entry.connectorSlug);
+        }
+      } catch (e) {
+        setError((e as Error).message || t('errors.updateIntegration'));
+      }
+    },
+    [globalSettings, numaPut, t]
+  );
+
+  const handleRemoveService = useCallback(
+    async (entry: CatalogEntry) => {
+      const name = entry.pipedreamSlug
+        ? getConnectionDisplayName(entry.pipedreamSlug)
+        : (entry.connectorSlug ?? entry.slug);
+      const ok = await confirm({
+        message: t('integrations.confirmRemove', {
+          defaultValue: 'Remove {{name}} from this workspace?',
+          name,
+        }),
+        confirmLabel: tCommon('confirm.remove', { defaultValue: 'Remove' }),
+        variant: 'danger',
+      });
+      if (!ok) return;
+
+      // Optimistic: drop the row immediately so admins get instant feedback.
+      // Restore on failure.
+      setRemovingSlugs((prev) => new Set(prev).add(entry.slug));
+
+      try {
+        const tasks: Promise<unknown>[] = [];
+        if (entry.pipedreamSlug) {
+          const current = globalSettings[entry.pipedreamSlug];
+          tasks.push(
+            AdminIntegrationsService.updateWithNuma(
+              entry.pipedreamSlug,
+              {
+                status: 'disabled',
+                denyTools: current?.denyTools ?? [],
+                preferred_method: current?.preferred_method ?? null,
+              },
+              numaPut
+            )
+          );
+        }
+        if (entry.connectorSlug) {
+          tasks.push(AdminDataConnectorsService.updateWithNuma(entry.connectorSlug, { status: 'disabled' }, numaPut));
+          // Disabling the data-connector-settings row alone isn't enough: the
+          // catalog falls back to vault-side proof (configuredNativeSlugs)
+          // when the registry doesn't carry an explicit flag, so we also need
+          // to nuke the stored credential. Best-effort — if there is no
+          // credential to remove, ConnectorsService.disconnect is a no-op.
+          tasks.push(ConnectorsService.disconnect(entry.connectorSlug).catch(() => undefined));
+        }
+        await Promise.all(tasks);
+        // Refresh every source of truth that feeds the catalog row:
+        //   - globalSettings + catalog (Pipedream + preferred_method)
+        //   - dataConnectorSettings (native admin-side flag)
+        //   - configuredNativeSlugs (vault-side proof; survives flag flips)
+        // Without all four, isNativeAvailable can re-surface the row on the
+        // next render — see FEAT-143 review for the resurrection bug.
+        const [nextSettings, nextCatalog, nextConnectors, nextConfigured] = await Promise.all([
+          AdminIntegrationsService.listWithNuma(numaGet),
+          AdminIntegrationsService.catalogWithNuma(numaGet),
+          AdminDataConnectorsService.listWithNuma(numaGet).catch(() => null),
+          ConnectorsService.listConfigured().catch(() => null),
+        ]);
+        setGlobalSettings(nextSettings);
+        setIntegrationsCatalog(nextCatalog);
+        if (nextConnectors) setDataConnectorAdmin(nextConnectors);
+        if (nextConfigured) {
+          setConfiguredNativeSlugs(
+            new Set([...nextConfigured.oauth.map((c) => c.id), ...nextConfigured.pat.map((c) => c.id)])
+          );
+        }
+        setRemovingSlugs((prev) => {
+          const next = new Set(prev);
+          next.delete(entry.slug);
+          return next;
+        });
+      } catch (e) {
+        // Roll back the optimistic hide so the row reappears with the error.
+        setRemovingSlugs((prev) => {
+          const next = new Set(prev);
+          next.delete(entry.slug);
+          return next;
+        });
+        setError((e as Error).message || t('errors.updateIntegration'));
+      }
+    },
+    [confirm, globalSettings, numaPut, numaGet, t, tCommon]
+  );
+
+  const handleConfiguredNative = useCallback(async () => {
+    const slug = configuringConnector;
+    const intent = configuringIntent;
+    setConfiguringConnector(null);
+    if (slug) {
+      try {
+        // Always flip the data-connector-settings flag so the unified catalog
+        // surfaces the row with the correct method indication.
+        await AdminDataConnectorsService.updateWithNuma(slug, { status: 'enabled' }, numaPut);
+        // For 'add' / 'switch' intent the admin explicitly chose native, so
+        // make it the preferred method on the paired Pipedream record (the
+        // preferred_method field lives on the Pipedream side of the catalog).
+        // For 'reconfigure' we leave preferred_method alone — they're just
+        // updating credentials. For 'user_choice' we keep preferred_method
+        // null (set when Pipedream was enabled in handleAddService) so users
+        // pick the method themselves at connect time.
+        if (intent !== 'reconfigure' && intent !== 'user_choice') {
+          const pairedPipedreamSlug = pipedreamForConnector[slug];
+          if (pairedPipedreamSlug) {
+            const cur = globalSettings[pairedPipedreamSlug];
+            await AdminIntegrationsService.updateWithNuma(
+              pairedPipedreamSlug,
+              {
+                status: cur?.status ?? 'disabled',
+                denyTools: cur?.denyTools ?? [],
+                preferred_method: 'native',
+              },
+              numaPut
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to flag native connector as enabled', e);
+      }
+    }
+    await loadGlobal();
+    if (isAdmin && dataConnectorsEnabled) {
+      AdminDataConnectorsService.listWithNuma(numaGet)
+        .then(setDataConnectorAdmin)
+        .catch(() => undefined);
+    }
+  }, [
+    configuringConnector,
+    configuringIntent,
+    globalSettings,
+    pipedreamForConnector,
+    isAdmin,
+    dataConnectorsEnabled,
+    numaGet,
+    numaPut,
+  ]);
 
   const loadCapabilitySettings = async () => {
     try {
@@ -354,8 +737,13 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!isAdmin || !dataConnectorsEnabled || !user) return;
     AdminDataConnectorsService.listWithNuma(numaGet)
-      .then(setDataConnectorSettings)
-      .catch(() => setDataConnectorSettings({ synergy: { status: 'disabled' } }));
+      .then(setDataConnectorAdmin)
+      .catch(() =>
+        setDataConnectorAdmin({
+          settings: { synergy: { status: 'disabled' } },
+          apiDocsAvailableSlugs: new Set(),
+        })
+      );
   }, [isAdmin, dataConnectorsEnabled, user, numaGet]);
 
   // Load Agents settings
@@ -381,33 +769,6 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [isAdmin, agentsFeatureEnabled, user, numaGet]);
-
-  // Load Scheduling admin settings
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!isAdmin || !schedulingEnabled) {
-        if (!cancelled) setSchedulingMinLoading(false);
-        return;
-      }
-      try {
-        setSchedulingMinLoading(true);
-        const res = await AdminSchedulingSettingsService.get(numaGet);
-        if (!cancelled) {
-          setSchedulingMinInterval(res.minIntervalMinutes != null ? String(res.minIntervalMinutes) : '');
-          setSchedulingArcanumFloor(res.arcanumFloor);
-        }
-      } catch (e) {
-        console.warn('Settings: failed to load scheduling settings', e);
-        if (!cancelled) setSchedulingMinLoading(false);
-      } finally {
-        if (!cancelled) setSchedulingMinLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAdmin, schedulingEnabled, user, numaGet]);
 
   // Load Company Profile
   useEffect(() => {
@@ -471,13 +832,20 @@ export default function SettingsPage() {
 
   // Integrations tab internal state
   const [manageToolsFor, setManageToolsFor] = useState<string | null>(null);
+  // Slug of the catalog entry currently open in the Manage modal. We store
+  // the slug rather than the full entry so the modal stays in sync with the
+  // live catalog — after a method switch or native setup the catalog
+  // refreshes and the modal reactively reflects the new "Active" / configured
+  // state without the admin having to reopen it.
+  const [manageForSlug, setManageForSlug] = useState<string | null>(null);
+  const manageFor = useMemo(
+    () => (manageForSlug ? (integrationsCatalog.find((e) => e.slug === manageForSlug) ?? null) : null),
+    [manageForSlug, integrationsCatalog]
+  );
   const [toolsLoading, setToolsLoading] = useState<boolean>(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
   const [toolList, setToolList] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
-  const [_integrationsTabKey, _setIntegrationsTabKey] = useState<'connected-apps' | 'data-connectors'>(
-    'connected-apps'
-  );
   const [userSettingsTabKey, setUserSettingsTabKey] = useState<string>(urlTab || 'my-profile');
 
   useEffect(() => {
@@ -582,6 +950,120 @@ export default function SettingsPage() {
     }
   };
 
+  /** Open the unified Manage modal for a service. Loads Pipedream tool list
+   *  when the Pipedream side is the active method; otherwise just renders the
+   *  method-switching UI. */
+  const openManage = (entry: CatalogEntry) => {
+    setManageForSlug(entry.slug);
+    if (entry.pipedreamSlug && entry.pipedreamEnabled) {
+      void openManageTools(entry.pipedreamSlug);
+    } else {
+      setManageToolsFor(null);
+      setToolList([]);
+      setToolToggles({});
+    }
+  };
+
+  const closeManage = () => {
+    setManageForSlug(null);
+    setManageToolsFor(null);
+    setToolList([]);
+    setToolToggles({});
+    setToolsError(null);
+  };
+
+  // Keep the Manage modal's tool list in sync with the live active method.
+  // When admin switches from native -> Pipedream the catalog refreshes; this
+  // fires openManageTools so the tool list materialises in the same modal
+  // session. The reverse direction clears the list so stale Pipedream tools
+  // don't bleed through if the admin switches back to Pipedream later.
+  useEffect(() => {
+    if (!manageFor) return;
+    const nativeAvailable = isNativeAvailable(manageFor.connectorSlug, manageFor.connectorEnabled);
+    const isPdActive =
+      manageFor.pipedreamEnabled === true && (!nativeAvailable || manageFor.preferred_method !== 'native');
+    if (isPdActive && manageFor.pipedreamSlug) {
+      if (manageToolsFor !== manageFor.pipedreamSlug) {
+        void openManageTools(manageFor.pipedreamSlug);
+      }
+    } else if (manageToolsFor !== null) {
+      setManageToolsFor(null);
+      setToolList([]);
+      setToolToggles({});
+    }
+  }, [manageFor, isNativeAvailable]);
+
+  /** Render a single tool row inside the Manage modal's Tools section. */
+  const renderManagedTool = (tool: { name: string; description?: string }) => {
+    const allowed = toolToggles[tool.name] ?? true;
+    const stripPrefix = (name: string, prefix?: string | null) =>
+      prefix && name.startsWith(prefix + '-') ? name.slice(prefix.length + 1) : name;
+    const toTitle = (s: string) =>
+      s
+        .split('-')
+        .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+        .join(' ');
+    const parseDescription = (desc: string | undefined) => {
+      if (!desc) return null;
+      const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+      const parts: (string | React.ReactElement)[] = [];
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = linkRegex.exec(desc)) !== null) {
+        if (match.index > lastIndex) parts.push(desc.substring(lastIndex, match.index));
+        const linkText = match[1].toLowerCase().includes('see') ? t('manageTools.seeDocumentation') : match[1];
+        parts.push(
+          <a
+            key={match.index}
+            href={match[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-decoration-none"
+          >
+            [{linkText}]
+          </a>
+        );
+        lastIndex = match.index + match[0].length;
+      }
+      if (lastIndex < desc.length) parts.push(desc.substring(lastIndex));
+      return parts.length > 0 ? parts : desc;
+    };
+    const displayName = toTitle(stripPrefix(tool.name, manageToolsFor));
+    return (
+      <div
+        key={tool.name}
+        className={`d-flex align-items-start justify-content-between p-3 border rounded-3 ${allowed ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
+      >
+        <div className="flex-grow-1 me-3">
+          <div className="d-flex align-items-center mb-1">
+            <div
+              className={`rounded-circle me-2 ${allowed ? 'bg-success' : 'bg-secondary'}`}
+              style={{ width: 8, height: 8 }}
+            />
+            <span className={`fw-semibold ${allowed ? 'text-dark' : 'text-muted'}`}>{displayName}</span>
+          </div>
+          {tool.description && (
+            <div
+              className={`small settings-tool-description ${allowed ? 'text-muted' : 'text-secondary'}`}
+              style={{ maxWidth: 720, whiteSpace: 'normal', wordBreak: 'break-word' }}
+            >
+              {parseDescription(tool.description)}
+            </div>
+          )}
+        </div>
+        <div className="form-check form-switch ms-2">
+          <input
+            className="form-check-input"
+            type="checkbox"
+            checked={allowed}
+            onChange={(e) => setToolToggles({ ...toolToggles, [tool.name]: e.target.checked })}
+            style={{ transform: 'scale(1.1)' }}
+          />
+        </div>
+      </div>
+    );
+  };
+
   const saveManageTools = async () => {
     if (!manageToolsFor) return;
     try {
@@ -593,37 +1075,14 @@ export default function SettingsPage() {
         {
           status: globalSettings[manageToolsFor]?.status || 'disabled',
           denyTools,
+          preferred_method: globalSettings[manageToolsFor]?.preferred_method ?? null,
         },
         numaPut
       );
       await loadGlobal();
-      setManageToolsFor(null);
+      closeManage();
     } catch (e) {
       setToolsError((e as Error).message || t('errors.saveFailed'));
-    }
-  };
-
-  const toggleIntegration = async (integrationId: string, nextEnabled: boolean) => {
-    try {
-      if (!nextEnabled && globalSettings[integrationId]?.status === 'enabled') {
-        const ok = await confirm({
-          message: t('confirm.disableIntegration', { integrationId }),
-          confirmLabel: tCommon('common.ok'),
-          variant: 'warning',
-        });
-        if (!ok) return;
-      }
-      await AdminIntegrationsService.updateWithNuma(
-        integrationId,
-        {
-          status: nextEnabled ? 'enabled' : 'disabled',
-          denyTools: globalSettings[integrationId]?.denyTools || [],
-        },
-        numaPut
-      );
-      await loadGlobal();
-    } catch (e) {
-      setError((e as Error).message || t('errors.updateIntegration'));
     }
   };
 
@@ -677,92 +1136,105 @@ export default function SettingsPage() {
     [activeKey, isBrandingDirty, confirm, t, tCommon]
   );
 
-  const renderIntegrationRow = (integration: IntegrationListItem) => {
-    const id = integration.name_slug;
-    const enabled = globalSettings[id]?.status === 'enabled';
-    const deniedCount = globalSettings[id]?.denyTools?.length || 0;
+  const renderUnifiedAdminRow = (svc: (typeof addedServices)[number]) => {
+    const pdSlug = svc.pipedreamSlug;
+    const connectorSlug = svc.connectorSlug;
+    const pdSettings = pdSlug ? globalSettings[pdSlug] : undefined;
+    const pdEnabled = svc.pipedreamEnabled === true;
+    const nativeEnabled = isNativeAvailable(connectorSlug, svc.connectorEnabled);
+    // Method picker is only meaningful when the admin has *both* sides set
+    // up — picking native makes no sense if no native credentials exist for
+    // this service yet.
+    const hasBothMethods = pdEnabled && nativeEnabled;
+    const preferredMethod: IntegrationMethod | null = pdSettings?.preferred_method ?? null;
+    const deniedCount = pdSettings?.denyTools?.length ?? 0;
     const disabledByPreview = previewMode;
 
+    // Three display states on the row badge:
+    //   1. User-choice mode (both configured + no preferred) -> "User choice" badge
+    //   2. Both configured + preferred picked -> that method's badge
+    //   3. Single method configured -> that method's badge
+    const isUserChoice = hasBothMethods && preferredMethod === null;
+    const displayMethod: IntegrationMethod = hasBothMethods
+      ? (preferredMethod ?? 'pipedream') // only used when isUserChoice is false
+      : pdEnabled
+        ? 'pipedream'
+        : 'native';
+
     return (
-      <div
-        key={id}
-        className="border rounded-3 p-3 mb-2 bg-white"
-        style={{
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-          transition: 'all 0.2s ease',
-          opacity: enabled || disabledByPreview ? 1 : 0.75,
-          cursor: 'default',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)';
-        }}
-      >
+      <div key={svc.slug} className="border rounded-3 p-3 mb-2 bg-white">
         <div className="row align-items-center">
           <div className="col-md-6 d-flex align-items-center">
             <div
               className="rounded-2 d-flex align-items-center justify-content-center me-3 flex-shrink-0"
-              style={{ width: '48px', height: '48px', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}
+              style={{ width: 48, height: 48, backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}
             >
-              <img
-                src={integration.img_src}
-                alt={integration.name}
-                width={32}
-                height={32}
-                style={{ objectFit: 'contain' }}
-              />
+              {svc.icon.iconUrl ? (
+                <img src={svc.icon.iconUrl} alt={svc.name} width={32} height={32} style={{ objectFit: 'contain' }} />
+              ) : svc.icon.iconClass ? (
+                <i className={svc.icon.iconClass} style={{ fontSize: '1.4rem' }} />
+              ) : null}
             </div>
-            <div>
-              <div className="fw-semibold settings-item-title">{integration.name}</div>
-              <div className="text-muted small settings-item-description">{integration.description}</div>
+            <div className="d-flex flex-column" style={{ gap: '0.25rem', minWidth: 0 }}>
+              <div
+                className="fw-semibold settings-item-title d-flex align-items-center"
+                style={{ gap: '0.5rem', margin: 0 }}
+              >
+                <span>{svc.name}</span>
+                {isUserChoice ? (
+                  <span
+                    className="badge bg-info-subtle text-info-emphasis border border-info-subtle d-inline-flex align-items-center"
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '0.15rem 0.5rem',
+                      gap: '0.3rem',
+                      fontWeight: 500,
+                      letterSpacing: '0.01em',
+                      lineHeight: 1.2,
+                      verticalAlign: 'middle',
+                    }}
+                    title={t('manage.method.userChoiceBadgeTooltip', {
+                      defaultValue: 'Users pick the connection method at connect time',
+                    })}
+                  >
+                    <i className="bi bi-people-fill" style={{ fontSize: '0.7rem' }} />
+                    {t('manage.method.userChoiceBadge', { defaultValue: 'User choice' })}
+                  </span>
+                ) : (
+                  <MethodBadge method={displayMethod} size="xs" />
+                )}
+              </div>
+              {svc.description && (
+                <div className="text-muted small settings-item-description" style={{ margin: 0, paddingLeft: 0 }}>
+                  {svc.description}
+                </div>
+              )}
             </div>
           </div>
-          <div className="col-md-6 d-flex justify-content-end gap-2 align-items-center">
-            {disabledByPreview ? (
-              <OverlayTrigger placement="top" overlay={<Tooltip>{t('integrations.previewTooltip')}</Tooltip>}>
-                <div>
-                  <Form.Check
-                    type="switch"
-                    id={`toggle-${id}`}
-                    checked={enabled}
-                    disabled
-                    label={
-                      <span className="small">
-                        {enabled ? t('integrations.status.enabled') : t('integrations.status.disabled')}
-                      </span>
-                    }
-                  />
-                </div>
-              </OverlayTrigger>
-            ) : (
-              <Form.Check
-                type="switch"
-                id={`toggle-${id}`}
-                checked={enabled}
-                onChange={() => toggleIntegration(id, !enabled)}
-                label={
-                  <span className="small">
-                    {enabled ? t('integrations.status.enabled') : t('integrations.status.disabled')}
-                  </span>
-                }
-              />
-            )}
+          <div className="col-md-6 d-flex justify-content-end gap-2 align-items-center flex-wrap">
             <Button
               variant="primary"
               size="sm"
-              onClick={() => openManageTools(id)}
+              onClick={() => openManage(svc)}
               disabled={disabledByPreview}
               className="d-flex align-items-center"
             >
               <i className="bi bi-sliders me-2"></i>
-              {t('integrations.manageTools')}{' '}
+              {t('integrations.manage', { defaultValue: 'Manage' })}
               {deniedCount > 0 && (
                 <span className="ms-1 badge bg-light text-dark settings-item-badge">
                   {t('integrations.toolsOff', { count: deniedCount })}
                 </span>
               )}
+            </Button>
+            <Button
+              variant="outline-danger"
+              size="sm"
+              disabled={disabledByPreview}
+              onClick={() => void handleRemoveService(svc)}
+              title={t('integrations.remove', { defaultValue: 'Remove' })}
+            >
+              <i className="bi bi-trash" />
             </Button>
           </div>
         </div>
@@ -905,12 +1377,9 @@ export default function SettingsPage() {
       { key: 'company-profile', label: t('tabs.companyProfile'), iconClassName: 'bi bi-building' },
       ...(agentsFeatureEnabled ? [{ key: 'agents', label: t('tabs.agents'), iconClassName: 'bi bi-robot' }] : []),
       ...(schedulingEnabled
-        ? [{ key: 'scheduling', label: t('tabs.scheduling'), iconClassName: 'bi bi-clock-history' }]
+        ? [{ key: 'scheduling', label: t('tabs.scheduling'), iconClassName: 'bi bi-lightning-charge-fill' }]
         : []),
       { key: 'integrations', label: t('tabs.integrations'), iconClassName: 'bi bi-plug' },
-      ...(dataConnectorsEnabled
-        ? [{ key: 'data-connectors', label: t('tabs.dataConnectors'), iconClassName: 'bi bi-cloud-download' }]
-        : []),
       { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
       ...(usageReportingEnabled
         ? [{ key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' }]
@@ -1246,14 +1715,12 @@ export default function SettingsPage() {
                                         dataAnalysisEnabled: true,
                                         createAgentEnabled: true,
                                         memoriesEnabled: true,
-                                        dataConnectorsEnabled: true,
                                       }
                                     : {
                                         webSearchEnabled: false,
                                         dataAnalysisEnabled: false,
                                         createAgentEnabled: false,
                                         memoriesEnabled: false,
-                                        dataConnectorsEnabled: false,
                                       }),
                                 }));
                                 setChatDefaultsDirty(true);
@@ -1350,31 +1817,6 @@ export default function SettingsPage() {
                             </div>
                             <div className="text-muted small ms-5">{t('chatDefaults.memoryManagementHelp')}</div>
                           </div>
-
-                          {dataConnectorsEnabled && (
-                            <div className="mt-3 ms-4">
-                              <div className="d-flex align-items-center gap-2">
-                                <Form.Check
-                                  type="switch"
-                                  id="chat-defaults-data-connectors"
-                                  label=""
-                                  checked={
-                                    globalChatSettings.autoToolsEnabled || globalChatSettings.dataConnectorsEnabled
-                                  }
-                                  disabled={globalChatSettings.autoToolsEnabled}
-                                  onChange={(e) => {
-                                    setGlobalChatSettings((prev) => ({
-                                      ...prev,
-                                      dataConnectorsEnabled: e.target.checked,
-                                    }));
-                                    setChatDefaultsDirty(true);
-                                  }}
-                                />
-                                <div className="settings-secondary-label">{t('chatDefaults.dataConnectors')}</div>
-                              </div>
-                              <div className="text-muted small ms-5">{t('chatDefaults.dataConnectorsHelp')}</div>
-                            </div>
-                          )}
                         </div>
 
                         <div className="mb-3">
@@ -1554,41 +1996,126 @@ export default function SettingsPage() {
                           ) : (
                             <>
                               <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
-                                {availableIntegrations
-                                  .filter((integration) => {
+                                {/* One row per unique service. Dual-method
+                                    services collapse to a single entry using
+                                    the Pipedream icon + display name, with the
+                                    toggle adding the slug to BOTH default
+                                    lists so whichever method the workspace
+                                    has configured wins on chat init. */}
+                                {(() => {
+                                  type Row = {
+                                    key: string;
+                                    label: string;
+                                    iconSrc?: string;
+                                    iconClass?: string;
+                                    pipedreamSlug?: string;
+                                    nativeSlug?: string;
+                                  };
+                                  const rows: Row[] = [];
+
+                                  for (const integration of availableIntegrations) {
                                     const id = integration.name_slug;
-                                    return globalSettings[id]?.status === 'enabled';
-                                  })
-                                  .map((integration) => {
-                                    const id = integration.name_slug;
-                                    const checked = globalChatSettings.defaultConnectionIds.includes(id);
+                                    if (globalSettings[id]?.status !== 'enabled') continue;
+                                    rows.push({
+                                      key: `pd-${id}`,
+                                      label: integration.name,
+                                      iconSrc: getConnectionIcon(id),
+                                      iconClass: getConnectionFallbackIcon(id),
+                                      pipedreamSlug: id,
+                                      nativeSlug: connectorSlugForPipedream(id) ?? undefined,
+                                    });
+                                  }
+
+                                  for (const entry of integrationsCatalog) {
+                                    const slug = entry.connectorSlug;
+                                    if (!slug) continue;
+                                    if (!isNativeAvailable(slug, entry.connectorEnabled)) continue;
+                                    const pdSlug = pipedreamSlugForConnector(slug);
+                                    // Skip if a Pipedream row already covers
+                                    // this service.
+                                    if (pdSlug && rows.some((r) => r.pipedreamSlug === pdSlug)) {
+                                      continue;
+                                    }
+                                    const tmpl = getConnectorById(slug);
+                                    rows.push({
+                                      key: `nv-${slug}`,
+                                      label: pdSlug ? getConnectionDisplayName(pdSlug) : (tmpl?.displayName ?? slug),
+                                      iconSrc: pdSlug ? getConnectionIcon(pdSlug) : undefined,
+                                      iconClass: pdSlug
+                                        ? getConnectionFallbackIcon(pdSlug)
+                                        : (tmpl?.icon ?? 'bi bi-plug'),
+                                      pipedreamSlug: undefined,
+                                      nativeSlug: slug,
+                                    });
+                                  }
+
+                                  rows.sort((a, b) => a.label.localeCompare(b.label));
+
+                                  if (rows.length === 0) {
+                                    return <div className="text-muted small">{t('chatDefaults.noIntegrations')}</div>;
+                                  }
+
+                                  return rows.map((row) => {
+                                    const pdEnabled = row.pipedreamSlug
+                                      ? globalChatSettings.defaultConnectionIds.includes(row.pipedreamSlug)
+                                      : false;
+                                    const nvEnabled = row.nativeSlug
+                                      ? (globalChatSettings.defaultNativeConnectorIds ?? []).includes(row.nativeSlug)
+                                      : false;
+                                    const checked = pdEnabled || nvEnabled;
                                     return (
                                       <Form.Check
-                                        key={id}
+                                        key={row.key}
                                         type="checkbox"
-                                        id={`chat-defaults-integration-${id}`}
-                                        label={integration.name}
+                                        id={`chat-defaults-${row.key}`}
+                                        label={
+                                          <span className="d-inline-flex align-items-center gap-2">
+                                            {row.iconSrc ? (
+                                              <img
+                                                src={row.iconSrc}
+                                                alt={row.label}
+                                                style={{ width: 16, height: 16, objectFit: 'contain' }}
+                                                onError={(e) => {
+                                                  e.currentTarget.style.display = 'none';
+                                                }}
+                                              />
+                                            ) : (
+                                              <i className={row.iconClass} />
+                                            )}
+                                            {row.label}
+                                          </span>
+                                        }
                                         checked={checked}
                                         disabled={loadingSettings}
                                         onChange={(e) => {
                                           const nextChecked = e.target.checked;
-                                          setGlobalChatSettings((prev) => ({
-                                            ...prev,
-                                            defaultConnectionIds: nextChecked
-                                              ? [...prev.defaultConnectionIds, id]
-                                              : prev.defaultConnectionIds.filter((x) => x !== id),
-                                          }));
+                                          setGlobalChatSettings((prev) => {
+                                            const pd = prev.defaultConnectionIds;
+                                            const nv = prev.defaultNativeConnectorIds ?? [];
+                                            let nextPd = pd;
+                                            let nextNv = nv;
+                                            if (row.pipedreamSlug) {
+                                              nextPd = nextChecked
+                                                ? Array.from(new Set([...pd, row.pipedreamSlug]))
+                                                : pd.filter((x) => x !== row.pipedreamSlug);
+                                            }
+                                            if (row.nativeSlug) {
+                                              nextNv = nextChecked
+                                                ? Array.from(new Set([...nv, row.nativeSlug]))
+                                                : nv.filter((x) => x !== row.nativeSlug);
+                                            }
+                                            return {
+                                              ...prev,
+                                              defaultConnectionIds: nextPd,
+                                              defaultNativeConnectorIds: nextNv,
+                                            };
+                                          });
                                           setChatDefaultsDirty(true);
                                         }}
                                       />
                                     );
-                                  })}
-                                {availableIntegrations.filter((integration) => {
-                                  const id = integration.name_slug;
-                                  return globalSettings[id]?.status === 'enabled';
-                                }).length === 0 && (
-                                  <div className="text-muted small">{t('chatDefaults.noIntegrations')}</div>
-                                )}
+                                  });
+                                })()}
                               </ExpandableOverflowBox>
                               <div className="text-muted small mt-1">{t('chatDefaults.defaultIntegrationsHelp')}</div>
                             </>
@@ -1609,9 +2136,9 @@ export default function SettingsPage() {
                                     webSearchEnabled: globalChatSettings.webSearchEnabled,
                                     createAgentEnabled: globalChatSettings.createAgentEnabled,
                                     memoriesEnabled: globalChatSettings.memoriesEnabled,
-                                    dataConnectorsEnabled: globalChatSettings.dataConnectorsEnabled,
                                     dataAnalysisEnabled: globalChatSettings.dataAnalysisEnabled,
                                     defaultConnectionIds: globalChatSettings.defaultConnectionIds,
+                                    defaultNativeConnectorIds: globalChatSettings.defaultNativeConnectorIds,
                                     allowUserDefaults: globalChatSettings.allowUserDefaults,
                                     approvalMode: globalChatSettings.approvalMode,
                                     numaToolApprovalMode: globalChatSettings.numaToolApprovalMode,
@@ -1923,97 +2450,18 @@ export default function SettingsPage() {
                   eventKey="scheduling"
                   title={
                     <span>
-                      <i className="bi bi-clock-history me-2"></i>
+                      <i className="bi bi-lightning-charge-fill me-2"></i>
                       {t('tabs.scheduling')}
                     </span>
                   }
                 >
                   <div className="mb-3">
-                    <Alert variant="secondary" className="mb-3">
-                      <div className="d-flex align-items-start">
-                        <i className="bi bi-clock-history me-2 mt-1"></i>
-                        <div>
-                          <div className="settings-section-title">{t('schedulingSettings.title')}</div>
-                          <div className="small text-muted">{t('schedulingSettings.description')}</div>
-                        </div>
-                      </div>
-                    </Alert>
-                    {schedulingMinLoading ? (
-                      <div className="text-center py-4">
-                        <Spinner animation="border" />
-                      </div>
-                    ) : (
-                      <div>
-                        {schedulingMinError && (
-                          <Alert variant="danger" dismissible onClose={() => setSchedulingMinError(null)}>
-                            {schedulingMinError}
-                          </Alert>
-                        )}
-                        {schedulingMinSuccess && (
-                          <Alert variant="success" dismissible onClose={() => setSchedulingMinSuccess(null)}>
-                            {schedulingMinSuccess}
-                          </Alert>
-                        )}
-                        <div className="mb-3 p-3 border rounded-3 bg-light">
-                          <div className="small text-muted mb-1">
-                            {t('schedulingSettings.arcanumFloor', {
-                              minutes: schedulingArcanumFloor,
-                            })}
-                          </div>
-                        </div>
-                        <Form.Group className="mb-3">
-                          <Form.Label>{t('schedulingSettings.minInterval.label')}</Form.Label>
-                          <Form.Control
-                            type="number"
-                            min={schedulingArcanumFloor}
-                            step={1}
-                            value={schedulingMinInterval}
-                            onChange={(e) => setSchedulingMinInterval(e.target.value)}
-                            placeholder={t('schedulingSettings.minInterval.placeholder')}
-                          />
-                          <Form.Text className="text-muted">
-                            {t('schedulingSettings.minInterval.helpText', {
-                              floor: schedulingArcanumFloor,
-                            })}
-                          </Form.Text>
-                        </Form.Group>
-                        <div className="d-flex gap-2">
-                          <Button
-                            variant="primary"
-                            disabled={schedulingMinSaving}
-                            onClick={async () => {
-                              setSchedulingMinError(null);
-                              setSchedulingMinSuccess(null);
-                              const parsed = schedulingMinInterval ? parseInt(schedulingMinInterval, 10) : null;
-                              if (parsed !== null && (isNaN(parsed) || parsed < schedulingArcanumFloor)) {
-                                setSchedulingMinError(
-                                  t('schedulingSettings.validation.belowFloor', {
-                                    floor: schedulingArcanumFloor,
-                                  })
-                                );
-                                return;
-                              }
-                              try {
-                                setSchedulingMinSaving(true);
-                                await AdminSchedulingSettingsService.update(parsed, numaPut);
-                                setSchedulingMinSuccess(t('schedulingSettings.saveSuccess'));
-                              } catch (e) {
-                                setSchedulingMinError((e as Error).message || t('schedulingSettings.saveFailed'));
-                              } finally {
-                                setSchedulingMinSaving(false);
-                              }
-                            }}
-                          >
-                            {schedulingMinSaving ? <Spinner animation="border" size="sm" className="me-2" /> : null}
-                            {schedulingMinSaving ? t('actions.saving') : t('actions.saveChanges')}
-                          </Button>
-                          {schedulingMinInterval && (
-                            <Button variant="outline-secondary" onClick={() => setSchedulingMinInterval('')}>
-                              {t('schedulingSettings.clearButton')}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                    {isAdmin && (
+                      <>
+                        <ScheduleQuotaAdminForm />
+                        <hr className="my-4" />
+                        <ScheduleAuditPanel />
+                      </>
                     )}
                   </div>
                 </Tab>
@@ -2046,24 +2494,58 @@ export default function SettingsPage() {
                     <Spinner animation="border" variant="primary" />
                   </div>
                 ) : (
-                  <div>
-                    {[...availableIntegrations].sort((a, b) => a.name.localeCompare(b.name)).map(renderIntegrationRow)}
-                  </div>
+                  <>
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <span className="small text-muted">
+                        {addedServices.length === 0
+                          ? t('integrations.emptyHeader', {
+                              defaultValue: 'No integrations added yet.',
+                            })
+                          : t('integrations.countHeader', {
+                              count: addedServices.length,
+                              defaultValue: '{{count}} integration added',
+                            })}
+                      </span>
+                      <div className="d-flex gap-2">
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => setGoogleSetupWizardOpen(true)}
+                          disabled={previewMode}
+                          title={t('integrations.googleCloudSetupTooltip', {
+                            defaultValue:
+                              'One-time setup that auto-provisions a shared Google OAuth client for all Google connectors (Drive, Gmail, Sheets, etc.).',
+                          })}
+                        >
+                          <i className="bi bi-google me-1" />
+                          {t('integrations.googleCloudSetup', { defaultValue: 'Google Cloud setup' })}
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => setAddModalOpen(true)}
+                          disabled={previewMode}
+                        >
+                          <i className="bi bi-plus-lg me-1" />
+                          {t('integrations.addIntegration', { defaultValue: 'Add integration' })}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {addedServices.length === 0 ? (
+                      <div className="text-center text-muted small py-5 border rounded-3 bg-light">
+                        <i className="bi bi-plug fs-3 d-block mb-2" />
+                        {t('integrations.emptyBody', {
+                          defaultValue:
+                            'Click "Add integration" to enable services like Gmail, Slack, Google Drive, or any of the native data connectors.',
+                        })}
+                      </div>
+                    ) : (
+                      <div>{addedServices.map(renderUnifiedAdminRow)}</div>
+                    )}
+                  </>
                 )}
               </Tab>
-              {dataConnectorsEnabled && (
-                <Tab
-                  eventKey="data-connectors"
-                  title={
-                    <span>
-                      <i className="bi bi-cloud-download me-2"></i>
-                      {t('tabs.dataConnectors')}
-                    </span>
-                  }
-                >
-                  <DataConnectorsTab adminSettings={dataConnectorSettings} />
-                </Tab>
-              )}
               <Tab
                 eventKey="capabilities"
                 title={
@@ -2230,174 +2712,248 @@ export default function SettingsPage() {
         )}
       </div>
 
+      <AddIntegrationModal
+        show={addModalOpen}
+        onHide={() => setAddModalOpen(false)}
+        addedKeys={addedKeys}
+        pipedreamForConnector={pipedreamForConnector}
+        onSelect={(entry, method) => void handleAddService(entry, method)}
+      />
+
+      <NativeConfigurationModal
+        show={configuringConnector !== null}
+        connectorSlug={configuringConnector}
+        onHide={() => setConfiguringConnector(null)}
+        onSaved={() => void handleConfiguredNative()}
+      />
+
+      {/* Google Cloud setup wizard — admin one-time flow. Self-checks whether
+          the shared Google OAuth client is already provisioned; if so, it
+          renders a success state, otherwise walks the admin through Google
+          sign-in + project creation + Google API enablement. */}
+      <GoogleCloudSetupWizard
+        show={googleSetupWizardOpen}
+        onHide={() => setGoogleSetupWizardOpen(false)}
+        onComplete={() => {
+          setGoogleSetupWizardOpen(false);
+          // Refresh global settings + catalog so any Google connectors the
+          // admin newly configured via the wizard pick up the new shared
+          // client. loadGlobal also re-derives googleCloudConfigured from
+          // the vault, so the wizard shows the success state next time.
+          void loadGlobal();
+        }}
+        isConfigured={googleCloudConfigured}
+      />
+
       {isAdmin && (
-        <Modal show={!!manageToolsFor} onHide={() => setManageToolsFor(null)} centered size="lg">
-          <Modal.Header closeButton className="border-0 pb-2">
-            <Modal.Title>
-              <div className="d-flex align-items-center">
-                <i className="bi bi-sliders me-2 text-primary"></i>
-                {t('manageTools.title', { integration: manageToolsFor || '' })}
-              </div>
-              <div className="small text-muted fw-normal mt-2 settings-modal-subtitle">{t('manageTools.subtitle')}</div>
-            </Modal.Title>
-          </Modal.Header>
-          <Modal.Body className="pt-2" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-            {toolsLoading ? (
-              <div className="text-center py-5">
-                <Spinner animation="border" variant="primary" />
-                <p className="mt-3 text-muted mb-0">{t('manageTools.loading')}</p>
-              </div>
-            ) : toolsError ? (
-              <Alert variant="danger" className="mb-0">
-                <i className="bi bi-exclamation-triangle-fill me-2"></i>
-                {toolsError}
-              </Alert>
-            ) : toolList.length === 0 ? (
-              <div className="text-center py-5">
-                <i className="bi bi-info-circle text-muted settings-empty-state-icon"></i>
-                <p className="text-muted mt-2 mb-0">{t('manageTools.empty')}</p>
-              </div>
-            ) : (
-              <div className="d-flex flex-column gap-2">
-                {toolList.map((tool) => {
-                  const allowed = toolToggles[tool.name] ?? true;
-
-                  // Helper functions for formatting tool names
-                  const stripPrefix = (name: string, prefix?: string | null) =>
-                    prefix && name.startsWith(prefix + '-') ? name.slice(prefix.length + 1) : name;
-                  const toTitle = (s: string) =>
-                    s
-                      .split('-')
-                      .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-                      .join(' ');
-
-                  // Parse markdown links in description and clean up display
-                  const parseDescription = (desc: string | undefined) => {
-                    if (!desc) return null;
-
-                    // Match markdown links: [text](url)
-                    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-                    const parts: (string | React.ReactElement)[] = [];
-                    let lastIndex = 0;
-                    let match: RegExpExecArray | null;
-
-                    while ((match = linkRegex.exec(desc)) !== null) {
-                      // Add text before the link
-                      if (match.index > lastIndex) {
-                        parts.push(desc.substring(lastIndex, match.index));
-                      }
-
-                      // Replace "See the docs" with "see documentation"
-                      const linkText = match[1].toLowerCase().includes('see')
-                        ? t('manageTools.seeDocumentation')
-                        : match[1];
-
-                      // Add the link as JSX
-                      parts.push(
-                        <a
-                          key={match.index}
-                          href={match[2]}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-decoration-none"
+        <Modal show={!!manageFor} onHide={closeManage} centered size="lg">
+          {manageFor &&
+            (() => {
+              const mf = manageFor;
+              const mfName = mf.pipedreamSlug
+                ? getConnectionDisplayName(mf.pipedreamSlug)
+                : (getConnectorById(mf.connectorSlug ?? '')?.displayName ?? mf.slug);
+              const mfIcon = resolveServiceIcon(mf.pipedreamSlug, mf.connectorSlug);
+              const mfSettings = mf.pipedreamSlug ? globalSettings[mf.pipedreamSlug] : undefined;
+              const mfPreferred = mfSettings?.preferred_method ?? null;
+              const mfPdEnabled = mf.pipedreamEnabled === true;
+              const mfNativeEnabled = isNativeAvailable(mf.connectorSlug, mf.connectorEnabled);
+              const mfHasPdOption = Boolean(mf.pipedreamSlug);
+              const mfHasNativeOption = Boolean(mf.connectorSlug);
+              // When both methods are configured AND admin hasn't picked a
+              // preferred one, the service is in "user-choice" mode — users see
+              // a method picker at connect time. Neither card is "active".
+              const mfBothConfigured = mfPdEnabled && mfNativeEnabled;
+              const mfUserChoice = mfBothConfigured && mfPreferred === null;
+              const mfActiveMethod: IntegrationMethod | null = mfBothConfigured
+                ? mfPreferred
+                : mfPdEnabled
+                  ? 'pipedream'
+                  : mfNativeEnabled
+                    ? 'native'
+                    : null;
+              const setUserChoiceMode = async (next: boolean) => {
+                if (!mf.pipedreamSlug) return;
+                // Toggling on -> null (user picks). Toggling off -> default to
+                // Pipedream as the active method; admin can flip to native via
+                // the card buttons.
+                const nextPreferred: IntegrationMethod | null = next ? null : 'pipedream';
+                await setPreferredMethod(mf.pipedreamSlug, nextPreferred);
+              };
+              return (
+                <>
+                  <Modal.Header closeButton className="border-0 pb-2">
+                    <Modal.Title>
+                      <div className="d-flex align-items-center gap-2">
+                        <span
+                          className="rounded d-flex align-items-center justify-content-center"
+                          style={{ width: 36, height: 36, background: '#f8f9fa', border: '1px solid #dee2e6' }}
                         >
-                          [{linkText}]
-                        </a>
-                      );
-
-                      lastIndex = match.index + match[0].length;
-                    }
-
-                    // Add any remaining text
-                    if (lastIndex < desc.length) {
-                      parts.push(desc.substring(lastIndex));
-                    }
-
-                    return parts.length > 0 ? parts : desc;
-                  };
-
-                  const displayName = toTitle(stripPrefix(tool.name, manageToolsFor));
-
-                  return (
-                    <div
-                      key={tool.name}
-                      className={`d-flex align-items-start justify-content-between p-3 border rounded-3 ${allowed ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
-                      style={{
-                        transition: 'all 0.2s ease',
-                        borderColor: allowed ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
-                      }}
-                    >
-                      <div className="flex-grow-1 me-3">
-                        <div className="d-flex align-items-center mb-1">
-                          <div
-                            className={`rounded-circle me-2 ${allowed ? 'bg-success' : 'bg-secondary'}`}
-                            style={{ width: '8px', height: '8px', transition: 'all 0.2s ease' }}
-                          ></div>
-                          <span className={`fw-semibold ${allowed ? 'text-dark' : 'text-muted'}`}>{displayName}</span>
-                        </div>
-                        {tool.description && (
-                          <div
-                            className={`small settings-tool-description ${allowed ? 'text-muted' : 'text-secondary'}`}
-                            style={{
-                              maxWidth: 720,
-                              whiteSpace: 'normal',
-                              wordBreak: 'break-word',
+                          {mfIcon.iconUrl ? (
+                            <img src={mfIcon.iconUrl} alt="" width={22} height={22} style={{ objectFit: 'contain' }} />
+                          ) : mfIcon.iconClass ? (
+                            <i className={mfIcon.iconClass} style={{ fontSize: '1.2rem' }} />
+                          ) : null}
+                        </span>
+                        <span>{t('manage.title', { defaultValue: 'Manage {{name}}', name: mfName })}</span>
+                      </div>
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body className="pt-2" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                    {/* Method section — always shown. Lets admin switch the active
+                      method, set up a not-yet-configured method, or reconfigure
+                      native credentials. Replaces the old inline Add native/
+                      Native buttons that used to live on the row. */}
+                    <div className="mb-4">
+                      <h6 className="text-uppercase small text-muted fw-semibold mb-2">
+                        {t('manage.methodHeading', { defaultValue: 'Connection method' })}
+                      </h6>
+                      <div className="d-flex flex-column gap-2">
+                        {mfBothConfigured && (
+                          <UserChoiceCard isActive={mfUserChoice} t={t} onToggle={(next) => setUserChoiceMode(next)} />
+                        )}
+                        {mfHasPdOption && (
+                          <ManageMethodCard
+                            method="pipedream"
+                            isActive={mfActiveMethod === 'pipedream'}
+                            isConfigured={mfPdEnabled}
+                            isUserChoiceMode={mfUserChoice}
+                            t={t}
+                            onActivate={async () => {
+                              if (!mf.pipedreamSlug) return;
+                              // Optimistic: switch the badge / Active state in
+                              // the same React tick. setPreferredMethod handles
+                              // the PUT + reconcile internally; we just need to
+                              // also flip status to 'enabled' for the very
+                              // first add case where Pipedream wasn't enabled.
+                              optimisticPreferredMethod(mf.pipedreamSlug, 'pipedream');
+                              const cur = globalSettings[mf.pipedreamSlug];
+                              try {
+                                await AdminIntegrationsService.updateWithNuma(
+                                  mf.pipedreamSlug,
+                                  {
+                                    status: 'enabled',
+                                    denyTools: cur?.denyTools ?? [],
+                                    preferred_method: 'pipedream',
+                                  },
+                                  numaPut
+                                );
+                                await loadGlobal();
+                              } catch (e) {
+                                await loadGlobal();
+                                setError((e as Error).message || t('errors.updateIntegration'));
+                              }
                             }}
-                          >
-                            {parseDescription(tool.description)}
-                          </div>
+                          />
+                        )}
+                        {mfHasNativeOption && (
+                          <ManageMethodCard
+                            method="native"
+                            isActive={mfActiveMethod === 'native'}
+                            isConfigured={mfNativeEnabled}
+                            isUserChoiceMode={mfUserChoice}
+                            t={t}
+                            onActivate={async () => {
+                              if (mfNativeEnabled && mf.pipedreamSlug) {
+                                // Already configured — flip preferred_method
+                                // with optimistic UI feedback.
+                                await setPreferredMethod(mf.pipedreamSlug, 'native');
+                              } else if (mf.connectorSlug) {
+                                // Not yet configured — launch the wizard with
+                                // 'switch' intent so handleConfiguredNative will
+                                // set preferred_method='native' on save.
+                                setConfiguringIntent('switch');
+                                setConfiguringConnector(mf.connectorSlug);
+                              }
+                            }}
+                            onReconfigure={
+                              mfNativeEnabled && mf.connectorSlug
+                                ? () => {
+                                    // Reconfigure: just update credentials, leave
+                                    // the admin's current preferred_method alone.
+                                    setConfiguringIntent('reconfigure');
+                                    setConfiguringConnector(mf.connectorSlug ?? null);
+                                  }
+                                : undefined
+                            }
+                          />
                         )}
                       </div>
-                      <div className="form-check form-switch ms-2">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          checked={allowed}
-                          onChange={(e) => setToolToggles({ ...toolToggles, [tool.name]: e.target.checked })}
-                          style={{
-                            transform: 'scale(1.1)',
-                          }}
-                        />
+                    </div>
+
+                    {/* Tools section — only relevant when Pipedream is the active
+                      method. The deny list applies to Pipedream's MCP tools. */}
+                    {mfPdEnabled && mfActiveMethod === 'pipedream' && (
+                      <div>
+                        <h6 className="text-uppercase small text-muted fw-semibold mb-2">
+                          {t('manage.toolsHeading', { defaultValue: 'Tools' })}
+                        </h6>
+                        <p className="small text-muted mb-2">{t('manageTools.subtitle')}</p>
+                        {toolsLoading ? (
+                          <div className="text-center py-4">
+                            <Spinner animation="border" size="sm" variant="primary" />
+                          </div>
+                        ) : toolsError ? (
+                          <Alert variant="danger" className="mb-0">
+                            <i className="bi bi-exclamation-triangle-fill me-2" />
+                            {toolsError}
+                          </Alert>
+                        ) : toolList.length === 0 ? (
+                          <div className="text-center py-3 small text-muted">{t('manageTools.empty')}</div>
+                        ) : (
+                          <div className="d-flex flex-column gap-2">{toolList.map(renderManagedTool)}</div>
+                        )}
+                      </div>
+                    )}
+                    {/* Synergy 12d PAT health + manual rotation. Only surfaces
+                        when the connector is Synergy and the native side is
+                        configured — auto-rotation can silently fail, and
+                        before this badge there was no admin signal for it. */}
+                    {mf.connectorSlug === 'synergy' && mfNativeEnabled && (
+                      <div className="mt-3 d-flex justify-content-end">
+                        <SynergyPatBadge connectorConfigured={mfNativeEnabled} />
+                      </div>
+                    )}
+                  </Modal.Body>
+                  <Modal.Footer className="border-top pt-3">
+                    <div className="d-flex justify-content-between align-items-center w-100">
+                      <small className="text-muted">
+                        {mfActiveMethod === 'pipedream' && toolList.length > 0 && (
+                          <>
+                            <i className="bi bi-info-circle me-1" />
+                            {t('manageTools.enabledCount', {
+                              enabled: Object.values(toolToggles).filter(Boolean).length,
+                              total: toolList.length,
+                            })}
+                          </>
+                        )}
+                      </small>
+                      <div>
+                        {/* When the Save button is present, the close button
+                          discards pending tool-toggle edits — "Cancel" is the
+                          honest label. Otherwise method-switching is already
+                          auto-saved, so close means "Done", not "Cancel". */}
+                        {mfActiveMethod === 'pipedream' && toolList.length > 0 ? (
+                          <>
+                            <Button variant="secondary" onClick={closeManage} className="me-2">
+                              {t('actions.cancel')}
+                            </Button>
+                            <Button variant="primary" onClick={saveManageTools} disabled={toolsLoading || !!toolsError}>
+                              <i className="bi bi-check-lg me-2" />
+                              {t('actions.saveChanges')}
+                            </Button>
+                          </>
+                        ) : (
+                          <Button variant="primary" onClick={closeManage}>
+                            {t('actions.done', { defaultValue: 'Done' })}
+                          </Button>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </Modal.Body>
-          <Modal.Footer
-            className="border-top pt-3"
-            style={{
-              position: 'sticky',
-              bottom: 0,
-              backgroundColor: 'white',
-              zIndex: 1050,
-              boxShadow: '0 -2px 8px rgba(0,0,0,0.05)',
-            }}
-          >
-            <div className="d-flex justify-content-between align-items-center w-100">
-              <small className="text-muted">
-                {toolList.length > 0 && (
-                  <span>
-                    <i className="bi bi-info-circle me-1"></i>
-                    {t('manageTools.enabledCount', {
-                      enabled: Object.values(toolToggles).filter(Boolean).length,
-                      total: toolList.length,
-                    })}
-                  </span>
-                )}
-              </small>
-              <div>
-                <Button variant="secondary" onClick={() => setManageToolsFor(null)} className="me-2">
-                  {t('actions.cancel')}
-                </Button>
-                <Button variant="primary" onClick={saveManageTools} disabled={toolsLoading || !!toolsError}>
-                  <i className="bi bi-check-lg me-2"></i>
-                  {t('actions.saveChanges')}
-                </Button>
-              </div>
-            </div>
-          </Modal.Footer>
+                  </Modal.Footer>
+                </>
+              );
+            })()}
         </Modal>
       )}
     </div>

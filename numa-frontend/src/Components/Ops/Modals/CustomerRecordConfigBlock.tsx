@@ -5,7 +5,7 @@ import Form from 'react-bootstrap/Form';
 import Dropdown from 'react-bootstrap/Dropdown';
 import type { TFunction } from 'i18next';
 import type { CustomerRecordConfig, CustomerRecordSection, FieldDefinition, FieldType } from '../../../types/ops';
-import { BUILTIN_CUSTOMER_FIELDS, isBuiltinField } from '../Shared/customerRecordFields';
+import { BUILTIN_CUSTOMER_FIELDS, isBuiltinField, resolveBuiltinFieldLabel } from '../Shared/customerRecordFields';
 
 interface CreateFieldInput {
   name: string;
@@ -35,6 +35,18 @@ interface CustomerRecordConfigBlockProps {
    * Called with the field id and the new values. If undefined, edit buttons are hidden.
    */
   onUpdateField?: (fieldId: string, input: UpdateFieldInput) => Promise<boolean>;
+  /**
+   * Current per-client label overrides for built-in fields, keyed by
+   * built-in field id (e.g. "companyName"). When unset, labels fall back
+   * to the i18n default for the field.
+   */
+  builtinFieldLabels?: Record<string, string>;
+  /**
+   * Set or clear the label override for a built-in field. Pass null to
+   * remove the override and fall back to the i18n default. If undefined,
+   * the pencil/edit affordance is hidden for built-ins.
+   */
+  onBuiltinLabelChange?: (fieldId: string, newLabel: string | null) => void;
 }
 
 const ADDABLE_FIELD_TYPES: FieldType[] = [
@@ -66,6 +78,8 @@ export function CustomerRecordConfigBlock({
   t,
   onCreateField,
   onUpdateField,
+  builtinFieldLabels,
+  onBuiltinLabelChange,
 }: CustomerRecordConfigBlockProps): React.JSX.Element {
   const [newSectionName, setNewSectionName] = useState('');
   // Inline "Create new custom field" form state. Only one form is open at a
@@ -108,9 +122,9 @@ export function CustomerRecordConfigBlock({
     const already = new Set(section.fieldIds);
     const opts: { id: string; label: string }[] = [];
 
-    for (const [id, meta] of Object.entries(BUILTIN_CUSTOMER_FIELDS)) {
+    for (const id of Object.keys(BUILTIN_CUSTOMER_FIELDS)) {
       if (already.has(id) || usedFieldIds.has(id)) continue;
-      opts.push({ id, label: t(meta.labelKey) });
+      opts.push({ id, label: resolveBuiltinFieldLabel(builtinFieldLabels, id, t) });
     }
     for (const f of crmFields) {
       if (already.has(f.id) || usedFieldIds.has(f.id)) continue;
@@ -121,7 +135,7 @@ export function CustomerRecordConfigBlock({
   };
 
   const labelFor = (fieldId: string): string => {
-    if (isBuiltinField(fieldId)) return t(BUILTIN_CUSTOMER_FIELDS[fieldId].labelKey);
+    if (isBuiltinField(fieldId)) return resolveBuiltinFieldLabel(builtinFieldLabels, fieldId, t);
     return fieldDefById.get(fieldId)?.name ?? fieldId;
   };
 
@@ -208,6 +222,16 @@ export function CustomerRecordConfigBlock({
   };
 
   const openEditField = (fieldId: string) => {
+    if (isBuiltinField(fieldId)) {
+      setEditingFieldId(fieldId);
+      setEditFieldName(resolveBuiltinFieldLabel(builtinFieldLabels, fieldId, t));
+      setEditFieldType('text');
+      setEditFieldOptions('');
+      setEditFieldError(null);
+      setCreateForSectionId(null);
+      resetCreateForm();
+      return;
+    }
     const field = fieldDefById.get(fieldId);
     if (!field) return;
     setEditingFieldId(fieldId);
@@ -226,9 +250,21 @@ export function CustomerRecordConfigBlock({
   };
 
   const handleUpdateField = async () => {
-    if (!onUpdateField || !editingFieldId) return;
+    if (!editingFieldId) return;
     const name = editFieldName.trim();
-    if (!name) return;
+
+    // Built-in field rename: just update the label override (local state).
+    // Empty input clears the override and falls back to the i18n default.
+    if (isBuiltinField(editingFieldId)) {
+      if (!onBuiltinLabelChange) return;
+      const defaultLabel = t(BUILTIN_CUSTOMER_FIELDS[editingFieldId].labelKey);
+      const nextOverride = !name || name === defaultLabel ? null : name;
+      onBuiltinLabelChange(editingFieldId, nextOverride);
+      setEditingFieldId(null);
+      return;
+    }
+
+    if (!onUpdateField || !name) return;
 
     const requiresOptions = editFieldType === 'select' || editFieldType === 'multi_select';
     const parsedOptions = requiresOptions
@@ -398,12 +434,12 @@ export function CustomerRecordConfigBlock({
                         {t('globalSettings.required', 'Required')}
                       </label>
                       <span className="text-muted small">{builtin ? 'built-in' : 'custom'}</span>
-                      {!builtin && onUpdateField && (
+                      {((builtin && onBuiltinLabelChange) || (!builtin && onUpdateField)) && (
                         <Button
                           variant="link"
                           className="text-muted p-1"
                           onClick={() => (isEditing ? cancelEditField() : openEditField(fieldId))}
-                          title={isEditing ? 'Cancel edit' : 'Edit field'}
+                          title={isEditing ? 'Cancel edit' : builtin ? 'Rename label' : 'Edit field'}
                         >
                           <i className={`bi bi-${isEditing ? 'x' : 'pencil'}`} />
                         </Button>
@@ -455,38 +491,50 @@ export function CustomerRecordConfigBlock({
                               }}
                             />
                           </div>
-                          <div className="col-6 col-md-3">
-                            <Form.Label className="small text-muted mb-1">
-                              {t('globalSettings.fieldType', 'Type')}
-                            </Form.Label>
-                            <Form.Select
-                              size="sm"
-                              value={editFieldType}
-                              onChange={(e) => setEditFieldType(e.target.value as FieldType)}
-                              disabled={savingField}
-                            >
-                              {ADDABLE_FIELD_TYPES.map((ft) => (
-                                <option key={ft} value={ft}>
-                                  {ft}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </div>
-                          {(editFieldType === 'select' || editFieldType === 'multi_select') && (
-                            <div className="col-12 col-md-4">
-                              <Form.Label className="small text-muted mb-1">
-                                {t('globalSettings.options', 'Options')}
-                              </Form.Label>
-                              <Form.Control
-                                size="sm"
-                                value={editFieldOptions}
-                                placeholder="Red, Blue, Green"
-                                onChange={(e) => setEditFieldOptions(e.target.value)}
-                                disabled={savingField}
-                              />
-                            </div>
+                          {!builtin && (
+                            <>
+                              <div className="col-6 col-md-3">
+                                <Form.Label className="small text-muted mb-1">
+                                  {t('globalSettings.fieldType', 'Type')}
+                                </Form.Label>
+                                <Form.Select
+                                  size="sm"
+                                  value={editFieldType}
+                                  onChange={(e) => setEditFieldType(e.target.value as FieldType)}
+                                  disabled={savingField}
+                                >
+                                  {ADDABLE_FIELD_TYPES.map((ft) => (
+                                    <option key={ft} value={ft}>
+                                      {ft}
+                                    </option>
+                                  ))}
+                                </Form.Select>
+                              </div>
+                              {(editFieldType === 'select' || editFieldType === 'multi_select') && (
+                                <div className="col-12 col-md-4">
+                                  <Form.Label className="small text-muted mb-1">
+                                    {t('globalSettings.options', 'Options')}
+                                  </Form.Label>
+                                  <Form.Control
+                                    size="sm"
+                                    value={editFieldOptions}
+                                    placeholder="Red, Blue, Green"
+                                    onChange={(e) => setEditFieldOptions(e.target.value)}
+                                    disabled={savingField}
+                                  />
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
+                        {builtin && (
+                          <div className="text-muted small mt-2">
+                            {t(
+                              'globalSettings.builtinFieldEditHint',
+                              'Built-in fields keep their underlying type; you can only rename the label. Clear the name to restore the default.'
+                            )}
+                          </div>
+                        )}
                         {editFieldError && <div className="text-danger small mt-2">{editFieldError}</div>}
                         <div className="d-flex justify-content-end gap-2 mt-2">
                           <Button
@@ -501,7 +549,7 @@ export function CustomerRecordConfigBlock({
                             variant="primary"
                             size="sm"
                             onClick={handleUpdateField}
-                            disabled={savingField || !editFieldName.trim()}
+                            disabled={savingField || (!builtin && !editFieldName.trim())}
                           >
                             {savingField ? t('common.saving') : t('common.save')}
                           </Button>

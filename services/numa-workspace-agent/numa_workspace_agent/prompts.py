@@ -75,20 +75,16 @@ The "Workspace" is this entire collaborative environment — the active working 
 Files the user needs are often NOT in /workdir/ — they may live elsewhere:
 
 1. **Numa Files (always available)** — the user's personal **My Files** (private to them, kb_id equals their user sub, friendly name "My Files"), the workspace-wide **Company Files**, and any shared folders the user has access to. Use `numa_tool` with `name="numa_files"` to list, search, or download from them. Check here first when looking for documents, templates, or data the user refers to. **My Files is the default destination** when the user asks you to save a file without naming a folder.
-2. **Connected Integrations** — If integrations are enabled for this conversation (see Connected Integrations section below), use those first. They are the primary way to interact with external services like Google Drive, Gmail, Slack, etc.
-3. **Data Connectors** — If the connectors tool is available, it provides access to OAuth-connected services (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d, etc.) via the `connectors` tool. Use `connectors` with `name="status"` to check which are connected.
-
-**IMPORTANT — Data Connectors vs Integrations are separate systems.** The "Connected Integrations" list (Pipedream) and data connectors are independent. A service may be available as a data connector even if it's not in the integrations list, and vice versa.
+2. **Connected Integrations** — external services like Google Drive, Gmail, Slack, Outlook, Jira, etc. that the user has connected. Each service has *one* connection method active at any time — either Numa's native connector or Pipedream-backed — and the right tool for each service is exposed automatically. Treat both tool families as a single "Integrations" capability: try whichever is available for the service you need; if a tool tells you the wrong method is in use for a service, switch to the alternative tool family for that one call.
 
 **When a user asks about files, documents, or external services:**
 - Check Numa Files first (always connected and fast)
-- Use connected integrations if available for the requested service
-- If the connectors tool is available, check connector status: `connectors(name="status", params={{}}, description="Check connected services")`
+- Use connected integrations for the requested service. If `mcp__connectors__*` tools are available, also call `connectors(name="status", params={{}}, description="Check connected services")` to see which native connections are live.
 - Only say something is "not connected" after checking all available sources
 
-**Do NOT waste tool calls on disconnected connectors.** If connector status shows a connector as "disconnected", skip it entirely.
+**Do NOT waste tool calls on disconnected services.** If a connector or integration reports as not connected, skip it.
 
-**Connector `request` operation** — makes authenticated HTTP calls to ANY API the connector's OAuth token covers. This is not limited to the connector's default endpoints. For example, a Google Drive connector token also works with the Google Docs API (`docs.googleapis.com`), Google Sheets API, etc. When creating Google Docs with content, use the Docs API `batchUpdate` endpoint after creation to insert text. Do not assume an API "isn't enabled" — try the request first.
+**The connector `request` operation** — makes authenticated HTTP calls to ANY API the connector's OAuth token covers. This is not limited to the connector's default endpoints. For example, a Google Drive connector token also works with the Google Docs API (`docs.googleapis.com`), Google Sheets API, etc. When creating Google Docs with content, use the Docs API `batchUpdate` endpoint after creation to insert text. Do not assume an API "isn't enabled" — try the request first.
 
 ## Security Restrictions
 
@@ -377,7 +373,7 @@ Activate skills using the Skill tool. Available skills:
 |-------|-------------|
 | `agents` | Managing the user's saved Numa Agents (custom AI personas) — listing, creating, updating, duplicating agents. When a user asks to create/save an agent mid-conversation, the skill's context-aware path uses the current conversation to pre-fill the draft — do not restart with discovery questions. |
 | `memories` | Listing, updating, or detailed management of the user's persistent memories. For quick adds you can use the tool directly without loading the skill. |
-| `integrations` | Working with connected external apps (Google Drive, Slack, Gmail, HubSpot, Jira, Notion, etc.) |
+| `integrations` | Working with connected external apps (Google Drive, Slack, Gmail, HubSpot, Jira, Notion, etc.) — covers both native connector and Pipedream-backed methods. The right method per service is selected automatically. |
 | `numa-files-search` | Searching, uploading, downloading, or listing files in the user's Numa Files folders (My Files, Company Files, shared folders) |
 | `web-search` | Searching the internet for current information not available in the user's Numa Files |
 | `pptx-handling` | Creating, reading, or editing PowerPoint presentations, slide decks, or .pptx files |
@@ -385,7 +381,7 @@ Activate skills using the Skill tool. Available skills:
 | `docx-handling` | Creating, reading, manipulating, converting to/from Word documents/templates, and adding images/logos |
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
-| `connect` | Finding files beyond the workspace — check Numa Files (My Files, Company Files, shared folders via numa_tool with name="numa_files") and data connectors (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). Use when a user asks about files not in /workdir/, needs to send email via a connector, or needs to make authenticated HTTP requests to connected services |
+| `connect` | Native-connector operations within the unified Integrations system — listing, searching, downloading files, or making authenticated HTTP requests via the user's native connections (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). |
 | `render` | Rendering visual HTML, SVG diagrams, or images inline in the chat. Also covers the design system, colour palette, sendPrompt() bridge, and interactive widget patterns |
 
 **Inline render vs HTML file -- pick the right one:**
@@ -860,77 +856,144 @@ def _build_user_profile_context(user_profile: Optional[dict]) -> str:
     return "\n".join(parts)
 
 
+def _admin_preferred_method(pipedream_slug: str) -> Optional[str]:
+    """Return the admin-preferred method for a Pipedream slug, or None."""
+    try:
+        from numa_workspace_agent.mcp_tools.integration_preferences import (
+            get_preferred_method,
+        )
+    except Exception:
+        return None
+    return get_preferred_method(pipedream_slug)
+
+
 def _build_integrations_context(
-    enabled_integrations: list[str],
+    enabled_integrations: list[dict],
     available_integrations: Optional[list[dict]] = None,
     email_signature: Optional[dict] = None,
 ) -> str:
-    """Build system prompt section for Pipedream Connect integrations.
+    """Build the unified Integrations system prompt section covering BOTH
+    Pipedream Connect integrations and native (OAuth/token) connectors.
+
+    Each item is one of:
+        {"slug": "...", "method": "pipedream"|"native", "name": "..."}
+
+    The section header lists every available service with a method tag and
+    enabled/available status, then emits method-specific tool-usage
+    subsections only when at least one item of that method is enabled.
 
     Args:
-        enabled_integrations: List of app slugs enabled for this conversation
-        available_integrations: All integrations the user has connected (id + name)
-        email_signature: Optional user email signature settings
-
-    Returns:
-        Integrations context string for the system prompt
+        enabled_integrations: Items the agent can call in this conversation.
+        available_integrations: All items the user has (enabled + available).
+            When None, treated as equal to ``enabled_integrations``.
+        email_signature: Optional user email signature settings.
     """
-    enabled_set = set(enabled_integrations)
 
-    # Build the integrations status list showing enabled vs available
-    if available_integrations:
-        status_lines = []
-        for conn in available_integrations:
-            slug = conn.get("id", "")
-            name = conn.get("name", slug)
-            if slug in enabled_set:
-                status_lines.append(
-                    f"- {name} ({slug}): **Enabled for this conversation**"
-                )
-            else:
-                status_lines.append(
-                    f"- {name} ({slug}): Available (connected but not enabled for this conversation)"
-                )
-        # Include any enabled integrations not in availableIntegrations (edge case)
-        available_ids = {c.get("id") for c in available_integrations}
-        for slug in enabled_integrations:
-            if slug not in available_ids:
-                status_lines.append(f"- {slug}: **Enabled for this conversation**")
-        integrations_status = "\n".join(status_lines)
-    else:
-        integrations_status = "\n".join(
-            f"- {slug}: **Enabled for this conversation**"
-            for slug in enabled_integrations
+    # Normalise inputs. Each entry is a dict with slug/method/name.
+    def _normalise(items: Optional[list[dict]]) -> list[dict]:
+        out = []
+        for it in items or []:
+            if not isinstance(it, dict):
+                continue
+            slug = it.get("slug") or it.get("id") or ""
+            if not slug:
+                continue
+            method = it.get("method")
+            if method not in ("pipedream", "native"):
+                method = "pipedream"  # back-compat default
+            out.append({"slug": slug, "method": method, "name": it.get("name") or slug})
+        return out
+
+    enabled = _normalise(enabled_integrations)
+    available = _normalise(available_integrations)
+
+    # Build a deduplicated catalog keyed by (method, slug). Enabled status
+    # comes from `enabled`; everything in `available` not in `enabled` is
+    # rendered as Available.
+    enabled_keys = {(e["method"], e["slug"]) for e in enabled}
+    catalog: dict[tuple[str, str], dict] = {}
+    for it in available:
+        catalog[(it["method"], it["slug"])] = it
+    for it in enabled:
+        catalog.setdefault((it["method"], it["slug"]), it)
+
+    if not catalog:
+        return ""
+
+    has_pipedream_enabled = any(e["method"] == "pipedream" for e in enabled)
+    has_native_enabled = any(e["method"] == "native" for e in enabled)
+    pipedream_enabled_slugs = [e["slug"] for e in enabled if e["method"] == "pipedream"]
+    native_enabled_slugs = [e["slug"] for e in enabled if e["method"] == "native"]
+
+    # Status lines — one per (method, slug). Method tagged inline so the
+    # agent knows which tool family to use without a separate section.
+    status_lines: list[str] = []
+    for (method, slug), item in catalog.items():
+        method_label = "Pipedream" if method == "pipedream" else "Native"
+        is_enabled = (method, slug) in enabled_keys
+        enabled_marker = (
+            "**Enabled for this conversation**"
+            if is_enabled
+            else "Available (connected but not enabled for this conversation — tell the user they can flip it on in the chat sidebar's Integrations panel if they want you to use it)"
         )
 
-    context = f"""## Connected Integrations
-The user has integrations connected via Pipedream Connect.
+        # Admin routing hint for dual-method services. Lookup uses the
+        # Pipedream slug regardless of which method this row represents.
+        hint = ""
+        try:
+            from numa_workspace_agent.mcp_tools.integration_preferences import (
+                _CONNECTOR_TO_PIPEDREAM,
+            )
+        except Exception:
+            _CONNECTOR_TO_PIPEDREAM = {}  # type: ignore[assignment]
+        pd_slug = slug if method == "pipedream" else _CONNECTOR_TO_PIPEDREAM.get(slug)
+        pref = _admin_preferred_method(pd_slug) if pd_slug else None
+        if pref == "pipedream" and method == "pipedream":
+            hint = " — admin set this service to **Pipedream**; do not use the `connectors` tool for it."
+        elif pref == "pipedream" and method == "native":
+            hint = " — admin set this service to **Pipedream**; do not call this row via the `connectors` tool, use `mcp__integrations__run_action` on the Pipedream row for the same service."
+        elif pref == "native" and method == "native":
+            hint = " — admin set this service to the **native connector**; use the `connectors` tool here."
+        elif pref == "native" and method == "pipedream":
+            hint = " — admin set this service to the **native connector**; do not use `mcp__integrations__run_action` for it, use the `connectors` tool on the Native row for the same service."
 
-**Integration Status:**
-{integrations_status}
+        status_lines.append(
+            f"- {item['name']} (`{slug}`) — **{method_label}**: {enabled_marker}{hint}"
+        )
 
-Only integrations marked as **Enabled** can be used with tools in this conversation. Integrations marked as Available are connected by the user but not toggled on for this session. When creating agents, you may offer any connected integration (enabled or available) as an option.
+    status_block = "\n".join(status_lines)
 
-**Precedence rule:** If a service with the same (or similar) name appears in both the Data Connectors list and this Integrations list, **always prefer the Data Connectors path** — check `connectors` status first and use the `connectors` tool for that service. Do not say "you need to connect via Integrations settings" when a Data Connector exists for the service the user asked about. Only fall back to Pipedream integrations when no matching data connector exists."""
+    context = f"""## Integrations
 
-    # Only include tool usage instructions when integrations are actually enabled
-    if not enabled_integrations:
-        return context
+The user's integrations are listed below. Each row is tagged with its method:
+- **Pipedream** rows are accessed via the `mcp__integrations__*` tool family.
+- **Native** rows are accessed via the `connectors` tool family.
 
-    context += f"""
+Only rows marked **Enabled for this conversation** can be called by tools right now. Rows marked Available are connected but toggled off for this session — when relevant, suggest the user enable them from the chat sidebar's Integrations panel.
 
-Action schemas are in /workdir/tools/integrations/{{app_slug}}/.
+**Available integrations:**
+{status_block}
 
-**IMPORTANT:** Always load the `integrations` skill BEFORE performing any integration operations. It contains essential context for working with integrations correctly.
+**Method routing:** Follow the per-row method tag and any "admin set this service to ..." hint. When a service appears on both a Pipedream and a Native row, the admin hint is the source of truth — there is no global "prefer one or the other" rule. If you call the wrong family, the runtime rejects the call and tells you which to switch to."""
+
+    # ── Pipedream subsection (only when any pipedream is enabled) ────────
+    if has_pipedream_enabled:
+        context += """
+
+### Pipedream tool usage
+
+Action schemas are in /workdir/tools/integrations/{app_slug}/.
+
+**IMPORTANT:** Always load the `integrations` skill BEFORE performing any Pipedream operations. It contains essential context for working with these integrations correctly.
 
 **CRITICAL — Two-step schema lookup before ANY action call:**
-1. **Read the index first:** Read `/workdir/tools/integrations/{{app_slug}}/_index.json` to see all available actions and pick the right one.
+1. **Read the index first:** Read `/workdir/tools/integrations/{app_slug}/_index.json` to see all available actions and pick the right one.
 2. **Read the full action schema:** Read the individual action JSON file (e.g., `/workdir/tools/integrations/google_drive/google_drive-find-file.json`) to get the exact prop names, types, required fields, and whether `configure_props` is needed for dynamic options. **NEVER guess prop names or structure — they vary per action and are often not what you'd expect.**
 
 To execute an action, use the MCP integrations tools:
   mcp__integrations__run_action(
     action_key="google_drive-find-file",
-    props='{{"googleDrive":{{"authProvisionId":"auto"}},"nameSearchTerm":"quarterly report"}}',
+    props='{"googleDrive":{"authProvisionId":"auto"},"nameSearchTerm":"quarterly report"}',
     description="Search for quarterly report in Google Drive"
   )
 
@@ -938,7 +1001,7 @@ To get dynamic dropdown options for a prop:
   mcp__integrations__configure_props(
     action_key="google_drive-list-files",
     prop_name="drive",
-    configured_props='{{"googleDrive":{{"authProvisionId":"auto"}}}}'
+    configured_props='{"googleDrive":{"authProvisionId":"auto"}}'
   )
 
 Important notes:
@@ -953,30 +1016,30 @@ Important notes:
 - **Bulk / paginated fetches:** Use `proxy_request` directly and follow the API's pagination token (`@odata.nextLink` for Microsoft Graph, `nextPageToken` for Google APIs, `next` URLs for most REST APIs). NEVER iterate `$skip` / `offset` / `pageNumber` manually — that's a linear scan that costs one round-trip + one approval per page. Pipedream's built-in actions strip pagination tokens before returning, so you cannot paginate past page 1 via `run_action` — only `proxy_request` preserves them. Decide your full field selection (`$select` etc.) up front so you don't have to re-walk the same window with different params.
 """
 
-    # Append per-integration prompt files if they exist
-    for slug in enabled_integrations:
-        prompt_file = _INTEGRATION_PROMPTS_DIR / f"{slug}.md"
-        if prompt_file.is_file():
-            content = prompt_file.read_text().strip()
-            context += f"\n\n### {slug} — Integration Guide\n{content}\n"
+        # Append per-integration prompt files if they exist
+        for slug in pipedream_enabled_slugs:
+            prompt_file = _INTEGRATION_PROMPTS_DIR / f"{slug}.md"
+            if prompt_file.is_file():
+                content = prompt_file.read_text().strip()
+                context += f"\n\n### {slug} — Integration Guide\n{content}\n"
 
-    # Append denied tools policy section
-    tools_dir = Path("/workdir/tools/integrations")
-    denied_entries = []
-    for slug in enabled_integrations:
-        denied_file = tools_dir / slug / "_denied_tools.json"
-        if denied_file.is_file():
-            try:
-                denied_tools = json.loads(denied_file.read_text())
-                if denied_tools:
-                    tool_list = ", ".join(f"`{t}`" for t in denied_tools)
-                    denied_entries.append(f"- **{slug}**: {tool_list}")
-            except (json.JSONDecodeError, OSError):
-                pass
+        # Append denied tools policy section
+        tools_dir = Path("/workdir/tools/integrations")
+        denied_entries = []
+        for slug in pipedream_enabled_slugs:
+            denied_file = tools_dir / slug / "_denied_tools.json"
+            if denied_file.is_file():
+                try:
+                    denied_tools = json.loads(denied_file.read_text())
+                    if denied_tools:
+                        tool_list = ", ".join(f"`{t}`" for t in denied_tools)
+                        denied_entries.append(f"- **{slug}**: {tool_list}")
+                except (json.JSONDecodeError, OSError):
+                    pass
 
-    if denied_entries:
-        denied_list = "\n".join(denied_entries)
-        context += f"""
+        if denied_entries:
+            denied_list = "\n".join(denied_entries)
+            context += f"""
 
 ### Restricted Integration Tools
 
@@ -987,67 +1050,32 @@ The following tools have been restricted by administrator or user policy. They h
 **Do NOT attempt to work around these restrictions** by using `proxy_request` to call the underlying API directly, or by any other means. These tools are intentionally disabled. If the user asks you to perform an action covered by a restricted tool, explain that the tool is restricted by their integration policy and suggest they update their settings if needed.
 """
 
-    # Append email signature when an email integration is connected
-    has_email_integration = any(
-        slug in _EMAIL_INTEGRATION_SLUGS for slug in enabled_integrations
-    )
-    if has_email_integration:
-        sig_context = _build_email_signature_context(email_signature)
-        if sig_context:
-            context += f"\n\n{sig_context}"
-
-    return context
-
-
-def _build_connectors_context(
-    connected_data_connectors: list[dict],
-) -> str:
-    """Build system prompt section for connected data connectors.
-
-    Mirrors _build_integrations_context but for OAuth/token data connectors
-    (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d, etc.).
-
-    Also checks for API reference documentation on disk at
-    ``/workdir/api-docs/{name}/`` and includes instructions when available.
-
-    Args:
-        connected_data_connectors: List of dicts with 'id' and 'name' keys
-            for each connected data connector.
-
-    Returns:
-        Connectors context string for the system prompt.
-    """
-    connector_lines = []
-    connectors_with_docs: list[str] = []
-
-    for conn in connected_data_connectors:
-        cid = conn.get("id", "")
-        name = conn.get("name", cid)
-        connector_lines.append(
-            f'- {name} (`{cid}`): configured by the workspace admin (per-user connection state unknown — call `connectors(name="status")` to check before telling the user anything about it)'
+        # Email signature when any email integration is enabled (Pipedream side).
+        has_email_integration = any(
+            slug in _EMAIL_INTEGRATION_SLUGS for slug in pipedream_enabled_slugs
         )
-        # Check if API reference docs were synced for this connector. The S3
-        # sync writes to /workdir/api-docs/{slug}/, not /{display_name}/.
-        docs_dir = Path(f"/workdir/api-docs/{cid}")
-        if docs_dir.is_dir() and any(docs_dir.iterdir()):
-            connectors_with_docs.append(cid)
+        if has_email_integration:
+            sig_context = _build_email_signature_context(email_signature)
+            if sig_context:
+                context += f"\n\n{sig_context}"
 
-    connectors_list = "\n".join(connector_lines)
+    # ── Native subsection (only when any native is enabled OR available) ─
+    # We emit this whenever any native row exists in the catalog because
+    # the disconnection-handling instructions are needed for the agent to
+    # respond correctly when status returns "Awaiting credential" — that
+    # can happen for connectors the user hasn't enabled yet.
+    has_any_native = any(method == "native" for (method, _slug) in catalog)
+    if has_any_native:
+        context += """
 
-    context = f"""## Available Data Connectors
-The workspace admin has configured these data connectors. They are **always your first port of call** for the services listed below — do not fall back to Pipedream integrations when one of these is named. The current user may or may not have connected each one yet; check with the `connectors` status operation to find out.
+### Native connector tool usage
 
-**Connectors:**
-{connectors_list}
-
-**Precedence:** If the user asks about a service that appears in the list above, use the `connectors` tool immediately. Do NOT say "you need to connect via Integrations settings" and do NOT suggest Pipedream. Only consider Pipedream integrations when the named service does NOT appear in the list above.
-
-Access these via the `connectors` tool (NOT the integrations tool). Operations:
-- `connectors(name="status", params={{}}, description="...")` — check detailed status
-- `connectors(name="list_files", params={{"connector": "<id>"}}, description="...")` — list files
-- `connectors(name="search_files", params={{"connector": "<id>", "query": "..."}}, description="...")` — search
-- `connectors(name="download_file", params={{"connector": "<id>", "file_id": "..."}}, description="...")` — download
-- `connectors(name="request", params={{"connector": "<id>", "method": "GET", "url": "..."}}, description="...")` — authenticated HTTP request (requires approval)
+Access native rows via the `connectors` tool (NOT `mcp__integrations__*`). Operations:
+- `connectors(name="status", params={}, description="...")` — check detailed status
+- `connectors(name="list_files", params={"connector": "<id>"}, description="...")` — list files
+- `connectors(name="search_files", params={"connector": "<id>", "query": "..."}, description="...")` — search
+- `connectors(name="download_file", params={"connector": "<id>", "file_id": "..."}, description="...")` — download
+- `connectors(name="request", params={"connector": "<id>", "method": "GET", "url": "..."}, description="...")` — authenticated HTTP request (requires approval)
 
 The `request` operation makes authenticated HTTP calls to ANY API the connector's OAuth token covers. For example, a Google Drive connector token also works with Google Docs API, Sheets API, etc.
 
@@ -1057,17 +1085,24 @@ When the `status` tool returns `Awaiting credential: <Name>` for a connector, th
 
 In this case you MUST:
 1. Acknowledge briefly (one sentence): "I've opened a credential prompt for <Name> above — fill it in and I'll retry your request."
-2. **STOP.** Do NOT call any further tools. Do NOT ask the user to paste their credential into chat. Do NOT tell them to go to Integrations, Settings, or Data Connectors. Do NOT suggest any manual route — the inline prompt is the ONLY correct path.
+2. **STOP.** Do NOT call any further tools. Do NOT ask the user to paste their credential into chat. Do NOT tell them to go to Integrations or Settings. Do NOT suggest any manual route — the inline prompt is the ONLY correct path.
 
-When the status tool returns `Not connected: <Name> — connect at /files?tab=remote`, the connector is an OAuth file provider that needs a browser redirect. Tell the user: "Please connect <Name> under Files > Remote, then ask me again."
+When the status tool returns `Not connected: <Name> — connect at /integrations#<slug>`, the connector is an OAuth file provider that needs a browser redirect. Tell the user: "Please connect <Name> on the Integrations page, then ask me again." (The page deep-links to the relevant card automatically.)
 
 When the connector is truly absent (not in the status output at all), tell the user the connector isn't configured and to contact their admin.
 
 Never: paste-the-token-in-chat. Never: go-to-settings for a chat-only connector showing *Awaiting credential*. The inline form stores the credential securely in the user's personal vault; any other path bypasses that."""
 
-    if connectors_with_docs:
-        docs_list = ", ".join(connectors_with_docs)
-        context += f"""
+        # API reference docs synced for enabled natives.
+        connectors_with_docs: list[str] = []
+        for slug in native_enabled_slugs:
+            docs_dir = Path(f"/workdir/api-docs/{slug}")
+            if docs_dir.is_dir() and any(docs_dir.iterdir()):
+                connectors_with_docs.append(slug)
+
+        if connectors_with_docs:
+            docs_list = ", ".join(connectors_with_docs)
+            context += f"""
 
 **API Reference Documentation:**
 API reference documentation is available at `/workdir/api-docs/{{name}}/` for the following connectors: {docs_list}.
@@ -1256,9 +1291,8 @@ def build_workspace_system_prompt(
     today_string: Optional[str] = None,
     agent_config: Optional["AgentConfig"] = None,
     agent_file_paths: Optional[list[str]] = None,
-    enabled_integrations: Optional[list[str]] = None,
+    enabled_integrations: Optional[list[dict]] = None,
     available_integrations: Optional[list[dict]] = None,
-    connected_data_connectors: Optional[list[dict]] = None,
     email_signature: Optional[dict] = None,
     identity_override: Optional[str] = None,
     user_profile: Optional[dict] = None,
@@ -1378,57 +1412,39 @@ def build_workspace_system_prompt(
                 agent_memory_lines.append(f"- {mem.get('content', '')}")
             base_prompt = f"{base_prompt}\n" + "\n".join(agent_memory_lines)
 
-    # Append integrations context if any integrations are enabled or available
+    # Append unified integrations context (Pipedream + native rolled into one
+    # section, with per-row method tags). Emitted whenever any integration is
+    # enabled OR available.
     if enabled_integrations or available_integrations:
         integrations_context = _build_integrations_context(
             enabled_integrations or [], available_integrations, email_signature
         )
-        base_prompt = f"{base_prompt}\n\n{integrations_context}"
+        if integrations_context:
+            base_prompt = f"{base_prompt}\n\n{integrations_context}"
 
-    # Append data connectors context if any are connected
-    if connected_data_connectors:
-        connectors_context = _build_connectors_context(connected_data_connectors)
-        base_prompt = f"{base_prompt}\n\n{connectors_context}"
-
-    # Append disabled feature hints based on feature flags
     _flags = feature_flags or {}
 
-    # Append email signature context for connectors (Gmail via data connectors)
-    # when integrations didn't already include it
+    # Email-signature fallback: when no Pipedream email integration was
+    # enabled (so the integrations section didn't append the signature
+    # itself) but a native email connector might be available, attach the
+    # signature here so it still applies. Pipedream-enabled-with-email is
+    # handled inside `_build_integrations_context`.
     if (
         _flags.get("OAUTH_INTEGRATIONS_ENABLED", False)
         and email_signature
         and email_signature.get("enabled")
     ):
-        # Only add if integrations context didn't already include it
-        # (i.e. no Pipedream email integration like gmail or outlook was enabled)
         _email_slugs = {"gmail", "google_mail", "microsoft_outlook", "outlook"}
-        _has_pipedream_email = enabled_integrations and any(
-            slug in _email_slugs for slug in enabled_integrations
+        _has_pipedream_email = bool(enabled_integrations) and any(
+            isinstance(it, dict)
+            and it.get("method") == "pipedream"
+            and it.get("slug") in _email_slugs
+            for it in enabled_integrations
         )
         if not _has_pipedream_email:
             sig_context = _build_email_signature_context(email_signature)
             if sig_context:
                 base_prompt = f"{base_prompt}\n\n{sig_context}"
-
-    disabled_hints: list[str] = []
-    # Only mention disabled connectors when the account HAS the feature
-    # (OAUTH_INTEGRATIONS_ENABLED) but the per-chat toggle is off.
-    # When the feature flag itself is off, the agent has no concept of
-    # connectors — no MCP server, no prompt context — so stay silent.
-    if _flags.get("OAUTH_INTEGRATIONS_ENABLED", False) and not _flags.get(
-        "DATA_CONNECTORS_CHAT_ENABLED", False
-    ):
-        disabled_hints.append(
-            "Data Connectors are disabled for this conversation. The user has "
-            "turned off the Data Connectors toggle in their chat settings. "
-            "Do not attempt to use the connectors tool. If the user asks about "
-            "data connectors, let them know they can enable it in chat settings."
-        )
-    if disabled_hints:
-        base_prompt += "\n\n## Disabled Features\n" + "\n".join(
-            f"- {h}" for h in disabled_hints
-        )
 
     return base_prompt
 

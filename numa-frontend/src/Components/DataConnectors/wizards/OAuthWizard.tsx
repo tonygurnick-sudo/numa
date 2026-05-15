@@ -11,7 +11,7 @@ import { createCompanySecret, updateCompanySecret, getCompanySecret } from '../.
 import { ConnectorsService } from '../../../Services/ConnectorsService';
 import type { VaultSecretMetadata, VaultSecretWithFields } from '../../../Services/VaultService';
 import type { OAuthProviderInfo } from '../../../types/oauthProviders';
-import { getConnectorById, getConnectorsByPlatform, getOAuthSecretId, CACHING_PRESETS } from '../connectorRegistry';
+import { getConnectorById, getConnectorsByPlatform, getOAuthSecretId } from '../connectorRegistry';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,7 +26,6 @@ export interface ProviderTemplate {
   tokenUrl: string;
   scopes: string;
   extraAuthParams: string;
-  helpUrl: string;
   discoveryUrl?: string;
 }
 
@@ -48,19 +47,9 @@ interface OAuthFormState {
   extraAuthParams: string;
   clientId: string;
   clientSecret: string;
-  helpUrl: string;
-  apiDocsUrl: string;
-  openApiUrl: string;
-  postmanUrl: string;
-  mcpServerRef: string;
-  purposeHint: string;
   rateLimitRpm: string;
   rateLimitDaily: string;
   customHeaders: CustomHeader[];
-  cacheTtl: string;
-  cacheStaleWhileRevalidate: boolean;
-  cachePrefetch: boolean;
-  cacheBackgroundRefresh: string;
 }
 
 interface OAuthWizardProps {
@@ -126,7 +115,6 @@ export const OAuthWizard = ({
   const [success, setSuccess] = useState<string | null>(null);
   const [providerIdError, setProviderIdError] = useState<string | null>(null);
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
-  const [customizeExpanded, setCustomizeExpanded] = useState(false);
   const [testResult, setTestResult] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
   const [testError, setTestError] = useState<string | null>(null);
   const [secretExists, setSecretExists] = useState(false);
@@ -145,19 +133,9 @@ export const OAuthWizard = ({
     extraAuthParams: '',
     clientId: '',
     clientSecret: '',
-    helpUrl: '',
-    apiDocsUrl: '',
-    openApiUrl: '',
-    postmanUrl: '',
-    mcpServerRef: '',
-    purposeHint: '',
     rateLimitRpm: '',
     rateLimitDaily: '',
     customHeaders: [],
-    cacheTtl: '300',
-    cacheStaleWhileRevalidate: true,
-    cachePrefetch: true,
-    cacheBackgroundRefresh: '0',
   };
 
   const [form, setForm] = useState<OAuthFormState>(emptyForm);
@@ -188,7 +166,6 @@ export const OAuthWizard = ({
     setTestResult('idle');
     setTestError(null);
     setAdvancedExpanded(false);
-    setCustomizeExpanded(false);
     setRelatedProviderName(null);
 
     if (isNew) {
@@ -204,10 +181,6 @@ export const OAuthWizard = ({
     const tpl = templates.find((t) => t.id === editingProviderId);
     const info = mergedProviders.find((p) => p.id === editingProviderId);
 
-    // Load caching defaults from connector registry
-    const connectorEntry = getConnectorById(editingProviderId);
-    const cachingDefaults = connectorEntry?.cachingPolicy ?? CACHING_PRESETS.cloudStorage;
-
     const baseForm: Partial<OAuthFormState> = {
       template: tpl ? tpl.id : 'custom',
       providerId: editingProviderId,
@@ -215,14 +188,9 @@ export const OAuthWizard = ({
       icon: info?.icon || tpl?.icon || 'bi-cloud',
       description: info?.description || tpl?.description || '',
       authUrl: tpl?.authUrl || '',
-      cacheTtl: String(cachingDefaults.ttl),
-      cacheStaleWhileRevalidate: cachingDefaults.staleWhileRevalidate > 0,
-      cachePrefetch: cachingDefaults.prefetch,
-      cacheBackgroundRefresh: String(cachingDefaults.backgroundRefresh),
       tokenUrl: tpl?.tokenUrl || '',
       scopes: tpl?.scopes || '',
       extraAuthParams: tpl?.extraAuthParams || '',
-      helpUrl: tpl?.helpUrl || '',
     };
 
     // Set default scopes from definitions if available
@@ -251,11 +219,6 @@ export const OAuthWizard = ({
             displayName: full.fields?.display_name || baseForm.displayName || '',
             icon: full.fields?.icon || baseForm.icon || '',
             description: full.fields?.description || baseForm.description || '',
-            apiDocsUrl: full.fields?.api_docs_url || '',
-            openApiUrl: full.fields?.open_api_url || '',
-            postmanUrl: full.fields?.postman_url || '',
-            mcpServerRef: full.fields?.mcp_server_ref || '',
-            purposeHint: full.fields?.purpose_hint || '',
             rateLimitRpm: full.fields?.rate_limit_rpm || '',
             rateLimitDaily: full.fields?.rate_limit_daily || '',
             customHeaders: parseCustomHeaders(full.fields?.custom_headers),
@@ -332,7 +295,6 @@ export const OAuthWizard = ({
   const oauthSecretId = effectiveProviderId ? getOAuthSecretId(effectiveProviderId) : '';
   const secretName = oauthSecretId ? `oauth-client-${oauthSecretId}` : '';
   const registryEntry = getConnectorById(effectiveProviderId);
-  const apiRef = registryEntry?.apiReference;
 
   // ---------------------------------------------------------------------------
   // Steps — dynamic based on isNew vs known template
@@ -451,7 +413,6 @@ export const OAuthWizard = ({
       scopes: tpl.scopes,
       selectedScopeIds: scopeIds.length > 0 ? scopeIds : [],
       extraAuthParams: tpl.extraAuthParams,
-      helpUrl: tpl.helpUrl,
     });
     setAdvancedExpanded(false);
 
@@ -531,12 +492,6 @@ export const OAuthWizard = ({
         fields.auth_header_scheme = registryEntry.authHeaderScheme;
       }
 
-      // Caching policy
-      fields.cache_ttl = form.cacheTtl;
-      fields.cache_stale_while_revalidate = form.cacheStaleWhileRevalidate ? 'true' : 'false';
-      fields.cache_prefetch = form.cachePrefetch ? 'true' : 'false';
-      fields.cache_background_refresh = form.cacheBackgroundRefresh;
-
       const connector = getConnectorById(pid);
       if (connector?.oauthPlatform) {
         // Platform connector: scopes at top level, fall back to registry if empty
@@ -547,13 +502,6 @@ export const OAuthWizard = ({
           icon: form.icon.trim(),
           description: form.description.trim(),
           scopes: effectiveScopes,
-          api_reference: apiRef
-            ? JSON.stringify({
-                ...apiRef,
-                docsUrl: form.apiDocsUrl.trim() || apiRef.docsUrl,
-                purpose: form.purposeHint.trim() || apiRef.purpose,
-              })
-            : undefined,
         });
 
         if (existing) {
@@ -573,25 +521,8 @@ export const OAuthWizard = ({
         fields.icon = form.icon.trim();
         fields.description = form.description.trim();
 
-        if (form.apiDocsUrl.trim()) fields.api_docs_url = form.apiDocsUrl.trim();
-        if (form.openApiUrl.trim()) fields.open_api_url = form.openApiUrl.trim();
-        if (form.postmanUrl.trim()) fields.postman_url = form.postmanUrl.trim();
-        if (form.mcpServerRef.trim()) fields.mcp_server_ref = form.mcpServerRef.trim();
-        if (form.purposeHint.trim()) fields.purpose_hint = form.purposeHint.trim();
         if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
         if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
-
-        if (apiRef) {
-          const refBlob = {
-            ...apiRef,
-            docsUrl: form.apiDocsUrl.trim() || apiRef.docsUrl,
-            openApiUrl: form.openApiUrl.trim() || apiRef.openApiUrl,
-            postmanUrl: form.postmanUrl.trim() || apiRef.postmanUrl,
-            mcpServerRef: form.mcpServerRef.trim() || apiRef.mcpServerRef,
-            purpose: form.purposeHint.trim() || apiRef.purpose,
-          };
-          fields.api_reference = JSON.stringify(refBlob);
-        }
       }
 
       const validHeaders = form.customHeaders.filter((h) => h.name.trim() && h.value.trim());
@@ -616,7 +547,6 @@ export const OAuthWizard = ({
           category: 'OAuth Clients',
           type: 'custom',
           fields,
-          help_url: form.helpUrl.trim() || undefined,
         });
         setSecretExists(true);
       }
@@ -707,7 +637,6 @@ export const OAuthWizard = ({
     setSuccess(null);
     setProviderIdError(null);
     setAdvancedExpanded(false);
-    setCustomizeExpanded(false);
     setTestResult('idle');
     setTestError(null);
     setSecretExists(false);
@@ -723,7 +652,6 @@ export const OAuthWizard = ({
   // Render helpers
   // ---------------------------------------------------------------------------
 
-  const signupLink = registryEntry?.signupUrl || registryEntry?.helpUrl || form.helpUrl;
   const setupSteps = registryEntry?.oauthSetupSteps;
 
   const renderSetupGuide = () => {
@@ -745,77 +673,6 @@ export const OAuthWizard = ({
             </li>
           ))}
         </ol>
-      </div>
-    );
-  };
-
-  const renderApiReferenceSummary = () => {
-    if (!apiRef) return null;
-    return (
-      <div className="border rounded p-3 mb-3">
-        <div className="d-flex align-items-center gap-2 mb-2">
-          <h6 className="fw-semibold small text-muted mb-0">{t('dataConnectors.apiReference.title')}</h6>
-          <span className="badge bg-success-subtle text-success small">
-            <i className="bi bi-check-circle me-1"></i>
-            {t('dataConnectors.apiReference.autoConfigured')}
-          </span>
-        </div>
-        {apiRef.purpose && <p className="small text-muted mb-2">{apiRef.purpose}</p>}
-        {apiRef.dataTypes && apiRef.dataTypes.length > 0 && (
-          <div className="mb-2">
-            <span className="small text-muted me-2">{t('dataConnectors.apiReference.dataTypesLabel')}:</span>
-            {apiRef.dataTypes.map((dt) => (
-              <span key={dt} className="badge bg-light text-dark me-1" style={{ fontSize: '0.7rem' }}>
-                {dt}
-              </span>
-            ))}
-          </div>
-        )}
-        {apiRef.capabilities && apiRef.capabilities.length > 0 && (
-          <div className="mb-2">
-            <span className="small text-muted me-2">{t('dataConnectors.apiReference.capabilitiesLabel')}:</span>
-            {apiRef.capabilities.map((cap) => (
-              <span key={cap} className="badge bg-primary-subtle text-primary me-1" style={{ fontSize: '0.7rem' }}>
-                {cap}
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="d-flex flex-wrap gap-2">
-          {(form.apiDocsUrl || apiRef.docsUrl) && (
-            <a
-              href={form.apiDocsUrl || apiRef.docsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="small d-inline-flex align-items-center gap-1"
-            >
-              <ExternalLink size={12} />
-              {t('dataConnectors.apiReference.docsUrl')}
-            </a>
-          )}
-          {(form.openApiUrl || apiRef.openApiUrl) && (
-            <a
-              href={form.openApiUrl || apiRef.openApiUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="small d-inline-flex align-items-center gap-1"
-            >
-              <ExternalLink size={12} />
-              {t('dataConnectors.apiReference.openApiUrl')}
-            </a>
-          )}
-          {(form.postmanUrl || apiRef.postmanUrl) && (
-            <a
-              href={form.postmanUrl || apiRef.postmanUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="small d-inline-flex align-items-center gap-1"
-            >
-              <ExternalLink size={12} />
-              {t('dataConnectors.apiReference.postmanUrl')}
-            </a>
-          )}
-        </div>
       </div>
     );
   };
@@ -951,6 +808,8 @@ export const OAuthWizard = ({
           <Form.Control
             type="text"
             readOnly
+            plaintext
+            className="bg-light px-2 rounded border"
             value={oauthSecretId ? `${frontendBaseUrl}/oauth/callback/${oauthSecretId}` : ''}
             onClick={(e) => {
               (e.target as HTMLInputElement).select();
@@ -975,117 +834,69 @@ export const OAuthWizard = ({
     </Col>
   );
 
-  const renderAdvancedOAuthSettings = () => (
-    <>
-      <Col md={12}>
-        <div
-          className="d-flex align-items-center gap-2 cursor-pointer"
-          onClick={() => setAdvancedExpanded(!advancedExpanded)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && setAdvancedExpanded(!advancedExpanded)}
-        >
-          <h6 className="fw-semibold mb-0">{t('dataConnectors.oauthWizard.advancedOauth')}</h6>
-          {advancedExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </div>
-      </Col>
-      <Collapse in={advancedExpanded}>
-        <div>
-          <Row className="g-3">
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.authUrl')}</Form.Label>
-                <Form.Control
-                  type="url"
-                  placeholder={t('dataConnectors.oauth.authUrlPlaceholder')}
-                  value={form.authUrl}
-                  onChange={(e) => updateForm({ authUrl: e.target.value })}
-                />
-              </Form.Group>
-            </Col>
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.tokenUrl')}</Form.Label>
-                <Form.Control
-                  type="url"
-                  placeholder={t('dataConnectors.oauth.tokenUrlPlaceholder')}
-                  value={form.tokenUrl}
-                  onChange={(e) => updateForm({ tokenUrl: e.target.value })}
-                />
-              </Form.Group>
-            </Col>
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.extraAuthParams')}</Form.Label>
-                <Form.Control
-                  as="textarea"
-                  rows={2}
-                  placeholder={t('dataConnectors.oauth.extraAuthParamsPlaceholder')}
-                  value={form.extraAuthParams}
-                  onChange={(e) => updateForm({ extraAuthParams: e.target.value })}
-                />
-                <Form.Text className="text-muted">{t('dataConnectors.oauth.extraAuthParamsHint')}</Form.Text>
-              </Form.Group>
-            </Col>
-
-            {/* Caching Settings */}
-            <Col md={12} className="mt-3">
-              <h6 className="fw-semibold small text-muted mb-2">
-                {t('dataConnectors.oauth.cachingSettings', 'Caching Settings')}
-              </h6>
-            </Col>
-            <Col md={6}>
-              <Form.Group>
-                <Form.Label className="small fw-semibold">
-                  {t('dataConnectors.oauth.cacheTtl', 'Cache Duration')}
-                </Form.Label>
-                <Form.Select value={form.cacheTtl} onChange={(e) => updateForm({ cacheTtl: e.target.value })}>
-                  <option value="60">{t('dataConnectors.cache.1min', '1 minute (email)')}</option>
-                  <option value="300">{t('dataConnectors.cache.5min', '5 minutes (files)')}</option>
-                  <option value="1800">{t('dataConnectors.cache.30min', '30 minutes (projects)')}</option>
-                  <option value="3600">{t('dataConnectors.cache.1hr', '1 hour')}</option>
-                </Form.Select>
-              </Form.Group>
-            </Col>
-            <Col md={6}>
-              <Form.Group>
-                <Form.Label className="small fw-semibold">
-                  {t('dataConnectors.oauth.backgroundRefresh', 'Background Refresh')}
-                </Form.Label>
-                <Form.Select
-                  value={form.cacheBackgroundRefresh}
-                  onChange={(e) => updateForm({ cacheBackgroundRefresh: e.target.value })}
-                >
-                  <option value="0">{t('dataConnectors.cache.off', 'Off')}</option>
-                  <option value="60">{t('dataConnectors.cache.every1min', 'Every 1 minute')}</option>
-                  <option value="300">{t('dataConnectors.cache.every5min', 'Every 5 minutes')}</option>
-                  <option value="1800">{t('dataConnectors.cache.every30min', 'Every 30 minutes')}</option>
-                </Form.Select>
-              </Form.Group>
-            </Col>
-            <Col md={6}>
-              <Form.Check
-                type="checkbox"
-                label={t('dataConnectors.oauth.staleWhileRevalidate', 'Serve stale while refreshing')}
-                checked={form.cacheStaleWhileRevalidate}
-                onChange={(e) => updateForm({ cacheStaleWhileRevalidate: e.target.checked })}
-                className="mt-2"
-              />
-            </Col>
-            <Col md={6}>
-              <Form.Check
-                type="checkbox"
-                label={t('dataConnectors.oauth.prefetch', 'Auto-prefetch subfolders')}
-                checked={form.cachePrefetch}
-                onChange={(e) => updateForm({ cachePrefetch: e.target.checked })}
-                className="mt-2"
-              />
-            </Col>
-          </Row>
-        </div>
-      </Collapse>
-    </>
-  );
+  const renderAdvancedOAuthSettings = () => {
+    // Once a secret exists, every editable field inside this collapse is gated
+    // off (auth/token URLs and extra params are locked because changing them on
+    // a live config breaks signed tokens). Don't render an empty toggle.
+    if (secretExists) return null;
+    return (
+      <>
+        <Col md={12}>
+          <div
+            className="d-flex align-items-center gap-2 cursor-pointer"
+            onClick={() => setAdvancedExpanded(!advancedExpanded)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && setAdvancedExpanded(!advancedExpanded)}
+          >
+            <h6 className="fw-semibold mb-0">{t('dataConnectors.oauthWizard.advancedOauth')}</h6>
+            {advancedExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </div>
+        </Col>
+        <Collapse in={advancedExpanded}>
+          <div>
+            <Row className="g-3">
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.authUrl')}</Form.Label>
+                  <Form.Control
+                    type="url"
+                    placeholder={t('dataConnectors.oauth.authUrlPlaceholder')}
+                    value={form.authUrl}
+                    onChange={(e) => updateForm({ authUrl: e.target.value })}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.tokenUrl')}</Form.Label>
+                  <Form.Control
+                    type="url"
+                    placeholder={t('dataConnectors.oauth.tokenUrlPlaceholder')}
+                    value={form.tokenUrl}
+                    onChange={(e) => updateForm({ tokenUrl: e.target.value })}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.extraAuthParams')}</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    placeholder={t('dataConnectors.oauth.extraAuthParamsPlaceholder')}
+                    value={form.extraAuthParams}
+                    onChange={(e) => updateForm({ extraAuthParams: e.target.value })}
+                  />
+                  <Form.Text className="text-muted">{t('dataConnectors.oauth.extraAuthParamsHint')}</Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
+          </div>
+        </Collapse>
+      </>
+    );
+  };
 
   // ---------------------------------------------------------------------------
   // Render
@@ -1132,41 +943,8 @@ export const OAuthWizard = ({
             </div>
           </Col>
 
-          {/* Signup prompt when credentials don't exist */}
-          {!secretExists && signupLink && (
-            <Col md={12}>
-              <Alert variant="light" className="py-2 small border d-flex align-items-center gap-2 mb-0">
-                <i className="bi bi-info-circle"></i>
-                <span>{t('dataConnectors.signup.noAccount')}</span>
-                <a
-                  href={signupLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="d-inline-flex align-items-center gap-1"
-                >
-                  <ExternalLink size={12} />
-                  {t('dataConnectors.signup.signUp', { provider: form.displayName })}
-                </a>
-              </Alert>
-            </Col>
-          )}
-
           {/* Setup guide for OAuth providers */}
           {!secretExists && <Col md={12}>{renderSetupGuide()}</Col>}
-
-          {form.helpUrl && (
-            <Col md={12}>
-              <a
-                href={form.helpUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="d-inline-flex align-items-center gap-1 small"
-              >
-                <ExternalLink size={14} />
-                {t('dataConnectors.oauth.helpLink')}
-              </a>
-            </Col>
-          )}
         </Row>
       )}
 
@@ -1268,129 +1046,14 @@ export const OAuthWizard = ({
       {/* ── Setup Guide (custom/new flow: step 2) ── */}
       {stepContent === 'guide' && (
         <Row className="g-3">
-          {/* Signup prompt */}
-          {!secretExists && signupLink && (
-            <Col md={12}>
-              <Alert variant="light" className="py-2 small border d-flex align-items-center gap-2 mb-0">
-                <i className="bi bi-info-circle"></i>
-                <span>{t('dataConnectors.signup.noAccount')}</span>
-                <a
-                  href={signupLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="d-inline-flex align-items-center gap-1"
-                >
-                  <ExternalLink size={12} />
-                  {t('dataConnectors.signup.signUp', { provider: form.displayName })}
-                </a>
-              </Alert>
-            </Col>
-          )}
-
           {/* Setup guide */}
           <Col md={12}>{renderSetupGuide()}</Col>
-
-          {form.helpUrl && (
-            <Col md={12}>
-              <a
-                href={form.helpUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="d-inline-flex align-items-center gap-1 small"
-              >
-                <ExternalLink size={14} />
-                {t('dataConnectors.oauth.helpLink')}
-              </a>
-            </Col>
-          )}
         </Row>
       )}
 
       {/* ── Docs & Advanced (custom/new flow: step 5) ── */}
       {stepContent === 'advanced' && (
         <Row className="g-3">
-          <Col md={12}>
-            <Form.Group>
-              <Form.Label className="small fw-semibold">{t('dataConnectors.oauthWizard.apiDocsUrlLabel')}</Form.Label>
-              <Form.Control
-                type="url"
-                placeholder={t('dataConnectors.oauthWizard.apiDocsUrlPlaceholder')}
-                value={form.apiDocsUrl}
-                onChange={(e) => updateForm({ apiDocsUrl: e.target.value })}
-              />
-              <Form.Text className="text-muted">{t('dataConnectors.oauthWizard.apiDocsUrlHint')}</Form.Text>
-            </Form.Group>
-          </Col>
-
-          {/* API Reference URLs */}
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label className="small fw-semibold">{t('dataConnectors.apiReference.openApiUrl')}</Form.Label>
-              <Form.Control
-                type="url"
-                placeholder={t('dataConnectors.apiReference.openApiUrlPlaceholder')}
-                value={form.openApiUrl}
-                onChange={(e) => updateForm({ openApiUrl: e.target.value })}
-              />
-            </Form.Group>
-          </Col>
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label className="small fw-semibold">{t('dataConnectors.apiReference.postmanUrl')}</Form.Label>
-              <Form.Control
-                type="url"
-                placeholder={t('dataConnectors.apiReference.postmanUrlPlaceholder')}
-                value={form.postmanUrl}
-                onChange={(e) => updateForm({ postmanUrl: e.target.value })}
-              />
-            </Form.Group>
-          </Col>
-          <Col md={12}>
-            <Form.Group>
-              <Form.Label className="small fw-semibold">{t('dataConnectors.apiReference.mcpServerRef')}</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder={t('dataConnectors.apiReference.mcpServerRefPlaceholder')}
-                value={form.mcpServerRef}
-                onChange={(e) => updateForm({ mcpServerRef: e.target.value })}
-              />
-            </Form.Group>
-          </Col>
-
-          {/* Purpose hint */}
-          <Col md={12}>
-            <Form.Group>
-              <Form.Label className="small fw-semibold">{t('dataConnectors.apiReference.purposeHint')}</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={2}
-                placeholder={t('dataConnectors.apiReference.purposeHintPlaceholder')}
-                value={form.purposeHint}
-                onChange={(e) => updateForm({ purposeHint: e.target.value })}
-              />
-              <Form.Text className="text-muted">{t('dataConnectors.apiReference.purposeHintDesc')}</Form.Text>
-            </Form.Group>
-          </Col>
-
-          {/* Endpoint categories (read-only from registry) */}
-          {(() => {
-            const cats = apiRef?.endpointCategories;
-            if (!cats || cats.length === 0) return null;
-            return (
-              <Col md={12}>
-                <h6 className="small fw-semibold mb-2">{t('dataConnectors.apiReference.endpointCategories')}</h6>
-                <div className="border rounded p-2">
-                  {cats.map((cat) => (
-                    <div key={cat.name} className="d-flex justify-content-between small mb-1">
-                      <span className="fw-semibold">{cat.name}</span>
-                      <span className="text-muted">{cat.description}</span>
-                    </div>
-                  ))}
-                </div>
-              </Col>
-            );
-          })()}
-
           {/* Rate Limits */}
           <Col md={12}>
             <Form.Label className="small fw-semibold">{t('dataConnectors.oauthWizard.rateLimitsLabel')}</Form.Label>
@@ -1532,15 +1195,6 @@ export const OAuthWizard = ({
               <span className="text-break">{form.tokenUrl}</span>
             </div>
 
-            {/* API Docs */}
-            {form.apiDocsUrl && (
-              <>
-                <hr className="my-2" />
-                <h6 className="fw-semibold small text-muted mb-2">{t('dataConnectors.oauthWizard.reviewApiDocs')}</h6>
-                <div className="small text-break">{form.apiDocsUrl}</div>
-              </>
-            )}
-
             {/* Rate Limits */}
             {(form.rateLimitRpm || form.rateLimitDaily) && (
               <>
@@ -1578,112 +1232,6 @@ export const OAuthWizard = ({
               </>
             )}
           </div>
-
-          {/* Read-only API reference summary (for known templates) */}
-          {renderApiReferenceSummary()}
-
-          {/* Customize toggle for API reference overrides */}
-          {isKnownTemplate && (
-            <>
-              <div
-                className="d-flex align-items-center gap-2 cursor-pointer mb-2"
-                onClick={() => setCustomizeExpanded(!customizeExpanded)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setCustomizeExpanded(!customizeExpanded)}
-              >
-                <h6 className="fw-semibold small mb-0">{t('dataConnectors.apiReference.customize')}</h6>
-                {customizeExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </div>
-              <Collapse in={customizeExpanded}>
-                <div>
-                  <Row className="g-3">
-                    <Col md={12}>
-                      <Form.Group>
-                        <Form.Label className="small fw-semibold">
-                          {t('dataConnectors.oauthWizard.apiDocsUrlLabel')}
-                        </Form.Label>
-                        <Form.Control
-                          type="url"
-                          placeholder={t('dataConnectors.oauthWizard.apiDocsUrlPlaceholder')}
-                          value={form.apiDocsUrl}
-                          onChange={(e) => updateForm({ apiDocsUrl: e.target.value })}
-                        />
-                      </Form.Group>
-                    </Col>
-                    <Col md={6}>
-                      <Form.Group>
-                        <Form.Label className="small fw-semibold">
-                          {t('dataConnectors.apiReference.openApiUrl')}
-                        </Form.Label>
-                        <Form.Control
-                          type="url"
-                          placeholder={t('dataConnectors.apiReference.openApiUrlPlaceholder')}
-                          value={form.openApiUrl}
-                          onChange={(e) => updateForm({ openApiUrl: e.target.value })}
-                        />
-                      </Form.Group>
-                    </Col>
-                    <Col md={6}>
-                      <Form.Group>
-                        <Form.Label className="small fw-semibold">
-                          {t('dataConnectors.apiReference.postmanUrl')}
-                        </Form.Label>
-                        <Form.Control
-                          type="url"
-                          placeholder={t('dataConnectors.apiReference.postmanUrlPlaceholder')}
-                          value={form.postmanUrl}
-                          onChange={(e) => updateForm({ postmanUrl: e.target.value })}
-                        />
-                      </Form.Group>
-                    </Col>
-                    <Col md={12}>
-                      <Form.Group>
-                        <Form.Label className="small fw-semibold">
-                          {t('dataConnectors.apiReference.purposeHint')}
-                        </Form.Label>
-                        <Form.Control
-                          as="textarea"
-                          rows={2}
-                          placeholder={t('dataConnectors.apiReference.purposeHintPlaceholder')}
-                          value={form.purposeHint}
-                          onChange={(e) => updateForm({ purposeHint: e.target.value })}
-                        />
-                      </Form.Group>
-                    </Col>
-                    <Col md={6}>
-                      <Form.Group>
-                        <Form.Label className="small text-muted">
-                          {t('dataConnectors.oauthWizard.rateLimitRpmLabel')}
-                        </Form.Label>
-                        <Form.Control
-                          type="number"
-                          placeholder={t('dataConnectors.oauthWizard.rateLimitRpmPlaceholder')}
-                          value={form.rateLimitRpm}
-                          onChange={(e) => updateForm({ rateLimitRpm: e.target.value })}
-                          min={0}
-                        />
-                      </Form.Group>
-                    </Col>
-                    <Col md={6}>
-                      <Form.Group>
-                        <Form.Label className="small text-muted">
-                          {t('dataConnectors.oauthWizard.rateLimitDailyLabel')}
-                        </Form.Label>
-                        <Form.Control
-                          type="number"
-                          placeholder={t('dataConnectors.oauthWizard.rateLimitDailyPlaceholder')}
-                          value={form.rateLimitDaily}
-                          onChange={(e) => updateForm({ rateLimitDaily: e.target.value })}
-                          min={0}
-                        />
-                      </Form.Group>
-                    </Col>
-                  </Row>
-                </div>
-              </Collapse>
-            </>
-          )}
         </div>
       )}
 

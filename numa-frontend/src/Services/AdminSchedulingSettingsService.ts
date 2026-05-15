@@ -8,7 +8,7 @@ export type SchedulingSettings = {
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 type NumaPut = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 
-const DEFAULT_SETTINGS: SchedulingSettings = { minIntervalMinutes: null, arcanumFloor: 5 };
+const DEFAULT_SETTINGS: SchedulingSettings = { minIntervalMinutes: null, arcanumFloor: 60 };
 
 export const AdminSchedulingSettingsService = {
   async get(numaGet?: NumaGet): Promise<SchedulingSettings> {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getFlag } from '../../utils/featureFlags';
 import { Modal, Form, Button, Row, Col, Alert, Spinner, Accordion } from 'react-bootstrap';
-import { Database, Lightbulb, Link45deg, Search, Robot } from 'react-bootstrap-icons';
+import { Database, Lightbulb, Search, Robot } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
@@ -14,6 +14,7 @@ import { AgentAvatarSelector } from './AgentAvatarSelector';
 import AgentAvatar from './AgentAvatar';
 import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from './schedulingTypes';
 import type { AgentPayload, AgentSummary, AgentUpdatePayload, AgentReferenceFile, Team } from '../../types/agents';
+import type { IntegrationListItem, IntegrationMethod } from '../../types/workspaceChatTypes';
 import type { AgentSchedule } from '../../types/agentSchedules';
 import {
   createAgent,
@@ -26,6 +27,9 @@ import { Users } from 'lucide-react';
 import { ScheduleService } from '../../Services/ScheduleService';
 import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
 import { PipedreamProxyService } from '../../Services/PipedreamProxyService';
+import { AdminIntegrationsService } from '../../Services/AdminIntegrationsService';
+import { ConnectorsService } from '../../Services/ConnectorsService';
+import { getConnectorById } from '../DataConnectors/connectorRegistry';
 import { getConnectionConfig } from '../../config/integrationsConfig';
 import { downloadAgentExport, parseAgentImport, serializeAgentPayloadToExport } from '../../utils/agentExport';
 
@@ -44,10 +48,21 @@ type AgentCreateModalProps = {
 };
 
 type ConnectionInfo = {
+  /** Canonical slug — Pipedream slug when the service has one, else the
+   *  connector slug. Stored as the row id and used for legacy
+   *  enabledConnections. */
   id: string;
   name: string;
   isConnected: boolean;
   mcpServerUrl?: string;
+  /** Pipedream slug for this service (if it has a Pipedream-backed method). */
+  pipedreamSlug?: string;
+  /** Native connector slug for this service (if it has a native method). */
+  connectorSlug?: string;
+  /** Whether the user is authed on the Pipedream side. */
+  pipedreamConnected?: boolean;
+  /** Whether the user is authed on the native side. */
+  nativeConnected?: boolean;
 };
 
 type IntegrationSettings = Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }>;
@@ -67,7 +82,6 @@ const DEFAULT_PAYLOAD: AgentPayload = {
     webSearchEnabled: false,
     createAgentEnabled: false,
     memoriesEnabled: true,
-    dataConnectorsEnabled: true,
     enabledConnections: [],
     allowedKnowledgeBases: null, // null = all KBs
   },
@@ -163,6 +177,8 @@ export const AgentCreateModal = ({
     }
   });
   const [scheduleMaxRuns, setScheduleMaxRuns] = useState<string>('');
+  /** Optional ISO date string (YYYY-MM-DD). Empty = no expiry. */
+  const [scheduleExpiresAt, setScheduleExpiresAt] = useState<string>('');
   const [scheduleEmailNotifications, setScheduleEmailNotifications] = useState(false);
 
   // Inline schedule management state (for editing existing agents)
@@ -271,18 +287,91 @@ export const AgentCreateModal = ({
           }
         }
 
-        // Build the final list: all known integrations with connection status
-        const allIntegrations: ConnectionInfo[] = allKnownIntegrations
-          .map((config) => ({
-            id: config.id,
-            name: config.name,
-            isConnected: connectedSet.has(config.id),
-            mcpServerUrl: undefined,
-          }))
-          .filter((conn) => integrationSettings[conn.id]?.status !== 'disabled'); // Only filter disabled ones
+        // Drive the picker off the unified catalog. Each catalog entry is
+        // ONE service — admin enable state and the dual-method pairing
+        // (Pipedream slug + native connector slug) come from the same row,
+        // so dual-method services collapse to a single picker row whose
+        // connection status reflects EITHER method being authed.
+        let catalog: Awaited<ReturnType<typeof AdminIntegrationsService.catalogWithNuma>> = [];
+        try {
+          catalog = await AdminIntegrationsService.catalogWithNuma(numaGet);
+        } catch (err) {
+          console.warn('AgentCreateModal: failed to fetch unified catalog', err);
+        }
+
+        // Admin must have explicitly enabled at least one method for the
+        // service to appear. The legacy /api/settings/integrations map is
+        // the source of truth for Pipedream `status='enabled'`; the catalog
+        // carries `connectorEnabled` for natives.
+        type ServiceRow = {
+          /** Canonical slug — Pipedream slug when available, else connector. */
+          slug: string;
+          name: string;
+          pipedreamSlug?: string;
+          connectorSlug?: string;
+        };
+        const services: ServiceRow[] = [];
+        for (const entry of catalog) {
+          const pdEnabled = entry.pipedreamSlug && integrationSettings[entry.pipedreamSlug]?.status === 'enabled';
+          const nativeEnabled = entry.connectorSlug && entry.connectorEnabled === true;
+          if (!pdEnabled && !nativeEnabled) continue;
+
+          // Display name preference: Pipedream art when available (more
+          // recognisable), connector template otherwise.
+          let name = entry.slug;
+          if (entry.pipedreamSlug) {
+            const cfg = allKnownIntegrations.find((c) => c.id === entry.pipedreamSlug);
+            name = cfg?.name ?? entry.pipedreamSlug;
+          } else if (entry.connectorSlug) {
+            const tmpl = getConnectorById(entry.connectorSlug);
+            name = tmpl?.displayName ?? entry.connectorSlug;
+          }
+
+          services.push({
+            slug: entry.slug,
+            name,
+            pipedreamSlug: entry.pipedreamSlug ?? undefined,
+            connectorSlug: entry.connectorSlug ?? undefined,
+          });
+        }
+
+        // Per-user native status — fetched in parallel for every service
+        // that carries a connector slug, regardless of whether it's also a
+        // Pipedream service. This is what was missing for dual-method
+        // services like Google Drive: the row was keyed to the Pipedream
+        // slug and only the Pipedream proxy was checked, so a user who
+        // authed the native Google Drive showed up as "Not connected".
+        const nativeStatusResults = await Promise.all(
+          services.map(async (s) => {
+            if (!s.connectorSlug) return false;
+            try {
+              const st = await ConnectorsService.getStatus(s.connectorSlug);
+              return st.status === 'connected';
+            } catch {
+              return false;
+            }
+          })
+        );
+
+        const allRows: ConnectionInfo[] = services
+          .map((s, i) => {
+            const pipedreamConnected = s.pipedreamSlug ? connectedSet.has(s.pipedreamSlug) : false;
+            const nativeConnected = nativeStatusResults[i] ?? false;
+            return {
+              id: s.slug,
+              name: s.name,
+              isConnected: pipedreamConnected || nativeConnected,
+              mcpServerUrl: undefined,
+              pipedreamSlug: s.pipedreamSlug,
+              connectorSlug: s.connectorSlug,
+              pipedreamConnected,
+              nativeConnected,
+            };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
 
         if (!cancelled) {
-          setConnections(allIntegrations);
+          setConnections(allRows);
         }
       } catch (err) {
         console.error('AgentCreateModal: failed to load integrations', err);
@@ -299,7 +388,7 @@ export const AgentCreateModal = ({
     return () => {
       cancelled = true;
     };
-  }, [REGION, hasPipedreamIntegrations, integrationSettings, lambdaClient, relayLambdaArn, show, user]);
+  }, [REGION, hasPipedreamIntegrations, integrationSettings, lambdaClient, numaGet, relayLambdaArn, show, user]);
 
   useEffect(() => {
     // Load agents policy when modal opens
@@ -342,8 +431,8 @@ export const AgentCreateModal = ({
           webSearchEnabled: editingAgent.toolsConfig?.webSearchEnabled ?? false,
           createAgentEnabled: editingAgent.toolsConfig?.createAgentEnabled ?? false,
           memoriesEnabled: editingAgent.toolsConfig?.memoriesEnabled ?? true,
-          dataConnectorsEnabled: editingAgent.toolsConfig?.dataConnectorsEnabled ?? true,
           enabledConnections: editingAgent.toolsConfig?.enabledConnections ?? [],
+          enabledIntegrations: editingAgent.toolsConfig?.enabledIntegrations ?? [],
           // Preserve KB access setting - null means "all KBs", [] means "none", array means "selected"
           allowedKnowledgeBases: editingAgent.toolsConfig?.allowedKnowledgeBases ?? null,
           approvalMode: editingAgent.toolsConfig?.approvalMode,
@@ -362,6 +451,7 @@ export const AgentCreateModal = ({
       setScheduleFrequency('daily');
       setScheduleStartTime('09:00');
       setScheduleMaxRuns('');
+      setScheduleExpiresAt('');
       setScheduleEmailNotifications(false);
       // Reset inline schedule management state
       setEditingScheduleData(null);
@@ -412,6 +502,7 @@ export const AgentCreateModal = ({
       setScheduleFrequency('daily');
       setScheduleStartTime('09:00');
       setScheduleMaxRuns('');
+      setScheduleExpiresAt('');
       setScheduleEmailNotifications(false);
       setEditingScheduleData(null);
       setSelectedTeamIds(new Set());
@@ -565,28 +656,67 @@ export const AgentCreateModal = ({
   };
 
   const handleIntegrationToggle = (integrationId: string) => {
+    const row = connections.find((c) => c.id === integrationId);
     setFormState((prev) => {
       const enabled = new Set(prev.toolsConfig?.enabledConnections ?? []);
       const requiredIntegrations = new Set(prev.requiredIntegrations ?? []);
+      const existingIntegrations = prev.toolsConfig?.enabledIntegrations ?? [];
 
       if (enabled.has(integrationId)) {
         enabled.delete(integrationId);
         requiredIntegrations.delete(integrationId);
-      } else {
-        // Check if we've reached the limit of 4 integrations
-        if (enabled.size >= 4) {
-          void showAlert({ message: t('createModal.integrations.maxAlert'), variant: 'warning' });
-          return prev;
-        }
-        enabled.add(integrationId);
-        requiredIntegrations.add(integrationId);
+        const nextIntegrations = existingIntegrations.filter((r) => r.slug !== integrationId);
+        return {
+          ...prev,
+          requiredIntegrations: Array.from(requiredIntegrations),
+          toolsConfig: {
+            ...prev.toolsConfig,
+            enabledConnections: Array.from(enabled),
+            enabledIntegrations: nextIntegrations,
+          },
+        };
       }
+
+      // Limit of 4 integrations.
+      if (enabled.size >= 4) {
+        void showAlert({ message: t('createModal.integrations.maxAlert'), variant: 'warning' });
+        return prev;
+      }
+      enabled.add(integrationId);
+      requiredIntegrations.add(integrationId);
+
+      // Method resolution at save time: prefer Pipedream when both methods
+      // are authed (richer tooling); fall back to whichever the user has
+      // actually connected. If neither is connected we still persist the
+      // selection but tag it `pipedream` as a default — the runner/chat
+      // will skip it cleanly at runtime when no auth exists.
+      let method: IntegrationMethod = 'pipedream';
+      let canonicalSlug = integrationId;
+      if (row?.pipedreamConnected) {
+        method = 'pipedream';
+        canonicalSlug = row.pipedreamSlug ?? integrationId;
+      } else if (row?.nativeConnected) {
+        method = 'native';
+        canonicalSlug = row.connectorSlug ?? integrationId;
+      } else if (row?.pipedreamSlug) {
+        canonicalSlug = row.pipedreamSlug;
+      } else if (row?.connectorSlug) {
+        method = 'native';
+        canonicalSlug = row.connectorSlug;
+      }
+      const name = row?.name ?? integrationId;
+      const nextIntegrations: IntegrationListItem[] = [
+        ...existingIntegrations.filter((r) => r.slug !== integrationId && r.slug !== canonicalSlug),
+        { slug: canonicalSlug, method, name },
+      ];
+
       return {
         ...prev,
         requiredIntegrations: Array.from(requiredIntegrations),
         toolsConfig: {
           ...prev.toolsConfig,
           enabledConnections: Array.from(enabled),
+          enabledIntegrations: nextIntegrations,
         },
       };
     });
@@ -761,7 +891,7 @@ export const AgentCreateModal = ({
         try {
           const cronParts = buildScheduleCronExpression();
           const conversationId = `schedule-${saved.agentId}-${Date.now()}`;
-          await ScheduleService.create(numaPost, {
+          const created = await ScheduleService.create(numaPost, {
             agentId: saved.agentId,
             agentTitle: saved.title,
             conversationId,
@@ -770,6 +900,9 @@ export const AgentCreateModal = ({
             timezone: scheduleTimezone,
             label: scheduleName.trim() || undefined,
             maxRuns: scheduleMaxRuns ? parseInt(scheduleMaxRuns, 10) : undefined,
+            // YYYY-MM-DD → end-of-day epoch ms in the user's local tz so the
+            // schedule still fires on the chosen date through to midnight.
+            expiresAt: scheduleExpiresAt ? new Date(`${scheduleExpiresAt}T23:59:59`).getTime() : undefined,
             emailNotifications: scheduleEmailNotifications,
             runConfig: {
               enabledTools: buildScheduleEnabledTools(),
@@ -787,6 +920,20 @@ export const AgentCreateModal = ({
               visibility: formState.visibility,
             },
           });
+          if (created.requiresApproval) {
+            // Schedule was parked in pending_approval; surface a notice so the user knows.
+            const v = created.quotaViolation;
+            const detail = v ? ` (${v.scope} cap: ${v.requested}/${v.limit} runs/mo)` : '';
+            // Toast is fire-and-forget — fall back to alert for now since the
+            // global Toast context isn't imported here yet. Phase 4 will wire
+            // a structured "approval required" banner with admin-name lookup.
+
+            alert(
+              t('scheduling.approval.requiredToast', {
+                defaultValue: `Your schedule was created but needs admin approval before it runs${detail}.`,
+              })
+            );
+          }
           onScheduleCreated?.();
         } catch (schedErr) {
           console.error('AgentCreateModal: schedule creation failed', schedErr);
@@ -1584,39 +1731,6 @@ export const AgentCreateModal = ({
                           className="fs-5"
                         />
                       </div>
-                      {getFlag('DATA_CONNECTORS_ENABLED') && (
-                        <div
-                          className="d-flex align-items-center justify-content-between p-3 bg-white border rounded-2"
-                          style={{
-                            opacity: formState.toolsConfig?.autoToolsEnabled ? 0.6 : 1,
-                          }}
-                        >
-                          <div className="d-flex align-items-center gap-3">
-                            <div
-                              className="rounded-2 d-flex align-items-center justify-content-center"
-                              style={{ width: 40, height: 40, backgroundColor: '#6c757d' }}
-                            >
-                              <Link45deg size={20} color="white" />
-                            </div>
-                            <div>
-                              <div className="fw-semibold">{t('createModal.tools.dataConnectors.title')}</div>
-                              <small className="text-muted">{t('createModal.tools.dataConnectors.description')}</small>
-                            </div>
-                          </div>
-                          <Form.Check
-                            type="switch"
-                            id="data-connectors-enabled"
-                            checked={
-                              formState.toolsConfig?.autoToolsEnabled ||
-                              formState.toolsConfig?.dataConnectorsEnabled ||
-                              false
-                            }
-                            disabled={saving || formState.toolsConfig?.autoToolsEnabled}
-                            onChange={(e) => handleToolsChange('dataConnectorsEnabled', e.target.checked)}
-                            className="fs-5"
-                          />
-                        </div>
-                      )}
                     </div>
                   </Col>
                   <Col md={12}>

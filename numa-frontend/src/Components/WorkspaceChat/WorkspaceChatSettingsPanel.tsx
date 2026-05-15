@@ -34,8 +34,7 @@ import {
   getConnectionFallbackIcon,
 } from '../../config/integrationsConfig';
 import { getConnectorById } from '../DataConnectors/connectorRegistry';
-import { ConnectorsService } from '../../Services/ConnectorsService';
-import { ConnectCredentialsModal } from './ConnectCredentialsModal';
+import { connectorSlugForPipedream, pipedreamSlugForConnector } from '../Integrations/integrationCatalogHelpers';
 import { WorkspaceChatFilesExpandedModal } from './WorkspaceChatFilesExpandedModal';
 import { getFileIconClass, getFileIconColorClass, formatFileSize } from '../../utils/fileUtils';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
@@ -92,8 +91,9 @@ export interface WorkspaceChatSettingsPanelProps {
   numaOpsEnabled: boolean;
   setNumaOpsEnabled: Dispatch<SetStateAction<boolean>>;
   numaOpsFeatureEnabled: boolean;
-  dataConnectorsEnabled: boolean;
-  setDataConnectorsEnabled: Dispatch<SetStateAction<boolean>>;
+  /** When false (admin gate via DATA_CONNECTORS_CHAT_ENABLED), no native rows
+   *  surface in the unified integrations section. There is no per-chat
+   *  on/off switch — per-row toggles in the Integrations card replace it. */
   dataConnectorsFeatureEnabled: boolean;
   agentsFeatureEnabled: boolean;
 
@@ -116,9 +116,12 @@ export interface WorkspaceChatSettingsPanelProps {
   adminConfiguredConnectors: Array<{ id: string; name: string }>;
   /** IDs of connectors the CURRENT user has personal credentials for. */
   userConnectedConnectorIds: string[];
-  /** Called after a successful connect (OAuth callback or PAT save) so the
-   *  parent can re-fetch per-user status. */
-  onConnectorConnected: () => void | Promise<void>;
+  /** Per-chat enable list for native connectors — mirrors `enabledConnections`
+   *  for Pipedream so users can toggle individual native connectors on/off
+   *  for the conversation. Defaults set by the parent (typically all
+   *  user-connected ones on). */
+  enabledNativeConnectorIds: string[];
+  setEnabledNativeConnectorIds: Dispatch<SetStateAction<string[]>>;
 
   // Control disabled state (during streaming)
   isDisabled: boolean;
@@ -158,8 +161,6 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   numaOpsEnabled,
   setNumaOpsEnabled,
   numaOpsFeatureEnabled,
-  dataConnectorsEnabled,
-  setDataConnectorsEnabled,
   dataConnectorsFeatureEnabled,
   agentsFeatureEnabled,
   enabledKBIds,
@@ -173,7 +174,8 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   hasPipedreamFeature,
   adminConfiguredConnectors,
   userConnectedConnectorIds,
-  onConnectorConnected,
+  enabledNativeConnectorIds,
+  setEnabledNativeConnectorIds,
   isDisabled,
   showModelSelector = false,
   selectedModelId,
@@ -222,42 +224,78 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   // sort preserves the backend's alphabetical order within the user KB tier.
   const sortedKBs = useMemo(() => sortKnowledgeBases(availableKBs), [availableKBs]);
 
-  // Data connectors — per-user connection state + Connect click handling.
-  // OAuth connectors route through ConnectorsService.connect (browser redirect
-  // back via PKCE callback). PAT/token connectors open an inline modal.
-  const connectedConnectorIdSet = useMemo(() => new Set(userConnectedConnectorIds), [userConnectedConnectorIds]);
-  const [credentialModal, setCredentialModal] = useState<{ show: boolean; connectorId: string }>({
-    show: false,
-    connectorId: '',
-  });
+  // Data connectors — sorted for the unified integrations list. Setup +
+  // disconnect both live on /integrations now; this panel is purely an
+  // enable/disable toggle surface, so the inline credential modal and the
+  // ConnectorsService.connect handler that used to live here are gone.
   const [expandedFilesModal, setExpandedFilesModal] = useState<null | 'uploads' | 'outputs'>(null);
   const sortedConnectors = useMemo(
     () => [...adminConfiguredConnectors].sort((a, b) => a.name.localeCompare(b.name)),
     [adminConfiguredConnectors]
   );
 
-  const handleConnectorConnectClick = useCallback(async (connectorId: string) => {
-    // ConnectorsService.connect returns a discriminated union — TS exhaustiveness
-    // ensures every kind is handled. Throws on OAuth authorize failure; wrap
-    // in try/catch so the error surfaces in the console rather than an
-    // unhandled promise rejection.
-    try {
-      const action = await ConnectorsService.connect(connectorId);
-      switch (action.kind) {
-        case 'redirecting':
-          // OAuth — browser is navigating to the provider. Nothing to do.
-          return;
-        case 'needs_credentials':
-          setCredentialModal({ show: true, connectorId });
-          return;
-        case 'unsupported':
-          console.warn('Connector connect unsupported:', action.reason);
-          return;
+  // Unified list mixing Pipedream connections and native connectors so the
+  // sidebar shows one alphabetised "Integrations" section. Dual-method
+  // services collapse to a single row (Pipedream icon + Pipedream display
+  // name) — toggling adds the service to BOTH the Pipedream enable list
+  // and the native enable list so whichever method the user actually has
+  // connected gets enabled. Both kinds expose the same UX: an
+  // "Enable/Enabled" per-chat toggle.
+  type UnifiedItem = {
+    key: string;
+    name: string;
+    iconSrc?: string;
+    iconClass?: string;
+    pipedreamSlug?: string;
+    nativeSlug?: string;
+  };
+  const unifiedIntegrationItems = useMemo<UnifiedItem[]>(() => {
+    const items: UnifiedItem[] = [];
+    const seenPipedream = new Set<string>();
+
+    // 1. Pipedream connections first — these take priority for dual-method
+    //    services. Carry forward the matching native slug so the toggle
+    //    handler can flip both lists when relevant.
+    if (hasPipedreamFeature) {
+      for (const conn of connectedIntegrations) {
+        const pdSlug = conn.id;
+        seenPipedream.add(pdSlug);
+        const nativeSlug = connectorSlugForPipedream(pdSlug);
+        items.push({
+          key: `pd-${pdSlug}`,
+          name: getConnectionDisplayName(pdSlug),
+          iconSrc: getConnectionIcon(pdSlug),
+          iconClass: getConnectionFallbackIcon(pdSlug),
+          pipedreamSlug: pdSlug,
+          // Only attach the native slug when the user has ACTUALLY
+          // authed the native counterpart — otherwise the toggle would
+          // try to enable a connector the user hasn't set up.
+          nativeSlug: nativeSlug && userConnectedConnectorIds.includes(nativeSlug) ? nativeSlug : undefined,
+        });
       }
-    } catch (err) {
-      console.error(`Connect failed for "${connectorId}":`, err);
     }
-  }, []);
+
+    // 2. Native connectors that the user has authed AND aren't already
+    //    represented by a Pipedream row. Use the Pipedream art when the
+    //    service has a Pipedream counterpart so the icon/name stay
+    //    consistent regardless of method.
+    for (const conn of sortedConnectors) {
+      if (!userConnectedConnectorIds.includes(conn.id)) continue;
+      const pdSlug = pipedreamSlugForConnector(conn.id);
+      if (pdSlug && seenPipedream.has(pdSlug)) continue;
+      const tmpl = getConnectorById(conn.id);
+      items.push({
+        key: `nv-${conn.id}`,
+        name: pdSlug ? getConnectionDisplayName(pdSlug) : conn.name,
+        iconSrc: pdSlug ? getConnectionIcon(pdSlug) : undefined,
+        iconClass: pdSlug ? getConnectionFallbackIcon(pdSlug) : (tmpl?.icon ?? 'bi-plug'),
+        pipedreamSlug: undefined,
+        nativeSlug: conn.id,
+      });
+    }
+
+    return items.sort((a, b) => a.name.localeCompare(b.name));
+  }, [connectedIntegrations, sortedConnectors, hasPipedreamFeature, userConnectedConnectorIds]);
 
   // Developer-only chat cost toggle. Section only renders when the
   // DEVELOPER_MODE client config flag is on.
@@ -291,9 +329,6 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
       }
       if (numaOpsFeatureEnabled) {
         setNumaOpsEnabled(true);
-      }
-      if (dataConnectorsFeatureEnabled) {
-        setDataConnectorsEnabled(true);
       }
     }
   };
@@ -412,21 +447,10 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 <span className="workspace-settings-collapsed-summary">
                   {autoToolsEnabled
                     ? t('workspaceSettings.allToolsEnabledSummary')
-                    : [
-                          webSearchEnabled,
-                          createAgentEnabled,
-                          memoriesEnabled,
-                          numaOpsEnabled,
-                          dataConnectorsEnabled,
-                        ].filter(Boolean).length > 0
+                    : [webSearchEnabled, createAgentEnabled, memoriesEnabled, numaOpsEnabled].filter(Boolean).length > 0
                       ? t('workspaceSettings.toolsPartialSummary', {
-                          count: [
-                            webSearchEnabled,
-                            createAgentEnabled,
-                            memoriesEnabled,
-                            numaOpsEnabled,
-                            dataConnectorsEnabled,
-                          ].filter(Boolean).length,
+                          count: [webSearchEnabled, createAgentEnabled, memoriesEnabled, numaOpsEnabled].filter(Boolean)
+                            .length,
                         })
                       : t('workspaceSettings.noneEnabled')}
                 </span>
@@ -512,30 +536,16 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     }
                   />
                 )}
-
-                {dataConnectorsFeatureEnabled && (
-                  <Form.Check
-                    type="checkbox"
-                    id="panel-data-connectors"
-                    className="workspace-settings-list-item"
-                    checked={dataConnectorsEnabled}
-                    onChange={(e) => setDataConnectorsEnabled(e.target.checked)}
-                    disabled={isDisabled || autoToolsEnabled}
-                    label={
-                      <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
-                        <Link size={14} />
-                        {t('workspaceSettings.dataConnectors')}
-                      </span>
-                    }
-                  />
-                )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Integrations */}
-        {hasPipedreamFeature && (
+        {/* Integrations — unified Pipedream + native connectors. Each row
+            shows a method badge so it's clear which backend a service uses,
+            and the action button is appropriate to the method (toggle for
+            Pipedream chat-enable, Connect for native auth). */}
+        {(hasPipedreamFeature || adminConfiguredConnectors.length > 0) && (
           <div className="workspace-settings-card workspace-settings-integrations-card">
             <button
               type="button"
@@ -548,31 +558,64 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 <span>{t('workspaceSettings.integrations')}</span>
               </div>
               <div className="workspace-settings-card-header-right">
-                {collapsedSections.integrations && (
-                  <span className="workspace-settings-collapsed-summary workspace-settings-collapsed-integrations">
-                    {enabledConnections.length > 0 ? (
-                      <>
-                        {enabledConnections.slice(0, 3).map((id) => {
-                          const iconSrc = getConnectionIcon(id);
-                          const displayName = getConnectionDisplayName(id);
-                          return iconSrc ? (
-                            <img
-                              key={id}
-                              src={iconSrc}
-                              alt={displayName}
-                              className="workspace-settings-collapsed-icon"
-                            />
-                          ) : null;
-                        })}
-                        {enabledConnections.length > 3 && (
-                          <span className="workspace-settings-collapsed-more">+{enabledConnections.length - 3}</span>
+                {collapsedSections.integrations &&
+                  (() => {
+                    // Combined summary: "active" = enabled in THIS chat, for
+                    // both kinds. Mirrors the unifiedIntegrationItems mix below.
+                    const activeIcons: { key: string; src?: string; cls?: string; name: string }[] = [];
+                    for (const id of enabledConnections) {
+                      activeIcons.push({
+                        key: `pd-${id}`,
+                        src: getConnectionIcon(id),
+                        cls: getConnectionFallbackIcon(id),
+                        name: getConnectionDisplayName(id),
+                      });
+                    }
+                    for (const conn of sortedConnectors) {
+                      if (!enabledNativeConnectorIds.includes(conn.id)) continue;
+                      // Prefer the Pipedream art for dual-method services so
+                      // the summary stays visually consistent with the rows.
+                      const pdSlug = pipedreamSlugForConnector(conn.id);
+                      const tmpl = getConnectorById(conn.id);
+                      activeIcons.push({
+                        key: `nv-${conn.id}`,
+                        src: pdSlug ? getConnectionIcon(pdSlug) : undefined,
+                        cls: pdSlug ? getConnectionFallbackIcon(pdSlug) : (tmpl?.icon ?? 'bi-plug'),
+                        name: conn.name,
+                      });
+                    }
+                    return (
+                      <span className="workspace-settings-collapsed-summary workspace-settings-collapsed-integrations">
+                        {activeIcons.length > 0 ? (
+                          <>
+                            {activeIcons
+                              .slice(0, 3)
+                              .map((it) =>
+                                it.src ? (
+                                  <img
+                                    key={it.key}
+                                    src={it.src}
+                                    alt={it.name}
+                                    className="workspace-settings-collapsed-icon"
+                                  />
+                                ) : (
+                                  <i
+                                    key={it.key}
+                                    className={`${it.cls} workspace-settings-collapsed-icon`}
+                                    aria-label={it.name}
+                                  />
+                                )
+                              )}
+                            {activeIcons.length > 3 && (
+                              <span className="workspace-settings-collapsed-more">+{activeIcons.length - 3}</span>
+                            )}
+                          </>
+                        ) : (
+                          t('workspaceSettings.noneEnabled')
                         )}
-                      </>
-                    ) : (
-                      t('workspaceSettings.noneEnabled')
-                    )}
-                  </span>
-                )}
+                      </span>
+                    );
+                  })()}
                 {collapsedSections.integrations ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
               </div>
             </button>
@@ -583,162 +626,122 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     <Spinner animation="border" size="sm" />
                     {t('workspaceSettings.loading')}
                   </div>
-                ) : connectedIntegrations.length === 0 ? (
+                ) : unifiedIntegrationItems.length === 0 ? (
                   <div className="text-muted small fst-italic">
                     <Info size={12} className="me-1" />
                     {t('workspaceSettings.noIntegrations')}
                   </div>
                 ) : (
                   <>
-                    {connectedIntegrations.length > 1 && (
-                      <div className="workspace-settings-kb-actions">
-                        <button
-                          type="button"
-                          className="workspace-settings-kb-action-link"
-                          onClick={() => setEnabledConnections(connectedIntegrations.map((c) => c.id))}
-                          disabled={isDisabled || connectedIntegrations.every((c) => enabledConnections.includes(c.id))}
-                        >
-                          {t('workspaceSettings.selectAll')}
-                        </button>
-                        {enabledConnections.length > 0 && (
-                          <button
-                            type="button"
-                            className="workspace-settings-kb-action-link"
-                            onClick={() => setEnabledConnections([])}
-                            disabled={isDisabled}
-                          >
-                            {t('workspaceSettings.clear')}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    <div className="workspace-settings-list workspace-settings-integrations-list">
-                      {connectedIntegrations
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((conn) => {
-                          const iconSrc = getConnectionIcon(conn.id);
-                          const fallbackIcon = getConnectionFallbackIcon(conn.id);
-                          const displayName = getConnectionDisplayName(conn.id);
-                          const isEnabled = enabledConnections.includes(conn.id);
-
-                          return (
-                            <div key={conn.id} className="workspace-settings-integration-item">
-                              <div className="workspace-settings-integration-main">
-                                <span className="workspace-settings-integration-label">
-                                  {iconSrc ? (
-                                    <img
-                                      src={iconSrc}
-                                      alt={displayName}
-                                      style={{ width: 18, height: 18, objectFit: 'contain' }}
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                      }}
-                                    />
-                                  ) : (
-                                    <i className={fallbackIcon} />
-                                  )}
-                                  {displayName}
-                                </span>
-                              </div>
+                    {unifiedIntegrationItems.length > 1 &&
+                      (() => {
+                        const isItemActive = (item: UnifiedItem) =>
+                          (item.pipedreamSlug ? enabledConnections.includes(item.pipedreamSlug) : false) ||
+                          (item.nativeSlug ? enabledNativeConnectorIds.includes(item.nativeSlug) : false);
+                        const allActive = unifiedIntegrationItems.every(isItemActive);
+                        const anyActive = unifiedIntegrationItems.some(isItemActive);
+                        const enableAll = () => {
+                          const pdSlugs = unifiedIntegrationItems
+                            .map((i) => i.pipedreamSlug)
+                            .filter((s): s is string => !!s);
+                          const nvSlugs = unifiedIntegrationItems
+                            .map((i) => i.nativeSlug)
+                            .filter((s): s is string => !!s);
+                          setEnabledConnections((prev) => Array.from(new Set([...prev, ...pdSlugs])));
+                          setEnabledNativeConnectorIds((prev) => Array.from(new Set([...prev, ...nvSlugs])));
+                        };
+                        const clearAll = () => {
+                          const pdSlugs = new Set(
+                            unifiedIntegrationItems.map((i) => i.pipedreamSlug).filter((s): s is string => !!s)
+                          );
+                          const nvSlugs = new Set(
+                            unifiedIntegrationItems.map((i) => i.nativeSlug).filter((s): s is string => !!s)
+                          );
+                          setEnabledConnections((prev) => prev.filter((id) => !pdSlugs.has(id)));
+                          setEnabledNativeConnectorIds((prev) => prev.filter((id) => !nvSlugs.has(id)));
+                        };
+                        return (
+                          <div className="workspace-settings-kb-actions">
+                            <button
+                              type="button"
+                              className="workspace-settings-kb-action-link"
+                              onClick={enableAll}
+                              disabled={isDisabled || allActive}
+                            >
+                              {t('workspaceSettings.selectAll')}
+                            </button>
+                            {anyActive && (
                               <button
                                 type="button"
-                                className={`workspace-settings-integration-state ${isEnabled ? 'is-connected' : 'is-connect'}`}
-                                onClick={() => handleIntegrationToggle(conn.id, !isEnabled)}
+                                className="workspace-settings-kb-action-link"
+                                onClick={clearAll}
                                 disabled={isDisabled}
                               >
-                                {isEnabled ? (
-                                  <>
-                                    <Check size={12} />
-                                    {t('workspaceSettings.connected')}
-                                  </>
-                                ) : (
-                                  t('workspaceSettings.connect')
-                                )}
+                                {t('workspaceSettings.clear')}
                               </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    <div className="workspace-settings-list workspace-settings-integrations-list">
+                      {unifiedIntegrationItems.map((item) => {
+                        // A row carries up to two slugs (Pipedream + native).
+                        // It's "active" when EITHER list contains its slug —
+                        // and toggling flips both at once, so whichever method
+                        // the user has connected actually gets enabled.
+                        const pdActive = item.pipedreamSlug ? enabledConnections.includes(item.pipedreamSlug) : false;
+                        const nvActive = item.nativeSlug ? enabledNativeConnectorIds.includes(item.nativeSlug) : false;
+                        const isActive = pdActive || nvActive;
+                        const onToggle = () => {
+                          if (item.pipedreamSlug) {
+                            handleIntegrationToggle(item.pipedreamSlug, !isActive);
+                          }
+                          if (item.nativeSlug) {
+                            setEnabledNativeConnectorIds((prev) =>
+                              isActive ? prev.filter((id) => id !== item.nativeSlug) : [...prev, item.nativeSlug!]
+                            );
+                          }
+                        };
+                        return (
+                          <div key={item.key} className="workspace-settings-integration-item">
+                            <div className="workspace-settings-integration-main">
+                              <span className="workspace-settings-integration-label d-inline-flex align-items-center gap-2">
+                                {item.iconSrc ? (
+                                  <img
+                                    src={item.iconSrc}
+                                    alt={item.name}
+                                    style={{ width: 18, height: 18, objectFit: 'contain' }}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <i className={item.iconClass} />
+                                )}
+                                <span>{item.name}</span>
+                              </span>
                             </div>
-                          );
-                        })}
+                            <button
+                              type="button"
+                              className={`workspace-settings-integration-state ${isActive ? 'is-connected' : 'is-connect'}`}
+                              onClick={onToggle}
+                              disabled={isDisabled}
+                            >
+                              {isActive ? (
+                                <>
+                                  <Check size={12} />
+                                  {t('workspaceSettings.enabledInChat', { defaultValue: 'Enabled' })}
+                                </>
+                              ) : (
+                                t('workspaceSettings.enableInChat', { defaultValue: 'Enable' })
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </>
                 )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Data Connectors — admin-configured, per-user Connect action.
-            Parallel to Integrations but backed by the data-connectors stack
-            (OAuth redirect flow or PAT modal). Always rendered if ANY admin
-            connectors are configured; per-user connection state is displayed
-            per row. */}
-        {adminConfiguredConnectors.length > 0 && (
-          <div className="workspace-settings-card workspace-settings-integrations-card">
-            <button
-              type="button"
-              className="workspace-settings-card-header workspace-settings-card-header--collapsible"
-              onClick={() => toggleSection('connectors')}
-              aria-expanded={!collapsedSections.connectors}
-            >
-              <div className="workspace-settings-card-title">
-                <Link size={16} />
-                <span>{t('workspaceSettings.connectors', { defaultValue: 'Connectors' })}</span>
-              </div>
-              <div className="workspace-settings-card-header-right">
-                {collapsedSections.connectors && (
-                  <span className="workspace-settings-collapsed-summary">
-                    {userConnectedConnectorIds.length > 0
-                      ? t('workspaceSettings.connectorsConnectedCount', {
-                          count: userConnectedConnectorIds.length,
-                          total: adminConfiguredConnectors.length,
-                          defaultValue: `${userConnectedConnectorIds.length}/${adminConfiguredConnectors.length} connected`,
-                        })
-                      : t('workspaceSettings.noneConnected', { defaultValue: 'None connected' })}
-                  </span>
-                )}
-                {collapsedSections.connectors ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-              </div>
-            </button>
-            {!collapsedSections.connectors && (
-              <div className="workspace-settings-card-body">
-                <div className="workspace-settings-list workspace-settings-integrations-list">
-                  {sortedConnectors.map((conn) => {
-                    const tmpl = getConnectorById(conn.id);
-                    const iconClass = tmpl?.icon ?? 'bi-plug';
-                    const isConnected = connectedConnectorIdSet.has(conn.id);
-                    return (
-                      <div key={conn.id} className="workspace-settings-integration-item">
-                        <div className="workspace-settings-integration-main">
-                          <span className="workspace-settings-integration-label">
-                            <i className={iconClass} style={{ fontSize: 16 }} />
-                            {conn.name}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          className={`workspace-settings-integration-state ${isConnected ? 'is-connected' : 'is-connect'}`}
-                          onClick={() => handleConnectorConnectClick(conn.id)}
-                          disabled={isDisabled || isConnected}
-                          title={
-                            isConnected
-                              ? t('workspaceSettings.connectorAlreadyConnected', {
-                                  defaultValue: 'Already connected',
-                                })
-                              : undefined
-                          }
-                        >
-                          {isConnected ? (
-                            <>
-                              <Check size={12} />
-                              {t('workspaceSettings.connected')}
-                            </>
-                          ) : (
-                            t('workspaceSettings.connect')
-                          )}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             )}
           </div>
@@ -1010,12 +1013,6 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
           </div>
         )}
       </div>
-      <ConnectCredentialsModal
-        show={credentialModal.show}
-        onHide={() => setCredentialModal({ show: false, connectorId: '' })}
-        connectorId={credentialModal.connectorId}
-        onConnected={onConnectorConnected}
-      />
       <WorkspaceChatFilesExpandedModal
         show={expandedFilesModal !== null}
         onHide={() => setExpandedFilesModal(null)}

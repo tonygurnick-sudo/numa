@@ -4,8 +4,11 @@
     "cancel": "Cancel",
     "close": "Close",
     "delete": "Delete",
-    "search": "Search...",
-    "noResults": "No matches"
+    "done": "Done",
+    "noResults": "No matches",
+    "refresh": "Refresh",
+    "save": "Save",
+    "search": "Search..."
   },
   "confirm": {
     "defaultTitle": "Confirm",
@@ -13,7 +16,9 @@
     "disconnect": "Disconnect",
     "leave": "Leave",
     "discard": "Discard",
-    "save": "Save"
+    "save": "Save",
+    "remove": "Remove",
+    "areYouSure": "Are you sure?"
   },
   "alert": {
     "titles": {

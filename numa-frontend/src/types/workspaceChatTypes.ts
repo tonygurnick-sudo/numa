@@ -5,6 +5,19 @@
  * Different from chat.ts which handles Strands/Bedrock events.
  */
 
+/** Method an integration is delivered through. Pipedream rows route through
+ *  the `mcp__integrations__*` family; native rows route through `connectors`.
+ *  Sent on every row in the chat payload so the agent picks the right family
+ *  without a separate "data connectors" feature toggle. */
+export type IntegrationMethod = 'pipedream' | 'native';
+
+/** Single row in the unified Integrations chat payload. */
+export interface IntegrationListItem {
+  slug: string;
+  method: IntegrationMethod;
+  name: string;
+}
+
 // ============================================================
 // Model Selection Types
 // ============================================================
@@ -516,12 +529,18 @@ export interface WorkspaceChatRequest {
    */
   accessibleKBs?: Array<{ id: string; name: string }>;
   enabledTools?: string[];
-  enabledConnections?: string[];
-  availableIntegrations?: Array<{ id: string; name: string }>;
-  /** Connected data connectors (OAuth/token connectors from Data Connectors page) */
-  connectedDataConnectors?: Array<{ id: string; name: string }>;
-  /** Whether the data connectors tool is enabled for this chat session */
-  dataConnectorsEnabled?: boolean;
+  /**
+   * Integrations ENABLED for this chat — the agent can call these. Each
+   * entry carries its method tag so the agent knows which MCP family
+   * (Pipedream `mcp__integrations__*` vs native `connectors`) to route to.
+   */
+  enabledIntegrations?: Array<IntegrationListItem>;
+  /**
+   * All integrations the user has available (both connected & not enabled
+   * for this chat). Drives the prompt's "Available" section so the agent
+   * can suggest enabling something rather than claim nothing is connected.
+   */
+  availableIntegrations?: Array<IntegrationListItem>;
   // Model selection (global cross-region inference profile)
   modelId?: WorkspaceChatModelId;
   // Attachment handling - files and optional folder metadata

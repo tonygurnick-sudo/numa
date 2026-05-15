@@ -29,6 +29,8 @@ from connectors import get_connector
 from prm import resource as prm_resource
 from storage import (
     create_sync_config,
+    delete_connector_record,
+    delete_secret,
     delete_sync_config,
     get_connector_record,
     get_secret_payload,
@@ -158,6 +160,26 @@ def _handle_status(user_id: str, table_name: str) -> Dict[str, Any]:
     """Return connector status records for the user."""
     items = list_connectors_for_user(table_name, user_id)
     return _response(200, {"items": items})
+
+
+def _handle_disconnect(
+    user_id: str, connector_id: str, table_name: str
+) -> Dict[str, Any]:
+    """Delete the user's row for this connector and clean up the secret.
+
+    Idempotent — returns 200 even when there was nothing to delete, so callers
+    can fire this unconditionally during the unified disconnect flow without
+    branching on whether the user actually had a row.
+    """
+    removed = delete_connector_record(table_name, user_id, connector_id)
+    if removed:
+        secret_arn = removed.get("secret_arn")
+        if isinstance(secret_arn, str):
+            delete_secret(secret_arn)
+    return _response(
+        200,
+        {"success": True, "removed": bool(removed), "connector_id": connector_id},
+    )
 
 
 def _get_synergy_credentials(table_name: str, user_id: str) -> tuple[str, str] | None:
@@ -958,6 +980,28 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
 
     if method == "POST" and path.endswith("/data-connectors/connect"):
         return _handle_connect(event, user_id, table_name, client_name)
+
+    # Per-user disconnect: DELETE /api/data-connectors/{connector_id}.
+    # The trailing segment is the connector_id (no further subpath). We have
+    # to guard against the other /data-connectors/{x}/{y} DELETE paths
+    # (sync-configs etc.) by requiring exactly one segment after the prefix.
+    if method == "DELETE" and "/data-connectors/" in path:
+        parts = [p for p in path.strip("/").split("/") if p]
+        try:
+            anchor = parts.index("data-connectors")
+        except ValueError:
+            anchor = -1
+        # Exactly one segment after `data-connectors` means
+        # /data-connectors/{connector_id}. Two-or-more segments belong to
+        # subroutes (sync-configs, event-configs, etc.) handled below.
+        if anchor >= 0 and len(parts) == anchor + 2:
+            connector_id = parts[-1]
+            # Don't shadow reserved keywords like "status" / "connect" — those
+            # don't take DELETE here, and a /data-connectors/status DELETE
+            # would be a programming error not a real disconnect intent.
+            if connector_id in {"status", "connect", "sync-configs"}:
+                return _response(405, {"error": "Method not allowed"})
+            return _handle_disconnect(user_id, connector_id, table_name)
 
     if method == "GET" and path.endswith("/data-connectors/synergy/pat-status"):
         return _handle_pat_status(user_id, table_name)

@@ -369,7 +369,7 @@ export const CreateShareModal = ({
             conversationId: `desc-gen-${crypto.randomUUID()}`,
             hasUploads: false,
             enabledTools: [],
-            enabledConnections: [],
+            enabledIntegrations: [],
             responseMode: 'stream',
           },
           (event: SDKEvent) => {

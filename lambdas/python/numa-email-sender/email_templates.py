@@ -155,8 +155,9 @@ BASE_TEMPLATE = """<!DOCTYPE html>
 
 # HTML rendering escapes interpolated values by default to defend against XSS
 # in user-controlled fields (schedule names, comment authors, error summaries,
-# etc.). Templates that need to inject pre-rendered HTML reference fields with
-# the |safe filter or wrap values in Markup() at the call site.
+# admin lock reasons, etc.). Templates that need to inject pre-rendered HTML
+# reference fields with the |safe filter or wrap values in Markup() at the
+# call site.
 #
 # Plain-text rendering (subjects, text bodies) must NOT escape — entities like
 # `&amp;` would render literally in the user's inbox.
@@ -342,30 +343,37 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
         ),
     },
     "schedule_trigger_quota_blocked": {
-        "subject": "{{schedule_name}} — trigger blocked, monthly cap reached",
-        "title": "Trigger blocked: monthly cap reached",
+        "subject": "{{schedule_name}} — out of monthly trigger budget",
+        "title": "Trigger fire skipped — out of monthly budget",
         "html": (
-            '<div class="status-icon status-icon-failed">✗</div>'
+            '<div class="status-icon status-icon-warning">⚠</div>'
             '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
             "Your automation "
             '<span style="font-weight:600;color:#333;">{{schedule_name}}</span> '
-            "won't fire for the rest of this month — the monthly trigger cap has been reached."
+            "tried to fire but skipped — {{scope_label_lower}} out of monthly trigger budget."
             "</p>"
             '<div class="summary">'
-            '<p style="margin:0 0 8px;font-weight:600;color:#333;font-size:13px;">Reason</p>'
+            '<p style="margin:0 0 8px;font-weight:600;color:#333;font-size:13px;">What this means</p>'
+            '<p style="margin:0 0 12px;color:#555;">'
+            "{{scope_label}} hit the monthly trigger cap of <strong>{{cap}}</strong>. "
+            "The automation is still <strong>active</strong> — it'll start firing again on the 1st when the budget resets."
+            "</p>"
             '<p style="margin:0;color:#555;">'
-            "{{scope_label}} hit the monthly trigger cap of <strong>{{cap}}</strong>. Pause or remove existing triggers to free up budget — an admin can also raise the cap."
+            "<strong>Note:</strong> pausing or deleting existing triggers won't refund this month's usage — past fires stay counted. "
+            "If you need more budget right now, ask an admin to raise the cap."
             "</p>"
             "</div>"
             '<p style="font-size:14px;color:#555;line-height:1.55;margin:20px 0 0;">'
-            "If this is unexpected, an admin can raise the cap. You'll get this email once per month per scope, not on every blocked fire."
+            "You'll get this email once per month per scope, not on every skipped fire."
             "</p>"
             '{% if manage_url %}<a href="{{manage_url}}" class="button">View automation &rarr;</a>{% endif %}'
         ),
         "text": (
-            "Your automation '{{schedule_name}}' won't fire for the rest of this month.\n\n"
-            "{{scope_label}} hit the monthly trigger cap of {{cap}}. Pause or remove existing triggers to free up budget — an admin can also raise the cap.\n\n"
-            "If this is unexpected, an admin can raise the cap."
+            "Your automation '{{schedule_name}}' tried to fire but skipped — {{scope_label_lower}} out of monthly trigger budget.\n\n"
+            "{{scope_label}} hit the monthly trigger cap of {{cap}}. "
+            "The automation is still active — it'll start firing again on the 1st when the budget resets.\n\n"
+            "Note: pausing or deleting existing triggers won't refund this month's usage — past fires stay counted. "
+            "If you need more budget right now, ask an admin to raise the cap."
             "{% if manage_url %}\n\nView automation: {{manage_url}}{% endif %}"
         ),
     },

@@ -53,6 +53,8 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       logGroup: this.logGroup,
       memorySize: props.memorySize,
       ephemeralStorageMb: props.ephemeralStorageMb,
+      reservedConcurrentExecutions: props.reservedConcurrentExecutions,
+      deadLetterTargetArn: props.deadLetterTargetArn,
       resourceNameSuffix: (this.props.resourceNameInfix ?? '') + '_' + name,
       systemLogLevel: props.systemLogLevel,
       timeout: props.timeout || 29, // API Gateway will only wait 30 seconds. Let's try to come in under that
@@ -118,6 +120,10 @@ export interface AddLambdaFunctionProps {
   timeout?: number;
   /** Override the system (platform) log level. Defaults to INFO. Set to WARN to suppress platform.start/report noise. */
   systemLogLevel?: 'INFO' | 'WARN' | 'ERROR';
+  /** Reserved concurrent executions cap (FEAT-105 round-2). Default unset = unreserved. */
+  reservedConcurrentExecutions?: number;
+  /** Dead-letter target ARN for async invocation failures (FEAT-105 round-2). */
+  deadLetterTargetArn?: string;
 }
 
 export interface ApiGatewayLambdaCollectionProps {
