@@ -677,7 +677,9 @@
     "selected": "{{count}} selected",
     "deselectAll": "Deselect All",
     "keepAsIs": "Keep as is",
-    "bulkDelete": "Bulk Delete"
+    "bulkDelete": "Bulk Delete",
+    "addToSprint": "Add to Sprint",
+    "draggingCount": "+{{count}}"
   },
   "archive": {
     "archive": "Archive",

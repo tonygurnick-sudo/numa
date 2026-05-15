@@ -1906,59 +1906,248 @@ const handleTickets = async (
 
   // ── Bulk update ────────────────────────────────────────────────────────────
   // POST /ops/tickets/bulk
+  //
+  // Applies the same `changes` patch to many tickets in one call. Mirrors the
+  // single-PUT path: derives statusType from stage, recomputes lifecycle
+  // timestamps (scopedAt/startedAt/completedAt/endedAt), applies the workUnitId
+  // derivation rule (board zone -> inherit active sprint; backlog -> use what
+  // the caller sent), maintains GSI2 index rows (IDX_WORKUNIT / IDX_ASSIGNEE /
+  // IDX_CUSTOMER / IDX_PROJECT) when those fields change, and writes one audit
+  // entry per ticket. Zones/stages/work-units are loaded once per team.
   if (method === 'POST' && segments.length === 1 && segments[0] === 'bulk') {
     const { ticketIds, changes } = body;
     if (!Array.isArray(ticketIds) || !changes) return errorResponse(400, 'Missing required fields: ticketIds, changes');
 
+    const teamId = String((changes as Record<string, unknown>).boardId ?? '');
+    if (!teamId) return errorResponse(400, 'Missing required field: changes.boardId');
+
     const ts = now();
     const results: Record<string, unknown>[] = [];
-    const bumpedTeams = new Set<string>();
+
+    // Strip API-shape keys we don't want spread onto the DB item.
+    const { boardId: _boardId, currentBoardId: _currentBoardId, ...changesObj } = changes as Record<string, unknown>;
+    void _boardId;
+    void _currentBoardId;
+
+    // Pre-load team zones/stages/work-units once.
+    const teamItems = (await queryGSI1(`TEAM#${teamId}`)).items;
+    const teamZones = teamItems.filter((i) => String(i.SK ?? '').startsWith('ZONE#'));
+    const teamStages = teamItems.filter((i) => String(i.SK ?? '').startsWith('STAGE#'));
+    const teamWorkUnits = teamItems.filter((i) => String(i.SK ?? '').startsWith('WORKUNIT#'));
+    applyLegacyActiveSprintFallback(teamZones, teamWorkUnits);
+    const stageById = new Map(teamStages.map((s) => [String(s.id), s]));
+    const zoneById = new Map(teamZones.map((z) => [String(z.id), z]));
+
+    const indexOps: Promise<void>[] = [];
 
     for (const tid of ticketIds as string[]) {
-      const teamId = String((changes as Record<string, unknown>).boardId ?? '');
       const existing = await getItem(`TEAM#${teamId}`, `TICKET#${tid}`);
       if (!existing) {
         results.push({ ticketId: tid, error: 'not found' });
         continue;
       }
 
-      // Strip `boardId` from the spread so we don't write the API-shape key
-      // alongside the existing DB-shape `teamId` attribute on the item. The
-      // routing teamId above is what we actually use; the item's teamId is
-      // unchanged on a same-board edit.
-      const { boardId: _boardId, ...changesObj } = changes as Record<string, unknown>;
-      void _boardId;
-
-      // Derive statusType from stage when stageId changes
-      let derivedStatusType: string | undefined;
-      if (changesObj.stageId && String(changesObj.stageId) !== String(existing.stageId)) {
-        const targetStage = await getItem(`TEAM#${teamId}`, `STAGE#${String(changesObj.stageId)}`);
-        if (targetStage?.statusType) derivedStatusType = String(targetStage.statusType);
+      // ── Resolve stageId / statusType ─────────────────────────────────────
+      const stageId = changesObj.stageId !== undefined ? String(changesObj.stageId) : (existing.stageId as string);
+      let statusType = existing.statusType as string;
+      if (changesObj.stageId !== undefined && String(changesObj.stageId) !== String(existing.stageId)) {
+        const targetStage = stageById.get(stageId);
+        if (targetStage?.statusType) statusType = String(targetStage.statusType);
+      } else if (changesObj.statusType !== undefined) {
+        statusType = String(changesObj.statusType);
       }
+
+      // ── Lifecycle timestamps (matches single-PUT) ────────────────────────
+      const lifecycleUpdates: Record<string, unknown> = {};
+      if (statusType !== existing.statusType) {
+        const prevStatus = existing.statusType as string;
+        if (['scoped', 'queued', 'active'].includes(statusType) && !existing.scopedAt) {
+          lifecycleUpdates.scopedAt = ts;
+        }
+        if (['queued', 'active'].includes(statusType) && !existing.startedAt) {
+          lifecycleUpdates.startedAt = ts;
+        }
+        if (statusType === 'completed') {
+          if (!existing.completedAt) lifecycleUpdates.completedAt = ts;
+          if (existing.endedAt) lifecycleUpdates.endedAt = null;
+        } else if (prevStatus === 'completed') {
+          lifecycleUpdates.completedAt = null;
+        }
+        if (statusType === 'ended') {
+          if (!existing.endedAt) lifecycleUpdates.endedAt = ts;
+          if (existing.completedAt) lifecycleUpdates.completedAt = null;
+        } else if (prevStatus === 'ended') {
+          lifecycleUpdates.endedAt = null;
+        }
+      }
+
+      // ── Resolve zoneId (caller may have sent one; otherwise derive from stage) ─
+      let zoneId = changesObj.zoneId !== undefined ? String(changesObj.zoneId) : (existing.zoneId as string);
+      if (changesObj.stageId !== undefined && changesObj.zoneId === undefined) {
+        const targetStage = stageById.get(stageId);
+        if (targetStage?.zoneId) zoneId = String(targetStage.zoneId);
+      }
+
+      // ── workUnitId derivation (matches single-PUT) ───────────────────────
+      const finalZone = zoneById.get(zoneId);
+      const finalZoneType = finalZone ? String(finalZone.zoneType) : undefined;
+      const finalZoneActiveWuId = finalZone?.activeWorkUnitId ? String(finalZone.activeWorkUnitId) : null;
+      let derivedWorkUnitId: string | null | undefined;
+      if (finalZoneType === 'board') {
+        derivedWorkUnitId = finalZoneActiveWuId;
+      } else {
+        // backlog (or unknown): caller's workUnitId wins, otherwise keep existing.
+        derivedWorkUnitId =
+          changesObj.workUnitId !== undefined
+            ? changesObj.workUnitId === null
+              ? null
+              : String(changesObj.workUnitId)
+            : ((existing.workUnitId as string | null | undefined) ?? null);
+      }
+
+      // scopedAt also fires when a work unit is first assigned.
+      const workUnitBeingAssigned = !existing.workUnitId && !!derivedWorkUnitId;
+      if (workUnitBeingAssigned && !existing.scopedAt && !lifecycleUpdates.scopedAt) {
+        lifecycleUpdates.scopedAt = ts;
+      }
+
+      const order = typeof changesObj.order === 'number' ? changesObj.order : ((existing.order as number) ?? 0);
+      const newVersion = ((existing.version as number) ?? 0) + 1;
 
       const updated: Record<string, unknown> = {
         ...existing,
         ...changesObj,
+        ...lifecycleUpdates,
         PK: existing.PK,
         SK: existing.SK,
         id: tid,
-        ...(derivedStatusType ? { statusType: derivedStatusType } : {}),
-        version: ((existing.version as number) ?? 0) + 1,
+        teamId,
+        zoneId,
+        stageId,
+        statusType,
+        workUnitId: derivedWorkUnitId,
+        order,
+        version: newVersion,
         updatedAt: ts,
         updatedBy: auth.sub,
+        GSI1SK: `STAGE#${stageId}#ORDER#${padOrder(order)}#${tid}`,
       };
 
-      // Recompute GSI1SK if stageId or order changed
-      const stageId = String(updated.stageId ?? existing.stageId ?? '');
-      const order = typeof updated.order === 'number' ? updated.order : ((existing.order as number) ?? 0);
-      updated.GSI1SK = `STAGE#${stageId}#ORDER#${padOrder(order)}#${tid}`;
+      // ── Audit ────────────────────────────────────────────────────────────
+      const auditChanges: Record<string, unknown> = {};
+      const AUDIT_SKIP_FIELDS = new Set(['version', 'currentBoardId', 'currentTeamId']);
+      for (const key of Object.keys(changesObj)) {
+        if (AUDIT_SKIP_FIELDS.has(key)) continue;
+        const dbKey = API_TO_DB_KEYS[key] ?? key;
+        if (changesObj[key] !== existing[dbKey]) {
+          auditChanges[key] = { from: existing[dbKey], to: changesObj[key] };
+        }
+      }
+      // Surface zoneId / workUnitId / statusType changes that came from derivation.
+      if (String(zoneId) !== String(existing.zoneId ?? '') && !('zoneId' in auditChanges)) {
+        auditChanges.zoneId = { from: existing.zoneId, to: zoneId };
+      }
+      if (String(derivedWorkUnitId ?? '') !== String(existing.workUnitId ?? '') && !('workUnitId' in auditChanges)) {
+        auditChanges.workUnitId = { from: existing.workUnitId, to: derivedWorkUnitId };
+      }
+      if (statusType !== existing.statusType && !('statusType' in auditChanges)) {
+        auditChanges.statusType = { from: existing.statusType, to: statusType };
+      }
 
       await putItem(updated);
-      bumpedTeams.add(teamId);
+      indexOps.push(putItem(buildAuditItem(tid, auth, 'updated', auditChanges)));
+
+      // ── Maintain GSI2 index rows ─────────────────────────────────────────
+      const assigneeChanged =
+        changesObj.assigneeId !== undefined &&
+        String(changesObj.assigneeId ?? '') !== String(existing.assigneeId ?? '');
+      if (assigneeChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_ASSIGNEE`));
+        if (changesObj.assigneeId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_ASSIGNEE`,
+              GSI2PK: `ASSIGNEE#${String(changesObj.assigneeId)}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_ASSIGNEE',
+              ticketId: tid,
+              teamId,
+              assigneeId: String(changesObj.assigneeId),
+            })
+          );
+        }
+      }
+
+      const customerChanged =
+        changesObj.customerId !== undefined &&
+        String(changesObj.customerId ?? '') !== String(existing.customerId ?? '');
+      if (customerChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_CUSTOMER`));
+        if (changesObj.customerId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_CUSTOMER`,
+              GSI2PK: `CUSTOMER#${String(changesObj.customerId)}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_CUSTOMER',
+              ticketId: tid,
+              teamId,
+              customerId: String(changesObj.customerId),
+            })
+          );
+        }
+      }
+
+      const workUnitChanged = String(derivedWorkUnitId ?? '') !== String(existing.workUnitId ?? '');
+      if (workUnitChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_WORKUNIT`));
+        if (derivedWorkUnitId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_WORKUNIT`,
+              GSI2PK: `WORKUNIT#${derivedWorkUnitId}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_WORKUNIT',
+              ticketId: tid,
+              teamId,
+              workUnitId: derivedWorkUnitId,
+            })
+          );
+        }
+      }
+
+      const projectChanged =
+        changesObj.projectId !== undefined && String(changesObj.projectId ?? '') !== String(existing.projectId ?? '');
+      if (projectChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_PROJECT`));
+        if (changesObj.projectId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_PROJECT`,
+              GSI2PK: `PROJECT#${String(changesObj.projectId)}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_PROJECT',
+              ticketId: tid,
+              teamId,
+              projectId: String(changesObj.projectId),
+            })
+          );
+        }
+      }
+
       results.push({ ticketId: tid, success: true });
     }
 
-    await Promise.all([...bumpedTeams].map((tid) => bumpBoardVersion(tid, ts)));
+    if (indexOps.length > 0) await Promise.all(indexOps);
+    await bumpBoardVersion(teamId, ts);
     return jsonResponse(200, { results });
   }
 
