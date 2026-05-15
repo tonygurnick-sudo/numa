@@ -382,6 +382,8 @@
     "deleteZoneConfirm": "Are you sure? This will also delete all stages in this zone.",
     "cannotDeleteLastZone": "Cannot delete the last zone.",
     "cannotDeleteZoneWithTickets": "Move or delete tickets in this zone before removing it.",
+    "moveZoneUp": "Move zone up",
+    "moveZoneDown": "Move zone down",
     "newZoneName": "New Zone",
     "newZoneNamePlaceholder": "Zone name...",
     "addZoneStagesHint": "configure stages after creation via the edit button.",

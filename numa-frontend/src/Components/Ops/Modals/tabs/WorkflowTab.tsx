@@ -192,6 +192,24 @@ export function WorkflowTab({
     }
   };
 
+  // Move a zone up/down in the displayed order. The save flow already PUTs
+  // the full zones array so this is purely a state mutation. We swap the two
+  // zones' positions in the sorted list and then renumber every zone's
+  // `order` field sequentially — guards against migrated boards where every
+  // zone shares the same order value, which would otherwise make a pure
+  // swap a no-op.
+  const handleMoveZone = (sortedIndex: number, direction: 'up' | 'down') => {
+    const swapIndex = direction === 'up' ? sortedIndex - 1 : sortedIndex + 1;
+    if (swapIndex < 0 || swapIndex >= sortedZones.length) return;
+    const reordered = [...sortedZones];
+    [reordered[sortedIndex], reordered[swapIndex]] = [reordered[swapIndex], reordered[sortedIndex]];
+    const orderById = new Map<string, number>();
+    reordered.forEach((z, i) => {
+      if (z.id) orderById.set(z.id, (i + 1) * 1000);
+    });
+    setZones((prev) => prev.map((z) => (z.id && orderById.has(z.id) ? { ...z, order: orderById.get(z.id) } : z)));
+  };
+
   // ── Stage handlers ──────────────────────────────────────────────────
   const handleStageNameChange = (zoneId: string, stageIndex: number, value: string) => {
     const zoneStages = getStagesForZone(zoneId);
@@ -576,7 +594,7 @@ export function WorkflowTab({
         </div>
 
         <div className="d-flex flex-column gap-3 mb-4">
-          {sortedZones.map((zone) => {
+          {sortedZones.map((zone, sortedIndex) => {
             const zoneStages = getStagesForZone(zone.id);
             const ticketCount = zone.id ? (zoneTicketCounts.get(zone.id) ?? 0) : 0;
             const isDefault = zone.id === defaultZoneId;
@@ -601,6 +619,30 @@ export function WorkflowTab({
                       </Badge>
                     )}
                     <div className="ms-auto d-flex align-items-center gap-1">
+                      {zone.id && sortedZones.length > 1 && (
+                        <>
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0 text-muted"
+                            disabled={sortedIndex === 0}
+                            title={t('settings.moveZoneUp')}
+                            onClick={() => handleMoveZone(sortedIndex, 'up')}
+                          >
+                            <i className="bi bi-arrow-up" />
+                          </Button>
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0 text-muted"
+                            disabled={sortedIndex === sortedZones.length - 1}
+                            title={t('settings.moveZoneDown')}
+                            onClick={() => handleMoveZone(sortedIndex, 'down')}
+                          >
+                            <i className="bi bi-arrow-down" />
+                          </Button>
+                        </>
+                      )}
                       {zone.id && (
                         <Button
                           variant="link"
