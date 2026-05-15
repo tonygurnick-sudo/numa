@@ -13,6 +13,7 @@ import { getNextRunTimes, describeCronExpression } from '../utils/cronUtils';
 import { listObjectsInFolder, fetchFileFromS3, downloadFileFromS3 } from '../utils/s3Utils';
 import { jwtDecode } from 'jwt-decode';
 import { RunHistoryExpandedRow } from '../Components/Scheduling/RunHistoryExpandedRow';
+import { OpenInChatButton } from '../Components/Scheduling/OpenInChatButton';
 import { ConfirmModal } from '../Components/Ops/Modals/ConfirmModal';
 import { useTranslation } from 'react-i18next';
 
@@ -939,6 +940,7 @@ export const ScheduleDetailPage: React.FC = () => {
                           <th>{t('scheduling.details.runHistory.columns.completed')}</th>
                           <th>{t('scheduling.details.runHistory.columns.duration')}</th>
                           <th>{t('scheduling.details.runHistory.columns.status')}</th>
+                          <th style={{ width: 48 }} aria-label="" />
                         </tr>
                       </thead>
                       <tbody>
@@ -1034,11 +1036,14 @@ export const ScheduleDetailPage: React.FC = () => {
                                     <Badge bg="secondary">{t('scheduling.details.runHistory.placeholder')}</Badge>
                                   )}
                                 </td>
+                                <td className="align-middle text-end">
+                                  <OpenInChatButton conversationId={run.log?.conversationId} variant="icon" />
+                                </td>
                               </tr>
                               {expandedRun === run.runId && (
                                 <tr>
                                   <td
-                                    colSpan={showDebugIds ? 6 : 5}
+                                    colSpan={showDebugIds ? 7 : 6}
                                     className="p-0 border-0"
                                     style={
                                       {
@@ -1052,6 +1057,7 @@ export const ScheduleDetailPage: React.FC = () => {
                                         run={run}
                                         onDownloadArtifact={handleDownloadArtifact}
                                         defaultMessagesOpen
+                                        schedulePrompt={schedule.promptText}
                                       />
                                     </div>
                                   </td>
