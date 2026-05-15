@@ -39,6 +39,7 @@ const HEADERS = {
 
 const OPS_TABLE = process.env.OPS_TABLE!;
 const OPS_CONFIG_TABLE = process.env.OPS_CONFIG_TABLE!;
+const OPS_CRM_TABLE = process.env.OPS_CRM_TABLE!;
 const OUTPUTS_BUCKET_NAME = process.env.OUTPUTS_BUCKET_NAME!;
 const REGION = process.env.REGION || 'ap-southeast-2';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1433,6 +1434,7 @@ const buildTicketIndexItems = (
   ticketId: string,
   assigneeId: string | undefined,
   customerId: string | undefined,
+  supplierId: string | undefined,
   workUnitId: string | undefined,
   projectId: string | undefined,
   updatedAt: string
@@ -1467,6 +1469,20 @@ const buildTicketIndexItems = (
     });
   }
 
+  if (supplierId) {
+    items.push({
+      PK: `TEAM#${teamId}`,
+      SK: `TICKET#${ticketId}#IDX_SUPPLIER`,
+      GSI2PK: `SUPPLIER#${supplierId}`,
+      GSI2SK: `TICKET#${updatedAt}#${ticketId}`,
+      entityType: 'TICKET_INDEX',
+      indexType: 'IDX_SUPPLIER',
+      ticketId,
+      teamId,
+      supplierId,
+    });
+  }
+
   if (workUnitId) {
     items.push({
       PK: `TEAM#${teamId}`,
@@ -1496,6 +1512,32 @@ const buildTicketIndexItems = (
   }
 
   return items;
+};
+
+// Atomically adjust openTicketCount on a customer/supplier META item in the
+// CRM table. Used when ticket.customerId / ticket.supplierId is set, cleared
+// or changed. Avoids a GSI count at read time (which is eventually consistent
+// and was the source of BUG-075's wrong ticketCount). Silently no-ops if the
+// target entity has been deleted concurrently.
+const adjustEntityTicketCount = async (
+  entityType: 'CUSTOMER' | 'SUPPLIER',
+  entityId: string | undefined,
+  delta: number
+): Promise<void> => {
+  if (!entityId || delta === 0) return;
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: OPS_CRM_TABLE,
+        Key: { PK: `${entityType}#${entityId}`, SK: 'META' },
+        UpdateExpression: 'ADD openTicketCount :delta SET updatedAt = :ts',
+        ExpressionAttributeValues: { ':delta': delta, ':ts': now() },
+        ConditionExpression: 'attribute_exists(PK)',
+      })
+    );
+  } catch (err) {
+    if ((err as Error).name !== 'ConditionalCheckFailedException') throw err;
+  }
 };
 
 const handleTickets = async (
@@ -2100,6 +2142,40 @@ const handleTickets = async (
             })
           );
         }
+        indexOps.push(
+          adjustEntityTicketCount('CUSTOMER', existing.customerId ? String(existing.customerId) : undefined, -1)
+        );
+        indexOps.push(
+          adjustEntityTicketCount('CUSTOMER', changesObj.customerId ? String(changesObj.customerId) : undefined, 1)
+        );
+      }
+
+      const supplierChanged =
+        changesObj.supplierId !== undefined &&
+        String(changesObj.supplierId ?? '') !== String(existing.supplierId ?? '');
+      if (supplierChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_SUPPLIER`));
+        if (changesObj.supplierId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_SUPPLIER`,
+              GSI2PK: `SUPPLIER#${String(changesObj.supplierId)}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_SUPPLIER',
+              ticketId: tid,
+              teamId,
+              supplierId: String(changesObj.supplierId),
+            })
+          );
+        }
+        indexOps.push(
+          adjustEntityTicketCount('SUPPLIER', existing.supplierId ? String(existing.supplierId) : undefined, -1)
+        );
+        indexOps.push(
+          adjustEntityTicketCount('SUPPLIER', changesObj.supplierId ? String(changesObj.supplierId) : undefined, 1)
+        );
       }
 
       const workUnitChanged = String(derivedWorkUnitId ?? '') !== String(existing.workUnitId ?? '');
@@ -2432,6 +2508,7 @@ const handleTickets = async (
       ticketId,
       assigneeId ? String(assigneeId) : undefined,
       customerId ? String(customerId) : undefined,
+      supplierId ? String(supplierId) : undefined,
       resolvedWorkUnitId,
       projectId ? String(projectId) : undefined,
       ts
@@ -2449,6 +2526,14 @@ const handleTickets = async (
     ];
 
     await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems as never }));
+
+    // Maintain denormalised openTicketCount on the linked CRM entities. Done
+    // after the transactional write so a counter failure can't roll back the
+    // ticket itself; lazy recompute on getCustomer/getSupplier covers drift.
+    await Promise.all([
+      adjustEntityTicketCount('CUSTOMER', customerId ? String(customerId) : undefined, 1),
+      adjustEntityTicketCount('SUPPLIER', supplierId ? String(supplierId) : undefined, 1),
+    ]);
 
     return jsonResponse(201, {
       ticket: ticketItem,
@@ -2659,6 +2744,7 @@ const handleTickets = async (
       const oldIndexSKs = [
         `TICKET#${ticketId}#IDX_ASSIGNEE`,
         `TICKET#${ticketId}#IDX_CUSTOMER`,
+        `TICKET#${ticketId}#IDX_SUPPLIER`,
         `TICKET#${ticketId}#IDX_WORKUNIT`,
         `TICKET#${ticketId}#IDX_PROJECT`,
       ];
@@ -2668,6 +2754,7 @@ const handleTickets = async (
         ticketId,
         updated.assigneeId ? String(updated.assigneeId) : undefined,
         updated.customerId ? String(updated.customerId) : undefined,
+        updated.supplierId ? String(updated.supplierId) : undefined,
         updated.workUnitId ? String(updated.workUnitId) : undefined,
         updated.projectId ? String(updated.projectId) : undefined,
         ts
@@ -2700,6 +2787,24 @@ const handleTickets = async (
         throw err;
       }
 
+      // openTicketCount adjustments — cross-team move preserves the link to the
+      // CRM entity unless the caller also changed customerId / supplierId, so
+      // diff old vs. new and only adjust when they differ.
+      const xtmCustomerOld = existing.customerId ? String(existing.customerId) : undefined;
+      const xtmCustomerNew = updated.customerId ? String(updated.customerId) : undefined;
+      const xtmSupplierOld = existing.supplierId ? String(existing.supplierId) : undefined;
+      const xtmSupplierNew = updated.supplierId ? String(updated.supplierId) : undefined;
+      const counterOps: Promise<void>[] = [];
+      if (xtmCustomerOld !== xtmCustomerNew) {
+        counterOps.push(adjustEntityTicketCount('CUSTOMER', xtmCustomerOld, -1));
+        counterOps.push(adjustEntityTicketCount('CUSTOMER', xtmCustomerNew, 1));
+      }
+      if (xtmSupplierOld !== xtmSupplierNew) {
+        counterOps.push(adjustEntityTicketCount('SUPPLIER', xtmSupplierOld, -1));
+        counterOps.push(adjustEntityTicketCount('SUPPLIER', xtmSupplierNew, 1));
+      }
+      if (counterOps.length > 0) await Promise.all(counterOps);
+
       return jsonResponse(200, { ticket: updated });
     }
 
@@ -2721,11 +2826,13 @@ const handleTickets = async (
       throw err;
     }
 
-    // Update index items if assignee/customer/workUnit changed
+    // Update index items if assignee/customer/supplier/workUnit changed
     const assigneeChanged =
       body.assigneeId !== undefined && String(body.assigneeId ?? '') !== String(existing.assigneeId ?? '');
     const customerChanged =
       body.customerId !== undefined && String(body.customerId ?? '') !== String(existing.customerId ?? '');
+    const supplierChanged =
+      body.supplierId !== undefined && String(body.supplierId ?? '') !== String(existing.supplierId ?? '');
     // Compare against the derived workUnitId, not just what the caller sent, since
     // zone-based derivation may have changed it without an explicit body.workUnitId.
     const workUnitChanged = String(derivedWorkUnitId ?? '') !== String(existing.workUnitId ?? '');
@@ -2769,6 +2876,33 @@ const handleTickets = async (
           })
         );
       }
+      indexOps.push(
+        adjustEntityTicketCount('CUSTOMER', existing.customerId ? String(existing.customerId) : undefined, -1)
+      );
+      indexOps.push(adjustEntityTicketCount('CUSTOMER', body.customerId ? String(body.customerId) : undefined, 1));
+    }
+
+    if (supplierChanged) {
+      indexOps.push(deleteItem(`TEAM#${targetTeamId}`, `TICKET#${ticketId}#IDX_SUPPLIER`));
+      if (body.supplierId) {
+        indexOps.push(
+          putItem({
+            PK: `TEAM#${targetTeamId}`,
+            SK: `TICKET#${ticketId}#IDX_SUPPLIER`,
+            GSI2PK: `SUPPLIER#${String(body.supplierId)}`,
+            GSI2SK: `TICKET#${ts}#${ticketId}`,
+            entityType: 'TICKET_INDEX',
+            indexType: 'IDX_SUPPLIER',
+            ticketId,
+            teamId: targetTeamId,
+            supplierId: String(body.supplierId),
+          })
+        );
+      }
+      indexOps.push(
+        adjustEntityTicketCount('SUPPLIER', existing.supplierId ? String(existing.supplierId) : undefined, -1)
+      );
+      indexOps.push(adjustEntityTicketCount('SUPPLIER', body.supplierId ? String(body.supplierId) : undefined, 1));
     }
 
     if (workUnitChanged) {
