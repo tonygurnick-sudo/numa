@@ -119,13 +119,13 @@ const ChatInput = ({
   // Keep text input enabled during chat processing and uploads; only honor a hard disable
   const isTextInputDisabled = !!disabled;
 
-  // Send button should be disabled during loading/streaming, uploads, hard-disable, or oversized messages
-  const isSendDisabled =
-    buttonStatus === 'loading' || uploadsInProgress || !!disabled || inputMessage.length > MAX_MESSAGE_LENGTH;
+  // Send is disabled by loading/streaming/hard-disable/oversized — but NOT by
+  // uploadsInProgress. The parent intercepts submits during uploads and queues them
+  // (auto-firing once staging completes), so the user can hit Enter/Send any time.
+  const isSendDisabled = buttonStatus === 'loading' || !!disabled || inputMessage.length > MAX_MESSAGE_LENGTH;
 
   const showStopButton = buttonStatus === 'streaming' && !!onStop;
-  const showSendSpinner =
-    (buttonStatus === 'loading' || uploadsInProgress || buttonStatus === 'streaming') && !showStopButton;
+  const showSendSpinner = (buttonStatus === 'loading' || buttonStatus === 'streaming') && !showStopButton;
 
   // Keep other controls disabled during streaming/uploads to avoid mid-turn config changes
   const isControlsDisabled = buttonStatus === 'streaming' || uploadsInProgress || !!disabled;

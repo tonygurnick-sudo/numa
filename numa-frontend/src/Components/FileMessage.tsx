@@ -1,6 +1,6 @@
 // FileMessage.tsx - Unified component for file upload/download success messages
 import { useTranslation } from 'react-i18next';
-import { getFileIconClass } from '../utils/fileUtils';
+import { getFileIconClass, getFileIconColorClass } from '../utils/fileUtils';
 
 type FileMessageProps = {
   filename: string;
@@ -23,6 +23,7 @@ export const FileMessage = ({
 }: FileMessageProps) => {
   const { t } = useTranslation('common');
   const iconClass = getFileIconClass(filename);
+  const colorClass = getFileIconColorClass(filename);
   const isClickable = clickable || !!onClick;
 
   const handleClick = () => {
@@ -47,7 +48,7 @@ export const FileMessage = ({
       tabIndex={isClickable ? 0 : undefined}
       style={{ cursor: isClickable ? 'pointer' : 'default' }}
     >
-      <i className={iconClass} />
+      <i className={`${iconClass} ${colorClass}`} />
       <span className="file-name">{filename}</span>
       {type === 'success' && (
         <div className="success-indicator">

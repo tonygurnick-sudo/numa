@@ -1,7 +1,6 @@
 import { lazy } from 'react';
 import { Navigate } from 'react-router-dom';
 import { reloadFavourites } from './navigation';
-import { NotificationLabel } from '../Components/Notifications/NotificationLabel';
 
 // Lazy load page components for better code splitting
 const Dash = lazy(() => import('../Pages/Dash').then((m) => ({ default: m.Dash })));
@@ -141,14 +140,9 @@ export const ROUTE_CONFIG = [
   {
     path: '/job-history',
     element: () => <JobHistoryManager />,
-    nav: {
-      label: 'Job History',
-      labelKey: 'nav.items.jobHistory',
-      icon: 'bi bi-clock-history',
-      section: 'timeline',
-      sectionKey: 'nav.sections.timeline',
-      order: 6,
-    },
+    // Job history no longer has a main-nav entry — it's surfaced as a button
+    // in the Apps page header (Dash.tsx). The route stays mounted for the
+    // button + direct URL.
   },
   // Legacy scheduling route — kept for backward compatibility, no longer in nav
   {
@@ -160,14 +154,9 @@ export const ROUTE_CONFIG = [
     path: '/notifications',
     element: () => <NotificationsPage />,
     featureFlag: 'SCHEDULING',
-    nav: {
-      label: <NotificationLabel />,
-      icon: 'bi bi-bell',
-      section: 'timeline',
-      sectionKey: 'nav.sections.timeline',
-      featureFlag: 'SCHEDULING',
-      order: 8,
-    },
+    // Notifications no longer have a main-nav entry — they're surfaced as a
+    // bell-with-badge button in the Nav user area (Nav.tsx). The route is
+    // still mounted and reachable via that button + direct URL.
   },
 
   // Files (unified KB + files page)

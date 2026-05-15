@@ -360,7 +360,10 @@
   "userPicker": {
     "placeholder": "Search users...",
     "noResults": "No users found",
-    "removeUser": "Remove {{name}}"
+    "removeUser": "Remove {{name}}",
+    "selectAll": "Select all",
+    "selectAllMatching": "Select all matching",
+    "clearAll": "Clear all"
   },
   "createKB": {
     "title": "Create new folder",

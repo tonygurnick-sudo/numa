@@ -401,11 +401,12 @@ The following integrations have custom system prompt overrides in `/integration-
 
 Integration results are saved to files to avoid flooding the agent's context window:
 
-- Results directory: `/workdir/outputs/integrations-results/`
+- Results directory: `/workdir/tmp/integrations-results/` (scratch — synced to S3 for model continuity but hidden from the user's Files UI)
 - Each result saved as `{action_key}-{timestamp}.json`
 - Large results are truncated in the agent response with a pointer to the full file
 - Pipedream file stash uploads (e.g., downloaded files) are automatically saved to the results directory
 - Binary proxy responses (base64-encoded) are decoded and saved with appropriate extensions
+- The model is instructed to `cp` or `mv` user-facing deliverables into `/workdir/outputs/` so they appear in the Files UI; raw API blobs and intermediate downloads stay in tmp
 
 ### Integrations Troubleshooting & Gotchas
 

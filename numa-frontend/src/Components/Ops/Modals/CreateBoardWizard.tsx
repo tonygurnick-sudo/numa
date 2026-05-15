@@ -653,6 +653,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                   selectedIds={selectedUserIds}
                   onChange={setSelectedUserIds}
                   mode="multi"
+                  allowSelectAll
                 />
               </div>
             )}

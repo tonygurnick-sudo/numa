@@ -121,6 +121,7 @@
   },
   "history": {
     "title": "כחאט חיסטורי",
+    "viewAll": "ביו אל כחאט חיסטורי",
     "closeAria": "כלוסה כחאט חיסטורי",
     "loading": "לואדינג כונבהרסאטיונס...",
     "loadFailed": "פאילהד טו לואד כונבהרסאטיונ חיסטורי",
@@ -135,6 +136,20 @@
     "deleteConfirm": "ארה יוו סורה יוו ואנט טו דהלהטה טחיס כונבהרסאטיונ?",
     "deleteFailed": "פאילהד טו דהלהטה כונבהרסאטיונ",
     "deleteAria": "דהלהטה כונבהרסאטיונ"
+  },
+  "agentsPanel": {
+    "title": "יוור אגהנטס",
+    "loading": "לואדינג אגהנטס...",
+    "empty": "נו אגהנטס יהט",
+    "noResults": "נו אגהנטס מאטכח יוור סהארכח.",
+    "searchPlaceholder": "סהארכח אגהנטס...",
+    "favoriteAria": "פאבוריטה אגהנט",
+    "unfavoriteAria": "רהמובה פרומ פאבוריטהס",
+    "sections": {
+      "favourites": "פאבוריטהס",
+      "personal": "פהרסונאל",
+      "company": "כומפאני"
+    }
   },
   "settingsPanel": {
     "knowledgeBases": "פילהס",

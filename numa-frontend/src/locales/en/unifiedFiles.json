@@ -11,6 +11,7 @@
   },
   "actions": {
     "newFolder": "New Folder",
+    "newFolderRootTooltip": "Create a shareable top-level folder (its own knowledge base with its own permissions). To create a folder inside My Files, open it first.",
     "newSubfolder": "New Subfolder",
     "upload": "Upload",
     "uploadFiles": "Upload Files",
@@ -25,6 +26,8 @@
     "sharing": "Shared with others",
     "files": "Files",
     "private": "Private",
+    "privateTooltip": "Only you can see this folder.",
+    "shared": "Shared",
     "settings": "Settings",
     "loading": "Loading folders...",
     "empty": {
@@ -153,6 +156,8 @@
   "rootFiles": {
     "title": "My Files",
     "upload": "Upload files",
+    "uploadTooltip": "Upload to your private My Files folder.",
+    "privateTooltip": "Private to you. Numa can read and write here when you enable it in chat.",
     "empty": "No loose files. Upload files here or create a folder to organise them."
   },
   "upload": {

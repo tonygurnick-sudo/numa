@@ -199,6 +199,29 @@ def serialize_content_block(block: Any) -> dict[str, Any]:
         return {"type": "unknown", "value": str(block)}
 
 
+def reclassify_interrupt_result(serialized: dict[str, Any]) -> dict[str, Any]:
+    """Reclassify a ResultMessage that arrived after we issued client.interrupt().
+
+    When the user clicks Stop (or the client disconnects), we call
+    client.interrupt() and the SDK responds with a ResultMessage carrying
+    subtype="error_during_execution" and is_error=true. That's misleading
+    for the frontend and pollutes the tool_errors aggregator with non-errors.
+
+    Callers must only invoke this when they know the interrupt was
+    user-initiated (e.g. _stop_interrupt_sent is True). The original SDK
+    fields are preserved under raw_subtype / raw_is_error for debugging.
+    """
+    if serialized.get("type") != "result":
+        return serialized
+    if serialized.get("subtype") != "error_during_execution":
+        return serialized
+    serialized["raw_subtype"] = serialized["subtype"]
+    serialized["raw_is_error"] = serialized.get("is_error")
+    serialized["subtype"] = "interrupted"
+    serialized["is_error"] = False
+    return serialized
+
+
 def serialize_message(message: Any) -> dict[str, Any]:
     """Serialize an SDK message to a JSON-compatible dict for trace storage."""
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -457,6 +480,7 @@ async def stream_claude_sdk(
     feature_flags: Optional[dict[str, bool]] = None,
     voice_recordings: Optional[list[str]] = None,
     thinking_override: Optional[str] = None,
+    accessible_kbs: Optional[list[dict]] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -666,6 +690,7 @@ async def stream_claude_sdk(
         attached_folders,
         v1_migration_context,
         today_string=today_string,
+        accessible_kbs=accessible_kbs,
     )
 
     # 4. Create SDK options with validated model (with quota fallback pre-check)
@@ -835,12 +860,21 @@ async def stream_claude_sdk(
                         captured_session_id = message.session_id
                         serialized["session_id"] = captured_session_id
                         stream_log.finalize(message)
+                        # Reclassify the SDK's error_during_execution result
+                        # as a clean interrupt so the frontend doesn't render
+                        # red error styling on a user-initiated stop.
+                        serialized = reclassify_interrupt_result(serialized)
+                        if serialized.get("subtype") == "interrupted":
+                            serialized["interrupted_by"] = (
+                                stop_reason or "user_requested"
+                            )
                         logger.info(
                             "SDK result received after stop (drain complete)",
                             _name="STOP_DRAIN_RESULT",
                             conversation_id=conversation_id,
                             session_id=message.session_id,
                             request_id=request_id,
+                            reclassified=serialized.get("subtype") == "interrupted",
                         )
                     trace_line = json.dumps(serialized) + "\n"
                     with trace_path.open("a", encoding="utf-8") as f:
@@ -1694,6 +1728,7 @@ async def run_claude_sdk(
     feature_flags: Optional[dict[str, bool]] = None,
     system_dir: Optional[Path] = None,
     thinking_override: Optional[str] = None,
+    accessible_kbs: Optional[list[dict]] = None,
 ) -> dict[str, Any]:
     """Run Claude SDK to completion and return the collected result.
 
@@ -1775,6 +1810,7 @@ async def run_claude_sdk(
         attached_folders,
         v1_migration_context,
         today_string=today_string,
+        accessible_kbs=accessible_kbs,
     )
 
     # 3b. Default approval mode env var — overridden per tool call in the

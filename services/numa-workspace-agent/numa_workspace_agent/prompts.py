@@ -74,7 +74,7 @@ The "Workspace" is this entire collaborative environment — the active working 
 
 Files the user needs are often NOT in /workdir/ — they may live elsewhere:
 
-1. **Numa Files (always available)** — the user's personal **My Files**, the workspace-wide **Company Files**, and any shared folders the user has access to. Use `numa_tool` with `name="numa_files"` to list, search, or download from them. Check here first when looking for documents, templates, or data the user refers to.
+1. **Numa Files (always available)** — the user's personal **My Files** (private to them, kb_id equals their user sub, friendly name "My Files"), the workspace-wide **Company Files**, and any shared folders the user has access to. Use `numa_tool` with `name="numa_files"` to list, search, or download from them. Check here first when looking for documents, templates, or data the user refers to. **My Files is the default destination** when the user asks you to save a file without naming a folder.
 2. **Connected Integrations** — external services like Google Drive, Gmail, Slack, Outlook, Jira, etc. that the user has connected. Each service has *one* connection method active at any time — either Numa's native connector or Pipedream-backed — and the right tool for each service is exposed automatically. Treat both tool families as a single "Integrations" capability: try whichever is available for the service you need; if a tool tells you the wrong method is in use for a service, switch to the alternative tool family for that one call.
 
 **When a user asks about files, documents, or external services:**
@@ -435,7 +435,16 @@ When referencing files in your response, use inline angle bracket syntax which r
 - Use <folder:/workdir/uploads/documents/> to reference folders
 - Use absolute paths (e.g., /workdir/outputs/, /workdir/uploads/)
 
-Don't reference a file with <> tags unless the user requested it or you think it would be genuinely helpful — the frontend renders these inline with previews. If you're listing many files, simply list them as text and ask if the user wants to see any of them.
+**ALWAYS tag a deliverable in the same turn you produce it.** Whenever you create, write, regenerate, edit, or save a new version of a file in the current turn, the file path MUST appear as a `<file:...>` (or `<folder:...>`) tag in your reply. This is the only way the user gets a clickable link.
+
+Examples that are REQUIRED:
+- "I've saved the report to <file:/workdir/outputs/report.pdf>"
+- "Here's the updated version: <file:/workdir/outputs/report.pdf>" (re-tag even if you mentioned the same path earlier — a previous mention does not stay visible across turns)
+- "I've created a new version with your changes: <file:/workdir/outputs/report_v2.pdf>"
+
+Failure mode to avoid: saying "I've updated the report" or "Here's the new version" without a `<file:...>` tag. The user cannot find the file. This is the single most common cause of "where's my deliverable?" complaints.
+
+Do NOT bulk-tag every pre-existing file you happen to mention in passing — if you're enumerating ten files the user already knows about, plain text is fine and offer to open the ones they want. The rule is about *deliverables produced or modified in the current turn*, not about every reference to a path.
 
 ## Document Generation — IMPORTANT
 
@@ -555,6 +564,22 @@ mcp__numa__numa_tool(
   params={{"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company"}}
 )
 ```
+
+**Example — Upload to the user's private My Files (default when no folder is specified):**
+```
+mcp__numa__numa_tool(
+  name="numa_files",
+  description="Saving draft to My Files",
+  params={{"operation": "upload", "file": "/workdir/outputs/draft.docx", "kb_id": "<user_sub>"}}
+)
+```
+
+**Saving files — folder resolution rules:**
+- The user names a folder you can see in the available folders list → upload there.
+- The user names a folder you **cannot** see in the available folders list → **ask first**. The folder may exist but be disabled in their chat settings (they can enable it in Settings → Folders), or it may not exist yet. Do not silently create a subfolder labelled with the requested name inside another folder — that hides their files.
+- The user does not name a folder → save to My Files (kb_id = user sub). Mention where you saved it.
+- The user says "in my files" or similar → save to My Files at root.
+- The user says "in my files under <subfolder>" → save to My Files with `kb_path="<subfolder>"`. Subfolders inside My Files are supported.
 
 **Example — List files in a folder:**
 ```
@@ -982,11 +1007,13 @@ To get dynamic dropdown options for a prop:
 Important notes:
 - run_action and proxy_request require user approval before execution
 - configure_props does NOT require approval (read-only metadata)
-- Results are saved to files in /workdir/outputs/integrations-results/ to avoid flooding context
-- Files returned via file stash (e.g., downloaded files) are automatically saved to /workdir/outputs/integrations-results/
+- Integration tool results (JSON response blobs AND downloaded files like attachments) land in /workdir/tmp/integrations-results/
+- /workdir/tmp/ is scratch — synced for your continuity but invisible to the user. /workdir/outputs/ is what the user sees in their Files page
+- If the user asks for a file (download/save/give me X), `cp` or `mv` it from /workdir/tmp/integrations-results/ into /workdir/outputs/ before reporting done. Otherwise leave it in tmp and reference it inline
 - Use the annotations (readOnlyHint, destructiveHint) from schemas to gauge risk
 - The "authProvisionId":"auto" value is injected automatically — do not look up account IDs
 - Always read the action schema first to understand required and optional props
+- **Bulk / paginated fetches:** Use `proxy_request` directly and follow the API's pagination token (`@odata.nextLink` for Microsoft Graph, `nextPageToken` for Google APIs, `next` URLs for most REST APIs). NEVER iterate `$skip` / `offset` / `pageNumber` manually — that's a linear scan that costs one round-trip + one approval per page. Pipedream's built-in actions strip pagination tokens before returning, so you cannot paginate past page 1 via `run_action` — only `proxy_request` preserves them. Decide your full field selection (`$select` etc.) up front so you don't have to re-walk the same window with different params.
 """
 
         # Append per-integration prompt files if they exist
@@ -1504,25 +1531,62 @@ def build_folder_context(attached_folders: Optional[list[dict]] = None) -> str:
 def build_kb_context(
     available_kbs: Optional[list[dict]] = None,
     kb_listings: Optional[dict[str, dict]] = None,
+    accessible_kbs: Optional[list[dict]] = None,
 ) -> str:
     """
     Build context about available Numa Files folders including file listings.
 
     Args:
-        available_kbs: List of available folders with 'id' and optional 'name' fields.
-                       None or empty list means no folders are enabled.
+        available_kbs: List of folders enabled for this conversation, with 'id'
+                       and optional 'name' fields. None or empty list means no
+                       folders are enabled.
         kb_listings: Optional dict mapping kb_id -> {files, folders, total_count, truncated}
                      from the list_kb_files Lambda handler.
+        accessible_kbs: List of all folders the user can toggle on for this chat
+                        (the same set shown in the chat folder picker). Used to
+                        surface folders the user has access to but has not enabled
+                        for this conversation, so the agent can suggest enabling
+                        them. None means the frontend did not provide the list.
 
     Returns:
         Context string for the prompt
     """
+    enabled_ids = {kb.get("id") for kb in (available_kbs or []) if kb.get("id")}
+    disabled_kbs = [
+        kb
+        for kb in (accessible_kbs or [])
+        if kb.get("id") and kb.get("id") not in enabled_ids
+    ]
+
+    def _render_disabled_section() -> str:
+        if not disabled_kbs:
+            return ""
+        lines = [
+            "",
+            "**Available Numa Files folders (available to the user but not selected for this conversation):**",
+        ]
+        user_sub = os.environ.get("NUMA_USER_SUB", "")
+        for kb in disabled_kbs:
+            kb_id = kb.get("id", "unknown")
+            kb_name = kb.get("name", kb_id)
+            if user_sub and kb_id == user_sub:
+                lines.append(f"- {kb_name} (the user's personal folder)")
+            else:
+                lines.append(f"- {kb_name}")
+        lines.append(
+            "You cannot search these folders until the user enables them in the "
+            "chat folder picker. If one looks relevant to the user's request, "
+            "suggest they enable it."
+        )
+        return "\n".join(lines)
+
     if not available_kbs:
-        return (
+        base = (
             "**Numa Files:** No folders are currently enabled. "
             "The user can enable them in the chat settings. "
             "Do not attempt to use the numa_files tool until a folder is enabled."
         )
+        return base + _render_disabled_section()
 
     lines = ["**Available Numa Files folders:**"]
 
@@ -1535,7 +1599,10 @@ def build_kb_context(
         if kb_id == "company":
             lines.append(f"\n- `company` - Company Files (default)")
         elif user_sub and kb_id == user_sub:
-            lines.append(f"\n- `{kb_id}` - My Files (user's root files)")
+            lines.append(
+                f"\n- `{kb_id}` - My Files (the user's private personal folder; "
+                "default save destination when no folder is named)"
+            )
         else:
             lines.append(f"\n- `{kb_id}` - {kb_name}")
 
@@ -1580,6 +1647,10 @@ def build_kb_context(
     # Mention all_kbs when multiple folders are available
     if len(available_kbs) > 1:
         lines.append("Set `all_kbs: true` to search every enabled folder at once.")
+
+    disabled_section = _render_disabled_section()
+    if disabled_section:
+        lines.append(disabled_section)
 
     return "\n".join(lines)
 
@@ -1645,6 +1716,7 @@ def augment_prompt_with_context(
     attached_folders: Optional[list[dict]] = None,
     v1_migration_context: Optional[str] = None,
     today_string: Optional[str] = None,
+    accessible_kbs: Optional[list[dict]] = None,
 ) -> str:
     """
     Augment user prompt with additional context.
@@ -1663,6 +1735,10 @@ def augment_prompt_with_context(
         today_string: Frontend-provided date/time string. Prepended to user message
                       instead of system prompt so the system prompt stays stable
                       for prompt caching.
+        accessible_kbs: All folders the user can toggle on for this chat (the same
+                        set shown in the chat folder picker). Used so the agent
+                        knows which folders the user has access to but has not
+                        enabled, and can suggest enabling them.
 
     Returns:
         Augmented prompt string
@@ -1689,7 +1765,7 @@ def augment_prompt_with_context(
 
     # Always add Numa Files context - tells Claude which folders are available or that none are
     # This ensures Claude knows not to try the tool when no folders are enabled
-    parts.append(build_kb_context(available_kbs, kb_listings))
+    parts.append(build_kb_context(available_kbs, kb_listings, accessible_kbs))
 
     # Add user prompt
     parts.append(user_prompt.strip())

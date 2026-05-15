@@ -119,6 +119,26 @@ export const AdminMfaSettingsService = {
     }
   },
 
+  /**
+   * Public, unauthenticated counterpart to {@link revokeDeviceTrust}. Called mid-login
+   * when DEVICE_SRP fails ("Device does not exist") so the DDB trust record is cleared
+   * in lockstep with localStorage — otherwise sibling tabs / future logins keep
+   * re-validating the same dead deviceKey and looping back into the failure.
+   * Non-blocking: errors are swallowed so the catch path can continue.
+   */
+  async clearDeviceTrust(deviceKey: string): Promise<void> {
+    try {
+      const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+      await fetch(`${API_ENDPOINT}/settings/mfa/clear-device-trust`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceKey }),
+      });
+    } catch {
+      // best-effort
+    }
+  },
+
   async validateDevice(deviceKey: string): Promise<boolean> {
     try {
       const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';

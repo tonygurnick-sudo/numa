@@ -11,6 +11,7 @@ import {
   Code2,
   Cpu,
   Download,
+  Expand,
   Eye,
   FileText,
   FolderOpen,
@@ -23,6 +24,7 @@ import {
   Plug,
   RefreshCw,
   Upload,
+  UserCircle,
   User as UserIcon,
   Wrench,
 } from 'lucide-react';
@@ -33,16 +35,20 @@ import {
 } from '../../config/integrationsConfig';
 import { getConnectorById } from '../DataConnectors/connectorRegistry';
 import { connectorSlugForPipedream, pipedreamSlugForConnector } from '../Integrations/integrationCatalogHelpers';
-import { getFileIconClass, formatFileSize } from '../../utils/fileUtils';
+import { WorkspaceChatFilesExpandedModal } from './WorkspaceChatFilesExpandedModal';
+import { getFileIconClass, getFileIconColorClass, formatFileSize } from '../../utils/fileUtils';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
 import { getFlag } from '../../utils/featureFlags';
 import { useShowChatCost } from '../../hooks/useShowChatCost';
+import { sortKnowledgeBases } from '../../constants/knowledgeBase';
 
 type KnowledgeBase = {
   kb_id: string;
   kb_name: string;
   role?: string;
+  is_root?: boolean;
+  is_shared?: boolean;
 };
 
 type ConnectionOption = {
@@ -214,10 +220,15 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   // Connected integrations only
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
 
+  // Pin My Files first, then company / numa-support / shared KBs. Stable
+  // sort preserves the backend's alphabetical order within the user KB tier.
+  const sortedKBs = useMemo(() => sortKnowledgeBases(availableKBs), [availableKBs]);
+
   // Data connectors — sorted for the unified integrations list. Setup +
   // disconnect both live on /integrations now; this panel is purely an
   // enable/disable toggle surface, so the inline credential modal and the
   // ConnectorsService.connect handler that used to live here are gone.
+  const [expandedFilesModal, setExpandedFilesModal] = useState<null | 'uploads' | 'outputs'>(null);
   const sortedConnectors = useMemo(
     () => [...adminConfiguredConnectors].sort((a, b) => a.name.localeCompare(b.name)),
     [adminConfiguredConnectors]
@@ -363,13 +374,13 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 <div className="text-muted small fst-italic">{t('workspaceSettings.noKBs')}</div>
               ) : (
                 <>
-                  {availableKBs.length > 1 && (
+                  {sortedKBs.length > 1 && (
                     <div className="workspace-settings-kb-actions">
                       <button
                         type="button"
                         className="workspace-settings-kb-action-link"
-                        onClick={() => setEnabledKBIds(availableKBs.map((kb) => kb.kb_id))}
-                        disabled={isDisabled || availableKBs.every((kb) => enabledKBIds.includes(kb.kb_id))}
+                        onClick={() => setEnabledKBIds(sortedKBs.map((kb) => kb.kb_id))}
+                        disabled={isDisabled || sortedKBs.every((kb) => enabledKBIds.includes(kb.kb_id))}
                       >
                         {t('workspaceSettings.selectAll')}
                       </button>
@@ -386,15 +397,19 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     </div>
                   )}
                   <div className="workspace-settings-list">
-                    {availableKBs.map((kb) => (
+                    {sortedKBs.map((kb) => (
                       <Form.Check
                         type="checkbox"
                         key={kb.kb_id}
                         id={`panel-kb-${kb.kb_id}`}
-                        className="workspace-settings-list-item workspace-settings-kb-list-item"
+                        className={`workspace-settings-list-item workspace-settings-kb-list-item${
+                          kb.is_root ? ' workspace-settings-kb-list-item--my-files' : ''
+                        }`}
                         label={
                           <span className="workspace-settings-kb-label">
-                            {kb.kb_id === 'company' ? (
+                            {kb.is_root ? (
+                              <UserCircle size={14} />
+                            ) : kb.kb_id === 'company' ? (
                               <Building2 size={14} />
                             ) : kb.kb_id === 'numa-support' ? (
                               <LifeBuoy size={14} />
@@ -617,63 +632,115 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     {t('workspaceSettings.noIntegrations')}
                   </div>
                 ) : (
-                  <div className="workspace-settings-list workspace-settings-integrations-list">
-                    {unifiedIntegrationItems.map((item) => {
-                      // A row carries up to two slugs (Pipedream + native).
-                      // It's "active" when EITHER list contains its slug —
-                      // and toggling flips both at once, so whichever method
-                      // the user has connected actually gets enabled.
-                      const pdActive = item.pipedreamSlug ? enabledConnections.includes(item.pipedreamSlug) : false;
-                      const nvActive = item.nativeSlug ? enabledNativeConnectorIds.includes(item.nativeSlug) : false;
-                      const isActive = pdActive || nvActive;
-                      const onToggle = () => {
-                        if (item.pipedreamSlug) {
-                          handleIntegrationToggle(item.pipedreamSlug, !isActive);
-                        }
-                        if (item.nativeSlug) {
-                          setEnabledNativeConnectorIds((prev) =>
-                            isActive ? prev.filter((id) => id !== item.nativeSlug) : [...prev, item.nativeSlug!]
+                  <>
+                    {unifiedIntegrationItems.length > 1 &&
+                      (() => {
+                        const isItemActive = (item: UnifiedItem) =>
+                          (item.pipedreamSlug ? enabledConnections.includes(item.pipedreamSlug) : false) ||
+                          (item.nativeSlug ? enabledNativeConnectorIds.includes(item.nativeSlug) : false);
+                        const allActive = unifiedIntegrationItems.every(isItemActive);
+                        const anyActive = unifiedIntegrationItems.some(isItemActive);
+                        const enableAll = () => {
+                          const pdSlugs = unifiedIntegrationItems
+                            .map((i) => i.pipedreamSlug)
+                            .filter((s): s is string => !!s);
+                          const nvSlugs = unifiedIntegrationItems
+                            .map((i) => i.nativeSlug)
+                            .filter((s): s is string => !!s);
+                          setEnabledConnections((prev) => Array.from(new Set([...prev, ...pdSlugs])));
+                          setEnabledNativeConnectorIds((prev) => Array.from(new Set([...prev, ...nvSlugs])));
+                        };
+                        const clearAll = () => {
+                          const pdSlugs = new Set(
+                            unifiedIntegrationItems.map((i) => i.pipedreamSlug).filter((s): s is string => !!s)
                           );
-                        }
-                      };
-                      return (
-                        <div key={item.key} className="workspace-settings-integration-item">
-                          <div className="workspace-settings-integration-main">
-                            <span className="workspace-settings-integration-label d-inline-flex align-items-center gap-2">
-                              {item.iconSrc ? (
-                                <img
-                                  src={item.iconSrc}
-                                  alt={item.name}
-                                  style={{ width: 18, height: 18, objectFit: 'contain' }}
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                  }}
-                                />
-                              ) : (
-                                <i className={item.iconClass} />
-                              )}
-                              <span>{item.name}</span>
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            className={`workspace-settings-integration-state ${isActive ? 'is-connected' : 'is-connect'}`}
-                            onClick={onToggle}
-                            disabled={isDisabled}
-                          >
-                            {isActive ? (
-                              <>
-                                <Check size={12} />
-                                {t('workspaceSettings.enabledInChat', { defaultValue: 'Enabled' })}
-                              </>
-                            ) : (
-                              t('workspaceSettings.enableInChat', { defaultValue: 'Enable' })
+                          const nvSlugs = new Set(
+                            unifiedIntegrationItems.map((i) => i.nativeSlug).filter((s): s is string => !!s)
+                          );
+                          setEnabledConnections((prev) => prev.filter((id) => !pdSlugs.has(id)));
+                          setEnabledNativeConnectorIds((prev) => prev.filter((id) => !nvSlugs.has(id)));
+                        };
+                        return (
+                          <div className="workspace-settings-kb-actions">
+                            <button
+                              type="button"
+                              className="workspace-settings-kb-action-link"
+                              onClick={enableAll}
+                              disabled={isDisabled || allActive}
+                            >
+                              {t('workspaceSettings.selectAll')}
+                            </button>
+                            {anyActive && (
+                              <button
+                                type="button"
+                                className="workspace-settings-kb-action-link"
+                                onClick={clearAll}
+                                disabled={isDisabled}
+                              >
+                                {t('workspaceSettings.clear')}
+                              </button>
                             )}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
+                          </div>
+                        );
+                      })()}
+                    <div className="workspace-settings-list workspace-settings-integrations-list">
+                      {unifiedIntegrationItems.map((item) => {
+                        // A row carries up to two slugs (Pipedream + native).
+                        // It's "active" when EITHER list contains its slug —
+                        // and toggling flips both at once, so whichever method
+                        // the user has connected actually gets enabled.
+                        const pdActive = item.pipedreamSlug ? enabledConnections.includes(item.pipedreamSlug) : false;
+                        const nvActive = item.nativeSlug ? enabledNativeConnectorIds.includes(item.nativeSlug) : false;
+                        const isActive = pdActive || nvActive;
+                        const onToggle = () => {
+                          if (item.pipedreamSlug) {
+                            handleIntegrationToggle(item.pipedreamSlug, !isActive);
+                          }
+                          if (item.nativeSlug) {
+                            setEnabledNativeConnectorIds((prev) =>
+                              isActive ? prev.filter((id) => id !== item.nativeSlug) : [...prev, item.nativeSlug!]
+                            );
+                          }
+                        };
+                        return (
+                          <div key={item.key} className="workspace-settings-integration-item">
+                            <div className="workspace-settings-integration-main">
+                              <span className="workspace-settings-integration-label d-inline-flex align-items-center gap-2">
+                                {item.iconSrc ? (
+                                  <img
+                                    src={item.iconSrc}
+                                    alt={item.name}
+                                    style={{ width: 18, height: 18, objectFit: 'contain' }}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <i className={item.iconClass} />
+                                )}
+                                <span>{item.name}</span>
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className={`workspace-settings-integration-state ${isActive ? 'is-connected' : 'is-connect'}`}
+                              onClick={onToggle}
+                              disabled={isDisabled}
+                            >
+                              {isActive ? (
+                                <>
+                                  <Check size={12} />
+                                  {t('workspaceSettings.enabledInChat', { defaultValue: 'Enabled' })}
+                                </>
+                              ) : (
+                                t('workspaceSettings.enableInChat', { defaultValue: 'Enable' })
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -787,9 +854,27 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 )}
               </div>
               <div className="workspace-settings-card-header-right">
-                {collapsedSections.chatUploads && (
-                  <span className="workspace-settings-collapsed-summary">
-                    {uploadsFiles.length > 0 ? `${uploadsFiles.length}` : t('workspaceSettings.noneSelected')}
+                {collapsedSections.chatUploads && uploadsFiles.length === 0 && (
+                  <span className="workspace-settings-collapsed-summary">{t('workspaceSettings.noneSelected')}</span>
+                )}
+                {uploadsFiles.length > 0 && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="workspace-settings-icon-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedFilesModal('uploads');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.stopPropagation();
+                        setExpandedFilesModal('uploads');
+                      }
+                    }}
+                    title={t('workspaceSettings.expand')}
+                  >
+                    <Expand size={14} />
                   </span>
                 )}
                 <span
@@ -857,9 +942,27 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 {outputFiles.length > 0 && <span className="workspace-settings-count-badge">{outputFiles.length}</span>}
               </div>
               <div className="workspace-settings-card-header-right">
-                {collapsedSections.outputFiles && (
-                  <span className="workspace-settings-collapsed-summary">
-                    {outputFiles.length > 0 ? `${outputFiles.length}` : t('workspaceSettings.noneSelected')}
+                {collapsedSections.outputFiles && outputFiles.length === 0 && (
+                  <span className="workspace-settings-collapsed-summary">{t('workspaceSettings.noneSelected')}</span>
+                )}
+                {outputFiles.length > 0 && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="workspace-settings-icon-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedFilesModal('outputs');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.stopPropagation();
+                        setExpandedFilesModal('outputs');
+                      }
+                    }}
+                    title={t('workspaceSettings.expand')}
+                  >
+                    <Expand size={14} />
                   </span>
                 )}
                 <span
@@ -910,6 +1013,19 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
           </div>
         )}
       </div>
+      <WorkspaceChatFilesExpandedModal
+        show={expandedFilesModal !== null}
+        onHide={() => setExpandedFilesModal(null)}
+        title={
+          expandedFilesModal === 'outputs'
+            ? t('workspaceSettings.expandedTitleOutputFiles')
+            : t('workspaceSettings.expandedTitleChatUploads')
+        }
+        files={expandedFilesModal === 'outputs' ? outputFiles : uploadsFiles}
+        rootPrefix={expandedFilesModal === 'outputs' ? 'outputs/' : 'uploads/'}
+        onOpen={onOpenFile}
+        onDownload={onDownloadFile}
+      />
     </div>
   );
 };
@@ -969,14 +1085,19 @@ const WorkspaceSettingsFileList: React.FC<WorkspaceSettingsFileListProps> = ({
     <div className="workspace-settings-file-list">
       {sortedFiles.map((file) => {
         const iconClass = getFileIconClass(file.displayName);
+        const colorClass = getFileIconColorClass(file.displayName);
         const modifiedLabel = formatFileModifiedDate(file.modifiedAt);
 
         return (
           <div key={file.path} className="workspace-settings-file-row">
-            <i className={`${iconClass} workspace-settings-file-icon`} />
+            <i className={`${iconClass} workspace-settings-file-icon ${colorClass}`} />
             <div className="workspace-settings-file-main" title={file.relativePath}>
-              <div className="workspace-settings-file-top-row">
-                <span className="workspace-settings-file-name">{file.displayName}</span>
+              <span className="workspace-settings-file-name">{file.displayName}</span>
+              <div className="workspace-settings-file-bottom-row">
+                <span className="workspace-settings-file-meta">
+                  <span className="workspace-settings-file-size">{formatFileSize(file.size)}</span>
+                  {modifiedLabel && <span className="workspace-settings-file-modified">{modifiedLabel}</span>}
+                </span>
                 <div className="workspace-settings-file-actions">
                   {onOpen && (
                     <Button
@@ -1002,10 +1123,6 @@ const WorkspaceSettingsFileList: React.FC<WorkspaceSettingsFileListProps> = ({
                   )}
                 </div>
               </div>
-              <span className="workspace-settings-file-meta">
-                <span className="workspace-settings-file-size">{formatFileSize(file.size)}</span>
-                {modifiedLabel && <span className="workspace-settings-file-modified">{modifiedLabel}</span>}
-              </span>
             </div>
           </div>
         );

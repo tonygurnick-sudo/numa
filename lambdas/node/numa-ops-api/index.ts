@@ -39,6 +39,7 @@ const HEADERS = {
 
 const OPS_TABLE = process.env.OPS_TABLE!;
 const OPS_CONFIG_TABLE = process.env.OPS_CONFIG_TABLE!;
+const OPS_CRM_TABLE = process.env.OPS_CRM_TABLE!;
 const OUTPUTS_BUCKET_NAME = process.env.OUTPUTS_BUCKET_NAME!;
 const REGION = process.env.REGION || 'ap-southeast-2';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -394,6 +395,134 @@ const buildAuditItem = (
     performedByName: auth.name,
     createdAt: ts,
   };
+};
+
+// ─── Mention notification helpers ───────────────────────────────────────────────
+//
+// Used by POST /tickets/{ticketId}/comments to assemble the `ops_mention`
+// email payload sent to the centralised numa-email-sender. The sanitization
+// helpers are intentionally narrow — they target the output shape of the
+// in-app RichTextEditor, not arbitrary HTML.
+
+const MENTION_AVATAR_PRESIGN_EXPIRY = 60 * 60 * 24 * 7; // 7 days
+const URL_REGEX = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;!?)]/g;
+
+const parseS3Url = (url: string): { bucket: string; key: string } | null => {
+  const match = url.match(/^s3:\/\/([^/]+)\/(.+)$/);
+  return match ? { bucket: match[1], key: match[2] } : null;
+};
+
+/**
+ * Find a ticket by its UUID by probing every accessible team board in
+ * parallel. Tickets are stored as TEAM#{teamId} / TICKET#{ticketId}, so a
+ * lookup that doesn't know which board owns the ticket has to fan out.
+ */
+const findTicketByUuid = async (ticketId: string): Promise<Record<string, unknown> | undefined> => {
+  const { items: allTeams } = await queryGSI1('TENANT', 'TEAM#');
+  const probes = await Promise.all(
+    allTeams.map((team) => getItem(`TEAM#${String(team.id ?? '')}`, `TICKET#${ticketId}`))
+  );
+  return probes.find((t): t is Record<string, unknown> => Boolean(t));
+};
+
+/**
+ * Sanitize RichTextEditor HTML for inclusion in email bodies. The RTE emits a
+ * narrow tag set plus the occasional `<div><br></div>` paragraph-break artefact
+ * and bare URLs that aren't wrapped in <a>. We:
+ *   - strip script/style/iframe/object/embed (defence in depth — the in-app
+ *     surface already trusts this content, but email clients are less forgiving)
+ *   - drop event handlers and javascript: hrefs
+ *   - collapse empty <div><br></div> blocks
+ *   - auto-link bare URLs so they don't get half-parsed by clients
+ */
+const sanitizeCommentHtml = (html: string): string => {
+  let out = String(html);
+
+  // Strip dangerous block-level tags including content
+  out = out.replace(/<(script|style|iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  // Strip standalone dangerous tags
+  out = out.replace(/<\/?(script|style|iframe|object|embed)\b[^>]*>/gi, '');
+  // Strip inline event handlers (onclick=..., onerror=..., etc.)
+  out = out.replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  // Strip javascript: and data: hrefs/srcs
+  out = out.replace(/(href|src)\s*=\s*(["'])\s*(?:javascript|data):[^"']*\2/gi, '$1="#"');
+  // Collapse empty paragraph-break artefacts produced by the RTE
+  out = out.replace(/<div>\s*<br\s*\/?\s*>\s*<\/div>/gi, '');
+  out = out.replace(/<p>\s*<br\s*\/?\s*>\s*<\/p>/gi, '');
+
+  // Auto-link bare URLs outside of existing anchors. Cheap approach: split on
+  // <a>...</a> spans, only transform the non-anchor segments. This avoids the
+  // classic "linking URLs that are already inside href" mistake.
+  const parts = out.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/i);
+  out = parts
+    .map((part, idx) => {
+      if (idx % 2 === 1) return part; // already an anchor — leave alone
+      return part.replace(URL_REGEX, (url) => `<a href="${url}">${url}</a>`);
+    })
+    .join('');
+
+  return out.trim();
+};
+
+/**
+ * Convert HTML to a single-string plain text representation. Used for the
+ * email's text/plain fallback so recipients on text-only clients see the
+ * comment without HTML markup leaking through.
+ */
+const htmlToPlainText = (html: string): string => {
+  let out = String(html);
+  // Drop tags entirely; preserve href contents by keeping the text between
+  // <a>...</a>. The RTE's bare-URL output (now auto-linked) survives because
+  // the URL text is identical to the href.
+  out = out.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  out = out.replace(/<br\s*\/?\s*>/gi, '\n');
+  out = out.replace(/<\/(p|div|li|h[1-6])>/gi, '\n');
+  out = out.replace(/<[^>]+>/g, '');
+  // Decode the most common entities — &nbsp; is the main one the RTE emits
+  out = out
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  // Collapse runs of whitespace and excess blank lines
+  return out
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line, idx, arr) => line || (idx > 0 && arr[idx - 1]))
+    .join('\n')
+    .trim();
+};
+
+const computeInitials = (name: string): string => {
+  const words = String(name).trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+};
+
+/**
+ * Generate a long-lived presigned GET URL for a staff member's avatar so the
+ * email recipient (who has no auth into the Numa account) can render the
+ * image inline. Returns null on any failure — the template falls back to
+ * initials in that case.
+ */
+const presignAvatarUrl = async (avatarUrl: string | undefined): Promise<string | null> => {
+  if (!avatarUrl) return null;
+  const parsed = parseS3Url(avatarUrl);
+  if (!parsed) return null;
+  try {
+    const s3 = withPRM(S3Client, { region: REGION });
+    const url = await getSignedUrl(
+      s3 as unknown as Parameters<typeof getSignedUrl>[0],
+      new GetObjectCommand({ Bucket: parsed.bucket, Key: parsed.key }),
+      { expiresIn: MENTION_AVATAR_PRESIGN_EXPIRY }
+    );
+    return url;
+  } catch {
+    return null;
+  }
 };
 
 // ─── Sprint zone backwards-compat ────────────────────────────────────────────────
@@ -1305,6 +1434,7 @@ const buildTicketIndexItems = (
   ticketId: string,
   assigneeId: string | undefined,
   customerId: string | undefined,
+  supplierId: string | undefined,
   workUnitId: string | undefined,
   projectId: string | undefined,
   updatedAt: string
@@ -1339,6 +1469,20 @@ const buildTicketIndexItems = (
     });
   }
 
+  if (supplierId) {
+    items.push({
+      PK: `TEAM#${teamId}`,
+      SK: `TICKET#${ticketId}#IDX_SUPPLIER`,
+      GSI2PK: `SUPPLIER#${supplierId}`,
+      GSI2SK: `TICKET#${updatedAt}#${ticketId}`,
+      entityType: 'TICKET_INDEX',
+      indexType: 'IDX_SUPPLIER',
+      ticketId,
+      teamId,
+      supplierId,
+    });
+  }
+
   if (workUnitId) {
     items.push({
       PK: `TEAM#${teamId}`,
@@ -1368,6 +1512,32 @@ const buildTicketIndexItems = (
   }
 
   return items;
+};
+
+// Atomically adjust openTicketCount on a customer/supplier META item in the
+// CRM table. Used when ticket.customerId / ticket.supplierId is set, cleared
+// or changed. Avoids a GSI count at read time (which is eventually consistent
+// and was the source of BUG-075's wrong ticketCount). Silently no-ops if the
+// target entity has been deleted concurrently.
+const adjustEntityTicketCount = async (
+  entityType: 'CUSTOMER' | 'SUPPLIER',
+  entityId: string | undefined,
+  delta: number
+): Promise<void> => {
+  if (!entityId || delta === 0) return;
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: OPS_CRM_TABLE,
+        Key: { PK: `${entityType}#${entityId}`, SK: 'META' },
+        UpdateExpression: 'ADD openTicketCount :delta SET updatedAt = :ts',
+        ExpressionAttributeValues: { ':delta': delta, ':ts': now() },
+        ConditionExpression: 'attribute_exists(PK)',
+      })
+    );
+  } catch (err) {
+    if ((err as Error).name !== 'ConditionalCheckFailedException') throw err;
+  }
 };
 
 const handleTickets = async (
@@ -1442,53 +1612,79 @@ const handleTickets = async (
       }
     }
 
-    if (mentions.size > 0 && process.env.EMAIL_SENDER_LAMBDA_ARN) {
-      try {
-        const staffResp = await dynamo.send(
-          new QueryCommand({
-            TableName: process.env.OPS_CONFIG_TABLE,
-            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
-            ExpressionAttributeValues: { ':pk': 'CONFIG', ':sk': 'STAFF#' },
-          })
-        );
-        const staffList = staffResp.Items ?? [];
+    // Look up the ticket up-front — we need its title/displayId/type for the
+    // mention email, and we need to bump commentCount on it afterwards.
+    const ticket = await findTicketByUuid(ticketId);
 
-        const origin =
-          event.headers.origin ??
-          (event.headers.referer ? event.headers.referer.replace(/\/$/, '') : `https://${event.headers.host}`);
-        const ticketUrl = `${origin}/ops?ticketId=${ticketId}`;
+    if (mentions.size > 0 && ticket && process.env.EMAIL_SENDER_LAMBDA_ARN) {
+      try {
+        const [staffResp, ticketTypeResp] = await Promise.all([
+          dynamo.send(
+            new QueryCommand({
+              TableName: process.env.OPS_CONFIG_TABLE,
+              KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+              ExpressionAttributeValues: { ':pk': 'CONFIG', ':sk': 'STAFF#' },
+            })
+          ),
+          ticket.ticketTypeId
+            ? dynamo.send(
+                new GetCommand({
+                  TableName: process.env.OPS_CONFIG_TABLE,
+                  Key: { PK: 'CONFIG', SK: `TICKET_TYPE#${String(ticket.ticketTypeId)}` },
+                })
+              )
+            : Promise.resolve(undefined),
+        ]);
+        const staffList = staffResp.Items ?? [];
+        const ticketType = ticketTypeResp?.Item;
+
+        // Strip any trailing slash from every fallback — origin headers
+        // sometimes arrive as `https://host/` which produced `host//ops` in
+        // the email link and broke the deep-link route on click.
+        const rawOrigin = event.headers.origin ?? event.headers.referer ?? `https://${event.headers.host}`;
+        const origin = String(rawOrigin).replace(/\/+$/, '');
+        const displayId = String(ticket.displayId ?? '');
+        const ticketUrl = displayId
+          ? `${origin}/ops?ticket=${encodeURIComponent(displayId)}`
+          : `${origin}/ops?ticketId=${ticketId}`;
 
         const authorStaff = staffList.find((s) => s.id === auth.sub || s.SK === `STAFF#${auth.sub}`);
-        const authorName = authorStaff?.name;
-        const authorEmail = authorStaff?.email;
-        const displayAuthor = authorName
-          ? String(authorName)
-          : authorEmail
-            ? String(authorEmail).split('@')[0]
-            : 'Someone';
+        const authorName = authorStaff?.name
+          ? String(authorStaff.name)
+          : authorStaff?.email
+            ? String(authorStaff.email).split('@')[0]
+            : auth.name || 'Someone';
+        const authorAvatarUrl = await presignAvatarUrl(authorStaff?.avatarUrl as string | undefined);
 
-        for (const sub of mentions) {
-          const mentionedStaff = staffList.find((s) => s.id === sub || s.SK === `STAFF#${sub}`);
-          if (mentionedStaff && mentionedStaff.email) {
+        const sanitizedHtml = sanitizeCommentHtml(contentStr);
+        const plainText = htmlToPlainText(sanitizedHtml);
+        const emailLambdaClient = withPRM(LambdaClient, { region: 'us-east-1' });
+
+        await Promise.all(
+          [...mentions].map(async (sub) => {
+            const mentionedStaff = staffList.find((s) => s.id === sub || s.SK === `STAFF#${sub}`);
+            if (!mentionedStaff?.email) return;
+
             const emailPayload = {
               sts_proof_url: await generateStsProofUrl(),
               client_name: process.env.CLIENT_NAME || 'unknown',
-              to: [mentionedStaff.email],
-              template: 'generic',
+              to: [String(mentionedStaff.email)],
+              template: 'ops_mention',
               template_data: {
-                subject: `${displayAuthor} mentioned you in Ops Ticket #${ticketId.split('-')[0] || ticketId.slice(0, 8)}`,
-                title: 'You Were Mentioned',
-                body_html: `<p>You were mentioned in a comment by <strong>${displayAuthor}</strong>:</p>
-                            <blockquote style="border-left: 4px solid #ccc; padding-left: 1rem; color: #555; margin-left: 0; word-break: break-word;">
-                              ${contentStr}
-                            </blockquote>
-                            <p><a href="${ticketUrl}" style="display: inline-block; padding: 10px 20px; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 5px;">View Ticket</a></p>`,
-                body_text: `You were mentioned in a comment by ${displayAuthor}: ${contentStr}\nView Ticket: ${ticketUrl}`,
+                mentioner_name: authorName,
+                mentioner_initials: computeInitials(authorName),
+                ...(authorAvatarUrl ? { mentioner_avatar_url: authorAvatarUrl } : {}),
+                ticket_display_id: displayId || ticketId.slice(0, 8),
+                ticket_title: String(ticket.title ?? 'Untitled ticket'),
+                ticket_type_label: String(ticketType?.name ?? 'Ticket'),
+                ticket_type_color: String(ticketType?.color ?? '#6b7280'),
+                comment_html_safe: sanitizedHtml,
+                comment_text: plainText,
+                ticket_url: ticketUrl,
                 primary_color: '#0d6efd',
               },
             };
 
-            const emailLambdaClient = withPRM(LambdaClient, { region: 'us-east-1' });
             await emailLambdaClient.send(
               new InvokeCommand({
                 FunctionName: process.env.EMAIL_SENDER_LAMBDA_ARN,
@@ -1496,21 +1692,13 @@ const handleTickets = async (
                 Payload: Buffer.from(JSON.stringify(emailPayload)),
               })
             );
-          }
-        }
+          })
+        );
       } catch (err) {
         console.error('Failed to process mentions', err);
       }
     }
 
-    // Increment commentCount on the ticket — need to find the ticket first
-    const ticketItems = await queryByPK(`TEAM#${String(body.boardId ?? '')}`, `TICKET#${ticketId}`);
-    // Fallback: scan for ticket by looking at GSI3
-    let ticket = ticketItems.find((t) => String(t.SK) === `TICKET#${ticketId}`);
-    if (!ticket) {
-      const found = await queryGSI3(`TID#${String(body.displayId ?? '')}`, 'TICKET');
-      ticket = found;
-    }
     if (ticket) {
       try {
         await dynamo.send(
@@ -1760,59 +1948,282 @@ const handleTickets = async (
 
   // ── Bulk update ────────────────────────────────────────────────────────────
   // POST /ops/tickets/bulk
+  //
+  // Applies the same `changes` patch to many tickets in one call. Mirrors the
+  // single-PUT path: derives statusType from stage, recomputes lifecycle
+  // timestamps (scopedAt/startedAt/completedAt/endedAt), applies the workUnitId
+  // derivation rule (board zone -> inherit active sprint; backlog -> use what
+  // the caller sent), maintains GSI2 index rows (IDX_WORKUNIT / IDX_ASSIGNEE /
+  // IDX_CUSTOMER / IDX_PROJECT) when those fields change, and writes one audit
+  // entry per ticket. Zones/stages/work-units are loaded once per team.
   if (method === 'POST' && segments.length === 1 && segments[0] === 'bulk') {
     const { ticketIds, changes } = body;
     if (!Array.isArray(ticketIds) || !changes) return errorResponse(400, 'Missing required fields: ticketIds, changes');
 
+    const teamId = String((changes as Record<string, unknown>).boardId ?? '');
+    if (!teamId) return errorResponse(400, 'Missing required field: changes.boardId');
+
     const ts = now();
     const results: Record<string, unknown>[] = [];
-    const bumpedTeams = new Set<string>();
+
+    // Strip API-shape keys we don't want spread onto the DB item.
+    const { boardId: _boardId, currentBoardId: _currentBoardId, ...changesObj } = changes as Record<string, unknown>;
+    void _boardId;
+    void _currentBoardId;
+
+    // Pre-load team zones/stages/work-units once.
+    const teamItems = (await queryGSI1(`TEAM#${teamId}`)).items;
+    const teamZones = teamItems.filter((i) => String(i.SK ?? '').startsWith('ZONE#'));
+    const teamStages = teamItems.filter((i) => String(i.SK ?? '').startsWith('STAGE#'));
+    const teamWorkUnits = teamItems.filter((i) => String(i.SK ?? '').startsWith('WORKUNIT#'));
+    applyLegacyActiveSprintFallback(teamZones, teamWorkUnits);
+    const stageById = new Map(teamStages.map((s) => [String(s.id), s]));
+    const zoneById = new Map(teamZones.map((z) => [String(z.id), z]));
+
+    const indexOps: Promise<void>[] = [];
 
     for (const tid of ticketIds as string[]) {
-      const teamId = String((changes as Record<string, unknown>).boardId ?? '');
       const existing = await getItem(`TEAM#${teamId}`, `TICKET#${tid}`);
       if (!existing) {
         results.push({ ticketId: tid, error: 'not found' });
         continue;
       }
 
-      // Strip `boardId` from the spread so we don't write the API-shape key
-      // alongside the existing DB-shape `teamId` attribute on the item. The
-      // routing teamId above is what we actually use; the item's teamId is
-      // unchanged on a same-board edit.
-      const { boardId: _boardId, ...changesObj } = changes as Record<string, unknown>;
-      void _boardId;
-
-      // Derive statusType from stage when stageId changes
-      let derivedStatusType: string | undefined;
-      if (changesObj.stageId && String(changesObj.stageId) !== String(existing.stageId)) {
-        const targetStage = await getItem(`TEAM#${teamId}`, `STAGE#${String(changesObj.stageId)}`);
-        if (targetStage?.statusType) derivedStatusType = String(targetStage.statusType);
+      // ── Resolve stageId / statusType ─────────────────────────────────────
+      const stageId = changesObj.stageId !== undefined ? String(changesObj.stageId) : (existing.stageId as string);
+      let statusType = existing.statusType as string;
+      if (changesObj.stageId !== undefined && String(changesObj.stageId) !== String(existing.stageId)) {
+        const targetStage = stageById.get(stageId);
+        if (targetStage?.statusType) statusType = String(targetStage.statusType);
+      } else if (changesObj.statusType !== undefined) {
+        statusType = String(changesObj.statusType);
       }
+
+      // ── Lifecycle timestamps (matches single-PUT) ────────────────────────
+      const lifecycleUpdates: Record<string, unknown> = {};
+      if (statusType !== existing.statusType) {
+        const prevStatus = existing.statusType as string;
+        if (['scoped', 'queued', 'active'].includes(statusType) && !existing.scopedAt) {
+          lifecycleUpdates.scopedAt = ts;
+        }
+        if (['queued', 'active'].includes(statusType) && !existing.startedAt) {
+          lifecycleUpdates.startedAt = ts;
+        }
+        if (statusType === 'completed') {
+          if (!existing.completedAt) lifecycleUpdates.completedAt = ts;
+          if (existing.endedAt) lifecycleUpdates.endedAt = null;
+        } else if (prevStatus === 'completed') {
+          lifecycleUpdates.completedAt = null;
+        }
+        if (statusType === 'ended') {
+          if (!existing.endedAt) lifecycleUpdates.endedAt = ts;
+          if (existing.completedAt) lifecycleUpdates.completedAt = null;
+        } else if (prevStatus === 'ended') {
+          lifecycleUpdates.endedAt = null;
+        }
+      }
+
+      // ── Resolve zoneId (caller may have sent one; otherwise derive from stage) ─
+      let zoneId = changesObj.zoneId !== undefined ? String(changesObj.zoneId) : (existing.zoneId as string);
+      if (changesObj.stageId !== undefined && changesObj.zoneId === undefined) {
+        const targetStage = stageById.get(stageId);
+        if (targetStage?.zoneId) zoneId = String(targetStage.zoneId);
+      }
+
+      // ── workUnitId derivation (matches single-PUT) ───────────────────────
+      const finalZone = zoneById.get(zoneId);
+      const finalZoneType = finalZone ? String(finalZone.zoneType) : undefined;
+      const finalZoneActiveWuId = finalZone?.activeWorkUnitId ? String(finalZone.activeWorkUnitId) : null;
+      let derivedWorkUnitId: string | null | undefined;
+      if (finalZoneType === 'board') {
+        derivedWorkUnitId = finalZoneActiveWuId;
+      } else {
+        // backlog (or unknown): caller's workUnitId wins, otherwise keep existing.
+        derivedWorkUnitId =
+          changesObj.workUnitId !== undefined
+            ? changesObj.workUnitId === null
+              ? null
+              : String(changesObj.workUnitId)
+            : ((existing.workUnitId as string | null | undefined) ?? null);
+      }
+
+      // scopedAt also fires when a work unit is first assigned.
+      const workUnitBeingAssigned = !existing.workUnitId && !!derivedWorkUnitId;
+      if (workUnitBeingAssigned && !existing.scopedAt && !lifecycleUpdates.scopedAt) {
+        lifecycleUpdates.scopedAt = ts;
+      }
+
+      const order = typeof changesObj.order === 'number' ? changesObj.order : ((existing.order as number) ?? 0);
+      const newVersion = ((existing.version as number) ?? 0) + 1;
 
       const updated: Record<string, unknown> = {
         ...existing,
         ...changesObj,
+        ...lifecycleUpdates,
         PK: existing.PK,
         SK: existing.SK,
         id: tid,
-        ...(derivedStatusType ? { statusType: derivedStatusType } : {}),
-        version: ((existing.version as number) ?? 0) + 1,
+        teamId,
+        zoneId,
+        stageId,
+        statusType,
+        workUnitId: derivedWorkUnitId,
+        order,
+        version: newVersion,
         updatedAt: ts,
         updatedBy: auth.sub,
+        GSI1SK: `STAGE#${stageId}#ORDER#${padOrder(order)}#${tid}`,
       };
 
-      // Recompute GSI1SK if stageId or order changed
-      const stageId = String(updated.stageId ?? existing.stageId ?? '');
-      const order = typeof updated.order === 'number' ? updated.order : ((existing.order as number) ?? 0);
-      updated.GSI1SK = `STAGE#${stageId}#ORDER#${padOrder(order)}#${tid}`;
+      // ── Audit ────────────────────────────────────────────────────────────
+      const auditChanges: Record<string, unknown> = {};
+      const AUDIT_SKIP_FIELDS = new Set(['version', 'currentBoardId', 'currentTeamId']);
+      for (const key of Object.keys(changesObj)) {
+        if (AUDIT_SKIP_FIELDS.has(key)) continue;
+        const dbKey = API_TO_DB_KEYS[key] ?? key;
+        if (changesObj[key] !== existing[dbKey]) {
+          auditChanges[key] = { from: existing[dbKey], to: changesObj[key] };
+        }
+      }
+      // Surface zoneId / workUnitId / statusType changes that came from derivation.
+      if (String(zoneId) !== String(existing.zoneId ?? '') && !('zoneId' in auditChanges)) {
+        auditChanges.zoneId = { from: existing.zoneId, to: zoneId };
+      }
+      if (String(derivedWorkUnitId ?? '') !== String(existing.workUnitId ?? '') && !('workUnitId' in auditChanges)) {
+        auditChanges.workUnitId = { from: existing.workUnitId, to: derivedWorkUnitId };
+      }
+      if (statusType !== existing.statusType && !('statusType' in auditChanges)) {
+        auditChanges.statusType = { from: existing.statusType, to: statusType };
+      }
 
       await putItem(updated);
-      bumpedTeams.add(teamId);
+      indexOps.push(putItem(buildAuditItem(tid, auth, 'updated', auditChanges)));
+
+      // ── Maintain GSI2 index rows ─────────────────────────────────────────
+      const assigneeChanged =
+        changesObj.assigneeId !== undefined &&
+        String(changesObj.assigneeId ?? '') !== String(existing.assigneeId ?? '');
+      if (assigneeChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_ASSIGNEE`));
+        if (changesObj.assigneeId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_ASSIGNEE`,
+              GSI2PK: `ASSIGNEE#${String(changesObj.assigneeId)}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_ASSIGNEE',
+              ticketId: tid,
+              teamId,
+              assigneeId: String(changesObj.assigneeId),
+            })
+          );
+        }
+      }
+
+      const customerChanged =
+        changesObj.customerId !== undefined &&
+        String(changesObj.customerId ?? '') !== String(existing.customerId ?? '');
+      if (customerChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_CUSTOMER`));
+        if (changesObj.customerId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_CUSTOMER`,
+              GSI2PK: `CUSTOMER#${String(changesObj.customerId)}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_CUSTOMER',
+              ticketId: tid,
+              teamId,
+              customerId: String(changesObj.customerId),
+            })
+          );
+        }
+        indexOps.push(
+          adjustEntityTicketCount('CUSTOMER', existing.customerId ? String(existing.customerId) : undefined, -1)
+        );
+        indexOps.push(
+          adjustEntityTicketCount('CUSTOMER', changesObj.customerId ? String(changesObj.customerId) : undefined, 1)
+        );
+      }
+
+      const supplierChanged =
+        changesObj.supplierId !== undefined &&
+        String(changesObj.supplierId ?? '') !== String(existing.supplierId ?? '');
+      if (supplierChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_SUPPLIER`));
+        if (changesObj.supplierId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_SUPPLIER`,
+              GSI2PK: `SUPPLIER#${String(changesObj.supplierId)}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_SUPPLIER',
+              ticketId: tid,
+              teamId,
+              supplierId: String(changesObj.supplierId),
+            })
+          );
+        }
+        indexOps.push(
+          adjustEntityTicketCount('SUPPLIER', existing.supplierId ? String(existing.supplierId) : undefined, -1)
+        );
+        indexOps.push(
+          adjustEntityTicketCount('SUPPLIER', changesObj.supplierId ? String(changesObj.supplierId) : undefined, 1)
+        );
+      }
+
+      const workUnitChanged = String(derivedWorkUnitId ?? '') !== String(existing.workUnitId ?? '');
+      if (workUnitChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_WORKUNIT`));
+        if (derivedWorkUnitId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_WORKUNIT`,
+              GSI2PK: `WORKUNIT#${derivedWorkUnitId}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_WORKUNIT',
+              ticketId: tid,
+              teamId,
+              workUnitId: derivedWorkUnitId,
+            })
+          );
+        }
+      }
+
+      const projectChanged =
+        changesObj.projectId !== undefined && String(changesObj.projectId ?? '') !== String(existing.projectId ?? '');
+      if (projectChanged) {
+        indexOps.push(deleteItem(`TEAM#${teamId}`, `TICKET#${tid}#IDX_PROJECT`));
+        if (changesObj.projectId) {
+          indexOps.push(
+            putItem({
+              PK: `TEAM#${teamId}`,
+              SK: `TICKET#${tid}#IDX_PROJECT`,
+              GSI2PK: `PROJECT#${String(changesObj.projectId)}`,
+              GSI2SK: `TICKET#${ts}#${tid}`,
+              entityType: 'TICKET_INDEX',
+              indexType: 'IDX_PROJECT',
+              ticketId: tid,
+              teamId,
+              projectId: String(changesObj.projectId),
+            })
+          );
+        }
+      }
+
       results.push({ ticketId: tid, success: true });
     }
 
-    await Promise.all([...bumpedTeams].map((tid) => bumpBoardVersion(tid, ts)));
+    if (indexOps.length > 0) await Promise.all(indexOps);
+    await bumpBoardVersion(teamId, ts);
     return jsonResponse(200, { results });
   }
 
@@ -1883,6 +2294,26 @@ const handleTickets = async (
     if (qp.priority) {
       filtered = filtered.filter((t) => t.priority === qp.priority);
     }
+    if (qp.search) {
+      const term = qp.search.trim().toLowerCase();
+      if (term) {
+        // Split on whitespace so multi-word queries match in any order
+        // ("network interruptions" and "interruptions network" both hit).
+        const words = term.split(/\s+/).filter(Boolean);
+        filtered = filtered.filter((t) => {
+          const displayId = String(t.displayId ?? '').toLowerCase();
+          // Display-ID lookup: users naturally type "FEAT-010" expecting that
+          // ticket. A prefix match like "FEAT" also surfaces all tickets of
+          // that type, which is useful for narrowing by ticket-type prefix.
+          if (displayId && displayId.includes(term)) return true;
+          const title = String(t.title ?? '').toLowerCase();
+          const descHtml = String(t.description ?? '');
+          const descText = descHtml.replace(/<[^>]+>/g, ' ').toLowerCase();
+          const haystack = `${title} ${descText}`;
+          return words.every((w) => haystack.includes(w));
+        });
+      }
+    }
 
     return jsonResponse(200, {
       tickets: filtered,
@@ -1893,8 +2324,6 @@ const handleTickets = async (
   // ── GET /ops/tickets/{ticketId} — get single ticket ─────────────────────────
   if (method === 'GET' && segments.length === 1) {
     const ticketId = segments[0];
-    // We need to find the ticket; use GSI3 lookup with a scan over known boards
-    // or the caller can provide teamId as query param
     const teamId = qp.boardId;
     let ticket: Record<string, unknown> | undefined;
 
@@ -1902,11 +2331,12 @@ const handleTickets = async (
       ticket = await getItem(`TEAM#${teamId}`, `TICKET#${ticketId}`);
     }
 
-    if (!ticket) {
-      // Fallback: try to find via all boards (expensive, but works)
-      // For efficiency, caller should provide teamId
-      return errorResponse(400, 'Please provide boardId as query parameter for single ticket lookup');
-    }
+    // Fallback: ticket lives on a different board (common for deep-links from
+    // Slack/email when the user is on the wrong board). Probe every accessible
+    // board in parallel rather than 400ing.
+    if (!ticket) ticket = await findTicketByUuid(ticketId);
+
+    if (!ticket) return errorResponse(404, 'Ticket not found');
 
     // Fetch links and recent comments
     const [links, comments] = await Promise.all([
@@ -2078,6 +2508,7 @@ const handleTickets = async (
       ticketId,
       assigneeId ? String(assigneeId) : undefined,
       customerId ? String(customerId) : undefined,
+      supplierId ? String(supplierId) : undefined,
       resolvedWorkUnitId,
       projectId ? String(projectId) : undefined,
       ts
@@ -2095,6 +2526,14 @@ const handleTickets = async (
     ];
 
     await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems as never }));
+
+    // Maintain denormalised openTicketCount on the linked CRM entities. Done
+    // after the transactional write so a counter failure can't roll back the
+    // ticket itself; lazy recompute on getCustomer/getSupplier covers drift.
+    await Promise.all([
+      adjustEntityTicketCount('CUSTOMER', customerId ? String(customerId) : undefined, 1),
+      adjustEntityTicketCount('SUPPLIER', supplierId ? String(supplierId) : undefined, 1),
+    ]);
 
     return jsonResponse(201, {
       ticket: ticketItem,
@@ -2305,6 +2744,7 @@ const handleTickets = async (
       const oldIndexSKs = [
         `TICKET#${ticketId}#IDX_ASSIGNEE`,
         `TICKET#${ticketId}#IDX_CUSTOMER`,
+        `TICKET#${ticketId}#IDX_SUPPLIER`,
         `TICKET#${ticketId}#IDX_WORKUNIT`,
         `TICKET#${ticketId}#IDX_PROJECT`,
       ];
@@ -2314,6 +2754,7 @@ const handleTickets = async (
         ticketId,
         updated.assigneeId ? String(updated.assigneeId) : undefined,
         updated.customerId ? String(updated.customerId) : undefined,
+        updated.supplierId ? String(updated.supplierId) : undefined,
         updated.workUnitId ? String(updated.workUnitId) : undefined,
         updated.projectId ? String(updated.projectId) : undefined,
         ts
@@ -2346,6 +2787,24 @@ const handleTickets = async (
         throw err;
       }
 
+      // openTicketCount adjustments — cross-team move preserves the link to the
+      // CRM entity unless the caller also changed customerId / supplierId, so
+      // diff old vs. new and only adjust when they differ.
+      const xtmCustomerOld = existing.customerId ? String(existing.customerId) : undefined;
+      const xtmCustomerNew = updated.customerId ? String(updated.customerId) : undefined;
+      const xtmSupplierOld = existing.supplierId ? String(existing.supplierId) : undefined;
+      const xtmSupplierNew = updated.supplierId ? String(updated.supplierId) : undefined;
+      const counterOps: Promise<void>[] = [];
+      if (xtmCustomerOld !== xtmCustomerNew) {
+        counterOps.push(adjustEntityTicketCount('CUSTOMER', xtmCustomerOld, -1));
+        counterOps.push(adjustEntityTicketCount('CUSTOMER', xtmCustomerNew, 1));
+      }
+      if (xtmSupplierOld !== xtmSupplierNew) {
+        counterOps.push(adjustEntityTicketCount('SUPPLIER', xtmSupplierOld, -1));
+        counterOps.push(adjustEntityTicketCount('SUPPLIER', xtmSupplierNew, 1));
+      }
+      if (counterOps.length > 0) await Promise.all(counterOps);
+
       return jsonResponse(200, { ticket: updated });
     }
 
@@ -2367,11 +2826,13 @@ const handleTickets = async (
       throw err;
     }
 
-    // Update index items if assignee/customer/workUnit changed
+    // Update index items if assignee/customer/supplier/workUnit changed
     const assigneeChanged =
       body.assigneeId !== undefined && String(body.assigneeId ?? '') !== String(existing.assigneeId ?? '');
     const customerChanged =
       body.customerId !== undefined && String(body.customerId ?? '') !== String(existing.customerId ?? '');
+    const supplierChanged =
+      body.supplierId !== undefined && String(body.supplierId ?? '') !== String(existing.supplierId ?? '');
     // Compare against the derived workUnitId, not just what the caller sent, since
     // zone-based derivation may have changed it without an explicit body.workUnitId.
     const workUnitChanged = String(derivedWorkUnitId ?? '') !== String(existing.workUnitId ?? '');
@@ -2415,6 +2876,33 @@ const handleTickets = async (
           })
         );
       }
+      indexOps.push(
+        adjustEntityTicketCount('CUSTOMER', existing.customerId ? String(existing.customerId) : undefined, -1)
+      );
+      indexOps.push(adjustEntityTicketCount('CUSTOMER', body.customerId ? String(body.customerId) : undefined, 1));
+    }
+
+    if (supplierChanged) {
+      indexOps.push(deleteItem(`TEAM#${targetTeamId}`, `TICKET#${ticketId}#IDX_SUPPLIER`));
+      if (body.supplierId) {
+        indexOps.push(
+          putItem({
+            PK: `TEAM#${targetTeamId}`,
+            SK: `TICKET#${ticketId}#IDX_SUPPLIER`,
+            GSI2PK: `SUPPLIER#${String(body.supplierId)}`,
+            GSI2SK: `TICKET#${ts}#${ticketId}`,
+            entityType: 'TICKET_INDEX',
+            indexType: 'IDX_SUPPLIER',
+            ticketId,
+            teamId: targetTeamId,
+            supplierId: String(body.supplierId),
+          })
+        );
+      }
+      indexOps.push(
+        adjustEntityTicketCount('SUPPLIER', existing.supplierId ? String(existing.supplierId) : undefined, -1)
+      );
+      indexOps.push(adjustEntityTicketCount('SUPPLIER', body.supplierId ? String(body.supplierId) : undefined, 1));
     }
 
     if (workUnitChanged) {

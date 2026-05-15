@@ -353,6 +353,14 @@ export class WorkspaceChatToolsConstruct extends Construct {
         // KB configuration (empty string if not configured)
         Q_APPLICATION_ID: props.qApplicationId ?? '',
         Q_RETRIEVER_ID: props.qRetrieverId ?? '',
+        // Role assumed via AssumeRoleWithWebIdentity to query Q Business as the
+        // calling Cognito user. The OIDC trust policy + qbusiness:SearchRelevantContent
+        // permission are already on `numa-<client>-standard-role` (legacy V1 role,
+        // currently used by the per-user Cognito Identity Pool). Empty when Q is
+        // not provisioned.
+        QBUSINESS_USER_ROLE_ARN: props.qApplicationId
+          ? `arn:aws:iam::${callerIdentity.accountId}:role/numa-${props.clientName}-standard-role`
+          : '',
         BEDROCK_KNOWLEDGE_BASE_ID: props.bedrockKnowledgeBaseId ?? '',
         // Nova 2 Lite for fast, cost-effective summarization with reasoning
         FAST_MODEL_ID: 'global.amazon.nova-2-lite-v1:0',

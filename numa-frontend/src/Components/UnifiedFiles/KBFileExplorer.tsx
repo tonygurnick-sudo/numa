@@ -666,12 +666,60 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       return { s3Files, keys };
     }
 
+    /**
+     * Fetch a single folder's contents and merge into state. Shared between
+     * the user-initiated toggle (with per-folder spinner) and the refresh
+     * restore path (silent background refill).
+     */
+    async function fetchFolderContents(folderId: string, options: { withSpinner?: boolean } = {}): Promise<void> {
+      const basePrefixNoSlash = basePrefix.replace(/\/$/, '');
+      const subpath = folderId.startsWith(basePrefixNoSlash) ? folderId.slice(basePrefixNoSlash.length + 1) : folderId;
+
+      if (options.withSpinner) {
+        setLoadingFolders((prev) => new Set(prev).add(folderId));
+      }
+
+      try {
+        const { files: fileInfos, folders: folderNames = [] } = await knowledgeBaseService.listKBFiles(kbId, subpath);
+        const folderPrefix = `${basePrefix}${subpath}/`.replace(/\/{2,}/g, '/');
+        const { s3Files, keys } = apiResponseToS3Objects(fileInfos, folderNames, folderPrefix);
+
+        setFiles((prev) => {
+          const existing = new Set(prev.map((f) => f.Key));
+          const merged = [...prev];
+          for (const f of s3Files) {
+            if (!existing.has(f.Key)) merged.push(f);
+          }
+          return merged;
+        });
+        setAllObjectKeys((prev) => {
+          const next = new Set(prev);
+          keys.forEach((k) => next.add(k));
+          return next;
+        });
+        setLoadedFolders((prev) => new Set(prev).add(folderId));
+      } catch (err) {
+        console.error('Failed to load folder', folderId, err);
+      } finally {
+        if (options.withSpinner) {
+          setLoadingFolders((prev) => {
+            const next = new Set(prev);
+            next.delete(folderId);
+            return next;
+          });
+        }
+      }
+    }
+
     async function fetchFiles(): Promise<void> {
       // Set loading state for user-initiated refresh or initial load,
       // but only if we have no cached files to show
       if (isUserInitiatedRefresh || (isInitialLoad && files.length === 0)) {
         setIsLoadingFiles(true);
       }
+      // Snapshot expansion so we can replay it after the root refetch.
+      // Folders that no longer exist will silently drop out when the tree rebuilds.
+      const expansionSnapshot = Array.from(expandedFolders);
       try {
         // Fetch only root level — folders are returned separately
         const { files: fileInfos, folders: folderNames = [] } = await knowledgeBaseService.listKBFiles(kbId);
@@ -680,9 +728,9 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
 
         setFiles(s3Files);
         setAllObjectKeys(new Set(keys));
-        // Reset lazy-load tracking on full refresh
+        // Reset loaded tracking so the replay below actually refetches.
+        // expandedFolders is intentionally preserved so chevrons stay open during the refill.
         setLoadedFolders(new Set());
-        setExpandedFolders(new Set());
       } catch (err) {
         console.error('Failed to list KB files', err);
       } finally {
@@ -694,6 +742,12 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         if (isInitialLoad) {
           setIsInitialLoad(false);
         }
+      }
+      // Replay expansion in the background; fire-and-forget so the main
+      // spinner doesn't wait on subfolder refetches. Folders that no longer
+      // exist will silently drop out when the tree rebuilds.
+      if (expansionSnapshot.length > 0) {
+        void Promise.all(expansionSnapshot.map((folderId) => fetchFolderContents(folderId)));
       }
     }
 
@@ -939,8 +993,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
      * Toggle folder — lazily fetches contents the first time a folder is expanded.
      *
      * The folderId is the tree path built by buildRowsForTree, e.g.
-     * "documents/kb-abc123/reports".  We derive the API subpath by stripping
-     * the basePrefix.
+     * "documents/kb-abc123/reports".
      */
     function toggleFolder(folderId: string): void {
       const isExpanding = !expandedFolders.has(folderId);
@@ -953,43 +1006,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       // If collapsing or already loaded, nothing more to do
       if (!isExpanding || loadedFolders.has(folderId)) return;
 
-      // Derive the subpath the API expects (relative to the KB's S3 prefix)
-      const basePrefixNoSlash = basePrefix.replace(/\/$/, '');
-      const subpath = folderId.startsWith(basePrefixNoSlash) ? folderId.slice(basePrefixNoSlash.length + 1) : folderId;
-
-      // Mark folder as loading
-      setLoadingFolders((prev) => new Set(prev).add(folderId));
-
-      knowledgeBaseService
-        .listKBFiles(kbId, subpath)
-        .then(({ files: fileInfos, folders: folderNames = [] }) => {
-          const folderPrefix = `${basePrefix}${subpath}/`.replace(/\/{2,}/g, '/');
-          const { s3Files, keys } = apiResponseToS3Objects(fileInfos, folderNames, folderPrefix);
-
-          // Merge new files into existing state (avoid duplicates by key)
-          setFiles((prev) => {
-            const existing = new Set(prev.map((f) => f.Key));
-            const merged = [...prev];
-            for (const f of s3Files) {
-              if (!existing.has(f.Key)) merged.push(f);
-            }
-            return merged;
-          });
-          setAllObjectKeys((prev) => {
-            const next = new Set(prev);
-            keys.forEach((k) => next.add(k));
-            return next;
-          });
-          setLoadedFolders((prev) => new Set(prev).add(folderId));
-        })
-        .catch((err) => console.error('Failed to load folder', folderId, err))
-        .finally(() => {
-          setLoadingFolders((prev) => {
-            const next = new Set(prev);
-            next.delete(folderId);
-            return next;
-          });
-        });
+      void fetchFolderContents(folderId, { withSpinner: true });
     }
 
     /**

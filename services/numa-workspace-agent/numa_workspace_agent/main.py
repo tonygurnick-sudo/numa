@@ -1152,6 +1152,26 @@ async def invocations(request: Request):
     conversation_id = body.get("conversationId") or str(uuid.uuid4())
     user_email = body.get("userEmail", "unknown")
 
+    # Pull the raw Cognito JWT (already signature-verified by the proxy). Downstream
+    # tools that hit identity-aware AWS services — currently Q Business via
+    # AssumeRoleWithWebIdentity — need the original token, not just the sub claim.
+    auth_header = (payload_headers or {}).get("authorization") or request.headers.get(
+        "authorization", ""
+    )
+    id_token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+    if id_token and user_email in ("", "unknown"):
+        try:
+            jwt_payload = id_token.split(".")[1]
+            padding = 4 - len(jwt_payload) % 4
+            if padding != 4:
+                jwt_payload += "=" * padding
+            user_email = (
+                json.loads(base64.urlsafe_b64decode(jwt_payload)).get("email")
+                or user_email
+            )
+        except Exception:
+            pass
+
     # Resolve agent type config (defaults to "numa-chat")
     agent_type_id = body.get("type", "numa-chat")
     agent_type_config = get_agent_type_config(agent_type_id)
@@ -1159,6 +1179,7 @@ async def invocations(request: Request):
     # Export user context to environment for tools (they read from env vars)
     os.environ["NUMA_USER_SUB"] = user_sub or "unknown"
     os.environ["NUMA_USER_EMAIL"] = user_email or ""
+    os.environ["NUMA_USER_ID_TOKEN"] = id_token
     os.environ["NUMA_CONVERSATION_ID"] = conversation_id
 
     logger.info(
@@ -1621,6 +1642,9 @@ async def _handle_chat(
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
     available_kbs = body.get("availableKBs")  # List of {id, name} for KB tool
+    accessible_kbs = body.get(
+        "accessibleKBs"
+    )  # All folders the user can toggle for this chat (informational; not queryable unless also in availableKBs)
     enabled_tools = body.get(
         "enabledTools", []
     )  # List of enabled tool names (e.g., ["web_search"])
@@ -1628,6 +1652,8 @@ async def _handle_chat(
     # Apply agent type restrictions on KBs
     if agent_type_config.restrict_kbs:
         available_kbs = agent_type_config.default_kbs or []
+        # Restricted agent types should not advertise folders the user cannot enable here
+        accessible_kbs = available_kbs
     elif agent_type_config.default_kbs and not available_kbs:
         available_kbs = agent_type_config.default_kbs
 
@@ -1981,6 +2007,7 @@ async def _handle_chat(
                 feature_flags=feature_flags,  # Feature flags for conditional tools
                 voice_recordings=voice_recordings,  # Voice recordings to auto-transcribe
                 thinking_override=thinking_override,  # @<suffix> override from modelId
+                accessible_kbs=accessible_kbs,  # All folders the user can toggle (for awareness in prompt)
             )
             async for chunk in sdk_stream:
                 # Stream chunk directly to frontend via HTTP SSE
@@ -2075,6 +2102,7 @@ async def _handle_sync(
     today_string = body.get("todayString")
     company_profile = load_company_profile_from_s3()
     available_kbs = body.get("availableKBs")
+    accessible_kbs = body.get("accessibleKBs")
     enabled_tools = body.get("enabledTools", [])
     # Frontend may send "anthropic.claude-sonnet-4-6@high-thinking" — split the
     # thinking-preset suffix here so the bare ID flows through validate_model_id
@@ -2089,6 +2117,7 @@ async def _handle_sync(
     # Apply agent type restrictions on KBs
     if agent_type_config.restrict_kbs:
         available_kbs = agent_type_config.default_kbs or []
+        accessible_kbs = available_kbs
     elif agent_type_config.default_kbs and not available_kbs:
         available_kbs = agent_type_config.default_kbs
 
@@ -2267,6 +2296,7 @@ async def _handle_sync(
             company_profile=company_profile,
             feature_flags=feature_flags,
             thinking_override=thinking_override,
+            accessible_kbs=accessible_kbs,
         )
 
     # If the agent type uses result_file mode, read /workdir/outputs/result.json
@@ -2382,6 +2412,7 @@ async def _handle_fire_and_forget(
     today_string = body.get("todayString")
     company_profile = load_company_profile_from_s3()
     available_kbs = body.get("availableKBs")
+    accessible_kbs = body.get("accessibleKBs")
     enabled_tools = body.get("enabledTools", [])
     # Frontend may send "anthropic.claude-sonnet-4-6@high-thinking" — split the
     # thinking-preset suffix here so the bare ID flows through validate_model_id
@@ -2411,6 +2442,7 @@ async def _handle_fire_and_forget(
     # Apply agent type restrictions
     if agent_type_config.restrict_kbs:
         available_kbs = agent_type_config.default_kbs or []
+        accessible_kbs = available_kbs
     elif agent_type_config.default_kbs and not available_kbs:
         available_kbs = agent_type_config.default_kbs
 
@@ -2598,6 +2630,7 @@ async def _handle_fire_and_forget(
                     company_profile=company_profile,
                     feature_flags=feature_flags,
                     thinking_override=thinking_override,
+                    accessible_kbs=accessible_kbs,
                 )
 
             # If the agent type uses result_file mode, read result.json

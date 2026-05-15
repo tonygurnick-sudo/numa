@@ -200,6 +200,7 @@ export function CreateFolderModal({ show, onHide, onSuccess }: CreateFolderModal
                 mode="multi"
                 placeholder={t('folderSettings.searchUsers')}
                 disabled={isSubmitting}
+                allowSelectAll
               />
             </div>
           )}
@@ -216,6 +217,7 @@ export function CreateFolderModal({ show, onHide, onSuccess }: CreateFolderModal
                 mode="multi"
                 placeholder={t('folderSettings.searchUsers')}
                 disabled={isSubmitting}
+                allowSelectAll
               />
             </div>
           )}

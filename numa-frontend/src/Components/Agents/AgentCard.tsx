@@ -11,7 +11,6 @@ import {
   FileText,
   Folder,
   FolderOpen,
-  MessageSquare,
   Pencil,
   Search,
   Star,
@@ -205,7 +204,7 @@ export const AgentCard = ({
           transition: 'all 0.2s ease',
           borderRadius: '12px',
         }}
-        onClick={handleToggle}
+        onClick={() => !disabled && onChat?.(agent)}
       >
         <Card.Body className="p-3 d-flex flex-column">
           <div className="d-flex align-items-center gap-3">
@@ -402,7 +401,16 @@ export const AgentCard = ({
                 />
               </Button>
             )}
-            <ChevronDown size={20} style={{ color: '#6c757d', flexShrink: 0 }} />
+            <Button
+              variant="link"
+              className="p-0 ms-1"
+              style={{ flexShrink: 0 }}
+              onClick={handleToggle}
+              disabled={disabled}
+              aria-label={t('card.expandAria')}
+            >
+              <ChevronDown size={20} style={{ color: '#6c757d' }} />
+            </Button>
           </div>
         </Card.Body>
       </Card>
@@ -414,11 +422,12 @@ export const AgentCard = ({
     <Card
       className={`agent-card ${highlight ? 'border-primary border-2' : ''}`}
       style={{
-        cursor: disabled ? 'not-allowed' : 'default',
+        cursor: disabled || !onChat ? 'default' : 'pointer',
         opacity: disabled ? 0.65 : 1,
         transition: 'all 0.2s ease',
         borderRadius: '12px',
       }}
+      onClick={() => !disabled && onChat?.(agent)}
     >
       <Card.Body className="d-flex flex-column p-4">
         {/* Header: Icon, Title, Badge, Favorite, Collapse Toggle */}
@@ -699,31 +708,27 @@ export const AgentCard = ({
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="d-flex gap-2 flex-wrap">
-          {onChat && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => onChat(agent)}
-              disabled={disabled}
-              className="flex-grow-1"
-              style={{ minWidth: 80 }}
+        {/* Action buttons — body click on the Card starts chat (see Card onClick),
+            so the explicit "Chat" button is no longer rendered. Every button here
+            stops propagation so they don't ALSO fire chat. */}
+        <div className="d-flex gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+          {onEdit && (
+            <OverlayTrigger
+              placement="top"
+              overlay={<Tooltip id={`edit-${agent.agentId}`}>{t('card.actions.edit')}</Tooltip>}
             >
-              <MessageSquare size={14} className="me-1" /> {t('card.actions.chat')}
-            </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => onEdit(agent)}
+                disabled={disabled}
+                className="d-inline-flex align-items-center gap-1"
+              >
+                <Pencil size={14} /> {t('card.actions.edit')}
+              </Button>
+            </OverlayTrigger>
           )}
           <div className="d-flex gap-1">
-            {onEdit && (
-              <OverlayTrigger
-                placement="top"
-                overlay={<Tooltip id={`edit-${agent.agentId}`}>{t('card.actions.edit')}</Tooltip>}
-              >
-                <Button variant="secondary" size="sm" onClick={() => onEdit(agent)} disabled={disabled}>
-                  <Pencil size={15} />
-                </Button>
-              </OverlayTrigger>
-            )}
             {onDuplicate && (
               <OverlayTrigger
                 placement="top"

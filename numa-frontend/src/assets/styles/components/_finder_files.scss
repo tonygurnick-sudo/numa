@@ -337,6 +337,16 @@
       background: var(--nav-active-bg, color-mix(in srgb, var(--brand-primary, #8e50a7) 5%, white 95%));
     }
 
+    // "My Files" — the user's personal private folder. Tinted background so
+    // it reads as distinct from sibling KBs even when collapsed.
+    &.finder-row--my-files {
+      background: color-mix(in srgb, var(--brand-primary, #8e50a7) 6%, white 94%);
+
+      &.finder-row--expanded {
+        background: color-mix(in srgb, var(--brand-primary, #8e50a7) 10%, white 90%);
+      }
+    }
+
     &.finder-row--depth-1 .finder-row__name-content {
       padding-left: 20px;
     }
@@ -351,6 +361,22 @@
     }
     &.finder-row--depth-5 .finder-row__name-content {
       padding-left: 100px;
+    }
+
+    // Group visual: children of an expanded folder share a subtle tinted
+    // background and an inset brand-coloured guide line on the left edge,
+    // so the eye reads them as one group under the parent folder.
+    &.finder-row--depth-1,
+    &.finder-row--depth-2,
+    &.finder-row--depth-3,
+    &.finder-row--depth-4,
+    &.finder-row--depth-5 {
+      background: color-mix(in srgb, var(--brand-primary, #8e50a7) 3%, white 97%);
+      box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--brand-primary, #8e50a7) 28%, transparent 72%);
+
+      &:hover {
+        background: color-mix(in srgb, var(--brand-primary, #8e50a7) 8%, white 92%);
+      }
     }
 
     &.finder-row--dragging {
@@ -413,6 +439,11 @@
         color: var(--brand-primary, var(--color-primary));
       }
 
+      &.finder-icon--my-files {
+        color: var(--brand-primary, var(--color-primary));
+        font-size: 1.05rem;
+      }
+
       &.finder-icon--file {
         color: #a1a1aa;
       }
@@ -435,6 +466,34 @@
       border: 1px solid #e4e4e7;
       background: #fafafa;
       color: #a1a1aa;
+    }
+
+    .finder-row__visibility-badge {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.22rem;
+      font-family: 'Metropolis Medium', 'Metropolis Regular', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.08rem 0.4rem;
+      border-radius: 999px;
+
+      i {
+        font-size: 0.65rem;
+      }
+
+      &.finder-row__visibility-badge--private {
+        background: color-mix(in srgb, var(--brand-primary, #8e50a7) 14%, white 86%);
+        color: var(--brand-primary, #8e50a7);
+      }
+
+      &.finder-row__visibility-badge--shared {
+        background: rgba(34, 139, 230, 0.12);
+        color: rgb(28, 110, 184);
+      }
     }
   }
 
@@ -607,11 +666,9 @@
   // ── Chat Artifacts accent ─────────────────────────────────────
   // Scoped subtle brand-primary touches that signal these are
   // AI-generated artifacts, without overwhelming the neutral grid.
+  // (File icon colours are now driven by extension via .file-color--*
+  // classes below, so we don't recolour them here.)
   &.chat-artifacts {
-    .finder-row .finder-icon--file {
-      color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 70%, #a1a1aa 30%);
-    }
-
     .finder-row__meta--type {
       display: inline-block;
       padding: 0.0625rem 0.4rem;
@@ -630,6 +687,54 @@
       opacity: 0.6;
     }
   }
+}
+
+// ── File-type icon colours ────────────────────────────────────
+// Conventional colour cues per format (PDF red, Word blue, Excel green,
+// PowerPoint orange, etc.). Applied as a sibling class alongside an icon
+// class. !important is intentional — file type is a strong semantic the
+// icon should always reflect, regardless of surrounding context.
+.file-color--pdf {
+  color: #dc2626 !important;
+}
+.file-color--word {
+  color: #2563eb !important;
+}
+.file-color--excel {
+  color: #16a34a !important;
+}
+.file-color--powerpoint {
+  color: #c2410c !important;
+}
+.file-color--image {
+  color: #a855f7 !important;
+}
+.file-color--video {
+  color: #4f46e5 !important;
+}
+.file-color--audio {
+  color: #ec4899 !important;
+}
+.file-color--data {
+  color: #ca8a04 !important;
+}
+.file-color--html {
+  color: #ea580c !important;
+}
+.file-color--code {
+  color: #475569 !important;
+}
+.file-color--text {
+  color: #71717a !important;
+}
+.file-color--archive {
+  color: #b45309 !important;
+}
+
+// In a selected finder row the row text becomes white — keep the icon
+// readable by neutralising the type colour for that state.
+.finder-row--selected .finder-icon[class*='file-color--'] {
+  color: rgba(255, 255, 255, 0.92) !important;
 }
 
 // Permanent two-column intro shown at the top of the External Share tab

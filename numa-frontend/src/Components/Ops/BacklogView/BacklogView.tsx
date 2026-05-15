@@ -736,6 +736,7 @@ const BacklogView = () => {
 
   // ── DnD state ────────────────────────────────────────────────
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
+  const [activeDragIds, setActiveDragIds] = useState<string[]>([]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const zones = boardData?.zones ?? [];
@@ -866,7 +867,12 @@ const BacklogView = () => {
   const groups = useMemo<TicketGroup[]>(() => {
     const result: TicketGroup[] = [];
 
-    const unassigned = filteredTickets.filter((tk) => !tk.workUnitId);
+    // A ticket belongs in a stage group if it has no workUnitId, OR its
+    // workUnitId points to something that isn't currently a planning sprint
+    // (active/completed/stale). The kanban view groups purely by stageId, so
+    // without this we'd silently hide tickets that show up there.
+    const planningUnitIds = new Set(planningUnits.map((wu) => wu.id));
+    const unassigned = filteredTickets.filter((tk) => !tk.workUnitId || !planningUnitIds.has(tk.workUnitId));
     if (backlogStages.length > 1) {
       for (const stage of backlogStages) {
         const stageTickets = unassigned.filter((tk) => tk.stageId === stage.id);
@@ -1079,7 +1085,9 @@ const BacklogView = () => {
   // ── Bulk action handlers ────────────────────────────────────────
   const [bulkActing, setBulkActing] = useState(false);
   const [showBulkMove, setShowBulkMove] = useState(false);
+  const [showBulkSprint, setShowBulkSprint] = useState(false);
   const bulkMoveRef = useRef<HTMLDivElement>(null);
+  const bulkSprintRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!showBulkMove) return;
@@ -1091,6 +1099,17 @@ const BacklogView = () => {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showBulkMove]);
+
+  useEffect(() => {
+    if (!showBulkSprint) return;
+    const handler = (e: MouseEvent) => {
+      if (bulkSprintRef.current && !bulkSprintRef.current.contains(e.target as Node)) {
+        setShowBulkSprint(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showBulkSprint]);
 
   const handleBulkMove = useCallback(
     async (stageId: string) => {
@@ -1149,6 +1168,27 @@ const BacklogView = () => {
     }
   }, [selectedTickets, bulkActing, numaDelete, refreshTickets, t, tCommon, confirm]);
 
+  const handleBulkAssignSprint = useCallback(
+    async (workUnitId: string) => {
+      if (selectedTickets.length === 0 || bulkActing || !boardId) return;
+      setBulkActing(true);
+      setShowBulkSprint(false);
+      try {
+        await OpsService.bulkUpdateTickets(numaPost, {
+          ticketIds: selectedTickets.map((tk) => tk.id),
+          changes: { workUnitId, boardId },
+        });
+        setSelectedIds(new Set());
+        await refreshTickets();
+      } catch (err) {
+        console.error('[BacklogView] Bulk assign sprint failed:', err);
+      } finally {
+        setBulkActing(false);
+      }
+    },
+    [selectedTickets, bulkActing, boardId, numaPost, refreshTickets]
+  );
+
   const handleTicketClick = useCallback((ticketId: string) => {
     setDetailTicketId(ticketId);
     setShowDetail(true);
@@ -1193,18 +1233,27 @@ const BacklogView = () => {
   }, []);
 
   // ── DnD Handlers ───────────────────────────────────────────────
+  //
+  // Multi-select semantics: if the dragged ticket is in the current selection,
+  // every selected ticket moves together. Otherwise only the dragged ticket
+  // moves and the selection is left intact.
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       const ticketId = event.active.id as string;
       const ticket = filteredTickets.find((tk) => tk.id === ticketId) ?? null;
       setActiveTicket(ticket);
+
+      const ids = selectedIds.has(ticketId) && selectedIds.size > 1 ? [...selectedIds] : [ticketId];
+      setActiveDragIds(ids);
     },
-    [filteredTickets]
+    [filteredTickets, selectedIds]
   );
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
+      const draggedIds = activeDragIds;
       setActiveTicket(null);
+      setActiveDragIds([]);
 
       const { active, over } = event;
       if (!over) return;
@@ -1215,21 +1264,19 @@ const BacklogView = () => {
       const ticket = filteredTickets.find((tk) => tk.id === ticketId);
       if (!ticket) return;
 
-      // Determine target based on droppable ID
+      // ── Resolve destination (same for all dragged tickets) ──────────────
       let newZoneId = ticket.zoneId;
       let newStageId = ticket.stageId;
       let newWorkUnitId: string | null | undefined = ticket.workUnitId;
       let insertIndex: number | null = null;
 
       if (overId.startsWith('bk-stage-')) {
-        // Kanban mode: dropped on a stage column
         const stageId = overId.replace('bk-stage-', '');
         const stageInfo = stageMap.get(stageId);
         if (!stageInfo) return;
         newStageId = stageId;
         newZoneId = stageInfo.zoneId;
       } else {
-        // Check if dropped on another ticket (within-group reorder or cross-group)
         const overTicket = filteredTickets.find((tk) => tk.id === overId);
         if (overTicket) {
           const sourceGroup = ticketGroupMap.get(ticketId);
@@ -1240,14 +1287,13 @@ const BacklogView = () => {
             if (targetGroup.stageId) newStageId = targetGroup.stageId;
             newWorkUnitId = targetGroup.workUnit?.id ?? null;
 
-            // Calculate insertion index based on the over ticket's position
+            const draggedSet = new Set(draggedIds);
             const sortedGroupTickets = targetGroup.tickets
-              .filter((tk) => tk.id !== ticketId)
+              .filter((tk) => !draggedSet.has(tk.id))
               .sort((a, b) => a.order - b.order);
             const overIndex = sortedGroupTickets.findIndex((tk) => tk.id === overId);
 
             if (sourceGroup?.id === targetGroup.id) {
-              // Same group: determine direction
               const allSorted = targetGroup.tickets.sort((a, b) => a.order - b.order);
               const origDragIdx = allSorted.findIndex((tk) => tk.id === ticketId);
               const origOverIdx = allSorted.findIndex((tk) => tk.id === overId);
@@ -1257,22 +1303,27 @@ const BacklogView = () => {
             }
           }
         } else {
-          // Dropped on a group droppable
           const targetGroup = groupMap.get(overId);
           if (!targetGroup) return;
-
           newZoneId = targetGroup.zoneId;
           if (targetGroup.stageId) newStageId = targetGroup.stageId;
           newWorkUnitId = targetGroup.workUnit?.id ?? null;
         }
       }
 
-      // Build destination ticket list for order calculation
+      // Resolve all dragged tickets (defensive: drop any that no longer exist
+      // or are now filtered out) and sort by their current order so the
+      // relative arrangement is preserved at the destination.
+      const draggedSet = new Set(draggedIds);
+      const draggedTickets = filteredTickets.filter((tk) => draggedSet.has(tk.id)).sort((a, b) => a.order - b.order);
+      if (draggedTickets.length === 0) return;
+
+      // Build destination ticket list for order calculation, excluding the
+      // dragged tickets themselves.
       const destTickets = filteredTickets
         .filter((tk) => {
-          if (tk.id === ticketId) return false;
+          if (draggedSet.has(tk.id)) return false;
           if (overId.startsWith('bk-stage-')) return tk.stageId === newStageId;
-          // For ticket-on-ticket drops, use the target group's tickets
           const overTicket = filteredTickets.find((t) => t.id === overId);
           if (overTicket) {
             const tg = ticketGroupMap.get(overId);
@@ -1284,9 +1335,10 @@ const BacklogView = () => {
         .sort((a, b) => a.order - b.order);
 
       const effectiveIndex = insertIndex ?? destTickets.length;
+      const baseOrder = calculateNewOrder(destTickets, effectiveIndex);
 
-      // No-op if same group, same position
-      if (newStageId === ticket.stageId && newWorkUnitId === ticket.workUnitId) {
+      // ── No-op short-circuit (single ticket only — bulk drops always commit) ─
+      if (draggedTickets.length === 1 && newStageId === ticket.stageId && newWorkUnitId === ticket.workUnitId) {
         const currentSorted = destTickets;
         const currentIdx = [...currentSorted, ticket]
           .sort((a, b) => a.order - b.order)
@@ -1294,33 +1346,50 @@ const BacklogView = () => {
         if (currentIdx === effectiveIndex || currentIdx === effectiveIndex - 1) return;
       }
 
-      const newOrder = calculateNewOrder(destTickets, effectiveIndex);
+      // ── Assign per-ticket orders. Space them by 1 around `baseOrder` so all
+      // dragged tickets land contiguously and preserve their relative order.
+      // `calculateNewOrder` picks the midpoint between neighbours when
+      // inserting in the middle, which gives us plenty of headroom.
+      const orderById = new Map<string, number>();
+      draggedTickets.forEach((tk, i) => {
+        orderById.set(tk.id, baseOrder + i);
+      });
 
-      // Optimistic update
+      // Optimistic update for all dragged tickets.
       setTickets((prev) =>
         prev.map((tk) =>
-          tk.id === ticketId
-            ? { ...tk, stageId: newStageId, zoneId: newZoneId, workUnitId: newWorkUnitId, order: newOrder }
+          draggedSet.has(tk.id)
+            ? {
+                ...tk,
+                stageId: newStageId,
+                zoneId: newZoneId,
+                workUnitId: newWorkUnitId,
+                order: orderById.get(tk.id) ?? tk.order,
+              }
             : tk
         )
       );
 
       try {
-        await OpsService.updateTicket(numaPut, ticketId, {
-          boardId: ticket.boardId,
-          stageId: newStageId,
-          zoneId: newZoneId,
-          workUnitId: newWorkUnitId,
-          order: newOrder,
-          version: ticket.version,
-        });
+        await Promise.all(
+          draggedTickets.map((tk) =>
+            OpsService.updateTicket(numaPut, tk.id, {
+              boardId: tk.boardId,
+              stageId: newStageId,
+              zoneId: newZoneId,
+              workUnitId: newWorkUnitId,
+              order: orderById.get(tk.id) ?? tk.order,
+              version: tk.version,
+            })
+          )
+        );
         await refreshTickets();
       } catch (err) {
-        console.error('[BacklogView] Failed to move ticket:', err);
+        console.error('[BacklogView] Failed to move tickets:', err);
         await refreshTickets();
       }
     },
-    [filteredTickets, groupMap, ticketGroupMap, stageMap, numaPut, refreshTickets, setTickets]
+    [activeDragIds, filteredTickets, groupMap, ticketGroupMap, stageMap, numaPut, refreshTickets, setTickets]
   );
 
   return (
@@ -1684,19 +1753,52 @@ const BacklogView = () => {
           {/* Drag overlay preview */}
           <DragOverlay>
             {activeTicket ? (
-              <div
-                className="ticket-card"
-                style={{
-                  width: 320,
-                  opacity: 0.96,
-                  boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
-                  rotate: '2deg',
-                }}
-              >
-                <p className="ticket-title mb-1">{activeTicket.title}</p>
-                <div className="ticket-card-footer">
-                  <span className="ticket-id">{activeTicket.displayId}</span>
-                  {activeTicket.priority && <PriorityIndicator priority={activeTicket.priority as TicketPriority} />}
+              <div style={{ position: 'relative', width: 320 }}>
+                {activeDragIds.length > 1 && (
+                  <>
+                    <div
+                      className="ticket-card"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        opacity: 0.55,
+                        transform: 'translate(8px, 8px) rotate(3deg)',
+                        boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                    <div
+                      className="ticket-card"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        opacity: 0.75,
+                        transform: 'translate(4px, 4px) rotate(1.5deg)',
+                        boxShadow: '0 10px 24px rgba(0,0,0,0.14)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  </>
+                )}
+                <div
+                  className="ticket-card"
+                  style={{
+                    position: 'relative',
+                    opacity: 0.96,
+                    boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
+                    rotate: '2deg',
+                  }}
+                >
+                  <p className="ticket-title mb-1">{activeTicket.title}</p>
+                  <div className="ticket-card-footer">
+                    <span className="ticket-id">{activeTicket.displayId}</span>
+                    {activeTicket.priority && <PriorityIndicator priority={activeTicket.priority as TicketPriority} />}
+                  </div>
+                  {activeDragIds.length > 1 && (
+                    <span className="backlog-multi-drag-badge">
+                      {t('bulk.draggingCount', { count: activeDragIds.length })}
+                    </span>
+                  )}
                 </div>
               </div>
             ) : null}
@@ -1740,6 +1842,36 @@ const BacklogView = () => {
                 </div>
               )}
             </div>
+
+            {workUnitsEnabled && planningUnits.length > 0 && (
+              <div ref={bulkSprintRef} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  className="bulk-action"
+                  disabled={bulkActing}
+                  onClick={() => setShowBulkSprint((prev) => !prev)}
+                >
+                  <i className="bi bi-calendar2-week" />
+                  {t('bulk.addToSprint')}
+                </button>
+                {showBulkSprint && (
+                  <div className="backlog-stage-picker" style={{ bottom: '100%', top: 'auto', marginBottom: 4 }}>
+                    {planningUnits.map((wu) => (
+                      <button
+                        key={wu.id}
+                        type="button"
+                        className="backlog-stage-picker-item"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => handleBulkAssignSprint(wu.id)}
+                      >
+                        <span className="backlog-status-dot backlog-status-dot--scoped" />
+                        {wu.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <button type="button" className="bulk-action" disabled={bulkActing} onClick={handleBulkArchive}>
               <i className="bi bi-archive" />

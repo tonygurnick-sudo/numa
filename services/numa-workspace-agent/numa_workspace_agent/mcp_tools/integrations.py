@@ -6,10 +6,13 @@ Connect API via the workspace-chat-tools Lambda. Actions requiring
 side effects (run_action, proxy_request) go through human-in-the-loop
 approval before execution.
 
-Results are saved to files in /workdir/outputs/integrations-results/ to
+Results are saved to files in /workdir/tmp/integrations-results/ to
 avoid flooding the agent's context window with large API responses.
-Files returned via Pipedream's file stash are automatically downloaded
-into the same directory.
+Files returned via Pipedream's file stash are also downloaded into
+the same directory. /workdir/tmp/ is scratch space — synced to S3 for
+the model's continuity but hidden from the user's Files UI. If the
+user actually wants a downloaded file, the model should `cp` it to
+/workdir/outputs/ explicitly.
 """
 
 import json
@@ -114,6 +117,30 @@ def _detect_upstream_error(result: Any) -> tuple[bool, str | None]:
         body_msg = _extract_error_message(inner.get("body"))
         suffix = f" — {body_msg}" if body_msg else ""
         return True, f"upstream returned HTTP {status_code}{suffix}"
+
+    # Pattern 4: Pipedream download-attachment sentinel.
+    # Pipedream's microsoft_outlook-download-attachment (and possibly others)
+    # returns a "success" envelope while ret.filePath is the literal string
+    # "/tmp/undefined" and ret.contentType is the boolean false when the
+    # component fails to derive a filename for the attachment. Verified live
+    # 2026-05-14 — happens regardless of whether the agent passes filePath.
+    ret = inner.get("ret")
+    if isinstance(ret, dict):
+        ret_filepath = ret.get("filePath")
+        ret_content_type = ret.get("contentType")
+        sentinel_path = isinstance(
+            ret_filepath, str
+        ) and ret_filepath.strip().lower() in ("/tmp/undefined", "undefined")
+        sentinel_ct = ret_content_type is False
+        if sentinel_path or sentinel_ct:
+            return (
+                True,
+                "Upstream component returned sentinel response "
+                "(filePath='/tmp/undefined' or contentType=false). "
+                "The attachment was not downloaded successfully despite the "
+                "wrapper reporting success. Likely a Pipedream-side bug on "
+                "this action.",
+            )
 
     return False, None
 
@@ -283,13 +310,14 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                     {
                         "type": "text",
                         "text": (
-                            f"Approval timed out for: {action_key}. "
-                            "This workspace has human-in-the-loop approval enabled for integration tools. "
-                            "An approval card was shown to the user but they did not respond "
-                            "before the approval window expired. You can offer to try again if the user is ready to approve."
+                            f"Approval window expired for: {action_key}. "
+                            "An approval card was shown to the user but they did not respond before it timed out. "
+                            "Do NOT retry this action automatically. Wait for the user to ask before trying again."
                         ),
                     }
                 ],
+                "is_error": True,
+                "isError": True,
             }
         if status in ("execution_timeout", "execution_failed"):
             # Pass through the real error message from the relay/proxy
@@ -618,13 +646,14 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                     {
                         "type": "text",
                         "text": (
-                            f"Approval timed out for proxy request: {method} {upstream_url}. "
-                            "This workspace has human-in-the-loop approval enabled for integration tools. "
-                            "An approval card was shown to the user but they did not respond "
-                            "before the approval window expired. You can offer to try again if the user is ready to approve."
+                            f"Approval window expired for proxy request: {method} {upstream_url}. "
+                            "An approval card was shown to the user but they did not respond before it timed out. "
+                            "Do NOT retry this request automatically. Wait for the user to ask before trying again."
                         ),
                     }
                 ],
+                "is_error": True,
+                "isError": True,
             }
         if status in ("execution_timeout", "execution_failed"):
             error_message = result.get("message", "")

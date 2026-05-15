@@ -44,20 +44,20 @@ const kanbanCollisionDetection: CollisionDetection = (args) => {
   const overColumn = pointerCollisions.find((c) => String(c.id).startsWith('stage-'));
 
   if (overColumn) {
-    // 2. Narrow candidates to items belonging to that column + the column itself.
-    // Use the column droppable's rect to geometrically filter ticket droppables
-    // that are physically inside the column.
+    // 2. Narrow candidates to TICKETS inside the hovered column. We intentionally
+    // exclude the column droppable itself from `closestCenter` here: the column's
+    // rect spans the full column height, so its center can beat every individual
+    // ticket center when the pointer is mid-column, causing the over target to
+    // collapse to the column (which the drop handler treats as "append to end").
+    // Falling back to the column only when there are no ticket candidates keeps
+    // empty columns droppable.
     const columnId = overColumn.id as string;
     const columnContainer = args.droppableContainers.find((c) => c.id === columnId);
     const columnRect = columnContainer?.rect.current;
 
     const filtered = args.droppableContainers.filter((container) => {
       const id = String(container.id);
-      // Always keep the target column droppable itself
-      if (id === columnId) return true;
-      // Exclude other column droppables
       if (id.startsWith('stage-')) return false;
-      // Keep ticket droppables whose horizontal center falls within the column
       if (!columnRect) return false;
       const rect = container.rect.current;
       if (!rect) return false;
@@ -333,8 +333,18 @@ const BoardView = () => {
           const insertIndex = origDragIdx < origOverIdx ? overIndex + 1 : overIndex;
           setDropIndicator({ stageId, index: insertIndex });
         } else {
-          // Cross-column: insert before the hovered card
-          setDropIndicator({ stageId, index: overIndex >= 0 ? overIndex : visibleTickets.length });
+          // Cross-column: insert BEFORE or AFTER based on whether the dragged
+          // card's center is above or below the hovered card's midpoint. Without
+          // this, dragging far below a column's last card still inserts BEFORE
+          // it instead of appending at the bottom.
+          const overRect = over.rect;
+          const activeRect = active.rect.current.translated;
+          const insertAfter =
+            activeRect && overRect
+              ? activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
+              : false;
+          const rawIndex = overIndex >= 0 ? (insertAfter ? overIndex + 1 : overIndex) : visibleTickets.length;
+          setDropIndicator({ stageId, index: rawIndex });
         }
       }
     },
@@ -387,7 +397,15 @@ const BoardView = () => {
           const origOverIdx = allStageTickets.findIndex((tk) => tk.id === overId);
           insertIndex = origDragIdx < origOverIdx ? overIndex + 1 : overIndex;
         } else {
-          insertIndex = overIndex >= 0 ? overIndex : visibleDestTickets.length;
+          // Cross-column: top/bottom-half check. Mirror of handleDragOver so
+          // the indicator and the actual drop stay aligned.
+          const overRect = over.rect;
+          const activeRect = active.rect.current.translated;
+          const insertAfter =
+            activeRect && overRect
+              ? activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
+              : false;
+          insertIndex = overIndex >= 0 ? (insertAfter ? overIndex + 1 : overIndex) : visibleDestTickets.length;
         }
       }
 
@@ -399,13 +417,17 @@ const BoardView = () => {
         .filter((tk) => tk.stageId === newStageId && tk.id !== ticketId)
         .sort((a, b) => a.order - b.order);
 
-      // No-op if same column, same position
+      // No-op if same column AND insertIndex maps to the dragged ticket's
+      // current slot. With the dragged ticket removed from the visible list,
+      // "back where you started" is exactly currentIdx === insertIndex.
+      // (The old `currentIdx === insertIndex - 1` clause silently swallowed
+      // legitimate "drag down by one slot" moves, making cards pop back.)
       if (ticket.stageId === newStageId) {
         const currentTickets = filteredTickets
           .filter((tk) => tk.stageId === newStageId)
           .sort((a, b) => a.order - b.order);
         const currentIdx = currentTickets.findIndex((tk) => tk.id === ticketId);
-        if (currentIdx === insertIndex || currentIdx === insertIndex - 1) return;
+        if (currentIdx === insertIndex) return;
       }
 
       const newOrder = calculateNewOrder(destStageTickets, insertIndex);

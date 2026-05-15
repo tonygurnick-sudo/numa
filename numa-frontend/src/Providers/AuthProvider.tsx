@@ -1870,8 +1870,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
           );
         } catch (deviceErr) {
           // Device SRP failed — clear device trust so next login omits DEVICE_KEY
-          // and Cognito falls back to MFA instead.
+          // and Cognito falls back to MFA instead. Clear both locally AND server-side:
+          // without the server-side clear, validateDevice() keeps returning true for
+          // a deviceKey Cognito refuses, so a sibling tab / future login loops back
+          // into the same failure. Fire-and-forget on the server call — we're mid-login,
+          // can't surface a server error to the user, and the local clear plus the
+          // login-retry path are sufficient to recover on their own.
           console.warn('Device SRP authentication failed, clearing device trust:', deviceErr);
+          void AdminMfaSettingsService.clearDeviceTrust(storedDeviceKey);
           clearDeviceTrust();
         }
       }
@@ -1995,95 +2001,115 @@ export const AuthProvider = ({ children, initialTokens }) => {
     return result;
   }, []);
 
+  // Maps a RespondToAuthChallenge response to a LoginResult.
+  // Returns null when the response carries neither a known ChallengeName nor an
+  // AuthenticationResult — caller's signal to retry SRP (typically because the
+  // DEVICE_SRP catch in performSrpAuthentication cleared stale trust and left
+  // the dead DEVICE_SRP_AUTH response in place).
+  // Loosely typed because performSrpAuthentication itself is loosely typed
+  // (matches the existing style in this file).
+  const resolveAuthResponse = async (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    response: any,
+    lowercaseUsername: string
+  ): Promise<LoginResult | null> => {
+    if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+      return { requiresNewPassword: true, session: response.AuthenticationResult };
+    }
+
+    // MFA_SETUP — user needs to enrol in TOTP MFA
+    if (response.ChallengeName === 'MFA_SETUP') {
+      const mfaSetupResult = await buildMfaSetupRequired(response.Session, lowercaseUsername);
+      setMfaSetupData(mfaSetupResult);
+      setMfaCodeData(null);
+      return mfaSetupResult;
+    }
+
+    // SOFTWARE_TOKEN_MFA — user needs to enter TOTP code
+    if (response.ChallengeName === 'SOFTWARE_TOKEN_MFA') {
+      mfaSessionRef.current = response.Session;
+      mfaUsernameRef.current = lowercaseUsername;
+      const mfaCodeResult: MfaCodeRequired = {
+        requiresMfaCode: true,
+        session: response.Session,
+        username: lowercaseUsername,
+      };
+      setMfaCodeData(mfaCodeResult);
+      setMfaSetupData(null);
+      return mfaCodeResult;
+    }
+
+    if (!response.AuthenticationResult) {
+      return null;
+    }
+
+    // Cognito returned tokens directly — no MFA challenge was issued.
+    // With OPTIONAL MFA, this happens when the user has no TOTP configured.
+    // We MUST check if MFA enrolment is required BEFORE setting user state,
+    // because setUser() triggers a route redirect away from /login which would
+    // prevent MFA enforcement from running.
+    const authResult = response.AuthenticationResult;
+    if (authResult?.IdToken) {
+      const idPayload = jwtDecode(authResult.IdToken) as Record<string, unknown>;
+      const needsMfa =
+        idPayload['custom:mfa_setup_required'] === 'true' || idPayload['custom:mfa_reset_pending'] === 'true';
+
+      if (!needsMfa) {
+        // DEFENSE-IN-DEPTH ONLY (Layer 2): Client-side fallback that checks Cognito
+        // directly for MFA status. This is NOT a primary security control — it depends
+        // on the client-side MFA_ENABLED flag which is read from config.json and could
+        // be tampered with. Layer 1 (token-adjuster server-side claims) is the
+        // authoritative enforcement. This layer exists solely to catch the case where
+        // token-adjuster hasn't been deployed yet to a client environment.
+        try {
+          const REGION = window.sessionStorage.getItem('REGION');
+          const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+          const userInfo = await cognitoClient.send(new GetUserCommand({ AccessToken: authResult.AccessToken }));
+          const mfaMethods = userInfo.UserMFASettingList ?? [];
+          if (mfaMethods.length === 0 && getFlag('MFA_ENABLED')) {
+            console.warn('MFA enforcement (Layer 2): user has no MFA configured, requiring enrollment');
+            return await handleMfaEnrollmentRequired(authResult, lowercaseUsername, false);
+          }
+        } catch (err) {
+          console.error('MFA status check failed (non-fatal):', err);
+        }
+      }
+
+      if (needsMfa) {
+        const isAdminReset = idPayload['custom:mfa_reset_pending'] === 'true';
+        console.warn(
+          `MFA enforcement (Layer 1): token-adjuster flagged MFA required (${isAdminReset ? 'admin reset' : 'setup required'})`
+        );
+        return await handleMfaEnrollmentRequired(authResult, lowercaseUsername, isAdminReset);
+      }
+    }
+
+    // MFA is verified or not required — safe to set user state
+    const { features } = await handleLoginSuccess(authResult);
+    return { success: true, features };
+  };
+
   const login = useCallback(async (username, password): Promise<LoginResult> => {
     try {
       // Clear any previous auth errors when attempting login
       setAuthError(null);
 
-      const { response, lowercaseUsername } = await performSrpAuthentication(username, password);
+      const first = await performSrpAuthentication(username, password);
+      const firstResult = await resolveAuthResponse(first.response, first.lowercaseUsername);
+      if (firstResult) return firstResult;
 
-      if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
-        return { requiresNewPassword: true, session: response.AuthenticationResult };
-      }
+      // First attempt left us with no AuthenticationResult and no recognised challenge —
+      // typically the DEVICE_SRP catch in performSrpAuthentication cleared stale device
+      // trust and returned the dead DEVICE_SRP_AUTH response unchanged. Retry once; the
+      // retry omits DEVICE_KEY (trust is cleared) and Cognito should now either return
+      // tokens directly or issue an MFA challenge. Resolve the retry the same way so
+      // MFA challenges from the retry are surfaced to the UI instead of becoming a hard
+      // "no tokens received" failure.
+      const retry = await performSrpAuthentication(username, password);
+      const retryResult = await resolveAuthResponse(retry.response, retry.lowercaseUsername);
+      if (retryResult) return retryResult;
 
-      // Handle MFA_SETUP challenge - user needs to enroll in TOTP MFA
-      if (response.ChallengeName === 'MFA_SETUP') {
-        const mfaSetupResult = await buildMfaSetupRequired(response.Session, lowercaseUsername);
-        setMfaSetupData(mfaSetupResult);
-        setMfaCodeData(null);
-        return mfaSetupResult;
-      }
-
-      // Handle SOFTWARE_TOKEN_MFA challenge - user needs to enter TOTP code
-      if (response.ChallengeName === 'SOFTWARE_TOKEN_MFA') {
-        // Store session and username for later use in submitMfaCode
-        mfaSessionRef.current = response.Session;
-        mfaUsernameRef.current = lowercaseUsername;
-        const mfaCodeResult: MfaCodeRequired = {
-          requiresMfaCode: true,
-          session: response.Session,
-          username: lowercaseUsername,
-        };
-        setMfaCodeData(mfaCodeResult);
-        setMfaSetupData(null);
-        return mfaCodeResult;
-      }
-
-      if (!response.AuthenticationResult) {
-        // Device SRP returned an unexpected state (e.g. stale device credentials).
-        // Stale trust was already cleared by performSrpAuthentication — retry once.
-        const retry = await performSrpAuthentication(username, password);
-        if (!retry.response.AuthenticationResult) {
-          throw new Error('Authentication failed — no tokens received. Please try again.');
-        }
-        const { features } = await handleLoginSuccess(retry.response.AuthenticationResult);
-        return { success: true, features };
-      }
-
-      // Cognito returned tokens directly — no MFA challenge was issued.
-      // With OPTIONAL MFA, this happens when the user has no TOTP configured.
-      // We MUST check if MFA enrollment is required BEFORE setting user state,
-      // because setUser() triggers a route redirect away from /login which would
-      // prevent MFA enforcement from running.
-      const authResult = response.AuthenticationResult;
-      if (authResult?.IdToken) {
-        const idPayload = jwtDecode(authResult.IdToken) as Record<string, unknown>;
-        const needsMfa =
-          idPayload['custom:mfa_setup_required'] === 'true' || idPayload['custom:mfa_reset_pending'] === 'true';
-
-        if (!needsMfa) {
-          // DEFENSE-IN-DEPTH ONLY (Layer 2): Client-side fallback that checks Cognito
-          // directly for MFA status. This is NOT a primary security control — it depends
-          // on the client-side MFA_ENABLED flag which is read from config.json and could
-          // be tampered with. Layer 1 (token-adjuster server-side claims) is the
-          // authoritative enforcement. This layer exists solely to catch the case where
-          // token-adjuster hasn't been deployed yet to a client environment.
-          try {
-            const REGION = window.sessionStorage.getItem('REGION');
-            const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
-            const userInfo = await cognitoClient.send(new GetUserCommand({ AccessToken: authResult.AccessToken }));
-            const mfaMethods = userInfo.UserMFASettingList ?? [];
-            if (mfaMethods.length === 0 && getFlag('MFA_ENABLED')) {
-              console.warn('MFA enforcement (Layer 2): user has no MFA configured, requiring enrollment');
-              return await handleMfaEnrollmentRequired(authResult, lowercaseUsername, false);
-            }
-          } catch (err) {
-            console.error('MFA status check failed (non-fatal):', err);
-          }
-        }
-
-        if (needsMfa) {
-          const isAdminReset = idPayload['custom:mfa_reset_pending'] === 'true';
-          console.warn(
-            `MFA enforcement (Layer 1): token-adjuster flagged MFA required (${isAdminReset ? 'admin reset' : 'setup required'})`
-          );
-          return await handleMfaEnrollmentRequired(authResult, lowercaseUsername, isAdminReset);
-        }
-      }
-
-      // MFA is verified or not required — safe to set user state
-      const { features } = await handleLoginSuccess(authResult);
-      return { success: true, features };
+      throw new Error('Authentication failed — no tokens received. Please try again.');
     } catch (error) {
       console.error('Error during authentication:', error);
       throw error;

@@ -73,6 +73,7 @@ import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/Workspac
 import { WorkspaceChatAgentsPanel } from '../Components/WorkspaceChat/WorkspaceChatAgentsPanel';
 import { useWorkspaceChatSettingsPanel } from '../hooks/useWorkspaceChatSettingsPanel';
 import { PendingFilesBar } from '../Components/Chat/PendingFilesBar';
+import { QueuedSubmitBanner } from '../Components/Chat/QueuedSubmitBanner';
 import { ChatSuggestionPills } from '../Components/Chat/ChatSuggestionPills';
 import { useChatSuggestions } from '../hooks/useChatSuggestions';
 import { deleteWorkspaceChatUploads, uploadWorkspaceChatFileDirect } from '../Services/workspaceChatAgentService';
@@ -96,6 +97,7 @@ import type {
   WorkspaceChatMessage,
 } from '../types/workspaceChatTypes';
 import { DEFAULT_WORKSPACE_MODEL } from '../types/workspaceChatTypes';
+import { expandMyFilesSentinel } from '../constants/knowledgeBase';
 
 type ConversationChatConfig = {
   autoToolsEnabled?: boolean;
@@ -225,6 +227,20 @@ const NumaWorkspaceChatAgents = () => {
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const dragDepthRef = useRef(0);
+  /**
+   * Counts in-flight upload "intents" — incremented synchronously when paste/drop
+   * starts, before any async work (conversation mint, ArrayBuffer read, S3 upload).
+   * Closes the race where the user types + sends in the gap between "file dropped"
+   * and "uploadingFiles state actually contains the entry".
+   */
+  const [pendingUploadIntents, setPendingUploadIntents] = useState(0);
+  /**
+   * If the user submits a message while uploads are in flight, we hold the message
+   * here and auto-fire it once uploads + staging complete. Stored in a ref so the
+   * useEffect that fires it doesn't loop on its own writes.
+   */
+  const pendingSubmitRef = useRef<string | null>(null);
+  const [pendingSubmitDisplay, setPendingSubmitDisplay] = useState<string | null>(null);
 
   // Refs
   const messageEndRef = useRef<HTMLDivElement | null>(null);
@@ -676,10 +692,12 @@ const NumaWorkspaceChatAgents = () => {
       return [];
     }
 
-    const defaultKBSet = new Set(userChatSettings.defaultKBIds);
+    // Expand the My Files sentinel to the user's actual sub before matching.
+    const expanded = expandMyFilesSentinel(userChatSettings.defaultKBIds, sub);
+    const defaultKBSet = new Set(expanded);
     const availableDefaultKBs = availableKBs.filter((kb) => defaultKBSet.has(kb.kb_id));
     return availableDefaultKBs.map((kb) => kb.kb_id);
-  }, [availableKBs, userChatSettings.defaultKBIds]);
+  }, [availableKBs, userChatSettings.defaultKBIds, sub]);
 
   const defaultConnectionIdsFromSettings = useMemo(
     () => userChatSettings.defaultConnectionIds.filter((id) => connectedSet.has(id)),
@@ -1892,7 +1910,7 @@ const NumaWorkspaceChatAgents = () => {
     };
   }, []);
 
-  const hasUploadsInProgress = uploadingFiles.some((f) => f.status === 'uploading');
+  const hasUploadsInProgress = uploadingFiles.some((f) => f.status === 'uploading') || pendingUploadIntents > 0;
 
   /**
    * Recursively read all files from a dropped FileSystemDirectoryEntry.
@@ -2003,103 +2021,111 @@ const NumaWorkspaceChatAgents = () => {
     async (entries: Array<{ file: File; relativePath?: string }>) => {
       if (entries.length === 0) return;
 
-      // Mint a conversation if needed (same as clicking the paperclip).
-      // ensureConversationReady returns the conversationId.
-      let targetConversationId = conversationId;
-      if (!targetConversationId) {
-        const activeAgent = pendingAgent || currentAgent;
-        targetConversationId = await ensureConversationReady(
-          'File Upload',
-          activeAgent
-            ? {
-                agentId: activeAgent.agentId,
-                title: activeAgent.title,
-                version: activeAgent.version,
-                icon: activeAgent.icon,
-                agentType: activeAgent.agentType,
-                visibility: activeAgent.visibility,
-              }
-            : undefined
-        );
-        setIsPreMintedConversation(true);
-      }
-
-      if (!targetConversationId) return;
-
-      // Create uploading entries for each file
-      const newUploading: (UploadingFile & { relativePath?: string })[] = entries.map((entry) => ({
-        id: crypto.randomUUID(),
-        file: entry.file,
-        filename: entry.relativePath || entry.file.name,
-        progress: 0,
-        status: 'uploading' as const,
-        relativePath: entry.relativePath,
-      }));
-      setUploadingFiles((prev) => [...prev, ...newUploading]);
-
-      // Upload each file concurrently
-      const convId = targetConversationId;
-      const uploadPromises = newUploading.map(async (entry) => {
-        try {
-          const response = await uploadWorkspaceChatFileDirect(
-            entry.file,
-            convId,
-            entry.relativePath,
-            (progress) => {
-              setUploadingFiles((prev) => prev.map((f) => (f.id === entry.id ? { ...f, progress } : f)));
-            },
-            getCredentials
+      // Bump the intent counter SYNCHRONOUSLY (before any await) so the send button
+      // is correctly disabled / submission is queued during the conversation-mint
+      // and S3-upload windows. Decremented in `finally` once staging is committed.
+      setPendingUploadIntents((n) => n + 1);
+      try {
+        // Mint a conversation if needed (same as clicking the paperclip).
+        // ensureConversationReady returns the conversationId.
+        let targetConversationId = conversationId;
+        if (!targetConversationId) {
+          const activeAgent = pendingAgent || currentAgent;
+          targetConversationId = await ensureConversationReady(
+            'File Upload',
+            activeAgent
+              ? {
+                  agentId: activeAgent.agentId,
+                  title: activeAgent.title,
+                  version: activeAgent.version,
+                  icon: activeAgent.icon,
+                  agentType: activeAgent.agentType,
+                  visibility: activeAgent.visibility,
+                }
+              : undefined
           );
-
-          // Remove from uploading list on success
-          setUploadingFiles((prev) => prev.filter((f) => f.id !== entry.id));
-          return response;
-        } catch (error) {
-          console.error('[DragDrop] Upload failed:', error);
-          setUploadingFiles((prev) =>
-            prev.map((f) =>
-              f.id === entry.id
-                ? { ...f, status: 'error' as const, error: (error as Error).message || 'Upload failed' }
-                : f
-            )
-          );
-          return null;
+          setIsPreMintedConversation(true);
         }
-      });
 
-      const results = await Promise.all(uploadPromises);
-      const successfulResponses = results.filter((r): r is WorkspaceChatUploadResponse => r !== null);
+        if (!targetConversationId) return;
 
-      if (successfulResponses.length > 0) {
-        // Stage the successfully uploaded files
-        const newFiles: StagedFile[] = successfulResponses.map((r) => ({
-          kind: 'file' as const,
-          filename: r.filename,
-          path: r.path,
-          size: r.size,
-          uploadedAt: Date.now(),
+        // Create uploading entries for each file
+        const newUploading: (UploadingFile & { relativePath?: string })[] = entries.map((entry) => ({
+          id: crypto.randomUUID(),
+          file: entry.file,
+          filename: entry.relativePath || entry.file.name,
+          progress: 0,
+          status: 'uploading' as const,
+          relativePath: entry.relativePath,
         }));
+        setUploadingFiles((prev) => [...prev, ...newUploading]);
 
-        setStagedItems((prev) => {
-          const existingFiles = flattenStagedItems(prev);
-          const allFiles = [...existingFiles, ...newFiles];
-          const grouped = groupFilesIntoFolders(allFiles);
-          if (convId) saveStagedItems(convId, grouped);
-          return grouped;
+        // Upload each file concurrently. Each successful upload stages itself
+        // immediately so stagedItems and uploadingFiles transition atomically —
+        // closes the post-upload / pre-staging race for multi-file drops.
+        const convId = targetConversationId;
+        const uploadPromises = newUploading.map(async (entry) => {
+          try {
+            const response = await uploadWorkspaceChatFileDirect(
+              entry.file,
+              convId,
+              entry.relativePath,
+              (progress) => {
+                setUploadingFiles((prev) => prev.map((f) => (f.id === entry.id ? { ...f, progress } : f)));
+              },
+              getCredentials
+            );
+
+            // Stage this file BEFORE removing it from the uploading list — guarantees
+            // there's never a moment where neither list contains it.
+            const newFile: StagedFile = {
+              kind: 'file' as const,
+              filename: response.filename,
+              path: response.path,
+              size: response.size,
+              uploadedAt: Date.now(),
+            };
+            setStagedItems((prev) => {
+              const existingFiles = flattenStagedItems(prev);
+              const allFiles = [...existingFiles, newFile];
+              const grouped = groupFilesIntoFolders(allFiles);
+              if (convId) saveStagedItems(convId, grouped);
+              return grouped;
+            });
+            setUploadingFiles((prev) => prev.filter((f) => f.id !== entry.id));
+            return response;
+          } catch (error) {
+            console.error('[DragDrop] Upload failed:', error);
+            setUploadingFiles((prev) =>
+              prev.map((f) =>
+                f.id === entry.id
+                  ? { ...f, status: 'error' as const, error: (error as Error).message || 'Upload failed' }
+                  : f
+              )
+            );
+            return null;
+          }
         });
 
-        // Auto-name pre-minted conversations
-        if (isPreMintedConversation && numaChatDynamoUtils && convId) {
-          const firstName = successfulResponses[0].filename;
-          try {
-            await numaChatDynamoUtils.updateConversationName(convId, sub, firstName, 'auto');
-          } catch (err) {
-            console.error('Error renaming pre-minted conversation:', err);
-          }
-        }
+        const results = await Promise.all(uploadPromises);
+        const successfulResponses = results.filter((r): r is WorkspaceChatUploadResponse => r !== null);
 
-        refreshSidebar();
-        settingsPanel.refreshFiles();
+        if (successfulResponses.length > 0) {
+          // Auto-name pre-minted conversations
+          if (isPreMintedConversation && numaChatDynamoUtils && convId) {
+            const firstName = successfulResponses[0].filename;
+            try {
+              await numaChatDynamoUtils.updateConversationName(convId, sub, firstName, 'auto');
+            } catch (err) {
+              console.error('Error renaming pre-minted conversation:', err);
+            }
+          }
+
+          refreshSidebar();
+          settingsPanel.refreshFiles();
+        }
+      } finally {
+        setPendingUploadIntents((n) => Math.max(0, n - 1));
       }
     },
     [
@@ -2254,11 +2280,32 @@ const NumaWorkspaceChatAgents = () => {
     if (isProcessingRef.current) {
       return;
     }
-    isProcessingRef.current = true;
-    markProcessingStart();
 
     // Use override message if provided, otherwise use state
     const messageToSend = overrideMessage ?? inputMessage;
+
+    // If uploads are still in flight (active uploads OR pre-state-update intents),
+    // queue this submission. The watcher useEffect will fire it once uploads + staging
+    // finish, so the model receives the message + attachments together rather than
+    // racing the upload.
+    const activeUploads = uploadingFiles.filter((f) => f.status === 'uploading').length + pendingUploadIntents;
+    if (activeUploads > 0) {
+      // Validate before queuing — same rules as a real send
+      const hasVoice = pendingVoiceRecordingsRef.current.length > 0;
+      if (!messageToSend.trim() && uploadedFiles.length === 0 && stagedItems.length === 0 && !hasVoice) {
+        return;
+      }
+      pendingSubmitRef.current = messageToSend;
+      setPendingSubmitDisplay(messageToSend);
+      setInputMessage('');
+      if (inputRef.current) {
+        inputRef.current.style.height = '40px';
+      }
+      return;
+    }
+
+    isProcessingRef.current = true;
+    markProcessingStart();
 
     // Consume any pending voice recordings
     const voiceRecordings =
@@ -2453,6 +2500,24 @@ const NumaWorkspaceChatAgents = () => {
       setButtonStatus('idle');
     }
   };
+
+  // Stable ref to the latest handleSubmit so the queued-submit watcher doesn't need
+  // it as a dependency (handleSubmit is recreated on every render and would loop).
+  const handleSubmitRef = useRef(handleSubmit);
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  });
+
+  // Auto-fire any queued submit once uploads + staging finish.
+  useEffect(() => {
+    const activeUploads = uploadingFiles.filter((f) => f.status === 'uploading').length + pendingUploadIntents;
+    if (activeUploads === 0 && pendingSubmitRef.current !== null && !isProcessingRef.current) {
+      const queued = pendingSubmitRef.current;
+      pendingSubmitRef.current = null;
+      setPendingSubmitDisplay(null);
+      handleSubmitRef.current({ preventDefault: () => {} } as React.FormEvent, queued);
+    }
+  }, [uploadingFiles, pendingUploadIntents]);
 
   // Handle quick action button clicks
   // Quick actions either prefill the input for user completion or send immediately
@@ -3185,6 +3250,13 @@ const NumaWorkspaceChatAgents = () => {
                           onFilesDropped={(files) => handleDroppedFiles(files.map((f) => ({ file: f })))}
                           uploadingFiles={uploadingFiles}
                           onCancelUpload={handleCancelUpload}
+                          queuedSubmitMessage={pendingSubmitDisplay}
+                          onCancelQueuedSubmit={() => {
+                            const queued = pendingSubmitRef.current ?? '';
+                            pendingSubmitRef.current = null;
+                            setPendingSubmitDisplay(null);
+                            if (queued && !inputMessage) setInputMessage(queued);
+                          }}
                           voiceInputEnabled={voiceInputEnabled}
                           voiceRecordingState={voiceRecordingState}
                           onVoiceRecordingComplete={handleVoiceRecordingComplete}
@@ -3255,6 +3327,17 @@ const NumaWorkspaceChatAgents = () => {
 
                     {!shouldShowNewChatView && (
                       <div className="chat-input-wrapper">
+                        {pendingSubmitDisplay !== null && (
+                          <QueuedSubmitBanner
+                            message={pendingSubmitDisplay}
+                            onCancel={() => {
+                              const queued = pendingSubmitRef.current ?? '';
+                              pendingSubmitRef.current = null;
+                              setPendingSubmitDisplay(null);
+                              if (queued && !inputMessage) setInputMessage(queued);
+                            }}
+                          />
+                        )}
                         {(stagedItems.length > 0 || uploadingFiles.length > 0) && (
                           <PendingFilesBar
                             items={stagedItems}

@@ -255,6 +255,12 @@ export function useWorkspaceChatStreaming({
       const kbNameById = new Map<string, string>();
       availableKBs.forEach((kb) => kbNameById.set(kb.kb_id, kb.kb_name));
       const workspaceChatKBs = enabledKBIds.map((id) => ({ id, name: kbNameById.get(id) || id }));
+      // Send the full set of folders the user can toggle so the agent is aware
+      // of folders the user has access to but hasn't enabled for this chat.
+      const workspaceChatAccessibleKBs = availableKBs.map((kb) => ({
+        id: kb.kb_id,
+        name: kb.kb_name,
+      }));
 
       const { abort: abortWorkspaceChat } = await streamWorkspaceChatAgent(
         {
@@ -262,6 +268,7 @@ export function useWorkspaceChatStreaming({
           conversationId,
           timezone,
           availableKBs: workspaceChatKBs,
+          accessibleKBs: workspaceChatAccessibleKBs,
           enabledTools,
           enabledIntegrations,
           availableIntegrations,

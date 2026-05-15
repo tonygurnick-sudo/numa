@@ -56,6 +56,7 @@
       "available": "Available folders",
       "empty": "No folders available",
       "companyName": "Company Files",
+      "sharepointName": "SharePoint",
       "roles": {
         "owner": "Owner",
         "editor": "Editor",
@@ -162,6 +163,7 @@
   },
   "history": {
     "title": "Chat History",
+    "viewAll": "View all chat history",
     "closeAria": "Close chat history",
     "loading": "Loading conversations...",
     "loadFailed": "Failed to load conversation history",
@@ -188,7 +190,16 @@
   "agentsPanel": {
     "title": "Your Agents",
     "loading": "Loading agents...",
-    "empty": "No agents yet"
+    "empty": "No agents yet",
+    "noResults": "No agents match your search.",
+    "searchPlaceholder": "Search agents...",
+    "favoriteAria": "Favourite agent",
+    "unfavoriteAria": "Remove from favourites",
+    "sections": {
+      "favourites": "Favourites",
+      "personal": "Personal",
+      "company": "Company"
+    }
   },
   "settingsPanel": {
     "knowledgeBases": "Files",
@@ -207,7 +218,9 @@
     "integrations": "Integrations",
     "loadingIntegrations": "Loading integrations...",
     "noIntegrations": "No integrations connected. Visit the Integrations page to connect apps.",
-    "enableIntegrations": "Enable integrations to use during this chat"
+    "enableIntegrations": "Enable integrations to use during this chat",
+    "selectAll": "Select all",
+    "clearAll": "Clear all"
   },
   "fileUpload": {
     "csvWarning": "CSV support is limited when Data Analysis is off. Enable Data Analysis in chat tools to analyze CSV files.",
@@ -491,6 +504,12 @@
     "noKBs": "No folders available",
     "selectAll": "Select All",
     "clear": "Clear",
+    "private": "Private",
+    "shared": "Shared",
+    "myFilesPrivateTooltip": "Only you can see files in this folder. Numa can read and write here when enabled in chat.",
+    "privateTooltip": "Only you can see this folder.",
+    "sharedTooltip": "You have shared this folder with others.",
+    "sharedWithYouTooltip": "Shared with you.",
     "tools": "Tools",
     "toolsHelper": "Enable capabilities for this chat",
     "all": "All",
@@ -517,7 +536,17 @@
     "connectors": "Connectors",
     "noneConnected": "None connected",
     "connectorsConnectedCount": "{{count}}/{{total}} connected",
-    "connectorAlreadyConnected": "Already connected"
+    "connectorAlreadyConnected": "Already connected",
+    "expand": "Expand",
+    "expandedTitleChatUploads": "Chat Uploads",
+    "expandedTitleOutputFiles": "Output Files",
+    "expandedClose": "Close",
+    "expandedColName": "Name",
+    "expandedColType": "Type",
+    "expandedColSize": "Size",
+    "expandedColModified": "Modified",
+    "expandedColActions": "Actions",
+    "expandedEmpty": "No files yet"
   },
   "connectorsPanel": {
     "connectTo": "Connect to {{name}}",

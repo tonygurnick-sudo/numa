@@ -8,6 +8,7 @@ import { useConfirm } from '../../../Providers/ConfirmContext';
 import * as OpsService from '../../../Services/OpsService';
 import type { Comment } from '../../../types/ops';
 import { RichTextEditor } from './RichTextEditor';
+import { StaffAvatar } from './StaffAvatar';
 import { useOps } from '../OpsContext';
 
 /**
@@ -23,50 +24,6 @@ function isHtmlEmpty(html: string): boolean {
 
 interface CommentSectionProps {
   ticketId: string;
-}
-
-/**
- * Calculates a simple numeric hash from a string.
- * Used to deterministically assign avatar colors to authors.
- */
-function hashString(str: string | null | undefined): number {
-  if (!str) return 0;
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
-/**
- * Returns a hex color deterministically derived from a name string.
- */
-function avatarColor(name: string | null | undefined): string {
-  const colors = [
-    '#3b82f6',
-    '#ef4444',
-    '#22c55e',
-    '#f59e0b',
-    '#8b5cf6',
-    '#ec4899',
-    '#06b6d4',
-    '#f97316',
-    '#14b8a6',
-    '#6366f1',
-  ];
-  return colors[hashString(name) % colors.length];
-}
-
-/**
- * Extracts initials from a name (first letter of first two words, uppercase).
- */
-function getInitials(name: string | null | undefined): string {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
 }
 
 /**
@@ -191,9 +148,12 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
     );
   }
 
-  // Get current user's display name for the input avatar
+  // Resolve the current user's staff record so the input avatar uses the
+  // same presigned-URL pipeline as comment avatars below.
   const currentUserName: string =
     (user?.decoded_tokens?.idToken?.name as string) ?? (user?.decoded_tokens?.idToken?.email as string) ?? '';
+  const currentUserEmail: string = (user?.decoded_tokens?.idToken?.email as string) ?? '';
+  const currentUserStaff = (config?.staff ?? []).find((s) => s.id === currentUserId) ?? null;
 
   return (
     <div>
@@ -202,20 +162,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
         className="d-flex gap-3 mb-3 pb-3"
         style={{ borderBottom: comments.length > 0 ? '1px solid #f3f4f6' : 'none' }}
       >
-        <div
-          className="d-flex align-items-center justify-content-center flex-shrink-0"
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
-            backgroundColor: avatarColor(currentUserName),
-            color: '#fff',
-            fontSize: '0.7rem',
-            fontWeight: 600,
-          }}
-        >
-          {getInitials(currentUserName)}
-        </div>
+        <StaffAvatar staff={currentUserStaff} name={currentUserName} email={currentUserEmail} size={32} />
         <div className="flex-grow-1">
           <RichTextEditor
             value={newContent}
@@ -247,6 +194,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
           {comments.map((comment) => {
             const isOwn = comment.authorId === currentUserId;
             const isEditing = editingId === comment.id;
+            const authorStaff = (config?.staff ?? []).find((s) => s.id === comment.authorId) ?? null;
 
             return (
               <div
@@ -254,21 +202,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                 className="d-flex gap-3 mb-3 pb-3"
                 style={{ borderBottom: '1px solid #f3f4f6' }}
               >
-                {/* Avatar */}
-                <div
-                  className="d-flex align-items-center justify-content-center flex-shrink-0"
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    backgroundColor: avatarColor(comment.authorName),
-                    color: '#fff',
-                    fontSize: '0.7rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  {getInitials(comment.authorName)}
-                </div>
+                <StaffAvatar staff={authorStaff} name={comment.authorName} email={comment.authorEmail} size={32} />
 
                 {/* Content */}
                 <div className="flex-grow-1" style={{ minWidth: 0 }}>

@@ -224,7 +224,13 @@ const DEFAULT_GLOBAL_CHAT_SETTINGS: GlobalChatSettings = {
 const GLOBAL_SETTINGS_KEY = '__global__';
 const COMPANY_KB_ID = 'company';
 const NUMA_SUPPORT_KB_ID = 'numa-support';
-const SYSTEM_KB_IDS = new Set([COMPANY_KB_ID, NUMA_SUPPORT_KB_ID]);
+const SHAREPOINT_KB_ID = 'sharepoint';
+// `sharepoint` is only meaningful for workspaces with provisionQResources=true,
+// but the chat-settings Lambda has no per-workspace flag visibility — we
+// include it in the system whitelist so it can be persisted. The backend KB
+// router enforces availability (returns an error if Q isn't configured) and
+// the frontend hides the tickbox when PROVISION_Q_RESOURCES is off.
+const SYSTEM_KB_IDS = new Set([COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SHAREPOINT_KB_ID]);
 
 const HEADERS = {
   'Access-Control-Allow-Origin': '*',

@@ -18,7 +18,13 @@ import type { S3Object, TableRow, SortColumn, SortDirection } from './KBFileExpl
 import { FileUploader } from '../FileUploader';
 import { NotificationModal } from '../NotificationModal';
 import FolderSelector from './FolderSelector';
-import { shouldShowLargeDataFileWarning, formatFileSize, getFileTypeCategory } from '../../utils/fileUtils';
+import {
+  shouldShowLargeDataFileWarning,
+  formatFileSize,
+  getFileTypeCategory,
+  getFileIconClass,
+  getFileIconColorClass,
+} from '../../utils/fileUtils';
 import type { FileTypeCategory } from '../../utils/fileUtils';
 import { listFoldersInKB, downloadFileFromS3 } from '../../utils/s3Utils';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -338,8 +344,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   const ensureKbLoaded = useCallback(
     (kbId: string) => {
+      // Always fire a background shallow refresh on expansion (SWR pattern).
+      // Hydration seeds kbFileStates from localStorage on mount, so a cache-miss
+      // guard would skip the fetch and never pick up server-side changes (e.g.
+      // a folder created from chat or another session would stay invisible).
+      // fetchKbFiles uses a functional setter that merges cleanly with existing
+      // state, so this is safe to call unconditionally.
+      fetchKbFiles(kbId);
       if (!kbFileStates.has(kbId)) {
-        fetchKbFiles(kbId);
         fetchKBDetails(kbId);
       }
     },
@@ -1160,9 +1172,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           setUploadTargetKb(kb);
           setShowUploadModal(true);
         } else if (action === 'settings') {
+          // My Files is virtual (no DDB record) — sharing/permissions don't apply.
+          if (kb.is_root) return;
           setSettingsKb(kb);
           setShowSettingsDrawer(true);
         } else if (action === 'delete') {
+          // My Files cannot be deleted — it is auto-provisioned per user.
+          if (kb.is_root) return;
           if (kb.role === 'OWNER') setTopLevelDeleteConfirm(kb);
         }
       } else {
@@ -1261,10 +1277,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const isInitialLoad = isLoadingKBs;
   const isRootKbLoading = rootKB ? (kbFileStates.get(rootKB.kb_id)?.isLoading ?? false) : false;
 
-  // Only show empty state if there are no folders AND no root files
-  const rootState = rootKB ? kbFileStates.get(rootKB.kb_id) : undefined;
-  const hasRootFiles = rootState && rootState.files.length > 0;
-
   // ── Build rows ─────────────────────────────────────────────
 
   const isInsideFolder = currentFolder !== null;
@@ -1279,11 +1291,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       return {
         kb: currentKb,
         folderPath: currentUploadFolderPath,
-        rejectFolders: !!rootKB && currentKb.kb_id === rootKB.kb_id && !currentUploadFolderPath,
+        // My Files now supports subfolders, so accept folder drops everywhere
+        // a user can edit. The backend creates the S3 prefix on first object.
+        rejectFolders: false,
       };
     }
     if (!currentFolder && rootKB) {
-      return { kb: rootKB, folderPath: '', rejectFolders: true };
+      return { kb: rootKB, folderPath: '', rejectFolders: false };
     }
     return null;
   }, [currentFolder, currentKb, canEditCurrent, currentUploadFolderPath, rootKB]);
@@ -1383,28 +1397,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       }
     }
   } else {
-    // Root view -- root files at depth 0, then KB folders at depth 0
-
-    // Show root files (loose files not in any folder) at the top.
-    // Render whatever files we have (including cached) even while a background
-    // refresh is in flight — otherwise the list flickers empty during SWR.
-    if (rootKB) {
-      const rootState = kbFileStates.get(rootKB.kb_id);
-      if (rootState && rootState.files.length > 0) {
-        const rootChildRows = buildKbChildRows(rootKB.kb_id, 0);
-        // Only show file rows (not folders) as root-level loose files
-        for (const r of rootChildRows) {
-          if (r.type === 'file') {
-            rows.push({ row: r, kbId: rootKB.kb_id, isKbFolder: false });
-          }
-        }
-      }
-    }
-
-    // Then show KB folders
+    // Root view — every KB renders as a folder row, with My Files pinned first.
+    // The "loose files" surface at the root has been collapsed into My Files
+    // (kb-<sub>) so files only appear in one place. My Files defaults to
+    // expanded so users still see their root files inline on arrival.
     const trimmedSearch = searchValue.trim();
     const anyFilterActive = !!trimmedSearch || filterPredicate.isActive;
-    for (const kb of allUserKBs) {
+    const rootViewKBs: UserKB[] = rootKB ? [rootKB, ...allUserKBs] : [...allUserKBs];
+    for (const kb of rootViewKBs) {
       const kbState = kbFileStates.get(kb.kb_id);
       const isLoaded = !!kbState && !kbState.isLoading;
       const childRows = isLoaded ? buildKbChildRows(kb.kb_id, 1) : [];
@@ -1606,23 +1606,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
             </button>
           )}
-          {selectedKeys.size > 0 && !isInsideFolder && rootKB && (
-            <button
-              className="finder-btn finder-btn--danger"
-              onClick={() => confirmDeleteFiles(rootKB.kb_id, Array.from(selectedKeys))}
-              title={t('delete.confirm', { count: selectedKeys.size })}
-            >
-              <i className="bi bi-trash" />
-              <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
-            </button>
-          )}
-          {/* New Folder / New Subfolder — branches on context: at root creates a top-level
-              shareable folder (KB), inside a folder creates a plain subfolder. */}
+          {/* New Folder / New Subfolder — branches on context: at root creates a
+              shareable top-level folder (a sibling KB with its own permissions),
+              inside a folder creates a plain subfolder under the same KB. */}
           {!isInsideFolder ? (
             <button
               className="finder-btn finder-btn--primary finder-btn--labelled"
               onClick={() => setShowCreateModal(true)}
-              title={t('actions.newFolder')}
+              title={t('actions.newFolderRootTooltip')}
             >
               <i className="bi bi-folder-plus" />
               <span className="finder-btn__label">{t('actions.newFolder')}</span>
@@ -1650,12 +1641,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               <span className="finder-btn__label">{t('actions.newSubfolder')}</span>
             </button>
           ) : null}
-          {/* Upload button: at root level (uploads to root KB) or inside a folder */}
+          {/* Upload button: at root level uploads to My Files root; inside a
+              folder uploads into that folder. */}
           {!isInsideFolder && rootKB ? (
             <button
               className="finder-btn finder-btn--labelled"
               onClick={(e) => openUploadForKb(rootKB, e)}
-              title={t('actions.upload')}
+              title={t('rootFiles.uploadTooltip')}
             >
               <i className="bi bi-upload" />
               <span className="finder-btn__label">{t('actions.upload')}</span>
@@ -1748,10 +1740,8 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         {rows.length === 0 ? (
           <div className="finder-empty">
             <i className="bi bi-folder" />
-            <span>
-              {allUserKBs.length === 0 && !hasRootFiles ? t('folderList.empty.title') : tKb('fileExplorer.empty')}
-            </span>
-            {allUserKBs.length === 0 && !hasRootFiles && (
+            <span>{allUserKBs.length === 0 ? t('folderList.empty.title') : tKb('fileExplorer.empty')}</span>
+            {allUserKBs.length === 0 && (
               <div className="d-flex gap-2 mt-2">
                 <button className="finder-btn finder-btn--primary" onClick={() => setShowCreateModal(true)}>
                   <i className="bi bi-folder-plus" /> {t('actions.newFolder')}
@@ -1789,7 +1779,8 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             // KB folder row at root level
             if (isKbFolder && kb) {
               const isExpanded = expandedKbs.has(kb.kb_id);
-              const isShared = kb.is_shared || kb.role === 'VIEWER';
+              const isRootRow = !!kb.is_root;
+              const isShared = !isRootRow && (kb.is_shared || kb.role === 'VIEWER');
               const isOwner = kb.role === 'OWNER';
               const isEditor = kb.role === 'EDITOR';
               const canEdit = isOwner || isEditor;
@@ -1806,6 +1797,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                     isExpanded ? 'finder-row--expanded' : '',
                     isDropTarget ? 'finder-row--drop-over' : '',
                     isDragging && dropDisabled ? 'finder-row--viewer-disabled' : '',
+                    isRootRow ? 'finder-row--my-files' : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}
@@ -1831,22 +1823,38 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                     >
                       <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
                     </span>
-                    <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
-                    <span className="finder-name">{kb.kb_name}</span>
-                    {isShared ? (
-                      <i
-                        className="bi bi-people-fill"
-                        style={{ fontSize: '0.7rem', color: '#86868b' }}
-                        title={isOwner ? t('folderList.sharing') : t('folderList.sharedWithYou')}
-                      />
+                    {isRootRow ? (
+                      <i className="bi bi-person-circle finder-icon finder-icon--my-files" />
                     ) : (
-                      <i
-                        className="bi bi-person-fill"
-                        style={{ fontSize: '0.7rem', color: '#86868b' }}
-                        title={t('folderList.private')}
-                      />
+                      <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
                     )}
-                    {!isOwner && (
+                    <span className="finder-name">{kb.kb_name}</span>
+                    {isRootRow ? (
+                      <span
+                        className="finder-row__visibility-badge finder-row__visibility-badge--private"
+                        title={t('rootFiles.privateTooltip')}
+                      >
+                        <i className="bi bi-shield-lock-fill" />
+                        {t('folderList.private')}
+                      </span>
+                    ) : isShared ? (
+                      <span
+                        className="finder-row__visibility-badge finder-row__visibility-badge--shared"
+                        title={isOwner ? t('folderList.sharing') : t('folderList.sharedWithYou')}
+                      >
+                        <i className="bi bi-people-fill" />
+                        {t('folderList.shared')}
+                      </span>
+                    ) : (
+                      <span
+                        className="finder-row__visibility-badge finder-row__visibility-badge--private"
+                        title={t('folderList.privateTooltip')}
+                      >
+                        <i className="bi bi-shield-lock-fill" />
+                        {t('folderList.private')}
+                      </span>
+                    )}
+                    {!isOwner && !isRootRow && (
                       <span className="finder-row__badge">{isEditor ? t('badges.editor') : t('badges.viewer')}</span>
                     )}
                     {kbFileStates.get(kb.kb_id)?.truncated && (
@@ -1877,9 +1885,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                         <button onClick={(e) => openUploadForKb(kb, e)} title={t('actions.uploadFiles')}>
                           <i className="bi bi-upload" />
                         </button>
-                        <button onClick={(e) => openSettings(kb, e)} title={t('folderList.settings')}>
-                          <i className="bi bi-gear" />
-                        </button>
+                        {!isRootRow && (
+                          <button onClick={(e) => openSettings(kb, e)} title={t('folderList.settings')}>
+                            <i className="bi bi-gear" />
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -1988,9 +1998,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   ) : (
                     <span className="finder-chevron-spacer" />
                   )}
-                  <i
-                    className={`bi ${isSubfolder ? 'bi-folder-fill finder-icon--folder' : 'bi-file-earmark finder-icon--file'} finder-icon`}
-                  />
+                  {isSubfolder ? (
+                    <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
+                  ) : (
+                    <i
+                      className={`${getFileIconClass(row.name)} finder-icon finder-icon--file ${getFileIconColorClass(row.name)}`}
+                    />
+                  )}
                   <span className="finder-name">{row.displayName || row.name}</span>
                 </div>
                 <div className="finder-row__meta finder-row__meta--type">
@@ -2101,7 +2115,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               : canEditKb(folderContextMenu.target.kbId)
           }
           canDeleteTopLevel={
-            folderContextMenu.target.kind === 'topLevel' ? folderContextMenu.target.kb.role === 'OWNER' : false
+            folderContextMenu.target.kind === 'topLevel'
+              ? folderContextMenu.target.kb.role === 'OWNER' && !folderContextMenu.target.kb.is_root
+              : false
           }
           onClose={closeFolderContextMenu}
           onAction={handleContextMenuAction}

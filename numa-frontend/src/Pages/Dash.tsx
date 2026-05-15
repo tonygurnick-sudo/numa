@@ -1,6 +1,8 @@
 import { useContext, useState, useEffect, useMemo } from 'react';
 
-import { Alert, Container, Row, Col } from 'react-bootstrap';
+import { Alert, Button, Container, Row, Col } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
+import { History } from 'lucide-react';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 
 import { AppSearch } from '../Components/Apps/AppSearch';
@@ -22,6 +24,7 @@ import type { DashProps } from '../types/dash';
 
 export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   const niceties = useContext(NicetyContext);
+  const navigate = useNavigate();
   const { t, i18n } = useTranslation('apps');
   const { error, setError, loading, setLoading, setNumaApps, numaApps } = useNumaApp();
   const [searchTerm, setSearchTerm] = useState('');
@@ -172,6 +175,16 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
           </>
         }
         subtitle={showFavorites ? t('dash.subtitle.favorites') : t('dash.subtitle.all')}
+        actions={
+          <Button
+            variant="primary"
+            onClick={() => navigate('/job-history')}
+            className="d-inline-flex align-items-center gap-2"
+          >
+            <History size={16} aria-hidden="true" />
+            {t('dash.viewJobHistory')}
+          </Button>
+        }
       />
       <LayoutDashboard>
         <Container fluid className="px-0">

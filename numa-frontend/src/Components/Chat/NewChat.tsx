@@ -6,6 +6,7 @@ import i18n from '../../i18n';
 import { ChatInput, ChatInputVariant } from './ChatInput';
 import { ChatSettingsPanel } from './ChatSettingsPanel';
 import { PendingFilesBar } from './PendingFilesBar';
+import { QueuedSubmitBanner } from './QueuedSubmitBanner';
 import { QuickActionsRow } from './QuickActionsRow';
 import type { ConversationMeta } from '../../hooks/useChatInactivity';
 import type { WorkspaceChatModelId, StagedItem, UploadingFile } from '../../types/workspaceChatTypes';
@@ -116,6 +117,10 @@ type NewChatProps = {
   uploadingFiles?: UploadingFile[];
   /** Cancel an in-progress upload (V2 only) */
   onCancelUpload?: (id: string) => void;
+  /** Message currently queued to auto-send once uploads finish; null when none */
+  queuedSubmitMessage?: string | null;
+  /** Cancel a queued submission and (optionally) restore it to the input */
+  onCancelQueuedSubmit?: () => void;
   // Voice recording props
   /** Whether voice input feature is enabled */
   voiceInputEnabled?: boolean;
@@ -229,6 +234,8 @@ const NewChat = ({
   onOpenAgents,
   uploadingFiles = [],
   onCancelUpload,
+  queuedSubmitMessage = null,
+  onCancelQueuedSubmit,
   voiceInputEnabled = false,
   voiceRecordingState = 'idle',
   onVoiceRecordingComplete,
@@ -440,6 +447,9 @@ const NewChat = ({
 
   const inputComposer = (
     <div className="chat-input-wrapper new-chat-input-wrapper" style={{ animation: 'fadeIn 0.8s ease-in-out' }}>
+      {variant === 'v2' && queuedSubmitMessage !== null && onCancelQueuedSubmit && (
+        <QueuedSubmitBanner message={queuedSubmitMessage} onCancel={onCancelQueuedSubmit} />
+      )}
       {/* Show pending/uploading files indicator for pre-minted conversations (V2) */}
       {variant === 'v2' && (stagedItems.length > 0 || uploadingFiles.length > 0) && onRemoveStagedItem && (
         <PendingFilesBar
