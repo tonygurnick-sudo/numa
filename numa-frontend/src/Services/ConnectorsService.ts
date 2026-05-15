@@ -228,7 +228,9 @@ export const ConnectorsService = {
   },
 
   /** Disconnect / revoke per-user credentials. Routes OAuth -> revoke
-   *  endpoint, PAT -> delete credentials endpoint. */
+   *  endpoint, PAT -> delete credentials endpoint. Throws if the underlying
+   *  call fails so callers can surface the error to the user — silently
+   *  swallowing here would leave stale UI state. */
   async disconnect(connectorId: string): Promise<void> {
     const c = classifyConnector(connectorId);
     if (!c) {
@@ -236,7 +238,11 @@ export const ConnectorsService = {
       return;
     }
     if (c.kind === 'oauth') {
-      await OAuthProvidersService.disconnect(c.id);
+      const result = await OAuthProvidersService.disconnect(c.id);
+      if (!result.success) {
+        log('disconnect', connectorId, { result: 'oauth_failed', error: result.error });
+        throw new Error(result.error || 'Disconnect failed');
+      }
     } else {
       await PATConnectorService.revoke(c.id);
     }

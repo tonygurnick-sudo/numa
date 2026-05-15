@@ -31,9 +31,7 @@ import {
 } from '../Services/AdminIntegrationsService';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { ConnectorsService, type PATCredentialField } from '../Services/ConnectorsService';
-import { OAuthProvidersService } from '../Services/internal/OAuthProvidersService';
 import { DataConnectorsService } from '../Services/DataConnectorsService';
-import type { OAuthConnectorId } from '../Services/internal/connectorIds';
 
 import {
   getConnectionDisplayName,
@@ -197,7 +195,7 @@ export const UnifiedIntegrationsPage = () => {
               const statuses = await Promise.all(
                 oauthSlugs.map(async (slug) => {
                   try {
-                    const s = await OAuthProvidersService.getConnectionStatus(slug as OAuthConnectorId);
+                    const s = await ConnectorsService.getStatus(slug);
                     return [slug, s.status === 'connected'] as const;
                   } catch {
                     return [slug, false] as const;
@@ -566,16 +564,10 @@ export const UnifiedIntegrationsPage = () => {
             })
           );
         }
-        if (nativeOAuthActive && conSlug) {
-          tasks.push(
-            (async () => {
-              const result = await OAuthProvidersService.disconnect(conSlug as OAuthConnectorId);
-              if (!result.success) {
-                throw new Error(result.error || 'Disconnect failed');
-              }
-            })()
-          );
-        } else if (nativePatActive && conSlug) {
+        if ((nativeOAuthActive || nativePatActive) && conSlug) {
+          // Facade routes to the right backend per registry authType, and
+          // throws when the underlying revoke/delete fails so the catch below
+          // can surface the error.
           tasks.push(ConnectorsService.disconnect(conSlug));
         }
         // ALWAYS clear the data-connector row when we know about one. OAuth
@@ -635,16 +627,7 @@ export const UnifiedIntegrationsPage = () => {
           })
         );
       }
-      if (nativeOAuthActive && conSlug) {
-        tasks.push(
-          (async () => {
-            const result = await OAuthProvidersService.disconnect(conSlug as OAuthConnectorId);
-            if (!result.success) {
-              throw new Error(result.error || 'Disconnect failed');
-            }
-          })()
-        );
-      } else if (nativePatActive && conSlug) {
+      if ((nativeOAuthActive || nativePatActive) && conSlug) {
         tasks.push(ConnectorsService.disconnect(conSlug));
       }
       if (hasDataConnectorRow && conSlug) {
