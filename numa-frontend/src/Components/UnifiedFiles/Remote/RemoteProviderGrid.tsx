@@ -3,7 +3,7 @@ import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { OAuthProviderType, OAuthProviderInfo, OAuthConnectionStatus } from '../../../types/oauthProviders';
-import { OAuthProvidersService } from '../../../Services/internal/OAuthProvidersService';
+import { ConnectorsService } from '../../../Services/ConnectorsService';
 
 interface RemoteProviderGridProps {
   providers: OAuthProviderInfo[];
@@ -85,7 +85,7 @@ export function RemoteProviderGrid({
                             className="btn btn-sm btn-outline-secondary text-nowrap"
                             onClick={(e) => {
                               e.stopPropagation();
-                              OAuthProvidersService.disconnect(provider.id)
+                              ConnectorsService.disconnect(provider.id)
                                 .catch(() => {})
                                 .finally(() => onRefreshStatuses());
                             }}
@@ -169,7 +169,7 @@ export function RemoteProviderGrid({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      OAuthProvidersService.disconnect(provider.id)
+                      ConnectorsService.disconnect(provider.id)
                         .catch(() => {})
                         .finally(() => onRefreshStatuses());
                     }}

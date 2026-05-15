@@ -6,9 +6,8 @@ import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useToast } from '../../../Providers/ToastContext';
 import { useFileSelection } from '../../../hooks/useFileSelection';
 import { useRemoteBrowse } from '../../../hooks/useRemoteBrowse';
+import { ConnectorsService } from '../../../Services/ConnectorsService';
 import { DataConnectorsService } from '../../../Services/DataConnectorsService';
-import { OAuthProvidersService } from '../../../Services/internal/OAuthProvidersService';
-import { getConnectorById } from '../../DataConnectors/connectorRegistry';
 import { ComposeEmailModal } from '../../Files/ComposeEmailModal';
 import { ConnectTokenModal } from '../../Files/ConnectTokenModal';
 import { EmailViewerModal } from '../../Files/EmailViewerModal';
@@ -139,11 +138,24 @@ export function RemoteTab({ onActionChange }: RemoteTabProps): React.JSX.Element
     }
   }, [dataConnectorsEnabled, numaGet]);
 
+  // Use the ConnectorsService facade — it classifies each id against the
+  // registry and routes status checks to the correct backend endpoint
+  // (`/oauth/{id}/status` for OAuth, `/pat/{id}/status` for PAT). Calling the
+  // internal OAuthProvidersService directly here sent every connector through
+  // the OAuth endpoint, which 400-rejected PAT connectors (Synergy, Fergus)
+  // and surfaced as a misleading "Token expired" badge.
   const loadDynamicOAuthProviders = useCallback(async () => {
     if (!oauthEnabled) return;
     try {
-      const providers = await OAuthProvidersService.listProviders();
-      setEnabledOAuthProviders(providers);
+      const { oauth, pat } = await ConnectorsService.listConfigured();
+      const merged: OAuthProviderInfo[] = [...oauth, ...pat].map((c) => ({
+        id: c.id,
+        display_name: c.displayName,
+        icon: c.icon ?? 'bi-cloud',
+        description: '',
+        configured: true,
+      }));
+      setEnabledOAuthProviders(merged);
     } catch {
       setEnabledOAuthProviders([]);
     }
@@ -157,7 +169,7 @@ export function RemoteTab({ onActionChange }: RemoteTabProps): React.JSX.Element
     const loadPromises = providers.map(async (provider) => {
       setOauthStatusLoading((prev) => ({ ...prev, [provider]: true }));
       try {
-        const status = await OAuthProvidersService.getConnectionStatus(provider);
+        const status = await ConnectorsService.getStatus(provider);
         setOauthProviderStatuses((prev) => ({ ...prev, [provider]: status }));
       } catch {
         setOauthProviderStatuses((prev) => ({
@@ -193,7 +205,7 @@ export function RemoteTab({ onActionChange }: RemoteTabProps): React.JSX.Element
     async (remoteItem: RemoteFileItem) => {
       try {
         const provider = remoteItem.oauthProvider || 'synergy';
-        const blob = await OAuthProvidersService.downloadFile(provider, remoteItem.file_id);
+        const blob = await ConnectorsService.files.download(provider, remoteItem.file_id);
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

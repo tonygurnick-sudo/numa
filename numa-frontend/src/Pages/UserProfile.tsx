@@ -29,8 +29,6 @@ import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { ConnectorsService } from '../Services/ConnectorsService';
 import { DataConnectorsService } from '../Services/DataConnectorsService';
 import { AdminIntegrationsService } from '../Services/AdminIntegrationsService';
-import { OAuthProvidersService } from '../Services/internal/OAuthProvidersService';
-import type { OAuthConnectorId } from '../Services/internal/connectorIds';
 import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
 import {
   connectorSlugForPipedream,
@@ -708,7 +706,7 @@ export default function UserProfilePage({
         const oauthStatuses = await Promise.all(
           oauthSlugs.map(async (slug) => {
             try {
-              const s = await OAuthProvidersService.getConnectionStatus(slug as OAuthConnectorId);
+              const s = await ConnectorsService.getStatus(slug);
               return [slug, s.status === 'connected'] as const;
             } catch {
               return [slug, false] as const;

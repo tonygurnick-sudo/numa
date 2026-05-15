@@ -1053,22 +1053,27 @@ const handleListProviders = async (bustCache = false) => {
 
     for (const [secretName, secretEntry] of Object.entries(secrets)) {
       const isOAuth = secretName.startsWith('oauth-client-');
-      const isConfigOnly = secretName.startsWith('connector-config-');
-      const isLegacyConnector = !isConfigOnly && secretName.startsWith('connector-');
-      if (!isOAuth && !isConfigOnly && !isLegacyConnector) continue;
+      // `connector-config-*` is the PAT admin format — NEVER return it here.
+      // PAT connectors live on a separate contract under `/api/pat/*`. Returning
+      // them via `/oauth/providers` routed PAT traffic into the OAuth status
+      // handler (which only knows how to look up `oauth-{provider}` user
+      // secrets), causing every PAT connector to render as "Token expired".
+      // The frontend now fetches PAT connectors via `/pat/connectors`, so this
+      // route is OAuth-only.
+      if (secretName.startsWith('connector-config-')) continue;
+      const isLegacyConnector = secretName.startsWith('connector-');
+      if (!isOAuth && !isLegacyConnector) continue;
 
       let providerId: string;
       if (isOAuth) providerId = secretName.replace('oauth-client-', '');
-      else if (isConfigOnly) providerId = secretName.replace('connector-config-', '');
       else providerId = secretName.replace('connector-', '');
 
       const fields = secretEntry.fields || secretEntry;
       const fallback = FALLBACK_OAUTH_CONFIGS[providerId];
 
       // OAuth connectors still need client_id + client_secret to be usable.
-      // Non-OAuth: metadata-only `connector-config-*` is valid with no creds
-      // (per-user PAT/api-key captured in chat). Legacy `connector-{id}` that
-      // predates the split still requires `instance_url` (Synergy, Workbench).
+      // Legacy `connector-{id}` that predates the split still requires
+      // `instance_url` (Synergy, Workbench).
       if (isOAuth && (!fields.client_id || !fields.client_secret)) continue;
       if (isLegacyConnector && !fields.instance_url) continue;
 
@@ -1437,6 +1442,17 @@ const handlePatRequest = async (event: APIGatewayProxyEventV2, pathParts: string
   // Validate connector exists (admin-registered) — PAT-only check, no OAuth lookup.
   const config = await getPatConnectorConfig(connectorId);
   if (!config) {
+    // Defense in depth: if this id IS a registered OAuth provider, refuse
+    // with a clear redirect rather than the generic "not configured" 400.
+    // Catches frontend callers that route OAuth traffic through the PAT
+    // handler.
+    const oauthConfig = await getProviderConfig(connectorId as OAuthProvider);
+    if (oauthConfig) {
+      return errorResponse(
+        404,
+        `"${connectorId}" is an OAuth connector. Use /api/oauth/${connectorId}/${action} instead of /api/pat/${connectorId}/${action}.`
+      );
+    }
     return errorResponse(400, `PAT connector "${connectorId}" is not configured`);
   }
 
@@ -1553,6 +1569,18 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // Validate provider dynamically — check if vault config exists
     const providerConfig = await getProviderConfig(provider);
     if (!providerConfig) {
+      // Defense in depth: if this id IS a registered PAT connector
+      // (`connector-config-{id}`), refuse with a clear redirect rather than
+      // the generic "not configured" 400. Catches frontend callers that route
+      // PAT traffic through this OAuth handler — the bug class that previously
+      // surfaced as "Token expired" for Synergy/Fergus.
+      const patConfig = await getPatConnectorConfig(provider);
+      if (patConfig) {
+        return errorResponse(
+          404,
+          `"${provider}" is a PAT connector. Use /api/pat/${provider}/${action} instead of /api/oauth/${provider}/${action}.`
+        );
+      }
       return errorResponse(400, `OAuth provider "${provider}" is not configured`);
     }
 
