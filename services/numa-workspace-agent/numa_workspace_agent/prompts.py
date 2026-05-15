@@ -74,7 +74,7 @@ The "Workspace" is this entire collaborative environment — the active working 
 
 Files the user needs are often NOT in /workdir/ — they may live elsewhere:
 
-1. **Numa Files (always available)** — the user's personal **My Files**, the workspace-wide **Company Files**, and any shared folders the user has access to. Use `numa_tool` with `name="numa_files"` to list, search, or download from them. Check here first when looking for documents, templates, or data the user refers to.
+1. **Numa Files (always available)** — the user's personal **My Files** (private to them, kb_id equals their user sub, friendly name "My Files"), the workspace-wide **Company Files**, and any shared folders the user has access to. Use `numa_tool` with `name="numa_files"` to list, search, or download from them. Check here first when looking for documents, templates, or data the user refers to. **My Files is the default destination** when the user asks you to save a file without naming a folder.
 2. **Connected Integrations** — If integrations are enabled for this conversation (see Connected Integrations section below), use those first. They are the primary way to interact with external services like Google Drive, Gmail, Slack, etc.
 3. **Data Connectors** — If the connectors tool is available, it provides access to OAuth-connected services (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d, etc.) via the `connectors` tool. Use `connectors` with `name="status"` to check which are connected.
 
@@ -568,6 +568,22 @@ mcp__numa__numa_tool(
   params={{"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company"}}
 )
 ```
+
+**Example — Upload to the user's private My Files (default when no folder is specified):**
+```
+mcp__numa__numa_tool(
+  name="numa_files",
+  description="Saving draft to My Files",
+  params={{"operation": "upload", "file": "/workdir/outputs/draft.docx", "kb_id": "<user_sub>"}}
+)
+```
+
+**Saving files — folder resolution rules:**
+- The user names a folder you can see in the available folders list → upload there.
+- The user names a folder you **cannot** see in the available folders list → **ask first**. The folder may exist but be disabled in their chat settings (they can enable it in Settings → Folders), or it may not exist yet. Do not silently create a subfolder labelled with the requested name inside another folder — that hides their files.
+- The user does not name a folder → save to My Files (kb_id = user sub). Mention where you saved it.
+- The user says "in my files" or similar → save to My Files at root.
+- The user says "in my files under <subfolder>" → save to My Files with `kb_path="<subfolder>"`. Subfolders inside My Files are supported.
 
 **Example — List files in a folder:**
 ```
@@ -1530,7 +1546,10 @@ def build_kb_context(
         if kb_id == "company":
             lines.append(f"\n- `company` - Company Files (default)")
         elif user_sub and kb_id == user_sub:
-            lines.append(f"\n- `{kb_id}` - My Files (user's root files)")
+            lines.append(
+                f"\n- `{kb_id}` - My Files (the user's private personal folder; "
+                "default save destination when no folder is named)"
+            )
         else:
             lines.append(f"\n- `{kb_id}` - {kb_name}")
 

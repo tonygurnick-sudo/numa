@@ -89,6 +89,7 @@ import type {
   WorkspaceChatMessage,
 } from '../types/workspaceChatTypes';
 import { DEFAULT_WORKSPACE_MODEL } from '../types/workspaceChatTypes';
+import { expandMyFilesSentinel } from '../constants/knowledgeBase';
 
 type ConversationChatConfig = {
   autoToolsEnabled?: boolean;
@@ -607,10 +608,12 @@ const NumaWorkspaceChatAgents = () => {
       return [];
     }
 
-    const defaultKBSet = new Set(userChatSettings.defaultKBIds);
+    // Expand the My Files sentinel to the user's actual sub before matching.
+    const expanded = expandMyFilesSentinel(userChatSettings.defaultKBIds, sub);
+    const defaultKBSet = new Set(expanded);
     const availableDefaultKBs = availableKBs.filter((kb) => defaultKBSet.has(kb.kb_id));
     return availableDefaultKBs.map((kb) => kb.kb_id);
-  }, [availableKBs, userChatSettings.defaultKBIds]);
+  }, [availableKBs, userChatSettings.defaultKBIds, sub]);
 
   const defaultConnectionIdsFromSettings = useMemo(
     () => userChatSettings.defaultConnectionIds.filter((id) => connectedSet.has(id)),

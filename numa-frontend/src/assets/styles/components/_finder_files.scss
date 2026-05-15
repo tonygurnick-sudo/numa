@@ -337,6 +337,16 @@
       background: var(--nav-active-bg, color-mix(in srgb, var(--brand-primary, #8e50a7) 5%, white 95%));
     }
 
+    // "My Files" — the user's personal private folder. Tinted background so
+    // it reads as distinct from sibling KBs even when collapsed.
+    &.finder-row--my-files {
+      background: color-mix(in srgb, var(--brand-primary, #8e50a7) 6%, white 94%);
+
+      &.finder-row--expanded {
+        background: color-mix(in srgb, var(--brand-primary, #8e50a7) 10%, white 90%);
+      }
+    }
+
     &.finder-row--depth-1 .finder-row__name-content {
       padding-left: 20px;
     }
@@ -429,6 +439,11 @@
         color: var(--brand-primary, var(--color-primary));
       }
 
+      &.finder-icon--my-files {
+        color: var(--brand-primary, var(--color-primary));
+        font-size: 1.05rem;
+      }
+
       &.finder-icon--file {
         color: #a1a1aa;
       }
@@ -451,6 +466,34 @@
       border: 1px solid #e4e4e7;
       background: #fafafa;
       color: #a1a1aa;
+    }
+
+    .finder-row__visibility-badge {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.22rem;
+      font-family: 'Metropolis Medium', 'Metropolis Regular', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.08rem 0.4rem;
+      border-radius: 999px;
+
+      i {
+        font-size: 0.65rem;
+      }
+
+      &.finder-row__visibility-badge--private {
+        background: color-mix(in srgb, var(--brand-primary, #8e50a7) 14%, white 86%);
+        color: var(--brand-primary, #8e50a7);
+      }
+
+      &.finder-row__visibility-badge--shared {
+        background: rgba(34, 139, 230, 0.12);
+        color: rgb(28, 110, 184);
+      }
     }
   }
 
