@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useBranding } from '../../Providers/BrandingContext';
@@ -15,6 +15,7 @@ import BoardSelector from './BoardSelector';
 import ZoneSprintStrip from './ZoneSprintStrip';
 import AllBoardsStrip from './AllBoardsStrip';
 import { useActivityBadgeCount } from './useActivityBadgeCount';
+import { getCached, setCache } from '../../utils/opsCache';
 import type { Ticket } from '../../types/ops';
 import type { OpsTopView } from './useOpsData';
 import './BoardView/kanban.css';
@@ -58,6 +59,22 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
     myWorkFilter,
     setMyWorkFilter,
   } = useOps();
+
+  // ── Pinned boards (which boards appear in the All Boards strip) ──────────
+  const [pinnedBoardIds, setPinnedBoardIds] = useState<string[] | null>(() => getCached<string[]>('pinnedBoards'));
+
+  const handleToggleBoardPin = useCallback(
+    (boardId: string) => {
+      setPinnedBoardIds((prev) => {
+        // null means "all shown" — first toggle initialises from full board list
+        const current = prev ?? boards.map((b) => b.id);
+        const next = current.includes(boardId) ? current.filter((id) => id !== boardId) : [...current, boardId];
+        setCache('pinnedBoards', next);
+        return next;
+      });
+    },
+    [boards]
+  );
 
   // ── Modal state ──────────────────────────────────────────────────────────
   const [showCreateTicket, setShowCreateTicket] = useState(false);
@@ -177,12 +194,14 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
                   currentBoard={boards.find((tm) => tm.id === selectedBoardId) ?? null}
                   boards={boards}
                   isAllBoards={boardViewMode === 'allBoards'}
+                  pinnedBoardIds={pinnedBoardIds}
                   onSelectBoard={(boardId) => {
                     selectBoard(boardId);
                     setBoardViewMode('singleBoard');
                   }}
                   onSelectAllBoards={() => setBoardViewMode('allBoards')}
                   onCreateBoard={() => setShowCreateTeam(true)}
+                  onToggleBoardPin={handleToggleBoardPin}
                 />
                 {/* Board settings — next to board name in single-board mode */}
                 {boardViewMode === 'singleBoard' && selectedBoardId && (canManage || isTeamOwner) && (
@@ -207,6 +226,7 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
               <AllBoardsStrip
                 canManage={canManage}
                 currentUserSub={currentUserSub}
+                pinnedBoardIds={pinnedBoardIds}
                 onOpenBoardSettings={(boardId) => {
                   selectBoard(boardId);
                   setShowBoardSettings(true);

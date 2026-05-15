@@ -16,10 +16,11 @@ import { getCached, setCache } from '../../utils/opsCache';
 interface AllBoardsStripProps {
   canManage?: boolean;
   currentUserSub?: string;
+  pinnedBoardIds: string[] | null;
   onOpenBoardSettings?: (boardId: string) => void;
 }
 
-const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllBoardsStripProps) => {
+const AllBoardsStrip = ({ canManage, currentUserSub, pinnedBoardIds, onOpenBoardSettings }: AllBoardsStripProps) => {
   const { t } = useTranslation('ops');
   const { numaGet } = useNumaRequest();
   const { boards, selectedBoardId, selectBoard, boardData, activeZoneId, setActiveZone } = useOps();
@@ -136,6 +137,8 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllB
     [selectBoard]
   );
 
+  const visibleBoards = pinnedBoardIds === null ? boards : boards.filter((b) => pinnedBoardIds.includes(b.id));
+
   if (boards.length === 0) {
     return (
       <div className="d-flex align-items-center gap-3 flex-grow-1">
@@ -146,12 +149,22 @@ const AllBoardsStrip = ({ canManage, currentUserSub, onOpenBoardSettings }: AllB
     );
   }
 
+  if (visibleBoards.length === 0) {
+    return (
+      <div className="d-flex align-items-center gap-3 flex-grow-1">
+        <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+          {t('boards.noPinnedBoards')}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className="d-flex align-items-stretch gap-3 flex-grow-1 ops-hide-scrollbar pb-2 pb-md-0 px-3 px-md-0"
       style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
     >
-      {boards.map((team) => {
+      {visibleBoards.map((team) => {
         const isSelected = team.id === selectedBoardId;
         const zones = getZonesForBoard(team.id);
         const activeSprintName = getActiveSprintName(team.id);
