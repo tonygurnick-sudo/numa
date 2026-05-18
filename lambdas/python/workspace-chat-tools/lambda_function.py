@@ -541,6 +541,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         "get_agent",
         "create_agent",
         "update_agent",
+        "patch_agent_prompt",
         "duplicate_agent",
     }
     if tool_name in agent_tools:

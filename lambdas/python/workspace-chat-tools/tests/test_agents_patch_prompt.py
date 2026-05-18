@@ -392,5 +392,76 @@ class TestHandlePatchAgentPromptApproval(unittest.TestCase):
         mock_dynamo.Table.assert_not_called()
 
 
+class TestLambdaDispatcherWiring(unittest.TestCase):
+    """Regression tests for the lambda_function.py dispatcher.
+
+    The Lambda dispatcher has a per-tool-name `agent_tools` allowlist that
+    injects `__user_sub`/`__user_groups`/`__conversation_id` into params and
+    enforces the `create_agent_tool` enablement gate. Any new agent operation
+    MUST be added to that allowlist — otherwise the handler is invoked with
+    no user context and fails its own auth check, even though approval cards
+    render correctly on the frontend.
+    """
+
+    def test_patch_agent_prompt_in_agent_tools_allowlist(self):
+        mock_handler = MagicMock(return_value={"agent": {}})
+        from lambda_function import TOOL_HANDLERS, handler
+
+        original = TOOL_HANDLERS["patch_agent_prompt"]
+        TOOL_HANDLERS["patch_agent_prompt"] = mock_handler
+        try:
+            handler(
+                {
+                    "tool": "patch_agent_prompt",
+                    "user_sub": USER_SUB,
+                    "user_email": "nathan@example.com",
+                    "user_groups": ["admin"],
+                    "conversation_id": "conv-1",
+                    "allowed_tools": ["create_agent_tool"],
+                    "params": {
+                        "agent_id": AGENT_ID,
+                        "old_text": "a",
+                        "new_text": "b",
+                    },
+                },
+                None,
+            )
+        finally:
+            TOOL_HANDLERS["patch_agent_prompt"] = original
+
+        mock_handler.assert_called_once()
+        forwarded_params = mock_handler.call_args.args[0]
+        self.assertEqual(forwarded_params.get("__user_sub"), USER_SUB)
+        self.assertEqual(forwarded_params.get("__user_groups"), ["admin"])
+        self.assertEqual(forwarded_params.get("__conversation_id"), "conv-1")
+
+    def test_patch_agent_prompt_blocked_when_create_agent_tool_not_enabled(self):
+        mock_handler = MagicMock(return_value={"agent": {}})
+        from lambda_function import TOOL_HANDLERS, handler
+
+        original = TOOL_HANDLERS["patch_agent_prompt"]
+        TOOL_HANDLERS["patch_agent_prompt"] = mock_handler
+        try:
+            result = handler(
+                {
+                    "tool": "patch_agent_prompt",
+                    "user_sub": USER_SUB,
+                    "allowed_tools": [],  # no create_agent_tool
+                    "params": {
+                        "agent_id": AGENT_ID,
+                        "old_text": "a",
+                        "new_text": "b",
+                    },
+                },
+                None,
+            )
+        finally:
+            TOOL_HANDLERS["patch_agent_prompt"] = original
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("not enabled", result["error"])
+        mock_handler.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
