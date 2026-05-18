@@ -219,7 +219,7 @@ class KnowledgeBaseManager:
         """Synthesize a virtual root KB record for a user's root files."""
         return {
             "kb_id": user_id,
-            "kb_name": "My Files",
+            "kb_name": "Personal",
             "s3_prefix": f"documents/kb-{user_id}/",
             "status": "ACTIVE",
             "is_root": True,
@@ -358,7 +358,7 @@ class KnowledgeBaseManager:
         if user_id not in memberships:
             memberships[user_id] = {
                 "kb_id": user_id,
-                "kb_name": "My Files",
+                "kb_name": "Personal",
                 "role": "OWNER",
                 "is_shared": False,
                 "is_public": False,

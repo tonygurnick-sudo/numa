@@ -105,6 +105,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   }, [kbFileStates]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createModalVisibility, setCreateModalVisibility] = useState<'personal' | 'shared' | undefined>(undefined);
+  const openCreateModal = useCallback((visibility?: 'personal' | 'shared') => {
+    setCreateModalVisibility(visibility);
+    setShowCreateModal(true);
+  }, []);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [settingsKb, setSettingsKb] = useState<UserKB | null>(null);
 
@@ -210,6 +215,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         (kb) => !SYSTEM_KB_IDS.has(kb.kb_id) && !(kb.is_root || (userSub && isRootKB(kb.kb_id, userSub)))
       ),
     [availableKBs, userSub]
+  );
+
+  // Defensive: backend returns "Personal" for the root KB, but if any legacy
+  // record / synthesis path returns something else we still want to surface
+  // the consistent "Personal" label in the UI.
+  const displayKbName = useCallback(
+    (kb: { kb_name: string; is_root?: boolean }) => (kb.is_root ? t('rootFiles.displayName') : kb.kb_name),
+    [t]
   );
 
   // Hide parent page actions -- we handle them in the toolbar
@@ -453,12 +466,12 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   /** Double-click: navigate into KB folder */
   const navigateIntoKb = useCallback(
     (kb: UserKB) => {
-      setCurrentFolder({ kbId: kb.kb_id, kbName: kb.kb_name, role: kb.role, subfolderPath: [] });
+      setCurrentFolder({ kbId: kb.kb_id, kbName: displayKbName(kb), role: kb.role, subfolderPath: [] });
       setSearchValue('');
       setSelectedKeys(new Set());
       ensureKbLoaded(kb.kb_id);
     },
-    [ensureKbLoaded]
+    [ensureKbLoaded, displayKbName]
   );
 
   const navigateBack = useCallback(() => {
@@ -1167,7 +1180,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       if (target.kind === 'topLevel') {
         const { kb } = target;
         if (action === 'addSubfolder') {
-          openAddSubfolder(kb.kb_id, '', kb.kb_name);
+          openAddSubfolder(kb.kb_id, '', displayKbName(kb));
         } else if (action === 'upload') {
           setUploadTargetKb(kb);
           setShowUploadModal(true);
@@ -1191,7 +1204,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         }
       }
     },
-    [folderContextMenu, openAddSubfolder, confirmDeleteSubfolder, subfolderRelativePath]
+    [folderContextMenu, openAddSubfolder, confirmDeleteSubfolder, subfolderRelativePath, displayKbName]
   );
 
   const executeTopLevelDelete = useCallback(async () => {
@@ -1346,7 +1359,10 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     kbId: string;
     isKbFolder: boolean;
     kb?: UserKB;
-    special?: 'loading' | 'empty';
+    special?: 'loading' | 'empty' | 'section' | 'createFolder';
+    sectionTitle?: string;
+    sectionBadge?: 'private' | 'shared';
+    createFolderVisibility?: 'personal' | 'shared';
   };
 
   const rows: RowEntry[] = [];
@@ -1397,14 +1413,22 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       }
     }
   } else {
-    // Root view — every KB renders as a folder row, with My Files pinned first.
-    // The "loose files" surface at the root has been collapsed into My Files
-    // (kb-<sub>) so files only appear in one place. My Files defaults to
-    // expanded so users still see their root files inline on arrival.
+    // Root view — KBs are grouped into "My Files" (root + owned KBs) and
+    // "Shared Files" (KBs shared with the user by others). The root KB
+    // renders as "Personal" and is pinned first inside My Files. The "loose
+    // files" surface at the root has been collapsed into the root KB so
+    // files only appear in one place.
     const trimmedSearch = searchValue.trim();
     const anyFilterActive = !!trimmedSearch || filterPredicate.isActive;
-    const rootViewKBs: UserKB[] = rootKB ? [rootKB, ...allUserKBs] : [...allUserKBs];
-    for (const kb of rootViewKBs) {
+    // Split rule: shared with other users (visible SHARED badge) → Shared
+    // Files; otherwise → My Files. This matches the per-row badge so what
+    // the user sees in the row aligns with which section it's grouped under.
+    // The root KB is never shared so it always lands in My Files.
+    const privateKBs = allUserKBs.filter((kb) => !kb.is_shared);
+    const sharedSectionKBs = allUserKBs.filter((kb) => kb.is_shared);
+    const myFilesKBs: UserKB[] = rootKB ? [rootKB, ...privateKBs] : privateKBs;
+
+    const pushKbRows = (kb: UserKB) => {
       const kbState = kbFileStates.get(kb.kb_id);
       const isLoaded = !!kbState && !kbState.isLoading;
       const childRows = isLoaded ? buildKbChildRows(kb.kb_id, 1) : [];
@@ -1413,7 +1437,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       // content. Unloaded / loading KBs are hidden too (we eager-fetch them
       // via useEffect) so the list only shows KBs that genuinely match.
       if (anyFilterActive && childRows.length === 0) {
-        continue;
+        return;
       }
 
       const isExpanded = anyFilterActive ? true : expandedKbs.has(kb.kb_id);
@@ -1421,7 +1445,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         row: {
           id: `kb-${kb.kb_id}`,
           type: 'folder',
-          name: kb.kb_name,
+          name: displayKbName(kb),
           depth: 0,
           uploadDate: '\u2014',
           size: '\u2014',
@@ -1469,6 +1493,68 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           }
         }
       }
+    };
+
+    const sectionHeaderRow = (key: string, title: string, badge: 'private' | 'shared'): RowEntry => ({
+      row: {
+        id: `section-${key}`,
+        type: 'file',
+        name: title,
+        depth: 0,
+        uploadDate: '',
+        size: '',
+        status: 'indexed',
+      },
+      kbId: `section-${key}`,
+      isKbFolder: false,
+      special: 'section',
+      sectionTitle: title,
+      sectionBadge: badge,
+    });
+
+    const createFolderRow = (visibility: 'personal' | 'shared'): RowEntry => ({
+      row: {
+        id: `create-folder-${visibility}`,
+        type: 'file',
+        name: '',
+        depth: 0,
+        uploadDate: '',
+        size: '',
+        status: 'indexed',
+      },
+      kbId: `create-folder-${visibility}`,
+      isKbFolder: false,
+      special: 'createFolder',
+      createFolderVisibility: visibility,
+    });
+
+    // Search/filter mode hides the create-folder affordance — it would just
+    // be noise alongside filtered results.
+    const showCreateRows = !anyFilterActive;
+
+    // "My Files" section: header emitted only if at least one row landed.
+    const myFilesStart = rows.length;
+    for (const kb of myFilesKBs) pushKbRows(kb);
+    if (rows.length > myFilesStart) {
+      rows.splice(myFilesStart, 0, sectionHeaderRow('myFiles', t('sections.myFiles'), 'private'));
+      if (showCreateRows) rows.push(createFolderRow('personal'));
+    }
+
+    // "Shared Files" section: only if there's at least one shared KB visible
+    // after the search/filter pass.
+    if (sharedSectionKBs.length > 0) {
+      const sharedStart = rows.length;
+      for (const kb of sharedSectionKBs) pushKbRows(kb);
+      if (rows.length > sharedStart) {
+        rows.splice(sharedStart, 0, sectionHeaderRow('sharedFiles', t('sections.sharedFiles'), 'shared'));
+        if (showCreateRows) rows.push(createFolderRow('shared'));
+      }
+    } else if (showCreateRows) {
+      // No shared KBs yet — still surface a "Shared Files" section with an
+      // inline create row so the user can spin one up without using the
+      // toolbar.
+      rows.push(sectionHeaderRow('sharedFiles', t('sections.sharedFiles'), 'shared'));
+      rows.push(createFolderRow('shared'));
     }
   }
 
@@ -1491,54 +1577,108 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
       {/* Toolbar */}
       <div className="finder-toolbar">
-        <div className="finder-toolbar__location">
-          {isInsideFolder ? (
-            <>
-              <button
-                className={`finder-toolbar__back ${dragOverTarget === 'back' ? 'finder-toolbar__back--drop-over' : ''}`}
-                onClick={navigateBack}
-                onDragOver={(e) => onTargetDragOver(e, 'back', true)}
-                onDragLeave={() => onTargetDragLeave('back')}
-                onDrop={onDropOnBack}
-              >
-                <i className="bi bi-chevron-left" />
-                {currentFolder.subfolderPath.length > 0
-                  ? currentFolder.subfolderPath.length === 1
-                    ? currentFolder.kbName
-                    : currentFolder.subfolderPath[currentFolder.subfolderPath.length - 2].name
-                  : t('breadcrumb.userFiles')}
-              </button>
-              <span className="finder-toolbar__title">
-                {currentFolder.subfolderPath.length > 0
-                  ? currentFolder.subfolderPath[currentFolder.subfolderPath.length - 1].name
-                  : currentFolder.kbName}
-                {isMoving && (
-                  <Spinner
-                    animation="border"
-                    size="sm"
-                    variant="secondary"
-                    className="ms-2"
-                    title={t('move.inProgress')}
-                    style={{ width: '0.75rem', height: '0.75rem', verticalAlign: 'middle' }}
-                  />
-                )}
-              </span>
-            </>
-          ) : (
-            <span className="finder-toolbar__title">
-              {t('tabs.userFiles')}
-              {(isInitialLoad || isRootKbLoading || isMoving) && (
+        <div className="finder-toolbar__left">
+          <div className="finder-toolbar__location">
+            {isInsideFolder ? (
+              <>
+                <button
+                  className={`finder-toolbar__back ${dragOverTarget === 'back' ? 'finder-toolbar__back--drop-over' : ''}`}
+                  onClick={navigateBack}
+                  onDragOver={(e) => onTargetDragOver(e, 'back', true)}
+                  onDragLeave={() => onTargetDragLeave('back')}
+                  onDrop={onDropOnBack}
+                >
+                  <i className="bi bi-chevron-left" />
+                  {currentFolder.subfolderPath.length > 0
+                    ? currentFolder.subfolderPath.length === 1
+                      ? currentFolder.kbName
+                      : currentFolder.subfolderPath[currentFolder.subfolderPath.length - 2].name
+                    : t('breadcrumb.userFiles')}
+                </button>
+                <span className="finder-toolbar__title">
+                  {currentFolder.subfolderPath.length > 0
+                    ? currentFolder.subfolderPath[currentFolder.subfolderPath.length - 1].name
+                    : currentFolder.kbName}
+                  {isMoving && (
+                    <Spinner
+                      animation="border"
+                      size="sm"
+                      variant="secondary"
+                      className="ms-2"
+                      title={t('move.inProgress')}
+                      style={{ width: '0.75rem', height: '0.75rem', verticalAlign: 'middle' }}
+                    />
+                  )}
+                </span>
+              </>
+            ) : (
+              (isInitialLoad || isRootKbLoading || isMoving) && (
                 <Spinner
                   animation="border"
                   size="sm"
                   variant="secondary"
-                  className="ms-2"
                   title={isMoving ? t('move.inProgress') : undefined}
                   style={{ width: '0.75rem', height: '0.75rem', verticalAlign: 'middle' }}
                 />
-              )}
-            </span>
-          )}
+              )
+            )}
+          </div>
+          {/* Primary actions pinned to the left. Upload is the prominent
+              primary purple button; New Folder is a subtle secondary next to
+              it. Inside a folder these become Upload + New Subfolder. */}
+          <div className="finder-toolbar__primary">
+            {!isInsideFolder && rootKB ? (
+              <button
+                className="finder-btn finder-btn--primary finder-btn--labelled"
+                onClick={(e) => openUploadForKb(rootKB, e)}
+                title={t('rootFiles.uploadTooltip')}
+              >
+                <i className="bi bi-upload" />
+                <span className="finder-btn__label">{t('actions.upload')}</span>
+              </button>
+            ) : isInsideFolder && canEditCurrent && currentKb ? (
+              <button
+                className="finder-btn finder-btn--primary finder-btn--labelled"
+                onClick={(e) => openUploadForKb(currentKb, e, currentUploadFolderPath)}
+                title={t('actions.upload')}
+              >
+                <i className="bi bi-upload" />
+                <span className="finder-btn__label">{t('actions.upload')}</span>
+              </button>
+            ) : null}
+            {!isInsideFolder ? (
+              <button
+                className="finder-btn finder-btn--labelled"
+                onClick={() => openCreateModal()}
+                title={t('actions.newFolderRootTooltip')}
+              >
+                <i className="bi bi-folder-plus" />
+                <span className="finder-btn__label">{t('actions.newFolder')}</span>
+              </button>
+            ) : canEditCurrent && currentKb ? (
+              <button
+                className="finder-btn finder-btn--labelled"
+                onClick={() =>
+                  openAddSubfolder(
+                    currentKb.kb_id,
+                    currentFolder!.subfolderPath.length > 0
+                      ? subfolderRelativePath(
+                          currentKb.kb_id,
+                          currentFolder!.subfolderPath[currentFolder!.subfolderPath.length - 1].id
+                        )
+                      : '',
+                    currentFolder!.subfolderPath.length > 0
+                      ? currentFolder!.subfolderPath[currentFolder!.subfolderPath.length - 1].name
+                      : displayKbName(currentKb)
+                  )
+                }
+                title={t('actions.newSubfolder')}
+              >
+                <i className="bi bi-folder-plus" />
+                <span className="finder-btn__label">{t('actions.newSubfolder')}</span>
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="finder-toolbar__actions">
           <div className="finder-search">
@@ -1606,62 +1746,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
             </button>
           )}
-          {/* New Folder / New Subfolder — branches on context: at root creates a
-              shareable top-level folder (a sibling KB with its own permissions),
-              inside a folder creates a plain subfolder under the same KB. */}
-          {!isInsideFolder ? (
-            <button
-              className="finder-btn finder-btn--primary finder-btn--labelled"
-              onClick={() => setShowCreateModal(true)}
-              title={t('actions.newFolderRootTooltip')}
-            >
-              <i className="bi bi-folder-plus" />
-              <span className="finder-btn__label">{t('actions.newFolder')}</span>
-            </button>
-          ) : canEditCurrent && currentKb ? (
-            <button
-              className="finder-btn finder-btn--primary finder-btn--labelled"
-              onClick={() =>
-                openAddSubfolder(
-                  currentKb.kb_id,
-                  currentFolder!.subfolderPath.length > 0
-                    ? subfolderRelativePath(
-                        currentKb.kb_id,
-                        currentFolder!.subfolderPath[currentFolder!.subfolderPath.length - 1].id
-                      )
-                    : '',
-                  currentFolder!.subfolderPath.length > 0
-                    ? currentFolder!.subfolderPath[currentFolder!.subfolderPath.length - 1].name
-                    : currentKb.kb_name
-                )
-              }
-              title={t('actions.newSubfolder')}
-            >
-              <i className="bi bi-folder-plus" />
-              <span className="finder-btn__label">{t('actions.newSubfolder')}</span>
-            </button>
-          ) : null}
-          {/* Upload button: at root level uploads to My Files root; inside a
-              folder uploads into that folder. */}
-          {!isInsideFolder && rootKB ? (
-            <button
-              className="finder-btn finder-btn--labelled"
-              onClick={(e) => openUploadForKb(rootKB, e)}
-              title={t('rootFiles.uploadTooltip')}
-            >
-              <i className="bi bi-upload" />
-              <span className="finder-btn__label">{t('actions.upload')}</span>
-            </button>
-          ) : isInsideFolder && canEditCurrent && currentKb ? (
-            <button
-              className="finder-btn finder-btn--labelled"
-              onClick={(e) => openUploadForKb(currentKb, e, currentUploadFolderPath)}
-              title={t('actions.upload')}
-            >
-              <i className="bi bi-upload" />
-              <span className="finder-btn__label">{t('actions.upload')}</span>
-            </button>
-          ) : null}
           <button
             className="finder-btn"
             onClick={() => {
@@ -1687,39 +1771,43 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         </div>
       </div>
 
-      {/* Column headers */}
-      <div className="finder-columns finder-grid-6">
-        <div
-          className={`finder-col ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
-          onClick={() => handleSortToggle('name')}
-        >
-          {tKb('fileExplorer.table.name')}
-          {sortColumn === 'name' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+      {/* Column headers — only shown inside a folder. At root view, each
+          section header row (MY FILES / SHARED FILES) carries the column
+          labels via grid cells to save a row of vertical space. */}
+      {isInsideFolder && (
+        <div className="finder-columns finder-grid-6">
+          <div
+            className={`finder-col ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
+            onClick={() => handleSortToggle('name')}
+          >
+            {tKb('fileExplorer.table.name')}
+            {sortColumn === 'name' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+          </div>
+          <div
+            className={`finder-col ${sortColumn === 'type' ? 'finder-col--active' : ''}`}
+            onClick={() => handleSortToggle('type')}
+          >
+            {tKb('fileExplorer.table.type')}
+            {sortColumn === 'type' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+          </div>
+          <div className="finder-col d-none d-lg-flex">{tKb('fileExplorer.table.addedBy')}</div>
+          <div
+            className={`finder-col d-none d-md-flex ${sortColumn === 'date' ? 'finder-col--active' : ''}`}
+            onClick={() => handleSortToggle('date')}
+          >
+            {tKb('fileExplorer.table.modified')}
+            {sortColumn === 'date' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+          </div>
+          <div
+            className={`finder-col d-none d-sm-flex ${sortColumn === 'size' ? 'finder-col--active' : ''}`}
+            onClick={() => handleSortToggle('size')}
+          >
+            {tKb('fileExplorer.table.size')}
+            {sortColumn === 'size' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+          </div>
+          <div className="finder-col"></div>
         </div>
-        <div
-          className={`finder-col ${sortColumn === 'type' ? 'finder-col--active' : ''}`}
-          onClick={() => handleSortToggle('type')}
-        >
-          {tKb('fileExplorer.table.type')}
-          {sortColumn === 'type' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
-        </div>
-        <div className="finder-col d-none d-lg-flex">{tKb('fileExplorer.table.addedBy')}</div>
-        <div
-          className={`finder-col d-none d-md-flex ${sortColumn === 'date' ? 'finder-col--active' : ''}`}
-          onClick={() => handleSortToggle('date')}
-        >
-          {tKb('fileExplorer.table.modified')}
-          {sortColumn === 'date' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
-        </div>
-        <div
-          className={`finder-col d-none d-sm-flex ${sortColumn === 'size' ? 'finder-col--active' : ''}`}
-          onClick={() => handleSortToggle('size')}
-        >
-          {tKb('fileExplorer.table.size')}
-          {sortColumn === 'size' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
-        </div>
-        <div className="finder-col"></div>
-      </div>
+      )}
 
       {/* Search status hints */}
       {isFilterOrSearchActive && deepLoadingKbs.size > 0 && (
@@ -1755,7 +1843,78 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             )}
           </div>
         ) : (
-          rows.map(({ row, kbId, isKbFolder, kb, special }) => {
+          rows.map(({ row, kbId, isKbFolder, kb, special, sectionTitle, sectionBadge, createFolderVisibility }) => {
+            if (special === 'createFolder') {
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  className="finder-create-folder-row"
+                  onClick={() => openCreateModal(createFolderVisibility)}
+                >
+                  <i className="bi bi-plus-lg" />
+                  <span>
+                    {createFolderVisibility === 'shared' ? t('actions.newSharedFolder') : t('actions.newPrivateFolder')}
+                  </span>
+                </button>
+              );
+            }
+            if (special === 'section') {
+              return (
+                <div key={row.id} className="finder-section-header finder-grid-6">
+                  <div className="finder-section-header__label">
+                    <span className="finder-section-header__title">{sectionTitle}</span>
+                    {sectionBadge === 'private' && (
+                      <span
+                        className="finder-row__visibility-badge finder-row__visibility-badge--private"
+                        title={t('folderList.privateTooltip')}
+                      >
+                        <i className="bi bi-shield-lock-fill" />
+                        {t('folderList.private')}
+                      </span>
+                    )}
+                    {sectionBadge === 'shared' && (
+                      <span
+                        className="finder-row__visibility-badge finder-row__visibility-badge--shared"
+                        title={t('folderList.sharing')}
+                      >
+                        <i className="bi bi-people-fill" />
+                        {t('folderList.shared')}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className={`finder-col ${sortColumn === 'type' ? 'finder-col--active' : ''}`}
+                    onClick={() => handleSortToggle('type')}
+                  >
+                    {tKb('fileExplorer.table.type')}
+                    {sortColumn === 'type' && (
+                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />
+                    )}
+                  </div>
+                  <div className="finder-col d-none d-lg-flex">{tKb('fileExplorer.table.addedBy')}</div>
+                  <div
+                    className={`finder-col d-none d-md-flex ${sortColumn === 'date' ? 'finder-col--active' : ''}`}
+                    onClick={() => handleSortToggle('date')}
+                  >
+                    {tKb('fileExplorer.table.modified')}
+                    {sortColumn === 'date' && (
+                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />
+                    )}
+                  </div>
+                  <div
+                    className={`finder-col d-none d-sm-flex ${sortColumn === 'size' ? 'finder-col--active' : ''}`}
+                    onClick={() => handleSortToggle('size')}
+                  >
+                    {tKb('fileExplorer.table.size')}
+                    {sortColumn === 'size' && (
+                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />
+                    )}
+                  </div>
+                  <div className="finder-col"></div>
+                </div>
+              );
+            }
             if (special === 'loading') {
               return (
                 <div key={row.id} className="finder-loading">
@@ -1780,7 +1939,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             if (isKbFolder && kb) {
               const isExpanded = expandedKbs.has(kb.kb_id);
               const isRootRow = !!kb.is_root;
-              const isShared = !isRootRow && (kb.is_shared || kb.role === 'VIEWER');
               const isOwner = kb.role === 'OWNER';
               const isEditor = kb.role === 'EDITOR';
               const canEdit = isOwner || isEditor;
@@ -1797,7 +1955,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                     isExpanded ? 'finder-row--expanded' : '',
                     isDropTarget ? 'finder-row--drop-over' : '',
                     isDragging && dropDisabled ? 'finder-row--viewer-disabled' : '',
-                    isRootRow ? 'finder-row--my-files' : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}
@@ -1828,32 +1985,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                     ) : (
                       <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
                     )}
-                    <span className="finder-name">{kb.kb_name}</span>
-                    {isRootRow ? (
-                      <span
-                        className="finder-row__visibility-badge finder-row__visibility-badge--private"
-                        title={t('rootFiles.privateTooltip')}
-                      >
-                        <i className="bi bi-shield-lock-fill" />
-                        {t('folderList.private')}
-                      </span>
-                    ) : isShared ? (
-                      <span
-                        className="finder-row__visibility-badge finder-row__visibility-badge--shared"
-                        title={isOwner ? t('folderList.sharing') : t('folderList.sharedWithYou')}
-                      >
-                        <i className="bi bi-people-fill" />
-                        {t('folderList.shared')}
-                      </span>
-                    ) : (
-                      <span
-                        className="finder-row__visibility-badge finder-row__visibility-badge--private"
-                        title={t('folderList.privateTooltip')}
-                      >
-                        <i className="bi bi-shield-lock-fill" />
-                        {t('folderList.private')}
-                      </span>
-                    )}
+                    <span className="finder-name">{displayKbName(kb)}</span>
                     {!isOwner && !isRootRow && (
                       <span className="finder-row__badge">{isEditor ? t('badges.editor') : t('badges.viewer')}</span>
                     )}
@@ -1865,7 +1997,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                       />
                     )}
                   </div>
-                  <div className="finder-row__meta finder-row__meta--type">{tKb('fileExplorer.table.typeFolder')}</div>
+                  <div className="finder-row__meta finder-row__meta--type"></div>
                   <div className="finder-row__meta d-none d-lg-block"></div>
                   <div className="finder-row__meta d-none d-md-block"></div>
                   <div className="finder-row__meta d-none d-sm-block">
@@ -2008,11 +2140,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   <span className="finder-name">{row.displayName || row.name}</span>
                 </div>
                 <div className="finder-row__meta finder-row__meta--type">
-                  {isSubfolder
-                    ? tKb('fileExplorer.table.typeFolder')
-                    : row.name.includes('.')
-                      ? (row.name.split('.').pop()?.toUpperCase() ?? '')
-                      : ''}
+                  {isSubfolder ? '' : row.name.includes('.') ? (row.name.split('.').pop()?.toUpperCase() ?? '') : ''}
                 </div>
                 <div className="finder-row__meta d-none d-lg-block">{!isSubfolder ? row.uploadedBy || '' : ''}</div>
                 <div className="finder-row__meta d-none d-md-block">{!isSubfolder ? row.uploadDate : ''}</div>
@@ -2091,6 +2219,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         show={showCreateModal}
         onHide={() => setShowCreateModal(false)}
         onSuccess={handleFolderCreated}
+        initialVisibility={createModalVisibility}
       />
 
       {subfolderTarget && (
@@ -2182,7 +2311,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         const isAtMyFilesRoot = !!rootKB && uploadTargetKb.kb_id === rootKB.kb_id && !selectedFolder;
         const destinationKb = destinationKbId ? (allUserKBs.find((k) => k.kb_id === destinationKbId) ?? null) : null;
         const effectiveKbId = destinationKb?.kb_id ?? uploadTargetKb.kb_id;
-        const effectiveKbName = destinationKb?.kb_name ?? uploadTargetKb.kb_name;
+        const effectiveKbName = destinationKb ? displayKbName(destinationKb) : displayKbName(uploadTargetKb);
         return (
           <div className="modal show d-block kb-upload-modal-backdrop" onClick={closeUploadModal}>
             <div

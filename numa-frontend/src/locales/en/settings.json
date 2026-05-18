@@ -670,6 +670,9 @@
       "kbHelp": "Select one or more folders to enable by default.",
       "selectAll": "Select All",
       "clear": "Clear",
+      "myFilesGroup": "My Files",
+      "expandGroup": "Expand group",
+      "collapseGroup": "Collapse group",
       "language": {
         "label": "Default language",
         "help": "Choose the language to use throughout the app.",

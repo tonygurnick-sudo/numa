@@ -120,7 +120,7 @@ def _get_kb_config() -> tuple[list[dict], list[str], str]:
     # Auto-inject root KB (user_sub) so users can always access their root files
     if user_sub and user_sub not in allowed_kb_ids:
         allowed_kb_ids.append(user_sub)
-        allowed_kbs.append({"id": user_sub, "name": "My Files"})
+        allowed_kbs.append({"id": user_sub, "name": "Personal"})
 
     return allowed_kbs, allowed_kb_ids, user_sub
 

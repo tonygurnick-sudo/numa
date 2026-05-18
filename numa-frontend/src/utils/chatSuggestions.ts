@@ -253,7 +253,7 @@ function buildCapabilityContext(
   }
   if (has('knowledge_base')) {
     lines.push(
-      `- **Numa Files** — folders the user can save, search, list, audit, upload, and download files from. Includes their personal "My Files", company-shared "Company Files", and any folders shared with them.`
+      `- **Numa Files** — folders the user can save, search, list, audit, upload, and download files from. Includes their "Personal" folder, the company-shared "Company Files", and any folders shared with them.`
     );
   }
   if (has('web_search')) {

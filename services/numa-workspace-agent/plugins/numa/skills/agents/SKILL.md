@@ -650,7 +650,7 @@ Once you understand the use case, determine who should have access:
 Based on the use case, ask about the tools and capabilities the agent needs:
 
 - **Web Search:** "Will this agent need to search the web for current information?"
-- **Numa Files:** "Should it have access to your Numa Files folders (My Files, Company Files, shared folders)?"
+- **Numa Files:** "Should it have access to your Numa Files folders (Personal, Company Files, shared folders)?"
   - Check the **Available Numa Files folders** section in your context. If folders are listed, present them by name so the user can choose specific ones.
   - If yes: "All folders, or specific ones?" (list the available folder names)
   - If no folders are available in your context, inform the user: "No Numa Files folders are currently configured."

@@ -579,6 +579,49 @@
     font-size: 0.875rem;
     color: #27272a;
   }
+
+  // "My Files" group — chevron + tri-state parent checkbox + indented children
+  .profile-kb-group {
+    display: flex;
+    flex-direction: column;
+
+    .profile-kb-group__header {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+
+      .form-check {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .profile-kb-group__chevron {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border: none;
+        background: transparent;
+        color: #71717a;
+        font-size: 0.625rem;
+        cursor: pointer;
+        padding: 0;
+        flex-shrink: 0;
+        margin-left: auto;
+
+        &:hover {
+          color: #18181b;
+        }
+      }
+    }
+
+    .profile-kb-group__children {
+      display: flex;
+      flex-direction: column;
+      padding-left: 1.25rem;
+    }
+  }
 }
 
 // --- Tool toggle row (switch + label + help) ---

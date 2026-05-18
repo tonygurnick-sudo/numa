@@ -27,6 +27,7 @@ import {
 } from '../Services/ChatSettingsService';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { withPRM } from '../utils/prmUtils';
+import { sortKnowledgeBases } from '../constants/knowledgeBase';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 import { PageHeader } from '../Components/PageHeader';
 import { StyledTabs } from '../Components/StyledTabs';
@@ -614,6 +615,25 @@ export default function UserProfilePage({
     () => availableKBs.map((kb) => kb.kb_id).filter((id) => typeof id === 'string'),
     [availableKBs]
   );
+
+  // Grouping for the Default folders picker: system KBs (Company / Support /
+  // SharePoint) and shared KBs render flat; private user-owned KBs (including
+  // the root "Personal" folder) collapse under a "My Files" group with a
+  // tri-state parent checkbox.
+  const PROFILE_SYSTEM_KB_IDS = useMemo(() => new Set(['company', 'numa-support', 'sharepoint']), []);
+  const profileSortedKBs = useMemo(() => sortKnowledgeBases(availableKBs), [availableKBs]);
+  const { profileSystemKBs, profileMyFilesKBs, profileSharedKBs } = useMemo(() => {
+    const system: typeof profileSortedKBs = [];
+    const myFiles: typeof profileSortedKBs = [];
+    const shared: typeof profileSortedKBs = [];
+    for (const kb of profileSortedKBs) {
+      if (PROFILE_SYSTEM_KB_IDS.has(kb.kb_id)) system.push(kb);
+      else if (kb.is_shared) shared.push(kb);
+      else myFiles.push(kb);
+    }
+    return { profileSystemKBs: system, profileMyFilesKBs: myFiles, profileSharedKBs: shared };
+  }, [profileSortedKBs, PROFILE_SYSTEM_KB_IDS]);
+  const [profileMyFilesExpanded, setProfileMyFilesExpanded] = useState(true);
 
   const canEditUserDefaults = globalLoaded && globalAllowUserDefaults;
   const canEditProfile = globalLoaded;
@@ -1691,17 +1711,14 @@ export default function UserProfilePage({
                     {isLoadingKBs ? (
                       <div className="profile-empty-state">{t('userProfile.defaults.kbLoading')}</div>
                     ) : (
-                      kbIdsSorted.map((kbId) => {
-                        const kb = availableKBs.find((k) => k.kb_id === kbId);
-                        const label = getKBLabel(kbId, kb?.kb_name);
-                        const checked = enabledKBSet.has(kbId);
-                        return (
+                      (() => {
+                        const renderRow = (kbId: string, kbName: string | undefined) => (
                           <Form.Check
                             key={kbId}
                             type="checkbox"
                             id={`profile-defaults-kb-${kbId}`}
-                            label={label}
-                            checked={checked}
+                            label={getKBLabel(kbId, kbName)}
+                            checked={enabledKBSet.has(kbId)}
                             disabled={disableDefaultsForm}
                             onChange={(e) => {
                               const nextChecked = e.target.checked;
@@ -1715,7 +1732,61 @@ export default function UserProfilePage({
                             }}
                           />
                         );
-                      })
+
+                        const myFilesIds = profileMyFilesKBs.map((kb) => kb.kb_id);
+                        const myFilesSelected = myFilesIds.filter((id) => enabledKBSet.has(id)).length;
+                        const myFilesAll = myFilesIds.length > 0 && myFilesSelected === myFilesIds.length;
+                        const myFilesIndeterminate = myFilesSelected > 0 && !myFilesAll;
+
+                        return (
+                          <>
+                            {profileSystemKBs.map((kb) => renderRow(kb.kb_id, kb.kb_name))}
+                            {profileMyFilesKBs.length > 0 && (
+                              <div className="profile-kb-group">
+                                <div className="profile-kb-group__header">
+                                  <Form.Check
+                                    type="checkbox"
+                                    id="profile-defaults-kb-group-my-files"
+                                    label={t('userProfile.defaults.myFilesGroup')}
+                                    checked={myFilesAll}
+                                    ref={(el: HTMLInputElement | null) => {
+                                      if (el) el.indeterminate = myFilesIndeterminate;
+                                    }}
+                                    disabled={disableDefaultsForm}
+                                    onChange={() => {
+                                      setUserDefaults((prev) => ({
+                                        ...prev,
+                                        defaultKBIds: myFilesAll
+                                          ? prev.defaultKBIds.filter((id) => !myFilesIds.includes(id))
+                                          : Array.from(new Set([...prev.defaultKBIds, ...myFilesIds])),
+                                      }));
+                                      setDirty(true);
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="profile-kb-group__chevron"
+                                    onClick={() => setProfileMyFilesExpanded((v) => !v)}
+                                    aria-label={
+                                      profileMyFilesExpanded
+                                        ? t('userProfile.defaults.collapseGroup')
+                                        : t('userProfile.defaults.expandGroup')
+                                    }
+                                  >
+                                    <i className={`bi bi-chevron-${profileMyFilesExpanded ? 'down' : 'right'}`} />
+                                  </button>
+                                </div>
+                                {profileMyFilesExpanded && (
+                                  <div className="profile-kb-group__children">
+                                    {profileMyFilesKBs.map((kb) => renderRow(kb.kb_id, kb.kb_name))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {profileSharedKBs.map((kb) => renderRow(kb.kb_id, kb.kb_name))}
+                          </>
+                        );
+                      })()
                     )}
                     {!isLoadingKBs && kbIdsSorted.length === 0 && (
                       <div className="profile-empty-state">{t('userProfile.defaults.kbEmpty')}</div>

@@ -1742,6 +1742,49 @@
   }
 }
 
+// "My Files" group — header row (tri-state checkbox + label, chevron pinned
+// right) with children below. Checkboxes line up with the rest of the list.
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-kb-group {
+  display: flex;
+  flex-direction: column;
+
+  .workspace-settings-kb-group__header {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+
+    .workspace-settings-kb-group__check {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .workspace-settings-kb-group__chevron {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border: none;
+      background: transparent;
+      color: #71717a;
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+      margin-left: auto;
+
+      &:hover {
+        color: #18181b;
+      }
+    }
+  }
+
+  .workspace-settings-kb-group__children {
+    display: flex;
+    flex-direction: column;
+    padding-left: 1.1rem;
+  }
+}
+
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-integrations-list {
   gap: 0.45rem;
 }
