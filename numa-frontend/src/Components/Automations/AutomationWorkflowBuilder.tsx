@@ -132,7 +132,7 @@ const buildCronExpression = (
       }
       return `cron(${minute} ${hour} * * ? *)`;
     case 'weekdays':
-      return `cron(${minute} ${hour} ? * 1-5 *)`;
+      return `cron(${minute} ${hour} ? * MON-FRI *)`;
     case 'weekly': {
       const selectedDays = weekDays.length ? weekDays : ['monday'];
       if (weeklyWeekNumbers.length > 0) {
