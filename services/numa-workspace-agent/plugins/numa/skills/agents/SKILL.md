@@ -35,17 +35,26 @@ mcp__numa__numa_tool(name="agents", description="Create policy expert agent", pa
     "systemPrompt": "You help answer questions about company policies.",
     "attach_files": ["/workdir/uploads/handbook.pdf", "/workdir/uploads/policies.docx"]
 })
+
+# Patch a phrase in an existing agent's system prompt (cheap — only the diff travels)
+mcp__numa__numa_tool(name="agents", description="Rename a phrase in agent prompt", params={
+    "operation": "patch_prompt",
+    "agent_id": "agt_abc123",
+    "old_text": "Client Content",
+    "new_text": "Receive Content"
+})
 ```
 
 ## Operations
 
-| Operation   | Purpose                                |
-| ----------- | -------------------------------------- |
-| `list`      | List agents (owned, public, or all)    |
-| `get`       | Get details of a specific agent        |
-| `create`    | Create a new agent                     |
-| `update`    | Update an existing agent               |
-| `duplicate` | Copy an agent to your personal library |
+| Operation      | Purpose                                                                         |
+| -------------- | ------------------------------------------------------------------------------- |
+| `list`         | List agents (owned, public, or all)                                             |
+| `get`          | Get details of a specific agent                                                 |
+| `create`       | Create a new agent                                                              |
+| `update`       | Replace any fields on an existing agent (full-value writes)                     |
+| `patch_prompt` | Edit the system prompt in place via find/replace — cheap for small text changes |
+| `duplicate`    | Copy an agent to your personal library                                          |
 
 ---
 
@@ -327,6 +336,73 @@ mcp__numa__numa_tool(name="agents", description="Enable web search for agent", p
 - You can update your own personal agents
 - You can update company agents you created
 - Admins can update any company agent
+
+---
+
+## Patch Prompt Operation
+
+Edit an agent's `systemPrompt` in place via find/replace. The DynamoDB record is the source of truth — you send only the substring to find and its replacement, not the full prompt.
+
+**Prefer `patch_prompt` over `update` when changing part of a system prompt.** The `update` operation requires sending the entire new `systemPrompt` as output tokens — for a prompt of any meaningful size (more than a few hundred chars), this is dramatically more expensive than `patch_prompt`, which only ships the diff. Reserve `update` for full rewrites or for changing non-prompt fields.
+
+If you don't already know the current prompt body, call `get` first to read it.
+
+### Parameters
+
+| Parameter     | Required | Default | Description                                                                      |
+| ------------- | -------- | ------- | -------------------------------------------------------------------------------- |
+| `operation`   | Yes      | -       | `"patch_prompt"`                                                                 |
+| `agent_id`    | Yes      | -       | Agent ID to patch                                                                |
+| `old_text`    | Yes      | -       | Exact substring to find in the current `systemPrompt`. Must match exactly.       |
+| `new_text`    | Yes      | -       | Replacement text. Use `""` to delete the matched text.                           |
+| `replace_all` | No       | `false` | If `false`, requires `old_text` to appear exactly once. If `true`, replaces all. |
+
+### Match rules
+
+- Match is **exact** — whitespace, punctuation, and casing all matter.
+- Default behaviour requires `old_text` to appear **exactly once** in the prompt. If it appears zero times you get an error; if it appears multiple times you get an error reporting the count.
+- To resolve a multi-match error: either extend `old_text` with 1-2 lines of surrounding context until it's unique, or set `replace_all: true` to replace every occurrence.
+
+### Examples
+
+```python
+# Rename a phrase that appears once in the prompt
+mcp__numa__numa_tool(name="agents", description="Rename phrase in agent prompt", params={
+    "operation": "patch_prompt",
+    "agent_id": "agt_abc123",
+    "old_text": "Client Content",
+    "new_text": "Receive Content"
+})
+
+# Fix a regex literal bug (raw \d that should be a real escape)
+mcp__numa__numa_tool(name="agents", description="Fix regex literal in agent prompt", params={
+    "operation": "patch_prompt",
+    "agent_id": "agt_abc123",
+    "old_text": "pattern = r'invoice-\\d'",
+    "new_text": "pattern = r'invoice-\\d+'"
+})
+
+# Replace every occurrence of a term (e.g. branding rename)
+mcp__numa__numa_tool(name="agents", description="Brand rename across prompt", params={
+    "operation": "patch_prompt",
+    "agent_id": "agt_abc123",
+    "old_text": "AcmeCorp",
+    "new_text": "ArcanumCorp",
+    "replace_all": True
+})
+
+# Delete a sentence from the prompt
+mcp__numa__numa_tool(name="agents", description="Remove outdated instruction", params={
+    "operation": "patch_prompt",
+    "agent_id": "agt_abc123",
+    "old_text": "\n\nAlways CC legal@example.com on outbound emails.",
+    "new_text": ""
+})
+```
+
+### Permissions
+
+- Same as `update`: personal agents you own, public agents you created, or any public agent if you are an admin.
 
 ---
 

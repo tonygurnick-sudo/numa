@@ -1299,15 +1299,16 @@ _AGENT_OP_TO_TOOL = {
     "get": "get_agent",
     "create": "create_agent",
     "update": "update_agent",
+    "patch_prompt": "patch_agent_prompt",
     "duplicate": "duplicate_agent",
 }
 
 
-_AGENT_WRITE_OPS = {"create", "update", "duplicate"}
+_AGENT_WRITE_OPS = {"create", "update", "patch_prompt", "duplicate"}
 
 
 async def _handle_agents(params: dict[str, Any]) -> dict[str, Any]:
-    """Agent management — list, get, create, update, duplicate.
+    """Agent management — list, get, create, update, patch_prompt, duplicate.
 
     Ports numa-agents.py CLI wrapper. Each operation maps to a Lambda tool
     in workspace-chat-tools.

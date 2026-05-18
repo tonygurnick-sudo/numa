@@ -1153,6 +1153,150 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     raise ValueError(f"Agent not found: {agent_id}")
 
 
+def _apply_string_edit(
+    text: str, old_text: str, new_text: str, replace_all: bool
+) -> str:
+    """Edit-tool-style find/replace with unique-match requirement.
+
+    Raises ValueError on 0 matches, or on >1 matches when replace_all=False.
+    """
+    count = text.count(old_text)
+    if count == 0:
+        raise ValueError(
+            "old_text was not found in system_prompt. "
+            "Check exact whitespace, punctuation, and casing. "
+            "Use operation='get' to inspect the current prompt."
+        )
+    if count > 1 and not replace_all:
+        raise ValueError(
+            f"old_text matches {count} places in system_prompt. "
+            "Either include more surrounding context to make the match unique, "
+            "or set replace_all=true to replace every occurrence."
+        )
+    if replace_all:
+        return text.replace(old_text, new_text)
+    return text.replace(old_text, new_text, 1)
+
+
+def handle_patch_agent_prompt(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Edit an agent's system_prompt in place via find/replace.
+
+    Use this instead of update_agent when changing part of a long system prompt:
+    only the diff travels over output tokens, not the full prompt body.
+
+    Params:
+        agent_id: Agent ID (required)
+        old_text: Exact substring to find (required, non-empty)
+        new_text: Replacement text (required; may be "" to delete)
+        replace_all: If False (default), requires a unique match. If True,
+            replaces every occurrence.
+        __user_sub: User's Cognito sub (required)
+        __user_groups: User's Cognito groups (for admin check on workspace agents)
+
+    Returns:
+        agent: Updated agent details (same shape as update_agent).
+    """
+    user_sub = params.get("__user_sub")
+    agent_id = params.get("agent_id")
+    old_text = params.get("old_text")
+    new_text = params.get("new_text", "")
+    replace_all = bool(params.get("replace_all", False))
+    user_groups = params.get("__user_groups", [])
+
+    if not user_sub:
+        raise ValueError("User authentication required")
+    if not agent_id:
+        raise ValueError("agent_id is required")
+    if not isinstance(old_text, str) or not old_text:
+        raise ValueError("old_text is required and must be a non-empty string")
+    if not isinstance(new_text, str):
+        raise ValueError('new_text must be a string (use "" to delete the match)')
+    if old_text == new_text:
+        raise ValueError("old_text and new_text are identical — nothing to patch")
+
+    # HITL approval gate
+    denial = _check_approval(
+        params,
+        action_key="numa_agents_patch_prompt",
+        description=f"Edit agent prompt: {agent_id}",
+        props_preview={
+            "agent_id": agent_id,
+            "old_text": old_text[:300],
+            "new_text": new_text[:300],
+            "replace_all": replace_all,
+        },
+    )
+    if denial:
+        return denial
+
+    # Check admin policy
+    mode = _get_agents_settings_mode()
+    if mode == "off":
+        raise ValueError("Agents are disabled")
+
+    dynamo = _get_dynamo_resource()
+    now = int(time.time() * 1000)
+    is_admin = "admin" in user_groups
+
+    # Personal agent first
+    user_agent = _get_user_agent(agent_id, user_sub)
+    if user_agent:
+        current_prompt = user_agent.get("system_prompt", "") or ""
+        new_prompt = _apply_string_edit(current_prompt, old_text, new_text, replace_all)
+        table = dynamo.Table(USER_AGENTS_TABLE)
+        table.update_item(
+            Key={"user_id": user_sub, "agent_id": agent_id},
+            UpdateExpression="SET system_prompt = :p, updated_at = :t, version = :t",
+            ExpressionAttributeValues={":p": new_prompt, ":t": now},
+        )
+        logger.info(
+            "Patched user agent prompt",
+            agent_id=agent_id,
+            user_sub=user_sub[:8] + "...",
+            delta_chars=len(new_text) - len(old_text),
+            replace_all=replace_all,
+        )
+        updated = {
+            **user_agent,
+            "system_prompt": new_prompt,
+            "updated_at": now,
+            "version": now,
+        }
+        return {"agent": _map_user_agent(updated)}
+
+    # Workspace agent
+    workspace_agent = _get_workspace_agent(agent_id)
+    if workspace_agent:
+        if workspace_agent.get("created_by_user_id") != user_sub and not is_admin:
+            raise ValueError("You do not have permission to update this agent")
+
+        current_prompt = workspace_agent.get("system_prompt", "") or ""
+        new_prompt = _apply_string_edit(current_prompt, old_text, new_text, replace_all)
+        table = dynamo.Table(WORKSPACE_AGENTS_TABLE)
+        table.update_item(
+            Key={"tenant_id": CLIENT_NAME, "agent_id": agent_id},
+            UpdateExpression="SET system_prompt = :p, updated_at = :t, version = :t",
+            ExpressionAttributeValues={":p": new_prompt, ":t": now},
+        )
+        logger.info(
+            "Patched workspace agent prompt",
+            agent_id=agent_id,
+            user_sub=user_sub[:8] + "...",
+            delta_chars=len(new_text) - len(old_text),
+            replace_all=replace_all,
+        )
+        updated = {
+            **workspace_agent,
+            "system_prompt": new_prompt,
+            "updated_at": now,
+            "version": now,
+        }
+        return {"agent": _map_workspace_agent(updated)}
+
+    raise ValueError(f"Agent not found: {agent_id}")
+
+
 def handle_duplicate_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Duplicate an agent to the user's personal library.
