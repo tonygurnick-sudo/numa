@@ -332,7 +332,7 @@ def build_assistant_prompt(context: AssistantContext) -> str:
 
 | Skill | Strong Signals | Activate When User Wants To... |
 |-------|----------------|-------------------------------|
-| numa-files-search | "Numa Files", "company files", "my files", "KB", "knowledge base", "company docs", "internal docs" | Search files in the user's Numa Files folders (My Files, Company Files, shared folders), find policies, look up procedures, retrieve stored info |
+| numa-files-search | "Numa Files", "company files", "my files", "personal", "KB", "knowledge base", "company docs", "internal docs" | Search files in the user's Numa Files folders (Personal, Company Files, shared folders), find policies, look up procedures, retrieve stored info |
 | pdf-handling | "pdf", file.pdf mentioned | Read, create, merge, annotate, or work with PDF files |
 | docx-handling | "word doc", "docx", file.docx mentioned, "letterhead", "logo" | Create, edit, add images/logos to Word documents |
 | spreadsheet-handling | "excel", "spreadsheet", "csv", file.xlsx/.csv mentioned | Analyze data, work with tables, create charts |

@@ -27,6 +27,15 @@ import {
 } from '../Services/ChatSettingsService';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { withPRM } from '../utils/prmUtils';
+import { MY_FILES_SENTINEL, expandMyFilesSentinel, sortKnowledgeBases } from '../constants/knowledgeBase';
+
+// Personal folder is user-toggleable only — admins can't reach it through
+// their UI, so company-level defaults never carry the sentinel. Re-inject it
+// whenever we materialise user-facing defaults from company-side state so
+// "Reset to company defaults" + "user defaults disabled" both surface Personal
+// as on by default. Users can still toggle it off explicitly afterwards.
+const withPersonalSentinel = (ids: string[]): string[] =>
+  ids.includes(MY_FILES_SENTINEL) ? ids : [...ids, MY_FILES_SENTINEL];
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 import { PageHeader } from '../Components/PageHeader';
 import { StyledTabs } from '../Components/StyledTabs';
@@ -615,6 +624,25 @@ export default function UserProfilePage({
     [availableKBs]
   );
 
+  // Grouping for the Default folders picker: system KBs (Company / Support /
+  // SharePoint) and shared KBs render flat; private user-owned KBs (including
+  // the root "Personal" folder) collapse under a "My Files" group with a
+  // tri-state parent checkbox.
+  const PROFILE_SYSTEM_KB_IDS = useMemo(() => new Set(['company', 'numa-support', 'sharepoint']), []);
+  const profileSortedKBs = useMemo(() => sortKnowledgeBases(availableKBs), [availableKBs]);
+  const { profileSystemKBs, profileMyFilesKBs, profileSharedKBs } = useMemo(() => {
+    const system: typeof profileSortedKBs = [];
+    const myFiles: typeof profileSortedKBs = [];
+    const shared: typeof profileSortedKBs = [];
+    for (const kb of profileSortedKBs) {
+      if (PROFILE_SYSTEM_KB_IDS.has(kb.kb_id)) system.push(kb);
+      else if (kb.is_shared) shared.push(kb);
+      else myFiles.push(kb);
+    }
+    return { profileSystemKBs: system, profileMyFilesKBs: myFiles, profileSharedKBs: shared };
+  }, [profileSortedKBs, PROFILE_SYSTEM_KB_IDS]);
+  const [profileMyFilesExpanded, setProfileMyFilesExpanded] = useState(true);
+
   const canEditUserDefaults = globalLoaded && globalAllowUserDefaults;
   const canEditProfile = globalLoaded;
 
@@ -683,7 +711,7 @@ export default function UserProfilePage({
   const displayedSettings = useMemo(() => {
     if (!userDefaultsEnabled) {
       return {
-        defaultKBIds: companyDefaults.defaultKBIds,
+        defaultKBIds: withPersonalSentinel(companyDefaults.defaultKBIds),
         autoToolsEnabled: companyDefaults.autoToolsEnabled,
         webSearchEnabled: companyDefaults.webSearchEnabled,
         createAgentEnabled: companyDefaults.createAgentEnabled,
@@ -696,7 +724,14 @@ export default function UserProfilePage({
     return userDefaults;
   }, [userDefaultsEnabled, userDefaults, companyDefaults]);
 
-  const enabledKBSet = useMemo(() => new Set(displayedSettings.defaultKBIds), [displayedSettings.defaultKBIds]);
+  // Expand MY_FILES_SENTINEL to the user's actual sub when building the set
+  // the UI checks against — rows iterate real kb_ids (sub for the root KB),
+  // so the literal sentinel would never match without expansion.
+  const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
+  const enabledKBSet = useMemo(
+    () => new Set(expandMyFilesSentinel(displayedSettings.defaultKBIds, userSub)),
+    [displayedSettings.defaultKBIds, userSub]
+  );
   const enabledConnectionSet = useMemo(
     () => new Set(displayedSettings.defaultConnectionIds),
     [displayedSettings.defaultConnectionIds]
@@ -717,6 +752,7 @@ export default function UserProfilePage({
     setUserDefaultsEnabled(true);
     setUserDefaults({
       ...companyDefaults,
+      defaultKBIds: withPersonalSentinel(companyDefaults.defaultKBIds),
       language: LANGUAGE_BROWSER_DEFAULT,
     });
     setDirty(true);
@@ -1691,31 +1727,96 @@ export default function UserProfilePage({
                     {isLoadingKBs ? (
                       <div className="profile-empty-state">{t('userProfile.defaults.kbLoading')}</div>
                     ) : (
-                      kbIdsSorted.map((kbId) => {
-                        const kb = availableKBs.find((k) => k.kb_id === kbId);
-                        const label = getKBLabel(kbId, kb?.kb_name);
-                        const checked = enabledKBSet.has(kbId);
-                        return (
+                      (() => {
+                        const renderRow = (kbId: string, kbName: string | undefined) => (
                           <Form.Check
                             key={kbId}
                             type="checkbox"
                             id={`profile-defaults-kb-${kbId}`}
-                            label={label}
-                            checked={checked}
+                            label={getKBLabel(kbId, kbName)}
+                            checked={enabledKBSet.has(kbId)}
                             disabled={disableDefaultsForm}
                             onChange={(e) => {
                               const nextChecked = e.target.checked;
-                              setUserDefaults((prev) => ({
-                                ...prev,
-                                defaultKBIds: nextChecked
-                                  ? Array.from(new Set([...prev.defaultKBIds, kbId]))
-                                  : prev.defaultKBIds.filter((id) => id !== kbId),
-                              }));
+                              // Toggling the Personal row needs to manage the
+                              // sentinel too — otherwise unchecking strips
+                              // only the user's sub and the sentinel re-
+                              // expands it on next load.
+                              const isPersonalRow = !!userSub && kbId === userSub;
+                              setUserDefaults((prev) => {
+                                const without = prev.defaultKBIds.filter(
+                                  (id) => id !== kbId && (!isPersonalRow || id !== MY_FILES_SENTINEL)
+                                );
+                                return {
+                                  ...prev,
+                                  defaultKBIds: nextChecked ? Array.from(new Set([...without, kbId])) : without,
+                                };
+                              });
                               setDirty(true);
                             }}
                           />
                         );
-                      })
+
+                        const myFilesIds = profileMyFilesKBs.map((kb) => kb.kb_id);
+                        const myFilesSelected = myFilesIds.filter((id) => enabledKBSet.has(id)).length;
+                        const myFilesAll = myFilesIds.length > 0 && myFilesSelected === myFilesIds.length;
+                        const myFilesIndeterminate = myFilesSelected > 0 && !myFilesAll;
+
+                        return (
+                          <>
+                            {profileSystemKBs.map((kb) => renderRow(kb.kb_id, kb.kb_name))}
+                            {profileMyFilesKBs.length > 0 && (
+                              <div className="profile-kb-group">
+                                <div className="profile-kb-group__header">
+                                  <Form.Check
+                                    type="checkbox"
+                                    id="profile-defaults-kb-group-my-files"
+                                    label={t('userProfile.defaults.myFilesGroup')}
+                                    checked={myFilesAll}
+                                    ref={(el: HTMLInputElement | null) => {
+                                      if (el) el.indeterminate = myFilesIndeterminate;
+                                    }}
+                                    disabled={disableDefaultsForm}
+                                    onChange={() => {
+                                      // Group toggle also manages the
+                                      // sentinel — Personal lives in this
+                                      // group so unchecking the group must
+                                      // strip both forms.
+                                      setUserDefaults((prev) => ({
+                                        ...prev,
+                                        defaultKBIds: myFilesAll
+                                          ? prev.defaultKBIds.filter(
+                                              (id) => !myFilesIds.includes(id) && id !== MY_FILES_SENTINEL
+                                            )
+                                          : Array.from(new Set([...prev.defaultKBIds, ...myFilesIds])),
+                                      }));
+                                      setDirty(true);
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="profile-kb-group__chevron"
+                                    onClick={() => setProfileMyFilesExpanded((v) => !v)}
+                                    aria-label={
+                                      profileMyFilesExpanded
+                                        ? t('userProfile.defaults.collapseGroup')
+                                        : t('userProfile.defaults.expandGroup')
+                                    }
+                                  >
+                                    <i className={`bi bi-chevron-${profileMyFilesExpanded ? 'down' : 'right'}`} />
+                                  </button>
+                                </div>
+                                {profileMyFilesExpanded && (
+                                  <div className="profile-kb-group__children">
+                                    {profileMyFilesKBs.map((kb) => renderRow(kb.kb_id, kb.kb_name))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {profileSharedKBs.map((kb) => renderRow(kb.kb_id, kb.kb_name))}
+                          </>
+                        );
+                      })()
                     )}
                     {!isLoadingKBs && kbIdsSorted.length === 0 && (
                       <div className="profile-empty-state">{t('userProfile.defaults.kbEmpty')}</div>

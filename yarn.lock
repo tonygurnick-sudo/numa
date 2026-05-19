@@ -263,6 +263,7 @@ __metadata:
     "@aws-sdk/client-qbusiness": "npm:^3.675.0"
     "@aws-sdk/client-rds": "npm:^3.738.0"
     "@aws-sdk/client-s3": "npm:^3.676.0"
+    "@aws-sdk/client-scheduler": "npm:^3.699.0"
     "@aws-sdk/client-secrets-manager": "npm:^3.738.0"
     "@aws-sdk/client-service-quotas": "npm:^3.738.0"
     "@aws-sdk/client-sfn": "npm:^3.738.0"

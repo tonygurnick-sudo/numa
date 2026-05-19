@@ -15,12 +15,18 @@ type Props = {
 
 const SHARE_ROLES: ShareRole[] = ['co-owner', 'editor', 'viewer'];
 
-const PERMISSIONS: { capability: string; coOwner: boolean; editor: boolean; viewer: boolean }[] = [
-  { capability: 'Run / Chat', coOwner: true, editor: true, viewer: true },
-  { capability: 'Edit Settings & Prompt', coOwner: true, editor: true, viewer: false },
-  { capability: 'Duplicate to Personal', coOwner: true, editor: true, viewer: true },
-  { capability: 'Manage Sharing', coOwner: true, editor: false, viewer: false },
-  { capability: 'Delete Agent', coOwner: false, editor: false, viewer: false },
+const ROLE_I18N_KEY: Record<ShareRole, string> = {
+  'co-owner': 'coOwner',
+  editor: 'editor',
+  viewer: 'viewer',
+};
+
+const PERMISSIONS: { key: string; coOwner: boolean; editor: boolean; viewer: boolean }[] = [
+  { key: 'chat', coOwner: true, editor: true, viewer: true },
+  { key: 'edit', coOwner: true, editor: true, viewer: false },
+  { key: 'duplicate', coOwner: true, editor: true, viewer: true },
+  { key: 'manageSharing', coOwner: true, editor: false, viewer: false },
+  { key: 'delete', coOwner: false, editor: false, viewer: false },
 ];
 
 export const AgentShareModal = ({ show, onHide, agent, teams = [] }: Props) => {
@@ -152,7 +158,7 @@ export const AgentShareModal = ({ show, onHide, agent, teams = [] }: Props) => {
           >
             {SHARE_ROLES.map((r) => (
               <option key={r} value={r}>
-                {r}
+                {t(`shareModal.roles.${ROLE_I18N_KEY[r]}`)}
               </option>
             ))}
           </Form.Select>
@@ -186,7 +192,7 @@ export const AgentShareModal = ({ show, onHide, agent, teams = [] }: Props) => {
                 <div className="flex-grow-1">
                   <div className="fw-medium small">{share.principalId}</div>
                   <div className="text-muted" style={{ fontSize: '0.75rem' }}>
-                    {share.principalType}
+                    {t(`shareModal.principalTypes.${share.principalType}`)}
                   </div>
                 </div>
                 <Form.Select
@@ -197,7 +203,7 @@ export const AgentShareModal = ({ show, onHide, agent, teams = [] }: Props) => {
                 >
                   {SHARE_ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {r}
+                      {t(`shareModal.roles.${ROLE_I18N_KEY[r]}`)}
                     </option>
                   ))}
                 </Form.Select>
@@ -224,8 +230,8 @@ export const AgentShareModal = ({ show, onHide, agent, teams = [] }: Props) => {
           </thead>
           <tbody>
             {PERMISSIONS.map((p) => (
-              <tr key={p.capability}>
-                <td>{p.capability}</td>
+              <tr key={p.key}>
+                <td>{t(`shareModal.capabilities.${p.key}`)}</td>
                 <td className="text-center text-success">
                   <i className="bi bi-check" />
                 </td>

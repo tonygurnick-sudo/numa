@@ -1,11 +1,11 @@
 ---
 name: connect
-description: Find files beyond the workspace — check the user's Numa Files (My Files / Company Files / shared folders) via numa_tool with name="numa_files", and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d) via the connectors tool. Use when a user asks about files not in /workdir/
+description: Find files beyond the workspace — check the user's Numa Files (Personal / Company Files / shared folders) via numa_tool with name="numa_files", and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d) via the connectors tool. Use when a user asks about files not in /workdir/
 ---
 
 # Connect Skill
 
-Access files from external sources using the **connectors** MCP tool (OAuth cloud storage, Synergy 12d, generic HTTP). For Numa Files (My Files / Company Files / shared folders) use the **numa_files** operation in **numa_tool** — see the `numa-files-search` skill for the full reference.
+Access files from external sources using the **connectors** MCP tool (OAuth cloud storage, Synergy 12d, generic HTTP). For Numa Files (Personal / Company Files / shared folders) use the **numa_files** operation in **numa_tool** — see the `numa-files-search` skill for the full reference.
 
 ## When to Use
 

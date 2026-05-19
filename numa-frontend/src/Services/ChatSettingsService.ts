@@ -105,8 +105,8 @@ export const VALID_APPROVAL_MODES: ApprovalMode[] = ['always', 'non_destructive'
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   // MY_FILES_SENTINEL is expanded to the user's Cognito sub at apply time
-  // so My Files is enabled by default in chat without baking each user's
-  // sub into the static defaults.
+  // so the user's Personal folder is enabled by default in chat without
+  // baking each user's sub into the static defaults.
   defaultKBIds: [COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, MY_FILES_SENTINEL],
   autoToolsEnabled: true,
   webSearchEnabled: true,

@@ -4,7 +4,7 @@ Numa Files — MCP Tool Reference
 ================================
 
 Search, upload, download, list, and delete files inside the user's Numa
-Files folders (My Files, Company Files, and any shared folders) via the
+Files folders (Personal, Company Files, and any shared folders) via the
 mcp__numa__numa_tool MCP tool. Load the `numa-files-search` skill for
 detailed guidance on citing sources, raw vs summarized results, and
 working with downloaded folders.

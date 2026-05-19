@@ -656,7 +656,7 @@ export const AgentCreateModal = ({
         }
         return `cron(${minute} ${hour} * * ? *)`;
       case 'weekdays':
-        return `cron(${minute} ${hour} ? * 1-5 *)`;
+        return `cron(${minute} ${hour} ? * MON-FRI *)`;
       case 'weekly': {
         const days = scheduleWeekDays.length ? scheduleWeekDays : ['monday'];
         if (scheduleWeeklyWeekNumbers.length > 0) {

@@ -13,6 +13,7 @@
     "@aws-sdk/client-qbusiness": "^3.675.0",
     "@aws-sdk/client-rds": "^3.738.0",
     "@aws-sdk/client-s3": "^3.676.0",
+    "@aws-sdk/client-scheduler": "^3.699.0",
     "@aws-sdk/client-secrets-manager": "^3.738.0",
     "@aws-sdk/client-service-quotas": "^3.738.0",
     "@aws-sdk/client-sfn": "^3.738.0",
@@ -69,7 +70,8 @@
     "assign-bedrock-quota-sharing": "node --import tsx assign-bedrock-quota-sharing.ts",
     "backup-portal-image-metadata": "node --import tsx backup-portal-image-metadata.ts",
     "migrate-portal-image-metadata": "node --import tsx migrate-portal-image-metadata.ts",
-    "cleanup-portal-image-metadata-old-rows": "node --import tsx cleanup-portal-image-metadata-old-rows.ts"
+    "cleanup-portal-image-metadata-old-rows": "node --import tsx cleanup-portal-image-metadata-old-rows.ts",
+    "backfill-weekdays-cron": "node --import tsx backfill-weekdays-cron.ts"
   },
   "packageManager": "yarn@4.9.2",
   "devDependencies": {

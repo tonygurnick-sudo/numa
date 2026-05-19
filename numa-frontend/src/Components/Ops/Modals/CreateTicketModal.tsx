@@ -259,7 +259,16 @@ export function CreateTicketModal({
     setPendingPastedAttachments([]);
     setError(null);
     setValidated(false);
-    const defaultZone = prefilledZoneId ?? boardData?.board?.defaultZoneId ?? '';
+    // Resolve a zone that actually exists on the board. defaultZoneId can
+    // become stale (e.g. the original default zone was deleted), and without
+    // this guard the stage cascade resolves to nothing and the form silently
+    // submits with stageId undefined — backend then rejects with a 400.
+    const zones = boardData?.zones ?? [];
+    const candidateZone = prefilledZoneId ?? boardData?.board?.defaultZoneId ?? '';
+    const candidateValid = !!candidateZone && zones.some((z) => z.id === candidateZone);
+    const sortedZones = [...zones].sort((a, b) => a.order - b.order);
+    const fallbackZone = sortedZones.find((z) => z.zoneType === 'board') ?? sortedZones[0];
+    const defaultZone = candidateValid ? candidateZone : (fallbackZone?.id ?? '');
     setZoneId(defaultZone);
     if (defaultZone && boardData) {
       const first = boardData.stages.filter((s) => s.zoneId === defaultZone).sort((a, b) => a.order - b.order)[0];

@@ -76,6 +76,10 @@ export function FolderContextMenu({
   }
 
   const isTopLevel = target.kind === 'topLevel';
+  // Personal is a virtual per-user KB — it can't be shared (no permissions
+  // to configure) and can't be deleted (auto-provisioned on every list).
+  // Hide both menu items entirely rather than showing them disabled.
+  const isPersonal = target.kind === 'topLevel' && !!target.kb.is_root;
 
   const dispatch = (action: FolderContextAction) => {
     onAction(action);
@@ -115,19 +119,27 @@ export function FolderContextMenu({
             disabled={!canEdit}
             onClick={() => dispatch('upload')}
           />
-          <MenuDivider />
-          <MenuItem icon="bi-gear" label={t('contextMenu.settings')} onClick={() => dispatch('settings')} />
+          {!isPersonal && (
+            <>
+              <MenuDivider />
+              <MenuItem icon="bi-gear" label={t('contextMenu.settings')} onClick={() => dispatch('settings')} />
+            </>
+          )}
         </>
       )}
 
-      <MenuDivider />
-      <MenuItem
-        icon="bi-trash"
-        label={t('contextMenu.delete')}
-        danger
-        disabled={isTopLevel ? !canDeleteTopLevel : !canEdit}
-        onClick={() => dispatch('delete')}
-      />
+      {!isPersonal && (
+        <>
+          <MenuDivider />
+          <MenuItem
+            icon="bi-trash"
+            label={t('contextMenu.delete')}
+            danger
+            disabled={isTopLevel ? !canDeleteTopLevel : !canEdit}
+            onClick={() => dispatch('delete')}
+          />
+        </>
+      )}
     </div>
   );
 
