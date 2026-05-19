@@ -2667,6 +2667,28 @@ const handleTickets = async (
       }
     }
 
+    // ── Auto-move to backlog when sprint label changes on a board-zone ────
+    // The derivation rule below pins workUnitId to the destination board
+    // zone's active sprint, which silently overwrites a caller's sprint
+    // change. When the caller explicitly sets workUnitId to something else,
+    // push the ticket into the backlog zone so the requested value sticks.
+    if (body.workUnitId !== undefined && !isCrossTeamMove && zoneIdOverride === undefined) {
+      const candidateZoneId = body.zoneId ? String(body.zoneId) : (existing.zoneId as string | undefined);
+      const candidateZone = candidateZoneId ? targetZones.find((z) => String(z.id) === candidateZoneId) : undefined;
+      if (candidateZone && String(candidateZone.zoneType) === 'board') {
+        const requestedWuId = body.workUnitId === null ? null : String(body.workUnitId);
+        const candidateActiveWuId = candidateZone.activeWorkUnitId ? String(candidateZone.activeWorkUnitId) : null;
+        if (requestedWuId !== candidateActiveWuId) {
+          const backlogZone = targetZones.find((z) => String(z.zoneType) === 'backlog');
+          if (backlogZone) {
+            zoneIdOverride = String(backlogZone.id);
+            const backlogStage = targetStages.find((s) => String(s.zoneId) === String(backlogZone.id));
+            if (backlogStage) stageId = String(backlogStage.id);
+          }
+        }
+      }
+    }
+
     const finalZoneId = zoneIdOverride ?? (body.zoneId ? String(body.zoneId) : (existing.zoneId as string));
 
     // ── workUnitId derivation rule ────────────────────────────────────────
@@ -2676,16 +2698,32 @@ const handleTickets = async (
     const finalZone = targetZones.find((z) => String(z.id) === finalZoneId);
     const finalZoneType = finalZone ? String(finalZone.zoneType) : undefined;
     const finalZoneActiveWuId = finalZone?.activeWorkUnitId ? String(finalZone.activeWorkUnitId) : null;
+
+    // A ticket's workUnitId in a board zone is implicit inheritance from the
+    // zone's active sprint, not an explicit user assignment. When the ticket
+    // leaves a board zone for the backlog without an explicit workUnitId in
+    // the patch, drop the inherited label so it doesn't follow the ticket
+    // into planning and clutter sprint groupings.
+    const existingZoneId = existing.zoneId as string | undefined;
+    const existingZone = existingZoneId ? targetZones.find((z) => String(z.id) === existingZoneId) : undefined;
+    const existingZoneType = existingZone ? String(existingZone.zoneType) : undefined;
+    const inheritedSprintBeingShed =
+      existingZoneType === 'board' && finalZoneType === 'backlog' && body.workUnitId === undefined;
+
     let derivedWorkUnitId: string | null | undefined;
     if (finalZoneType === 'board') {
       derivedWorkUnitId = finalZoneActiveWuId;
     } else if (finalZoneType === 'backlog') {
-      derivedWorkUnitId =
-        body.workUnitId !== undefined
-          ? body.workUnitId === null
-            ? null
-            : String(body.workUnitId)
-          : ((existing.workUnitId as string | null | undefined) ?? null);
+      if (inheritedSprintBeingShed) {
+        derivedWorkUnitId = null;
+      } else {
+        derivedWorkUnitId =
+          body.workUnitId !== undefined
+            ? body.workUnitId === null
+              ? null
+              : String(body.workUnitId)
+            : ((existing.workUnitId as string | null | undefined) ?? null);
+      }
     } else {
       derivedWorkUnitId =
         body.workUnitId !== undefined
