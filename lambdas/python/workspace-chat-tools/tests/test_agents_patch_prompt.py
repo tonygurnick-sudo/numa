@@ -6,9 +6,16 @@ real AWS clients.
 """
 
 import unittest
+from typing import cast
 from unittest.mock import MagicMock, patch
 
+from aws_lambda_powertools.utilities.typing import LambdaContext
+
 from tools.agents import _apply_string_edit, handle_patch_agent_prompt
+
+# pyright requires handler() receive a real LambdaContext. These tests never
+# use the context, so a typed placeholder is fine.
+_FAKE_CONTEXT = cast(LambdaContext, object())
 
 USER_SUB = "user-123"
 OTHER_USER_SUB = "user-999"
@@ -424,7 +431,7 @@ class TestLambdaDispatcherWiring(unittest.TestCase):
                         "new_text": "b",
                     },
                 },
-                None,
+                _FAKE_CONTEXT,
             )
         finally:
             TOOL_HANDLERS["patch_agent_prompt"] = original
@@ -453,7 +460,7 @@ class TestLambdaDispatcherWiring(unittest.TestCase):
                         "new_text": "b",
                     },
                 },
-                None,
+                _FAKE_CONTEXT,
             )
         finally:
             TOOL_HANDLERS["patch_agent_prompt"] = original
