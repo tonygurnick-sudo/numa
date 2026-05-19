@@ -176,8 +176,8 @@
     "success": "Files uploaded successfully!",
     "folderHintButton": "Create folder",
     "destinationLabel": "Upload destination",
-    "destinationPlaceholder": "Root — files only (pick a folder to upload folders)",
-    "destinationHelp": "Each folder has its own sharing controls."
+    "destinationPlaceholder": "Personal (your default folder)",
+    "destinationHelp": "Defaults to your Personal folder. Pick another folder to upload there instead — each folder has its own sharing controls."
   },
   "largeFile": {
     "title": "Large Raw Data File Detected",

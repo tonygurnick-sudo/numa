@@ -2379,9 +2379,12 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                     kb_id={effectiveKbId}
                     selectedFolder={selectedFolder}
                     enableFolderUpload
-                    requireFolderDestination={isAtMyFilesRoot && !destinationKbId}
                     preloadedFiles={droppedUploadBatch}
-                    autoUploadPreloaded
+                    // Skip auto-upload when the user dropped onto the root view
+                    // surface — they should be able to confirm the destination
+                    // first (defaults to Personal but they may want a folder).
+                    // For drops onto a specific folder row, auto-upload stays.
+                    autoUploadPreloaded={!isAtMyFilesRoot}
                   />
                 </div>
               </div>
