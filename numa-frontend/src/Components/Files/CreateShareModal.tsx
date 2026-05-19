@@ -793,7 +793,7 @@ export const CreateShareModal = ({
       // Use KB folder as destination -- S3 prefix is documents/kb-{kbId}/
       const targetKbId = dzSelectedKbId || userSub;
       const s3FolderPrefix = `documents/kb-${targetKbId}/`;
-      const folderName = dzKbFolders.find((kb) => kb.kb_id === targetKbId)?.kb_name || 'My Files';
+      const folderName = dzKbFolders.find((kb) => kb.kb_id === targetKbId)?.kb_name || 'Personal';
 
       const result = await createDropZone({
         folder_path: folderName,
@@ -966,7 +966,7 @@ export const CreateShareModal = ({
       // Use KB folder as destination -- S3 prefix is documents/kb-{kbId}/
       const targetKbId = dzSelectedKbId || userSub;
       const s3FolderPrefix = `documents/kb-${targetKbId}/`;
-      const folderName = dzKbFolders.find((kb) => kb.kb_id === targetKbId)?.kb_name || 'My Files';
+      const folderName = dzKbFolders.find((kb) => kb.kb_id === targetKbId)?.kb_name || 'Personal';
 
       const result = await createDropZone({
         folder_path: folderName,

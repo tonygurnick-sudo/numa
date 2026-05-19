@@ -220,9 +220,46 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   // Connected integrations only
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
 
-  // Pin My Files first, then company / numa-support / shared KBs. Stable
+  // Pin root first, then company / numa-support / shared KBs. Stable
   // sort preserves the backend's alphabetical order within the user KB tier.
   const sortedKBs = useMemo(() => sortKnowledgeBases(availableKBs), [availableKBs]);
+
+  // The picker groups KBs into: system (Company / Support / SharePoint) →
+  // "My Files" (root + private user-owned, rendered as an expandable group
+  // with a tri-state parent checkbox) → shared (folders shared with the user).
+  // System and shared KBs render flat; only "My Files" is grouped.
+  const SYSTEM_KB_ID_SET = useMemo(() => new Set(['company', 'numa-support', 'sharepoint']), []);
+  const { systemKBs, myFilesGroupKBs, sharedSectionKBs } = useMemo(() => {
+    const system: KnowledgeBase[] = [];
+    const myFiles: KnowledgeBase[] = [];
+    const shared: KnowledgeBase[] = [];
+    for (const kb of sortedKBs) {
+      if (SYSTEM_KB_ID_SET.has(kb.kb_id)) system.push(kb);
+      else if (kb.is_shared) shared.push(kb);
+      else myFiles.push(kb);
+    }
+    return { systemKBs: system, myFilesGroupKBs: myFiles, sharedSectionKBs: shared };
+  }, [sortedKBs, SYSTEM_KB_ID_SET]);
+
+  const [myFilesGroupExpanded, setMyFilesGroupExpanded] = useState(true);
+
+  const myFilesGroupIds = useMemo(() => myFilesGroupKBs.map((kb) => kb.kb_id), [myFilesGroupKBs]);
+  const myFilesGroupSelectedCount = useMemo(
+    () => myFilesGroupIds.filter((id) => enabledKBIds.includes(id)).length,
+    [myFilesGroupIds, enabledKBIds]
+  );
+  const myFilesGroupAllSelected = myFilesGroupIds.length > 0 && myFilesGroupSelectedCount === myFilesGroupIds.length;
+  const myFilesGroupNoneSelected = myFilesGroupSelectedCount === 0;
+  const myFilesGroupIndeterminate = !myFilesGroupNoneSelected && !myFilesGroupAllSelected;
+
+  const toggleMyFilesGroup = useCallback(() => {
+    setEnabledKBIds((prev) => {
+      if (myFilesGroupAllSelected) {
+        return prev.filter((id) => !myFilesGroupIds.includes(id));
+      }
+      return Array.from(new Set([...prev, ...myFilesGroupIds]));
+    });
+  }, [myFilesGroupAllSelected, myFilesGroupIds, setEnabledKBIds]);
 
   // Data connectors — sorted for the unified integrations list. Setup +
   // disconnect both live on /integrations now; this panel is purely an
@@ -397,25 +434,96 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     </div>
                   )}
                   <div className="workspace-settings-list">
-                    {sortedKBs.map((kb) => (
+                    {systemKBs.map((kb) => (
                       <Form.Check
                         type="checkbox"
                         key={kb.kb_id}
                         id={`panel-kb-${kb.kb_id}`}
-                        className={`workspace-settings-list-item workspace-settings-kb-list-item${
-                          kb.is_root ? ' workspace-settings-kb-list-item--my-files' : ''
-                        }`}
+                        className="workspace-settings-list-item workspace-settings-kb-list-item"
                         label={
                           <span className="workspace-settings-kb-label">
-                            {kb.is_root ? (
-                              <UserCircle size={14} />
-                            ) : kb.kb_id === 'company' ? (
+                            {kb.kb_id === 'company' ? (
                               <Building2 size={14} />
                             ) : kb.kb_id === 'numa-support' ? (
                               <LifeBuoy size={14} />
                             ) : (
-                              <UserIcon size={14} />
+                              <FolderOpen size={14} />
                             )}
+                            <span className="workspace-settings-kb-name">{kb.kb_name}</span>
+                          </span>
+                        }
+                        checked={enabledKBIds.includes(kb.kb_id)}
+                        onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
+                        disabled={isDisabled}
+                      />
+                    ))}
+                    {myFilesGroupKBs.length > 0 && (
+                      <div className="workspace-settings-kb-group">
+                        <div className="workspace-settings-kb-group__header">
+                          <Form.Check
+                            type="checkbox"
+                            id="panel-kb-group-my-files"
+                            className="workspace-settings-list-item workspace-settings-kb-group__check"
+                            label={
+                              <span className="workspace-settings-kb-label">
+                                <UserCircle size={14} />
+                                <span className="workspace-settings-kb-name">
+                                  {t('workspaceSettings.myFilesGroup')}
+                                </span>
+                              </span>
+                            }
+                            checked={myFilesGroupAllSelected}
+                            ref={(el: HTMLInputElement | null) => {
+                              if (el) el.indeterminate = myFilesGroupIndeterminate;
+                            }}
+                            onChange={toggleMyFilesGroup}
+                            disabled={isDisabled}
+                          />
+                          <button
+                            type="button"
+                            className="workspace-settings-kb-group__chevron"
+                            onClick={() => setMyFilesGroupExpanded((v) => !v)}
+                            aria-label={
+                              myFilesGroupExpanded
+                                ? t('workspaceSettings.collapseGroup')
+                                : t('workspaceSettings.expandGroup')
+                            }
+                          >
+                            {myFilesGroupExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          </button>
+                        </div>
+                        {myFilesGroupExpanded && (
+                          <div className="workspace-settings-kb-group__children">
+                            {myFilesGroupKBs.map((kb) => (
+                              <Form.Check
+                                type="checkbox"
+                                key={kb.kb_id}
+                                id={`panel-kb-${kb.kb_id}`}
+                                className="workspace-settings-list-item workspace-settings-kb-list-item"
+                                label={
+                                  <span className="workspace-settings-kb-label">
+                                    {kb.is_root ? <UserCircle size={14} /> : <UserIcon size={14} />}
+                                    <span className="workspace-settings-kb-name">{kb.kb_name}</span>
+                                  </span>
+                                }
+                                checked={enabledKBIds.includes(kb.kb_id)}
+                                onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
+                                disabled={isDisabled}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {sharedSectionKBs.map((kb) => (
+                      <Form.Check
+                        type="checkbox"
+                        key={kb.kb_id}
+                        id={`panel-kb-${kb.kb_id}`}
+                        className="workspace-settings-list-item workspace-settings-kb-list-item"
+                        label={
+                          <span className="workspace-settings-kb-label">
+                            <UserIcon size={14} />
                             <span className="workspace-settings-kb-name">{kb.kb_name}</span>
                           </span>
                         }

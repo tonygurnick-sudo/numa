@@ -1,11 +1,11 @@
 ---
 name: numa-files-search
-description: Search, retrieve, upload, download, and delete files in the user's Numa Files folders (My Files, Company Files, and any shared folders the user has access to). Use whenever the user asks about their files, company documents, policies, procedures, or anything stored in Numa.
+description: Search, retrieve, upload, download, and delete files in the user's Numa Files folders (Personal, Company Files, and any shared folders the user has access to). Use whenever the user asks about their files, company documents, policies, procedures, or anything stored in Numa.
 ---
 
 # Numa Files Search Skill
 
-Search, retrieve, and manage files inside the user's **Numa Files** folders — including their personal **My Files**, the workspace-wide **Company Files**, and any shared folders they have access to.
+Search, retrieve, and manage files inside the user's **Numa Files** folders. Every user has a seeded **Personal** folder (their private default save location), the workspace-wide **Company Files**, and may have additional private folders they've created or shared folders they have access to. The actual set of folders available to you is in the **Available Numa Files folders** section of your context — work from that list rather than assuming a fixed set.
 
 > "Numa Files" is the user-facing name for the Numa file system. Folders inside it are the unit users select; each folder is searchable. Internally the tool dispatch ID is `numa_files` (preferred) and `knowledge_base` (legacy alias for chat history replay).
 

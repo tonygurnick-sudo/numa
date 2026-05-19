@@ -54,6 +54,7 @@ from tools import (
     handle_list_kb_files,
     handle_list_memories,
     handle_ops_operation,
+    handle_patch_agent_prompt,
     handle_poll_connector_approval,
     handle_proxy_request,
     handle_query_knowledgebase,
@@ -128,6 +129,7 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "get_agent": handle_get_agent,
     "list_agents": handle_list_agents,
     "list_kb_files": handle_list_kb_files,
+    "patch_agent_prompt": handle_patch_agent_prompt,
     "query_knowledgebase": handle_query_knowledgebase,
     "retrieve_kb_file": handle_retrieve_kb_file,
     "update_agent": handle_update_agent,
@@ -539,6 +541,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         "get_agent",
         "create_agent",
         "update_agent",
+        "patch_agent_prompt",
         "duplicate_agent",
     }
     if tool_name in agent_tools:
