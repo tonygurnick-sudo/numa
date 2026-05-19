@@ -27,7 +27,15 @@ import {
 } from '../Services/ChatSettingsService';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { withPRM } from '../utils/prmUtils';
-import { sortKnowledgeBases } from '../constants/knowledgeBase';
+import { MY_FILES_SENTINEL, expandMyFilesSentinel, sortKnowledgeBases } from '../constants/knowledgeBase';
+
+// Personal folder is user-toggleable only — admins can't reach it through
+// their UI, so company-level defaults never carry the sentinel. Re-inject it
+// whenever we materialise user-facing defaults from company-side state so
+// "Reset to company defaults" + "user defaults disabled" both surface Personal
+// as on by default. Users can still toggle it off explicitly afterwards.
+const withPersonalSentinel = (ids: string[]): string[] =>
+  ids.includes(MY_FILES_SENTINEL) ? ids : [...ids, MY_FILES_SENTINEL];
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 import { PageHeader } from '../Components/PageHeader';
 import { StyledTabs } from '../Components/StyledTabs';
@@ -703,7 +711,7 @@ export default function UserProfilePage({
   const displayedSettings = useMemo(() => {
     if (!userDefaultsEnabled) {
       return {
-        defaultKBIds: companyDefaults.defaultKBIds,
+        defaultKBIds: withPersonalSentinel(companyDefaults.defaultKBIds),
         autoToolsEnabled: companyDefaults.autoToolsEnabled,
         webSearchEnabled: companyDefaults.webSearchEnabled,
         createAgentEnabled: companyDefaults.createAgentEnabled,
@@ -716,7 +724,14 @@ export default function UserProfilePage({
     return userDefaults;
   }, [userDefaultsEnabled, userDefaults, companyDefaults]);
 
-  const enabledKBSet = useMemo(() => new Set(displayedSettings.defaultKBIds), [displayedSettings.defaultKBIds]);
+  // Expand MY_FILES_SENTINEL to the user's actual sub when building the set
+  // the UI checks against — rows iterate real kb_ids (sub for the root KB),
+  // so the literal sentinel would never match without expansion.
+  const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
+  const enabledKBSet = useMemo(
+    () => new Set(expandMyFilesSentinel(displayedSettings.defaultKBIds, userSub)),
+    [displayedSettings.defaultKBIds, userSub]
+  );
   const enabledConnectionSet = useMemo(
     () => new Set(displayedSettings.defaultConnectionIds),
     [displayedSettings.defaultConnectionIds]
@@ -737,6 +752,7 @@ export default function UserProfilePage({
     setUserDefaultsEnabled(true);
     setUserDefaults({
       ...companyDefaults,
+      defaultKBIds: withPersonalSentinel(companyDefaults.defaultKBIds),
       language: LANGUAGE_BROWSER_DEFAULT,
     });
     setDirty(true);
@@ -1722,12 +1738,20 @@ export default function UserProfilePage({
                             disabled={disableDefaultsForm}
                             onChange={(e) => {
                               const nextChecked = e.target.checked;
-                              setUserDefaults((prev) => ({
-                                ...prev,
-                                defaultKBIds: nextChecked
-                                  ? Array.from(new Set([...prev.defaultKBIds, kbId]))
-                                  : prev.defaultKBIds.filter((id) => id !== kbId),
-                              }));
+                              // Toggling the Personal row needs to manage the
+                              // sentinel too — otherwise unchecking strips
+                              // only the user's sub and the sentinel re-
+                              // expands it on next load.
+                              const isPersonalRow = !!userSub && kbId === userSub;
+                              setUserDefaults((prev) => {
+                                const without = prev.defaultKBIds.filter(
+                                  (id) => id !== kbId && (!isPersonalRow || id !== MY_FILES_SENTINEL)
+                                );
+                                return {
+                                  ...prev,
+                                  defaultKBIds: nextChecked ? Array.from(new Set([...without, kbId])) : without,
+                                };
+                              });
                               setDirty(true);
                             }}
                           />
@@ -1754,10 +1778,16 @@ export default function UserProfilePage({
                                     }}
                                     disabled={disableDefaultsForm}
                                     onChange={() => {
+                                      // Group toggle also manages the
+                                      // sentinel — Personal lives in this
+                                      // group so unchecking the group must
+                                      // strip both forms.
                                       setUserDefaults((prev) => ({
                                         ...prev,
                                         defaultKBIds: myFilesAll
-                                          ? prev.defaultKBIds.filter((id) => !myFilesIds.includes(id))
+                                          ? prev.defaultKBIds.filter(
+                                              (id) => !myFilesIds.includes(id) && id !== MY_FILES_SENTINEL
+                                            )
                                           : Array.from(new Set([...prev.defaultKBIds, ...myFilesIds])),
                                       }));
                                       setDirty(true);
