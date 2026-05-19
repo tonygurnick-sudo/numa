@@ -991,6 +991,17 @@
       "editor": "Editor",
       "viewer": "Viewer"
     },
+    "capabilities": {
+      "chat": "Run / Chat",
+      "edit": "Edit Settings & Prompt",
+      "duplicate": "Duplicate to Personal",
+      "manageSharing": "Manage Sharing",
+      "delete": "Delete Agent"
+    },
+    "principalTypes": {
+      "user": "User",
+      "team": "Team"
+    },
     "close": "Close"
   },
   "teamModal": {

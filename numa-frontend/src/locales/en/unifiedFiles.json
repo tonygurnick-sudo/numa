@@ -11,8 +11,10 @@
   },
   "actions": {
     "newFolder": "New Folder",
-    "newFolderRootTooltip": "Create a shareable top-level folder (its own knowledge base with its own permissions). To create a folder inside My Files, open it first.",
+    "newFolderRootTooltip": "Create a shareable top-level folder with its own permissions. To create a folder inside Personal, open it first.",
     "newSubfolder": "New Subfolder",
+    "newPrivateFolder": "Create folder",
+    "newSharedFolder": "Create shared folder",
     "upload": "Upload",
     "uploadFiles": "Upload Files",
     "settings": "Settings",
@@ -48,6 +50,10 @@
     "userFiles": "User Files",
     "companyFiles": "Company Files",
     "shared": "Shared"
+  },
+  "sections": {
+    "myFiles": "My Files",
+    "sharedFiles": "Shared Files"
   },
   "createFolder": {
     "title": "Create New Folder",
@@ -154,9 +160,10 @@
     "connectProvider": "Connect a provider from Data Connectors to get started."
   },
   "rootFiles": {
-    "title": "My Files",
+    "title": "Personal",
+    "displayName": "Personal",
     "upload": "Upload files",
-    "uploadTooltip": "Upload to your private My Files folder.",
+    "uploadTooltip": "Upload to your Personal folder.",
     "privateTooltip": "Private to you. Numa can read and write here when you enable it in chat.",
     "empty": "No loose files. Upload files here or create a folder to organise them."
   },
@@ -169,8 +176,8 @@
     "success": "Files uploaded successfully!",
     "folderHintButton": "Create folder",
     "destinationLabel": "Upload destination",
-    "destinationPlaceholder": "Root — files only (pick a folder to upload folders)",
-    "destinationHelp": "Each folder has its own sharing controls."
+    "destinationPlaceholder": "Personal (your default folder)",
+    "destinationHelp": "Defaults to your Personal folder. Pick another folder to upload there instead — each folder has its own sharing controls."
   },
   "largeFile": {
     "title": "Large Raw Data File Detected",

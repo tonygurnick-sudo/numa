@@ -4,7 +4,7 @@
   "tabs": {
     "projects": "Projects",
     "company": "Company",
-    "myFiles": "My Files",
+    "myFiles": "Personal",
     "shared": "Shared",
     "remote": "Remote"
   },
@@ -149,7 +149,7 @@
   "createShare": {
     "title": "Share Document",
     "selectFile": "Select a file to share",
-    "browseFiles": "Browse My Files",
+    "browseFiles": "Browse Personal",
     "uploadNew": "Or upload a new file",
     "descriptionLabel": "Description",
     "descriptionPlaceholder": "Brief description shown to visitors",
@@ -186,7 +186,7 @@
     "browseRoot": "Browse",
     "browseUp": "Up",
     "or": "or",
-    "myFilesRoot": "My Files (root)",
+    "myFilesRoot": "Personal (root)",
     "extractionNotice": "Document content will be extracted for AI chat. This may take a moment for PDFs and other complex documents.",
     "extractionUnsupported": "This file type is not supported for AI chat. Only viewing and downloading will be available.",
     "unsupportedFileTypes": "Supported formats for AI chat: PDFs, Word documents (.docx), Excel files (.xlsx), images (.jpg, .png), text files (.txt, .md, .csv), audio/video files (.mp3, .mp4, .wav), and Outlook emails (.msg).",

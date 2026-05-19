@@ -13,6 +13,7 @@ interface CreateFolderModalProps {
   readonly show: boolean;
   readonly onHide: () => void;
   readonly onSuccess: () => void;
+  readonly initialVisibility?: Visibility;
 }
 
 function toStaffProfile(u: WorkspaceUser): StaffProfile {
@@ -26,7 +27,12 @@ function toStaffProfile(u: WorkspaceUser): StaffProfile {
   };
 }
 
-export function CreateFolderModal({ show, onHide, onSuccess }: CreateFolderModalProps): React.JSX.Element {
+export function CreateFolderModal({
+  show,
+  onHide,
+  onSuccess,
+  initialVisibility,
+}: CreateFolderModalProps): React.JSX.Element {
   const { t } = useTranslation('unifiedFiles');
   const { t: tKB } = useTranslation('knowledgeBase');
   const { numaGet } = useNumaRequest();
@@ -34,7 +40,16 @@ export function CreateFolderModal({ show, onHide, onSuccess }: CreateFolderModal
   const [folderName, setFolderName] = useState('');
   const [viewerIds, setViewerIds] = useState<string[]>([]);
   const [editorIds, setEditorIds] = useState<string[]>([]);
-  const [visibility, setVisibility] = useState<Visibility>('personal');
+  const [visibility, setVisibility] = useState<Visibility>(initialVisibility ?? 'personal');
+
+  // Re-seed visibility when the caller opens the modal with a different
+  // initial value (e.g. clicking "Create folder" under Shared Files vs the
+  // toolbar button which has no preselection).
+  useEffect(() => {
+    if (show && initialVisibility) {
+      setVisibility(initialVisibility);
+    }
+  }, [show, initialVisibility]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceUser[]>([]);

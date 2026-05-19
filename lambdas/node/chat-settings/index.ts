@@ -197,8 +197,16 @@ function validateUserProfile(raw: unknown): UserProfile {
 // Default settings for new users
 const VALID_APPROVAL_MODES: ApprovalMode[] = ['always', 'non_destructive', 'never'];
 
+// Sentinel for the user's Personal folder in defaultKBIds. The actual KB id
+// is the user's Cognito sub, which isn't known until apply time — the chat
+// runtime + frontend both expand this token. Admins never see Personal as a
+// toggle (it's user-only), so company-level defaultKBIds never carry it; we
+// inject it for users on the company-defaults fallback so Personal is on by
+// default everywhere it should be.
+const MY_FILES_SENTINEL = '__my_files__';
+
 const DEFAULT_SETTINGS: ChatSettings = {
-  defaultKBIds: ['company', 'numa-support'],
+  defaultKBIds: ['company', 'numa-support', MY_FILES_SENTINEL],
   autoToolsEnabled: true,
   webSearchEnabled: true,
   createAgentEnabled: false,
@@ -389,9 +397,16 @@ async function loadUserItem(userId: string): Promise<Record<string, unknown> | n
 }
 
 function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string, unknown> | null): UserChatSettings {
+  // When the user hasn't customised defaultKBIds we fall back to the
+  // admin-set company defaults, which (by design) never include the Personal
+  // sentinel — admins can't toggle it. Inject it here so existing users on
+  // company defaults still get Personal enabled. Users who HAVE customised
+  // get their saved state respected (so an explicit "Personal off" sticks).
+  const withPersonal = (ids: string[]): string[] =>
+    ids.includes(MY_FILES_SENTINEL) ? ids : [...ids, MY_FILES_SENTINEL];
   const defaultKBIds = Array.isArray(userItem?.defaultKBIds)
     ? (userItem!.defaultKBIds as unknown[]).filter((id): id is string => typeof id === 'string')
-    : globalSettings.defaultKBIds;
+    : withPersonal(globalSettings.defaultKBIds);
   const autoToolsEnabled =
     typeof userItem?.autoToolsEnabled === 'boolean'
       ? (userItem!.autoToolsEnabled as boolean)

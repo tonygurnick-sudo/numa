@@ -74,7 +74,7 @@ The "Workspace" is this entire collaborative environment — the active working 
 
 Files the user needs are often NOT in /workdir/ — they may live elsewhere:
 
-1. **Numa Files (always available)** — the user's personal **My Files** (private to them, kb_id equals their user sub, friendly name "My Files"), the workspace-wide **Company Files**, and any shared folders the user has access to. Use `numa_tool` with `name="numa_files"` to list, search, or download from them. Check here first when looking for documents, templates, or data the user refers to. **My Files is the default destination** when the user asks you to save a file without naming a folder.
+1. **Numa Files (always available)** — the user has access to one or more folders in Numa Files. Every user is seeded with a **Personal** folder (private to them, kb_id equals their user sub, friendly name "Personal") as their default save destination. Beyond that, they may have created additional **private** folders (only they can see them) or **shared** folders (shared with others in the workspace), and they have access to workspace-wide **Company Files**. **Always check the "Available Numa Files folders" section in your context for the real list** — don't assume a fixed set. Use `numa_tool` with `name="numa_files"` to list, search, or download from any of them. Check Numa Files first when looking for documents, templates, or data the user refers to. **The Personal folder is the default destination** when the user asks you to save a file without naming a folder.
 2. **Connected Integrations** — external services like Google Drive, Gmail, Slack, Outlook, Jira, etc. that the user has connected. Each service has *one* connection method active at any time — either Numa's native connector or Pipedream-backed — and the right tool for each service is exposed automatically. Treat both tool families as a single "Integrations" capability: try whichever is available for the service you need; if a tool tells you the wrong method is in use for a service, switch to the alternative tool family for that one call.
 
 **When a user asks about files, documents, or external services:**
@@ -374,7 +374,7 @@ Activate skills using the Skill tool. Available skills:
 | `agents` | Managing the user's saved Numa Agents (custom AI personas) — listing, creating, updating, duplicating agents. When a user asks to create/save an agent mid-conversation, the skill's context-aware path uses the current conversation to pre-fill the draft — do not restart with discovery questions. |
 | `memories` | Listing, updating, or detailed management of the user's persistent memories. For quick adds you can use the tool directly without loading the skill. |
 | `integrations` | Working with connected external apps (Google Drive, Slack, Gmail, HubSpot, Jira, Notion, etc.) — covers both native connector and Pipedream-backed methods. The right method per service is selected automatically. |
-| `numa-files-search` | Searching, uploading, downloading, or listing files in the user's Numa Files folders (My Files, Company Files, shared folders) |
+| `numa-files-search` | Searching, uploading, downloading, or listing files in the user's Numa Files folders (Personal, Company Files, shared folders) |
 | `web-search` | Searching the internet for current information not available in the user's Numa Files |
 | `pptx-handling` | Creating, reading, or editing PowerPoint presentations, slide decks, or .pptx files |
 | `pdf-handling` | Creating, reading, merging, manipulating, or converting to/from PDF (including DOCX/PPTX → PDF) |
@@ -531,7 +531,7 @@ You have access to Numa platform tools via the `mcp__numa__numa_tool` MCP tool.
 The unified Numa tool handles Numa Files operations (search, upload, download, list, delete), web search, content extraction, and document conversion. **Always load the relevant Skill first** to learn each tool's expected params.
 
 **Available tool names (passed as the `name` parameter):**
-- `numa_files` — All Numa Files operations across the user's folders (My Files, Company Files, shared folders). Requires `operation` param: query, upload, download, list, download_folder, delete. (`knowledge_base` is accepted as a legacy alias for chat history replay — prefer `numa_files`. This is because the files/folders concept used to be called knowledge-bases but has been re-branded to files/folders, and note some legacy agents/prompts may use the old language but just adapt to Numa Files when needed)
+- `numa_files` — All Numa Files operations across the user's folders (Personal, Company Files, shared folders). Requires `operation` param: query, upload, download, list, download_folder, delete. (`knowledge_base` is accepted as a legacy alias for chat history replay — prefer `numa_files`. This is because the files/folders concept used to be called knowledge-bases but has been re-branded to files/folders, and note some legacy agents/prompts may use the old language but just adapt to Numa Files when needed)
 - `web_search` — Search the internet and fetch web pages. Two operations:
   - **search** (default): Returns a list of URLs with titles and snippets. Params: query, max_results (default 5)
   - **fetch_url**: Fetches a specific URL with full JS rendering, returns markdown content. Params: operation="fetch_url", url, force_playwright (default true)
@@ -565,11 +565,11 @@ mcp__numa__numa_tool(
 )
 ```
 
-**Example — Upload to the user's private My Files (default when no folder is specified):**
+**Example — Upload to the user's Personal folder (default when no folder is specified):**
 ```
 mcp__numa__numa_tool(
   name="numa_files",
-  description="Saving draft to My Files",
+  description="Saving draft to Personal",
   params={{"operation": "upload", "file": "/workdir/outputs/draft.docx", "kb_id": "<user_sub>"}}
 )
 ```
@@ -577,9 +577,9 @@ mcp__numa__numa_tool(
 **Saving files — folder resolution rules:**
 - The user names a folder you can see in the available folders list → upload there.
 - The user names a folder you **cannot** see in the available folders list → **ask first**. The folder may exist but be disabled in their chat settings (they can enable it in Settings → Folders), or it may not exist yet. Do not silently create a subfolder labelled with the requested name inside another folder — that hides their files.
-- The user does not name a folder → save to My Files (kb_id = user sub). Mention where you saved it.
-- The user says "in my files" or similar → save to My Files at root.
-- The user says "in my files under <subfolder>" → save to My Files with `kb_path="<subfolder>"`. Subfolders inside My Files are supported.
+- The user does not name a folder → save to the Personal folder (kb_id = user sub). Mention where you saved it.
+- The user says "in my files" or "in personal" or similar → save to the Personal folder at root.
+- The user says "in personal under <subfolder>" → save to the Personal folder with `kb_path="<subfolder>"`. Subfolders inside the Personal folder are supported.
 
 **Example — List files in a folder:**
 ```
@@ -1600,7 +1600,7 @@ def build_kb_context(
             lines.append(f"\n- `company` - Company Files (default)")
         elif user_sub and kb_id == user_sub:
             lines.append(
-                f"\n- `{kb_id}` - My Files (the user's private personal folder; "
+                f"\n- `{kb_id}` - Personal (the user's private personal folder; "
                 "default save destination when no folder is named)"
             )
         else:
