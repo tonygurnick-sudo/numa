@@ -50,10 +50,6 @@ interface OAuthFormState {
   rateLimitRpm: string;
   rateLimitDaily: string;
   customHeaders: CustomHeader[];
-  cacheTtl: string;
-  cacheStaleWhileRevalidate: boolean;
-  cachePrefetch: boolean;
-  cacheBackgroundRefresh: string;
   customCredentials: Record<string, string>;
 }
 
@@ -141,10 +137,6 @@ export const OAuthWizard = ({
     rateLimitRpm: '',
     rateLimitDaily: '',
     customHeaders: [],
-    cacheTtl: '300',
-    cacheStaleWhileRevalidate: true,
-    cachePrefetch: true,
-    cacheBackgroundRefresh: '0',
     customCredentials: {},
   };
 
@@ -218,8 +210,9 @@ export const OAuthWizard = ({
         .then((full: VaultSecretWithFields) => {
           // Parse custom credentials if any
           const loadedCustomCredentials: Record<string, string> = {};
-          if (connectorEntry?.credentialFields) {
-            connectorEntry.credentialFields.forEach((field) => {
+          const editingEntry = getConnectorById(editingProviderId);
+          if (editingEntry?.credentialFields) {
+            editingEntry.credentialFields.forEach((field) => {
               if (full.fields?.[field.key]) {
                 loadedCustomCredentials[field.key] = full.fields[field.key];
               }

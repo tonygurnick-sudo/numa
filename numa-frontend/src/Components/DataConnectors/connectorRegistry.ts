@@ -573,11 +573,16 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Connect to Oracle NetSuite ERP for customers, orders, invoices, inventory, and financial reports',
     category: 'ERP',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://<ACCOUNT_ID>.app.netsuite.com/app/login/oauth2/authorize.nl',
       tokenUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token',
-      scopes: 'mcp restlets',
+      // Fallback default — the scope picker (oauthScopeDefinitions.ts:netsuite)
+      // overrides this. NetSuite's `mcp` scope is mutually exclusive with the
+      // REST/RESTlets/SuiteAnalytics group, so never combine them on one
+      // integration record. The four scopes are surfaced as separate
+      // checkboxes; the admin picks whichever subset matches the Integration
+      // Record's Scope field on the NetSuite side.
+      scopes: 'rest_webservices',
       hideClientSecret: true,
     },
     credentialFields: [
@@ -591,26 +596,15 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         helpText: 'Your NetSuite Account ID. This is required for OAuth routing.',
       },
     ],
-    helpUrl: 'https://docs.oracle.com/en/cloud/saas/netsuite/ns-go-live/chapter_1556006456.html',
     oauthSetupSteps: [
-      'Create an Integration Record in NetSuite (Setup > Integration > Manage Integrations > New).',
-      'Enable "OAuth 2.0" and "Public Client" (PKCE).',
-      'Add the Numa Redirect URI shown below to your integration.',
-      'Copy your NetSuite Client ID from the integration record.',
+      'In NetSuite: Setup → Company → Enable Features → SuiteCloud → tick OAuth 2.0, REST Web Services (for REST scope), and Server SuiteScript (for RESTlets / MCP scope).',
+      'Setup → Integration → Manage Integrations → New: name the record, tick Authorization Code Grant + Public Client (PKCE), add the Numa Redirect URI shown below.',
+      "Pick the integration record's Scope to match what you want this connector to use: REST Web Services, RESTlets, SuiteAnalytics Connect (combinable on one record), OR NetSuite AI Connector Service (exclusive — needs its own record + MCP SuiteApp + a custom role with MCP Server Connection perm).",
+      'Save — NetSuite shows the Client ID once. Copy it into this wizard (no client secret is issued for Public Client / PKCE).',
+      'Find your Account ID at Setup → Company → Company Information → Account ID (e.g. 1234567, or 1234567_SB1 for a sandbox) and enter it below.',
+      'In Permissions below, tick the scope(s) that match the integration record\'s Scope field. Mismatched scopes cause "INVALID_LOGIN_ATTEMPT — Insufficient scope" at connect time.',
     ],
-    cachingPolicy: {
-      ttl: 3600,
-      staleWhileRevalidate: 7200,
-      prefetch: false,
-      invalidateOn: ['write'],
-      maxEntries: 100,
-      backgroundRefresh: 0,
-    },
-    apiReference: {
-      purpose: 'Oracle NetSuite ERP',
-      dataTypes: ['customers', 'orders', 'invoices'],
-      capabilities: ['query', 'read', 'create', 'update', 'search', 'report'],
-    },
+    cachingPolicy: { ttl: 3600 },
   },
   {
     id: 'workbench',

@@ -325,6 +325,38 @@ export const PROVIDER_SCOPES: Record<string, ScopeOption[]> = {
       default: false,
     },
   ],
+  netsuite: [
+    {
+      id: 'rest_webservices',
+      label: 'REST Web Services',
+      scope: 'rest_webservices',
+      description: 'SuiteTalk REST — record CRUD (customer, salesOrder, invoice, …) and SuiteQL ad-hoc queries',
+      default: true,
+    },
+    {
+      id: 'restlets',
+      label: 'RESTlets',
+      scope: 'restlets',
+      description:
+        'Custom server-side SuiteScript endpoints. Combinable with REST Web Services and SuiteAnalytics Connect on the same integration record.',
+      default: false,
+    },
+    {
+      id: 'suite_analytics',
+      label: 'SuiteAnalytics Connect',
+      scope: 'suite_analytics',
+      description: 'BI / data warehouse loads via the SuiteAnalytics driver',
+      default: false,
+    },
+    {
+      id: 'mcp',
+      label: 'AI Connector (MCP)',
+      scope: 'mcp',
+      description:
+        'NetSuite AI Connector Service JSON-RPC tools. EXCLUSIVE — cannot be combined with REST Web Services / RESTlets / SuiteAnalytics on the same integration record. Requires its own dedicated NetSuite Integration Record + MCP SuiteApp + custom role.',
+      default: false,
+    },
+  ],
 };
 
 // Providers that expect a comma-separated scope string instead of the

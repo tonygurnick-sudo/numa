@@ -83,9 +83,21 @@ instance URL.** The backend expands `/api/v1/...` to `{instance_url}/api/v1/...`
 automatically for Synergy, Workbench, MYOB Acumatica, and any other
 customer-hosted HTTP API. You never have to discover or store the instance URL.
 
-**NetSuite does not speak plain HTTP** — it uses MCP (JSON-RPC 2.0). Use the
-`mcp_call` operation instead of `request` for NetSuite. See the MCP section
-below.
+**NetSuite supports two surfaces depending on the integration record's scope:**
+
+- **REST scope** (`rest_webservices` / `restlets` / `suite_analytics`): use the
+  `request` op. Pass a relative path like `/services/rest/record/v1/customer?limit=1`
+  or `/services/rest/query/v1/suiteql` — the backend prepends
+  `https://<accountId>.suitetalk.api.netsuite.com` from the saved Account ID.
+  See `ext-api-doc/netsuite/01-llm-api-rest-rules.md`.
+- **MCP scope** (`mcp`): use the `mcp_call` op (see MCP section below). MCP and
+  REST scopes are mutually exclusive on one integration record — a given
+  NetSuite connection supports one or the other, not both.
+
+If a NetSuite REST call returns `INVALID_LOGIN_ATTEMPT — Insufficient scope`,
+the integration record is mcp-scoped — switch to `mcp_call`. If `mcp_call`
+returns the same error, the integration record is REST-scoped — switch to
+`request`.
 
 ```
 # Fully-qualified URL (OAuth providers — their API hosts are fixed):

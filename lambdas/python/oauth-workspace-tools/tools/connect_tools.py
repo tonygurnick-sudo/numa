@@ -807,19 +807,38 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
         # This removes the need for the LLM to discover the instance URL —
         # it can just ask for "/api/v1/projects" and the backend expands it.
         if not url.startswith(("http://", "https://")):
-            base = (
-                (_connector_config(connector).get("instance_url") or "")
-                .strip()
-                .rstrip("/")
-            )
+            base = ""
+            # NetSuite is per-account: the account_id lives on the
+            # oauth-client-netsuite vault entry (no separate connector-config),
+            # and the SuiteTalk REST host is `<accountId>.suitetalk.api.netsuite.com`
+            # with the account id lowercased and `_` → `-` (so `5721181_SB1`
+            # becomes `5721181-sb1`).
+            if connector == "netsuite":
+                try:
+                    company_secrets = _get_consolidated_company_vault() or {}
+                except Exception:
+                    company_secrets = {}
+                ns_entry = company_secrets.get("oauth-client-netsuite") or {}
+                ns_fields = ns_entry.get("fields") or ns_entry
+                if isinstance(ns_fields, dict):
+                    account_id = (ns_fields.get("account_id") or "").strip()
+                    if account_id:
+                        host = account_id.lower().replace("_", "-")
+                        base = f"https://{host}.suitetalk.api.netsuite.com"
+            else:
+                base = (
+                    (_connector_config(connector).get("instance_url") or "")
+                    .strip()
+                    .rstrip("/")
+                )
             if not base:
                 return {
                     "status": "error",
                     "result": None,
                     "error": (
-                        f"Relative URL '{url}' given but no instance_url is configured "
+                        f"Relative URL '{url}' given but no base URL is configured "
                         f"for connector '{connector}'. Either pass an absolute URL "
-                        f"(https://…) or ask an admin to set the Instance URL in "
+                        f"(https://…) or ask an admin to set the connector up in "
                         f"Settings -> Data Connectors."
                     ),
                 }

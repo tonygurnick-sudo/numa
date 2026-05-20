@@ -313,8 +313,15 @@ yarn cdktf deploy --auto-approve numa-<client-name>
 
 ```bash
 cd infra/cdktf.out/prod/stacks/numa-<client-name>
-terraform force-unlock --force <lock-id>
+AWS_PROFILE=arcanum-dev terraform force-unlock --force <lock-id>
 ```
+
+Gotchas:
+
+- The lock table is `arcanum-terraform-lock` in account `458119850496`, region `ap-southeast-2` — accessible via the `arcanum-dev` profile. **Not** `q-demo` or `arcanum-q-deployer-prod`. Using the wrong profile/region gives `ResourceNotFoundException` and makes it look like the unlock is broken when it isn't.
+- `cd` into the stack folder first — `terraform` reads the backend config (bucket, region, dynamodb_table) from `cdk.tf.json` in that directory.
+- If `terraform force-unlock` returns **`Failed to unlock state: LocalState not locked`**, that's **success**, not failure. It means terraform reached the right table and confirmed no lock with that ID exists — you're clear to retry the deploy.
+- Sanity-check the table directly: `AWS_PROFILE=arcanum-dev aws dynamodb scan --table-name arcanum-terraform-lock --region ap-southeast-2 --projection-expression LockID`.
 
 ## Branching Strategy
 
