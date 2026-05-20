@@ -596,14 +596,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         helpText: 'Your NetSuite Account ID. This is required for OAuth routing.',
       },
     ],
-    oauthSetupSteps: [
-      'In NetSuite: Setup → Company → Enable Features → SuiteCloud → tick OAuth 2.0, REST Web Services (for REST scope), and Server SuiteScript (for RESTlets / MCP scope).',
-      'Setup → Integration → Manage Integrations → New: name the record, tick Authorization Code Grant + Public Client (PKCE), add the Numa Redirect URI shown below.',
-      "Pick the integration record's Scope to match what you want this connector to use: REST Web Services, RESTlets, SuiteAnalytics Connect (combinable on one record), OR NetSuite AI Connector Service (exclusive — needs its own record + MCP SuiteApp + a custom role with MCP Server Connection perm).",
-      'Save — NetSuite shows the Client ID once. Copy it into this wizard (no client secret is issued for Public Client / PKCE).',
-      'Find your Account ID at Setup → Company → Company Information → Account ID (e.g. 1234567, or 1234567_SB1 for a sandbox) and enter it below.',
-      'In Permissions below, tick the scope(s) that match the integration record\'s Scope field. Mismatched scopes cause "INVALID_LOGIN_ATTEMPT — Insufficient scope" at connect time.',
-    ],
     cachingPolicy: { ttl: 3600 },
   },
   {
