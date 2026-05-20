@@ -54,23 +54,26 @@ LOCAL_ROOT = Path(os.environ.get("LOCAL_WORKSPACE_ROOT", "/workdir"))
 
 # ── SDK Configuration ──────────────────────────────────────────────────────────
 
-# Regional inference profile prefixes
-# us-east-1 uses us.*, ap-southeast-2 uses au.* for 4.5+ models, apac.* for older models
+# Regional inference profile prefixes.
+# Sonnet/Opus 4.5+ use global.* (no 10% CRIS premium) from us-east-1 and
+# ap-southeast-2; Haiku 4.5 stays on us./au. (no global profile available);
+# legacy Sonnet 4 stays on us./apac. (ap-southeast-2 is not a supported
+# source region for its global profile).
 _KNOWN_PREFIXES = ("us.", "au.", "apac.", "eu.", "global.")
 
 REGIONAL_MODEL_MAP: dict[str, dict[str, str]] = {
     "us-east-1": {
-        "anthropic.claude-sonnet-4-6": "us.anthropic.claude-sonnet-4-6",
-        "anthropic.claude-opus-4-6-v1": "us.anthropic.claude-opus-4-6-v1",
+        "anthropic.claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
+        "anthropic.claude-opus-4-6-v1": "global.anthropic.claude-opus-4-6-v1",
         "anthropic.claude-haiku-4-5-20251001-v1:0": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        "anthropic.claude-sonnet-4-5-20250929-v1:0": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "anthropic.claude-sonnet-4-5-20250929-v1:0": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "us.anthropic.claude-sonnet-4-20250514-v1:0",
     },
     "ap-southeast-2": {
-        "anthropic.claude-sonnet-4-6": "au.anthropic.claude-sonnet-4-6",
-        "anthropic.claude-opus-4-6-v1": "au.anthropic.claude-opus-4-6-v1",
+        "anthropic.claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
+        "anthropic.claude-opus-4-6-v1": "global.anthropic.claude-opus-4-6-v1",
         "anthropic.claude-haiku-4-5-20251001-v1:0": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
-        "anthropic.claude-sonnet-4-5-20250929-v1:0": "apac.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "anthropic.claude-sonnet-4-5-20250929-v1:0": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
     },
     "ap-southeast-3": {
