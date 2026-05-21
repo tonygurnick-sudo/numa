@@ -158,8 +158,7 @@ class KnowledgeBaseService {
         parsed = JSON.parse(rawBody);
       } catch {
         const trimmed = rawBody.trim();
-        const looksLikeHtml =
-          trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<HTML');
+        const looksLikeHtml = /^<(?:!doctype\s|html[\s>])/i.test(trimmed);
 
         if (looksLikeHtml) {
           throw new Error(i18n.t('errors:knowledgeBase.htmlResponse'));

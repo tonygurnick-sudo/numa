@@ -278,14 +278,25 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
     try {
       const { files: fileInfos, folders: folderNames = [] } = await knowledgeBaseService.listKBFiles(kbId);
-      const s3Files = apiToS3Objects(fileInfos, folderNames, `documents/kb-${kbId}/`);
+      const parentPrefix = `documents/kb-${kbId}/`;
+      const s3Files = apiToS3Objects(fileInfos, folderNames, parentPrefix);
       setKbFileStates((prev) => {
         const next = new Map(prev);
         const existing = prev.get(kbId);
-        // Shallow fetch returns root-level entries with enrichment. Keep any
-        // deep-only entries outside the root by merging (shallow wins).
+        // Shallow fetch is authoritative for the root level. Keep deep entries
+        // (inside subfolders) the shallow call doesn't list — but only if their
+        // root folder is still in the fresh response. A stale root-level entry
+        // (file or folder marker) whose key has gone from the shallow response
+        // must be dropped, or e.g. a folder deleted server-side will linger in
+        // the UI and surface "Folder not found" 404s on delete.
         const shallowKeys = new Set(s3Files.map((f) => f.Key));
-        const preserved = (existing?.files ?? []).filter((f) => !shallowKeys.has(f.Key));
+        const liveFolderPrefixes = folderNames.map((name) => `${parentPrefix}${name}/`);
+        const preserved = (existing?.files ?? []).filter((f) => {
+          // Already in fresh response → fresh wins, drop here to avoid dupes.
+          if (shallowKeys.has(f.Key)) return false;
+          // Keep deep entries whose root folder is still live.
+          return liveFolderPrefixes.some((p) => f.Key.startsWith(p));
+        });
         next.set(kbId, {
           files: [...s3Files, ...preserved],
           isLoading: false,
