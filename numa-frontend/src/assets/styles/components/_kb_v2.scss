@@ -361,6 +361,38 @@
   .modal-dialog {
     margin: 1.75rem auto;
   }
+
+  // Placeholder shown in place of the FileUploader when the user hasn't
+  // picked a destination yet. Keeps the modal at the same approximate
+  // height so it doesn't snap shorter when the upload surface hides.
+  &__hint,
+  .kb-upload-modal__hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem 1.5rem;
+    margin-top: 1rem;
+    border: 1px dashed #e4e4e7;
+    border-radius: 8px;
+    color: #71717a;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.875rem;
+    background: #fafafa;
+  }
+}
+
+.kb-upload-modal__hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.5rem;
+  margin-top: 1rem;
+  border: 1px dashed #e4e4e7;
+  border-radius: 8px;
+  color: #71717a;
+  font-family: 'Metropolis Regular', sans-serif;
+  font-size: 0.875rem;
+  background: #fafafa;
 }
 
 // Selector Grid
