@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Offcanvas, Button, Form, Spinner } from 'react-bootstrap';
+import { Offcanvas, Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { knowledgeBaseService, KnowledgeBase } from '../../Services/knowledgeBaseService';
 import { UsersService, type WorkspaceUser } from '../../Services/UsersService';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { UserPicker } from '../Inputs/UserPicker';
+import { TaxonomyMultiSelect } from '../Inputs/TaxonomyMultiSelect';
+import { INDUSTRIES, PERSONAS } from '../../utils/resourceTaxonomy';
 import { StaffAvatar } from '../Ops/Shared/StaffAvatar';
+import { useAuth } from '../../Providers/AuthProvider';
 import type { StaffProfile } from '../../types/ops';
 
 type Visibility = 'personal' | 'shared' | 'public' | 'public_editor';
@@ -74,8 +77,16 @@ export function FolderSettingsDrawer({
   const [editVisibility, setEditVisibility] = useState<Visibility>('personal');
   const [editViewerIds, setEditViewerIds] = useState<string[]>([]);
   const [editEditorIds, setEditEditorIds] = useState<string[]>([]);
+  const [editPersonas, setEditPersonas] = useState<string[]>([]);
+  const [editIndustries, setEditIndustries] = useState<string[]>([]);
 
+  const { user } = useAuth();
+  const isAdmin = Boolean(user?.groups?.includes('admin'));
   const isOwner = role === 'OWNER';
+  // The Company KB is a system-managed singleton — admins can edit only its
+  // taxonomy tags, not its name/visibility/membership.
+  const isCompanyKb = kbDetails?.is_default === true;
+  const canEditTaxonomy = isOwner || (isCompanyKb && isAdmin);
 
   // Map workspace users to StaffProfile for UserPicker
   const staffProfiles = useMemo(() => workspaceUsers.map(toStaffProfile), [workspaceUsers]);
@@ -93,6 +104,8 @@ export function FolderSettingsDrawer({
       setEditVisibility(deriveVisibility(details));
       setEditViewerIds(details.viewers.filter((v) => v !== '*' && v !== details.created_by));
       setEditEditorIds(details.editors.filter((e) => e !== '*' && e !== details.created_by));
+      setEditPersonas(details.personas ?? []);
+      setEditIndustries(details.industries ?? []);
     } catch {
       // Details not critical
     } finally {
@@ -153,6 +166,17 @@ export function FolderSettingsDrawer({
   // Check if anything changed from the loaded state
   const hasChanges = useMemo(() => {
     if (!kbDetails) return false;
+    const origPersonas = new Set(kbDetails.personas ?? []);
+    const currPersonas = new Set(editPersonas);
+    const personasChanged =
+      origPersonas.size !== currPersonas.size || [...origPersonas].some((p) => !currPersonas.has(p));
+    const origIndustries = new Set(kbDetails.industries ?? []);
+    const currIndustries = new Set(editIndustries);
+    const industriesChanged =
+      origIndustries.size !== currIndustries.size || [...origIndustries].some((i) => !currIndustries.has(i));
+    // For the Company KB only taxonomy is editable, so other fields cannot have changed.
+    if (isCompanyKb) return personasChanged || industriesChanged;
+
     if (editName.trim() !== kbDetails.kb_name) return true;
     if (editVisibility !== deriveVisibility(kbDetails)) return true;
     const origViewers = new Set(kbDetails.viewers.filter((v) => v !== '*' && v !== kbDetails.created_by));
@@ -161,26 +185,33 @@ export function FolderSettingsDrawer({
     const currEditors = new Set(editEditorIds);
     if (origViewers.size !== currViewers.size || [...origViewers].some((v) => !currViewers.has(v))) return true;
     if (origEditors.size !== currEditors.size || [...origEditors].some((e) => !currEditors.has(e))) return true;
-    return false;
-  }, [kbDetails, editName, editVisibility, editViewerIds, editEditorIds]);
+    return personasChanged || industriesChanged;
+  }, [kbDetails, isCompanyKb, editName, editVisibility, editViewerIds, editEditorIds, editPersonas, editIndustries]);
 
   const handleSave = async () => {
     setError(null);
     setSaveSuccess(false);
     const trimmedName = editName.trim();
-    if (!trimmedName) {
+    if (!isCompanyKb && !trimmedName) {
       setError(t('createFolder.errors.nameRequired'));
       return;
     }
 
     setSaving(true);
     try {
-      await knowledgeBaseService.updateKB(kbId, {
-        name: trimmedName,
-        is_shared: editVisibility !== 'personal',
-        viewers: normalizedViewers,
-        editors: normalizedEditors,
-      });
+      // For the Company KB only taxonomy is mutable; omit name/visibility/membership
+      // so we don't accidentally overwrite system-managed values.
+      const payload = isCompanyKb
+        ? { personas: editPersonas, industries: editIndustries }
+        : {
+            name: trimmedName,
+            is_shared: editVisibility !== 'personal',
+            viewers: normalizedViewers,
+            editors: normalizedEditors,
+            personas: editPersonas,
+            industries: editIndustries,
+          };
+      await knowledgeBaseService.updateKB(kbId, payload);
       onUpdated?.();
       await loadDetails();
       setSaveSuccess(true);
@@ -241,7 +272,7 @@ export function FolderSettingsDrawer({
             {/* Folder Name */}
             <div className="folder-settings-drawer__section">
               <label className="folder-settings-drawer__label">{t('folderSettings.nameLabel')}</label>
-              {isOwner ? (
+              {isOwner && !isCompanyKb ? (
                 <input
                   type="text"
                   className="folder-settings-drawer__input"
@@ -272,7 +303,7 @@ export function FolderSettingsDrawer({
             {/* Visibility */}
             <div className="folder-settings-drawer__section">
               <label className="folder-settings-drawer__label">{t('folderSettings.visibility')}</label>
-              {isOwner ? (
+              {isOwner && !isCompanyKb ? (
                 <div className="folder-settings-drawer__radio-group">
                   {(['personal', 'shared', 'public', 'public_editor'] as Visibility[]).map((vis) => (
                     <label
@@ -305,7 +336,7 @@ export function FolderSettingsDrawer({
             </div>
 
             {/* Viewers (owner + shared mode) */}
-            {isOwner && editVisibility === 'shared' && (
+            {isOwner && !isCompanyKb && editVisibility === 'shared' && (
               <div className="folder-settings-drawer__section">
                 <label className="folder-settings-drawer__label">{t('folderSettings.viewers')}</label>
                 <p className="folder-settings-drawer__hint">{t('createFolder.viewersHelp')}</p>
@@ -326,7 +357,7 @@ export function FolderSettingsDrawer({
             )}
 
             {/* Editors (owner + shared or public mode) */}
-            {isOwner && (editVisibility === 'shared' || editVisibility === 'public') && (
+            {isOwner && !isCompanyKb && (editVisibility === 'shared' || editVisibility === 'public') && (
               <div className="folder-settings-drawer__section">
                 <label className="folder-settings-drawer__label">{t('folderSettings.editors')}</label>
                 <p className="folder-settings-drawer__hint">{t('createFolder.editorsHelp')}</p>
@@ -342,6 +373,42 @@ export function FolderSettingsDrawer({
                   disabled={saving}
                   excludeIds={ownerSub ? [ownerSub] : []}
                   allowSelectAll
+                />
+              </div>
+            )}
+
+            {/* Personas (owner or admin-on-company-KB; viewers see read-only badges below) */}
+            {canEditTaxonomy && (
+              <div className="folder-settings-drawer__section">
+                <label className="folder-settings-drawer__label">{t('createFolder.personasLabel')}</label>
+                <p className="folder-settings-drawer__hint">{t('createFolder.personasHelp')}</p>
+                <TaxonomyMultiSelect
+                  id="folder-edit-personas"
+                  options={PERSONAS}
+                  selected={editPersonas}
+                  onChange={(values) => {
+                    setEditPersonas(values);
+                    setSaveSuccess(false);
+                  }}
+                  disabled={saving}
+                />
+              </div>
+            )}
+
+            {/* Industries */}
+            {canEditTaxonomy && (
+              <div className="folder-settings-drawer__section">
+                <label className="folder-settings-drawer__label">{t('createFolder.industriesLabel')}</label>
+                <p className="folder-settings-drawer__hint">{t('createFolder.industriesHelp')}</p>
+                <TaxonomyMultiSelect
+                  id="folder-edit-industries"
+                  options={INDUSTRIES}
+                  selected={editIndustries}
+                  onChange={(values) => {
+                    setEditIndustries(values);
+                    setSaveSuccess(false);
+                  }}
+                  disabled={saving}
                 />
               </div>
             )}

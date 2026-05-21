@@ -14,6 +14,7 @@ import { randomUUID } from 'crypto';
 import { S3Client, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { GetCommand as DdbGetCommand } from '@aws-sdk/lib-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
+import { normalisePersonas, normaliseIndustries } from '../../../lib/resource-taxonomy';
 
 const client = withPRM(DynamoDBClient, {});
 const dynamo = DynamoDBDocumentClient.from(client, {
@@ -100,6 +101,8 @@ type WorkspaceAgentItem = {
   tools_config?: AgentToolsConfig;
   reference_files?: ReferenceFile[];
   tags?: string[];
+  personas?: string[];
+  industries?: string[];
   created_by_user_id: string;
   created_by_name?: string;
   created_at: number;
@@ -124,6 +127,8 @@ type UserAgentItem = {
   tools_config?: AgentToolsConfig;
   reference_files?: ReferenceFile[];
   tags?: string[];
+  personas?: string[];
+  industries?: string[];
   created_by_user_id: string;
   created_by_name?: string;
   created_at: number;
@@ -160,6 +165,8 @@ type AgentResponse = {
   sourceAgentId?: string;
   isFavorite?: boolean;
   tags: string[];
+  personas: string[];
+  industries: string[];
 };
 
 type AuthContext = {
@@ -186,6 +193,8 @@ type CreateAgentPayload = {
   createdByName?: string;
   sourceAgentId?: string;
   tags?: string[];
+  personas?: string[];
+  industries?: string[];
 };
 
 type UpdateAgentPayload = CreateAgentPayload & {
@@ -369,6 +378,8 @@ const buildPersonalDuplicatePayload = (
     referenceFiles: processedReferenceFiles,
     sourceAgentId: resolveSourceAgentId(agent),
     tags: agent.tags ?? [],
+    personas: agent.personas ?? [],
+    industries: agent.industries ?? [],
   };
 };
 
@@ -414,6 +425,8 @@ const mapWorkspaceAgent = (item: WorkspaceAgentItem): AgentResponse => {
     updatedAt: item.updated_at,
     version: item.version,
     tags: item.tags ?? [],
+    personas: item.personas ?? [],
+    industries: item.industries ?? [],
   };
 };
 
@@ -444,6 +457,8 @@ const mapUserAgent = (item: UserAgentItem): AgentResponse => {
     sourceAgentId: item.source_agent_id,
     isFavorite: item.is_favorite,
     tags: item.tags ?? [],
+    personas: item.personas ?? [],
+    industries: item.industries ?? [],
   };
 };
 
@@ -474,6 +489,8 @@ const buildWorkspaceItem = (
     tools_config: normaliseToolsConfig(payload.toolsConfig),
     reference_files: normaliseReferenceFiles(payload.referenceFiles),
     tags: normaliseTags(payload.tags),
+    personas: normalisePersonas(payload.personas).values,
+    industries: normaliseIndustries(payload.industries).values,
     created_by_user_id: auth.sub,
     created_by_name: payload.createdByName?.trim() || auth.email || auth.name || auth.sub,
     created_at: timestamp,
@@ -524,6 +541,8 @@ const buildUserItem = (
     tools_config: normaliseToolsConfig(payload.toolsConfig ?? existing?.tools_config),
     reference_files: normaliseReferenceFiles(payload.referenceFiles ?? existing?.reference_files),
     tags: normaliseTags(payload.tags ?? existing?.tags),
+    personas: normalisePersonas(payload.personas ?? existing?.personas).values,
+    industries: normaliseIndustries(payload.industries ?? existing?.industries).values,
     created_by_user_id: existing?.created_by_user_id ?? auth.sub,
     created_by_name: payload.createdByName?.trim() ?? existing?.created_by_name ?? auth.email ?? auth.name ?? auth.sub,
     created_at: existing?.created_at ?? timestamp,
@@ -726,6 +745,22 @@ const handleGetAgent = async (agentId: string, auth: AuthContext): Promise<Retur
   return errorResponse(404, 'Agent not found');
 };
 
+const validateTaxonomyPayload = (payload: CreateAgentPayload | UpdateAgentPayload): string | null => {
+  if (payload.personas !== undefined) {
+    const { invalid } = normalisePersonas(payload.personas);
+    if (invalid.length > 0) {
+      return `Invalid persona values: ${invalid.join(', ')}`;
+    }
+  }
+  if (payload.industries !== undefined) {
+    const { invalid } = normaliseIndustries(payload.industries);
+    if (invalid.length > 0) {
+      return `Invalid industry values: ${invalid.join(', ')}`;
+    }
+  }
+  return null;
+};
+
 const validateCreatePayload = (payload: CreateAgentPayload | null): string | null => {
   if (!payload) return 'Invalid JSON body';
   if (!payload.systemPrompt || !payload.systemPrompt.trim()) {
@@ -743,6 +778,8 @@ const validateCreatePayload = (payload: CreateAgentPayload | null): string | nul
   ) {
     return 'estimatedTimeSavedMinutes must be a non-negative number';
   }
+  const taxonomyError = validateTaxonomyPayload(payload);
+  if (taxonomyError) return taxonomyError;
   return null;
 };
 
@@ -911,6 +948,8 @@ const handleUpdateAgent = async (
   if (payload.referenceFiles && payload.referenceFiles.length > 5) {
     return errorResponse(400, 'A maximum of 5 reference files is supported');
   }
+  const taxonomyError = validateTaxonomyPayload(payload);
+  if (taxonomyError) return errorResponse(400, taxonomyError);
 
   const [userAgent, workspaceAgent] = await Promise.all([
     getUserAgentById(agentId, auth.sub),
@@ -955,6 +994,8 @@ const handleUpdateAgent = async (
         tools_config: merged.tools_config,
         reference_files: merged.reference_files,
         tags: merged.tags ?? [],
+        personas: merged.personas ?? [],
+        industries: merged.industries ?? [],
         created_by_user_id: workspaceAgent?.created_by_user_id ?? merged.created_by_user_id,
         created_by_name: workspaceAgent?.created_by_name ?? merged.created_by_name,
         created_at: workspaceAgent?.created_at ?? merged.created_at ?? now,
@@ -1078,6 +1119,8 @@ const handleUpdateAgent = async (
       tools_config: normaliseToolsConfig(payload.toolsConfig ?? workspaceAgent.tools_config),
       reference_files: normaliseReferenceFiles(payload.referenceFiles ?? workspaceAgent.reference_files),
       tags: normaliseTags(payload.tags ?? workspaceAgent.tags),
+      personas: normalisePersonas(payload.personas ?? workspaceAgent.personas).values,
+      industries: normaliseIndustries(payload.industries ?? workspaceAgent.industries).values,
       updated_at: now,
       version: now,
     };
@@ -1370,6 +1413,8 @@ const duplicateAsWorkspaceAgent = async (
     referenceFiles: processedReferenceFiles,
     sourceAgentId: resolveSourceAgentId(agent),
     tags: agent.tags ?? [],
+    personas: agent.personas ?? [],
+    industries: agent.industries ?? [],
   };
 
   const now = Date.now();
@@ -1419,6 +1464,8 @@ const duplicateAsWorkspaceAgent = async (
       owner: { userId: workspaceItem.created_by_user_id, name: workspaceItem.created_by_name },
       updatedAt: workspaceItem.updated_at,
       tags: workspaceItem.tags || [],
+      personas: workspaceItem.personas || [],
+      industries: workspaceItem.industries || [],
     },
   });
 };
@@ -2133,6 +2180,8 @@ const handleAdminListAgents = async (auth: AuthContext): Promise<ReturnType<type
       owner: { userId: item.created_by_user_id, name: item.created_by_name },
       updatedAt: item.updated_at,
       tags: item.tags || [],
+      personas: item.personas || [],
+      industries: item.industries || [],
     });
   }
 
@@ -2145,6 +2194,8 @@ const handleAdminListAgents = async (auth: AuthContext): Promise<ReturnType<type
       owner: { userId: item.created_by_user_id || item.user_id, name: item.created_by_name },
       updatedAt: item.updated_at,
       tags: item.tags || [],
+      personas: item.personas || [],
+      industries: item.industries || [],
     });
   }
 

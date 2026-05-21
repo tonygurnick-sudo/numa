@@ -23,6 +23,7 @@ import {
 import type { PresetZone } from '../../../lib/ops-constants';
 import type { ZoneType, StatusType } from '../../../lib/ops-schemas';
 import { dbToApi, translateTeamString, API_TO_DB_KEYS } from '../../../lib/ops-serialize';
+import { normalisePersonas, normaliseIndustries } from '../../../lib/resource-taxonomy';
 
 const client = withPRM(DynamoDBClient, {});
 
@@ -634,8 +635,19 @@ const handleBoards = async (
       order: rawOrder,
       customStages,
       zones: rawZones,
+      personas: rawPersonas,
+      industries: rawIndustries,
     } = body;
     if (!name) return errorResponse(400, 'Missing required field: name');
+
+    const personasResult = normalisePersonas(rawPersonas);
+    if (personasResult.invalid.length > 0) {
+      return errorResponse(400, `Invalid persona values: ${personasResult.invalid.join(', ')}`);
+    }
+    const industriesResult = normaliseIndustries(rawIndustries);
+    if (industriesResult.invalid.length > 0) {
+      return errorResponse(400, `Invalid industry values: ${industriesResult.invalid.join(', ')}`);
+    }
 
     const teamId = randomUUID();
     const ts = now();
@@ -703,6 +715,8 @@ const handleBoards = async (
       addedFields: addedFields && typeof addedFields === 'object' ? addedFields : undefined,
       accessControl: accessControl ?? { mode: 'all' },
       workUnitSeries: hasWorkUnits ? workUnitSeries : undefined,
+      personas: personasResult.values,
+      industries: industriesResult.values,
       defaultZoneId,
       announcement: announcement ? String(announcement) : undefined,
       preset: rawPreset ? String(rawPreset) : undefined,
@@ -789,10 +803,26 @@ const handleBoards = async (
 
     if (!isAdmin(auth) && !isTeamOwner(meta, auth)) return errorResponse(403, 'Admin or board owner access required');
 
+    const sanitisedBody: Record<string, unknown> = { ...body };
+    if ('personas' in sanitisedBody) {
+      const personasResult = normalisePersonas(sanitisedBody.personas);
+      if (personasResult.invalid.length > 0) {
+        return errorResponse(400, `Invalid persona values: ${personasResult.invalid.join(', ')}`);
+      }
+      sanitisedBody.personas = personasResult.values;
+    }
+    if ('industries' in sanitisedBody) {
+      const industriesResult = normaliseIndustries(sanitisedBody.industries);
+      if (industriesResult.invalid.length > 0) {
+        return errorResponse(400, `Invalid industry values: ${industriesResult.invalid.join(', ')}`);
+      }
+      sanitisedBody.industries = industriesResult.values;
+    }
+
     const ts = now();
     const updated: Record<string, unknown> = {
       ...meta,
-      ...body,
+      ...sanitisedBody,
       PK: meta.PK,
       SK: meta.SK,
       GSI1PK: meta.GSI1PK,

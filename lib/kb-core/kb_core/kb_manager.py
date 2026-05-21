@@ -64,6 +64,8 @@ class KnowledgeBaseManager:
         created_by: str,
         viewers: List[str],
         editors: List[str],
+        personas: Optional[List[str]] = None,
+        industries: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Create a new knowledge base.
@@ -73,6 +75,8 @@ class KnowledgeBaseManager:
             created_by: User ID creating the KB
             viewers: List of user_ids or ["*"] for all
             editors: List of user_ids with edit permission
+            personas: List of persona tags (must be members of the shared taxonomy)
+            industries: List of industry tags (must be members of the shared taxonomy)
 
         Returns:
             KB record dict
@@ -111,6 +115,15 @@ class KnowledgeBaseManager:
             {"SS": normalized_editors} if normalized_editors else {"L": []}
         )
 
+        personas_list = personas or []
+        industries_list = industries or []
+        personas_attribute: AttributeValueTypeDef = (
+            {"SS": personas_list} if personas_list else {"L": []}
+        )
+        industries_attribute: AttributeValueTypeDef = (
+            {"SS": industries_list} if industries_list else {"L": []}
+        )
+
         kb_item: Dict[str, AttributeValueTypeDef] = {
             "PK": {"S": self.tenant_pk},
             "SK": {"S": f"KB#{kb_id}"},
@@ -120,6 +133,8 @@ class KnowledgeBaseManager:
             "is_default": {"BOOL": False},
             "viewers": viewers_attribute,
             "editors": editors_attribute,
+            "personas": personas_attribute,
+            "industries": industries_attribute,
             "created_by": {"S": created_by},
             "created_at": {"S": now},
             "updated_at": {"S": now},
@@ -430,6 +445,8 @@ class KnowledgeBaseManager:
         name: Optional[str] = None,
         viewers: Optional[List[str]] = None,
         editors: Optional[List[str]] = None,
+        personas: Optional[List[str]] = None,
+        industries: Optional[List[str]] = None,
     ) -> bool:
         """
         Update KB properties.
@@ -439,6 +456,8 @@ class KnowledgeBaseManager:
             name: New name (optional)
             viewers: New viewers list (optional)
             editors: New editors list (optional)
+            personas: New personas list (taxonomy already validated)
+            industries: New industries list (taxonomy already validated)
 
         Returns:
             True if successful
@@ -505,6 +524,18 @@ class KnowledgeBaseManager:
                     {"SS": normalized_editors} if normalized_editors else {"L": []}
                 )
                 new_editors_list = normalized_editors
+
+            if personas is not None:
+                update_parts.append("personas = :personas")
+                expr_attr_values[":personas"] = (
+                    {"SS": personas} if personas else {"L": []}
+                )
+
+            if industries is not None:
+                update_parts.append("industries = :industries")
+                expr_attr_values[":industries"] = (
+                    {"SS": industries} if industries else {"L": []}
+                )
 
             if update_parts:
                 update_parts.append("updated_at = :updated_at")
@@ -764,6 +795,30 @@ class KnowledgeBaseManager:
         created_by = item.get("created_by", {}).get("S")
         visibility = self._compute_visibility(viewers, editors, created_by)
 
+        personas_value = item.get("personas", {})
+        if "SS" in personas_value:
+            personas = list(personas_value["SS"])
+        elif "L" in personas_value:
+            personas = [
+                v["S"]
+                for v in personas_value.get("L", [])
+                if isinstance(v, dict) and "S" in v
+            ]
+        else:
+            personas = []
+
+        industries_value = item.get("industries", {})
+        if "SS" in industries_value:
+            industries = list(industries_value["SS"])
+        elif "L" in industries_value:
+            industries = [
+                v["S"]
+                for v in industries_value.get("L", [])
+                if isinstance(v, dict) and "S" in v
+            ]
+        else:
+            industries = []
+
         return {
             "kb_id": item["kb_id"]["S"],
             "kb_name": item["kb_name"]["S"],
@@ -771,6 +826,8 @@ class KnowledgeBaseManager:
             "is_default": item.get("is_default", {}).get("BOOL", False),
             "viewers": viewers,
             "editors": editors,
+            "personas": personas,
+            "industries": industries,
             "created_by": created_by,
             "created_at": item.get("created_at", {}).get("S"),
             "status": item["status"]["S"],

@@ -43,6 +43,8 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
   const [announcement, setAnnouncement] = useState('');
   const [defaultZoneId, setDefaultZoneId] = useState('');
   const [defaultStageId, setDefaultStageId] = useState('');
+  const [personas, setPersonas] = useState<string[]>([]);
+  const [industries, setIndustries] = useState<string[]>([]);
 
   // ── Tickets & Fields tab state ───────────────────────────────────────────
   const [allowedTicketTypes, setAllowedTicketTypes] = useState<string[]>([]);
@@ -106,6 +108,8 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
       setAccessMode(team.accessControl?.mode ?? 'all');
       setAccessUserIds([...(team.accessControl?.users ?? [])]);
       setOwnerIds([...(team.accessControl?.owners ?? [])]);
+      setPersonas([...(team.personas ?? [])]);
+      setIndustries([...(team.industries ?? [])]);
       setZones(existingZones.map((z) => ({ ...z })));
       setStages(existingStages.map((s) => ({ ...s })));
       setError(null);
@@ -207,6 +211,20 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     },
     [markDirty]
   );
+  const setPersonasDirty = useCallback(
+    (v: string[]) => {
+      setPersonas(v);
+      markDirty();
+    },
+    [markDirty]
+  );
+  const setIndustriesDirty = useCallback(
+    (v: string[]) => {
+      setIndustries(v);
+      markDirty();
+    },
+    [markDirty]
+  );
 
   // ── Tab navigation with dirty guard ────────────────────────────────
   const handleTabSelect = useCallback(
@@ -235,6 +253,8 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     setAccessMode(team.accessControl?.mode ?? 'all');
     setAccessUserIds([...(team.accessControl?.users ?? [])]);
     setOwnerIds([...(team.accessControl?.owners ?? [])]);
+    setPersonas([...(team.personas ?? [])]);
+    setIndustries([...(team.industries ?? [])]);
     setZones(existingZones.map((z) => ({ ...z })));
     setStages(existingStages.map((s) => ({ ...s })));
   }, [team, config, existingZones, existingStages]);
@@ -352,6 +372,8 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
         accessControl: { mode: accessMode, users: accessMode === 'specific' ? accessUserIds : [], owners: ownerIds },
         defaultZoneId: defaultZoneId || undefined,
         defaultStageId: defaultStageId || undefined,
+        personas,
+        industries,
       });
 
       // Delete removed zones
@@ -386,6 +408,8 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     ownerIds,
     defaultZoneId,
     defaultStageId,
+    personas,
+    industries,
     zones,
     stages,
     existingZones,
@@ -494,6 +518,10 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                   setDefaultZoneId={setDefaultZoneIdDirty}
                   defaultStageId={defaultStageId}
                   setDefaultStageId={setDefaultStageIdDirty}
+                  personas={personas}
+                  setPersonas={setPersonasDirty}
+                  industries={industries}
+                  setIndustries={setIndustriesDirty}
                   zones={zones}
                   stages={stages}
                   createdBy={team.createdBy}

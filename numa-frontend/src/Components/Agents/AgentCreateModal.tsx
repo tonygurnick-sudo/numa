@@ -9,6 +9,8 @@ import { useAlert, useConfirm } from '../../Providers/ConfirmContext';
 import { useBranding } from '../../Providers/BrandingContext';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { ChipsInput } from '../Inputs/ChipsInput';
+import { TaxonomyMultiSelect } from '../Inputs/TaxonomyMultiSelect';
+import { INDUSTRIES, PERSONAS } from '../../utils/resourceTaxonomy';
 import { AgentFileUpload } from './AgentFileUpload';
 import { AgentAvatarSelector } from './AgentAvatarSelector';
 import AgentAvatar from './AgentAvatar';
@@ -89,6 +91,8 @@ const DEFAULT_PAYLOAD: AgentPayload = {
   requiredIntegrations: [],
   createdByName: '',
   tags: [],
+  personas: [],
+  industries: [],
 };
 
 // KB access mode type for the UI
@@ -442,6 +446,8 @@ export const AgentCreateModal = ({
         requiredIntegrations: editingAgent.requiredIntegrations ?? [],
         createdByName: normalisedCreatorName,
         tags: editingAgent.tags ?? [],
+        personas: editingAgent.personas ?? [],
+        industries: editingAgent.industries ?? [],
       });
       setReferenceFiles(editingAgent.referenceFiles ?? []);
       setError(null);
@@ -1201,6 +1207,32 @@ export const AgentCreateModal = ({
                       disabled={saving}
                       suggestions={existingTags}
                       suggestionsLabel={t('createModal.setup.tagsSuggestions')}
+                    />
+                  </Col>
+                </Row>
+
+                {/* Personas & Industries (controlled taxonomy for FEAT-127 filtering) */}
+                <Row className="mt-3">
+                  <Col md={6}>
+                    <TaxonomyMultiSelect
+                      id="agent-personas"
+                      label={t('createModal.setup.personasLabel')}
+                      helperText={t('createModal.setup.personasHelp')}
+                      options={PERSONAS}
+                      selected={formState.personas ?? []}
+                      onChange={(values) => handleChange('personas', values)}
+                      disabled={saving}
+                    />
+                  </Col>
+                  <Col md={6}>
+                    <TaxonomyMultiSelect
+                      id="agent-industries"
+                      label={t('createModal.setup.industriesLabel')}
+                      helperText={t('createModal.setup.industriesHelp')}
+                      options={INDUSTRIES}
+                      selected={formState.industries ?? []}
+                      onChange={(values) => handleChange('industries', values)}
+                      disabled={saving}
                     />
                   </Col>
                 </Row>

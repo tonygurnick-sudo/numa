@@ -391,6 +391,10 @@
     },
     "creating": "Creating...",
     "createButton": "Create folder",
+    "personasLabel": "Personas",
+    "personasHelp": "Which roles this folder is most useful for.",
+    "industriesLabel": "Industries",
+    "industriesHelp": "Which industries this folder is most relevant to.",
     "errors": {
       "nameRequired": "Please provide a name for the folder.",
       "editorsMustBeViewers": "Editors must also be viewers for shared folders."

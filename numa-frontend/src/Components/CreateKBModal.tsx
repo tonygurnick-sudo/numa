@@ -12,6 +12,8 @@ import { Modal, Button, Form, Alert } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { knowledgeBaseService } from '../Services/knowledgeBaseService';
 import { ChipsInput } from './Inputs/ChipsInput';
+import { TaxonomyMultiSelect } from './Inputs/TaxonomyMultiSelect';
+import { INDUSTRIES, PERSONAS } from '../utils/resourceTaxonomy';
 
 /** ─────────────────────────────────────────────────────────────────────────────
  *  Types & Brands
@@ -35,6 +37,8 @@ interface CreateKBRequest {
   readonly is_shared: boolean; // True for shared KB, false for personal
   readonly viewers: PrivateViewers; // Only used when is_shared=true
   readonly editors: ReadonlyArray<UserIdentifier>; // Only used when is_shared=true, subset of viewers
+  readonly personas?: ReadonlyArray<string>;
+  readonly industries?: ReadonlyArray<string>;
 }
 
 interface CreateKBResponse {
@@ -107,6 +111,8 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
   const [viewerChips, setViewerChips] = useState<string[]>([]);
   const [editorChips, setEditorChips] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<'personal' | 'shared' | 'public' | 'public_editor'>('personal');
+  const [personas, setPersonas] = useState<string[]>([]);
+  const [industries, setIndustries] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,6 +122,8 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
     setViewerChips([]);
     setEditorChips([]);
     setVisibility('personal');
+    setPersonas([]);
+    setIndustries([]);
     setError(null);
     onHide();
   };
@@ -158,6 +166,8 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
         is_shared: isShared,
         viewers,
         editors,
+        personas: personas.length > 0 ? personas : undefined,
+        industries: industries.length > 0 ? industries : undefined,
       };
 
       // Defensive invariant (shared only): editors ⊆ viewers
@@ -293,6 +303,25 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
               {t('createKB.invalidEmails', { values: invalidEditors.join(', ') })}
             </div>
           )}
+
+          <TaxonomyMultiSelect
+            id="kb-personas"
+            label={t('createKB.personasLabel')}
+            helperText={t('createKB.personasHelp')}
+            options={PERSONAS}
+            selected={personas}
+            onChange={setPersonas}
+            disabled={isSubmitting}
+          />
+          <TaxonomyMultiSelect
+            id="kb-industries"
+            label={t('createKB.industriesLabel')}
+            helperText={t('createKB.industriesHelp')}
+            options={INDUSTRIES}
+            selected={industries}
+            onChange={setIndustries}
+            disabled={isSubmitting}
+          />
 
           <Alert variant="light" className="mb-0">
             <strong>{t('createKB.noteTitle')}</strong>

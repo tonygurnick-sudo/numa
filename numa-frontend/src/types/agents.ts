@@ -79,6 +79,8 @@ export type AgentSummary = {
   sourceAgentId?: string;
   isFavorite?: boolean;
   tags: string[];
+  personas: string[];
+  industries: string[];
 };
 
 export type AgentListResponse = {
@@ -108,6 +110,8 @@ export type AgentPayload = {
   referenceFiles?: AgentReferenceFile[];
   createdByName?: string;
   tags?: string[];
+  personas?: string[];
+  industries?: string[];
 };
 
 export type AgentUpdatePayload = AgentPayload & {
@@ -170,4 +174,6 @@ export type AdminAgentEntry = {
   owner: { userId: string; name?: string };
   updatedAt: number;
   tags: string[];
+  personas: string[];
+  industries: string[];
 };

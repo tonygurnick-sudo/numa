@@ -398,7 +398,13 @@
     "announcementHelp": "Optional message shown at the top of the board",
     "announcementPlaceholder": "e.g., Sprint goal: Ship the CRM integration by Friday",
     "announcementClear": "Clear",
-    "announcementCharCount": "{{count}}/280"
+    "announcementCharCount": "{{count}}/280",
+    "taxonomyHeading": "Audience",
+    "taxonomyHelp": "Tag this board with the personas and industries it's relevant to. Used for filtering.",
+    "personasLabel": "Personas",
+    "personasHelp": "Which roles this board is most useful for.",
+    "industriesLabel": "Industries",
+    "industriesHelp": "Which industries this board is most relevant to."
   },
   "sprints": {
     "new": "New Sprint",

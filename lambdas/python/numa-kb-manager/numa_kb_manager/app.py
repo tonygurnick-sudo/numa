@@ -20,7 +20,7 @@ from botocore.exceptions import ClientError
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from kb_core import KnowledgeBaseManager
+from kb_core import KnowledgeBaseManager, normalise_industries, normalise_personas
 from prm import client as prm_client
 from prm import resource as prm_resource
 
@@ -139,6 +139,23 @@ async def create_kb(request: Request) -> Response:
                 status_code=400,
             )
 
+        personas_input = body.get("personas")
+        industries_input = body.get("industries")
+        personas_valid, personas_invalid = normalise_personas(personas_input or [])
+        industries_valid, industries_invalid = normalise_industries(
+            industries_input or []
+        )
+        if personas_invalid:
+            return JSONResponse(
+                {"error": f"Invalid persona values: {', '.join(personas_invalid)}"},
+                status_code=400,
+            )
+        if industries_invalid:
+            return JSONResponse(
+                {"error": f"Invalid industry values: {', '.join(industries_invalid)}"},
+                status_code=400,
+            )
+
         user_sub = user["sub"]
         kb_manager = KnowledgeBaseManager()
         kb = kb_manager.create_kb(
@@ -146,6 +163,8 @@ async def create_kb(request: Request) -> Response:
             created_by=user_sub,
             viewers=resolved_viewers,
             editors=resolved_editors,
+            personas=personas_valid,
+            industries=industries_valid,
         )
 
         logger.info("KB created", kb_id=kb["kb_id"], created_by=user_sub)
@@ -236,9 +255,13 @@ async def update_kb(request: Request, kb_id: str) -> Response:
         name = body.get("name")
         viewers = body.get("viewers")
         editors = body.get("editors")
+        personas_input = body.get("personas")
+        industries_input = body.get("industries")
 
         resolved_viewers = None
         resolved_editors = None
+        validated_personas: Optional[List[str]] = None
+        validated_industries: Optional[List[str]] = None
 
         if viewers is not None:
             resolved_viewers, unresolved_viewers = resolve_user_identifiers(viewers)
@@ -262,8 +285,35 @@ async def update_kb(request: Request, kb_id: str) -> Response:
                     status_code=400,
                 )
 
+        if personas_input is not None:
+            personas_valid, personas_invalid = normalise_personas(personas_input)
+            if personas_invalid:
+                return JSONResponse(
+                    {"error": f"Invalid persona values: {', '.join(personas_invalid)}"},
+                    status_code=400,
+                )
+            validated_personas = personas_valid
+
+        if industries_input is not None:
+            industries_valid, industries_invalid = normalise_industries(
+                industries_input
+            )
+            if industries_invalid:
+                return JSONResponse(
+                    {
+                        "error": f"Invalid industry values: {', '.join(industries_invalid)}"
+                    },
+                    status_code=400,
+                )
+            validated_industries = industries_valid
+
         success = kb_manager.update_kb(
-            kb_id=kb_id, name=name, viewers=resolved_viewers, editors=resolved_editors
+            kb_id=kb_id,
+            name=name,
+            viewers=resolved_viewers,
+            editors=resolved_editors,
+            personas=validated_personas,
+            industries=validated_industries,
         )
 
         if not success:
