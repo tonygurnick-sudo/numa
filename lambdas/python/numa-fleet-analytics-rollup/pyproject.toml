@@ -1,0 +1,27 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = ["**/tests/**/*"]
+source = ["."]
+
+[tool.poetry]
+name = "numa-fleet-analytics-rollup"
+version = "0.1.0"
+description = "Fleet-wide analytics rollup for the Numa Dashboard. Runs nightly + on-demand."
+authors = ["Arcanum AI"]
+# Include the top-level lambda_function.py AND every module under the package
+# subdir. Pattern matches what numa-dr-export and other Python lambdas use.
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+boto3 = "^1.37.0"
+structlog = "^25.2.0"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.17.1"
+pytest = "^8.0"

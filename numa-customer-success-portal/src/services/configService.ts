@@ -23,6 +23,8 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'NEXTGEN_BROKER_LAMBDA',
   'NEXTGEN_BROKER_REGION',
   'SUPPORT_DOCS_BUCKET',
+  'FLEET_ANALYTICS_TABLE',
+  'FLEET_ANALYTICS_LAMBDA',
 ];
 
 const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
@@ -47,6 +49,8 @@ export interface PortalConfig {
   NEXTGEN_BROKER_LAMBDA?: string;
   NEXTGEN_BROKER_REGION?: string;
   SUPPORT_DOCS_BUCKET?: string;
+  FLEET_ANALYTICS_TABLE?: string;
+  FLEET_ANALYTICS_LAMBDA?: string;
 }
 
 export const fetchConfigAndAddToSession = async (forceRefresh = false): Promise<void> => {
@@ -63,6 +67,11 @@ export const fetchConfigAndAddToSession = async (forceRefresh = false): Promise<
       headers: {
         'Content-Type': 'application/json',
       },
+      // Bypass the browser disk cache. Without this, browsers heuristically
+      // cache the response (no Cache-Control header on the S3 object) and may
+      // serve a stale copy that's missing optional properties added in a later
+      // deploy — manifesting as e.g. "FLEET_ANALYTICS_TABLE not configured".
+      cache: 'no-store',
     });
 
     if (!response.ok) {

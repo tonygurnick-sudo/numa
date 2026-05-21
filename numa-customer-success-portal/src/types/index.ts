@@ -183,12 +183,23 @@ export type ClientConfig = z.infer<typeof clientConfigSchema>;
 export const CLIENT_STATUS_VALUES = ['trial', 'paying', 'partner', 'internal', 'other', 'unclear'] as const;
 export type ClientStatusValue = (typeof CLIENT_STATUS_VALUES)[number];
 
+// Which AWS Organization the client's account belongs to.
+//   - nextgen: modern Arcanum-owned per-client accounts under the NextGen org (mgmt 282304106064)
+//   - arcanum: Arcanum's internal/dev/HQ/quota-sharing org
+//   - standalone: customer-owned account, not in either Arcanum-controlled org
+export const ACCOUNT_ORG_VALUES = ['nextgen', 'arcanum', 'standalone'] as const;
+export type AccountOrgValue = (typeof ACCOUNT_ORG_VALUES)[number];
+
 export const clientMetadataSchema = z.object({
   clientName: z.string(),
-  status: z.enum(CLIENT_STATUS_VALUES),
+  // Optional so the Configs page can seed a minimal row from the deterministic
+  // account-id classifier (clientName + accountOrg) for clients that have no
+  // metadata yet. Operators fill in status manually from the UI later.
+  status: z.enum(CLIENT_STATUS_VALUES).optional(),
   trialStartDate: z.string().optional(),
   trialEndDate: z.string().optional(),
   notes: z.string().optional(),
+  accountOrg: z.enum(ACCOUNT_ORG_VALUES).optional(),
   updatedAt: z.string().optional(),
   updatedBy: z.string().optional(),
 });
@@ -204,12 +215,22 @@ export const CLIENT_STATUS_DISPLAY: Record<ClientStatusValue, { label: string; v
   unclear: { label: 'Unclear', variant: 'light' },
 };
 
+export const ACCOUNT_ORG_DISPLAY: Record<AccountOrgValue, { label: string; variant: string }> = {
+  nextgen: { label: 'NextGen', variant: 'dark' },
+  arcanum: { label: 'Arcanum', variant: 'info' },
+  standalone: { label: 'Standalone', variant: 'secondary' },
+};
+
 export function getStatusBadgeInfo(metadata?: ClientMetadata): { label: string; variant: string } | null {
-  if (!metadata) return null;
+  if (!metadata || !metadata.status) return null;
   if (metadata.status === 'trial' && metadata.trialEndDate && new Date(metadata.trialEndDate) < new Date()) {
     return { label: 'Trial - Expired', variant: 'danger' };
   }
   return CLIENT_STATUS_DISPLAY[metadata.status];
+}
+
+export function getAccountOrgBadgeInfo(org?: AccountOrgValue | null): { label: string; variant: string } | null {
+  return org ? ACCOUNT_ORG_DISPLAY[org] : null;
 }
 
 // Helper to get default values for display

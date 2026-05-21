@@ -1,4 +1,4 @@
-import { Alert, Badge, Row, Col } from 'react-bootstrap';
+import { Badge } from 'react-bootstrap';
 import { CheckCircle, ExclamationTriangle, XCircle, Clock } from 'react-bootstrap-icons';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -71,75 +71,65 @@ export function WelcomeBanner({ systemStatus, onQuickAction: _onQuickAction }: W
   const status = systemStatus || defaultSystemStatus;
 
   return (
-    <Alert
-      variant="light"
-      className="border-0 shadow-sm mb-4 welcome-banner"
-      style={{
-        background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-        borderLeft: '4px solid var(--bs-primary)',
-      }}
-    >
-      <Row className="align-items-center">
-        <Col lg={12}>
-          <div className="d-flex align-items-center justify-content-between">
-            <div>
-              <h5 className="alert-heading mb-2">
-                {getGreeting()}, {getUserName()}
-              </h5>
-              <div className="d-flex align-items-center">
-                {getStatusIcon(status.overall)}
-                <span className="me-3">
-                  System Status:{' '}
-                  <strong
-                    className={`text-${
-                      getStatusVariant(status.overall) === 'success'
-                        ? 'success'
-                        : getStatusVariant(status.overall) === 'warning'
-                          ? 'warning'
-                          : 'danger'
-                    }`}
-                  >
-                    {status.overall === 'healthy'
-                      ? 'All Systems Operational'
-                      : status.overall === 'warning'
-                        ? 'Minor Issues Detected'
-                        : 'Service Disruption'}
-                  </strong>
-                </span>
-
-                <div className="d-flex gap-2">
-                  {status.services.map((service, index) => (
-                    <Badge
-                      key={index}
-                      bg={getStatusVariant(service.status)}
-                      className="px-2"
-                      title={service.message || `${service.name}: ${service.status}`}
-                    >
-                      {service.name}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {status.overall !== 'healthy' && (
-            <div className="mt-2 small text-muted">
-              {status.services
-                .filter((s) => s.status !== 'healthy')
-                .map((s) => s.message || `${s.name} experiencing issues`)
-                .join(' • ')}
-            </div>
+    <div className="welcome-banner mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+      <div>
+        <h3
+          className="mb-1"
+          style={{
+            fontFamily: 'var(--nd-font-display)',
+            fontWeight: 500,
+            letterSpacing: '-0.015em',
+            color: 'var(--nd-text)',
+            fontSize: '1.6rem',
+          }}
+        >
+          {getGreeting()}, {getUserName()}
+        </h3>
+        <div className="d-flex align-items-center flex-wrap gap-2 small" style={{ color: 'var(--nd-text-faint)' }}>
+          <span className="d-flex align-items-center">
+            {getStatusIcon(status.overall)}
+            <span>
+              {status.overall === 'healthy'
+                ? 'All Systems Operational'
+                : status.overall === 'warning'
+                  ? 'Minor Issues Detected'
+                  : 'Service Disruption'}
+            </span>
+          </span>
+          {status.lastChecked && (
+            <span aria-hidden="true" style={{ color: 'var(--nd-border-strong, rgba(31,31,31,0.18))' }}>
+              ·
+            </span>
           )}
-        </Col>
-      </Row>
+          {status.lastChecked && (
+            <span title="Last status check">
+              updated {new Date(status.lastChecked).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+      </div>
 
-      {status.lastChecked && (
-        <div className="text-muted small mt-2 border-top pt-2">
-          Status last updated: {new Date(status.lastChecked).toLocaleString()}
+      <div className="d-flex gap-2 flex-wrap">
+        {status.services.map((service, index) => (
+          <Badge
+            key={index}
+            bg={getStatusVariant(service.status)}
+            title={service.message || `${service.name}: ${service.status}`}
+          >
+            {service.name}
+          </Badge>
+        ))}
+      </div>
+
+      {status.overall !== 'healthy' && (
+        <div className="w-100 small mt-1" style={{ color: 'var(--nd-warn)' }}>
+          {status.services
+            .filter((s) => s.status !== 'healthy')
+            .map((s) => s.message || `${s.name} experiencing issues`)
+            .join(' • ')}
         </div>
       )}
-    </Alert>
+    </div>
   );
 }
 

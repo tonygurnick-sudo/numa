@@ -79,6 +79,14 @@ export interface CustomerSuccessPortalConstructProps {
   supportDocsBucketArn?: string;
   /** Optional: support docs master bucket name exposed to portal config */
   supportDocsBucketName?: string;
+  /** Optional: name of the numa-portal-fleet-analytics DynamoDB table (Numa Dashboard) */
+  fleetAnalyticsTableName?: string;
+  /** Optional: ARN of the numa-portal-fleet-analytics DynamoDB table — granted Read+Query to the portal role */
+  fleetAnalyticsTableArn?: string;
+  /** Optional: ARN of the numa-fleet-analytics-rollup Lambda — granted InvokeFunction to the portal role */
+  fleetAnalyticsLambdaArn?: string;
+  /** Optional: name of the numa-fleet-analytics-rollup Lambda — surfaced into the portal config.json */
+  fleetAnalyticsLambdaName?: string;
 }
 
 export class CustomerSuccessPortalConstruct extends Construct {
@@ -554,6 +562,22 @@ export class CustomerSuccessPortalConstruct extends Construct {
         ],
       });
     }
+    if (props.fleetAnalyticsTableArn) {
+      baseStatements.push({
+        sid: 'NumaDashboardReadFleetAnalytics',
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan', 'dynamodb:BatchGetItem'],
+        resources: [props.fleetAnalyticsTableArn, `${props.fleetAnalyticsTableArn}/index/*`],
+      });
+    }
+    if (props.fleetAnalyticsLambdaArn) {
+      baseStatements.push({
+        sid: 'NumaDashboardInvokeRollup',
+        effect: 'Allow',
+        actions: ['lambda:InvokeFunction'],
+        resources: [props.fleetAnalyticsLambdaArn],
+      });
+    }
     if (props.supportDocsBucketArn) {
       baseStatements.push({
         effect: 'Allow',
@@ -608,9 +632,12 @@ export class CustomerSuccessPortalConstruct extends Construct {
           }[source.split('.')?.pop() ?? 'default'];
 
           const relativePath = path.relative(frontendPath, source);
+          // index.html must always revalidate so users pick up new hashed bundle refs after a deploy.
+          const cacheControl = relativePath.endsWith('.html') ? 'no-cache' : undefined;
           new S3Object(this, `portal-file-${relativePath.replace(/[^a-zA-Z0-9]/g, '-')}`, {
             bucket: this.frontendBucket.bucket,
             contentType,
+            cacheControl,
             key: relativePath,
             source,
             sourceHash: Fn.filemd5(source),
@@ -674,12 +701,20 @@ export class CustomerSuccessPortalConstruct extends Construct {
     if (props.supportDocsBucketName) {
       portalConfig['SUPPORT_DOCS_BUCKET'] = props.supportDocsBucketName;
     }
+    if (props.fleetAnalyticsTableName) {
+      portalConfig['FLEET_ANALYTICS_TABLE'] = props.fleetAnalyticsTableName;
+    }
+    if (props.fleetAnalyticsLambdaName) {
+      portalConfig['FLEET_ANALYTICS_LAMBDA'] = props.fleetAnalyticsLambdaName;
+    }
 
     new S3Object(this, 'portal-config', {
       bucket: this.frontendBucket.bucket,
       key: 'config.json',
       content: JSON.stringify(portalConfig),
       contentType: 'application/json',
+      // Per-deploy file — never let browsers serve a stale copy from heuristic cache.
+      cacheControl: 'no-cache',
     });
 
     // Outputs

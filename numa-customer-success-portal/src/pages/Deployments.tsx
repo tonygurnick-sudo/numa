@@ -859,62 +859,78 @@ export default function Deployments() {
       {error && <Alert variant="danger">{error}</Alert>}
 
       <Card>
-        <Card.Header className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <Card.Header>
           <h5 className="mb-0">Start New Deployment</h5>
-          <div className="d-flex align-items-center gap-3 flex-wrap">
-            <ButtonGroup aria-label="Image channel">
-              <ToggleButton
-                id="channel-prod"
-                type="radio"
-                variant={channel === 'numa-deploy' ? 'primary' : 'outline-primary'}
-                value="numa-deploy"
-                checked={channel === 'numa-deploy'}
-                onChange={() => setChannel('numa-deploy')}
-              >
-                Production
-                <Badge bg="light" text="dark" className="ms-2">
-                  {imagesByChannel['numa-deploy'].length}
-                </Badge>
-              </ToggleButton>
-              <ToggleButton
-                id="channel-dev"
-                type="radio"
-                variant={channel === 'numa-deploy-dev' ? 'warning' : 'outline-warning'}
-                value="numa-deploy-dev"
-                checked={channel === 'numa-deploy-dev'}
-                onChange={() => setChannel('numa-deploy-dev')}
-              >
-                Dev
-                <Badge bg="light" text="dark" className="ms-2">
-                  {imagesByChannel['numa-deploy-dev'].length}
-                </Badge>
-              </ToggleButton>
-            </ButtonGroup>
-            <ButtonGroup>
-              <ToggleButton
-                id="deploy-mode-single"
-                type="radio"
-                variant={deployMode === 'single' ? 'primary' : 'outline-primary'}
-                value="single"
-                checked={deployMode === 'single'}
-                onChange={() => handleDeployModeChange('single')}
-              >
-                Single
-              </ToggleButton>
-              <ToggleButton
-                id="deploy-mode-group"
-                type="radio"
-                variant={deployMode === 'group' ? 'primary' : 'outline-primary'}
-                value="group"
-                checked={deployMode === 'group'}
-                onChange={() => handleDeployModeChange('group')}
-              >
-                Group
-              </ToggleButton>
-            </ButtonGroup>
-          </div>
         </Card.Header>
         <Card.Body>
+          {/* Toolbar: image channel + deploy mode toggles. Pulled out of
+           * the card header so the header reads as a clean section title
+           * and the toggles have breathing room above the form. */}
+          <div
+            className="d-flex align-items-center flex-wrap gap-3 mb-4 pb-3"
+            style={{ borderBottom: '1px solid var(--nd-border)' }}
+          >
+            <div className="d-flex align-items-center gap-2">
+              <span className="text-muted small fw-semibold" style={{ letterSpacing: '0.04em' }}>
+                IMAGE
+              </span>
+              <ButtonGroup aria-label="Image channel" size="sm">
+                <ToggleButton
+                  id="channel-prod"
+                  type="radio"
+                  variant={channel === 'numa-deploy' ? 'primary' : 'outline-primary'}
+                  value="numa-deploy"
+                  checked={channel === 'numa-deploy'}
+                  onChange={() => setChannel('numa-deploy')}
+                >
+                  Production
+                  <Badge bg="light" className="ms-2">
+                    {imagesByChannel['numa-deploy'].length}
+                  </Badge>
+                </ToggleButton>
+                <ToggleButton
+                  id="channel-dev"
+                  type="radio"
+                  variant={channel === 'numa-deploy-dev' ? 'warning' : 'outline-warning'}
+                  value="numa-deploy-dev"
+                  checked={channel === 'numa-deploy-dev'}
+                  onChange={() => setChannel('numa-deploy-dev')}
+                >
+                  Dev
+                  <Badge bg="light" className="ms-2">
+                    {imagesByChannel['numa-deploy-dev'].length}
+                  </Badge>
+                </ToggleButton>
+              </ButtonGroup>
+            </div>
+            <div className="d-flex align-items-center gap-2">
+              <span className="text-muted small fw-semibold" style={{ letterSpacing: '0.04em' }}>
+                MODE
+              </span>
+              <ButtonGroup size="sm">
+                <ToggleButton
+                  id="deploy-mode-single"
+                  type="radio"
+                  variant={deployMode === 'single' ? 'primary' : 'outline-primary'}
+                  value="single"
+                  checked={deployMode === 'single'}
+                  onChange={() => handleDeployModeChange('single')}
+                >
+                  Single
+                </ToggleButton>
+                <ToggleButton
+                  id="deploy-mode-group"
+                  type="radio"
+                  variant={deployMode === 'group' ? 'primary' : 'outline-primary'}
+                  value="group"
+                  checked={deployMode === 'group'}
+                  onChange={() => handleDeployModeChange('group')}
+                >
+                  Group
+                </ToggleButton>
+              </ButtonGroup>
+            </div>
+          </div>
           {deployMode === 'single' ? (
             <>
               <Row>

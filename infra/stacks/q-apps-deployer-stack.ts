@@ -13,6 +13,7 @@ import { PortalDeploymentsConstruct } from '../constructs/portal-deployments-con
 import { PortalNextgenBrokerConstruct } from '../constructs/portal-nextgen-broker-construct';
 import { EmailSenderConstruct } from '../constructs/email-sender-construct';
 import { QuotaReportDailyConstruct } from '../constructs/quota-report-daily-construct';
+import { NumaDashboardRollupConstruct } from '../constructs/numa-dashboard-rollup-construct';
 
 export class QAppsDeployerStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: QAppsDeployerStackProps) {
@@ -190,6 +191,17 @@ export class QAppsDeployerStack extends ArcanumStack {
         orgId: 'o-apdsu3c1a7',
       });
 
+      // Numa Dashboard fleet-analytics rollup — provisioned BEFORE the portal
+      // construct so we can pass its table/lambda ARNs into the portal's
+      // config and IAM policy for on-demand refresh.
+      const numaDashboardRollup =
+        (props.enableNumaDashboard ?? true)
+          ? new NumaDashboardRollupConstruct(this, 'numa-dashboard-rollup', {
+              clientConfigTableArn: clientConfigTable.arn,
+              clientConfigTableName: clientConfigTable.name,
+            })
+          : undefined;
+
       new CustomerSuccessPortalConstruct(this, 'customer-success-portal', {
         clientConfigTable,
         domainName: `customer-success-portal.${props.domainSuffix}`,
@@ -212,6 +224,10 @@ export class QAppsDeployerStack extends ArcanumStack {
         nextgenBrokerRegion: 'us-east-1',
         supportDocsBucketArn: supportDocsMasterBucket.bucket.arn,
         supportDocsBucketName: supportDocsMasterBucket.bucket.bucket,
+        fleetAnalyticsTableArn: numaDashboardRollup?.tableArn,
+        fleetAnalyticsTableName: numaDashboardRollup?.tableName,
+        fleetAnalyticsLambdaArn: numaDashboardRollup?.functionArn,
+        fleetAnalyticsLambdaName: numaDashboardRollup?.functionName,
       });
 
       // Useful outputs
@@ -264,6 +280,12 @@ export interface QAppsDeployerStackProps extends ArcanumStackProps {
    * @default false
    */
   enableQuotaReportDaily?: boolean;
+  /**
+   * Enable the Numa Dashboard fleet-analytics rollup table + Lambda + scheduler.
+   * Provides the data backing the portal's Numa Dashboard tab.
+   * @default true
+   */
+  enableNumaDashboard?: boolean;
   /** HQ client account ID for quota report S3 upload — required when enableQuotaReportDaily is true */
   hqAccountId?: string;
   /** HQ data bucket name — required when enableQuotaReportDaily is true */

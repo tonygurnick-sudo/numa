@@ -15,6 +15,7 @@ import QuotaReportTool from './pages/QuotaReportTool';
 import ConfigSearchTool from './pages/ConfigSearchTool';
 import AllUsersReportTool from './pages/AllUsersReportTool';
 import CostAnalyticsTool from './pages/CostAnalyticsTool';
+import NumaDashboard from './pages/NumaDashboard';
 import Deployments from './pages/Deployments';
 import GroupDeploymentDetail from './pages/GroupDeploymentDetail';
 import CreateClientConfig from './pages/tools/CreateClientConfig';
@@ -46,11 +47,12 @@ function App() {
             path="/*"
             element={
               <ProtectedRoute>
-                <div className="min-vh-100 bg-light text-dark">
+                <div className="min-vh-100" style={{ background: 'var(--nd-bg)', color: 'var(--nd-text-dim)' }}>
                   <NavigationBar />
                   <Container fluid className="py-4">
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
+                      <Route path="/numa-dashboard" element={<NumaDashboard />} />
                       <Route path="/configs" element={<Configs />} />
                       <Route path="/containers" element={<Containers />} />
                       <Route path="/users" element={<UserManagement />} />

@@ -17,10 +17,19 @@ import { Search, FileEarmarkText, Download, Funnel, XCircle } from 'react-bootst
 import { useNavigate } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { Client, getDefaultClientConfigValues, CLIENT_STATUS_VALUES, CLIENT_STATUS_DISPLAY } from '@/types';
-import type { ClientMetadata } from '@/types';
+import {
+  Client,
+  getDefaultClientConfigValues,
+  CLIENT_STATUS_VALUES,
+  CLIENT_STATUS_DISPLAY,
+  ACCOUNT_ORG_VALUES,
+  ACCOUNT_ORG_DISPLAY,
+  getAccountOrgBadgeInfo,
+} from '@/types';
+import type { ClientMetadata, AccountOrgValue } from '@/types';
 import { clientService } from '@/services/clientService';
 import { clientMetadataService } from '@/services/clientMetadataService';
+import { accountOrgService } from '@/services/accountOrgService';
 import { ClientTableGroup } from '@/components/ClientTableGroup';
 import { FileExportService } from '@/utils/fileExport';
 import { listAllRecentDeployments } from '@/services/deploymentService';
@@ -37,10 +46,12 @@ export default function Configs() {
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
+  const [orgFilter, setOrgFilter] = useState('');
   const [trialStartFrom, setTrialStartFrom] = useState('');
   const [trialStartTo, setTrialStartTo] = useState('');
   const [trialEndFrom, setTrialEndFrom] = useState('');
   const [trialEndTo, setTrialEndTo] = useState('');
+  const [orgMap, setOrgMap] = useState<Map<string, AccountOrgValue | null>>(new Map());
 
   useEffect(() => {
     const load = async () => {
@@ -54,6 +65,49 @@ export default function Configs() {
         setClients(data);
         setMetadataMap(metadata);
         if (data.length > 0) setSelected(data[0]);
+
+        // Non-blocking: classify accounts from AWS Organizations + write back into
+        // metadata for any client whose stored `accountOrg` is stale/missing.
+        // Failures are logged-and-swallowed — the page must still work without
+        // the broker.
+        void (async () => {
+          try {
+            const computed = await accountOrgService.classifyAll(data);
+            setOrgMap(computed);
+
+            const diffs: ClientMetadata[] = [];
+            for (const client of data) {
+              const computedOrg = computed.get(client.name);
+              if (!computedOrg) continue;
+              const existing = metadata.get(client.name);
+              if (!existing) {
+                // Seed a minimal row so the rollup Lambda (which only reads
+                // DDB) can see the classification. Operators fill in
+                // status/trial dates later from the UI.
+                diffs.push({ clientName: client.name, accountOrg: computedOrg });
+                continue;
+              }
+              if (existing.accountOrg === computedOrg) continue;
+              diffs.push({ ...existing, accountOrg: computedOrg });
+            }
+
+            if (diffs.length === 0) return;
+
+            // Bounded concurrency to avoid hammering DDB on first sync.
+            const CHUNK = 8;
+            for (let i = 0; i < diffs.length; i += CHUNK) {
+              const batch = diffs.slice(i, i + CHUNK);
+              await Promise.allSettled(batch.map((m) => clientMetadataService.saveMetadata(m)));
+            }
+
+            // Refresh local metadata so the right-pane "Client Metadata" block reflects new values.
+            clientMetadataService.clearCache();
+            const fresh = await clientMetadataService.getAllMetadata();
+            setMetadataMap(fresh);
+          } catch (err) {
+            console.error('Account org classification / write-through failed:', err);
+          }
+        })();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load clients');
       } finally {
@@ -66,13 +120,15 @@ export default function Configs() {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (statusFilter) count++;
+    if (orgFilter) count++;
     if (trialStartFrom || trialStartTo) count++;
     if (trialEndFrom || trialEndTo) count++;
     return count;
-  }, [statusFilter, trialStartFrom, trialStartTo, trialEndFrom, trialEndTo]);
+  }, [statusFilter, orgFilter, trialStartFrom, trialStartTo, trialEndFrom, trialEndTo]);
 
   const clearFilters = () => {
     setStatusFilter('');
+    setOrgFilter('');
     setTrialStartFrom('');
     setTrialStartTo('');
     setTrialEndFrom('');
@@ -86,6 +142,15 @@ export default function Configs() {
     const term = search.toLowerCase().trim();
     if (term) {
       result = result.filter((c) => c.name.toLowerCase().includes(term));
+    }
+
+    // Account org filter
+    if (orgFilter) {
+      result = result.filter((c) => {
+        const org = orgMap.get(c.name) ?? metadataMap.get(c.name)?.accountOrg ?? null;
+        if (orgFilter === 'unknown') return org === null;
+        return org === orgFilter;
+      });
     }
 
     // Status filter
@@ -129,7 +194,18 @@ export default function Configs() {
     }
 
     return result;
-  }, [search, clients, statusFilter, trialStartFrom, trialStartTo, trialEndFrom, trialEndTo, metadataMap]);
+  }, [
+    search,
+    clients,
+    statusFilter,
+    orgFilter,
+    trialStartFrom,
+    trialStartTo,
+    trialEndFrom,
+    trialEndTo,
+    metadataMap,
+    orgMap,
+  ]);
 
   // Helper function to merge config with defaults
   const mergeConfigWithDefaults = (config: any): any => {
@@ -188,6 +264,7 @@ export default function Configs() {
             name: client.name,
             status: client.status,
             metadataStatus: clientMetadata?.status || '',
+            accountOrg: orgMap.get(client.name) ?? clientMetadata?.accountOrg ?? '',
             trialStartDate: clientMetadata?.trialStartDate || '',
             trialEndDate: clientMetadata?.trialEndDate || '',
             metadataNotes: clientMetadata?.notes || '',
@@ -241,6 +318,7 @@ export default function Configs() {
           name: client.name,
           status: client.status,
           deploymentCount: client.deploymentCount,
+          accountOrg: orgMap.get(client.name) ?? metadataMap.get(client.name)?.accountOrg ?? null,
           config: client.config,
           metadata: metadataMap.get(client.name) || null,
           lastDeployment: client.lastDeployment,
@@ -343,6 +421,18 @@ export default function Configs() {
                   <div className="mt-2 p-2 bg-light rounded border">
                     <Row className="g-2">
                       <Col xs={12}>
+                        <Form.Label className="small fw-semibold text-muted mb-1">Account Org</Form.Label>
+                        <Form.Select size="sm" value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)}>
+                          <option value="">All Orgs</option>
+                          {ACCOUNT_ORG_VALUES.map((o) => (
+                            <option key={o} value={o}>
+                              {ACCOUNT_ORG_DISPLAY[o].label}
+                            </option>
+                          ))}
+                          <option value="unknown">Unknown / No Account ID</option>
+                        </Form.Select>
+                      </Col>
+                      <Col xs={12}>
                         <Form.Label className="small fw-semibold text-muted mb-1">Status</Form.Label>
                         <Form.Select size="sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                           <option value="">All Statuses</option>
@@ -439,6 +529,7 @@ export default function Configs() {
                   }
                   searchTerm={search}
                   metadataMap={metadataMap}
+                  orgMap={orgMap}
                 />
               </div>
             </Card.Body>
@@ -457,6 +548,33 @@ export default function Configs() {
               {selected ? (
                 <div style={{ height: 'calc(100vh - 280px)', overflow: 'auto' }}>
                   <pre className="bg-light p-3 rounded">{JSON.stringify(selected.config, null, 2)}</pre>
+                  {(() => {
+                    const liveOrg = orgMap.get(selected.name);
+                    const storedOrg = metadataMap.get(selected.name)?.accountOrg;
+                    const org = liveOrg ?? storedOrg ?? null;
+                    const orgBadge = getAccountOrgBadgeInfo(org);
+                    return (
+                      <>
+                        <h6 className="text-muted mt-3">Account Classification</h6>
+                        <div className="bg-light p-3 rounded small">
+                          <div>
+                            <strong>Account ID:</strong> <code>{selected.config.clientAccountId || '(none)'}</code>
+                          </div>
+                          <div className="d-flex align-items-center gap-2 mt-1">
+                            <strong>Org:</strong>{' '}
+                            {orgBadge ? (
+                              <Badge bg={orgBadge.variant}>{orgBadge.label}</Badge>
+                            ) : (
+                              <span className="text-muted">Unknown</span>
+                            )}
+                          </div>
+                          <div className="text-muted mt-1">
+                            Source: {liveOrg !== undefined ? 'Live (NextGen broker)' : 'Stored metadata'}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                   {metadataMap.get(selected.name) && (
                     <>
                       <h6 className="text-muted mt-3">Client Metadata</h6>

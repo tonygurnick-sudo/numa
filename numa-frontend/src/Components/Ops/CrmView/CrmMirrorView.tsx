@@ -132,7 +132,7 @@ function DroppableColumn({
   const textColor = getContrastTextColor(stageColor);
 
   return (
-    <div className="kanban-column" style={{ background: isOver ? '#faf5ff' : undefined }}>
+    <div ref={setNodeRef} className="kanban-column" style={{ background: isOver ? '#faf5ff' : undefined }}>
       <div
         style={{
           backgroundColor: stageColor,
@@ -164,7 +164,7 @@ function DroppableColumn({
         </span>
       </div>
 
-      <div ref={setNodeRef}>
+      <div style={{ flex: 1, minHeight: 40 }}>
         <SortableContext items={customers.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {customers.length === 0 && (
             <div className="text-center py-4">
@@ -956,7 +956,10 @@ const CrmMirrorView = (): React.JSX.Element => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
-      <div className="d-flex flex-column h-100">
+      <div
+        className="d-flex flex-column"
+        style={{ minHeight: '100%', height: viewMode === 'list' ? '100%' : undefined }}
+      >
         {/* ── Toolbar ──────────────────────────────────────────────────── */}
         <div
           className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white"
@@ -1129,7 +1132,9 @@ const CrmMirrorView = (): React.JSX.Element => {
             </Alert>
           </div>
         )}
-        <div className="flex-grow-1 d-flex flex-column overflow-hidden px-3 pb-3 pt-3">
+        <div
+          className={`flex-grow-1 d-flex flex-column px-3 pb-3 pt-3${viewMode === 'list' ? ' overflow-hidden' : ''}`}
+        >
           {viewMode === 'list' ? (
             <div
               style={{

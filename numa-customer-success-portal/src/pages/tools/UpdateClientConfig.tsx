@@ -303,7 +303,7 @@ export default function UpdateClientConfig() {
     // Load metadata for the selected client
     clientMetadataService.getMetadata(selectedClientName).then((meta) => {
       if (meta) {
-        setMetaStatus(meta.status);
+        setMetaStatus(meta.status ?? 'unclear');
         setTrialStartDate(meta.trialStartDate || '');
         setTrialEndDate(meta.trialEndDate || '');
         setMetaNotes(meta.notes || '');

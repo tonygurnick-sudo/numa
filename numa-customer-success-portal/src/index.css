@@ -1,11 +1,25 @@
+/*
+ * Base styles for the Customer Success Portal. The design system (colors,
+ * typography, Bootstrap overrides) lives in src/styles/arcanum-theme.css.
+ * This file is just the base/reset + a handful of utility classes.
+ */
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: light;
+  color: #323232;
+  background-color: #f7f5f1;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -26,6 +40,7 @@ body {
   min-height: 100vh;
 }
 
+/* ── Status indicators (used across the portal) ──────────────────────── */
 .status-indicator {
   width: 12px;
   height: 12px;
@@ -35,50 +50,54 @@ body {
 }
 
 .status-healthy {
-  background-color: #28a745;
+  background-color: var(--nd-good, #22c55e);
 }
-
 .status-warning {
-  background-color: #ffc107;
+  background-color: var(--nd-warn, #d97706);
 }
-
 .status-error {
-  background-color: #dc3545;
+  background-color: var(--nd-bad, #ef4444);
 }
-
 .status-pending {
-  background-color: #6c757d;
+  background-color: var(--nd-text-faint, #6b6b6b);
 }
 
+/* ── Client picker cards ─────────────────────────────────────────────── */
 .client-card {
   transition:
     transform 0.2s,
     box-shadow 0.2s;
   cursor: pointer;
 }
-
 .client-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--nd-shadow-hover, 0 4px 18px rgba(0, 0, 0, 0.08));
 }
 
+/* ── Deployment progress bar ─────────────────────────────────────────── */
 .deployment-progress {
   position: relative;
   height: 4px;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(31, 31, 31, 0.08);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .deployment-progress-bar {
   height: 100%;
-  background: linear-gradient(45deg, #007bff, #0056b3);
+  background: linear-gradient(45deg, var(--arcanum-purple, #9949ac), var(--arcanum-purple-dark, #7d3490));
   border-radius: 2px;
   transition: width 0.5s ease-in-out;
 }
 
 .deployment-progress-bar.animated {
-  background: linear-gradient(45deg, #007bff, #0056b3, #007bff, #0056b3);
+  background: linear-gradient(
+    45deg,
+    var(--arcanum-purple, #9949ac),
+    var(--arcanum-purple-dark, #7d3490),
+    var(--arcanum-purple, #9949ac),
+    var(--arcanum-purple-dark, #7d3490)
+  );
   background-size: 200% 200%;
   animation: shimmer 2s linear infinite;
 }
@@ -92,6 +111,7 @@ body {
   }
 }
 
+/* ── Misc ────────────────────────────────────────────────────────────── */
 .mock-badge {
   font-size: 0.7em;
   opacity: 0.8;
@@ -106,13 +126,16 @@ body {
   font-weight: 500;
 }
 
+/* Legacy dark-mode helper, retoned for light. Only used in a couple of
+ * places — keeping it so we don't have to sweep them. */
 .text-muted-dark {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: var(--nd-text-faint, #6b6b6b) !important;
 }
 
+/* ── Custom scrollbar for client picker lists ────────────────────────── */
 .client-picker-list {
   scrollbar-width: auto;
-  scrollbar-color: var(--arcanum-purple, #8e50a7) #e9ecef;
+  scrollbar-color: var(--arcanum-purple, #9949ac) var(--nd-panel-3, #efeae2);
 }
 
 .client-picker-list::-webkit-scrollbar {
@@ -120,16 +143,16 @@ body {
 }
 
 .client-picker-list::-webkit-scrollbar-track {
-  background: #e9ecef;
+  background: var(--nd-panel-3, #efeae2);
   border-radius: 6px;
 }
 
 .client-picker-list::-webkit-scrollbar-thumb {
-  background-color: var(--arcanum-purple, #8e50a7);
+  background-color: var(--arcanum-purple, #9949ac);
   border-radius: 6px;
-  border: 2px solid #e9ecef;
+  border: 2px solid var(--nd-panel-3, #efeae2);
 }
 
 .client-picker-list::-webkit-scrollbar-thumb:hover {
-  background-color: var(--arcanum-purple-dark, #7a4593);
+  background-color: var(--arcanum-purple-dark, #7d3490);
 }

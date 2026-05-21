@@ -72,6 +72,10 @@ export class PortalNextgenBrokerConstruct extends Construct {
       sourceCodeHash: Fn.filebase64sha256(zip),
       handler: 'index.handler',
       runtime: 'nodejs22.x',
+      // listOrgAccounts paginates Organizations.ListAccounts after an STS hop,
+      // which exceeds the 3s default on cold-start. 15s is well over what the
+      // worst-case ~10 page response needs.
+      timeout: 15,
       environment: {
         variables: {
           CLIENT_ASSUME_ROLE_NAME: 'ArcanumAIAccess',

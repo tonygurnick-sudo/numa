@@ -10,6 +10,7 @@ import {
   House,
   Clock,
   Tools,
+  Speedometer2,
 } from 'react-bootstrap-icons';
 import { Book } from 'react-bootstrap-icons';
 import { useAuth } from '@/contexts/AuthContext';
@@ -59,6 +60,17 @@ export default function NavigationBar() {
             >
               <House className="me-1" />
               Home
+            </Nav.Link>
+
+            <Nav.Link
+              as={Link}
+              to="/numa-dashboard"
+              active={location.pathname.startsWith('/numa-dashboard')}
+              className="d-flex align-items-center"
+              onClick={handleNavClick}
+            >
+              <Speedometer2 className="me-1" />
+              Numa Dashboard
             </Nav.Link>
 
             <Nav.Link
