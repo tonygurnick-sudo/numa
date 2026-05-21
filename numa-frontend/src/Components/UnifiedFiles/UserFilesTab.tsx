@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Spinner, Alert, Form, Modal } from 'react-bootstrap';
+import { Spinner, Alert, Modal } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import {
@@ -17,7 +17,9 @@ import {
 import type { S3Object, TableRow, SortColumn, SortDirection } from './KBFileExplorer';
 import { FileUploader } from '../FileUploader';
 import { NotificationModal } from '../NotificationModal';
-import FolderSelector from './FolderSelector';
+import DestinationFolderPicker, { type DestinationFolderPickerValue } from './DestinationFolderPicker';
+import DestinationFolderPickerModal from './DestinationFolderPickerModal';
+import FilesBulkActionBar from './FilesBulkActionBar';
 import {
   shouldShowLargeDataFileWarning,
   formatFileSize,
@@ -26,7 +28,7 @@ import {
   getFileIconColorClass,
 } from '../../utils/fileUtils';
 import type { FileTypeCategory } from '../../utils/fileUtils';
-import { listFoldersInKB, downloadFileFromS3 } from '../../utils/s3Utils';
+import { listFoldersInKB, downloadFileFromS3, downloadMultipleFilesAsZip } from '../../utils/s3Utils';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useToast } from '../../Providers/ToastContext';
 import { useFilePreviewProcessor } from '../../hooks/useFilePreviewProcessor';
@@ -153,17 +155,23 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const [pendingLargeFiles, setPendingLargeFiles] = useState<File[]>([]);
   const [clearFileUploader, setClearFileUploader] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState('');
   const [uploadInitialFolder, setUploadInitialFolder] = useState('');
   const [droppedUploadBatch, setDroppedUploadBatch] = useState<DroppedUploadBatch | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
-  const [folderOptions, setFolderOptions] = useState<string[]>([]);
-  // Destination KB chosen from the picker shown at My Files root. Does NOT
-  // switch uploadTargetKb (that would morph the modal into a subfolder picker
-  // view), it just redirects the upload to a folder KB while keeping the
-  // user's selection visible.
-  const [destinationKbId, setDestinationKbId] = useState<string | null>(null);
-  const [loadingFolders, setLoadingFolders] = useState(false);
+  // Combined destination from the tree picker shown inside the upload modal.
+  // null means "use the upload target KB's root".
+  const [uploadDestination, setUploadDestination] = useState<DestinationFolderPickerValue | null>(null);
+
+  // Bulk actions
+  const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState<{
+    kbId: string;
+    fileKeys: string[];
+    folderPaths: string[];
+    label: string;
+  } | null>(null);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Delete (files or subfolders — discriminated by `kind`)
   type DeleteConfirmState =
@@ -516,6 +524,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const handleFileClick = useCallback((originalKey: string, e: React.MouseEvent) => {
     // Ignore clicks that originated on the row's action buttons (preview, download).
     if ((e.target as HTMLElement).closest('button')) return;
+    if ((e.target as HTMLElement).closest('input[type="checkbox"]')) return;
     if (e.metaKey || e.ctrlKey || e.shiftKey) {
       setSelectedKeys((prev) => {
         const next = new Set(prev);
@@ -526,6 +535,21 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     } else {
       setSelectedKeys((prev) => (prev.size === 1 && prev.has(originalKey) ? new Set() : new Set([originalKey])));
     }
+  }, []);
+
+  /** Cmd/Ctrl click on a subfolder body toggles it in the selection. */
+  const handleFolderModifierClick = useCallback((folderId: string, e: React.MouseEvent): boolean => {
+    if ((e.target as HTMLElement).closest('button')) return false;
+    if ((e.target as HTMLElement).closest('input[type="checkbox"]')) return false;
+    if (!(e.metaKey || e.ctrlKey || e.shiftKey)) return false;
+    const folderKey = folderId.endsWith('/') ? folderId : `${folderId}/`;
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderKey)) next.delete(folderKey);
+      else next.add(folderKey);
+      return next;
+    });
+    return true;
   }, []);
 
   const onFileDragStart = useCallback(
@@ -893,28 +917,31 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   // ── Upload handlers ────────────────────────────────────────
 
+  // Lazy folder loader handed to the destination picker. The picker caches
+  // results per-KB internally, so we don't pre-fetch on modal open anymore.
+  const loadFoldersForKB = useCallback(
+    (kbId: string) => listFoldersInKB(kbId, `numa-${CLIENT_NAME}-data`, region, getCredentials),
+    [CLIENT_NAME, region, getCredentials]
+  );
+
+  // Initialise the picker's destination whenever the upload modal opens with
+  // a fresh target.
+  //
+  // - Opened from My Files root with no specific subfolder → leave the
+  //   picker at the KB-list view so the user explicitly picks a destination
+  //   (the previous behaviour silently dumped files into Personal which
+  //   surprised people).
+  // - Opened from a per-row Upload button or an external drop into a folder
+  //   → preselect that KB + subfolder so the user can upload immediately.
   useEffect(() => {
-    if (showUploadModal && uploadTargetKb) {
-      const fetchFoldersForUpload = async () => {
-        try {
-          setLoadingFolders(true);
-          const folders = await listFoldersInKB(
-            uploadTargetKb.kb_id,
-            `numa-${CLIENT_NAME}-data`,
-            region,
-            getCredentials
-          );
-          setFolderOptions(folders);
-        } catch {
-          setFolderOptions([]);
-        } finally {
-          setLoadingFolders(false);
-        }
-      };
-      fetchFoldersForUpload();
-      setSelectedFolder(uploadInitialFolder);
+    if (!showUploadModal || !uploadTargetKb) return;
+    const isFromRoot = !!rootKB && uploadTargetKb.kb_id === rootKB.kb_id && !uploadInitialFolder && !droppedUploadBatch;
+    if (isFromRoot) {
+      setUploadDestination(null);
+    } else {
+      setUploadDestination({ kbId: uploadTargetKb.kb_id, folderPath: uploadInitialFolder });
     }
-  }, [showUploadModal, uploadTargetKb, uploadInitialFolder, CLIENT_NAME, region, getCredentials]);
+  }, [showUploadModal, uploadTargetKb, uploadInitialFolder, rootKB, droppedUploadBatch]);
 
   useEffect(() => {
     if (clearFileUploader) {
@@ -933,13 +960,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   const closeUploadModal = useCallback(() => {
     setShowUploadModal(false);
-    setDestinationKbId(null);
+    setUploadDestination(null);
   }, []);
 
   function handleUploadSuccess(): void {
     setShowNotificationModal(false);
     setPendingLargeFiles([]);
-    const kbIdToRefresh = destinationKbId ?? uploadTargetKb?.kb_id;
+    const kbIdToRefresh = uploadDestination?.kbId ?? uploadTargetKb?.kb_id;
     closeUploadModal();
     setUploadSuccess(true);
     setTimeout(() => setUploadSuccess(false), 3000);
@@ -970,7 +997,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     setUploadTargetKb(kb);
     setUploadInitialFolder(initialFolder);
     setDroppedUploadBatch(null);
-    setDestinationKbId(null);
+    setUploadDestination(null);
     setShowUploadModal(true);
   }, []);
 
@@ -986,7 +1013,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
       setUploadTargetKb(kb);
       setUploadInitialFolder(folderPath);
-      setSelectedFolder(folderPath);
+      setUploadDestination({ kbId: kb.kb_id, folderPath });
       setDroppedUploadBatch({ id: Date.now(), ...batch });
       setShowUploadModal(true);
     },
@@ -1169,6 +1196,225 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       setDeleteConfirm(null);
     }
   }, [deleteConfirm, showToast, t, fetchKbFiles]);
+
+  // ── Bulk selection helpers ─────────────────────────────────
+
+  /**
+   * Extract the KB id encoded in an S3 key. Returns null when the key does
+   * not live under a known prefix (eg synthetic state markers).
+   */
+  const kbIdFromKey = useCallback((key: string): string | null => {
+    const match = key.match(/^documents\/kb-([^/]+)\//);
+    return match ? match[1] : null;
+  }, []);
+
+  /**
+   * Split the current selection into files vs folders and identify the
+   * single source KB. When the selection spans multiple KBs we report it
+   * as mixed so bulk actions can be disabled with a clear hint.
+   */
+  const selectionStats = useMemo(() => {
+    const fileKeys: string[] = [];
+    const folderKeys: string[] = [];
+    const kbIds = new Set<string>();
+    for (const key of selectedKeys) {
+      const owningKb = kbIdFromKey(key);
+      if (owningKb) kbIds.add(owningKb);
+      if (key.endsWith('/')) folderKeys.push(key);
+      else fileKeys.push(key);
+    }
+    return {
+      fileKeys,
+      folderKeys,
+      kbIds,
+      sourceKbId: kbIds.size === 1 ? Array.from(kbIds)[0] : null,
+      isMixedKb: kbIds.size > 1,
+    };
+  }, [selectedKeys, kbIdFromKey]);
+
+  const selectionSourceKb = useMemo(() => {
+    const id = selectionStats.sourceKbId;
+    if (!id) return null;
+    if (rootKB && id === rootKB.kb_id) return rootKB;
+    return allUserKBs.find((k) => k.kb_id === id) ?? null;
+  }, [selectionStats.sourceKbId, rootKB, allUserKBs]);
+
+  const canBulkAct = !!selectionSourceKb && !selectionStats.isMixedKb && canEditKb(selectionSourceKb.kb_id);
+
+  /** Toggle a single row's selection via its checkbox. */
+  const toggleRowSelection = useCallback((key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // ── Bulk actions ────────────────────────────────────────────
+
+  const openBulkMove = useCallback(() => {
+    if (!canBulkAct) return;
+    setShowBulkMoveModal(true);
+  }, [canBulkAct]);
+
+  const executeBulkMove = useCallback(
+    async (target: DestinationFolderPickerValue) => {
+      if (!selectionSourceKb) return;
+      const keys = Array.from(selectedKeys);
+      if (keys.length === 0) return;
+      setShowBulkMoveModal(false);
+      await executeMove(selectionSourceKb.kb_id, keys, target.kbId, target.folderPath);
+    },
+    [executeMove, selectedKeys, selectionSourceKb]
+  );
+
+  const executeBulkDownload = useCallback(async () => {
+    if (selectionStats.fileKeys.length === 0) {
+      showToast({
+        message: t('bulk.downloadFilesOnly', { defaultValue: 'Only files can be downloaded — folders were skipped.' }),
+        variant: 'warning',
+      });
+      return;
+    }
+    setIsBulkDownloading(true);
+    try {
+      if (selectionStats.fileKeys.length === 1) {
+        const onlyKey = selectionStats.fileKeys[0];
+        const filename = onlyKey.split('/').pop() || onlyKey;
+        await downloadFileFromS3(onlyKey, dataBucket, region, getCredentials, filename);
+      } else {
+        await downloadMultipleFilesAsZip(selectionStats.fileKeys, dataBucket, region, getCredentials, 'numa-files.zip');
+      }
+      if (selectionStats.folderKeys.length > 0) {
+        showToast({
+          message: t('bulk.downloadSkippedFolders', {
+            defaultValue: '{{count}} folder(s) were skipped — bulk download supports files only.',
+            count: selectionStats.folderKeys.length,
+          }),
+          variant: 'info',
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({
+        message: t('bulk.downloadError', { defaultValue: 'Download failed: {{error}}', error: msg }),
+        variant: 'error',
+      });
+    } finally {
+      setIsBulkDownloading(false);
+    }
+  }, [dataBucket, region, getCredentials, selectionStats, showToast, t]);
+
+  const openBulkDeleteConfirm = useCallback(() => {
+    if (!selectionSourceKb) return;
+    const sourceKbId = selectionSourceKb.kb_id;
+    const basePrefix = `documents/kb-${sourceKbId}/`;
+    const folderPaths = selectionStats.folderKeys
+      .map((k) => (k.startsWith(basePrefix) ? k.slice(basePrefix.length).replace(/\/$/, '') : ''))
+      .filter((p) => p.length > 0);
+    const fileKeys = selectionStats.fileKeys;
+    if (fileKeys.length === 0 && folderPaths.length === 0) return;
+    const labelKey =
+      fileKeys.length > 0 && folderPaths.length > 0
+        ? 'bulk.confirmDeleteMixed'
+        : folderPaths.length > 0
+          ? 'bulk.confirmDeleteFolders'
+          : 'bulk.confirmDeleteFiles';
+    setBulkConfirm({
+      kbId: sourceKbId,
+      fileKeys,
+      folderPaths,
+      label: t(labelKey, {
+        defaultValue:
+          fileKeys.length > 0 && folderPaths.length > 0
+            ? 'Delete {{files}} file(s) and {{folders}} folder(s)?'
+            : folderPaths.length > 0
+              ? 'Delete {{folders}} folder(s) and everything inside?'
+              : 'Delete {{files}} file(s)?',
+        files: fileKeys.length,
+        folders: folderPaths.length,
+      }),
+    });
+  }, [selectionSourceKb, selectionStats, t]);
+
+  const executeBulkDelete = useCallback(async () => {
+    if (!bulkConfirm) return;
+    setIsBulkDeleting(true);
+    const { kbId, fileKeys, folderPaths } = bulkConfirm;
+    let succeededFiles = 0;
+    let failedFiles = 0;
+    let succeededFolders = 0;
+    let failedFolders = 0;
+    try {
+      if (fileKeys.length > 0) {
+        const withMeta = fileKeys.flatMap((k) => [k, `${k}.metadata.json`]);
+        const result = await knowledgeBaseService.deleteKBFiles(kbId, withMeta);
+        succeededFiles = result.successful.filter((k) => !k.endsWith('.metadata.json')).length;
+        failedFiles = result.failed.filter((f) => !f.key.endsWith('.metadata.json')).length;
+        const deletedSet = new Set(result.successful);
+        setKbFileStates((prev) => {
+          const next = new Map(prev);
+          const s = prev.get(kbId);
+          if (s) {
+            next.set(kbId, { ...s, files: s.files.filter((f) => !deletedSet.has(f.Key)) });
+          }
+          return next;
+        });
+      }
+      for (const path of folderPaths) {
+        try {
+          await knowledgeBaseService.deleteSubfolder(kbId, path, true);
+          succeededFolders += 1;
+          const folderPrefix = `documents/kb-${kbId}/${path}/`.replace(/\/{2,}/g, '/');
+          setKbFileStates((prev) => {
+            const next = new Map(prev);
+            const s = prev.get(kbId);
+            if (s) {
+              next.set(kbId, {
+                ...s,
+                files: s.files.filter((f) => !f.Key.startsWith(folderPrefix)),
+                expandedFolders: new Set([...s.expandedFolders].filter((id) => !id.startsWith(folderPrefix))),
+                loadedFolders: new Set([...s.loadedFolders].filter((id) => !id.startsWith(folderPrefix))),
+              });
+            }
+            return next;
+          });
+        } catch (folderErr) {
+          failedFolders += 1;
+          console.error('Bulk subfolder delete failed for', path, folderErr);
+        }
+      }
+      const totalFailed = failedFiles + failedFolders;
+      const totalSucceeded = succeededFiles + succeededFolders;
+      if (totalFailed > 0) {
+        showToast({
+          message: t('bulk.deletePartial', {
+            defaultValue: 'Deleted {{succeeded}} item(s); {{failed}} failed',
+            succeeded: totalSucceeded,
+            failed: totalFailed,
+          }),
+          variant: 'warning',
+        });
+      } else {
+        showToast({
+          message: t('bulk.deleteSuccess', {
+            defaultValue: 'Deleted {{count}} item(s)',
+            count: totalSucceeded,
+          }),
+          variant: 'success',
+        });
+      }
+      setSelectedKeys(new Set());
+      fetchKbFiles(kbId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({ message: t('delete.error', { error: msg }), variant: 'error' });
+    } finally {
+      setIsBulkDeleting(false);
+      setBulkConfirm(null);
+    }
+  }, [bulkConfirm, fetchKbFiles, showToast, t]);
 
   // ── Folder context menu actions ─────────────────────────────
 
@@ -1558,6 +1804,45 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     }
   }
 
+  // Selectable rows in the current visible row set — used by the header
+  // "select all" checkbox + the bulk bar's deselect action.
+  const selectableRowKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const entry of rows) {
+      if (entry.special) continue;
+      if (entry.isKbFolder) continue;
+      const isSubfolder = entry.row.type === 'folder';
+      if (isSubfolder) {
+        const folderKey = entry.row.id.endsWith('/') ? entry.row.id : `${entry.row.id}/`;
+        keys.push(folderKey);
+      } else if (entry.row.originalKey) {
+        keys.push(entry.row.originalKey);
+      }
+    }
+    return keys;
+  }, [rows]);
+
+  const selectedVisibleCount = useMemo(
+    () => selectableRowKeys.reduce((count, k) => (selectedKeys.has(k) ? count + 1 : count), 0),
+    [selectableRowKeys, selectedKeys]
+  );
+  const allVisibleSelected = selectableRowKeys.length > 0 && selectedVisibleCount === selectableRowKeys.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
+
+  const toggleSelectAllVisible = useCallback(() => {
+    setSelectedKeys((prev) => {
+      if (selectableRowKeys.length === 0) return prev;
+      const fullyContained = selectableRowKeys.every((k) => prev.has(k));
+      const next = new Set(prev);
+      if (fullyContained) {
+        for (const k of selectableRowKeys) next.delete(k);
+      } else {
+        for (const k of selectableRowKeys) next.add(k);
+      }
+      return next;
+    });
+  }, [selectableRowKeys]);
+
   // ── Render ─────────────────────────────────────────────────
 
   const mainContent = (
@@ -1736,16 +2021,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             <option value="7d">{t('filters.dateOptions.last7')}</option>
             <option value="30d">{t('filters.dateOptions.last30')}</option>
           </select>
-          {selectedKeys.size > 0 && isInsideFolder && canEditCurrent && (
-            <button
-              className="finder-btn finder-btn--danger"
-              onClick={() => confirmDeleteFiles(currentFolder!.kbId, Array.from(selectedKeys))}
-              title={t('delete.confirm', { count: selectedKeys.size })}
-            >
-              <i className="bi bi-trash" />
-              <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
-            </button>
-          )}
           <button
             className="finder-btn"
             onClick={() => {
@@ -1777,9 +2052,24 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       {isInsideFolder && (
         <div className="finder-columns finder-grid-6">
           <div
-            className={`finder-col ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
-            onClick={() => handleSortToggle('name')}
+            className={`finder-col finder-col--name ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest('input[type="checkbox"]')) return;
+              handleSortToggle('name');
+            }}
           >
+            <input
+              type="checkbox"
+              className="finder-col__checkbox"
+              checked={allVisibleSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someVisibleSelected;
+              }}
+              onChange={toggleSelectAllVisible}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={t('bulk.selectAllVisible', { defaultValue: 'Select all visible items' })}
+              disabled={selectableRowKeys.length === 0}
+            />
             {tKb('fileExplorer.table.name')}
             {sortColumn === 'name' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
           </div>
@@ -2034,7 +2324,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             const isSubfolderExpanded = isSubfolder && (kbState?.expandedFolders.has(row.id) ?? false);
             const isSubfolderLoading = isSubfolder && (kbState?.loadingFolders.has(row.id) ?? false);
             const rowCanEdit = canEditKb(kbId);
+            const folderSelectionKey = isSubfolder ? (row.id.endsWith('/') ? row.id : `${row.id}/`) : null;
             const isFileSelected = !isSubfolder && !!row.originalKey && selectedKeys.has(row.originalKey);
+            const isFolderSelected = isSubfolder && !!folderSelectionKey && selectedKeys.has(folderSelectionKey);
+            const isRowSelected = isFileSelected || isFolderSelected;
+            const selectionKey = isSubfolder ? folderSelectionKey : (row.originalKey ?? null);
             const isRowDropTarget = isSubfolder && dragOverTarget === row.id;
 
             return (
@@ -2045,7 +2339,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   'finder-grid-6',
                   isSubfolder ? 'finder-row--folder' : '',
                   `finder-row--depth-${row.depth}`,
-                  isFileSelected ? 'finder-row--selected' : '',
+                  isRowSelected ? 'finder-row--selected' : '',
                   isRowDropTarget ? 'finder-row--drop-over' : '',
                   !isSubfolder ? 'finder-row--file-selectable' : '',
                 ]
@@ -2093,7 +2387,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   }
                 }}
                 onClick={(e) => {
-                  if (!isSubfolder && row.originalKey) handleFileClick(row.originalKey, e);
+                  if (isSubfolder) {
+                    handleFolderModifierClick(row.id, e);
+                  } else if (row.originalKey) {
+                    handleFileClick(row.originalKey, e);
+                  }
                 }}
                 onDoubleClick={() => {
                   if (isSubfolder) {
@@ -2114,6 +2412,20 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                 style={{ cursor: 'pointer' }}
               >
                 <div className="finder-row__name-content">
+                  {selectionKey && (
+                    <input
+                      type="checkbox"
+                      className="finder-row__checkbox"
+                      checked={isRowSelected}
+                      onChange={() => toggleRowSelection(selectionKey)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={
+                        isSubfolder
+                          ? t('bulk.selectFolder', { defaultValue: 'Select folder' })
+                          : t('bulk.selectFile', { defaultValue: 'Select file' })
+                      }
+                    />
+                  )}
                   {isSubfolder ? (
                     isSubfolderLoading ? (
                       <Spinner
@@ -2308,10 +2620,23 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
       {(() => {
         if (!showUploadModal || !uploadTargetKb) return null;
-        const isAtMyFilesRoot = !!rootKB && uploadTargetKb.kb_id === rootKB.kb_id && !selectedFolder;
-        const destinationKb = destinationKbId ? (allUserKBs.find((k) => k.kb_id === destinationKbId) ?? null) : null;
-        const effectiveKbId = destinationKb?.kb_id ?? uploadTargetKb.kb_id;
-        const effectiveKbName = destinationKb ? displayKbName(destinationKb) : displayKbName(uploadTargetKb);
+        // `||` not `??` — the picker uses kbId='' as a "no KB chosen" state
+        // when the user pops back to the KB list. We always need a real KB
+        // to upload into, so fall back to the modal's original target.
+        const effectiveKbId = uploadDestination?.kbId || uploadTargetKb.kb_id;
+        const effectiveFolderPath = uploadDestination?.kbId ? uploadDestination.folderPath : '';
+        const effectiveKb =
+          (rootKB && effectiveKbId === rootKB.kb_id ? rootKB : allUserKBs.find((k) => k.kb_id === effectiveKbId)) ??
+          uploadTargetKb;
+        const effectiveKbName = displayKbName(effectiveKb);
+        const isAtMyFilesRoot = !!rootKB && uploadTargetKb.kb_id === rootKB.kb_id;
+        // Editable KB options for the picker. When opened from a specific
+        // folder's upload button (eg the per-row Upload icon), lock the user
+        // to that KB so they don't accidentally retarget elsewhere.
+        const writableKBs = allUserKBs.filter((kb) => kb.role === 'OWNER' || kb.role === 'EDITOR');
+        const pickerKBOptions = writableKBs.map((kb) => ({ kb, displayName: displayKbName(kb) }));
+        const pickerRootOption = rootKB ? { kb: rootKB, displayName: displayKbName(rootKB) } : null;
+        const lockedKbId = isAtMyFilesRoot ? undefined : uploadTargetKb.kb_id;
         return (
           <div className="modal show d-block kb-upload-modal-backdrop" onClick={closeUploadModal}>
             <div
@@ -2332,60 +2657,46 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                     <br />
                     <strong>{t('upload.noteLabel')}</strong> {t('upload.note')}
                   </p>
-                  {isAtMyFilesRoot ? (
-                    <Form.Group className="mb-3">
-                      <Form.Label>{t('upload.destinationLabel')}</Form.Label>
-                      <div className="d-flex align-items-center gap-2">
-                        <Form.Select
-                          value={destinationKbId ?? ''}
-                          onChange={(e) => setDestinationKbId(e.target.value || null)}
-                        >
-                          <option value="">{t('upload.destinationPlaceholder')}</option>
-                          {allUserKBs
-                            .filter((kb) => kb.role === 'OWNER' || kb.role === 'EDITOR')
-                            .map((kb) => (
-                              <option key={kb.kb_id} value={kb.kb_id}>
-                                {kb.kb_name}
-                              </option>
-                            ))}
-                        </Form.Select>
-                        <button
-                          type="button"
-                          className="btn btn-outline-primary btn-sm text-nowrap"
-                          onClick={() => {
+                  <DestinationFolderPicker
+                    kbOptions={pickerKBOptions}
+                    rootKBOption={pickerRootOption}
+                    value={uploadDestination}
+                    onChange={setUploadDestination}
+                    loadFoldersForKB={loadFoldersForKB}
+                    lockedKbId={lockedKbId}
+                    label={t('upload.destinationLabel')}
+                    helpText={t('upload.destinationHelp')}
+                    onCreateFolder={
+                      isAtMyFilesRoot
+                        ? () => {
                             closeUploadModal();
                             setShowCreateModal(true);
-                          }}
-                        >
-                          <i className="bi bi-folder-plus me-1" />
-                          {t('upload.folderHintButton')}
-                        </button>
-                      </div>
-                      <Form.Text className="text-muted">{t('upload.destinationHelp')}</Form.Text>
-                    </Form.Group>
-                  ) : (
-                    <FolderSelector
-                      selectedFolder={selectedFolder}
-                      onFolderChange={setSelectedFolder}
-                      folderOptions={folderOptions}
-                      disabled={loadingFolders}
-                      label={t('upload.folderLabel')}
-                    />
-                  )}
-                  <FileUploader
-                    onUploadSuccess={handleUploadSuccess}
-                    onFileSelect={handleFileSelect}
-                    clearFiles={clearFileUploader}
-                    kb_id={effectiveKbId}
-                    selectedFolder={selectedFolder}
-                    enableFolderUpload
-                    preloadedFiles={droppedUploadBatch}
-                    // Skip auto-upload when the user dropped onto the root view
-                    // surface — they should be able to confirm the destination
-                    // first (defaults to Personal but they may want a folder).
-                    // For drops onto a specific folder row, auto-upload stays.
-                    autoUploadPreloaded={!isAtMyFilesRoot}
+                          }
+                        : undefined
+                    }
                   />
+                  {uploadDestination?.kbId ? (
+                    <FileUploader
+                      onUploadSuccess={handleUploadSuccess}
+                      onFileSelect={handleFileSelect}
+                      clearFiles={clearFileUploader}
+                      kb_id={effectiveKbId}
+                      selectedFolder={effectiveFolderPath}
+                      enableFolderUpload
+                      preloadedFiles={droppedUploadBatch}
+                      // Auto-upload stays for explicit per-folder drops only.
+                      // When the user opened the modal from the My Files root
+                      // they need to pick a destination first.
+                      autoUploadPreloaded={!isAtMyFilesRoot}
+                    />
+                  ) : (
+                    <div className="kb-upload-modal__hint">
+                      <i className="bi bi-arrow-up me-2" />
+                      {t('upload.pickDestinationHint', {
+                        defaultValue: 'Pick a destination folder above to continue.',
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2524,6 +2835,81 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           )}
         </Modal.Body>
       </Modal>
+
+      {/* Bulk move destination picker */}
+      {selectionSourceKb && (
+        <DestinationFolderPickerModal
+          show={showBulkMoveModal}
+          onHide={() => setShowBulkMoveModal(false)}
+          title={t('bulk.moveTitle', { defaultValue: 'Move {{count}} item(s)', count: selectedKeys.size })}
+          description={t('bulk.moveDescription', {
+            defaultValue: 'Pick a destination folder. Items keep their filenames and folder structure.',
+          })}
+          confirmLabel={t('bulk.moveConfirm', { defaultValue: 'Move here' })}
+          onConfirm={(target) => void executeBulkMove(target)}
+          inProgress={isMoving}
+          kbOptions={allUserKBs
+            .filter((kb) => kb.role === 'OWNER' || kb.role === 'EDITOR')
+            .map((kb) => ({ kb, displayName: displayKbName(kb) }))}
+          rootKBOption={rootKB ? { kb: rootKB, displayName: displayKbName(rootKB) } : null}
+          loadFoldersForKB={loadFoldersForKB}
+          initialValue={selectionSourceKb ? { kbId: selectionSourceKb.kb_id, folderPath: '' } : null}
+        />
+      )}
+
+      {/* Bulk delete confirmation */}
+      <Modal show={!!bulkConfirm} onHide={() => setBulkConfirm(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{bulkConfirm?.label}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-0">{t('delete.confirmMessage')}</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <button className="btn btn-secondary btn-sm" onClick={() => setBulkConfirm(null)} disabled={isBulkDeleting}>
+            {t('rename.cancel')}
+          </button>
+          <button className="btn btn-danger btn-sm" onClick={executeBulkDelete} disabled={isBulkDeleting}>
+            {isBulkDeleting ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-1" />
+                {t('delete.inProgress')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-trash me-1" />
+                {t('bulk.deleteConfirmCta', { defaultValue: 'Delete' })}
+              </>
+            )}
+          </button>
+        </Modal.Footer>
+      </Modal>
+
+      <FilesBulkActionBar
+        selectedCount={selectedKeys.size}
+        fileCount={selectionStats.fileKeys.length}
+        folderCount={selectionStats.folderKeys.length}
+        canMove={canBulkAct && !isMoving && !isBulkDeleting}
+        canDownload={selectionStats.fileKeys.length > 0 && !isBulkDownloading}
+        canDelete={canBulkAct && !isBulkDeleting}
+        inProgress={isMoving || isBulkDeleting || isBulkDownloading}
+        onMove={openBulkMove}
+        onDownload={() => void executeBulkDownload()}
+        onDelete={openBulkDeleteConfirm}
+        onClear={() => setSelectedKeys(new Set())}
+        warning={
+          selectionStats.isMixedKb
+            ? t('bulk.mixedKbWarning', {
+                defaultValue:
+                  'Selection spans multiple folders — move and delete are disabled until you narrow it down.',
+              })
+            : !canBulkAct && selectionSourceKb && !canEditKb(selectionSourceKb.kb_id)
+              ? t('bulk.readOnlyWarning', {
+                  defaultValue: "You can't change items in a folder you only have view access to.",
+                })
+              : undefined
+        }
+      />
     </div>
   );
 
