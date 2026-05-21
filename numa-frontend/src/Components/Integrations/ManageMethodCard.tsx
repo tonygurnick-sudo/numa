@@ -16,6 +16,11 @@ type ManageMethodCardProps = {
    *  and the action button label reflects that picking activates *and* turns
    *  off user-choice mode. */
   isUserChoiceMode?: boolean;
+  /** Native-only: the per-slug `ext-api-doc/<slug>/` files aren't deployed
+   *  for this client. Greys the card out and disables Activate / Reconfigure
+   *  so the admin can't drive the LLM into a state where it has to use the
+   *  native connector without bundled API docs. */
+  docsUnavailable?: boolean;
   t: TFunction;
   /** Make this method the active one. For an unconfigured native method this
    *  should kick off the credential wizard; for Pipedream it's a one-PUT
@@ -41,6 +46,7 @@ export const ManageMethodCard = ({
   isActive,
   isConfigured,
   isUserChoiceMode = false,
+  docsUnavailable = false,
   t,
   onActivate,
   onReconfigure,
@@ -57,6 +63,12 @@ export const ManageMethodCard = ({
   };
 
   const isPipedream = method === 'pipedream';
+  // docsUnavailable is native-only by design — Pipedream rides on the proxy
+  // account's docs and doesn't need per-slug `ext-api-doc/`. Guard here so a
+  // caller passing the flag for a Pipedream card doesn't accidentally lock
+  // the Pipedream side too.
+  const docsLocked = docsUnavailable && !isPipedream;
+  const docsTooltip = docsLocked ? t('dataConnectors.oauth.docsUnavailable') : undefined;
   const heading = isPipedream
     ? t('manage.method.pipedreamHeading', { defaultValue: 'Pipedream' })
     : t('manage.method.nativeHeading', { defaultValue: 'Native connector' });
@@ -80,7 +92,11 @@ export const ManageMethodCard = ({
   const useThisLabel = t('manage.method.useThis', { defaultValue: 'Use this method' });
 
   return (
-    <div className={`border rounded-3 p-3 ${showActive ? 'border-primary bg-primary bg-opacity-10' : 'bg-white'}`}>
+    <div
+      className={`border rounded-3 p-3 ${showActive ? 'border-primary bg-primary bg-opacity-10' : 'bg-white'}`}
+      title={docsTooltip}
+      style={docsLocked ? { opacity: 0.45, filter: 'grayscale(100%)' } : undefined}
+    >
       <div className="d-flex align-items-center justify-content-between gap-2 mb-1">
         <div className="d-flex align-items-center gap-2">
           <MethodBadge method={method} size="xs" />
@@ -101,7 +117,14 @@ export const ManageMethodCard = ({
       </div>
       <p className="small text-muted mb-2">{description}</p>
 
-      {!isConfigured && !isPipedream && (
+      {docsLocked && (
+        <div className="small d-flex align-items-start gap-2 text-warning mb-2">
+          <AlertTriangle size={14} className="flex-shrink-0 mt-1" />
+          <span>{t('dataConnectors.oauth.docsUnavailable')}</span>
+        </div>
+      )}
+
+      {!isConfigured && !isPipedream && !docsLocked && (
         <div className="small d-flex align-items-start gap-2 text-warning mb-2">
           <AlertTriangle size={14} className="flex-shrink-0 mt-1" />
           <span>
@@ -115,7 +138,7 @@ export const ManageMethodCard = ({
 
       <div className="d-flex gap-2">
         {!showActive && (
-          <Button variant="primary" size="sm" onClick={() => void handleActivate()} disabled={busy}>
+          <Button variant="primary" size="sm" onClick={() => void handleActivate()} disabled={busy || docsLocked}>
             {busy ? (
               <Spinner size="sm" />
             ) : isConfigured ? (
@@ -126,7 +149,7 @@ export const ManageMethodCard = ({
           </Button>
         )}
         {isConfigured && onReconfigure && (
-          <Button variant="outline-secondary" size="sm" onClick={onReconfigure} disabled={busy}>
+          <Button variant="outline-secondary" size="sm" onClick={onReconfigure} disabled={busy || docsLocked}>
             <i className="bi bi-gear me-1" />
             {t('manage.method.reconfigure', { defaultValue: 'Reconfigure' })}
           </Button>

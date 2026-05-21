@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { Link2, RefreshCw, Grid3X3, RefreshCcw, AlertTriangle, Settings, Eye, EyeOff } from 'lucide-react';
 
 import { getFlag } from '../utils/featureFlags';
+import { extractApiError } from '../utils/extractApiError';
 
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
@@ -39,7 +40,8 @@ import {
   getConnectionIcon,
   getConnectionConfig,
 } from '../config/integrationsConfig';
-import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+import { getConnectorById, surfacesInFiles } from '../Components/DataConnectors/connectorRegistry';
+import { connectorSlugForPipedream } from '../Components/Integrations/integrationCatalogHelpers';
 import type { DataConnectorStatus } from '../types/dataConnectors';
 import type { ConnectionStatus } from '../types/pipedream';
 
@@ -137,6 +139,16 @@ export const UnifiedIntegrationsPage = () => {
   // (vault secret exists, no data-connector-settings row) visible as an
   // available method when computing what users can connect through.
   const [configuredNativeSlugs, setConfiguredNativeSlugs] = useState<Set<string>>(new Set());
+  // Per-PAT-connector connection status. PAT credentials live in the user
+  // vault under `/pat/{slug}/status` — NOT in the data-connectors DDB table
+  // that `DataConnectorsService.listStatus` reads from. After a user saves
+  // a PAT via the credentials modal, the vault is updated but the legacy
+  // table isn't, so `nativeConnections` shows them as disconnected until
+  // something else writes that row. Mirror the OAuth pattern (per-slug
+  // /pat/{slug}/status fetch) so the connection state reflects the vault,
+  // which is what the workspace agent actually consults at tool-call time.
+  const [patConnectedSlugs, setPatConnectedSlugs] = useState<Set<string>>(new Set());
+
   // Per-OAuth-connector connection status. Native OAuth tokens live in the
   // user's vault (under `oauth-{slug}`), not in the data-connectors table —
   // so the only reliable way to know if a user is connected is to hit the
@@ -187,22 +199,38 @@ export const UnifiedIntegrationsPage = () => {
           ConnectorsService.listConfigured()
             .then(async ({ oauth, pat }) => {
               const oauthSlugs = oauth.map((c) => c.id);
-              setConfiguredNativeSlugs(new Set([...oauthSlugs, ...pat.map((c) => c.id)]));
-              // Per-OAuth connection status — fetch each in parallel. The
-              // backend status check reads from the consolidated vault, so
-              // this is the only reliable way to know if a user has a live
-              // OAuth token for a given connector.
-              const statuses = await Promise.all(
-                oauthSlugs.map(async (slug) => {
-                  try {
-                    const s = await ConnectorsService.getStatus(slug);
-                    return [slug, s.status === 'connected'] as const;
-                  } catch {
-                    return [slug, false] as const;
-                  }
-                })
-              );
-              setOauthConnectedSlugs(new Set(statuses.filter(([, c]) => c).map(([slug]) => slug)));
+              const patSlugs = pat.map((c) => c.id);
+              setConfiguredNativeSlugs(new Set([...oauthSlugs, ...patSlugs]));
+              // Per-connector status — fetch all in parallel via
+              // ConnectorsService.getStatus, which classifies each id against
+              // the registry and routes OAuth → `/oauth/{id}/status` and
+              // PAT → `/pat/{id}/status`. Hitting `OAuthProvidersService`
+              // directly here sent every connector through the OAuth
+              // endpoint and 400-rejected PAT connectors.
+              const [oauthStatuses, patStatuses] = await Promise.all([
+                Promise.all(
+                  oauthSlugs.map(async (slug) => {
+                    try {
+                      const s = await ConnectorsService.getStatus(slug);
+                      return [slug, s.status === 'connected'] as const;
+                    } catch {
+                      return [slug, false] as const;
+                    }
+                  })
+                ),
+                Promise.all(
+                  patSlugs.map(async (slug) => {
+                    try {
+                      const s = await ConnectorsService.getStatus(slug);
+                      return [slug, s.status === 'connected'] as const;
+                    } catch {
+                      return [slug, false] as const;
+                    }
+                  })
+                ),
+              ]);
+              setOauthConnectedSlugs(new Set(oauthStatuses.filter(([, c]) => c).map(([slug]) => slug)));
+              setPatConnectedSlugs(new Set(patStatuses.filter(([, c]) => c).map(([slug]) => slug)));
             })
             .catch(() => undefined),
         ];
@@ -230,7 +258,7 @@ export const UnifiedIntegrationsPage = () => {
         }
         await Promise.all(tasks);
       } catch (e) {
-        setError((e as Error).message || t('errors.loadStatus', { message: '' }));
+        setError(extractApiError(e, t('errors.loadStatus', { message: '' })));
       } finally {
         setLoading(false);
         // Flip once we've finished a load attempt — even on error, so the grid
@@ -276,9 +304,12 @@ export const UnifiedIntegrationsPage = () => {
         // fall back to it as effectiveMethod when admin is in user-choice
         // mode — otherwise the card would say "Not connected" even when
         // there's an active session via one of the methods.
-        // For native: OAuth tokens live in the user vault (oauthConnectedSlugs
-        // from /oauth/{slug}/status), PAT/token connectors live in the
-        // data-connectors DDB table (nativeConnections).
+        // For native: both OAuth and PAT tokens live in the user vault
+        // (oauthConnectedSlugs from /oauth/{slug}/status; patConnectedSlugs
+        // from /pat/{slug}/status). The legacy `nativeConnections` table is
+        // kept as a fallback for older connectors that still write rows
+        // there, but the vault is the source of truth — when a user saves
+        // a PAT, only the vault is updated, so the legacy table will lag.
         const connectedVia: IntegrationMethod | null = (() => {
           if (entry.pipedreamSlug) {
             const conn = pipedreamConnections.find((c) => c.app_name === entry.pipedreamSlug);
@@ -286,6 +317,7 @@ export const UnifiedIntegrationsPage = () => {
           }
           if (entry.connectorSlug) {
             if (oauthConnectedSlugs.has(entry.connectorSlug)) return 'native';
+            if (patConnectedSlugs.has(entry.connectorSlug)) return 'native';
             // Status filter is critical: without it, a row left behind from a
             // prior connect (status='disconnected', 'configured', etc.) makes
             // the card look connected and traps the user. Only rows that
@@ -331,7 +363,15 @@ export const UnifiedIntegrationsPage = () => {
         if (a.isConnected !== b.isConnected) return a.isConnected ? -1 : 1;
         return a.display.name.localeCompare(b.display.name);
       });
-  }, [catalog, configuredNativeSlugs, pipedreamConnections, nativeConnections, oauthConnectedSlugs, user]);
+  }, [
+    catalog,
+    configuredNativeSlugs,
+    pipedreamConnections,
+    nativeConnections,
+    oauthConnectedSlugs,
+    patConnectedSlugs,
+    user,
+  ]);
 
   // Split into two groups: services the user can actually connect to right
   // now (≥1 admin-enabled method) vs. services that exist in the catalog but
@@ -452,7 +492,7 @@ export const UnifiedIntegrationsPage = () => {
           await connectNative(svc.entry.connectorSlug);
         }
       } catch (e) {
-        setError((e as Error).message || 'Connect failed');
+        setError(extractApiError(e, t('errors.connectFailed', { defaultValue: 'Connect failed' })));
       } finally {
         setBusySlug(null);
         setChooserService(null);
@@ -521,11 +561,14 @@ export const UnifiedIntegrationsPage = () => {
       const conSlug = svc.entry.connectorSlug;
       const pdActive = pdSlug ? pipedreamConnections.find((c) => c.app_name === pdSlug)?.status === 'connected' : false;
       const nativeOAuthActive = conSlug ? oauthConnectedSlugs.has(conSlug) : false;
-      // Filter PAT activity by status='connected' — a stale row left over
-      // from a prior failed disconnect must NOT count as "still active" or
-      // we end up firing the wrong disconnect path and looping.
+      // PAT can be live in two places — the vault (patConnectedSlugs from
+      // /pat/{slug}/status, the source of truth) OR a legacy DDB row in
+      // nativeConnections. Treat either as "active" so disconnect actually
+      // tears down both. The vault path is the post-FEAT-143 default; the
+      // DDB row is residual and may or may not exist.
       const nativePatActive = conSlug
-        ? nativeConnections.some((c) => c.connector_id === conSlug && c.status === 'connected')
+        ? patConnectedSlugs.has(conSlug) ||
+          nativeConnections.some((c) => c.connector_id === conSlug && c.status === 'connected')
         : false;
       // Whether there is ANY row in the data-connectors table for this
       // connector — we want to clear it regardless of OAuth vs PAT so a
@@ -545,6 +588,13 @@ export const UnifiedIntegrationsPage = () => {
       }
       if (nativeOAuthActive && conSlug) {
         setOauthConnectedSlugs((prev) => {
+          const next = new Set(prev);
+          next.delete(conSlug);
+          return next;
+        });
+      }
+      if (nativePatActive && conSlug) {
+        setPatConnectedSlugs((prev) => {
           const next = new Set(prev);
           next.delete(conSlug);
           return next;
@@ -584,7 +634,7 @@ export const UnifiedIntegrationsPage = () => {
         // page reflects truth, not a stale snapshot.
         await reload({ forceRefresh: true });
       } catch (e) {
-        setError((e as Error).message || 'Disconnect failed');
+        setError(extractApiError(e, t('errors.disconnectFailed', { defaultValue: 'Disconnect failed' })));
         await reload({ forceRefresh: true });
       } finally {
         setBusySlug(null);
@@ -598,6 +648,7 @@ export const UnifiedIntegrationsPage = () => {
       user,
       pipedreamConnections,
       oauthConnectedSlugs,
+      patConnectedSlugs,
       nativeConnections,
       reload,
       numaDelete,
@@ -614,7 +665,8 @@ export const UnifiedIntegrationsPage = () => {
       const pdActive = pdSlug ? pipedreamConnections.find((c) => c.app_name === pdSlug)?.status === 'connected' : false;
       const nativeOAuthActive = conSlug ? oauthConnectedSlugs.has(conSlug) : false;
       const nativePatActive = conSlug
-        ? nativeConnections.some((c) => c.connector_id === conSlug && c.status === 'connected')
+        ? patConnectedSlugs.has(conSlug) ||
+          nativeConnections.some((c) => c.connector_id === conSlug && c.status === 'connected')
         : false;
       const hasDataConnectorRow = conSlug ? nativeConnections.some((c) => c.connector_id === conSlug) : false;
 
@@ -635,7 +687,7 @@ export const UnifiedIntegrationsPage = () => {
       }
       await Promise.all(tasks);
     },
-    [lambdaClient, user, pipedreamConnections, oauthConnectedSlugs, nativeConnections, numaDelete]
+    [lambdaClient, user, pipedreamConnections, oauthConnectedSlugs, patConnectedSlugs, nativeConnections, numaDelete]
   );
 
   // Switch flow: open the method chooser immediately. The actual disconnect
@@ -846,7 +898,7 @@ export const UnifiedIntegrationsPage = () => {
               const refreshed = services.find((s) => s.entry.slug === live.entry.slug) ?? live;
               await handleConnect(refreshed, method);
             } catch (e) {
-              setError((e as Error).message || t('errors.switchFailed', { defaultValue: 'Switch failed' }));
+              setError(extractApiError(e, t('errors.switchFailed', { defaultValue: 'Switch failed' })));
             } finally {
               setBusySlug(null);
             }
@@ -1014,6 +1066,38 @@ const IntegrationCard = ({
                   {t('methodChooser.userPicks', { defaultValue: 'Choose method' })}
                 </span>
               )}
+              {(() => {
+                // File-store badge: visible hint that this integration's files
+                // appear under Files → Remote Files. Resolved via the native
+                // connector slug, falling back to the Pipedream-to-native
+                // mapping for Pipedream-only entries.
+                const nativeSlug =
+                  svc.entry.connectorSlug ??
+                  (svc.entry.pipedreamSlug ? connectorSlugForPipedream(svc.entry.pipedreamSlug) : null);
+                if (!nativeSlug || !surfacesInFiles(nativeSlug)) return null;
+                return (
+                  <span
+                    className="badge bg-info-subtle text-info-emphasis border border-info-subtle"
+                    title={t('badges.fileStoreTooltip', {
+                      defaultValue: 'Files from this integration appear under Files → Remote Files',
+                    })}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '0.15rem 0.5rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      fontWeight: 500,
+                      letterSpacing: '0.01em',
+                      lineHeight: 1.2,
+                      verticalAlign: 'middle',
+                    }}
+                  >
+                    <i className="bi bi-folder2-open" />
+                    {t('badges.fileStore', { defaultValue: 'Files' })}
+                  </span>
+                );
+              })()}
             </div>
             <p className="integrations-row-card__description">{display.description}</p>
           </div>

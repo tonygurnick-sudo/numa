@@ -5,9 +5,12 @@
     "userFiles": "User Files",
     "companyFiles": "Company Files",
     "shared": "External Share",
-    "remote": "Connector Files",
     "webCrawler": "Web Crawler",
     "chatArtifacts": "Chat Artifacts"
+  },
+  "integrationFolder": {
+    "typeLabel": "Integration",
+    "reconnectLink": "Reconnect at Integrations"
   },
   "actions": {
     "newFolder": "New Folder",
@@ -53,7 +56,9 @@
   },
   "sections": {
     "myFiles": "My Files",
-    "sharedFiles": "Shared Files"
+    "sharedFiles": "Shared Files",
+    "remoteFiles": "Remote Files",
+    "connectIntegration": "Connect Integration"
   },
   "createFolder": {
     "title": "Create New Folder",

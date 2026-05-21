@@ -437,6 +437,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
       localStorage.removeItem('idToken');
       localStorage.removeItem('lastTokenValidation');
       localStorage.removeItem('numa_chat_lastInteraction-v2');
+      // Cached integrations list (useConnectedIntegrations). Clearing here
+      // prevents one user's connected services from briefly leaking into
+      // the next user's Remote Files / chat dropdown on a shared device.
+      localStorage.removeItem('numa-connected-integrations-v3');
       sessionStorage.removeItem('numaSessionStart');
       sessionStorage.removeItem('currentConversationId-v2');
       sessionStorage.removeItem('isWorkspaceConversation-v2');

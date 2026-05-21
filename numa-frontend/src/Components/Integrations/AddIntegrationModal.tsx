@@ -18,6 +18,26 @@ import type { IntegrationPickerEntry } from './integrationCatalogHelpers';
 export type { IntegrationPickerEntry };
 
 /**
+ * Native connectors that are exempt from the ext-api-doc gating. The LLM has
+ * strong native knowledge of these APIs (Google / Microsoft platforms), so
+ * their behaviour is reliable without bundled per-slug docs. Mirror of the
+ * exemption list in the old PlatformPickerModal.
+ */
+const DOCS_GATING_EXEMPT: ReadonlySet<string> = new Set(['googledrive', 'gmail', 'onedrive']);
+
+/**
+ * Decide whether a native connector slug should be gated because its
+ * per-slug `ext-api-doc/<slug>/` files aren't deployed for this client.
+ * `apiDocsAvailableSlugs` undefined means the parent hasn't loaded yet —
+ * don't gate during the flash.
+ */
+function isDocsUnavailable(slug: string | undefined, apiDocsAvailableSlugs: Set<string> | undefined): boolean {
+  if (!slug || !apiDocsAvailableSlugs) return false;
+  if (DOCS_GATING_EXEMPT.has(slug)) return false;
+  return !apiDocsAvailableSlugs.has(slug);
+}
+
+/**
  * Method selected from the add flow. `'user_choice'` is only possible for
  * dual-method services and means "enable Pipedream now AND launch the native
  * wizard, leave preferred_method=null so users pick at connect time."
@@ -31,6 +51,15 @@ type AddIntegrationModalProps = {
   addedKeys: Set<string>;
   /** Maps connector slug -> Pipedream slug for the same external service. */
   pipedreamForConnector: Record<string, string>;
+  /**
+   * Set of native connector slugs whose `ext-api-doc/<slug>/` files are
+   * present in this client's bucket. When supplied, native-only entries
+   * whose slug isn't in this set (and isn't exempt) render greyed-out and
+   * unclickable; dual-method services keep their Pipedream option but
+   * disable the native branch. Undefined means "not loaded yet" — nothing
+   * is gated.
+   */
+  apiDocsAvailableSlugs?: Set<string>;
   /**
    * Called once the admin has chosen a service AND (when applicable) the
    * connection method. For services with a single method available the modal
@@ -125,6 +154,7 @@ export const AddIntegrationModal = ({
   onHide,
   addedKeys,
   pipedreamForConnector,
+  apiDocsAvailableSlugs,
   onSelect,
 }: AddIntegrationModalProps) => {
   const { t } = useTranslation('integrations');
@@ -165,6 +195,11 @@ export const AddIntegrationModal = ({
     if (entry.alreadyAdded) return;
     const hasPipedream = Boolean(entry.pipedreamSlug);
     const hasNative = Boolean(entry.connectorSlug);
+    const nativeDocsUnavailable = isDocsUnavailable(entry.connectorSlug, apiDocsAvailableSlugs);
+    // Native-only entries are unclickable when their docs aren't deployed —
+    // the card itself is greyed out; this guard just protects against
+    // keyboard activation reaching here.
+    if (!hasPipedream && hasNative && nativeDocsUnavailable) return;
     // Single-method services: skip the method screen — there's nothing to choose.
     if (hasPipedream && !hasNative) {
       onSelect(entry, 'pipedream');
@@ -236,27 +271,37 @@ export const AddIntegrationModal = ({
             {filtered.map((entry) => {
               const hasPipedream = Boolean(entry.pipedreamSlug);
               const hasNative = Boolean(entry.connectorSlug);
-              const disabled = entry.alreadyAdded;
+              // Per-slug ext-api-doc gating: only matters for native-only
+              // entries. Dual-method services keep their Pipedream option
+              // and surface the gating in the method-choice step instead.
+              const nativeDocsUnavailable = isDocsUnavailable(entry.connectorSlug, apiDocsAvailableSlugs);
+              const nativeOnlyDocsBlocked = !hasPipedream && hasNative && nativeDocsUnavailable;
+              const disabled = entry.alreadyAdded || nativeOnlyDocsBlocked;
+              const docsTooltip = nativeOnlyDocsBlocked ? t('dataConnectors.oauth.docsUnavailable') : undefined;
               return (
                 <div key={entry.key} className="col-md-6 col-lg-4">
                   <div
-                    className="border rounded p-3 h-100 d-flex flex-column"
-                    style={{
-                      cursor: disabled ? 'default' : 'pointer',
-                      transition: 'border-color 0.15s',
-                      opacity: disabled ? 0.6 : 1,
-                    }}
-                    onClick={() => handleClick(entry)}
-                    onMouseEnter={(e) => {
-                      if (!disabled) e.currentTarget.style.borderColor = '#0d6efd';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = '';
-                    }}
+                    className={`integration-service-card border rounded p-3 h-100 d-flex flex-column${disabled ? ' integration-service-card--disabled' : ''}`}
+                    title={docsTooltip}
+                    style={
+                      nativeOnlyDocsBlocked
+                        ? {
+                            opacity: 0.45,
+                            filter: 'grayscale(100%)',
+                            pointerEvents: 'none',
+                            cursor: 'not-allowed',
+                          }
+                        : undefined
+                    }
+                    onClick={disabled ? undefined : () => handleClick(entry)}
                     role={disabled ? undefined : 'button'}
                     tabIndex={disabled ? -1 : 0}
+                    aria-disabled={disabled || undefined}
                     onKeyDown={(e) => {
-                      if (!disabled && e.key === 'Enter') handleClick(entry);
+                      if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        handleClick(entry);
+                      }
                     }}
                   >
                     {/* Header: icon + name (wraps) + "Added" badge top-right. */}
@@ -306,7 +351,11 @@ export const AddIntegrationModal = ({
           </div>
         </Modal.Body>
       ) : (
-        <MethodChoiceStep entry={step.entry} onPick={handleMethodPick} />
+        <MethodChoiceStep
+          entry={step.entry}
+          onPick={handleMethodPick}
+          nativeDocsUnavailable={isDocsUnavailable(step.entry.connectorSlug, apiDocsAvailableSlugs)}
+        />
       )}
     </Modal>
   );
@@ -316,15 +365,26 @@ export const AddIntegrationModal = ({
  * Step 2 of the add flow: dual-method service selected, admin picks which
  * backend to wire up. Each option carries the setup requirements clearly so
  * the admin doesn't accidentally pick "Native" expecting a one-click flow.
+ *
+ * When `nativeDocsUnavailable` is true, the native and user-choice options
+ * are locked — both paths would land us in a state where the LLM has to use
+ * a connector with no per-slug API docs. Pipedream remains selectable so
+ * the admin isn't completely stuck on this service.
  */
 const MethodChoiceStep = ({
   entry,
   onPick,
+  nativeDocsUnavailable,
 }: {
   entry: IntegrationPickerEntry;
   onPick: (method: AddIntegrationMethod) => void;
+  nativeDocsUnavailable: boolean;
 }) => {
   const { t } = useTranslation('integrations');
+  const nativeDisabledStyle = nativeDocsUnavailable
+    ? { opacity: 0.45, filter: 'grayscale(100%)', cursor: 'not-allowed' as const }
+    : undefined;
+  const docsTooltip = nativeDocsUnavailable ? t('dataConnectors.oauth.docsUnavailable') : undefined;
   return (
     <Modal.Body>
       <div className="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
@@ -352,9 +412,11 @@ const MethodChoiceStep = ({
       <div className="d-grid gap-2">
         <button
           type="button"
-          className="btn btn-light text-start border"
-          style={{ padding: '0.85rem 1rem' }}
+          className="btn btn-light text-start border integration-method-choice-btn"
           onClick={() => onPick('user_choice')}
+          disabled={nativeDocsUnavailable}
+          title={docsTooltip}
+          style={nativeDisabledStyle}
         >
           <div className="d-flex align-items-center gap-2 mb-1">
             <span
@@ -383,18 +445,22 @@ const MethodChoiceStep = ({
           <div className="small d-flex align-items-start gap-2 text-warning">
             <AlertTriangle size={14} className="flex-shrink-0 mt-1" />
             <span>
-              {t('addModal.userChoiceSetup', {
-                defaultValue:
-                  'Enables Pipedream immediately, then opens the native setup wizard so both methods are available.',
-              })}
+              {nativeDocsUnavailable
+                ? t('dataConnectors.oauth.docsUnavailable')
+                : t('addModal.userChoiceSetup', {
+                    defaultValue:
+                      'Enables Pipedream immediately, then opens the native setup wizard so both methods are available.',
+                  })}
             </span>
           </div>
         </button>
         <button
           type="button"
-          className="btn btn-light text-start border"
-          style={{ padding: '0.85rem 1rem' }}
+          className="btn btn-light text-start border integration-method-choice-btn"
           onClick={() => onPick('native')}
+          disabled={nativeDocsUnavailable}
+          title={docsTooltip}
+          style={nativeDisabledStyle}
         >
           <div className="d-flex align-items-center gap-2 mb-1">
             <MethodBadge method="native" size="xs" />
@@ -409,17 +475,18 @@ const MethodChoiceStep = ({
           <div className="small d-flex align-items-start gap-2 text-warning">
             <AlertTriangle size={14} className="flex-shrink-0 mt-1" />
             <span>
-              {t('addModal.nativeSetup', {
-                defaultValue:
-                  "Setup required: you'll register an OAuth app with this service and paste the client ID + secret. Takes a few minutes.",
-              })}
+              {nativeDocsUnavailable
+                ? t('dataConnectors.oauth.docsUnavailable')
+                : t('addModal.nativeSetup', {
+                    defaultValue:
+                      "Setup required: you'll register an OAuth app with this service and paste the client ID + secret. Takes a few minutes.",
+                  })}
             </span>
           </div>
         </button>
         <button
           type="button"
-          className="btn btn-light text-start border"
-          style={{ padding: '0.85rem 1rem' }}
+          className="btn btn-light text-start border integration-method-choice-btn"
           onClick={() => onPick('pipedream')}
         >
           <div className="d-flex align-items-center gap-2 mb-1">

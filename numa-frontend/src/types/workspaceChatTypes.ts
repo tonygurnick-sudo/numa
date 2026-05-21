@@ -16,6 +16,13 @@ export interface IntegrationListItem {
   slug: string;
   method: IntegrationMethod;
   name: string;
+  /** True when this integration exposes a navigable file tree (Google Drive,
+   *  Dropbox, Synergy, …) as opposed to being chat-only (Slack, simPRO, …).
+   *  Derived from the connector registry's `surfaces` declaration on the
+   *  frontend; sent so the agent can prefer file-store integrations when the
+   *  user references files without naming a folder. Optional for back-compat
+   *  with payloads built before this field existed. */
+  isFileStore?: boolean;
 }
 
 // ============================================================

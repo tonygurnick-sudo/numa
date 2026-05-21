@@ -2717,6 +2717,7 @@ export default function SettingsPage() {
         onHide={() => setAddModalOpen(false)}
         addedKeys={addedKeys}
         pipedreamForConnector={pipedreamForConnector}
+        apiDocsAvailableSlugs={dataConnectorAdmin.apiDocsAvailableSlugs}
         onSelect={(entry, method) => void handleAddService(entry, method)}
       />
 
@@ -2852,6 +2853,15 @@ export default function SettingsPage() {
                             isActive={mfActiveMethod === 'native'}
                             isConfigured={mfNativeEnabled}
                             isUserChoiceMode={mfUserChoice}
+                            docsUnavailable={
+                              // googledrive/gmail/onedrive are exempt — the LLM has
+                              // strong native knowledge of these APIs and doesn't
+                              // need per-slug docs. Mirror of the AddIntegrationModal
+                              // exemption list.
+                              !!mf.connectorSlug &&
+                              !['googledrive', 'gmail', 'onedrive'].includes(mf.connectorSlug) &&
+                              !dataConnectorAdmin.apiDocsAvailableSlugs.has(mf.connectorSlug)
+                            }
                             t={t}
                             onActivate={async () => {
                               if (mfNativeEnabled && mf.pipedreamSlug) {

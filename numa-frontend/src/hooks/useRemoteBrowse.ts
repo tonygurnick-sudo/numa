@@ -20,6 +20,7 @@ import type {
 import type { SynergyJob, SynergyFolder, SynergyFile } from '../types/synergySync';
 import { ConnectorsService, OAuthApiError } from '../Services/ConnectorsService';
 import { SynergyDataConnectorService } from '../Services/SynergyDataConnectorService';
+import { extractApiError } from '../utils/extractApiError';
 import {
   getRemoteFolder,
   setRemoteFolder,
@@ -531,7 +532,8 @@ export function useRemoteBrowse({
         if (cached.stale) {
           setSynergyRevalidating(true);
           try {
-            const folders = await SynergyDataConnectorService.listJobFolders(numaGet, job.job_id);
+            const res = await SynergyDataConnectorService.listJobFolders(numaGet, job.job_id);
+            const folders = res.items ?? [];
             if (generationRef.current === gen) {
               setRemoteFolder(cacheKey, { folders, files: [] });
               if (dataChanged(synergyFolders, folders)) setSynergyFolders(folders);
@@ -549,7 +551,8 @@ export function useRemoteBrowse({
         setSynergyFoldersLoading(true);
         setSynergyFolders([]);
         try {
-          const folders = await SynergyDataConnectorService.listJobFolders(numaGet, job.job_id);
+          const res = await SynergyDataConnectorService.listJobFolders(numaGet, job.job_id);
+          const folders = res.items ?? [];
           if (generationRef.current === gen) {
             setRemoteFolder(cacheKey, { folders, files: [] });
             setSynergyFolders(folders);
@@ -679,7 +682,8 @@ export function useRemoteBrowse({
           if (cached.stale) {
             setSynergyRevalidating(true);
             try {
-              const folders = await SynergyDataConnectorService.listJobFolders(numaGet, crumb.id);
+              const res = await SynergyDataConnectorService.listJobFolders(numaGet, crumb.id);
+              const folders = res.items ?? [];
               if (generationRef.current === gen) {
                 setRemoteFolder(cacheKey, { folders, files: [] });
                 if (dataChanged(synergyFolders, folders)) setSynergyFolders(folders);
@@ -693,13 +697,27 @@ export function useRemoteBrowse({
         } else {
           setSynergyFoldersLoading(true);
           try {
-            const folders = await SynergyDataConnectorService.listJobFolders(numaGet, crumb.id);
+            const res = await SynergyDataConnectorService.listJobFolders(numaGet, crumb.id);
+            const folders = res.items ?? [];
             if (generationRef.current === gen) {
               setRemoteFolder(cacheKey, { folders, files: [] });
               setSynergyFolders(folders);
             }
-          } catch {
-            if (generationRef.current === gen) setSynergyFolders([]);
+          } catch (error) {
+            // Don't silently render as "empty folder" — surface the failure
+            // so users can distinguish a fetch error from a genuinely empty
+            // folder. Auth errors are handled by the connector-status pill
+            // higher up; this toast covers everything else (network, 5xx).
+            console.error('Synergy folder fetch failed:', error);
+            if (generationRef.current === gen) {
+              setSynergyFolders([]);
+              if (!isAuthError(error)) {
+                showToast({
+                  message: extractApiError(error, t('remote.errors.loadFolderContents')),
+                  variant: 'error',
+                });
+              }
+            }
           } finally {
             if (generationRef.current === gen) setSynergyFoldersLoading(false);
           }
@@ -743,10 +761,17 @@ export function useRemoteBrowse({
               setSynergyFolders(response.subfolders ?? []);
               setSynergyFiles(response.files ?? []);
             }
-          } catch {
+          } catch (error) {
+            console.error('Synergy folder-items fetch failed:', error);
             if (generationRef.current === gen) {
               setSynergyFolders([]);
               setSynergyFiles([]);
+              if (!isAuthError(error)) {
+                showToast({
+                  message: extractApiError(error, t('remote.errors.loadFolderContents')),
+                  variant: 'error',
+                });
+              }
             }
           } finally {
             if (generationRef.current === gen) setSynergyFoldersLoading(false);

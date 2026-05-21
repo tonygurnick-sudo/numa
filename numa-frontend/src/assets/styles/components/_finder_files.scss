@@ -674,6 +674,146 @@
     border-bottom: 1px solid var(--finder-border, #e4e4e7);
   }
 
+  .remote-provider-card {
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+
+    &__icon {
+      font-size: 2rem;
+      color: var(--bs-primary, #0d6efd);
+    }
+
+    &--open {
+      cursor: pointer;
+
+      &:hover,
+      &:focus-visible {
+        border-color: var(--bs-primary, #0d6efd);
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+      }
+
+      &:focus-visible {
+        outline: none;
+      }
+    }
+  }
+
+  .remote-provider-row__icon {
+    color: var(--bs-primary, #0d6efd);
+  }
+
+  .remote-provider-row__inline-btn {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    border-radius: 0.25rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &--primary {
+      color: #fff;
+      background: var(--bs-primary, #0d6efd);
+      border-color: var(--bs-primary, #0d6efd);
+
+      &:hover,
+      &:focus-visible {
+        filter: brightness(0.92);
+        outline: none;
+      }
+    }
+
+    &--danger {
+      color: var(--bs-danger, #dc3545);
+      background: transparent;
+      border-color: var(--bs-danger, #dc3545);
+
+      &:hover,
+      &:focus-visible {
+        color: #fff;
+        background: var(--bs-danger, #dc3545);
+        outline: none;
+      }
+    }
+
+    &--warning {
+      color: var(--bs-warning-text-emphasis, #997404);
+      background: transparent;
+      border-color: var(--bs-warning, #ffc107);
+
+      &:hover,
+      &:focus-visible {
+        color: #000;
+        background: var(--bs-warning, #ffc107);
+        outline: none;
+      }
+    }
+
+    &--neutral {
+      color: var(--bs-secondary, #6c757d);
+      background: transparent;
+      border-color: var(--bs-secondary, #6c757d);
+
+      &:hover,
+      &:focus-visible {
+        color: #fff;
+        background: var(--bs-secondary, #6c757d);
+        outline: none;
+      }
+    }
+  }
+
+  .remote-folder-card {
+    cursor: pointer;
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+
+    &__icon {
+      font-size: 2rem;
+      color: var(--finder-folder-color, #79b8ff);
+    }
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--bs-primary, #0d6efd);
+      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    }
+
+    &:focus-visible {
+      outline: none;
+    }
+  }
+
+  .remote-file-card__icon {
+    font-size: 2rem;
+  }
+
+  .remote-breadcrumbs {
+    font-size: 0.85rem;
+
+    &__list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .btn-link {
+      font-size: inherit;
+      text-decoration: none;
+
+      &:hover,
+      &:focus-visible {
+        text-decoration: underline;
+      }
+    }
+  }
+
   // ── Grid template for columns ────────────────────────────────
   // 6 columns: Name | Type | Added by | Modified | Size | Actions
   // Breakpoints mirror the Bootstrap d-*-flex visibility classes on the headers:

@@ -25,7 +25,7 @@ import {
   connectorSlugForPipedream,
   pipedreamSlugForConnector,
 } from '../Components/Integrations/integrationCatalogHelpers';
-import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+import { getConnectorById, surfacesInFiles } from '../Components/DataConnectors/connectorRegistry';
 import { getModelId, MODEL_TYPES, isInFallbackMode } from '../utils/bedrockModelConfig';
 // Note: streamingProcessors imports moved to useWorkspaceStreaming hook
 import { loadConversation } from '../utils/conversationLoader';
@@ -468,16 +468,37 @@ const NumaWorkspaceChatAgents = () => {
   // (availableConnections, connectedDataConnectors, userConnectedConnectorIds,
   // enabledConnections, enabledNativeConnectorIds, dataConnectorsEnabled)
   // still drives the existing sidebars — this memo is the wire shape.
+  // isFileStore resolution: native rows look up the slug directly in the
+  // registry. Pipedream rows are always false — we keep the flag consistent
+  // with the Files page, which only renders native OAuth/PAT connections in
+  // Remote Files. A user with only the Pipedream Google Drive connection
+  // can still ask the agent to find files (it uses mcp__integrations__* for
+  // that), but the integration isn't a "folder" in our UX yet.
+  //
+  // FUTURE: if we make Remote Files Pipedream-capable (Tony's "isFileStore
+  // type object" idea), revisit this — Pipedream rows with file capability
+  // would resolve via connectorSlugForPipedream → surfacesInFiles. Until
+  // then, native-only keeps the flag's meaning unambiguous.
   const availableIntegrationsUnified = useMemo<IntegrationListItem[]>(() => {
     const rows: IntegrationListItem[] = [];
     for (const conn of availableConnections) {
       if (!conn.isConnected) continue;
-      rows.push({ slug: conn.id, method: 'pipedream', name: conn.name || conn.id });
+      rows.push({
+        slug: conn.id,
+        method: 'pipedream',
+        name: conn.name || conn.id,
+        isFileStore: false,
+      });
     }
     if (dataConnectorsFeatureEnabled) {
       for (const c of connectedDataConnectors) {
         if (!userConnectedConnectorIds.includes(c.id)) continue;
-        rows.push({ slug: c.id, method: 'native', name: c.name || c.id });
+        rows.push({
+          slug: c.id,
+          method: 'native',
+          name: c.name || c.id,
+          isFileStore: surfacesInFiles(c.id),
+        });
       }
     }
     return rows;
@@ -487,12 +508,22 @@ const NumaWorkspaceChatAgents = () => {
     const rows: IntegrationListItem[] = [];
     const pipedreamByName = new Map(availableConnections.map((c) => [c.id, c.name || c.id]));
     for (const slug of enabledConnections) {
-      rows.push({ slug, method: 'pipedream', name: pipedreamByName.get(slug) || slug });
+      rows.push({
+        slug,
+        method: 'pipedream',
+        name: pipedreamByName.get(slug) || slug,
+        isFileStore: false,
+      });
     }
     if (dataConnectorsFeatureEnabled) {
       const nativeByName = new Map(connectedDataConnectors.map((c) => [c.id, c.name || c.id]));
       for (const slug of enabledNativeConnectorIds) {
-        rows.push({ slug, method: 'native', name: nativeByName.get(slug) || slug });
+        rows.push({
+          slug,
+          method: 'native',
+          name: nativeByName.get(slug) || slug,
+          isFileStore: surfacesInFiles(slug),
+        });
       }
     }
     return rows;

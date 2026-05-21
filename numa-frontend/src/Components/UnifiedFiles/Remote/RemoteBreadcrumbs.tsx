@@ -50,49 +50,85 @@ export function RemoteBreadcrumbs({
   };
 
   return (
-    <div className="d-flex align-items-center gap-2 px-3 py-2 border-bottom bg-light" style={{ fontSize: '0.85rem' }}>
-      <button className="btn btn-sm btn-outline-secondary" onClick={handleUp} title={t('toolbar.up')}>
-        <i className="bi bi-arrow-up" />
+    <nav
+      aria-label={t('remote.breadcrumbsLabel', 'Breadcrumbs')}
+      className="d-flex align-items-center gap-2 px-3 py-2 border-bottom bg-light remote-breadcrumbs"
+    >
+      <button
+        type="button"
+        className="btn btn-sm btn-outline-secondary"
+        onClick={handleUp}
+        title={t('toolbar.up')}
+        aria-label={t('toolbar.up')}
+      >
+        <i className="bi bi-arrow-up" aria-hidden />
       </button>
 
-      <div className="d-flex align-items-center gap-0 flex-wrap" style={{ minWidth: 0 }}>
+      <ol className="d-flex align-items-center gap-0 flex-wrap remote-breadcrumbs__list" style={{ minWidth: 0 }}>
         {isInOAuthProvider &&
-          oauthBreadcrumbs.map((crumb, i) => (
-            <span key={i}>
-              {i > 0 && <span className="text-muted mx-1">&rsaquo;</span>}
-              <span
-                className={`${i === oauthBreadcrumbs.length - 1 ? 'fw-semibold' : 'text-primary'}`}
-                style={{ cursor: i < oauthBreadcrumbs.length - 1 ? 'pointer' : 'default' }}
-                onClick={i < oauthBreadcrumbs.length - 1 ? () => onOAuthBreadcrumbClick(i) : undefined}
-              >
-                {crumb.label}
-              </span>
-            </span>
-          ))}
+          oauthBreadcrumbs.map((crumb, i) => {
+            const isLast = i === oauthBreadcrumbs.length - 1;
+            return (
+              <li key={i} className="d-inline-flex align-items-center">
+                {i > 0 && (
+                  <span className="text-muted mx-1" aria-hidden>
+                    &rsaquo;
+                  </span>
+                )}
+                {isLast ? (
+                  <span className="fw-semibold" aria-current="page">
+                    {crumb.label}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-link btn-sm p-0 align-baseline text-primary"
+                    onClick={() => onOAuthBreadcrumbClick(i)}
+                  >
+                    {crumb.label}
+                  </button>
+                )}
+              </li>
+            );
+          })}
 
         {!isInOAuthProvider &&
           synergyConnected &&
           synergyBreadcrumbs.length > 1 &&
-          synergyBreadcrumbs.slice(1).map((crumb, i) => (
-            <span key={i}>
-              {i > 0 && <span className="text-muted mx-1">&rsaquo;</span>}
-              <span
-                className={`${i === synergyBreadcrumbs.length - 2 ? 'fw-semibold' : 'text-primary'}`}
-                style={{ cursor: i < synergyBreadcrumbs.length - 2 ? 'pointer' : 'default' }}
-                onClick={i < synergyBreadcrumbs.length - 2 ? () => onSynergyBreadcrumbClick(i + 1) : undefined}
-              >
-                {crumb.type === 'job' && !crumb.id ? t('remote.synergyName') : crumb.label}
-              </span>
-            </span>
-          ))}
-      </div>
+          synergyBreadcrumbs.slice(1).map((crumb, i) => {
+            const isLast = i === synergyBreadcrumbs.length - 2;
+            const label = crumb.type === 'job' && !crumb.id ? t('remote.synergyName') : crumb.label;
+            return (
+              <li key={i} className="d-inline-flex align-items-center">
+                {i > 0 && (
+                  <span className="text-muted mx-1" aria-hidden>
+                    &rsaquo;
+                  </span>
+                )}
+                {isLast ? (
+                  <span className="fw-semibold" aria-current="page">
+                    {label}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-link btn-sm p-0 align-baseline text-primary"
+                    onClick={() => onSynergyBreadcrumbClick(i + 1)}
+                  >
+                    {label}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+      </ol>
 
       {isInOAuthProvider && selectedOauthProvider === 'gmail' && (
-        <button className="btn btn-sm btn-primary ms-auto" onClick={onComposeEmail}>
-          <i className="bi bi-pencil-square me-1" />
+        <button type="button" className="btn btn-sm btn-primary ms-auto" onClick={onComposeEmail}>
+          <i className="bi bi-pencil-square me-1" aria-hidden />
           {t('compose.title', 'Compose')}
         </button>
       )}
-    </div>
+    </nav>
   );
 }

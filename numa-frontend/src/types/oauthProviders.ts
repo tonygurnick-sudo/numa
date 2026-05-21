@@ -45,7 +45,11 @@ export type OAuthFolder = {
 };
 
 export type OAuthConnectionStatus = {
-  status: 'connected' | 'disconnected' | 'error';
+  /** `error` = backend reported the token is bad (expired / revoked).
+   *  `check_failed` = our status fetch itself threw (network, 5xx). The
+   *  two are visually + semantically distinct: `error` prompts a reconnect,
+   *  `check_failed` prompts a retry. */
+  status: 'connected' | 'disconnected' | 'error' | 'check_failed';
   user_email?: string;
   connected_at?: string;
   error_message?: string;

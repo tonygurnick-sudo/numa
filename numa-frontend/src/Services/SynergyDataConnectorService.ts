@@ -1,4 +1,9 @@
-import type { SynergyFolderItemsResponse, SynergyJobsResponse, SynergyFolder, SyncConfig } from '../types/synergySync';
+import type {
+  SynergyFolderItemsResponse,
+  SynergyJobsResponse,
+  SynergyJobFoldersResponse,
+  SyncConfig,
+} from '../types/synergySync';
 
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 type NumaPost = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
@@ -13,15 +18,23 @@ export const SynergyDataConnectorService = {
     return (await numaGet('/api/data-connectors/synergy/jobs', params)) as SynergyJobsResponse;
   },
 
-  async listJobFolders(numaGet: NumaGet, jobId: string): Promise<SynergyFolder[]> {
-    const response = (await numaGet(`/api/data-connectors/synergy/jobs/${jobId}/folders`)) as {
-      items?: SynergyFolder[];
-    };
-    return response?.items || [];
+  async listJobFolders(
+    numaGet: NumaGet,
+    jobId: string,
+    params?: { page?: number; page_size?: number }
+  ): Promise<SynergyJobFoldersResponse> {
+    return (await numaGet(`/api/data-connectors/synergy/jobs/${jobId}/folders`, params)) as SynergyJobFoldersResponse;
   },
 
-  async listFolderItems(numaGet: NumaGet, folderId: string): Promise<SynergyFolderItemsResponse> {
-    return (await numaGet(`/api/data-connectors/synergy/folders/${folderId}/items`)) as SynergyFolderItemsResponse;
+  async listFolderItems(
+    numaGet: NumaGet,
+    folderId: string,
+    params?: { page?: number; page_size?: number }
+  ): Promise<SynergyFolderItemsResponse> {
+    return (await numaGet(
+      `/api/data-connectors/synergy/folders/${folderId}/items`,
+      params
+    )) as SynergyFolderItemsResponse;
   },
 
   async listSyncConfigs(numaGet: NumaGet): Promise<SyncConfig[]> {

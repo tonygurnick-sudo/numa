@@ -1,0 +1,48 @@
+// Connector wizard modal + shared connector UI styles.
+
+.connector-wizard-modal__body {
+  min-height: 300px;
+}
+
+.connector-wizard-modal__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.connector-wizard-modal__step {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.integration-service-card {
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--bs-primary, #0d6efd);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    outline: none;
+  }
+
+  &--disabled {
+    cursor: default;
+    opacity: 0.6;
+
+    &:hover,
+    &:focus-visible {
+      border-color: inherit;
+      box-shadow: none;
+    }
+  }
+}
+
+.integration-method-choice-btn {
+  padding: 0.85rem 1rem;
+}

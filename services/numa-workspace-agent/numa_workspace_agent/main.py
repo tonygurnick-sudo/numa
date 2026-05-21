@@ -164,10 +164,18 @@ def _normalise_integrations_payload(
         method = it.get("method")
         if method not in ("pipedream", "native"):
             method = "pipedream"
+        # isFileStore: forwarded from the frontend (camelCase on the wire,
+        # snake_case once normalised). Optional — absent on legacy payloads
+        # and on payloads built before the field was added; the prompt
+        # builder falls back to a slug allowlist in that case.
+        is_file_store = it.get("isFileStore")
+        if is_file_store is None:
+            is_file_store = it.get("is_file_store")
         return {
             "slug": slug,
             "method": method,
             "name": it.get("name") or slug,
+            "is_file_store": bool(is_file_store) if is_file_store is not None else None,
         }
 
     if new_shape:

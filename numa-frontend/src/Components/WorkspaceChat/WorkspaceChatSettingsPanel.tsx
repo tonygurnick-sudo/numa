@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, Dispatch, SetStateAction } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, Dispatch, SetStateAction } from 'react';
 import { Button, Form, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import {
@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Cloud,
   Code2,
   Cpu,
   Download,
@@ -33,7 +34,8 @@ import {
   getConnectionDisplayName,
   getConnectionFallbackIcon,
 } from '../../config/integrationsConfig';
-import { getConnectorById } from '../DataConnectors/connectorRegistry';
+import { getConnectorById, surfacesInFiles } from '../DataConnectors/connectorRegistry';
+import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations';
 import { connectorSlugForPipedream, pipedreamSlugForConnector } from '../Integrations/integrationCatalogHelpers';
 import { WorkspaceChatFilesExpandedModal } from './WorkspaceChatFilesExpandedModal';
 import { getFileIconClass, getFileIconColorClass, formatFileSize } from '../../utils/fileUtils';
@@ -261,6 +263,73 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     });
   }, [myFilesGroupAllSelected, myFilesGroupIds, setEnabledKBIds]);
 
+  // Remote Files group: file-store native integrations the user has
+  // connected (Google Drive, Dropbox, Synergy, …). Sourced from
+  // useConnectedIntegrations so the picker uses the same localStorage cache
+  // as the Files page — rows render instantly on chat open instead of
+  // waiting on the parent's connectors fetch. The hook revalidates in the
+  // background and on visibilitychange, so connecting/disconnecting via
+  // /integrations is reflected here without a manual refresh.
+  //
+  // Note: selecting a row only adds the slug to enabledNativeConnectorIds
+  // (per-chat enable list). Unselecting REMOVES from that list but never
+  // touches the actual integration auth — disconnecting lives on the
+  // Integrations page. The cleanup effect below handles the reverse: when
+  // an integration is disconnected upstream, prune it from our selection.
+  const { integrations: connectedIntegrationsList } = useConnectedIntegrations(dataConnectorsFeatureEnabled);
+  const remoteFilesGroupConnectors = useMemo(
+    () => connectedIntegrationsList.filter((i) => i.isFileStore),
+    [connectedIntegrationsList]
+  );
+
+  // When an integration is disconnected at /integrations (in this tab or
+  // another), drop it from the per-chat selection list. Only prune file-
+  // stores we KNOW are missing — leave non-file-store native connectors
+  // alone (they're owned by the Integrations card, not us). Skipped while
+  // the hook is hydrating from cache so a brief empty state doesn't wipe
+  // valid selections; skipped when the feature flag is off so we don't
+  // touch state the user can't see.
+  useEffect(() => {
+    if (!dataConnectorsFeatureEnabled) return;
+    if (connectedIntegrationsList.length === 0) return;
+    const connectedFileStoreIds = new Set(connectedIntegrationsList.filter((i) => i.isFileStore).map((i) => i.id));
+    setEnabledNativeConnectorIds((prev) => {
+      const next = prev.filter((id) => !surfacesInFiles(id) || connectedFileStoreIds.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [connectedIntegrationsList, dataConnectorsFeatureEnabled, setEnabledNativeConnectorIds]);
+  const remoteFilesGroupSlugs = useMemo(
+    () => remoteFilesGroupConnectors.map((c) => c.id),
+    [remoteFilesGroupConnectors]
+  );
+  const remoteFilesGroupSelectedCount = useMemo(
+    () => remoteFilesGroupSlugs.filter((id) => enabledNativeConnectorIds.includes(id)).length,
+    [remoteFilesGroupSlugs, enabledNativeConnectorIds]
+  );
+  const remoteFilesGroupAllSelected =
+    remoteFilesGroupSlugs.length > 0 && remoteFilesGroupSelectedCount === remoteFilesGroupSlugs.length;
+  const remoteFilesGroupNoneSelected = remoteFilesGroupSelectedCount === 0;
+  const remoteFilesGroupIndeterminate = !remoteFilesGroupNoneSelected && !remoteFilesGroupAllSelected;
+  const [remoteFilesGroupExpanded, setRemoteFilesGroupExpanded] = useState(true);
+
+  const toggleRemoteFilesGroup = useCallback(() => {
+    setEnabledNativeConnectorIds((prev) => {
+      if (remoteFilesGroupAllSelected) {
+        return prev.filter((id) => !remoteFilesGroupSlugs.includes(id));
+      }
+      return Array.from(new Set([...prev, ...remoteFilesGroupSlugs]));
+    });
+  }, [remoteFilesGroupAllSelected, remoteFilesGroupSlugs, setEnabledNativeConnectorIds]);
+
+  const handleRemoteFileToggle = useCallback(
+    (slug: string, checked: boolean) => {
+      setEnabledNativeConnectorIds((prev) =>
+        checked ? Array.from(new Set([...prev, slug])) : prev.filter((id) => id !== slug)
+      );
+    },
+    [setEnabledNativeConnectorIds]
+  );
+
   // Data connectors — sorted for the unified integrations list. Setup +
   // disconnect both live on /integrations now; this panel is purely an
   // enable/disable toggle surface, so the inline credential modal and the
@@ -391,8 +460,10 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
             <div className="workspace-settings-card-header-right">
               {collapsedSections.knowledgeBases && (
                 <span className="workspace-settings-collapsed-summary">
-                  {enabledKBIds.length > 0
-                    ? t('workspaceSettings.kbSelected', { count: enabledKBIds.length })
+                  {enabledKBIds.length + remoteFilesGroupSelectedCount > 0
+                    ? t('workspaceSettings.kbSelected', {
+                        count: enabledKBIds.length + remoteFilesGroupSelectedCount,
+                      })
                     : t('workspaceSettings.noneSelected')}
                 </span>
               )}
@@ -416,16 +487,33 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                       <button
                         type="button"
                         className="workspace-settings-kb-action-link"
-                        onClick={() => setEnabledKBIds(sortedKBs.map((kb) => kb.kb_id))}
-                        disabled={isDisabled || sortedKBs.every((kb) => enabledKBIds.includes(kb.kb_id))}
+                        onClick={() => {
+                          setEnabledKBIds(sortedKBs.map((kb) => kb.kb_id));
+                          if (remoteFilesGroupSlugs.length > 0) {
+                            setEnabledNativeConnectorIds((prev) =>
+                              Array.from(new Set([...prev, ...remoteFilesGroupSlugs]))
+                            );
+                          }
+                        }}
+                        disabled={
+                          isDisabled ||
+                          (sortedKBs.every((kb) => enabledKBIds.includes(kb.kb_id)) && remoteFilesGroupAllSelected)
+                        }
                       >
                         {t('workspaceSettings.selectAll')}
                       </button>
-                      {enabledKBIds.length > 0 && (
+                      {(enabledKBIds.length > 0 || remoteFilesGroupSelectedCount > 0) && (
                         <button
                           type="button"
                           className="workspace-settings-kb-action-link"
-                          onClick={() => setEnabledKBIds([])}
+                          onClick={() => {
+                            setEnabledKBIds([]);
+                            if (remoteFilesGroupSlugs.length > 0) {
+                              setEnabledNativeConnectorIds((prev) =>
+                                prev.filter((id) => !remoteFilesGroupSlugs.includes(id))
+                              );
+                            }
+                          }}
                           disabled={isDisabled}
                         >
                           {t('workspaceSettings.clear')}
@@ -532,6 +620,67 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                         disabled={isDisabled}
                       />
                     ))}
+                    {dataConnectorsFeatureEnabled && remoteFilesGroupConnectors.length > 0 && (
+                      <div className="workspace-settings-kb-group">
+                        <div className="workspace-settings-kb-group__header">
+                          <Form.Check
+                            type="checkbox"
+                            id="panel-kb-group-remote-files"
+                            className="workspace-settings-list-item workspace-settings-kb-group__check"
+                            label={
+                              <span className="workspace-settings-kb-label">
+                                <Cloud size={14} />
+                                <span className="workspace-settings-kb-name">
+                                  {t('workspaceSettings.remoteFilesGroup')}
+                                </span>
+                              </span>
+                            }
+                            checked={remoteFilesGroupAllSelected}
+                            ref={(el: HTMLInputElement | null) => {
+                              if (el) el.indeterminate = remoteFilesGroupIndeterminate;
+                            }}
+                            onChange={toggleRemoteFilesGroup}
+                            disabled={isDisabled}
+                          />
+                          <button
+                            type="button"
+                            className="workspace-settings-kb-group__chevron"
+                            onClick={() => setRemoteFilesGroupExpanded((v) => !v)}
+                            aria-label={
+                              remoteFilesGroupExpanded
+                                ? t('workspaceSettings.collapseGroup')
+                                : t('workspaceSettings.expandGroup')
+                            }
+                          >
+                            {remoteFilesGroupExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          </button>
+                        </div>
+                        {remoteFilesGroupExpanded && (
+                          <div className="workspace-settings-kb-group__children">
+                            {remoteFilesGroupConnectors.map((c) => {
+                              return (
+                                <Form.Check
+                                  type="checkbox"
+                                  key={c.id}
+                                  id={`panel-remote-${c.id}`}
+                                  className="workspace-settings-list-item workspace-settings-kb-list-item"
+                                  title={t('workspaceSettings.remoteFilesTooltip', { name: c.displayName })}
+                                  label={
+                                    <span className="workspace-settings-kb-label">
+                                      <i className={c.icon} style={{ fontSize: 14 }} />
+                                      <span className="workspace-settings-kb-name">{c.displayName}</span>
+                                    </span>
+                                  }
+                                  checked={enabledNativeConnectorIds.includes(c.id)}
+                                  onChange={(e) => handleRemoteFileToggle(c.id, e.target.checked)}
+                                  disabled={isDisabled}
+                                />
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </>
               )}

@@ -889,7 +889,25 @@ def _build_integrations_context(
         email_signature: Optional user email signature settings.
     """
 
-    # Normalise inputs. Each entry is a dict with slug/method/name.
+    # Fallback for legacy payloads that don't carry an explicit isFileStore
+    # flag. Mirrors the native connectorRegistry's `surfaces: ['files', …]`
+    # entries — Pipedream slugs are deliberately NOT included so the flag's
+    # meaning matches the Files page (which only renders native connections
+    # in Remote Files). Any miss is "treat as non-file-store" (safe default:
+    # the agent loses the folder-preference hint but keeps full tool access).
+    # FUTURE: if Remote Files becomes Pipedream-capable, add Pipedream slugs
+    # here in lockstep with the frontend resolver change.
+    _FILE_STORE_FALLBACK = {
+        "googledrive",
+        "gmail",
+        "onedrive",
+        "dropbox",
+        "synergy",
+    }
+
+    # Normalise inputs. Each entry is a dict with slug/method/name and an
+    # optional is_file_store flag forwarded from the frontend (preferred) or
+    # derived from the fallback allowlist (back-compat).
     def _normalise(items: Optional[list[dict]]) -> list[dict]:
         out = []
         for it in items or []:
@@ -901,7 +919,22 @@ def _build_integrations_context(
             method = it.get("method")
             if method not in ("pipedream", "native"):
                 method = "pipedream"  # back-compat default
-            out.append({"slug": slug, "method": method, "name": it.get("name") or slug})
+            raw_is_file_store = it.get("is_file_store")
+            if raw_is_file_store is None:
+                raw_is_file_store = it.get("isFileStore")
+            is_file_store = (
+                bool(raw_is_file_store)
+                if raw_is_file_store is not None
+                else slug in _FILE_STORE_FALLBACK
+            )
+            out.append(
+                {
+                    "slug": slug,
+                    "method": method,
+                    "name": it.get("name") or slug,
+                    "is_file_store": is_file_store,
+                }
+            )
         return out
 
     enabled = _normalise(enabled_integrations)
@@ -924,6 +957,7 @@ def _build_integrations_context(
     has_native_enabled = any(e["method"] == "native" for e in enabled)
     pipedream_enabled_slugs = [e["slug"] for e in enabled if e["method"] == "pipedream"]
     native_enabled_slugs = [e["slug"] for e in enabled if e["method"] == "native"]
+    enabled_file_store_names = [e["name"] for e in enabled if e.get("is_file_store")]
 
     # Status lines — one per (method, slug). Method tagged inline so the
     # agent knows which tool family to use without a separate section.
@@ -957,8 +991,13 @@ def _build_integrations_context(
         elif pref == "native" and method == "pipedream":
             hint = " — admin set this service to the **native connector**; do not use `mcp__integrations__run_action` for it, use the `connectors` tool on the Native row for the same service."
 
+        file_store_tag = (
+            " — **file-store** (browsable file tree)"
+            if item.get("is_file_store")
+            else ""
+        )
         status_lines.append(
-            f"- {item['name']} (`{slug}`) — **{method_label}**: {enabled_marker}{hint}"
+            f"- {item['name']} (`{slug}`) — **{method_label}**: {enabled_marker}{file_store_tag}{hint}"
         )
 
     status_block = "\n".join(status_lines)
@@ -974,7 +1013,9 @@ Only rows marked **Enabled for this conversation** can be called by tools right 
 **Available integrations:**
 {status_block}
 
-**Method routing:** Follow the per-row method tag and any "admin set this service to ..." hint. When a service appears on both a Pipedream and a Native row, the admin hint is the source of truth — there is no global "prefer one or the other" rule. If you call the wrong family, the runtime rejects the call and tells you which to switch to."""
+**Method routing:** Follow the per-row method tag and any "admin set this service to ..." hint. When a service appears on both a Pipedream and a Native row, the admin hint is the source of truth — there is no global "prefer one or the other" rule. If you call the wrong family, the runtime rejects the call and tells you which to switch to.
+
+**File-store integrations:** Rows tagged **file-store** expose a browsable file tree (Google Drive, Dropbox, Synergy, …) and surface as folders in the user's Files page. When the user references a file without naming a specific folder or location, prefer browsing their enabled file-store integrations over guessing or fabricating paths. Don't silently write into a file-store integration — ask before creating or modifying anything there. Non-file-store rows (Slack, simPRO, …) are tool-only and have no folder semantics."""
 
     # ── Pipedream subsection (only when any pipedream is enabled) ────────
     if has_pipedream_enabled:

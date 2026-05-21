@@ -730,24 +730,50 @@ export default function UserProfilePage({
           : [];
 
         // 3. Native connectors — same union the integrations page uses.
+        //    OAuth: /oauth/{slug}/status (vault)
+        //    PAT:   /pat/{slug}/status   (vault)
+        //    DDB:   legacy data-connectors row (kept as a backstop only;
+        //           the vault paths are authoritative for the post-FEAT-143
+        //           unified model). Without the PAT-vault check a user who
+        //           had just connected a PAT connector wouldn't see it
+        //           listed in their Chat Defaults until something else
+        //           wrote the legacy DDB row.
         const oauthSlugs = configured.oauth.map((c) => c.id);
-        const oauthStatuses = await Promise.all(
-          oauthSlugs.map(async (slug) => {
-            try {
-              const s = await ConnectorsService.getStatus(slug);
-              return [slug, s.status === 'connected'] as const;
-            } catch {
-              return [slug, false] as const;
-            }
-          })
-        );
+        const patSlugs = configured.pat.map((c) => c.id);
+        // Both OAuth and PAT status go through ConnectorsService.getStatus,
+        // which routes each id to the correct vault endpoint via the
+        // registry. Calling OAuthProvidersService directly here previously
+        // sent PAT connectors through the OAuth endpoint, which 400-rejected.
+        const [oauthStatuses, patStatuses] = await Promise.all([
+          Promise.all(
+            oauthSlugs.map(async (slug) => {
+              try {
+                const s = await ConnectorsService.getStatus(slug);
+                return [slug, s.status === 'connected'] as const;
+              } catch {
+                return [slug, false] as const;
+              }
+            })
+          ),
+          Promise.all(
+            patSlugs.map(async (slug) => {
+              try {
+                const s = await ConnectorsService.getStatus(slug);
+                return [slug, s.status === 'connected'] as const;
+              } catch {
+                return [slug, false] as const;
+              }
+            })
+          ),
+        ]);
         if (cancelled) return;
         const oauthConnected = new Set(oauthStatuses.filter(([, ok]) => ok).map(([slug]) => slug));
+        const patConnected = new Set(patStatuses.filter(([, ok]) => ok).map(([slug]) => slug));
         const ddbConnected = new Set(nativeRows.filter((r) => r.status === 'connected').map((r) => r.connector_id));
 
         // Native connectors surfaced for the Chat Defaults picker. Must be
         // BOTH admin-enabled (catalog entry with `connectorEnabled === true`)
-        // AND user-connected (OAuth token or DDB status row).
+        // AND user-connected on at least one of the three sources above.
         //
         // The previous code had a fallback loop that included any slug the
         // user had ever OAuth-connected, regardless of admin enable state.
@@ -762,7 +788,7 @@ export default function UserProfilePage({
           const slug = entry.connectorSlug;
           if (!slug) continue;
           if (entry.connectorEnabled !== true) continue;
-          if (!oauthConnected.has(slug) && !ddbConnected.has(slug)) continue;
+          if (!oauthConnected.has(slug) && !patConnected.has(slug) && !ddbConnected.has(slug)) continue;
           if (seen.has(slug)) continue;
           seen.add(slug);
           const tmpl = getConnectorById(slug);

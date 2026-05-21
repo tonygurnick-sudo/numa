@@ -42,6 +42,12 @@ import { CreateSubfolderModal } from './CreateSubfolderModal';
 import { FolderContextMenu, type FolderContextAction, type FolderContextTarget } from './FolderContextMenu';
 import { FolderSettingsDrawer } from './FolderSettingsDrawer';
 import { extractDroppedUploadBatch, isExternalFileDrag, type DroppedUploadBatch } from './dropUploadUtils';
+import { useConnectedIntegrations, type ConnectedIntegration } from '../../hooks/useConnectedIntegrations';
+import { RemoteProviderBrowser, type SubFolderBreadcrumb } from './Remote/RemoteProviderBrowser';
+import { RemoteProviderInlineRows } from './Remote/RemoteProviderInlineRows';
+import { ConnectorStatusBadge, type ConnectorStatus } from '../DataConnectors/ConnectorStatusBadge';
+import { getFlag } from '../../utils/featureFlags';
+import { Link } from 'react-router-dom';
 
 interface UserFilesTabProps {
   onActionChange?: (actions: React.ReactNode) => void;
@@ -92,6 +98,26 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   // Navigation: null = root, set = inside a KB
   const [currentFolder, setCurrentFolder] = useState<NavigationState | null>(null);
+
+  // Parallel nav track for an integration drilled into from the User Files
+  // root (Gmail, Google Drive, Synergy, etc.). Mutually exclusive with
+  // `currentFolder` — root → KB and root → integration are sibling moves.
+  // `integrationSubPath` is the breadcrumb path WITHIN that integration; the
+  // page toolbar renders the full crumbs as one bar.
+  const [currentIntegration, setCurrentIntegration] = useState<ConnectedIntegration | null>(null);
+  const [integrationSubPath, setIntegrationSubPath] = useState<SubFolderBreadcrumb[]>([]);
+
+  const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
+  const { integrations, isLoading: integrationsLoading } = useConnectedIntegrations(dataConnectorsEnabled);
+  const [expandedIntegrations, setExpandedIntegrations] = useState<Set<string>>(new Set());
+  const toggleIntegrationExpansion = useCallback((id: string) => {
+    setExpandedIntegrations((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   // Inline expansion at root level
   const [expandedKbs, setExpandedKbs] = useState<Set<string>>(new Set());
@@ -1177,6 +1203,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       const ctx = folderContextMenu;
       if (!ctx) return;
       const { target } = ctx;
+      if (target.kind === 'integration') {
+        // All integration actions are disabled in the menu, so a dispatch
+        // shouldn't fire — guard explicitly in case that ever changes.
+        return;
+      }
       if (target.kind === 'topLevel') {
         const { kb } = target;
         if (action === 'addSubfolder') {
@@ -1293,6 +1324,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   // ── Build rows ─────────────────────────────────────────────
 
   const isInsideFolder = currentFolder !== null;
+  const isInsideIntegration = currentIntegration !== null;
   const currentKb = isInsideFolder
     ? (allUserKBs.find((kb) => kb.kb_id === currentFolder.kbId) ??
       (rootKB && currentFolder.kbId === rootKB.kb_id ? rootKB : null))
@@ -1359,10 +1391,14 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     kbId: string;
     isKbFolder: boolean;
     kb?: UserKB;
-    special?: 'loading' | 'empty' | 'section' | 'createFolder';
+    special?: 'loading' | 'empty' | 'section' | 'createFolder' | 'connectIntegration';
     sectionTitle?: string;
-    sectionBadge?: 'private' | 'shared';
+    sectionBadge?: 'private' | 'shared' | 'remote';
     createFolderVisibility?: 'personal' | 'shared';
+    /** Set on rows that represent a connected integration (rendered as a
+     *  top-level folder inside the Remote Files section). Mutually exclusive
+     *  with `kb` / `isKbFolder`. */
+    integration?: ConnectedIntegration;
   };
 
   const rows: RowEntry[] = [];
@@ -1495,7 +1531,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       }
     };
 
-    const sectionHeaderRow = (key: string, title: string, badge: 'private' | 'shared'): RowEntry => ({
+    const sectionHeaderRow = (key: string, title: string, badge: 'private' | 'shared' | 'remote'): RowEntry => ({
       row: {
         id: `section-${key}`,
         type: 'file',
@@ -1528,6 +1564,38 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       createFolderVisibility: visibility,
     });
 
+    const connectIntegrationRow = (): RowEntry => ({
+      row: {
+        id: 'connect-integration',
+        type: 'file',
+        name: '',
+        depth: 0,
+        uploadDate: '',
+        size: '',
+        status: 'indexed',
+      },
+      kbId: 'connect-integration',
+      isKbFolder: false,
+      special: 'connectIntegration',
+    });
+
+    const pushIntegrationRow = (integration: ConnectedIntegration) => {
+      rows.push({
+        row: {
+          id: `integration-${integration.id}`,
+          type: 'folder',
+          name: integration.displayName,
+          depth: 0,
+          uploadDate: '—',
+          size: '—',
+          status: 'indexed',
+        },
+        kbId: `integration-${integration.id}`,
+        isKbFolder: false,
+        integration,
+      });
+    };
+
     // Search/filter mode hides the create-folder affordance — it would just
     // be noise alongside filtered results.
     const showCreateRows = !anyFilterActive;
@@ -1556,6 +1624,29 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       rows.push(sectionHeaderRow('sharedFiles', t('sections.sharedFiles'), 'shared'));
       rows.push(createFolderRow('shared'));
     }
+
+    // "Remote Files" section: connected integrations that expose a navigable
+    // file tree (Google Drive, Dropbox, Synergy, …). Chat-only integrations
+    // (Slack, simPRO, …) are excluded via the registry-derived isFileStore
+    // flag — they don't belong in a file browser. Hidden when a search/filter
+    // is active because their contents aren't part of the User Files index
+    // and would silently miss matches. The trailing "+" row routes to the
+    // Integrations page rather than creating a folder.
+    if (dataConnectorsEnabled && !anyFilterActive) {
+      const fileStoreIntegrations = integrations.filter((i) => i.isFileStore);
+      const remoteStart = rows.length;
+      for (const integration of fileStoreIntegrations) pushIntegrationRow(integration);
+      if (rows.length > remoteStart) {
+        rows.splice(remoteStart, 0, sectionHeaderRow('remoteFiles', t('sections.remoteFiles'), 'remote'));
+        if (showCreateRows) rows.push(connectIntegrationRow());
+      } else if (showCreateRows && !integrationsLoading) {
+        // No file-store integrations connected yet — still surface the
+        // section with the "Connect Integration" affordance so the user can
+        // wire one up.
+        rows.push(sectionHeaderRow('remoteFiles', t('sections.remoteFiles'), 'remote'));
+        rows.push(connectIntegrationRow());
+      }
+    }
   }
 
   // ── Render ─────────────────────────────────────────────────
@@ -1579,7 +1670,34 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       <div className="finder-toolbar">
         <div className="finder-toolbar__left">
           <div className="finder-toolbar__location">
-            {isInsideFolder ? (
+            {isInsideIntegration && currentIntegration ? (
+              <>
+                <button
+                  className="finder-toolbar__back"
+                  onClick={() => {
+                    if (integrationSubPath.length > 0) {
+                      setIntegrationSubPath((prev) => prev.slice(0, -1));
+                    } else {
+                      setCurrentIntegration(null);
+                      setIntegrationSubPath([]);
+                    }
+                  }}
+                >
+                  <i className="bi bi-chevron-left" />
+                  {integrationSubPath.length > 0
+                    ? integrationSubPath.length === 1
+                      ? currentIntegration.displayName
+                      : integrationSubPath[integrationSubPath.length - 2].name
+                    : t('breadcrumb.userFiles')}
+                </button>
+                <span className="finder-toolbar__title">
+                  <i className={`${currentIntegration.icon} me-2`} aria-hidden />
+                  {integrationSubPath.length > 0
+                    ? integrationSubPath[integrationSubPath.length - 1].name
+                    : currentIntegration.displayName}
+                </span>
+              </>
+            ) : isInsideFolder ? (
               <>
                 <button
                   className={`finder-toolbar__back ${dragOverTarget === 'back' ? 'finder-toolbar__back--drop-over' : ''}`}
@@ -1612,7 +1730,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                 </span>
               </>
             ) : (
-              (isInitialLoad || isRootKbLoading || isMoving) && (
+              (isInitialLoad || isRootKbLoading || isMoving || integrationsLoading) && (
                 <Spinner
                   animation="border"
                   size="sm"
@@ -1625,9 +1743,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           </div>
           {/* Primary actions pinned to the left. Upload is the prominent
               primary purple button; New Folder is a subtle secondary next to
-              it. Inside a folder these become Upload + New Subfolder. */}
+              it. Inside a folder these become Upload + New Subfolder. Hidden
+              entirely while browsing an integration — those actions target
+              the user's KBs and would be confusing in that context. */}
           <div className="finder-toolbar__primary">
-            {!isInsideFolder && rootKB ? (
+            {isInsideIntegration ? null : !isInsideFolder && rootKB ? (
               <button
                 className="finder-btn finder-btn--primary finder-btn--labelled"
                 onClick={(e) => openUploadForKb(rootKB, e)}
@@ -1646,7 +1766,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                 <span className="finder-btn__label">{t('actions.upload')}</span>
               </button>
             ) : null}
-            {!isInsideFolder ? (
+            {isInsideIntegration ? null : !isInsideFolder ? (
               <button
                 className="finder-btn finder-btn--labelled"
                 onClick={() => openCreateModal()}
@@ -1680,488 +1800,568 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
             ) : null}
           </div>
         </div>
-        <div className="finder-toolbar__actions">
-          <div className="finder-search">
-            <i className="bi bi-search finder-search__icon" />
-            <input
-              type="text"
-              placeholder={tKb('fileExplorer.searchPlaceholder')}
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-            />
-          </div>
-          <select
-            className="finder-filter-select"
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as FileTypeCategory | 'all')}
-            title={t('filters.type')}
-          >
-            <option value="all">
-              {t('filters.type')}: {t('filters.all')}
-            </option>
-            <option value="pdf">{t('filters.types.pdf')}</option>
-            <option value="document">{t('filters.types.document')}</option>
-            <option value="spreadsheet">{t('filters.types.spreadsheet')}</option>
-            <option value="presentation">{t('filters.types.presentation')}</option>
-            <option value="text">{t('filters.types.text')}</option>
-            <option value="image">{t('filters.types.image')}</option>
-            <option value="other">{t('filters.types.other')}</option>
-          </select>
-          {uploaderOptions.length > 0 && (
+        {!isInsideIntegration && (
+          <div className="finder-toolbar__actions">
+            <div className="finder-search">
+              <i className="bi bi-search finder-search__icon" />
+              <input
+                type="text"
+                placeholder={tKb('fileExplorer.searchPlaceholder')}
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+              />
+            </div>
             <select
               className="finder-filter-select"
-              value={uploaderFilter}
-              onChange={(e) => setUploaderFilter(e.target.value)}
-              title={t('filters.uploadedBy')}
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as FileTypeCategory | 'all')}
+              title={t('filters.type')}
             >
               <option value="all">
-                {t('filters.uploadedBy')}: {t('filters.all')}
+                {t('filters.type')}: {t('filters.all')}
               </option>
-              {uploaderOptions.map((u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ))}
+              <option value="pdf">{t('filters.types.pdf')}</option>
+              <option value="document">{t('filters.types.document')}</option>
+              <option value="spreadsheet">{t('filters.types.spreadsheet')}</option>
+              <option value="presentation">{t('filters.types.presentation')}</option>
+              <option value="text">{t('filters.types.text')}</option>
+              <option value="image">{t('filters.types.image')}</option>
+              <option value="other">{t('filters.types.other')}</option>
             </select>
-          )}
-          <select
-            className="finder-filter-select"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | '7d' | '30d')}
-          >
-            <option value="all">
-              {t('filters.date')}: {t('filters.all')}
-            </option>
-            <option value="today">{t('filters.dateOptions.today')}</option>
-            <option value="7d">{t('filters.dateOptions.last7')}</option>
-            <option value="30d">{t('filters.dateOptions.last30')}</option>
-          </select>
-          {selectedKeys.size > 0 && isInsideFolder && canEditCurrent && (
-            <button
-              className="finder-btn finder-btn--danger"
-              onClick={() => confirmDeleteFiles(currentFolder!.kbId, Array.from(selectedKeys))}
-              title={t('delete.confirm', { count: selectedKeys.size })}
+            {uploaderOptions.length > 0 && (
+              <select
+                className="finder-filter-select"
+                value={uploaderFilter}
+                onChange={(e) => setUploaderFilter(e.target.value)}
+                title={t('filters.uploadedBy')}
+              >
+                <option value="all">
+                  {t('filters.uploadedBy')}: {t('filters.all')}
+                </option>
+                {uploaderOptions.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select
+              className="finder-filter-select"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | '7d' | '30d')}
             >
-              <i className="bi bi-trash" />
-              <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
-            </button>
-          )}
-          <button
-            className="finder-btn"
-            onClick={() => {
-              if (isInsideFolder) {
-                fetchKbFiles(currentFolder!.kbId);
-                fetchDeepKbFiles(currentFolder!.kbId, true);
-              } else {
-                // Root view: force-refresh deep data for every KB — same scope
-                // as what a search activation does, just forced. Also shallow-
-                // refresh the root KB (the only one that renders inline files).
-                if (rootKB) fetchKbFiles(rootKB.kb_id);
-                const targets: string[] = [];
-                if (rootKB) targets.push(rootKB.kb_id);
-                for (const kb of allUserKBs) targets.push(kb.kb_id);
-                for (const kbId of targets) {
-                  fetchDeepKbFiles(kbId, true);
+              <option value="all">
+                {t('filters.date')}: {t('filters.all')}
+              </option>
+              <option value="today">{t('filters.dateOptions.today')}</option>
+              <option value="7d">{t('filters.dateOptions.last7')}</option>
+              <option value="30d">{t('filters.dateOptions.last30')}</option>
+            </select>
+            {selectedKeys.size > 0 && isInsideFolder && canEditCurrent && (
+              <button
+                className="finder-btn finder-btn--danger"
+                onClick={() => confirmDeleteFiles(currentFolder!.kbId, Array.from(selectedKeys))}
+                title={t('delete.confirm', { count: selectedKeys.size })}
+              >
+                <i className="bi bi-trash" />
+                <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
+              </button>
+            )}
+            <button
+              className="finder-btn"
+              onClick={() => {
+                if (isInsideFolder) {
+                  fetchKbFiles(currentFolder!.kbId);
+                  fetchDeepKbFiles(currentFolder!.kbId, true);
+                } else {
+                  // Root view: force-refresh deep data for every KB — same scope
+                  // as what a search activation does, just forced. Also shallow-
+                  // refresh the root KB (the only one that renders inline files).
+                  if (rootKB) fetchKbFiles(rootKB.kb_id);
+                  const targets: string[] = [];
+                  if (rootKB) targets.push(rootKB.kb_id);
+                  for (const kb of allUserKBs) targets.push(kb.kb_id);
+                  for (const kbId of targets) {
+                    fetchDeepKbFiles(kbId, true);
+                  }
                 }
-              }
-            }}
-          >
-            <i className="bi bi-arrow-clockwise" />
-          </button>
-        </div>
+              }}
+            >
+              <i className="bi bi-arrow-clockwise" />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Column headers — only shown inside a folder. At root view, each
-          section header row (MY FILES / SHARED FILES) carries the column
-          labels via grid cells to save a row of vertical space. */}
-      {isInsideFolder && (
-        <div className="finder-columns finder-grid-6">
-          <div
-            className={`finder-col ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
-            onClick={() => handleSortToggle('name')}
-          >
-            {tKb('fileExplorer.table.name')}
-            {sortColumn === 'name' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
-          </div>
-          <div
-            className={`finder-col ${sortColumn === 'type' ? 'finder-col--active' : ''}`}
-            onClick={() => handleSortToggle('type')}
-          >
-            {tKb('fileExplorer.table.type')}
-            {sortColumn === 'type' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
-          </div>
-          <div className="finder-col d-none d-lg-flex">{tKb('fileExplorer.table.addedBy')}</div>
-          <div
-            className={`finder-col d-none d-md-flex ${sortColumn === 'date' ? 'finder-col--active' : ''}`}
-            onClick={() => handleSortToggle('date')}
-          >
-            {tKb('fileExplorer.table.modified')}
-            {sortColumn === 'date' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
-          </div>
-          <div
-            className={`finder-col d-none d-sm-flex ${sortColumn === 'size' ? 'finder-col--active' : ''}`}
-            onClick={() => handleSortToggle('size')}
-          >
-            {tKb('fileExplorer.table.size')}
-            {sortColumn === 'size' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
-          </div>
-          <div className="finder-col"></div>
-        </div>
-      )}
+      {isInsideIntegration && currentIntegration ? (
+        <RemoteProviderBrowser
+          providerId={currentIntegration.id}
+          providerName={currentIntegration.displayName}
+          providerIcon={currentIntegration.icon}
+          subFolderPath={integrationSubPath}
+          onSubFolderPathChange={setIntegrationSubPath}
+        />
+      ) : (
+        <>
+          {/* Column headers — only shown inside a folder. At root view, each
+          section header row (MY FILES / SHARED FILES / REMOTE FILES) carries
+          the column labels via grid cells to save a row of vertical space. */}
+          {isInsideFolder && (
+            <div className="finder-columns finder-grid-6">
+              <div
+                className={`finder-col ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
+                onClick={() => handleSortToggle('name')}
+              >
+                {tKb('fileExplorer.table.name')}
+                {sortColumn === 'name' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+              </div>
+              <div
+                className={`finder-col ${sortColumn === 'type' ? 'finder-col--active' : ''}`}
+                onClick={() => handleSortToggle('type')}
+              >
+                {tKb('fileExplorer.table.type')}
+                {sortColumn === 'type' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+              </div>
+              <div className="finder-col d-none d-lg-flex">{tKb('fileExplorer.table.addedBy')}</div>
+              <div
+                className={`finder-col d-none d-md-flex ${sortColumn === 'date' ? 'finder-col--active' : ''}`}
+                onClick={() => handleSortToggle('date')}
+              >
+                {tKb('fileExplorer.table.modified')}
+                {sortColumn === 'date' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+              </div>
+              <div
+                className={`finder-col d-none d-sm-flex ${sortColumn === 'size' ? 'finder-col--active' : ''}`}
+                onClick={() => handleSortToggle('size')}
+              >
+                {tKb('fileExplorer.table.size')}
+                {sortColumn === 'size' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
+              </div>
+              <div className="finder-col"></div>
+            </div>
+          )}
 
-      {/* Search status hints */}
-      {isFilterOrSearchActive && deepLoadingKbs.size > 0 && (
-        <div className="finder-search-hint">
-          <Spinner animation="border" size="sm" variant="secondary" style={{ width: '0.65rem', height: '0.65rem' }} />
-          <span className="text-muted small">{t('search.loadingDeep')}</span>
-        </div>
-      )}
-      {isFilterOrSearchActive && deepLoadingKbs.size === 0 && (
-        <div className="finder-search-hint">
-          <i className="bi bi-info-circle text-muted" style={{ fontSize: '0.75rem' }} />
-          <span className="text-muted small">{t('search.cachedHint')}</span>
-        </div>
-      )}
+          {/* Search status hints */}
+          {isFilterOrSearchActive && deepLoadingKbs.size > 0 && (
+            <div className="finder-search-hint">
+              <Spinner
+                animation="border"
+                size="sm"
+                variant="secondary"
+                style={{ width: '0.65rem', height: '0.65rem' }}
+              />
+              <span className="text-muted small">{t('search.loadingDeep')}</span>
+            </div>
+          )}
+          {isFilterOrSearchActive && deepLoadingKbs.size === 0 && (
+            <div className="finder-search-hint">
+              <i className="bi bi-info-circle text-muted" style={{ fontSize: '0.75rem' }} />
+              <span className="text-muted small">{t('search.cachedHint')}</span>
+            </div>
+          )}
 
-      {/* File list */}
-      <div className="finder-list">
-        {rows.length === 0 ? (
-          <div className="finder-empty">
-            <i className="bi bi-folder" />
-            <span>{allUserKBs.length === 0 ? t('folderList.empty.title') : tKb('fileExplorer.empty')}</span>
-            {allUserKBs.length === 0 && (
-              <div className="d-flex gap-2 mt-2">
-                <button className="finder-btn finder-btn--primary" onClick={() => setShowCreateModal(true)}>
-                  <i className="bi bi-folder-plus" /> {t('actions.newFolder')}
-                </button>
-                {rootKB && (
-                  <button className="finder-btn finder-btn--primary" onClick={(e) => openUploadForKb(rootKB, e)}>
-                    <i className="bi bi-upload" /> {t('rootFiles.upload')}
-                  </button>
+          {/* File list */}
+          <div className="finder-list">
+            {rows.length === 0 ? (
+              <div className="finder-empty">
+                <i className="bi bi-folder" />
+                <span>{allUserKBs.length === 0 ? t('folderList.empty.title') : tKb('fileExplorer.empty')}</span>
+                {allUserKBs.length === 0 && (
+                  <div className="d-flex gap-2 mt-2">
+                    <button className="finder-btn finder-btn--primary" onClick={() => setShowCreateModal(true)}>
+                      <i className="bi bi-folder-plus" /> {t('actions.newFolder')}
+                    </button>
+                    {rootKB && (
+                      <button className="finder-btn finder-btn--primary" onClick={(e) => openUploadForKb(rootKB, e)}>
+                        <i className="bi bi-upload" /> {t('rootFiles.upload')}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        ) : (
-          rows.map(({ row, kbId, isKbFolder, kb, special, sectionTitle, sectionBadge, createFolderVisibility }) => {
-            if (special === 'createFolder') {
-              return (
-                <button
-                  key={row.id}
-                  type="button"
-                  className="finder-create-folder-row"
-                  onClick={() => openCreateModal(createFolderVisibility)}
-                >
-                  <i className="bi bi-plus-lg" />
-                  <span>
-                    {createFolderVisibility === 'shared' ? t('actions.newSharedFolder') : t('actions.newPrivateFolder')}
-                  </span>
-                </button>
-              );
-            }
-            if (special === 'section') {
-              return (
-                <div key={row.id} className="finder-section-header finder-grid-6">
-                  <div className="finder-section-header__label">
-                    <span className="finder-section-header__title">{sectionTitle}</span>
-                    {sectionBadge === 'private' && (
-                      <span
-                        className="finder-row__visibility-badge finder-row__visibility-badge--private"
-                        title={t('folderList.privateTooltip')}
-                      >
-                        <i className="bi bi-shield-lock-fill" />
-                        {t('folderList.private')}
-                      </span>
-                    )}
-                    {sectionBadge === 'shared' && (
-                      <span
-                        className="finder-row__visibility-badge finder-row__visibility-badge--shared"
-                        title={t('folderList.sharing')}
-                      >
-                        <i className="bi bi-people-fill" />
-                        {t('folderList.shared')}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    className={`finder-col ${sortColumn === 'type' ? 'finder-col--active' : ''}`}
-                    onClick={() => handleSortToggle('type')}
-                  >
-                    {tKb('fileExplorer.table.type')}
-                    {sortColumn === 'type' && (
-                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />
-                    )}
-                  </div>
-                  <div className="finder-col d-none d-lg-flex">{tKb('fileExplorer.table.addedBy')}</div>
-                  <div
-                    className={`finder-col d-none d-md-flex ${sortColumn === 'date' ? 'finder-col--active' : ''}`}
-                    onClick={() => handleSortToggle('date')}
-                  >
-                    {tKb('fileExplorer.table.modified')}
-                    {sortColumn === 'date' && (
-                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />
-                    )}
-                  </div>
-                  <div
-                    className={`finder-col d-none d-sm-flex ${sortColumn === 'size' ? 'finder-col--active' : ''}`}
-                    onClick={() => handleSortToggle('size')}
-                  >
-                    {tKb('fileExplorer.table.size')}
-                    {sortColumn === 'size' && (
-                      <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />
-                    )}
-                  </div>
-                  <div className="finder-col"></div>
-                </div>
-              );
-            }
-            if (special === 'loading') {
-              return (
-                <div key={row.id} className="finder-loading">
-                  <Spinner animation="border" size="sm" variant="secondary" />
-                  <span>{tKb('fileExplorer.loadingFiles')}</span>
-                </div>
-              );
-            }
-            if (special === 'empty') {
-              return (
-                <div key={row.id} className="finder-empty" style={{ padding: '1.5rem' }}>
-                  <i className="bi bi-inbox" style={{ fontSize: '1.5rem' }} />
-                  <span>{tKb('fileExplorer.empty')}</span>
-                </div>
-              );
-            }
-
-            const isFolder = row.type === 'folder';
-            const kbState = kbFileStates.get(kbId);
-
-            // KB folder row at root level
-            if (isKbFolder && kb) {
-              const isExpanded = expandedKbs.has(kb.kb_id);
-              const isRootRow = !!kb.is_root;
-              const isOwner = kb.role === 'OWNER';
-              const isEditor = kb.role === 'EDITOR';
-              const canEdit = isOwner || isEditor;
-              const isDropTarget = dragOverTarget === row.id;
-              const dropDisabled = !canEdit;
-
-              return (
-                <div
-                  key={row.id}
-                  className={[
-                    'finder-row',
-                    'finder-row--folder',
-                    'finder-grid-6',
-                    isExpanded ? 'finder-row--expanded' : '',
-                    isDropTarget ? 'finder-row--drop-over' : '',
-                    isDragging && dropDisabled ? 'finder-row--viewer-disabled' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  onDoubleClick={() => navigateIntoKb(kb)}
-                  onContextMenu={(e) => openFolderContextMenu(e, { kind: 'topLevel', kb })}
-                  onDragOver={(e) => onTargetDragOver(e, row.id, !dropDisabled)}
-                  onDragLeave={() => onTargetDragLeave(row.id)}
-                  onDrop={(e) => {
-                    if (isExternalFileDrag(e)) {
-                      void handleExternalUploadDrop(e, kb, '', false);
-                    } else if (!dropDisabled) {
-                      onDropOnKb(e, kb);
-                    }
-                  }}
-                >
-                  <div className="finder-row__name-content">
-                    <span
-                      className="finder-chevron"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleKbExpansion(kb.kb_id);
-                      }}
-                    >
-                      <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
-                    </span>
-                    {isRootRow ? (
-                      <i className="bi bi-person-circle finder-icon finder-icon--my-files" />
-                    ) : (
-                      <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
-                    )}
-                    <span className="finder-name">{displayKbName(kb)}</span>
-                    {!isOwner && !isRootRow && (
-                      <span className="finder-row__badge">{isEditor ? t('badges.editor') : t('badges.viewer')}</span>
-                    )}
-                    {kbFileStates.get(kb.kb_id)?.truncated && (
-                      <i
-                        className="bi bi-exclamation-triangle-fill"
-                        style={{ fontSize: '0.7rem', color: '#eab308' }}
-                        title={t('search.truncatedTooltip')}
-                      />
-                    )}
-                  </div>
-                  <div className="finder-row__meta finder-row__meta--type"></div>
-                  <div className="finder-row__meta d-none d-lg-block"></div>
-                  <div className="finder-row__meta d-none d-md-block"></div>
-                  <div className="finder-row__meta d-none d-sm-block">
-                    {(() => {
-                      const s = kbFileStates.get(kb.kb_id);
-                      // Use the in-cache count once the KB has been deep-loaded
-                      // (recursive + accurate). Fall back to the backend's
-                      // root-level document_count before that.
-                      const cached = s?.deepLoaded ? s.files.filter((f) => !f.Key.endsWith('/')).length : null;
-                      const count = cached ?? kb.document_count ?? 0;
-                      return count > 0 ? tKb('fileExplorer.table.items', { count }) : '';
-                    })()}
-                  </div>
-                  <div className="finder-row__actions">
-                    {canEdit && (
-                      <>
-                        <button onClick={(e) => openUploadForKb(kb, e)} title={t('actions.uploadFiles')}>
-                          <i className="bi bi-upload" />
-                        </button>
-                        {!isRootRow && (
-                          <button onClick={(e) => openSettings(kb, e)} title={t('folderList.settings')}>
-                            <i className="bi bi-gear" />
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            }
-
-            // Child rows (files and subfolders)
-            const isSubfolder = isFolder;
-            const isSubfolderExpanded = isSubfolder && (kbState?.expandedFolders.has(row.id) ?? false);
-            const isSubfolderLoading = isSubfolder && (kbState?.loadingFolders.has(row.id) ?? false);
-            const rowCanEdit = canEditKb(kbId);
-            const isFileSelected = !isSubfolder && !!row.originalKey && selectedKeys.has(row.originalKey);
-            const isRowDropTarget = isSubfolder && dragOverTarget === row.id;
-
-            return (
-              <div
-                key={row.id}
-                className={[
-                  'finder-row',
-                  'finder-grid-6',
-                  isSubfolder ? 'finder-row--folder' : '',
-                  `finder-row--depth-${row.depth}`,
-                  isFileSelected ? 'finder-row--selected' : '',
-                  isRowDropTarget ? 'finder-row--drop-over' : '',
-                  !isSubfolder ? 'finder-row--file-selectable' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                draggable={(isSubfolder || !!row.originalKey) && rowCanEdit}
-                onDragStart={(e) => {
-                  if (isSubfolder) {
-                    onFolderDragStart(e, kbId, row.id);
-                  } else if (row.originalKey) {
-                    onFileDragStart(e, kbId, row.originalKey);
-                  }
-                }}
-                onDragEnd={() => {
-                  onFileDragEnd();
-                }}
-                onDragOver={(e) => {
-                  if (isSubfolder) onTargetDragOver(e, row.id, rowCanEdit);
-                }}
-                onDragLeave={() => {
-                  if (isSubfolder) onTargetDragLeave(row.id);
-                }}
-                onDrop={(e) => {
-                  if (!isSubfolder || !rowCanEdit) return;
-                  if (isExternalFileDrag(e)) {
-                    const targetKb =
-                      (rootKB && kbId === rootKB.kb_id
-                        ? rootKB
-                        : allUserKBs.find((candidate) => candidate.kb_id === kbId)) ?? null;
-                    if (targetKb) {
-                      void handleExternalUploadDrop(e, targetKb, subfolderRelativePath(kbId, row.id), false);
-                    }
-                  } else {
-                    onDropOnSubfolder(e, kbId, row.id);
-                  }
-                }}
-                onContextMenu={(e) => {
-                  if (isSubfolder) {
-                    openFolderContextMenu(e, {
-                      kind: 'subfolder',
-                      kbId,
-                      folderId: row.id,
-                      folderName: row.displayName || row.name,
-                    });
-                  }
-                }}
-                onClick={(e) => {
-                  if (!isSubfolder && row.originalKey) handleFileClick(row.originalKey, e);
-                }}
-                onDoubleClick={() => {
-                  if (isSubfolder) {
-                    navigateIntoSubfolder(kbId, row.id, row.displayName || row.name);
-                  } else if (row.originalKey) {
-                    const filename = row.name;
-                    const isWc =
-                      row.originalKey?.includes('web-crawler/') || row.originalKey?.includes('scraped-content/');
-                    const ext = isWc ? 'md' : filename.includes('.') ? filename.split('.').pop() || '' : '';
-                    handleOpenFilePreview({
-                      filename,
-                      fullPath: row.originalKey!,
-                      relativePath: row.originalKey!,
-                      extension: ext,
-                    });
-                  }
-                }}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="finder-row__name-content">
-                  {isSubfolder ? (
-                    isSubfolderLoading ? (
-                      <Spinner
-                        animation="border"
-                        size="sm"
-                        variant="secondary"
-                        style={{ width: '0.6rem', height: '0.6rem', flexShrink: 0 }}
-                      />
-                    ) : (
-                      <span className="finder-chevron" onClick={() => toggleSubfolder(kbId, row.id)}>
-                        <i className={`bi bi-chevron-${isSubfolderExpanded ? 'down' : 'right'}`} />
-                      </span>
-                    )
-                  ) : (
-                    <span className="finder-chevron-spacer" />
-                  )}
-                  {isSubfolder ? (
-                    <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
-                  ) : (
-                    <i
-                      className={`${getFileIconClass(row.name)} finder-icon finder-icon--file ${getFileIconColorClass(row.name)}`}
-                    />
-                  )}
-                  <span className="finder-name">{row.displayName || row.name}</span>
-                </div>
-                <div className="finder-row__meta finder-row__meta--type">
-                  {isSubfolder ? '' : row.name.includes('.') ? (row.name.split('.').pop()?.toUpperCase() ?? '') : ''}
-                </div>
-                <div className="finder-row__meta d-none d-lg-block">{!isSubfolder ? row.uploadedBy || '' : ''}</div>
-                <div className="finder-row__meta d-none d-md-block">{!isSubfolder ? row.uploadDate : ''}</div>
-                <div className="finder-row__meta d-none d-sm-block">
-                  {isSubfolder
-                    ? (() => {
-                        const state = kbFileStates.get(kbId);
-                        if (!state) return '';
-                        const prefix = row.id.endsWith('/') ? row.id : `${row.id}/`;
-                        const count = state.files.filter(
-                          (f) => f.Key.startsWith(prefix) && !f.Key.endsWith('/')
-                        ).length;
-                        return count > 0 ? tKb('fileExplorer.table.items', { count }) : '';
-                      })()
-                    : row.size}
-                </div>
-                <div className="finder-row__actions">
-                  {!isSubfolder && row.originalKey && (
-                    <>
+            ) : (
+              rows.map(
+                ({
+                  row,
+                  kbId,
+                  isKbFolder,
+                  kb,
+                  special,
+                  sectionTitle,
+                  sectionBadge,
+                  createFolderVisibility,
+                  integration,
+                }) => {
+                  if (special === 'createFolder') {
+                    return (
                       <button
-                        onClick={() => {
+                        key={row.id}
+                        type="button"
+                        className="finder-create-folder-row"
+                        onClick={() => openCreateModal(createFolderVisibility)}
+                      >
+                        <i className="bi bi-plus-lg" />
+                        <span>
+                          {createFolderVisibility === 'shared'
+                            ? t('actions.newSharedFolder')
+                            : t('actions.newPrivateFolder')}
+                        </span>
+                      </button>
+                    );
+                  }
+                  if (special === 'connectIntegration') {
+                    return (
+                      <Link key={row.id} to="/integrations" className="finder-create-folder-row">
+                        <i className="bi bi-plus-lg" />
+                        <span>{t('sections.connectIntegration')}</span>
+                      </Link>
+                    );
+                  }
+                  if (special === 'section') {
+                    return (
+                      <div key={row.id} className="finder-section-header finder-grid-6">
+                        <div className="finder-section-header__label">
+                          <span className="finder-section-header__title">{sectionTitle}</span>
+                          {sectionBadge === 'private' && (
+                            <span
+                              className="finder-row__visibility-badge finder-row__visibility-badge--private"
+                              title={t('folderList.privateTooltip')}
+                            >
+                              <i className="bi bi-shield-lock-fill" />
+                              {t('folderList.private')}
+                            </span>
+                          )}
+                          {sectionBadge === 'shared' && (
+                            <span
+                              className="finder-row__visibility-badge finder-row__visibility-badge--shared"
+                              title={t('folderList.sharing')}
+                            >
+                              <i className="bi bi-people-fill" />
+                              {t('folderList.shared')}
+                            </span>
+                          )}
+                          {sectionBadge === 'remote' && (
+                            <span
+                              className="finder-row__visibility-badge finder-row__visibility-badge--remote"
+                              title={t('folderList.remoteTooltip', 'Connected integrations')}
+                            >
+                              <i className="bi bi-cloud-arrow-down-fill" />
+                              {t('folderList.remote', 'Remote')}
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          className={`finder-col ${sortColumn === 'type' ? 'finder-col--active' : ''}`}
+                          onClick={() => handleSortToggle('type')}
+                        >
+                          {tKb('fileExplorer.table.type')}
+                          {sortColumn === 'type' && (
+                            <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />
+                          )}
+                        </div>
+                        <div className="finder-col d-none d-lg-flex">{tKb('fileExplorer.table.addedBy')}</div>
+                        <div
+                          className={`finder-col d-none d-md-flex ${sortColumn === 'date' ? 'finder-col--active' : ''}`}
+                          onClick={() => handleSortToggle('date')}
+                        >
+                          {tKb('fileExplorer.table.modified')}
+                          {sortColumn === 'date' && (
+                            <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />
+                          )}
+                        </div>
+                        <div
+                          className={`finder-col d-none d-sm-flex ${sortColumn === 'size' ? 'finder-col--active' : ''}`}
+                          onClick={() => handleSortToggle('size')}
+                        >
+                          {tKb('fileExplorer.table.size')}
+                          {sortColumn === 'size' && (
+                            <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />
+                          )}
+                        </div>
+                        <div className="finder-col"></div>
+                      </div>
+                    );
+                  }
+                  if (special === 'loading') {
+                    return (
+                      <div key={row.id} className="finder-loading">
+                        <Spinner animation="border" size="sm" variant="secondary" />
+                        <span>{tKb('fileExplorer.loadingFiles')}</span>
+                      </div>
+                    );
+                  }
+                  if (special === 'empty') {
+                    return (
+                      <div key={row.id} className="finder-empty" style={{ padding: '1.5rem' }}>
+                        <i className="bi bi-inbox" style={{ fontSize: '1.5rem' }} />
+                        <span>{tKb('fileExplorer.empty')}</span>
+                      </div>
+                    );
+                  }
+
+                  // Integration folder row — top-level entry that mirrors the KB
+                  // folder row pattern: chevron toggles inline expansion, double-
+                  // click drills into the integration's full browser view. Status
+                  // badge + reconnect link surface any token issues without
+                  // forcing the user out of the list.
+                  if (integration) {
+                    const badgeStatus: ConnectorStatus =
+                      integration.status === 'connected'
+                        ? 'connected'
+                        : integration.status === 'error'
+                          ? 'expired'
+                          : 'check_failed';
+                    const needsAttention = integration.status !== 'connected';
+                    const isExpanded = expandedIntegrations.has(integration.id);
+                    return (
+                      <React.Fragment key={row.id}>
+                        <div
+                          className={[
+                            'finder-row',
+                            'finder-row--folder',
+                            'finder-grid-6',
+                            isExpanded ? 'finder-row--expanded' : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                          onDoubleClick={() => {
+                            setCurrentIntegration(integration);
+                            setIntegrationSubPath([]);
+                          }}
+                          onContextMenu={(e) =>
+                            openFolderContextMenu(e, {
+                              kind: 'integration',
+                              integrationId: integration.id,
+                              integrationName: integration.displayName,
+                            })
+                          }
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <div className="finder-row__name-content">
+                            <span
+                              className="finder-chevron"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleIntegrationExpansion(integration.id);
+                              }}
+                            >
+                              <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
+                            </span>
+                            <i className={`${integration.icon} finder-icon finder-icon--folder`} aria-hidden />
+                            <span className="finder-name">{integration.displayName}</span>
+                            <ConnectorStatusBadge
+                              status={badgeStatus}
+                              detail={integration.errorMessage}
+                              className="ms-2"
+                            />
+                            {needsAttention && (
+                              <Link
+                                to={`/integrations#${integration.id}`}
+                                className="ms-2 small"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {t('integrationFolder.reconnectLink', 'Reconnect at Integrations')}
+                              </Link>
+                            )}
+                          </div>
+                          <div className="finder-row__meta finder-row__meta--type">
+                            {t('integrationFolder.typeLabel', 'Integration')}
+                          </div>
+                          <div className="finder-row__meta d-none d-lg-block" />
+                          <div className="finder-row__meta d-none d-md-block" />
+                          <div className="finder-row__meta d-none d-sm-block" />
+                          <div className="finder-row__actions" />
+                        </div>
+                        {isExpanded && (
+                          <RemoteProviderInlineRows
+                            providerId={integration.id}
+                            baseDepth={1}
+                            onRowContextMenu={(e) =>
+                              openFolderContextMenu(e, {
+                                kind: 'integration',
+                                integrationId: integration.id,
+                                integrationName: integration.displayName,
+                              })
+                            }
+                            onFolderDoubleClick={() => {
+                              setCurrentIntegration(integration);
+                              setIntegrationSubPath([]);
+                            }}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  }
+
+                  const isFolder = row.type === 'folder';
+                  const kbState = kbFileStates.get(kbId);
+
+                  // KB folder row at root level
+                  if (isKbFolder && kb) {
+                    const isExpanded = expandedKbs.has(kb.kb_id);
+                    const isRootRow = !!kb.is_root;
+                    const isOwner = kb.role === 'OWNER';
+                    const isEditor = kb.role === 'EDITOR';
+                    const canEdit = isOwner || isEditor;
+                    const isDropTarget = dragOverTarget === row.id;
+                    const dropDisabled = !canEdit;
+
+                    return (
+                      <div
+                        key={row.id}
+                        className={[
+                          'finder-row',
+                          'finder-row--folder',
+                          'finder-grid-6',
+                          isExpanded ? 'finder-row--expanded' : '',
+                          isDropTarget ? 'finder-row--drop-over' : '',
+                          isDragging && dropDisabled ? 'finder-row--viewer-disabled' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        onDoubleClick={() => navigateIntoKb(kb)}
+                        onContextMenu={(e) => openFolderContextMenu(e, { kind: 'topLevel', kb })}
+                        onDragOver={(e) => onTargetDragOver(e, row.id, !dropDisabled)}
+                        onDragLeave={() => onTargetDragLeave(row.id)}
+                        onDrop={(e) => {
+                          if (isExternalFileDrag(e)) {
+                            void handleExternalUploadDrop(e, kb, '', false);
+                          } else if (!dropDisabled) {
+                            onDropOnKb(e, kb);
+                          }
+                        }}
+                      >
+                        <div className="finder-row__name-content">
+                          <span
+                            className="finder-chevron"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleKbExpansion(kb.kb_id);
+                            }}
+                          >
+                            <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} />
+                          </span>
+                          {isRootRow ? (
+                            <i className="bi bi-person-circle finder-icon finder-icon--my-files" />
+                          ) : (
+                            <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
+                          )}
+                          <span className="finder-name">{displayKbName(kb)}</span>
+                          {!isOwner && !isRootRow && (
+                            <span className="finder-row__badge">
+                              {isEditor ? t('badges.editor') : t('badges.viewer')}
+                            </span>
+                          )}
+                          {kbFileStates.get(kb.kb_id)?.truncated && (
+                            <i
+                              className="bi bi-exclamation-triangle-fill"
+                              style={{ fontSize: '0.7rem', color: '#eab308' }}
+                              title={t('search.truncatedTooltip')}
+                            />
+                          )}
+                        </div>
+                        <div className="finder-row__meta finder-row__meta--type"></div>
+                        <div className="finder-row__meta d-none d-lg-block"></div>
+                        <div className="finder-row__meta d-none d-md-block"></div>
+                        <div className="finder-row__meta d-none d-sm-block">
+                          {(() => {
+                            const s = kbFileStates.get(kb.kb_id);
+                            // Use the in-cache count once the KB has been deep-loaded
+                            // (recursive + accurate). Fall back to the backend's
+                            // root-level document_count before that.
+                            const cached = s?.deepLoaded ? s.files.filter((f) => !f.Key.endsWith('/')).length : null;
+                            const count = cached ?? kb.document_count ?? 0;
+                            return count > 0 ? tKb('fileExplorer.table.items', { count }) : '';
+                          })()}
+                        </div>
+                        <div className="finder-row__actions">
+                          {canEdit && (
+                            <>
+                              <button onClick={(e) => openUploadForKb(kb, e)} title={t('actions.uploadFiles')}>
+                                <i className="bi bi-upload" />
+                              </button>
+                              {!isRootRow && (
+                                <button onClick={(e) => openSettings(kb, e)} title={t('folderList.settings')}>
+                                  <i className="bi bi-gear" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Child rows (files and subfolders)
+                  const isSubfolder = isFolder;
+                  const isSubfolderExpanded = isSubfolder && (kbState?.expandedFolders.has(row.id) ?? false);
+                  const isSubfolderLoading = isSubfolder && (kbState?.loadingFolders.has(row.id) ?? false);
+                  const rowCanEdit = canEditKb(kbId);
+                  const isFileSelected = !isSubfolder && !!row.originalKey && selectedKeys.has(row.originalKey);
+                  const isRowDropTarget = isSubfolder && dragOverTarget === row.id;
+
+                  return (
+                    <div
+                      key={row.id}
+                      className={[
+                        'finder-row',
+                        'finder-grid-6',
+                        isSubfolder ? 'finder-row--folder' : '',
+                        `finder-row--depth-${row.depth}`,
+                        isFileSelected ? 'finder-row--selected' : '',
+                        isRowDropTarget ? 'finder-row--drop-over' : '',
+                        !isSubfolder ? 'finder-row--file-selectable' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      draggable={(isSubfolder || !!row.originalKey) && rowCanEdit}
+                      onDragStart={(e) => {
+                        if (isSubfolder) {
+                          onFolderDragStart(e, kbId, row.id);
+                        } else if (row.originalKey) {
+                          onFileDragStart(e, kbId, row.originalKey);
+                        }
+                      }}
+                      onDragEnd={() => {
+                        onFileDragEnd();
+                      }}
+                      onDragOver={(e) => {
+                        if (isSubfolder) onTargetDragOver(e, row.id, rowCanEdit);
+                      }}
+                      onDragLeave={() => {
+                        if (isSubfolder) onTargetDragLeave(row.id);
+                      }}
+                      onDrop={(e) => {
+                        if (!isSubfolder || !rowCanEdit) return;
+                        if (isExternalFileDrag(e)) {
+                          const targetKb =
+                            (rootKB && kbId === rootKB.kb_id
+                              ? rootKB
+                              : allUserKBs.find((candidate) => candidate.kb_id === kbId)) ?? null;
+                          if (targetKb) {
+                            void handleExternalUploadDrop(e, targetKb, subfolderRelativePath(kbId, row.id), false);
+                          }
+                        } else {
+                          onDropOnSubfolder(e, kbId, row.id);
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        if (isSubfolder) {
+                          openFolderContextMenu(e, {
+                            kind: 'subfolder',
+                            kbId,
+                            folderId: row.id,
+                            folderName: row.displayName || row.name,
+                          });
+                        }
+                      }}
+                      onClick={(e) => {
+                        if (!isSubfolder && row.originalKey) handleFileClick(row.originalKey, e);
+                      }}
+                      onDoubleClick={() => {
+                        if (isSubfolder) {
+                          navigateIntoSubfolder(kbId, row.id, row.displayName || row.name);
+                        } else if (row.originalKey) {
                           const filename = row.name;
                           const isWc =
                             row.originalKey?.includes('web-crawler/') || row.originalKey?.includes('scraped-content/');
@@ -2172,46 +2372,122 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                             relativePath: row.originalKey!,
                             extension: ext,
                           });
-                        }}
-                        title={tKb('fileExplorer.actions.previewInPanel')}
-                      >
-                        <i className="bi bi-eye" />
-                      </button>
-                      <button
-                        onClick={() => handleDownloadFile(row.originalKey!, row.name)}
-                        title={tKb('fileExplorer.actions.downloadFile')}
-                      >
-                        <i className="bi bi-download" />
-                      </button>
-                      {rowCanEdit && (
-                        <button onClick={() => openRename(kbId, row.originalKey!, row.name)} title={t('rename.title')}>
-                          <i className="bi bi-pencil" />
-                        </button>
-                      )}
-                      {rowCanEdit && (
-                        <button
-                          onClick={() => confirmDeleteFiles(kbId, [row.originalKey!])}
-                          title={t('delete.confirm', { count: 1 })}
-                        >
-                          <i className="bi bi-trash" />
-                        </button>
-                      )}
-                    </>
-                  )}
-                  {isSubfolder && rowCanEdit && (
-                    <button
-                      onClick={() => confirmDeleteSubfolder(kbId, row.id, row.displayName || row.name)}
-                      title={t('delete.confirm', { count: 1 })}
+                        }
+                      }}
+                      style={{ cursor: 'pointer' }}
                     >
-                      <i className="bi bi-trash" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+                      <div className="finder-row__name-content">
+                        {isSubfolder ? (
+                          isSubfolderLoading ? (
+                            <Spinner
+                              animation="border"
+                              size="sm"
+                              variant="secondary"
+                              style={{ width: '0.6rem', height: '0.6rem', flexShrink: 0 }}
+                            />
+                          ) : (
+                            <span className="finder-chevron" onClick={() => toggleSubfolder(kbId, row.id)}>
+                              <i className={`bi bi-chevron-${isSubfolderExpanded ? 'down' : 'right'}`} />
+                            </span>
+                          )
+                        ) : (
+                          <span className="finder-chevron-spacer" />
+                        )}
+                        {isSubfolder ? (
+                          <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
+                        ) : (
+                          <i
+                            className={`${getFileIconClass(row.name)} finder-icon finder-icon--file ${getFileIconColorClass(row.name)}`}
+                          />
+                        )}
+                        <span className="finder-name">{row.displayName || row.name}</span>
+                      </div>
+                      <div className="finder-row__meta finder-row__meta--type">
+                        {isSubfolder
+                          ? ''
+                          : row.name.includes('.')
+                            ? (row.name.split('.').pop()?.toUpperCase() ?? '')
+                            : ''}
+                      </div>
+                      <div className="finder-row__meta d-none d-lg-block">
+                        {!isSubfolder ? row.uploadedBy || '' : ''}
+                      </div>
+                      <div className="finder-row__meta d-none d-md-block">{!isSubfolder ? row.uploadDate : ''}</div>
+                      <div className="finder-row__meta d-none d-sm-block">
+                        {isSubfolder
+                          ? (() => {
+                              const state = kbFileStates.get(kbId);
+                              if (!state) return '';
+                              const prefix = row.id.endsWith('/') ? row.id : `${row.id}/`;
+                              const count = state.files.filter(
+                                (f) => f.Key.startsWith(prefix) && !f.Key.endsWith('/')
+                              ).length;
+                              return count > 0 ? tKb('fileExplorer.table.items', { count }) : '';
+                            })()
+                          : row.size}
+                      </div>
+                      <div className="finder-row__actions">
+                        {!isSubfolder && row.originalKey && (
+                          <>
+                            <button
+                              onClick={() => {
+                                const filename = row.name;
+                                const isWc =
+                                  row.originalKey?.includes('web-crawler/') ||
+                                  row.originalKey?.includes('scraped-content/');
+                                const ext = isWc ? 'md' : filename.includes('.') ? filename.split('.').pop() || '' : '';
+                                handleOpenFilePreview({
+                                  filename,
+                                  fullPath: row.originalKey!,
+                                  relativePath: row.originalKey!,
+                                  extension: ext,
+                                });
+                              }}
+                              title={tKb('fileExplorer.actions.previewInPanel')}
+                            >
+                              <i className="bi bi-eye" />
+                            </button>
+                            <button
+                              onClick={() => handleDownloadFile(row.originalKey!, row.name)}
+                              title={tKb('fileExplorer.actions.downloadFile')}
+                            >
+                              <i className="bi bi-download" />
+                            </button>
+                            {rowCanEdit && (
+                              <button
+                                onClick={() => openRename(kbId, row.originalKey!, row.name)}
+                                title={t('rename.title')}
+                              >
+                                <i className="bi bi-pencil" />
+                              </button>
+                            )}
+                            {rowCanEdit && (
+                              <button
+                                onClick={() => confirmDeleteFiles(kbId, [row.originalKey!])}
+                                title={t('delete.confirm', { count: 1 })}
+                              >
+                                <i className="bi bi-trash" />
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {isSubfolder && rowCanEdit && (
+                          <button
+                            onClick={() => confirmDeleteSubfolder(kbId, row.id, row.displayName || row.name)}
+                            title={t('delete.confirm', { count: 1 })}
+                          >
+                            <i className="bi bi-trash" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+              )
+            )}
+          </div>
+        </>
+      )}
 
       {/* Modals */}
 
@@ -2241,7 +2517,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           canEdit={
             folderContextMenu.target.kind === 'topLevel'
               ? folderContextMenu.target.kb.role === 'OWNER' || folderContextMenu.target.kb.role === 'EDITOR'
-              : canEditKb(folderContextMenu.target.kbId)
+              : folderContextMenu.target.kind === 'subfolder'
+                ? canEditKb(folderContextMenu.target.kbId)
+                : false
           }
           canDeleteTopLevel={
             folderContextMenu.target.kind === 'topLevel'

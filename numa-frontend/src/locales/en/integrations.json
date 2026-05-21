@@ -409,6 +409,10 @@
     "pipedreamBody": "Pipedream-managed OAuth with a broad pre-built action library.",
     "userPicks": "Choose method"
   },
+  "badges": {
+    "fileStore": "Files",
+    "fileStoreTooltip": "Files from this integration appear under Files → Remote Files"
+  },
   "manage": {
     "title": "Manage {{name}}",
     "methodHeading": "Connection method",
@@ -619,7 +623,9 @@
       "save": "Save",
       "saving": "Saving...",
       "cancel": "Cancel",
-      "done": "Done"
+      "done": "Done",
+      "stepIndicator": "Progress",
+      "stepLabel": "Step {{number}}: {{label}}"
     },
     "synergyWizard": {
       "title": "Configure Synergy 12d",
@@ -718,7 +724,8 @@
       "databaseHint": "The name of the FileMaker database to connect to.",
       "bearerToken": "Bearer Token",
       "appName": "Application Name",
-      "appKey": "Application Key"
+      "appKey": "Application Key",
+      "pat": "Personal Access Token"
     },
     "apiKeyWizard": {
       "title": "Configure {{connector}}",
@@ -739,7 +746,16 @@
       "storedInVault": "(stored in vault)",
       "saveSuccess": "Connector configured successfully.",
       "saveError": "Failed to save connector configuration.",
-      "doneHint": "Your connector credentials are stored securely. The AI assistant can now use this connector when configured."
+      "doneHint": "Your connector credentials are stored securely. The AI assistant can now use this connector when configured.",
+      "perUserNotice": "No credential needed here. Each user will be asked for their own credential the first time they use this connector from chat.",
+      "metadataOnly": "metadata only, no credential",
+      "credentialCapturedInChatHint": "Per-user credentials are captured in chat, not here.",
+      "optional": "optional",
+      "instanceUrlLabel": "Instance URL",
+      "instanceUrlPlaceholder": "https://your-instance.example.com",
+      "instanceUrlHelp": "Set this only if your connector's API is hosted at a customer-specific address (e.g. a private Synergy 12d server). Leave empty to use the connector's built-in default.",
+      "instanceUrlInvalid": "Invalid URL",
+      "instanceUrlInvalidProtocol": "Must start with http:// or https://"
     },
     "apiReference": {
       "customize": "Customize"

@@ -505,6 +505,8 @@
     "selectAll": "Select All",
     "clear": "Clear",
     "myFilesGroup": "My Files",
+    "remoteFilesGroup": "Remote Files",
+    "remoteFilesTooltip": "Selecting this folder will enable {{name}} for this conversation. Numa will prefer browsing it when you reference files without naming a folder.",
     "expandGroup": "Expand group",
     "collapseGroup": "Collapse group",
     "private": "Private",
