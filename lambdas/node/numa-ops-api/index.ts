@@ -209,6 +209,38 @@ const parseBody = (event: APIGatewayProxyEventV2): Record<string, unknown> => {
   }
 };
 
+// Derive the request's frontend origin (e.g. https://hq.numa.arcanum.ai) from
+// the API Gateway event headers. Tries origin -> referer -> host. Returns an
+// empty string if none yield a parseable URL (e.g. direct Lambda invocation
+// from the chat bridge, which passes no headers — that path enriches ticketUrl
+// in the MCP tool layer instead).
+const getRequestOrigin = (event: APIGatewayProxyEventV2): string => {
+  const candidates = [
+    event.headers?.origin,
+    event.headers?.referer,
+    event.headers?.host ? `https://${event.headers.host}` : undefined,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      return new URL(candidate).origin;
+    } catch {
+      continue;
+    }
+  }
+  return '';
+};
+
+// Add a `ticketUrl` deep-link field to a ticket-shaped object when we have both
+// a frontend origin and a displayId. Returns a new object so callers can decorate
+// without mutating the DDB-shaped item.
+const withTicketUrl = <T extends Record<string, unknown>>(ticket: T, origin: string): T => {
+  if (!origin) return ticket;
+  const displayId = ticket.displayId;
+  if (!displayId) return ticket;
+  return { ...ticket, ticketUrl: `${origin}/ops?ticket=${encodeURIComponent(String(displayId))}` };
+};
+
 const now = (): string => new Date().toISOString();
 
 const padOrder = (order: number): string => String(order).padStart(ORDER_PAD, '0');
@@ -1578,6 +1610,7 @@ const handleTickets = async (
   event: APIGatewayProxyEventV2
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const qp = event.queryStringParameters ?? {};
+  const requestOrigin = getRequestOrigin(event);
 
   // ── Audit sub-routes ─────────────────────────────────────────────────────────
   // GET /ops/tickets/{ticketId}/audit
@@ -1970,7 +2003,7 @@ const handleTickets = async (
       queryByPK(`TICKET#${ticketId}`, 'COMMENT#'),
     ]);
     return jsonResponse(200, {
-      ticket,
+      ticket: withTicketUrl(ticket as Record<string, unknown>, requestOrigin),
       links,
       comments: comments.slice(-20),
     });
@@ -2346,7 +2379,7 @@ const handleTickets = async (
     }
 
     return jsonResponse(200, {
-      tickets: filtered,
+      tickets: filtered.map((t) => withTicketUrl(t as Record<string, unknown>, requestOrigin)),
       cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
     });
   }
@@ -2375,7 +2408,7 @@ const handleTickets = async (
     ]);
 
     return jsonResponse(200, {
-      ticket,
+      ticket: withTicketUrl(ticket as Record<string, unknown>, requestOrigin),
       links,
       comments: comments.slice(-20),
     });
@@ -2566,7 +2599,7 @@ const handleTickets = async (
     ]);
 
     return jsonResponse(201, {
-      ticket: ticketItem,
+      ticket: withTicketUrl(ticketItem, requestOrigin),
       ...(unknownKeys.length > 0 && {
         warnings: [
           `Unrecognized parameters were ignored: ${unknownKeys.join(', ')}. Valid fields: ${[...knownCreateFields].join(', ')}`,
@@ -2873,7 +2906,7 @@ const handleTickets = async (
       }
       if (counterOps.length > 0) await Promise.all(counterOps);
 
-      return jsonResponse(200, { ticket: updated });
+      return jsonResponse(200, { ticket: withTicketUrl(updated as Record<string, unknown>, requestOrigin) });
     }
 
     // Same-team update
@@ -3017,7 +3050,7 @@ const handleTickets = async (
     if (indexOps.length > 0) await Promise.all(indexOps);
 
     await bumpBoardVersion(targetTeamId, ts);
-    return jsonResponse(200, { ticket: updated });
+    return jsonResponse(200, { ticket: withTicketUrl(updated as Record<string, unknown>, requestOrigin) });
   }
 
   // ── DELETE /ops/tickets/{ticketId} — soft delete ────────────────────────────
@@ -3087,7 +3120,7 @@ const handleTickets = async (
     await putItem(buildAuditItem(ticketId, auth, 'restored'));
     await bumpBoardVersion(teamId, ts);
 
-    return jsonResponse(200, { ticket: updated });
+    return jsonResponse(200, { ticket: withTicketUrl(updated as Record<string, unknown>, requestOrigin) });
   }
 
   return errorResponse(404, 'Route not found');

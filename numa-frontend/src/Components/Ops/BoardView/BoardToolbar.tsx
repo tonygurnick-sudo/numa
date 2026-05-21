@@ -30,7 +30,10 @@ const BoardToolbar: React.FC<BoardToolbarProps> = ({
   // Keyboard shortcut: '/' to focus search
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const isEditableField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (e.key === '/' && !isEditableField) {
         e.preventDefault();
         searchRef.current?.focus();
       }

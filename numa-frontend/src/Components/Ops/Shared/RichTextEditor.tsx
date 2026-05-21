@@ -731,6 +731,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           color: #9ca3af;
           pointer-events: none;
         }
+        .rich-text-editor-content { overflow-wrap: break-word; word-break: break-word; }
         .rich-text-editor-content ul { padding-left: 1.4em; list-style: disc; }
         .rich-text-editor-content ol { padding-left: 1.4em; list-style: decimal; }
         .rich-text-editor-content a { color: #6366f1; text-decoration: underline; }
@@ -739,10 +740,10 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         .rich-text-editor-content p:last-child { margin-bottom: 0; }
         .rich-text-editor-content h1 { font-size: 1.4em; font-weight: 700; margin: 0.3em 0 0.2em; }
         .rich-text-editor-content h2 { font-size: 1.2em; font-weight: 600; margin: 0.3em 0 0.2em; }
-        .rich-text-editor-content h3 { font-size: 1.05em; font-weight: 600; margin: 0.2em 0 0.15em; }
-        .rich-text-editor-content table { border-collapse: collapse; width: 100%; margin: 0.4em 0; }
-        .rich-text-editor-content td, .rich-text-editor-content th { border: 1px solid #d1d5db; padding: 8px; }
-        .rich-text-editor-content img { max-width: 100%; height: auto; }
+        .rich-text-editor-content h3 { font-size: 1.05em; font-weight: 600; margin: 0.2em 0 0.2em; }
+        .rich-text-editor-content table { border-collapse: collapse; max-width: 100%; width: 100%; margin: 0.4em 0; table-layout: fixed; }
+        .rich-text-editor-content td, .rich-text-editor-content th { border: 1px solid #d1d5db; padding: 8px; word-break: break-word; }
+        .rich-text-editor-content img { max-width: 100% !important; height: auto !important; display: block; }
       `}</style>
     </div>
   );
@@ -769,6 +770,7 @@ export function RichTextDisplay({ html, placeholder }: { html: string; placehold
           dangerouslySetInnerHTML={{ __html: html }}
         />
         <style>{`
+          .rich-text-editor-content { overflow-wrap: break-word; word-break: break-word; }
           .rich-text-editor-content ul { padding-left: 1.4em; list-style: disc; }
           .rich-text-editor-content ol { padding-left: 1.4em; list-style: decimal; }
           .rich-text-editor-content a { color: #6366f1; text-decoration: underline; }
@@ -777,10 +779,10 @@ export function RichTextDisplay({ html, placeholder }: { html: string; placehold
           .rich-text-editor-content p:last-child { margin-bottom: 0; }
           .rich-text-editor-content h1 { font-size: 1.4em; font-weight: 700; margin: 0.3em 0 0.2em; }
           .rich-text-editor-content h2 { font-size: 1.2em; font-weight: 600; margin: 0.3em 0 0.2em; }
-          .rich-text-editor-content h3 { font-size: 1.05em; font-weight: 600; margin: 0.2em 0 0.15em; }
-          .rich-text-editor-content table { border-collapse: collapse; width: 100%; margin: 0.4em 0; }
-          .rich-text-editor-content td, .rich-text-editor-content th { border: 1px solid #d1d5db; padding: 8px; }
-          .rich-text-editor-content img { max-width: 100%; height: auto; }
+          .rich-text-editor-content h3 { font-size: 1.05em; font-weight: 600; margin: 0.2em 0 0.2em; }
+          .rich-text-editor-content table { border-collapse: collapse; max-width: 100%; width: 100%; margin: 0.4em 0; table-layout: fixed; }
+          .rich-text-editor-content td, .rich-text-editor-content th { border: 1px solid #d1d5db; padding: 8px; word-break: break-word; }
+          .rich-text-editor-content img { max-width: 100% !important; height: auto !important; display: block; }
         `}</style>
       </>
     );

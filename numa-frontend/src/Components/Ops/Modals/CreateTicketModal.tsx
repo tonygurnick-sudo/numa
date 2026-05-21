@@ -1068,13 +1068,15 @@ export function CreateTicketModal({
                         onChange={(val) => setFieldValue('field-work-unit-id', val || null)}
                         options={[
                           { value: '', label: t('common.none') },
-                          ...workUnits.map(
-                            (wu): DropdownOption => ({
-                              value: wu.id,
-                              label: wu.name,
-                              icon: <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />,
-                            })
-                          ),
+                          ...workUnits
+                            .filter((wu) => wu.status !== 'completed')
+                            .map(
+                              (wu): DropdownOption => ({
+                                value: wu.id,
+                                label: wu.name,
+                                icon: <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />,
+                              })
+                            ),
                         ]}
                         renderValue={(opt) =>
                           opt?.value ? (

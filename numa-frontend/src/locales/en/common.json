@@ -10,6 +10,11 @@
     "save": "Save",
     "search": "Search..."
   },
+  "imageLightbox": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetZoom": "Reset zoom"
+  },
   "confirm": {
     "defaultTitle": "Confirm",
     "delete": "Delete",
