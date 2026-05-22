@@ -4587,9 +4587,16 @@ $border-radius-pill: 1rem;
   padding: 0.0625rem 0;
   position: relative;
 
-  // Integration tools get extra vertical spacing
+  // Integration tools get extra vertical spacing, and grow the icon slot to fit
+  // the 20px branded SVG (the default 16px icon slot clips the larger image).
   &.integration {
     padding: 0.375rem 0;
+
+    .inline-tool-icon {
+      width: 20px;
+      height: 20px;
+      min-width: 20px;
+    }
   }
 
   // Hide connecting line on last item
