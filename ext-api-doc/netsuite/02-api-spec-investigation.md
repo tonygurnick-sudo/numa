@@ -48,31 +48,36 @@ Authorization: Bearer {jwt_access_token}
 
 **OAuth 2.0 Configuration:**
 
-| Parameter         | Value                                                                                   |
-| ----------------- | --------------------------------------------------------------------------------------- |
-| Grant type        | Authorization Code with PKCE                                                            |
-| Authorization URL | `https://{accountid}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/authorize` |
-| Token URL         | `https://{accountid}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token`     |
-| Revocation URL    | Unknown                                                                                 |
-| Token lifetime    | ~3600 seconds                                                                           |
-| Token format      | JWT (RS256)                                                                             |
-| Refresh mechanism | Standard OAuth 2.0 refresh token flow                                                   |
-| PKCE required     | Yes                                                                                     |
-| Client type       | Public (no client secret)                                                               |
+| Parameter                            | Value                                                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Grant types                          | `authorization_code` (with PKCE) and `refresh_token`                                                             |
+| Authorization URL                    | `https://{accountid}.app.netsuite.com/app/login/oauth2/authorize.nl`                                             |
+| Authorize fallback (unknown account) | `https://system.netsuite.com/app/login/oauth2/authorize.nl`                                                      |
+| Token URL                            | `https://{accountid}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token`                              |
+| Access token lifetime                | 3600 seconds (1 hr)                                                                                              |
+| Access token format                  | JWT (RS256)                                                                                                      |
+| Refresh token (confidential)         | 7 days, reusable until expiry                                                                                    |
+| Refresh token (public)               | 2 days default, configurable 1–720 hrs; **rotates on every refresh (one-time use)**                              |
+| PKCE method                          | `S256` only (`plain` removed in 2020.2)                                                                          |
+| `code_verifier` length               | 43–128 chars, `[A-Za-z0-9-._~]`                                                                                  |
+| `state` length                       | 22–1024 chars, printable ASCII, unique per flow                                                                  |
+| Client types                         | Public (PKCE only, no secret) **or** confidential (client_secret); PKCE is required for both when scope is `mcp` |
 
-**Required scopes:**
+**Supported scopes (one per integration record):**
 
-| Scope | Purpose                         | Required? |
-| ----- | ------------------------------- | --------- |
-| `mcp` | MCP AI Connector Service access | Yes       |
+| Scope              | Surface                                                                        |
+| ------------------ | ------------------------------------------------------------------------------ |
+| `rest_webservices` | SuiteTalk REST (Record + SuiteQL)                                              |
+| `restlets`         | RESTlet endpoints                                                              |
+| `suite_analytics`  | SuiteAnalytics Connect                                                         |
+| `mcp`              | NetSuite AI Connector Service. **Exclusive** — cannot combine with the others. |
 
 **Prerequisites (customer must complete):**
 
-1. Enable OAuth 2.0, Server SuiteScript, and REST Web Services features
-2. Create a custom role with "MCP Server Connection" and "OAuth 2.0 Access Tokens" permissions
-3. Create an Integration Record with "NetSuite AI Connector Service" scope enabled and "Public Client" checked
-4. **The Administrator role does NOT work** -- must use a custom role
-5. Configure redirect URI in the integration record
+1. Enable OAuth 2.0, REST Web Services, and (for MCP/RESTlets) Server SuiteScript features
+2. Create an Integration Record with the desired scope and the Authorization Code Grant checkbox enabled; mark Public Client if no secret is desired
+3. **For MCP only:** create a custom role (Administrator does NOT work for MCP) with `MCP Server Connection` + `OAuth 2.0 Access Tokens`
+4. Configure redirect URI on the integration record — must match the authorize URL byte-for-byte
 
 ---
 

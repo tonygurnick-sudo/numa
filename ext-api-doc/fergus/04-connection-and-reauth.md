@@ -24,14 +24,14 @@ Fergus supports both PAT and OAuth 2.0, but OAuth requires Fergus to register yo
 
 ### 2. Token Format
 
-| Property           | Value                                                              |
-| ------------------ | ------------------------------------------------------------------ |
-| Header             | `Authorization: Bearer {PAT}`                                      |
-| Token format       | Opaque string with `fergPAT_` prefix                               |
-| Token example      | `fergPAT_dfd871b6-0047-...`                                        |
-| Lifetime           | **1 year** from creation                                           |
-| Scopes/permissions | Full API access (inherited from the company account, not per-user) |
-| Limit per account  | Not documented — test if multiple PATs are allowed                 |
+| Property           | Value                                                                                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Header             | `Authorization: Bearer {PAT}`                                                                                                                                        |
+| Token format       | Opaque string with `fergPAT_` prefix                                                                                                                                 |
+| Token example      | `fergPAT_dfd871b6-0047-...`                                                                                                                                          |
+| Lifetime           | **~1 year** from creation [INFERRED — derived from a single observed PAT (2026-04-04 → 2027-04-04); not documented anywhere on Fergus's side. Treat as approximate.] |
+| Scopes/permissions | Full API access (inherited from the company account, not per-user)                                                                                                   |
+| Limit per account  | Not documented — test if multiple PATs are allowed                                                                                                                   |
 
 ### 3. Token Refresh / Rotation
 
@@ -123,13 +123,15 @@ Note: No instance URL needed — Fergus is a single-tenant SaaS. Base URL is alw
 
 ```
 1. GET https://api.fergus.com/version (with Bearer token) — verify credentials valid
-   Expected: 200 with {"result":"success","data":{"version":"v1"}}
+   Expected: 200 with {"message": "<version-string>"}
    401: PAT invalid or expired
+   [VERIFIED 2026-05-19 against OpenAPI spec at https://api.fergus.com/docs/json — response is {"message": string}, NOT a {result, data} envelope]
 
-2. GET https://api.fergus.com/my-company (with Bearer token) — verify company access
-   Expected: 200 with company profile data
+2. GET https://api.fergus.com/company (with Bearer token) — verify company access
+   Expected: 200 with company profile data (schema GetCompanyResponse)
    401: auth issue
    403: insufficient permissions
+   [VERIFIED 2026-05-19 — the endpoint is /company; /my-company does NOT exist in the OpenAPI spec]
 ```
 
 ### Rate Limiting

@@ -67,9 +67,9 @@
 
 **[DOCUMENTED]** -- OAuth 2.0 Authorization Code flow, per official Acumatica help and MYOB Enterprise Support.
 
-- Authorization endpoint: `https://{instance}.myob.com/identity/connect/authorize`
-- Token endpoint: `https://{instance}.myob.com/identity/connect/token`
-- OpenID Connect discovery: `https://{instance}.myob.com/identity/` (if client supports OIDC Discovery)
+- Authorization endpoint: `https://{instance}.myobadvanced.com/identity/connect/authorize`
+- Token endpoint: `https://{instance}.myobadvanced.com/identity/connect/token`
+- OpenID Connect discovery: `https://{instance}.myobadvanced.com/identity/` (if client supports OIDC Discovery)
 - Scopes: `api offline_access`
 - Token type: Bearer
 - All endpoints are per-instance (no central MYOB gateway for Acumatica)
@@ -85,6 +85,8 @@ Source: https://help.acumatica.com/Wiki/ShowWiki.aspx?pageid=ff780860-09c2-46c9-
 3. Provide redirect URI
 4. Receive `client_id` and `client_secret`
 5. Must also have an Acumatica API License (separate purchase) -- without it, all API calls return 403
+
+> **⚠️ `client_id` format gotcha (verified 2026-05-19):** The `client_id` issued by MYOB Acumatica is **not** a bare GUID — it includes a `@CompanyId` suffix, e.g. `392B04F6-6CA4-43FA-48D9-45A6E6DF5579@Company`. Without the suffix the OAuth server cannot resolve which tenant the credential belongs to and the token request fails. Confirmed by: `fast-programmer/myob_acumatica` Ruby gem README (`MYOB_ACUMATICA_CLIENT_ID=xxxxxxxx-...-xxxxxxxxxxxx@Company`) and Keboola's `keboola/component-acumatica/scripts/oauth_helper.sh` line 15 (`Enter Client ID (e.g., 392B...@Company)`).
 
 Source: https://help.acumatica.com/Help?ScreenId=ShowWiki&pageid=a8f71c44-9f5c-4af8-9d47-bc815c8a58e7
 
@@ -128,7 +130,7 @@ Source: https://community.acumatica.com/develop-integrations-with-web-services-a
 
 ### Q6: What is the base URL structure?
 
-**[DOCUMENTED]** -- `https://{instance}.myob.com/entity/Default/{version}/{EntityName}`
+**[DOCUMENTED]** -- `https://{instance}.myobadvanced.com/entity/Default/{version}/{EntityName}`
 
 - `{instance}` = customer's Acumatica instance subdomain/hostname
 - `Default` = the default endpoint name (custom endpoints can be created via Web Service Endpoints screen)
@@ -151,8 +153,8 @@ Source: https://enterprise-support.myob.com/adv/contract-based-rest-api
 
 **[DOCUMENTED]** -- Each environment is a separate instance with a distinct URL.
 
-- Production: `https://company.myob.com/...`
-- Sandbox: `https://company-sandbox.myob.com/...` (or cloned instance)
+- Production: `https://company.myobadvanced.com/...`
+- Sandbox: `https://company-sandbox.myobadvanced.com/...` (or cloned instance)
 - Instance URL is the complete differentiator
 
 ---
@@ -161,15 +163,15 @@ Source: https://enterprise-support.myob.com/adv/contract-based-rest-api
 
 ### Q9: What are the rate limits?
 
-**[DOCUMENTED]** -- Concurrency-based, not requests-per-second.
+Concurrency-based, not requests-per-second.
 
-| Limit                   | Value                 | Notes                                     |
-| ----------------------- | --------------------- | ----------------------------------------- |
-| Concurrent API requests | 6                     | L-series license default                  |
-| Request queue depth     | 20                    | Requests beyond 6 queue up to 20          |
-| Queue timeout           | 60 seconds            | Queued requests waiting >60s are declined |
-| Beyond queue            | 429 Too Many Requests | Must retry                                |
-| Request timeout         | 600 seconds           | Long-running operations                   |
+| Limit                   | Value                 | Confidence                                                               | Notes                                     |
+| ----------------------- | --------------------- | ------------------------------------------------------------------------ | ----------------------------------------- |
+| Concurrent API requests | 6                     | [DOCUMENTED — community forum + license tier docs]                       | L-series license default                  |
+| Request queue depth     | 20                    | [INFERRED — single community-forum post; not in official Acumatica docs] | Requests beyond 6 queue                   |
+| Queue timeout           | 60 seconds            | [INFERRED — same single community post]                                  | Queued requests waiting >60s are declined |
+| Beyond queue            | 429 Too Many Requests | [DOCUMENTED]                                                             | Must retry                                |
+| Request timeout         | 600 seconds           | [DOCUMENTED]                                                             | Long-running operations                   |
 
 - Rate limiting is per-instance, shared across all API consumers and integrations
 - No per-user or per-application throttling

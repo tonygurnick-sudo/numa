@@ -113,29 +113,39 @@ blockers: []
 
 **OAuth 2.0 details:**
 
-- **Grant type(s) supported:** authorization_code with PKCE [CONFIRMED]
-- **Authorization URL:** `https://{accountid}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/authorize` [CONFIRMED]
-- **Token URL:** `https://{accountid}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token` [CONFIRMED]
+- **Grant type(s) supported:** `authorization_code` (with PKCE) and `refresh_token` [DOCUMENTED]
+- **Authorization URL:** `https://{accountid}.app.netsuite.com/app/login/oauth2/authorize.nl` [DOCUMENTED — corrected 2026-05-19; the prior `suitetalk.api.netsuite.com/.../authorize` value was wrong]
+- **Authorization URL fallback (account ID unknown):** `https://system.netsuite.com/app/login/oauth2/authorize.nl` [DOCUMENTED]
+- **Token URL:** `https://{accountid}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token` [DOCUMENTED]
 - **Revocation URL:** Unknown [UNKNOWN]
-- **Required scopes:**
+- **Supported scopes:** `restlets`, `rest_webservices`, `suite_analytics`, `mcp` — space-separated. The `mcp` scope is **exclusive** (cannot be combined with the others). [DOCUMENTED]
 
-| Scope | Purpose                         | Required?       |
-| ----- | ------------------------------- | --------------- |
-| `mcp` | MCP AI Connector Service access | Yes [CONFIRMED] |
+| Scope              | Purpose                                                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| `rest_webservices` | SuiteTalk REST (Record API + SuiteQL)                                                        |
+| `restlets`         | Custom SuiteScript RESTlet endpoints                                                         |
+| `suite_analytics`  | SuiteAnalytics Connect / BI                                                                  |
+| `mcp`              | NetSuite AI Connector Service (MCP). Exclusive; requires PKCE even for confidential clients. |
 
-- **Token lifetime:** ~3600 seconds (access token is JWT RS256) [CONFIRMED]
-- **Refresh token behavior:** Standard OAuth 2.0 refresh flow [DOCUMENTED]
-- **PKCE required?** Yes [CONFIRMED]
-- **State parameter required?** Yes (standard OAuth 2.0) [DOCUMENTED]
-- **Redirect URI restrictions:** Must match integration record; dynamic URIs now required for ChatGPT (March 2026 change) [DOCUMENTED]
+- **Access token lifetime:** 3600 seconds (1 hour). Format: JWT RS256. [DOCUMENTED]
+- **Refresh token lifetime:**
+  - **Confidential clients:** 7 days, reusable until expiry [DOCUMENTED]
+  - **Public clients:** 2 days default, configurable 1 hour – 720 hours via integration record. **One-time use — rotates on every refresh.** [DOCUMENTED]
+- **PKCE required?** Yes for public clients; required for the `mcp` scope on confidential clients too. [DOCUMENTED]
+- **PKCE method:** `S256` only — `plain` unsupported since 2020.2. [DOCUMENTED]
+- **`code_verifier` constraints:** 43–128 chars, `[A-Za-z0-9-._~]`. [DOCUMENTED]
+- **State parameter:** Required. Must be **22–1024 characters**, printable ASCII, unique per flow. [DOCUMENTED] (NetSuite-specific tighter constraint than the spec.)
+- **Redirect URI restrictions:** Must match integration record exactly. [DOCUMENTED]
 
-**Critical setup requirements:**
+**Critical setup requirements (MCP scope specifically):**
 
 1. Integration record must have "NetSuite AI Connector Service" scope enabled [DOCUMENTED]
-2. Must use **Public Client** (no client secret) [CONFIRMED]
-3. Administrator role does NOT work -- must create a custom role [DOCUMENTED]
+2. Public Client is recommended for MCP, but confidential clients also work — PKCE is required either way. [DOCUMENTED — corrects prior "must use public client" claim, which is only universally true if you specifically want PKCE without storing a secret]
+3. Administrator role does NOT work for MCP — must create a custom role [DOCUMENTED]
 4. Custom role requires: MCP Server Connection + OAuth 2.0 Access Tokens permissions [DOCUMENTED]
 5. Features required: OAuth 2.0, Server SuiteScript, REST Web Services [DOCUMENTED]
+
+For non-MCP scopes (`rest_webservices`, `restlets`), the Administrator role works fine, and confidential clients are common.
 
 ### 2.4 First Successful Call [REQUIRED] -- CRITICAL GATE
 
@@ -155,9 +165,9 @@ Content-Type: application/json
 - **HTTP status code:** 200 [CONFIRMED]
 - **Time to first successful call:** Initial setup hit 400 error with wrong scope (`restlets rest_webservices`); resolved when correct `mcp` scope used [CONFIRMED]
 - **Gotchas encountered during setup:**
-  1. Scope must be `mcp`, not `restlets` or `rest_webservices` [CONFIRMED]
-  2. Must use public client (no client secret) [CONFIRMED]
-  3. Administrator role cannot be used; need custom role [DOCUMENTED]
+  1. Scope must be `mcp` (and `mcp` is exclusive — cannot be combined with `restlets`/`rest_webservices`) [CONFIRMED]
+  2. The test integration used a public client (no client secret) [CONFIRMED]. Confidential clients also work for `mcp` per Oracle docs, provided PKCE is supplied. [DOCUMENTED]
+  3. Administrator role cannot be used for MCP; need custom role with `MCP Server Connection` [DOCUMENTED]
 
 - [x] **GATE CHECK: First successful API call completed and documented above**
 

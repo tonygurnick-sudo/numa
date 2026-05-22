@@ -1,8 +1,8 @@
 # 12d Synergy API Investigation
 
-> **Source:** Swagger spec at `{instance}/api-docs/api/v1` (369 endpoints, 274 models)
-> **Investigation date:** 2026-03-30
-> **Status:** CONFIRMED from spec unless marked [UNKNOWN]
+> **Source:** Swagger UI at `{instance}/swagger` (200 OK, verified 2026-05-19); JSON at `{instance}/api-docs/api/v1` is only reachable from inside an authenticated browser session. The companion file `02-api-spec-investigation.md` reports **359 paths / 369 operations** from a spec dump — the "369 endpoints / 274 models" claim in earlier drafts conflated _operations_ with _endpoints_, and the 274 model count is not independently verifiable. Treat raw counts as [INFERRED].
+> **Investigation date:** 2026-03-30 (counts re-checked 2026-05-19)
+> **Status:** Most claims [DOCUMENTED] from spec dump in 02; live re-probe of `/auth/getPersonalAccessTokens` (401), `/auth/delete-pat` (411), `/health` ({"status":"Healthy"}) confirms those exist. `[UNKNOWN]` markers stand where noted.
 
 ---
 
@@ -257,13 +257,13 @@ GET /health
 
 ## Phase 10 — Integration Assessment
 
-| #    | Question                  | Answer                                                                                                      |
-| ---- | ------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| 10.1 | Integration path          | **Data Connector** (token-based auth) — NOT Pipedream                                                       |
-| 10.2 | Auth type                 | Token auth (PAT in Bearer header)                                                                           |
-| 10.3 | Per-client config needed  | Instance URL (unique per client) + PAT                                                                      |
-| 10.4 | Test connection endpoints | 1. `GET /health` (no auth) 2. `GET /api/v1/auth/getPersonalAccessTokens` (auth check)                       |
-| 10.5 | Primary data to sync      | Jobs, Files, Folders, Tasks, Contacts                                                                       |
-| 10.6 | Complexity rating         | **Medium-High** — 369 endpoints, composite IDs, mixed casing, path-based pagination, no webhooks            |
-| 10.7 | Key risks                 | PAT expiry management, mixed casing bugs, pagination implementation errors, no error format docs            |
-| 10.8 | Webhook gap impact        | Must implement polling for change detection. Consider LastModified/CreatedDate fields for incremental sync. |
+| #    | Question                  | Answer                                                                                                                                    |
+| ---- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 10.1 | Integration path          | **Data Connector** (token-based auth) — NOT Pipedream                                                                                     |
+| 10.2 | Auth type                 | Token auth (PAT in Bearer header)                                                                                                         |
+| 10.3 | Per-client config needed  | Instance URL (unique per client) + PAT                                                                                                    |
+| 10.4 | Test connection endpoints | 1. `GET /health` (no auth) 2. `GET /api/v1/auth/getPersonalAccessTokens` (auth check)                                                     |
+| 10.5 | Primary data to sync      | Jobs, Files, Folders, Tasks, Contacts                                                                                                     |
+| 10.6 | Complexity rating         | **Medium-High** — ~359 paths / ~369 operations [INFERRED from spec dump], composite IDs, mixed casing, path-based pagination, no webhooks |
+| 10.7 | Key risks                 | PAT expiry management, mixed casing bugs, pagination implementation errors, no error format docs                                          |
+| 10.8 | Webhook gap impact        | Must implement polling for change detection. Consider LastModified/CreatedDate fields for incremental sync.                               |

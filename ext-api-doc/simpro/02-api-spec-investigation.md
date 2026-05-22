@@ -52,19 +52,18 @@ Content-Type: application/json
 
 **OAuth 2.0 Configuration:**
 
-| Parameter                 | Value                                                                                   | Source                  |
-| ------------------------- | --------------------------------------------------------------------------------------- | ----------------------- |
-| Grant types               | authorization_code, client_credentials, resource_owner (deprecated), implicit (JS only) | [DOCUMENTED -- PHP SDK] |
-| Authorization URL         | `https://auth.simpro.co/oauth/authorize`                                                | [CONFIRMED -- SDK code] |
-| Token URL                 | `https://auth.simpro.co/oauth/token`                                                    | [CONFIRMED -- SDK code] |
-| Alt Auth URL (per-build)  | `https://{build}.simprosuite.com/oauth2/login`                                          | [DOCUMENTED -- forum]   |
-| Alt Token URL (per-build) | `https://{build}.simprosuite.com/oauth2/token`                                          | [DOCUMENTED -- forum]   |
-| Access token lifetime     | 3600 seconds (1 hour)                                                                   | [CONFIRMED -- forum]    |
-| Refresh token lifetime    | 14 days (single-use: invalidated after use)                                             | [CONFIRMED -- forum]    |
-| Refresh mechanism         | `grant_type=refresh_token` with client_id, client_secret, refresh_token                 | [DOCUMENTED]            |
-| Revocation URL            | [UNKNOWN]                                                                               |                         |
-| PKCE required             | [UNKNOWN]                                                                               |                         |
-| Scopes                    | [UNKNOWN -- exist but not publicly enumerated]                                          |                         |
+| Parameter              | Value                                                                                                                      | Source                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Grant types            | authorization_code, client_credentials, resource_owner (**deprecated**), implicit (**deprecated by OAuth 2.1 / RFC 9700**) | [DOCUMENTED -- PHP SDK]                  |
+| Authorization URL      | `https://{build}.simprosuite.com/oauth2/login?client_id={CLIENT_ID}`                                                       | [VERIFIED 2026-05-19 — Provider.php:230] |
+| Token URL              | `https://{build}.simprosuite.com/oauth2/token`                                                                             | [VERIFIED 2026-05-19 — Provider.php:225] |
+| ~~Centralized URL~~    | ~~`https://auth.simpro.co/...`~~ — **does NOT exist (NXDOMAIN). Removed 2026-05-19.** Only per-build URLs work.            | DNS lookup, no A record                  |
+| Access token lifetime  | 3600 seconds (1 hour)                                                                                                      | [CONFIRMED -- forum]                     |
+| Refresh token lifetime | 14 days (single-use: invalidated after use)                                                                                | [CONFIRMED -- forum]                     |
+| Refresh mechanism      | `grant_type=refresh_token` with client_id, client_secret, refresh_token                                                    | [DOCUMENTED]                             |
+| Revocation URL         | [UNKNOWN]                                                                                                                  |                                          |
+| PKCE required          | [UNKNOWN]                                                                                                                  |                                          |
+| Scopes                 | [UNKNOWN -- exist but not publicly enumerated]                                                                             |                                          |
 
 **API Key auth (alternative):**
 
@@ -76,14 +75,14 @@ Content-Type: application/json
 **Authorization Code Flow:** [CONFIRMED -- SDK code]
 
 ```
-1. Redirect user to: https://auth.simpro.co/oauth/authorize?
+1. Redirect user to: https://{build}.simprosuite.com/oauth2/login?
      client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&state={RANDOM_STATE}
 
 2. User logs in and authorizes. Redirected to: {REDIRECT_URI}?code={AUTH_CODE}&state={STATE}
    (error case: ?error={error}&error_description={message})
 
 3. Exchange code for token:
-   POST https://auth.simpro.co/oauth/token
+   POST https://{build}.simprosuite.com/oauth2/token
    Content-Type: application/x-www-form-urlencoded
    grant_type=authorization_code&client_id={CLIENT_ID}&client_secret={CLIENT_SECRET}&
    code={AUTH_CODE}&redirect_uri={REDIRECT_URI}

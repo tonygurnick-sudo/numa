@@ -128,6 +128,21 @@
   color: var(--secure-fg);
 }
 
+.secure-posture__list {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+  color: var(--secure-fg);
+}
+
+.secure-posture__list li {
+  margin-bottom: 0.5rem;
+  line-height: 1.55;
+}
+
+.secure-posture__list li:last-child {
+  margin-bottom: 0;
+}
+
 .secure-posture__table-wrapper {
   border: 1px solid var(--secure-border);
   border-radius: 6px;

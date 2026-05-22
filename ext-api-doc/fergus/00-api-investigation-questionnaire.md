@@ -208,7 +208,7 @@ Authorization: Bearer {pat_token}
 ]
 ```
 
-**NOTE on /jobs/{id}/finalise:** The finalise link IS returned in job create response, but calling `POST /jobs/{id}/finalise` returns 404. This endpoint may not be fully implemented for the partner API or may use a different path. [NEEDS VERIFICATION -- live API test 2026-04-04]
+**NOTE on /jobs/{id}/finalise:** The HATEOAS link's `"type": "POST"` is a **server-side bug**. The OpenAPI spec defines this path with `put` only, and the `fergus-mcp` SDK calls `client.put('/jobs/${jobId}/finalise')`. Use **PUT**, ignore the HATEOAS verb. [VERIFIED 2026-05-19 against https://api.fergus.com/docs/json]
 
 **Relationships:**
 
@@ -529,13 +529,13 @@ Authorization: Bearer {pat_token}
 
 **Per-state capabilities:**
 
-| State     | Can Update? | Can Delete? | Available Actions             | Notes                                   |
-| --------- | ----------- | ----------- | ----------------------------- | --------------------------------------- |
-| Draft     | Yes (PUT)   | No          | finalise [NEEDS VERIFICATION] | Transient state                         |
-| To Price  | No          | No          | hold, create phases/quotes    | [CONFIRMED -- live API test 2026-04-04] |
-| Active    | No          | No          | hold, create phases/quotes    |                                         |
-| On Hold   | No          | No          | resume                        |                                         |
-| Completed | No          | No          | None                          |                                         |
+| State     | Can Update? | Can Delete? | Available Actions                                          | Notes                                   |
+| --------- | ----------- | ----------- | ---------------------------------------------------------- | --------------------------------------- |
+| Draft     | Yes (PUT)   | No          | finalise (`PUT /jobs/{id}/finalise`) [VERIFIED 2026-05-19] | Transient state                         |
+| To Price  | No          | No          | hold, create phases/quotes                                 | [CONFIRMED -- live API test 2026-04-04] |
+| Active    | No          | No          | hold, create phases/quotes                                 |                                         |
+| On Hold   | No          | No          | resume                                                     |                                         |
+| Completed | No          | No          | None                                                       |                                         |
 
 #### State Machine: Quote
 
@@ -863,11 +863,11 @@ Authorization: Bearer {pat_token}
 
 **Confirmed NOT working (404):** [CONFIRMED -- live API test 2026-04-04]
 
-| Method | Path                | Error                                                 | Notes                                                                   |
-| ------ | ------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------- |
-| GET    | /quotes             | 404: `"Route GET:/api/partner/quotes not found"`      | Use /jobs/quotes instead                                                |
-| GET    | /stockOnHand        | 404: `"Route GET:/api/partner/stockOnHand not found"` | Use /phases/{id}/stockOnHand instead                                    |
-| POST   | /jobs/{id}/finalise | 404                                                   | Link exists in responses but endpoint may not work [NEEDS VERIFICATION] |
+| Method | Path                | Error                                                 | Notes                                                                                                   |
+| ------ | ------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| GET    | /quotes             | 404: `"Route GET:/api/partner/quotes not found"`      | Use /jobs/quotes instead                                                                                |
+| GET    | /stockOnHand        | 404: `"Route GET:/api/partner/stockOnHand not found"` | Use /phases/{id}/stockOnHand instead                                                                    |
+| POST   | /jobs/{id}/finalise | 404 — wrong verb                                      | Use `PUT /jobs/{jobId}/finalise`. HATEOAS link incorrectly says `"type": "POST"`. [VERIFIED 2026-05-19] |
 
 **Other endpoints (from OpenAPI spec, not individually live-tested):**
 
@@ -1247,7 +1247,7 @@ No file upload/download endpoints in the API. [CONFIRMED]
 
 1. Use `/quotes` endpoint directly (404) [CONFIRMED -- live API test 2026-04-04]
 2. Use `/stockOnHand` endpoint directly (404) [CONFIRMED -- live API test 2026-04-04]
-3. Reliably finalise jobs via API (POST /jobs/{id}/finalise returns 404) [NEEDS VERIFICATION]
+3. ~~Reliably finalise jobs~~ — RESOLVED 2026-05-19: use `PUT /jobs/{id}/finalise` (the HATEOAS link's POST claim is a server bug; OpenAPI spec defines `put` only).
 4. Delete customers (destructive -- requires explicit user confirmation)
 5. Void job phases (irreversible)
 6. Create or modify time entries (read-only in API)
@@ -1285,7 +1285,7 @@ No file upload/download endpoints in the API. [CONFIRMED]
 
 1. Webhook details are not in the OpenAPI spec -- may exist via separate surface.
 2. Maximum page size is not documented.
-3. POST /jobs/{id}/finalise returns 404 despite being in HATEOAS links -- needs investigation.
+3. /jobs/{id}/finalise — RESOLVED: verb is PUT, not POST (HATEOAS link is wrong; OpenAPI spec is authoritative). [VERIFIED 2026-05-19]
 
 ### 10.3 Confidence Report [REQUIRED]
 

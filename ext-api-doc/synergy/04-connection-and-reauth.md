@@ -110,19 +110,24 @@ Flow:
 
 ```http
 # List PATs for current user
-GET /api/v1/auth/tokens
+GET /api/v1/auth/getPersonalAccessTokens
 Authorization: Bearer {PAT}
+# → returns 200 with PAT list; 401 unauthenticated [VERIFIED 2026-05-19 via live probe]
 
 # Create new PAT
 POST /api/v1/auth/generate-pat
 Authorization: Bearer {PAT}
 Content-Type: application/json
-{"ClientId": "numa", "Name": "Numa Connector", "ExpireInDays": 90}
+# Body fields unverified — confirm against {instanceUrl}/swagger before relying on field names
 
 # Revoke PAT
-DELETE /api/v1/auth/tokens/{id}
+POST /api/v1/auth/delete-pat
 Authorization: Bearer {PAT}
+Content-Type: application/json
+# → requires body; verb is POST not DELETE [VERIFIED 2026-05-19 via live probe — endpoint returns 411 Length Required when called without body]
 ```
+
+> **Corrected 2026-05-19:** the prior version listed `GET /api/v1/auth/tokens` and `DELETE /api/v1/auth/tokens/{id}` — both return **404** against a live 12d Synergy instance. They were fabricated. The real endpoints are `getPersonalAccessTokens` (GET, returns 401 unauth = exists) and `delete-pat` (POST, returns 411 = exists, wants body).
 
 ---
 
@@ -181,9 +186,9 @@ on API error:
 
 ### Reference URLs
 
-| Resource              | URL                                                                       |
-| --------------------- | ------------------------------------------------------------------------- |
-| Swagger UI            | `{instanceUrl}/api-docs/ui/index`                                         |
-| Swagger JSON          | `{instanceUrl}/api-docs/api/v1`                                           |
-| Public demo spec      | `https://synergy.12dsynergycloud.com/api-docs/ui/index`                   |
-| API examples download | `https://www.12dsynergy.com/downloads/5.1/api/SynergyWebAPI_Examples.zip` |
+| Resource              | URL                                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Swagger UI            | `{instanceUrl}/swagger` (verified 200 against live demo 2026-05-19; the prior `/api-docs/ui/index` path returns 404 on the public demo) |
+| Swagger JSON          | `{instanceUrl}/api-docs/api/v1` (only reachable from inside an authenticated session; public demo returns 404)                          |
+| Public demo Swagger   | `https://synergy.12dsynergycloud.com/swagger` (200)                                                                                     |
+| API examples download | `https://www.12dsynergy.com/downloads/5.1/api/SynergyWebAPI_Examples.zip`                                                               |

@@ -415,8 +415,8 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     ],
   },
   {
-    id: 'myob',
-    displayName: 'MYOB',
+    id: 'myob-account-right',
+    displayName: 'MYOB AccountRight',
     icon: 'bi-journal-text',
     description: 'Business management and accounting for AU/NZ',
     category: 'Accounting',
@@ -582,8 +582,14 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       // integration record. The four scopes are surfaced as separate
       // checkboxes; the admin picks whichever subset matches the Integration
       // Record's Scope field on the NetSuite side.
+      //
+      // Client secret is required because REST Web Services / RESTlets /
+      // SuiteAnalytics scopes use NetSuite's Confidential Client flow.
+      // Pure-PKCE Public Client is only valid for the `mcp` scope; since the
+      // wizard supports both, we always collect the secret. PKCE params are
+      // also still sent on the authorize URL — NetSuite ignores them for
+      // confidential clients, so this is safe in either mode.
       scopes: 'rest_webservices',
-      hideClientSecret: true,
     },
     credentialFields: [
       {

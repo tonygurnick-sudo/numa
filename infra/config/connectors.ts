@@ -23,7 +23,7 @@ export const NATIVE_CONNECTORS = [
   'connecteam-oauth',
   'totalsynergy-oauth',
   'xero',
-  'myob',
+  'myob-account-right',
   'myob-acumatica',
   'netsuite',
   'zoho-crm',

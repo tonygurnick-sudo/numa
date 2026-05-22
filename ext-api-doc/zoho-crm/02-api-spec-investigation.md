@@ -50,18 +50,19 @@ Authorization: Zoho-oauthtoken {access_token}
 
 ### OAuth 2.0 Details
 
-| Parameter         | Value                                                     |
-| ----------------- | --------------------------------------------------------- |
-| Grant type        | `authorization_code` (also `refresh_token`)               |
-| Authorization URL | `https://accounts.zoho.{region}/oauth/v2/auth`            |
-| Token URL         | `https://accounts.zoho.{region}/oauth/v2/token`           |
-| Revocation URL    | `https://accounts.zoho.{region}/oauth/v2/token/revoke`    |
-| Access token TTL  | 1 hour                                                    |
-| Refresh token TTL | Unlimited until revoked                                   |
-| Refresh rotation  | No — same refresh_token keeps working                     |
-| PKCE required     | No                                                        |
-| `access_type`     | Must be `offline` on authorize to receive a refresh_token |
-| `prompt`          | Recommended `consent` for fresh scope grants              |
+| Parameter         | Value                                                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Grant type        | `authorization_code` (also `refresh_token`)                                                                                                                 |
+| Authorization URL | `https://accounts.zoho.{region}/oauth/v2/auth` (CA: `accounts.zohocloud.ca`)                                                                                |
+| Token URL         | `https://accounts.zoho.{region}/oauth/v2/token` (CA: `accounts.zohocloud.ca`)                                                                               |
+| Revocation URL    | `https://accounts.zoho.{region}/oauth/v2/token/revoke` (CA: `accounts.zohocloud.ca`)                                                                        |
+| ⚠️ Region mapping | US: `.com` · AU: `.com.au` · EU: `.eu` · IN: `.in` · JP: `.jp` · CN: `.com.cn` · **CA: `cloud.ca` (NOT `.ca`)** [VERIFIED 2026-05-19 against multi-dc.html] |
+| Access token TTL  | 1 hour                                                                                                                                                      |
+| Refresh token TTL | Unlimited until revoked                                                                                                                                     |
+| Refresh rotation  | No — same refresh_token keeps working                                                                                                                       |
+| PKCE required     | No                                                                                                                                                          |
+| `access_type`     | Must be `offline` on authorize to receive a refresh_token                                                                                                   |
+| `prompt`          | Recommended `consent` for fresh scope grants                                                                                                                |
 
 ### Required Scopes
 
@@ -195,13 +196,13 @@ See `01a-domain-model-reference.md` for the full field catalogue.
 
 ### Parameters
 
-| Parameter    | Type   | Default | Description                                                      |
-| ------------ | ------ | ------- | ---------------------------------------------------------------- |
-| `page`       | int    | 1       | 1-based. Mutually exclusive with `page_token`.                   |
-| `per_page`   | int    | 200     | Max 200.                                                         |
-| `page_token` | string | —       | From previous `info.next_page_token`; use once past record 2000. |
-| `sort_by`    | string | `id`    | Single field only.                                               |
-| `sort_order` | enum   | `desc`  | `asc` / `desc`.                                                  |
+| Parameter    | Type   | Default | Description                                                                                                                                                                                                                        |
+| ------------ | ------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page`       | int    | 1       | 1-based. Mutually exclusive with `page_token`.                                                                                                                                                                                     |
+| `per_page`   | int    | 200     | Max 200.                                                                                                                                                                                                                           |
+| `page_token` | string | —       | From previous `info.next_page_token`; use once past record 2000. **Cursor chain caps at 100,000 records total; each token expires 24h after issue.** `previous_page_token` also returned. [VERIFIED 2026-05-19 — get-records.html] |
+| `sort_by`    | string | `id`    | Single field only.                                                                                                                                                                                                                 |
+| `sort_order` | enum   | `desc`  | `asc` / `desc`.                                                                                                                                                                                                                    |
 
 ### Response structure
 
@@ -366,13 +367,9 @@ Full reference: `01d-event-and-error-handling.md` § Error Code Reference.
 | `search_files`      | n/a — record search, not file search  | none        |
 | `get_file_metadata` | n/a                                   | none        |
 
-No provider class required. The generic `connect_request` handler in `oauth-workspace-tools` covers all CRUD, given:
+Zoho CRM is a fully documented public REST API. Any HTTP client that can perform per-region OAuth 2.0 Authorization Code, inject `Authorization: Zoho-oauthtoken {token}`, and target the region-correct API host (`www.zohoapis.{region}/crm/v8` — CA: `www.zohoapis.ca`) can drive the entire surface. No vendor-specific SDK required.
 
-1. `oauth-client-zoho-crm` vault entry with client_id/secret + auth_url/token_url (admin wizard does this).
-2. `auth_header_scheme: "Zoho-oauthtoken"` in the same vault entry (persisted automatically from the registry).
-3. Optional: `connector-config-zoho-crm.fields.instance_url` (e.g. `https://www.zohoapis.com.au/crm/v8`) for relative-path expansion.
-
-Steps 1 and 2 are already shipped in commit `d5333a75`.
+> Numa-internal wiring details (vault keys, registry entries, integration commits) live in the Numa connector skill and Numa-side docs — not in this API reference.
 
 ---
 

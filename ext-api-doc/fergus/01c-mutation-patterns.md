@@ -276,15 +276,15 @@ With body (if recurring -- must omit Content-Type or include body):
 
 ### Pattern 5: State Transitions
 
-#### Finalise Draft Job [NEEDS VERIFICATION]
+#### Finalise Draft Job
 
 ```http
-POST /jobs/{jobId}/finalise
+PUT /jobs/{jobId}/finalise
 Host: api.fergus.com
 Authorization: Bearer {token}
 ```
 
-**NOTE:** The HATEOAS link for finalise IS returned in job create responses (`{"href": "/jobs/20909314/finalise", "rel": "finalise", "type": "POST"}`), but calling this endpoint returns 404. This may be a different path or not yet implemented for the partner API. [NEEDS VERIFICATION -- live API test 2026-04-04]
+**NOTE:** The verb is **PUT**, not POST. The HATEOAS link returned in job create responses claims `"type": "POST"` but that is a server-side bug — the OpenAPI spec at `https://api.fergus.com/docs/json` defines this path with `put` only, and the `fergus-mcp` community SDK calls `client.put('/jobs/${jobId}/finalise')`. Using POST returns 404. Response schema: `JobResponse`. [VERIFIED 2026-05-19 against OpenAPI spec]
 
 #### Put Job on Hold
 
@@ -687,7 +687,7 @@ Content-Type: application/json
 8. **PATCH /sites requires `siteAddress`:** Even for partial updates. [CONFIRMED -- live API test 2026-04-04]
 9. **DELETE must NOT send Content-Type header:** Causes `"Body cannot be empty when content-type is set to 'application/json'"`. [CONFIRMED -- live API test 2026-04-04]
 10. **jobType only accepts Quote/Estimate/Charge Up.** "Service" and "Project" are NOT valid. [CONFIRMED -- live API test 2026-04-04]
-11. **POST /jobs/{id}/finalise returns 404.** Despite being in HATEOAS links. [NEEDS VERIFICATION]
+11. **Use PUT, not POST, for /jobs/{id}/finalise.** The HATEOAS link claims `"type": "POST"` but the spec defines `put` only. Using POST returns 404. [VERIFIED 2026-05-19 against OpenAPI spec]
 
 ---
 

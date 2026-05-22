@@ -59,17 +59,17 @@ blockers:
 
 ### 1.3 Documentation Quality Assessment [REQUIRED]
 
-| Area                      | Rating | Notes                                                                                                                                                     |
-| ------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Authentication            | 4      | OAuth2 well documented: authorization_code, client_credentials, API key; token lifetime (1hr access, 14-day refresh) confirmed [DOCUMENTED -- forum, SDK] |
-| Endpoint reference        | 4      | Comprehensive catalog in developer portal; 100+ entity types confirmed via SyncHub data model [CONFIRMED]                                                 |
-| Request/response examples | 3      | Official PHP SDK has examples; Postman collections exist; error response format now confirmed [DOCUMENTED]                                                |
-| Error documentation       | 3      | Error response JSON format confirmed from forum: `{status, url, header, data: {errors: [{path, message, value}]}}` [CONFIRMED -- forum]                   |
-| Rate limit documentation  | 3      | 10 req/sec per build documented and strictly enforced since Aug 2022; daily limit exists but unspecified [DOCUMENTED -- forum]                            |
-| Pagination documentation  | 5      | Excellent: page/pageSize params, Link headers, Result-Total/Pages/Count headers; max 250 [DOCUMENTED]                                                     |
-| Webhook documentation     | 3      | 22 events listed; actual payload format confirmed from forum (ID, build, name, action, reference, date_triggered, description) [CONFIRMED -- forum]       |
-| SDKs / code examples      | 3      | Official PHP SDK with 3 auth examples; community Laravel/Python packages [CONFIRMED]                                                                      |
-| Changelog / versioning    | 2      | Forum thread with API release updates; no dedicated changelog page [DOCUMENTED -- forum]                                                                  |
+| Area                      | Rating | Notes                                                                                                                                                         |
+| ------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication            | 4      | OAuth2 well documented: authorization_code, client_credentials, API key; token lifetime (1hr access, 14-day refresh) confirmed [DOCUMENTED -- forum, SDK]     |
+| Endpoint reference        | 4      | Comprehensive catalog in developer portal; 100+ entity types confirmed via SyncHub data model [CONFIRMED]                                                     |
+| Request/response examples | 3      | Official PHP SDK has examples; Postman collections exist; error response format now confirmed [DOCUMENTED]                                                    |
+| Error documentation       | 3      | Error response JSON format confirmed from forum: `{status, url, header, data: {errors: [{path, message, value}]}}` [CONFIRMED -- forum]                       |
+| Rate limit documentation  | 3      | 10 req/sec per build [DOCUMENTED — forum + Laravel SDK config]; daily limit referenced anecdotally but no public number — treat as [INFERRED] until confirmed |
+| Pagination documentation  | 5      | Excellent: page/pageSize params, Link headers, Result-Total/Pages/Count headers; max 250 [DOCUMENTED]                                                         |
+| Webhook documentation     | 3      | 22 events listed; actual payload format confirmed from forum (ID, build, name, action, reference, date_triggered, description) [CONFIRMED -- forum]           |
+| SDKs / code examples      | 3      | Official PHP SDK with 3 auth examples; community Laravel/Python packages [CONFIRMED]                                                                          |
+| Changelog / versioning    | 2      | Forum thread with API release updates; no dedicated changelog page [DOCUMENTED -- forum]                                                                      |
 
 **Overall documentation quality:** good (upgraded from "adequate" -- error format, webhook payloads, filter syntax, and token lifetime now confirmed)
 
@@ -136,8 +136,9 @@ https://{build}.simprosuite.com/api/v1.0/companies/{companyID}/{parent}/{parentI
 **OAuth 2.0:**
 
 - **Grant type(s) supported:** authorization_code, client_credentials, resource_owner_password (deprecated), implicit (JS only) [DOCUMENTED -- PHP SDK references all four]
-- **Authorization URL:** `https://auth.simpro.co/oauth/authorize` [DOCUMENTED -- SDK code] OR `https://{build}.simprosuite.com/oauth2/login` [DOCUMENTED -- forum; per-build alternative]
-- **Token URL:** `https://auth.simpro.co/oauth/token` [DOCUMENTED -- SDK code] OR `https://{build}.simprosuite.com/oauth2/token` [DOCUMENTED -- forum]
+- **Authorization URL:** `https://{build}.simprosuite.com/oauth2/login?client_id={CLIENT_ID}` [VERIFIED 2026-05-19 — official PHP SDK `simPRO-Software/simpro-restapi-php` Provider.php:230]
+- **Token URL:** `https://{build}.simprosuite.com/oauth2/token` [VERIFIED 2026-05-19 — Provider.php:225]
+- **Note — corrected 2026-05-19:** prior versions of this doc listed `https://auth.simpro.co/oauth/*` as a centralized alternative. **`auth.simpro.co` does not resolve in DNS** (NXDOMAIN, verified via `dig`). Only per-build URLs exist. The official PHP SDK uses per-build exclusively.
 - **Revocation URL:** [UNKNOWN]
 - **Required scopes:** [UNKNOWN -- scopes referenced in auth flow but specific scope values not publicly enumerated]
 - **Token lifetime:** Access token expires in 3600 seconds (1 hour); refresh token expires in 14 days [CONFIRMED -- forum]

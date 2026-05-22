@@ -191,13 +191,13 @@ Group-by also supported:
 
 ### Request Parameters
 
-| Parameter    | Type   | Default | Description                                                                           |
-| ------------ | ------ | ------- | ------------------------------------------------------------------------------------- |
-| `page`       | int    | 1       | 1-based. Mutually exclusive with `page_token`.                                        |
-| `per_page`   | int    | 200     | Max 200.                                                                              |
-| `page_token` | string | —       | Use instead of `page` once you've hit record 2000. Comes from `info.next_page_token`. |
-| `sort_by`    | string | `id`    | Single field.                                                                         |
-| `sort_order` | enum   | `desc`  | `asc` or `desc`.                                                                      |
+| Parameter    | Type   | Default | Description                                                                                                                                                                                                                                                      |
+| ------------ | ------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page`       | int    | 1       | 1-based. Mutually exclusive with `page_token`.                                                                                                                                                                                                                   |
+| `per_page`   | int    | 200     | Max 200.                                                                                                                                                                                                                                                         |
+| `page_token` | string | —       | Use instead of `page` once you've hit record 2000. Comes from `info.next_page_token`. **Cursor chain caps at 100,000 records total; each token expires 24h after issue.** `previous_page_token` is also returned. [VERIFIED 2026-05-19 against get-records.html] |
+| `sort_by`    | string | `id`    | Single field.                                                                                                                                                                                                                                                    |
+| `sort_order` | enum   | `desc`  | `asc` or `desc`.                                                                                                                                                                                                                                                 |
 
 ### Response Structure
 

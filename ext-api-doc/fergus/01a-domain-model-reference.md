@@ -58,7 +58,7 @@ source_phases: ['Phase 3: Domain Model & Behavior']
 ]
 ```
 
-**NOTE:** POST /jobs/{id}/finalise returns 404 despite being in HATEOAS links. [NEEDS VERIFICATION]
+**NOTE:** The HATEOAS link claims `"type": "POST"` but that's a server-side bug. The OpenAPI spec defines this path with `put` only — use **PUT /jobs/{id}/finalise**. [VERIFIED 2026-05-19 against https://api.fergus.com/docs/json]
 
 **Relationships:**
 

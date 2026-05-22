@@ -78,7 +78,7 @@ Content-Type: application/json
 9. **Calendar events use POST for updates:** PUT is NOT used. Updates use `POST /calendarEvents/{id}`.
 10. **Pagination cursor is an integer:** The `pageCursor` parameter is 0-based. Default page size is 10. [CONFIRMED -- live API test 2026-04-04]
 11. **Notes sort field uses snake_case:** `sortField=created_at` not `createdAt`. Only known endpoint with this exception. [CONFIRMED -- live API test 2026-04-04]
-12. **POST /jobs/{id}/finalise returns 404.** The link IS returned in HATEOAS responses but the endpoint may not work for the partner API. [NEEDS VERIFICATION]
+12. **Use PUT for /jobs/{id}/finalise, not POST.** The HATEOAS link's `"type": "POST"` is a server bug — the OpenAPI spec defines the path with `put` only. POST returns 404. [VERIFIED 2026-05-19 against OpenAPI spec]
 
 ## Default Parameters
 
@@ -224,11 +224,11 @@ Response (201): Status is `"Draft"` on create, transitions to `"To Price"` on GE
 
 **NOT AVAILABLE (confirmed 404):**
 
-| Endpoint                 | Error                                                                            |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| GET /quotes              | `"Route GET:/api/partner/quotes not found"` -- use /jobs/quotes                  |
-| GET /stockOnHand         | `"Route GET:/api/partner/stockOnHand not found"` -- use /phases/{id}/stockOnHand |
-| POST /jobs/{id}/finalise | 404 -- [NEEDS VERIFICATION] link exists in HATEOAS but endpoint may not work     |
+| Endpoint                 | Error                                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| GET /quotes              | `"Route GET:/api/partner/quotes not found"` -- use /jobs/quotes                                            |
+| GET /stockOnHand         | `"Route GET:/api/partner/stockOnHand not found"` -- use /phases/{id}/stockOnHand                           |
+| POST /jobs/{id}/finalise | 404 — wrong verb. **Use PUT** (the HATEOAS link's `"type": "POST"` is a server bug). [VERIFIED 2026-05-19] |
 
 ## Pagination [CONFIRMED -- live API test 2026-04-04]
 
@@ -279,7 +279,7 @@ GET /jobs?pageSize=20&pageCursor=40    (page 3)
 4. Rate limit of 100 req/min is shared company-wide; budget carefully with multiple integrations
 5. No bulk/batch operations -- all writes are single-record
 6. `/quotes` and `/stockOnHand` standalone endpoints do not exist (404)
-7. POST /jobs/{id}/finalise returns 404 despite being in HATEOAS links [NEEDS VERIFICATION]
+7. /jobs/{id}/finalise requires PUT (HATEOAS link's `"type": "POST"` is a server bug; spec defines `put` only) [VERIFIED 2026-05-19]
 8. DELETE requires no Content-Type header
 
 ---

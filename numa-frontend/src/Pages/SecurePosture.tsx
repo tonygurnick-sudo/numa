@@ -3,6 +3,8 @@ import { useTranslation, Trans } from 'react-i18next';
 import './SecurePosture.scss';
 
 type PenTestEngagement = { date: string; type: string };
+type Framework = { name: string; description: string };
+type RoadmapStage = { name: string; description: string };
 
 export const SecurePosture = () => {
   const { t } = useTranslation('compliance');
@@ -16,9 +18,15 @@ export const SecurePosture = () => {
   }, [t]);
 
   const year = new Date().getFullYear();
+  const frameworks = t('secure.sections.strategicIntent.frameworks', {
+    returnObjects: true,
+  }) as Framework[];
   const engagements = t('secure.sections.operationalSecurity.penTesting.engagements', {
     returnObjects: true,
   }) as PenTestEngagement[];
+  const stages = t('secure.sections.roadmap.stages', {
+    returnObjects: true,
+  }) as RoadmapStage[];
   const ctaEmail = t('secure.cta.email');
   const contactEmail = t('secure.contact.email');
 
@@ -60,6 +68,18 @@ export const SecurePosture = () => {
         </section>
 
         <section className="secure-posture__section">
+          <h2 className="secure-posture__section-title">{t('secure.sections.strategicIntent.title')}</h2>
+          <p>{t('secure.sections.strategicIntent.body')}</p>
+          <ul className="secure-posture__list">
+            {frameworks.map((framework, idx) => (
+              <li key={idx}>
+                <strong>{framework.name}</strong> — {framework.description}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="secure-posture__section">
           <h2 className="secure-posture__section-title">{t('secure.sections.cloudFoundation.title')}</h2>
           <p>{t('secure.sections.cloudFoundation.body')}</p>
         </section>
@@ -87,6 +107,11 @@ export const SecurePosture = () => {
         <section className="secure-posture__section">
           <h2 className="secure-posture__section-title">{t('secure.sections.integrationSecurity.title')}</h2>
           <p>{t('secure.sections.integrationSecurity.body')}</p>
+        </section>
+
+        <section className="secure-posture__section">
+          <h2 className="secure-posture__section-title">{t('secure.sections.aiGovernance.title')}</h2>
+          <p>{t('secure.sections.aiGovernance.body')}</p>
         </section>
 
         <section className="secure-posture__section">
@@ -123,6 +148,13 @@ export const SecurePosture = () => {
         <section className="secure-posture__section">
           <h2 className="secure-posture__section-title">{t('secure.sections.roadmap.title')}</h2>
           <p>{t('secure.sections.roadmap.body')}</p>
+          <ul className="secure-posture__list">
+            {stages.map((stage, idx) => (
+              <li key={idx}>
+                <strong>{stage.name}:</strong> {stage.description}
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section className="secure-posture__cta">
