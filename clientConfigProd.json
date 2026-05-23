@@ -77,7 +77,8 @@
     "oauthIntegrationsEnabled": true,
     "numaSharing": true,
     "numaDropZones": true,
-    "secretsVaultEnabled": true
+    "secretsVaultEnabled": true,
+    "useGlobalInferenceProfile": false
   },
   "nolia-id-gov-moh": {
     "additionalCognitoClientIds": "415r270afvm16t6fd4veli03tt",

@@ -54,14 +54,24 @@ LOCAL_ROOT = Path(os.environ.get("LOCAL_WORKSPACE_ROOT", "/workdir"))
 
 # ── SDK Configuration ──────────────────────────────────────────────────────────
 
-# Regional inference profile prefixes.
-# Sonnet/Opus 4.5+ use global.* (no 10% CRIS premium) from us-east-1 and
-# ap-southeast-2; Haiku 4.5 stays on us./au. (no global profile available);
-# legacy Sonnet 4 stays on us./apac. (ap-southeast-2 is not a supported
-# source region for its global profile).
+# Bedrock inference profile prefixes. Two maps below, selected at startup by
+# USE_GLOBAL_INFERENCE_PROFILE:
+#   - GLOBAL_MODEL_MAP routes Sonnet/Opus 4.5+ via the `global.*` profile,
+#     avoiding the 10% per-token cross-region premium AWS charges on `us.*`,
+#     `au.*`, and `apac.*` profiles.
+#   - REGIONAL_MODEL_MAP keeps traffic on regional `us.*` / `au.*` / `apac.*`
+#     profiles. Required for customers whose parent-org SCPs deny the
+#     `global.*` route (e.g. Suez, whose org-level SCP blocks the underlying
+#     `foundation-model/anthropic.claude-sonnet-4-6` ARN when reached via the
+#     global profile).
+# Haiku 4.5 has no global profile published — stays on us./au. in both maps.
+# Legacy Sonnet 4 (20250514) is not available on a global profile from
+# ap-southeast-2 — stays on apac.* in both maps.
+# ap-southeast-3 (Jakarta) has no local Bedrock for Claude, so both maps fall
+# back to the global profile there regardless of the flag.
 _KNOWN_PREFIXES = ("us.", "au.", "apac.", "eu.", "global.")
 
-REGIONAL_MODEL_MAP: dict[str, dict[str, str]] = {
+GLOBAL_MODEL_MAP: dict[str, dict[str, str]] = {
     "us-east-1": {
         "anthropic.claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
         "anthropic.claude-opus-4-6-v1": "global.anthropic.claude-opus-4-6-v1",
@@ -84,6 +94,33 @@ REGIONAL_MODEL_MAP: dict[str, dict[str, str]] = {
         "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
     },
 }
+
+REGIONAL_ONLY_MODEL_MAP: dict[str, dict[str, str]] = {
+    "us-east-1": {
+        "anthropic.claude-sonnet-4-6": "us.anthropic.claude-sonnet-4-6",
+        "anthropic.claude-opus-4-6-v1": "us.anthropic.claude-opus-4-6-v1",
+        "anthropic.claude-haiku-4-5-20251001-v1:0": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "anthropic.claude-sonnet-4-5-20250929-v1:0": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "anthropic.claude-sonnet-4-20250514-v1:0": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+    },
+    "ap-southeast-2": {
+        "anthropic.claude-sonnet-4-6": "au.anthropic.claude-sonnet-4-6",
+        "anthropic.claude-opus-4-6-v1": "au.anthropic.claude-opus-4-6-v1",
+        "anthropic.claude-haiku-4-5-20251001-v1:0": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "anthropic.claude-sonnet-4-5-20250929-v1:0": "apac.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
+    },
+    # ap-southeast-3 (Jakarta) has no local Bedrock — global is the only option.
+    "ap-southeast-3": GLOBAL_MODEL_MAP["ap-southeast-3"],
+}
+
+USE_GLOBAL_INFERENCE_PROFILE = os.environ.get(
+    "USE_GLOBAL_INFERENCE_PROFILE", "true"
+).strip().lower() in ("1", "true", "yes")
+
+REGIONAL_MODEL_MAP = (
+    GLOBAL_MODEL_MAP if USE_GLOBAL_INFERENCE_PROFILE else REGIONAL_ONLY_MODEL_MAP
+)
 
 
 def _strip_prefix(model_id: str) -> str:
