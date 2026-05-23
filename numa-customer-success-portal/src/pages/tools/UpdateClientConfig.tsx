@@ -110,6 +110,7 @@ export default function UpdateClientConfig() {
   const [scheduling, setScheduling] = useState<boolean>(false);
   const [schedulingMinIntervalMinutes, setSchedulingMinIntervalMinutes] = useState<string>('');
   const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState<boolean>(false);
+  const [useGlobalInferenceProfile, setUseGlobalInferenceProfile] = useState<boolean>(true);
   const [numaOps, setNumaOps] = useState<boolean>(false);
   const [numaDropZones, setNumaDropZones] = useState<boolean>(false);
   const [numaSharing, setNumaSharing] = useState<boolean>(false);
@@ -188,6 +189,7 @@ export default function UpdateClientConfig() {
       (cfg as any).schedulingMinIntervalMinutes != null ? String((cfg as any).schedulingMinIntervalMinutes) : ''
     );
     setWorkspaceChatModelSelection(Boolean((cfg as any).workspaceChatModelSelection));
+    setUseGlobalInferenceProfile((cfg as any).useGlobalInferenceProfile ?? defaults.useGlobalInferenceProfile);
     setNumaOps(Boolean((cfg as any).numaOps));
     setNumaDropZones(Boolean((cfg as any).numaDropZones));
     setNumaSharing(Boolean((cfg as any).numaSharing));
@@ -241,6 +243,7 @@ export default function UpdateClientConfig() {
       schedulingMinIntervalMinutes: (current as any)?.schedulingMinIntervalMinutes ?? undefined,
       workspaceChatModelSelection:
         (current as any)?.workspaceChatModelSelection ?? defaults.workspaceChatModelSelection,
+      useGlobalInferenceProfile: (current as any)?.useGlobalInferenceProfile ?? defaults.useGlobalInferenceProfile,
       numaOps: (current as any)?.numaOps ?? defaults.numaOps,
       numaDropZones: (current as any)?.numaDropZones ?? defaults.numaDropZones,
       numaSharing: (current as any)?.numaSharing ?? defaults.numaSharing,
@@ -310,6 +313,8 @@ export default function UpdateClientConfig() {
       updates.schedulingMinIntervalMinutes = parsedMinInterval;
     if (eff.workspaceChatModelSelection !== workspaceChatModelSelection)
       updates.workspaceChatModelSelection = workspaceChatModelSelection;
+    if (eff.useGlobalInferenceProfile !== useGlobalInferenceProfile)
+      (updates as any).useGlobalInferenceProfile = useGlobalInferenceProfile;
     if (eff.numaOps !== numaOps) updates.numaOps = numaOps;
     if (eff.numaDropZones !== numaDropZones) (updates as any).numaDropZones = numaDropZones;
     if (eff.numaSharing !== numaSharing) (updates as any).numaSharing = numaSharing;
@@ -595,6 +600,14 @@ export default function UpdateClientConfig() {
                           onChange={setNumaWorkspaceChat}
                           type="switch"
                           helpText="Enable Numa Workspace Chat (V2). On by default."
+                        />
+                        <ConfigField
+                          label="Use Global Bedrock Inference Profile"
+                          value={useGlobalInferenceProfile}
+                          defaultValue={defaults.useGlobalInferenceProfile}
+                          onChange={setUseGlobalInferenceProfile}
+                          type="switch"
+                          helpText="On (default): route Sonnet/Opus 4.5+ via the global.* Bedrock inference profile, avoiding the 10% per-token regional CRI premium. Off: stay on us./au./apac.* — required for customers whose parent-org SCPs deny the global route."
                         />
                         <ConfigField
                           label="Agent Scheduling"

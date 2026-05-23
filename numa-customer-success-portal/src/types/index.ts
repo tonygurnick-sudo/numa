@@ -111,6 +111,7 @@ export const clientConfigSchema = z.object({
   brandingProviderEnabled: z.boolean().optional(), // default: false
   numaWorkspaceChat: z.boolean().optional(), // default: true
   agentCoreRegion: z.string().optional(), // default: client region
+  useGlobalInferenceProfile: z.boolean().optional(), // default: true (global Bedrock CRI; false routes to regional us./au./apac.* for tight-SCP customers)
   scheduling: z.boolean().optional(), // default: false
   schedulingMinIntervalMinutes: z.number().int().min(5).optional(), // per-client min interval override
   workspaceChatModelSelection: z.boolean().optional(), // default: false
@@ -212,6 +213,7 @@ export const getDefaultClientConfigValues = () => ({
   agents: false,
   brandingProviderEnabled: false,
   numaWorkspaceChat: true,
+  useGlobalInferenceProfile: true,
   scheduling: false,
   workspaceChatModelSelection: false,
   numaOps: false,
@@ -270,6 +272,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     developerMode: 'Developer Mode',
     secretsVaultEnabled: 'Secrets Vault',
     oauthIntegrationsEnabled: 'OAuth Cloud Storage',
+    useGlobalInferenceProfile: 'Use Global Bedrock Inference Profile',
   };
 
   return fieldNames[key] || key;
