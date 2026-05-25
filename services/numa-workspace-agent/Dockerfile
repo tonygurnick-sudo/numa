@@ -90,9 +90,16 @@ RUN mkdir -p /workdir/.system/.claude && \
 COPY --chown=agent:agent plugins/numa/ /app/plugins/numa/
 
 # Download and install Claude CLI from official distribution
-# The Claude Agent SDK uses the CLI under the hood for execution
-# Uses ARM64 binary for AgentCore Graviton-based runtime
-ARG CLAUDE_CLI_VERSION=2.0.37
+# The Claude Agent SDK uses the CLI under the hood for execution.
+# Uses ARM64 binary for AgentCore Graviton-based runtime.
+#
+# Pinned to 2.1.142 — the prior pin (2.0.37) predated the addition of
+# Claude Haiku 4.5 to the CLI's pricing table, which caused the CLI to
+# silently fall back to billing Haiku requests at the default model's rate
+# (Sonnet). Always pin a specific version rather than `stable`/`latest` to
+# avoid surprise upgrades that could introduce breaking changes or
+# pricing-table shifts.
+ARG CLAUDE_CLI_VERSION=2.1.142
 RUN set -eux && \
     mkdir -p /opt/bin && \
     GCS_BUCKET="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" && \

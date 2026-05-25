@@ -558,11 +558,17 @@ async def stream_claude_sdk(
     polled_shell_ids: set[str] = set()
     killed_shell_ids: set[str] = set()
 
-    # Initialize stream log for verbose debugging
+    # Initialize stream log for verbose debugging. Streaming chats use the
+    # 1-hour Bedrock cache TTL (see ENABLE_PROMPT_CACHING_1H_BEDROCK in
+    # sdk_config.create_agent_options); the StreamLog uses this to recompute
+    # total_cost_usd correctly because the bundled CLI's pricing table only
+    # carries the 5-minute cache-write rate.
     stream_log = StreamLog(
         conversation_id=conversation_id,
         user_sub=user_sub,
         prompt=prompt,
+        model_id=model_id,
+        cache_ttl="1h",
     )
 
     # 1. Determine session_id and download files
@@ -1769,11 +1775,16 @@ async def run_claude_sdk(
     session_id: Optional[str] = None
     captured_session_id: Optional[str] = None
 
-    # Initialize stream log for debugging
+    # Initialize stream log for debugging. Non-streaming runs (scheduled
+    # agents, V2 apps, Nolia phases, sync pipelines) keep the default 5-minute
+    # Bedrock cache TTL — the CLI's pricing table matches reality here, but
+    # we still pass cache_ttl explicitly for clarity and forward-compatibility.
     stream_log = StreamLog(
         conversation_id=conversation_id,
         user_sub=user_sub,
         prompt=prompt,
+        model_id=model_id,
+        cache_ttl="5m",
     )
 
     # 1. Restore session on cold start (same as streaming)

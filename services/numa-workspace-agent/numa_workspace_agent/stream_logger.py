@@ -103,6 +103,13 @@ class StreamLog:
     conversation_id: str
     user_sub: str
     prompt: str
+    # Model id used for this stream (validated form). Optional so older callers
+    # that don't yet pass it through still work; cost recompute is then skipped.
+    model_id: Optional[str] = None
+    # Cache TTL: "1h" for interactive streaming chats (the case we
+    # under-report on), "5m" elsewhere. Set explicitly so the recompute can
+    # pick the right cache-write rate without re-deriving from env.
+    cache_ttl: str = "5m"
     start_time: float = field(default_factory=time.time)
 
     # Ordered list of entries (text + tools + thinking in sequence)
@@ -120,6 +127,9 @@ class StreamLog:
     # Result summary
     num_turns: int = 0
     total_cost_usd: float = 0.0
+    # The cost as originally reported by the SDK before any recompute. Useful
+    # for debugging the SDK's under-reporting and for telemetry comparison.
+    sdk_reported_cost_usd: float = 0.0
     is_error: bool = False
     error_message: Optional[str] = None
     stop_reason: Optional[str] = None
@@ -180,10 +190,22 @@ class StreamLog:
             del self.pending_tools[tool_use_id]
 
     def finalize(self, result_message: Any) -> None:
-        """Finalize the log with result data from ResultMessage."""
+        """Finalize the log with result data from ResultMessage.
+
+        Cost note: the bundled Claude CLI's pricing table only carries the
+        5-minute cache-write rate. Numa interactive chats use the 1-hour
+        cache tier (2× base input vs 1.25×), so the SDK's reported
+        total_cost_usd under-reports the cache_creation portion. We keep
+        the SDK's value as `sdk_reported_cost_usd` and override
+        `total_cost_usd` with a token-by-token recompute when we have
+        pricing for the model. AWS still bills correctly; this is purely
+        about telemetry accuracy.
+        """
         if result_message:
             self.num_turns = getattr(result_message, "num_turns", 0) or 0
-            self.total_cost_usd = getattr(result_message, "total_cost_usd", 0.0) or 0.0
+            sdk_cost = getattr(result_message, "total_cost_usd", 0.0) or 0.0
+            self.sdk_reported_cost_usd = sdk_cost
+            self.total_cost_usd = sdk_cost
             self.is_error = getattr(result_message, "is_error", False)
 
             usage = getattr(result_message, "usage", {}) or {}
@@ -194,6 +216,29 @@ class StreamLog:
                 self.cache_creation_tokens = (
                     usage.get("cache_creation_input_tokens", 0) or 0
                 )
+
+            # Recompute using AWS-billed rates when we know the model.
+            # Skip on first turn if usage is empty (no recompute possible).
+            if self.model_id and (
+                self.input_tokens
+                or self.output_tokens
+                or self.cache_creation_tokens
+                or self.cache_read_tokens
+            ):
+                # Late import: keeps stream_logger free of sdk_config import-order
+                # gotchas (sdk_config imports a lot of MCP/tool wiring).
+                from numa_workspace_agent.sdk_config import recalculate_anthropic_cost
+
+                recomputed = recalculate_anthropic_cost(
+                    self.model_id,
+                    input_tokens=self.input_tokens,
+                    output_tokens=self.output_tokens,
+                    cache_read_tokens=self.cache_read_tokens,
+                    cache_creation_tokens=self.cache_creation_tokens,
+                    cache_ttl=self.cache_ttl,
+                )
+                if recomputed is not None:
+                    self.total_cost_usd = recomputed
 
     def log_summary(self) -> None:
         """Log comprehensive summary of the stream."""
@@ -244,14 +289,22 @@ class StreamLog:
             stop_reason=self.stop_reason,
         )
 
-        # Dedicated cost log for easy cost tracking and aggregation
+        # Dedicated cost log for easy cost tracking and aggregation.
+        # `total_cost_usd` is the recomputed value matching AWS billing when
+        # we know the model; `sdk_reported_cost_usd` is what the bundled CLI
+        # told us, kept for diagnosing the under-reporting gap (the CLI's
+        # pricing table only carries the 5-minute cache-write rate; we use
+        # the 1-hour tier on interactive chats).
         logger.info(
             "Request cost",
             _name="COST",
             phase="sdk",
             conversation_id=self.conversation_id,
             user_sub=self.user_sub,
+            model_id=self.model_id,
+            cache_ttl=self.cache_ttl,
             total_cost_usd=self.total_cost_usd,
+            sdk_reported_cost_usd=self.sdk_reported_cost_usd,
             input_tokens=self.input_tokens,
             output_tokens=self.output_tokens,
             cache_read_tokens=self.cache_read_tokens,
