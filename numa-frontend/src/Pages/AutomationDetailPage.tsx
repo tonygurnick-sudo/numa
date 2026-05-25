@@ -176,6 +176,7 @@ export const AutomationDetailPage: React.FC = () => {
   const [pipedreamHealthState, setPipedreamHealthState] = useState<'unknown' | 'healthy' | 'unhealthy'>('unknown');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
   // Non-blocking advisory surfaced after a successful action (e.g. reactivate
   // while trigger budget is exhausted). Schedule status update succeeded —
   // this just tells the user the trigger won't fire until budget resets.
@@ -200,7 +201,7 @@ export const AutomationDetailPage: React.FC = () => {
         const allSchedules = await ScheduleService.list(numaGet);
         const result = allSchedules.find((s) => s.scheduleId === automationId);
         if (!result) {
-          if (!cancelled) setError(t('errors.load'));
+          if (!cancelled) setNotFound(true);
           return;
         }
         if (!cancelled) {
@@ -519,15 +520,49 @@ export const AutomationDetailPage: React.FC = () => {
     );
   }
 
+  if (notFound) {
+    return (
+      <LayoutDashboard>
+        <PageHeader
+          title={t('errors.notFoundTitle')}
+          icon={{
+            element: <Zap />,
+            backgroundColor: brandPrimaryColor,
+            color: brandPrimaryContrast,
+          }}
+          actions={
+            <Button variant="outline-secondary" size="sm" onClick={() => navigate('/automations')}>
+              <ArrowLeft size={14} className="me-1" />
+              {t('actions.backToList')}
+            </Button>
+          }
+        />
+        <Container fluid className="px-4 py-4">
+          <Alert variant="warning">{t('errors.notFoundDescription')}</Alert>
+        </Container>
+      </LayoutDashboard>
+    );
+  }
+
   if (error || !automation) {
     return (
       <LayoutDashboard>
+        <PageHeader
+          title={t('detail.title')}
+          icon={{
+            element: <Zap />,
+            backgroundColor: brandPrimaryColor,
+            color: brandPrimaryContrast,
+          }}
+          actions={
+            <Button variant="outline-secondary" size="sm" onClick={() => navigate('/automations')}>
+              <ArrowLeft size={14} className="me-1" />
+              {t('actions.backToList')}
+            </Button>
+          }
+        />
         <Container fluid className="px-4 py-4">
           <Alert variant="danger">{error || t('errors.load')}</Alert>
-          <Button variant="outline-secondary" onClick={() => navigate('/automations')}>
-            <ArrowLeft size={14} className="me-1" />
-            {t('actions.backToList')}
-          </Button>
         </Container>
       </LayoutDashboard>
     );

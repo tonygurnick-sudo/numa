@@ -195,7 +195,9 @@ export const AuthProvider = ({ children, initialTokens }) => {
   // Decode tokens without triggering re-renders
   const decodeTokens = async () => {
     if (!tokensRef.current.idToken) {
-      console.error('❌ No ID token found');
+      // Pre-login / post-logout state — not an error. Debug-level so it's
+      // invisible in production console and doesn't trigger RUM/Sentry.
+      console.debug('No ID token found (pre-login or post-logout)');
       setUser(null);
       return;
     }
@@ -1709,7 +1711,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
       }
       scheduleRefreshBeforeExpiry();
     } else {
-      console.error('❌ No refresh token found');
+      // Pre-login / post-logout state — not an error.
+      console.debug('No refresh token found (pre-login or post-logout)');
       setUser(null);
     }
     setLoading(false);

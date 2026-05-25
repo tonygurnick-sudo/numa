@@ -486,7 +486,12 @@
     "allCustomers": "All Customers",
     "bulkArchive": "Archive",
     "moveUp": "Move section up",
-    "moveDown": "Move section down"
+    "moveDown": "Move section down",
+    "statusCounts": {
+      "backlog": "{{count}} backlog",
+      "active": "{{count}} active",
+      "done": "{{count}} done"
+    }
   },
   "toolbar": {
     "searchPlaceholder": "Search tickets...",

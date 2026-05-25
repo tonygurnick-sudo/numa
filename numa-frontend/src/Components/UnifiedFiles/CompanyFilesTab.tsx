@@ -1057,6 +1057,7 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
               className="finder-btn finder-btn--danger"
               onClick={() => confirmDeleteFiles(Array.from(selectedKeys))}
               title={t('delete.confirm', { count: selectedKeys.size })}
+              aria-label={t('delete.confirm', { count: selectedKeys.size })}
             >
               <i className="bi bi-trash" />
               <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
@@ -1098,11 +1099,18 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
               fetchFiles();
               fetchDeepFiles(true);
             }}
+            title={t('actions.refresh')}
+            aria-label={t('actions.refresh')}
           >
             <i className="bi bi-arrow-clockwise" />
           </button>
           {isAdmin && (
-            <button className="finder-btn" onClick={() => setShowSettings(true)} title={t('companySettings.title')}>
+            <button
+              className="finder-btn"
+              onClick={() => setShowSettings(true)}
+              title={t('companySettings.title')}
+              aria-label={t('companySettings.title')}
+            >
               <i className="bi bi-gear" />
             </button>
           )}

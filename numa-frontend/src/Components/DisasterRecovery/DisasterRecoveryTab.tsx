@@ -424,51 +424,81 @@ export const DisasterRecoveryTab = ({ numaGet: propNumaGet }: DisasterRecoveryTa
             <p className="text-muted small">{t('disasterRecovery.lock.description')}</p>
 
             {isFederated ? (
-              <Alert variant="info" className="small">
-                {t('disasterRecovery.lock.federatedNotice')}
-              </Alert>
+              <>
+                <Alert variant="info" className="small">
+                  {t('disasterRecovery.lock.federatedNotice')}
+                </Alert>
+                {unlockError && (
+                  <Alert variant="danger" className="small">
+                    {t('disasterRecovery.lock.error', { error: unlockError })}
+                  </Alert>
+                )}
+                <Button variant="warning" onClick={handleUnlock} disabled={unlocking} className="w-100">
+                  {unlocking ? (
+                    <>
+                      <Spinner size="sm" className="me-1" />
+                      {t('disasterRecovery.lock.unlocking')}
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-unlock-fill me-1"></i>
+                      {t('disasterRecovery.lock.unlockButton')}
+                    </>
+                  )}
+                </Button>
+              </>
             ) : (
-              <Form.Group className="mb-3">
-                <Form.Label>{t('disasterRecovery.lock.passwordLabel')}</Form.Label>
-                <Form.Control
-                  type="password"
-                  autoFocus
-                  autoComplete="current-password"
-                  value={unlockPassword}
-                  onChange={(e) => setUnlockPassword(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !unlocking) handleUnlock();
-                  }}
-                  placeholder={t('disasterRecovery.lock.passwordPlaceholder')}
-                  disabled={unlocking}
+              <Form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!unlocking && unlockPassword) handleUnlock();
+                }}
+              >
+                {/* Hidden username for password managers — associates the
+                    password entry with the current user so credential
+                    managers can autofill correctly. */}
+                <input
+                  type="text"
+                  name="username"
+                  value={(user?.decoded_tokens?.idToken?.email as string | undefined) || ''}
+                  autoComplete="username"
+                  readOnly
+                  hidden
                 />
-              </Form.Group>
-            )}
+                <Form.Group className="mb-3">
+                  <Form.Label>{t('disasterRecovery.lock.passwordLabel')}</Form.Label>
+                  <Form.Control
+                    type="password"
+                    autoFocus
+                    autoComplete="current-password"
+                    value={unlockPassword}
+                    onChange={(e) => setUnlockPassword(e.target.value)}
+                    placeholder={t('disasterRecovery.lock.passwordPlaceholder')}
+                    disabled={unlocking}
+                  />
+                </Form.Group>
 
-            {unlockError && (
-              <Alert variant="danger" className="small">
-                {t('disasterRecovery.lock.error', { error: unlockError })}
-              </Alert>
-            )}
+                {unlockError && (
+                  <Alert variant="danger" className="small">
+                    {t('disasterRecovery.lock.error', { error: unlockError })}
+                  </Alert>
+                )}
 
-            <Button
-              variant="warning"
-              onClick={handleUnlock}
-              disabled={unlocking || (!isFederated && !unlockPassword)}
-              className="w-100"
-            >
-              {unlocking ? (
-                <>
-                  <Spinner size="sm" className="me-1" />
-                  {t('disasterRecovery.lock.unlocking')}
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-unlock-fill me-1"></i>
-                  {t('disasterRecovery.lock.unlockButton')}
-                </>
-              )}
-            </Button>
+                <Button variant="warning" type="submit" disabled={unlocking || !unlockPassword} className="w-100">
+                  {unlocking ? (
+                    <>
+                      <Spinner size="sm" className="me-1" />
+                      {t('disasterRecovery.lock.unlocking')}
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-unlock-fill me-1"></i>
+                      {t('disasterRecovery.lock.unlockButton')}
+                    </>
+                  )}
+                </Button>
+              </Form>
+            )}
           </div>
         </div>
       )}

@@ -306,7 +306,9 @@
     "run": "Failed to run automation",
     "nameRequired": "Automation name is required",
     "agentRequired": "Please select an agent",
-    "scheduleRequired": "Please configure a schedule"
+    "scheduleRequired": "Please configure a schedule",
+    "notFoundTitle": "Automation not found",
+    "notFoundDescription": "This automation no longer exists. It may have been deleted, or the link is stale."
   },
   "toast": {
     "created": "Automation created successfully",

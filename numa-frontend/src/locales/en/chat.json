@@ -389,7 +389,9 @@
     "settings": {
       "thinkingMode": "Thinking Mode",
       "thinkingModeDesc": "Enable extended thinking for complex tasks",
-      "stopButton": "Stop"
+      "stopButton": "Stop",
+      "sendButton": "Send message",
+      "sendingButton": "Sending message"
     },
     "fileUpload": {
       "title": "Upload to Workspace",

@@ -207,7 +207,6 @@ describe('ConfigSetup', () => {
       await fetchConfigAddtoSession();
       expect(mockSessionStorage.Q_APPLICATION_ID).toBe('app-1');
       expect(mockSessionStorage.CLIENT_NAME).toBe('test-client-1');
-      expect(console.warn).toHaveBeenCalledWith('Config is not in session, or is missing required properties');
       expect(mockWindowReload).toHaveBeenCalledTimes(1); // First fetch triggers reload
 
       // Reset mocks for cleaner testing of subsequent steps

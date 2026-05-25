@@ -160,7 +160,9 @@ const shouldRefreshConfig = () => {
   const workspaceModelFlag = sessionStorage.getItem('WORKSPACE_CHAT_MODEL_SELECTION');
 
   if (!hasConfigInSession()) {
-    console.warn('Config is not in session, or is missing required properties');
+    // Expected on first-load / fresh session — refresh fetches config.json.
+    // No log: previously logged a console.warn that scared users despite
+    // being the normal cold-start path.
     return true;
   }
 
