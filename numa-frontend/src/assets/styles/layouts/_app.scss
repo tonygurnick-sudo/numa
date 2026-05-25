@@ -34,13 +34,15 @@
   flex-direction: column;
   height: 100%;
   padding: 20px;
-  padding-bottom: 80px; // Space for absolute-positioned navigation buttons (50px offset + 30px breathing room)
+  // 50px nav offset + ~40px button + ~80px Ask Numa bubble exclusion zone
+  padding-bottom: 130px;
   max-width: 100%;
   width: 100%;
 
   @include mobile {
     padding: 0;
     margin: 0;
+    padding-bottom: 110px;
 
     .container-fluid {
       padding-left: 10px;

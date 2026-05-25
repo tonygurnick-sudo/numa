@@ -261,7 +261,9 @@
 // ================================================
 
 .automation-workflow-builder {
-  // nothing special at container level
+  // Keep the bottom navigation clear of the floating Ask Numa bubble
+  // when the page scrolls all the way down.
+  padding-bottom: 70px;
 }
 
 // Step progress indicator
