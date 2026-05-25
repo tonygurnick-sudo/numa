@@ -615,7 +615,8 @@ export class NumaClientStack extends TerraformStack {
       agentTeamMembersTableName: core.agentTeamMembersTable.name,
       agentSharingTableName: core.agentSharingTable.name,
       schedulingSettingsTableName: core.schedulingSettingsTable.name,
-      perClientSchedulingMinIntervalMinutes: clientConfig.schedulingMinIntervalMinutes,
+      perClientSchedulingMinIntervalMinutes:
+        clientConfig.schedulingMinIntervalMinutes ?? props.globalSchedulingMinIntervalMinutes,
       globalSchedulingMinIntervalMinutes: props.globalSchedulingMinIntervalMinutes,
       scheduleQuotas: {
         // Per-client (Level 2) overrides take precedence over the global

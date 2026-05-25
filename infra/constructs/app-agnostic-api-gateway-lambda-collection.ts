@@ -544,9 +544,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ...(props.perClientSchedulingMinIntervalMinutes != null && {
         SCHEDULING_MIN_INTERVAL_MINUTES: String(props.perClientSchedulingMinIntervalMinutes),
       }),
-      ...(props.globalSchedulingMinIntervalMinutes != null && {
-        GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: String(props.globalSchedulingMinIntervalMinutes),
-      }),
       ...(props.scheduleQuotas?.maxRunsPerCompanyPerMonth != null && {
         SCHEDULE_QUOTA_MAX_RUNS_PER_COMPANY_PER_MONTH: String(props.scheduleQuotas.maxRunsPerCompanyPerMonth),
       }),
@@ -2136,9 +2133,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ...(props.cognitoUserPoolId && { USER_POOL_ID: props.cognitoUserPoolId }),
       ...(props.perClientSchedulingMinIntervalMinutes != null && {
         SCHEDULING_MIN_INTERVAL_MINUTES: String(props.perClientSchedulingMinIntervalMinutes),
-      }),
-      ...(props.globalSchedulingMinIntervalMinutes != null && {
-        GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: String(props.globalSchedulingMinIntervalMinutes),
       }),
       // Pipedream-trigger lifecycle. Both empty when integrations are disabled
       // for this client; the lambda gracefully rejects pipedream-trigger
