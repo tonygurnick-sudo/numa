@@ -21,6 +21,10 @@ export interface VaultSecretMetadata {
   created_at: string;
   updated_at: string;
   last_accessed_at: string;
+  created_by_id?: string | null;
+  created_by_email?: string | null;
+  last_modified_by_id?: string | null;
+  last_modified_by_email?: string | null;
   // Explicit provenance marker — set to 'system' by backend flows (OAuth, etc)
   // that produce machine-managed secrets. Preferred over the null-type heuristic.
   source?: 'user' | 'system';
@@ -43,6 +47,7 @@ export interface VaultAuditLogEntry {
   secret_name: string;
   action: string;
   accessor: string;
+  actor_email?: string;
   purpose: string;
   conversation_id: string;
   approved_by: string;
@@ -152,9 +157,11 @@ export async function listCategories(): Promise<string[]> {
   return data.categories;
 }
 
-export async function listAuditLog(): Promise<VaultAuditLogEntry[]> {
+export type AuditLogScope = 'user' | 'company' | 'all';
+
+export async function listAuditLog(scope: AuditLogScope = 'user'): Promise<VaultAuditLogEntry[]> {
   const endpoint = getApiEndpoint();
-  const response = await fetch(`${endpoint}/vault/audit-log`, {
+  const response = await fetch(`${endpoint}/vault/audit-log?scope=${encodeURIComponent(scope)}`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });

@@ -139,7 +139,9 @@ export const clientConfigSchema = z.object({
   numaDropZones: z.boolean().optional(), // default: false
   numaSharing: z.boolean().optional(), // default: false
   developerMode: z.boolean().optional(), // default: false
-  secretsVaultEnabled: z.boolean().optional(), // default: false
+  // @deprecated TASK-146 — vault now follows `dataConnectorsEnabled`. Kept on
+  // the schema so legacy DynamoDB items with this field still parse.
+  secretsVaultEnabled: z.boolean().optional(),
   oauthIntegrationsEnabled: z.boolean().optional(), // default: false
   oauthProviders: z.record(z.string(), oauthProviderSchema).optional(),
   ssoEnabled: z.boolean().optional(), // default: true
@@ -264,7 +266,6 @@ export const getDefaultClientConfigValues = () => ({
   numaDropZones: false,
   numaSharing: false,
   developerMode: false,
-  secretsVaultEnabled: false,
   oauthIntegrationsEnabled: false,
   ssoEnabled: true,
   ssoEnterprise: false,
@@ -322,7 +323,6 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     ssoEnabled: 'SSO Self-Service',
     ssoEnterprise: 'SSO Enterprise (SCIM/OIDC)',
     developerMode: 'Developer Mode',
-    secretsVaultEnabled: 'Secrets Vault',
     oauthIntegrationsEnabled: 'OAuth Cloud Storage',
   };
 

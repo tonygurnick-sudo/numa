@@ -26,6 +26,8 @@ import {
 import { MethodBadge } from '../Components/Integrations/MethodBadge';
 import { NativeConfigurationModal } from '../Components/Integrations/NativeConfigurationModal';
 import { listCompanySecrets } from '../Services/VaultService';
+import { VaultUserSecretsPanel } from '../Components/Vault/VaultUserSecretsPanel';
+import { VaultCompanySecretsPanel } from '../Components/Vault/VaultCompanySecretsPanel';
 import { ManageMethodCard } from '../Components/Integrations/ManageMethodCard';
 import { UserChoiceCard } from '../Components/Integrations/UserChoiceCard';
 import { SynergyPatBadge } from '../Components/DataConnectors/SynergyPatBadge';
@@ -1380,6 +1382,15 @@ export default function SettingsPage() {
         ? [{ key: 'scheduling', label: t('tabs.scheduling'), iconClassName: 'bi bi-lightning-charge-fill' }]
         : []),
       { key: 'integrations', label: t('tabs.integrations'), iconClassName: 'bi bi-plug' },
+      ...(dataConnectorsEnabled
+        ? [
+            {
+              key: 'company-secrets',
+              label: t('vault.company.tabLabel', 'Company Secrets'),
+              iconClassName: 'bi bi-shield-lock-fill',
+            },
+          ]
+        : []),
       { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
       ...(usageReportingEnabled
         ? [{ key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' }]
@@ -1414,13 +1425,22 @@ export default function SettingsPage() {
             },
           ]
         : []),
+      ...(dataConnectorsEnabled
+        ? [
+            {
+              key: 'secrets',
+              label: t('vault.user.tabLabel', 'My Secrets'),
+              iconClassName: 'bi bi-shield-lock-fill',
+            },
+          ]
+        : []),
       ...(mfaEnabled
         ? [{ key: 'trusted-devices', label: t('userProfile.trustedDevices.title'), iconClassName: 'bi bi-shield-lock' }]
         : []),
     ],
     // REBASE RESOLUTION: Kept HEAD — includes mfaEnabled in deps. Incoming (8e1a6ca9, 2f54184e) omitted it,
     // but mfaEnabled IS used in the useMemo body (line ~767), so omitting it was a bug.
-    [workspaceChatEnabled, mfaEnabled, t]
+    [workspaceChatEnabled, mfaEnabled, dataConnectorsEnabled, t]
   );
 
   const activeTabLabel = (() => {
@@ -1530,12 +1550,18 @@ export default function SettingsPage() {
 
       <div className="app-content settings-app-content">
         <div hidden={currentScope !== 'user'} aria-hidden={currentScope !== 'user'}>
-          <UserProfilePage
-            embedded
-            activeTabKey={userSettingsTabKey}
-            onActiveTabChange={setUserSettingsTabKey}
-            settingsScope={currentScope === 'user' || currentScope === 'admin' ? currentScope : 'user'}
-          />
+          {/* The secrets vault is rendered as a sibling rather than inside
+              UserProfilePage so the profile component stays focused on
+              profile/chat-defaults concerns. */}
+          <div hidden={userSettingsTabKey === 'secrets'} aria-hidden={userSettingsTabKey === 'secrets'}>
+            <UserProfilePage
+              embedded
+              activeTabKey={userSettingsTabKey}
+              onActiveTabChange={setUserSettingsTabKey}
+              settingsScope={currentScope === 'user' || currentScope === 'admin' ? currentScope : 'user'}
+            />
+          </div>
+          {userSettingsTabKey === 'secrets' && dataConnectorsEnabled && <VaultUserSecretsPanel />}
         </div>
 
         {isAdmin && (
@@ -2546,6 +2572,19 @@ export default function SettingsPage() {
                   </>
                 )}
               </Tab>
+              {dataConnectorsEnabled && (
+                <Tab
+                  eventKey="company-secrets"
+                  title={
+                    <span>
+                      <i className="bi bi-shield-lock-fill me-2"></i>
+                      {t('vault.company.tabLabel', 'Company Secrets')}
+                    </span>
+                  }
+                >
+                  <VaultCompanySecretsPanel active={activeKey === 'company-secrets'} />
+                </Tab>
+              )}
               <Tab
                 eventKey="capabilities"
                 title={

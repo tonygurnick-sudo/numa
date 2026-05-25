@@ -54,8 +54,8 @@ const PIPEDREAM_RELAY_LAMBDA_ARN = process.env.PIPEDREAM_RELAY_LAMBDA_ARN ?? '';
 // Workspace-agent featureFlags forwarded into scheduled-run request bodies.
 // These gate MCP-server registration in `sdk_config.py`: missing flags ⇒ no
 // connectors/vault tool family in the sandbox, even when the user is authed.
+// Vault availability is tied to DATA_CONNECTORS_ENABLED (TASK-146).
 const OAUTH_INTEGRATIONS_ENABLED = (process.env.OAUTH_INTEGRATIONS_ENABLED ?? '').toLowerCase() === 'true';
-const SECRETS_VAULT_ENABLED = (process.env.SECRETS_VAULT_ENABLED ?? '').toLowerCase() === 'true';
 
 /**
  * Level-2 (per-client) quota overrides parsed at cold start. Used by the
@@ -2379,7 +2379,7 @@ const invokeWorkspaceAgent = async ({
     // and silently losing native-connector tool access.
     featureFlags: {
       OAUTH_INTEGRATIONS_ENABLED,
-      SECRETS_VAULT_ENABLED,
+      DATA_CONNECTORS_ENABLED,
     },
     timezone: 'UTC',
     userEmail: auth.email ?? '',

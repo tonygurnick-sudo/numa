@@ -98,6 +98,8 @@ export const clientConfigSchema = z.object({
   developerMode: z.boolean().optional(),
   oauthIntegrationsEnabled: z.boolean().optional(),
   numaOps: z.boolean().optional(),
+  // @deprecated — vault is now gated on `dataConnectorsEnabled` (TASK-146).
+  // Kept optional so legacy configs parse without error.
   secretsVaultEnabled: z.boolean().optional(),
   workspaceChatModelSelection: z.boolean().optional(),
   mfa: z.boolean().optional(),

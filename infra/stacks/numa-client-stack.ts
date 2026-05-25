@@ -206,7 +206,6 @@ export class NumaClientStack extends TerraformStack {
     const core = new CoreNumaInfra(this, 'numa', {
       ...clientConfig,
       emailDomain,
-      secretsVaultEnabled: clientConfig.secretsVaultEnabled ?? false,
       numaDropZones: clientConfig.numaDropZones ?? false,
       oauthIntegrationsEnabled: clientConfig.oauthIntegrationsEnabled ?? false,
       additionalOrigins: coreAdditionalOrigins,
@@ -438,7 +437,13 @@ export class NumaClientStack extends TerraformStack {
         // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
         fileRedirectSecret: fileRedirectSecret.value,
         fileRedirectBaseUrl: `https://${domainName}/api/workspace-chat-agent`,
-        // Vault secrets integration removed in favor of usage analytics
+        // Vault audit log — name wires the env var so chat-driven Pipedream
+        // and vault-MCP tool calls can write `ai_access` rows; arn grants the
+        // IAM PutItem permission. Without the arn the write silently logs
+        // AccessDenied and chat usage never appears in My Secrets > Activity
+        // (TASK-146 follow-up — was removed in an earlier refactor).
+        vaultAuditLogTableName: core.vaultAuditLogTable.name,
+        vaultAuditLogTableArn: core.vaultAuditLogTable.arn,
         // Numa Ops Lambda ARNs (conditional on numaOps flag)
         opsApiLambdaArn,
         opsConfigApiLambdaArn,
@@ -472,8 +477,6 @@ export class NumaClientStack extends TerraformStack {
         // Chat settings table (for reading user approval mode preferences)
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
-        // Vault secrets feature flag (enables vault system prompt and tools)
-        secretsVaultEnabled: clientConfig.secretsVaultEnabled ?? false,
         // Company bucket (for loading company profile into system prompt)
         companyBucketName: core.companyBucket?.bucket.bucket,
         companyBucketArn: core.companyBucket?.bucket.arn,
@@ -657,8 +660,9 @@ export class NumaClientStack extends TerraformStack {
       // request body, so the SDK config registers the `connectors` MCP and
       // `vault` MCP in unattended runs. Without these the schedule runner
       // can't use native connectors at all (the MCP server isn't registered).
+      // Vault MCP is gated on the `DATA_CONNECTORS_ENABLED` flag forwarded
+      // from `app-agnostic-api-gateway-lambda-collection` (TASK-146).
       oauthIntegrationsEnabled: clientConfig.oauthIntegrationsEnabled ?? false,
-      secretsVaultEnabled: clientConfig.secretsVaultEnabled ?? false,
       connectorEventsTableName: core.connectorEventsTable.name,
       connectorEventConfigsTableName: core.connectorEventConfigsTable.name,
       connectorEventBusName: core.connectorEventBusName,
@@ -740,8 +744,10 @@ export class NumaClientStack extends TerraformStack {
       });
     }
 
-    // Vault Secrets (encrypted secrets management via AWS Secrets Manager)
-    if (clientConfig.secretsVaultEnabled) {
+    // Vault Secrets (encrypted secrets management via AWS Secrets Manager).
+    // Tied to the data-connectors flag — native connectors are the primary
+    // producer of vault secrets (TASK-146).
+    if (clientConfig.dataConnectorsEnabled) {
       new VaultSecretsConstruct(this, safeConstructId + '-vault', {
         apiGatewayAuthorizerId: fe.authorizer.id,
         apiGatewayId: fe.apiGateway.id,
@@ -771,7 +777,11 @@ export class NumaClientStack extends TerraformStack {
       // Data bucket (for S3 data bucket connector)
       dataBucketName: core.dataBucket.bucket.bucket,
       dataBucketArn: core.dataBucket.bucket.arn,
-      // Vault audit log table (for tracking vault access)
+      // Vault audit log — the construct treats this as required (it builds
+      // an IAM resource ARN from it), but it was never being passed. The
+      // policy was being rendered as `table/undefined`, so the lambda had
+      // no permission to write to the real audit table and chat OAuth
+      // fetches silently failed audit (TASK-146 follow-up).
       vaultAuditLogTableName: core.vaultAuditLogTable.name,
     });
 
@@ -910,7 +920,6 @@ export class NumaClientStack extends TerraformStack {
         NUMA_OPS: clientConfig.numaOps ?? false,
         SITE_WIDE_SEARCH: clientConfig.siteWideSearch ?? false,
         MFA_ENABLED: clientConfig.mfa ?? false,
-        SECRETS_VAULT_ENABLED: clientConfig.secretsVaultEnabled ?? false,
         NUMA_DROP_ZONES: clientConfig.numaDropZones ?? false,
         NUMA_SHARING: clientConfig.numaSharing ?? false,
         WORKSPACE_CHAT_MODEL_SELECTION:

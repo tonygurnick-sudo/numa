@@ -1978,11 +1978,12 @@ const _coreNumaInfraPropsSchema = z
      */
     agents: z.boolean().optional().default(false),
     /**
-     * Whether to enable Secrets Vault functionality for secure credential storage.
-     *
-     * @default false
+     * @deprecated Secrets Vault is now gated on `dataConnectorsEnabled` (TASK-146).
+     * Field kept on the schema as `.optional()` so existing client configs that
+     * still set it parse without error — the value is ignored by infra and the
+     * frontend.
      */
-    secretsVaultEnabled: z.boolean().optional().default(false),
+    secretsVaultEnabled: z.boolean().optional(),
     /**
      * Whether to enable Numa Ops (work management, kanban boards, CRM).
      * When true, the integrations-approval DynamoDB table is created even without

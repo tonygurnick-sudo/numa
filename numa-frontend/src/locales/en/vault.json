@@ -108,30 +108,43 @@
     "audit": {
       "title": "Access Audit Log",
       "empty": "No access history recorded yet.",
+      "emptyFiltered": "No entries match this filter.",
+      "filterLabel": "Filter activity",
+      "filter": {
+        "all": "All activity",
+        "me": "My actions only",
+        "chat": "Chat usage only"
+      },
+      "actorChat": "Numa chat",
+      "actorYou": "You",
       "columns": {
         "timestamp": "Timestamp",
         "secretName": "Secret",
         "action": "Action",
         "accessor": "Accessed By",
+        "actor": "Actor",
         "purpose": "Purpose",
         "approvedBy": "Approved By"
       },
       "actions": {
-        "ai_access": "AI Access",
-        "user_view": "User View",
-        "user_update": "User Update",
-        "user_delete": "User Delete",
-        "admin_view": "Admin View",
-        "admin_create": "Admin Create",
-        "admin_update": "Admin Update",
-        "admin_delete": "Admin Delete",
-        "admin_step_up_grant": "Admin Step-Up Granted",
-        "admin_step_up_failed": "Admin Step-Up Failed",
-        "system_access": "System Access"
+        "ai_access": "Chat access",
+        "user_view": "Viewed",
+        "user_create": "Created",
+        "user_update": "Updated",
+        "user_delete": "Deleted",
+        "user_bulk_create": "Bulk import",
+        "admin_view": "Admin viewed",
+        "admin_create": "Admin created",
+        "admin_update": "Admin updated",
+        "admin_delete": "Admin deleted",
+        "admin_step_up_grant": "Admin verified password",
+        "admin_step_up_failed": "Admin verification failed",
+        "system_access": "System access"
       },
       "approvals": {
-        "user": "User Approval",
-        "danger_mode": "Danger Mode (Auto)"
+        "user": "User approved",
+        "danger_mode": "Auto (danger mode)",
+        "oauth_grant": "OAuth grant"
       }
     },
     "errors": {

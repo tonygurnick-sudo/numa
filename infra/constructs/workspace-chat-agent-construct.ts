@@ -53,8 +53,6 @@ export interface WorkspaceChatAgentConstructProps {
   chatSettingsTableName?: string;
   /** Chat settings table ARN (for IAM permissions) */
   chatSettingsTableArn?: string;
-  /** Whether to enable vault secrets functionality (enables vault system prompt and tools) */
-  secretsVaultEnabled?: boolean;
   /** Company bucket name (for loading company profile into system prompt) */
   companyBucketName?: string;
   /** Company bucket ARN (for IAM permissions) */

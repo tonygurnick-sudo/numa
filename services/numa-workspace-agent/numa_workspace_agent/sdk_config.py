@@ -761,8 +761,11 @@ def create_agent_options(
             tools=[connectors],
         )
 
-    # Vault: only register if secrets vault feature is enabled
-    if type_config.enable_vault_mcp and flags.get("SECRETS_VAULT_ENABLED", False):
+    # Vault: register when native data connectors are enabled. The vault and
+    # connectors travel together — connectors are the only thing that auto-
+    # populates secrets, so gating both on DATA_CONNECTORS_ENABLED keeps a
+    # single switch for admins (TASK-146).
+    if type_config.enable_vault_mcp and flags.get("DATA_CONNECTORS_ENABLED", False):
         mcp_servers["vault"] = create_sdk_mcp_server(
             name="vault",
             version="1.0.0",

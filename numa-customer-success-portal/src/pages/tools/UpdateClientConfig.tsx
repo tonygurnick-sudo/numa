@@ -133,7 +133,6 @@ export default function UpdateClientConfig() {
   const [ssoEnabled, setSsoEnabled] = useState<boolean>(true);
   const [ssoEnterprise, setSsoEnterprise] = useState<boolean>(false);
   const [developerMode, setDeveloperMode] = useState<boolean>(false);
-  const [secretsVaultEnabled, setSecretsVaultEnabled] = useState<boolean>(false);
   const [oauthIntegrationsEnabled, setOauthIntegrationsEnabled] = useState<boolean>(false);
   const [v2Apps, setV2Apps] = useState<boolean>(false);
   const [agentCoreRegion, setAgentCoreRegion] = useState<string>('');
@@ -287,7 +286,6 @@ export default function UpdateClientConfig() {
     setSsoEnabled((cfg as any).ssoEnabled ?? defaults.ssoEnabled);
     setSsoEnterprise(Boolean((cfg as any).ssoEnterprise));
     setDeveloperMode(Boolean((cfg as any).developerMode));
-    setSecretsVaultEnabled(Boolean((cfg as any).secretsVaultEnabled));
     setOauthIntegrationsEnabled(Boolean((cfg as any).oauthIntegrationsEnabled));
     setV2Apps(Boolean((cfg as any)?.v2Apps));
     setAgentCoreRegion((cfg as any).agentCoreRegion || '');
@@ -348,7 +346,6 @@ export default function UpdateClientConfig() {
       ssoEnabled: (current as any)?.ssoEnabled ?? defaults.ssoEnabled,
       ssoEnterprise: (current as any)?.ssoEnterprise ?? defaults.ssoEnterprise,
       developerMode: (current as any)?.developerMode ?? defaults.developerMode,
-      secretsVaultEnabled: (current as any)?.secretsVaultEnabled ?? defaults.secretsVaultEnabled,
       oauthIntegrationsEnabled: (current as any)?.oauthIntegrationsEnabled ?? defaults.oauthIntegrationsEnabled,
       v2Apps: (current as any)?.v2Apps ?? defaults.v2Apps,
       agentCoreRegion: (current as any)?.agentCoreRegion ?? '',
@@ -451,7 +448,6 @@ export default function UpdateClientConfig() {
     if (eff.ssoEnabled !== ssoEnabled) (updates as any).ssoEnabled = ssoEnabled;
     if (eff.ssoEnterprise !== ssoEnterprise) (updates as any).ssoEnterprise = ssoEnterprise;
     if (eff.developerMode !== developerMode) (updates as any).developerMode = developerMode;
-    if (eff.secretsVaultEnabled !== secretsVaultEnabled) (updates as any).secretsVaultEnabled = secretsVaultEnabled;
     if (eff.oauthIntegrationsEnabled !== oauthIntegrationsEnabled)
       (updates as any).oauthIntegrationsEnabled = oauthIntegrationsEnabled;
     if (eff.v2Apps !== v2Apps) updates.v2Apps = v2Apps;
@@ -820,14 +816,6 @@ export default function UpdateClientConfig() {
                           onChange={setDeveloperMode}
                           type="switch"
                           helpText="Show power-user actions: file system drill-down, metadata inspection, debug views"
-                        />
-                        <ConfigField
-                          label="Secrets Vault"
-                          value={secretsVaultEnabled}
-                          defaultValue={defaults.secretsVaultEnabled}
-                          onChange={setSecretsVaultEnabled}
-                          type="switch"
-                          helpText="Secure credential storage for the workspace"
                         />
                         <ConfigField
                           label="OAuth Cloud Storage"

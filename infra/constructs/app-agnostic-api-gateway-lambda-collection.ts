@@ -1749,8 +1749,8 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         // so scheduled runs register the same MCP servers (connectors, vault)
         // that chat does. Without these, native connector tools are
         // unavailable in scheduled runs even when the user has them authed.
+        // Vault MCP is gated on DATA_CONNECTORS_ENABLED above (TASK-146).
         OAUTH_INTEGRATIONS_ENABLED: String(props.oauthIntegrationsEnabled ?? false),
-        SECRETS_VAULT_ENABLED: String(props.secretsVaultEnabled ?? false),
         ...(props.pipedreamRelayLambdaArn && {
           PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn,
         }),
@@ -2813,9 +2813,6 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
    *  `connectors` MCP in `sdk_config.py` is gated on this flag, so leaving
    *  it false silently breaks native connector tools in scheduled runs. */
   oauthIntegrationsEnabled?: boolean;
-  /** Forwarded as `featureFlags.SECRETS_VAULT_ENABLED` on the workspace-agent
-   *  request body fired by the schedule runner. Gates the `vault` MCP. */
-  secretsVaultEnabled?: boolean;
   /** Connector events table name (permanent event records). */
   connectorEventsTableName: string;
   /** Connector event configs table name (admin toggle/tags per event type). */

@@ -34,6 +34,28 @@
     "disasterRecovery": "Disaster Recovery",
     "sso": "Single Sign-On"
   },
+  "vault": {
+    "user": {
+      "tabLabel": "My Secrets",
+      "title": "My Secrets",
+      "description": "Personal secrets only visible to you. Used by connectors and Numa chat tools you authorise.",
+      "activityTitle": "Activity",
+      "activityDescription": "Recent reads and writes against your personal secrets."
+    },
+    "company": {
+      "tabLabel": "Company Secrets",
+      "title": "Company Secrets",
+      "description": "Shared OAuth client configurations and API credentials used by all users. Every change is logged with the admin who made it.",
+      "lockedTitle": "Verification required",
+      "lockedDescription": "Re-enter your password to view or change company secrets. Verification is required every time you open this tab.",
+      "unlockButton": "Unlock company secrets",
+      "unlockedBadge": "Unlocked for this session",
+      "createButton": "Add company secret",
+      "lastModifiedBy": "Last modified by {{actor}}",
+      "activityTitle": "Audit log",
+      "activityDescription": "Every read and write against a company secret, with the responsible admin."
+    }
+  },
   "navigation": {
     "unsavedBranding": "You have unsaved branding changes. Leaving this page will discard them. Continue?",
     "unsavedChatDefaults": "You have unsaved chat default changes. Leaving this tab will discard them. Continue?"

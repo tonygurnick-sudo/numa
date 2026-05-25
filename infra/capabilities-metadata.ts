@@ -160,16 +160,6 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: ['SSO_ENABLED'],
   },
   {
-    flag: 'SECRETS_VAULT_ENABLED',
-    title: 'Secrets Vault',
-    description: 'Secure credential storage for integrations and connections.',
-    icon: 'bi-key',
-    system_only: true,
-    dev_only: true,
-    enabled: false,
-    dependencies: [],
-  },
-  {
     flag: 'OAUTH_INTEGRATIONS_ENABLED',
     title: 'OAuth Integrations',
     description: 'OAuth-based connectors for external services.',

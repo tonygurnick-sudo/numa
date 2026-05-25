@@ -38,7 +38,6 @@ const _CONFIG_OPTIONAL_PROPERTIES = [
   'TRIGGERS', // Sub-flag of SCHEDULING — gates event triggers (no effect when SCHEDULING is off)
   'WORKSPACE_CHAT_MODEL_SELECTION', // Feature flag for model selection in Chat V2
   'NUMA_OPS', // Feature flag for Numa Ops work management
-  'SECRETS_VAULT_ENABLED', // Feature flag for Secrets Vault
   'DEVELOPER_MODE', // Feature flag for developer actions (file detail drill-down, etc.)
   'OAUTH_AVAILABLE', // Feature flag for OAuth file providers
   'FILE_BROWSER_DETAIL', // Feature flag for file browser detail drill-down

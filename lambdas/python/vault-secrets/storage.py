@@ -218,8 +218,14 @@ def write_audit_log(
     purpose: str = "",
     conversation_id: str = "",
     approved_by: str = "user",
+    actor_email: str = "",
 ) -> Dict[str, Any]:
-    """Write an audit log entry. TTL = 90 days."""
+    """Write an audit log entry. TTL = 90 days.
+
+    actor_email identifies the human responsible for the action. For company
+    secret operations it is the admin's email so the UI can show who touched
+    a shared credential. For user-scoped actions it is the user's own email.
+    """
     dynamodb = prm_resource("dynamodb")
     table = dynamodb.Table(table_name)
     now = datetime.now(timezone.utc).isoformat()
@@ -233,6 +239,7 @@ def write_audit_log(
         "secret_name": secret_name,
         "action": action,
         "accessor": accessor,
+        "actor_email": actor_email,
         "purpose": purpose,
         "conversation_id": conversation_id,
         "approved_by": approved_by,

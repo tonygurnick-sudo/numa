@@ -233,7 +233,10 @@ async function streamWorkspaceChatAttempt(
     // Feature flags for conditional tool registration in the workspace agent
     featureFlags: {
       OAUTH_INTEGRATIONS_ENABLED: sessionStorage.getItem('OAUTH_AVAILABLE') === 'true',
-      SECRETS_VAULT_ENABLED: sessionStorage.getItem('SECRETS_VAULT_ENABLED') === 'true',
+      // Vault MCP availability is tied to native data connectors — connectors
+      // are the only thing that auto-write secrets into the vault, so the two
+      // travel together.
+      DATA_CONNECTORS_ENABLED: sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true',
     },
     // Model selection (global cross-region inference profile)
     modelId: request.modelId,
@@ -995,7 +998,10 @@ export async function invokeWorkspaceAgentSync(
     availableIntegrations: request.availableIntegrations,
     featureFlags: {
       OAUTH_INTEGRATIONS_ENABLED: sessionStorage.getItem('OAUTH_AVAILABLE') === 'true',
-      SECRETS_VAULT_ENABLED: sessionStorage.getItem('SECRETS_VAULT_ENABLED') === 'true',
+      // Vault MCP availability is tied to native data connectors — connectors
+      // are the only thing that auto-write secrets into the vault, so the two
+      // travel together.
+      DATA_CONNECTORS_ENABLED: sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true',
     },
     modelId: request.modelId,
     attachments: request.attachments,

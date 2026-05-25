@@ -350,6 +350,10 @@ async def get_oauth_token(
 ) -> Optional[str]:
     """Get valid OAuth access token for user and provider from consolidated vault.
 
+    NB: This file is currently unused by the chat connector path — the active
+    code path is tools/oauth_tools.py:get_oauth_token, which is where chat
+    audit instrumentation lives (TASK-146).
+
     Args:
         provider: OAuth provider name (e.g., 'googledrive', 'gmail')
         user_sub: User ID from JWT

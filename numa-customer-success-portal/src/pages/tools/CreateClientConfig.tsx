@@ -127,7 +127,6 @@ export default function CreateClientConfig() {
   const [ssoEnabled, setSsoEnabled] = useState(defaults.ssoEnabled);
   const [ssoEnterprise, setSsoEnterprise] = useState(defaults.ssoEnterprise);
   const [developerMode, setDeveloperMode] = useState(defaults.developerMode);
-  const [secretsVaultEnabled, setSecretsVaultEnabled] = useState(defaults.secretsVaultEnabled);
   const [oauthIntegrationsEnabled, setOauthIntegrationsEnabled] = useState(defaults.oauthIntegrationsEnabled);
   const [v2Apps, setV2Apps] = useState(defaults.v2Apps);
   const [agentCoreRegion, setAgentCoreRegion] = useState('');
@@ -302,7 +301,6 @@ export default function CreateClientConfig() {
     if (ssoEnabled !== defaults.ssoEnabled) minimal['ssoEnabled'] = ssoEnabled;
     if (ssoEnterprise !== defaults.ssoEnterprise) minimal['ssoEnterprise'] = ssoEnterprise;
     if (developerMode !== defaults.developerMode) minimal['developerMode'] = developerMode;
-    if (secretsVaultEnabled !== defaults.secretsVaultEnabled) minimal['secretsVaultEnabled'] = secretsVaultEnabled;
     if (oauthIntegrationsEnabled !== defaults.oauthIntegrationsEnabled)
       minimal['oauthIntegrationsEnabled'] = oauthIntegrationsEnabled;
     if (v2Apps) minimal['v2Apps'] = true;
@@ -615,14 +613,6 @@ export default function CreateClientConfig() {
                         onChange={setDeveloperMode}
                         type="switch"
                         helpText="Show power-user actions: file system drill-down, metadata inspection, debug views"
-                      />
-                      <ConfigField
-                        label="Secrets Vault"
-                        value={secretsVaultEnabled}
-                        defaultValue={defaults.secretsVaultEnabled}
-                        onChange={setSecretsVaultEnabled}
-                        type="switch"
-                        helpText="Secure credential storage for the workspace"
                       />
                       <ConfigField
                         label="OAuth Cloud Storage"

@@ -33,7 +33,6 @@ const NotificationsPage = lazy(() =>
   import('../Pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage }))
 );
 const SupportPage = lazy(() => import('../Pages/SupportPage').then((m) => ({ default: m.SupportPage })));
-const VaultSecretsPage = lazy(() => import('../Pages/VaultSecretsPage').then((m) => ({ default: m.VaultSecretsPage })));
 const OAuthCallback = lazy(() => import('../Pages/OAuthCallback'));
 const V2AppDetail = lazy(() => import('../Pages/V2AppDetail').then((m) => ({ default: m.V2AppDetail })));
 const ApiContractPage = lazy(() => import('../Pages/ApiContractPage'));
@@ -235,19 +234,11 @@ export const ROUTE_CONFIG = [
     element: () => <Navigate to="/integrations" replace />,
   },
 
-  // Vault Secrets
+  // Vault Secrets — now lives inside Settings (user + admin scope tabs).
+  // Keep the path so existing bookmarks/footer-nav links redirect into Settings.
   {
     path: '/vault-secrets',
-    element: () => <VaultSecretsPage />,
-    nav: {
-      label: 'Secrets Vault',
-      labelKey: 'nav.items.vault',
-      icon: 'bi bi-shield-lock-fill',
-      featureFlag: 'SECRETS_VAULT_ENABLED',
-      footerOnly: true,
-      order: 15,
-    },
-    featureFlag: 'SECRETS_VAULT_ENABLED',
+    element: () => <Navigate to="/settings?scope=user&tab=secrets" replace />,
   },
 
   // Support
