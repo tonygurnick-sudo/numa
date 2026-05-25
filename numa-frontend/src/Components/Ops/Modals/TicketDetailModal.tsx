@@ -185,6 +185,8 @@ export function TicketDetailModal({
   const [editingTags, setEditingTags] = useState(false);
   const [tagsDraft, setTagsDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [saveError, setSaveError] = useState(false);
 
   // ── CRM lists for selector dropdowns ───────────────────────────────────
 
@@ -222,6 +224,17 @@ export function TicketDetailModal({
   // ── Ref for title input auto-focus ──────────────────────────────────────
   const titleInputRef = useRef<HTMLInputElement>(null);
   const descriptionEditorRef = useRef<RichTextEditorHandle>(null);
+
+  // Serialises inline saves so back-to-back edits don't race the optimistic
+  // version lock (BUG-131). ticketRef holds the freshest version+fields,
+  // saveQueueRef chains PUTs, and handleUpdate accepts a factory so payloads
+  // that depend on prior state are computed after the previous save lands.
+  const ticketRef = useRef<Ticket | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveErrorRef = useRef(false);
+  useEffect(() => {
+    ticketRef.current = ticket;
+  }, [ticket]);
 
   // ── Close handler — always flush description before closing ─────────────
   const handleClose = useCallback(() => {
@@ -336,36 +349,89 @@ export function TicketDetailModal({
   // ── Generic update handler with optimistic locking ──────────────────────
 
   const handleUpdate = useCallback(
-    async (payload: Record<string, unknown>) => {
-      if (!ticket || !ticketId) return;
-      setSaving(true);
-      try {
-        const updated = await OpsService.updateTicket(numaPut, ticketId, {
-          ...payload,
-          boardId: ticket.boardId,
-          version: ticket.version,
-        });
-        setTicket(updated);
-        void refreshTickets();
-        const crmImpactingKeys = ['customerId', 'supplierId', 'statusType', 'stageId', 'archived'] as const;
-        if (crmImpactingKeys.some((key) => Object.prototype.hasOwnProperty.call(payload, key))) {
-          refreshCrmData();
+    async (payload: Record<string, unknown> | ((current: Ticket) => Record<string, unknown>)) => {
+      if (!ticketId) return;
+      const task = saveQueueRef.current.then(async () => {
+        const current = ticketRef.current;
+        if (!current) return;
+        const resolvedPayload = typeof payload === 'function' ? payload(current) : payload;
+        setSaving(true);
+        try {
+          const updated = await OpsService.updateTicket(numaPut, ticketId, {
+            ...resolvedPayload,
+            boardId: current.boardId,
+            version: current.version,
+          });
+          ticketRef.current = updated;
+          setTicket(updated);
+          setLastSavedAt(new Date());
+          setSaveError(false);
+          saveErrorRef.current = false;
+          void refreshTickets();
+          const crmImpactingKeys = ['customerId', 'supplierId', 'statusType', 'stageId', 'archived'] as const;
+          if (crmImpactingKeys.some((key) => Object.prototype.hasOwnProperty.call(resolvedPayload, key))) {
+            refreshCrmData();
+          }
+        } catch (err: unknown) {
+          setSaveError(true);
+          saveErrorRef.current = true;
+          const isConflict = err instanceof Error && (err.message.includes('409') || err.message.includes('conflict'));
+          if (isConflict) {
+            await showAlert({ message: t('tickets.conflictMessage'), variant: 'warning' });
+            void loadTicket();
+          } else {
+            console.error('[TicketDetailModal] Update failed', err);
+          }
+        } finally {
+          setSaving(false);
         }
-      } catch (err: unknown) {
-        // Check for 409 conflict
-        const isConflict = err instanceof Error && (err.message.includes('409') || err.message.includes('conflict'));
-        if (isConflict) {
-          await showAlert({ message: t('tickets.conflictMessage'), variant: 'warning' });
-          void loadTicket();
-        } else {
-          console.error('[TicketDetailModal] Update failed', err);
-        }
-      } finally {
-        setSaving(false);
-      }
+      });
+      saveQueueRef.current = task.catch(() => undefined);
+      await task;
     },
-    [ticket, ticketId, numaPut, refreshTickets, refreshCrmData, loadTicket, t]
+    [ticketId, numaPut, refreshTickets, refreshCrmData, loadTicket, showAlert, t]
   );
+
+  // Force-flush any pending inline edits, drain the save queue, then report
+  // the outcome via toast + footer indicator. Drives the indicator into
+  // "Saving..." → "Saved HH:MM" even when nothing was actually pending, so
+  // clicking Save always gives visible confirmation.
+  const handleManualSave = useCallback(async () => {
+    if (!ticketId) return;
+    saveErrorRef.current = false;
+    setSaving(true);
+    const start = Date.now();
+    const minShowMs = 1000;
+    try {
+      descriptionEditorRef.current?.flush();
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await saveQueueRef.current;
+      // Silent server roundtrip — verifies connectivity and that the ticket
+      // is reachable, without overwriting local state if another user has
+      // edited since (response is intentionally discarded).
+      try {
+        await OpsService.getTicket(numaGet, ticketId, effectiveTeamId ?? undefined);
+      } catch (err) {
+        saveErrorRef.current = true;
+        console.error('[TicketDetailModal] Save verification failed', err);
+      }
+      const remaining = minShowMs - (Date.now() - start);
+      if (remaining > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+      }
+      if (saveErrorRef.current) {
+        showToast({ message: t('tickets.saveFailed'), variant: 'error' });
+      } else {
+        setLastSavedAt(new Date());
+        setSaveError(false);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }, [ticketId, numaGet, effectiveTeamId, showToast, t]);
 
   // ── Title editing handlers ──────────────────────────────────────────────
 
@@ -486,11 +552,11 @@ export function TicketDetailModal({
 
   const handleCustomFieldChange = useCallback(
     async (fieldId: string, value: unknown) => {
-      if (!ticket) return;
-      const updatedFields = { ...(ticket.fields ?? {}), [fieldId]: value };
-      await handleUpdate({ fields: updatedFields });
+      await handleUpdate((current) => ({
+        fields: { ...(current.fields ?? {}), [fieldId]: value },
+      }));
     },
-    [ticket, handleUpdate]
+    [handleUpdate]
   );
 
   // ── Get ticket type fields with overrides ─────────────────────────────
@@ -1393,9 +1459,34 @@ export function TicketDetailModal({
                   </button>
                 )}
               </div>
-              <button type="button" className="ticket-detail-footer-btn" onClick={handleClose}>
-                {t('common.close')}
-              </button>
+              <div className="d-flex align-items-center gap-2">
+                <small
+                  className={saveError ? 'text-danger' : 'text-muted'}
+                  style={{ fontSize: '0.75rem', minWidth: 90, textAlign: 'right' }}
+                >
+                  {saving
+                    ? t('common.saving')
+                    : saveError
+                      ? t('tickets.saveFailed')
+                      : lastSavedAt
+                        ? t('tickets.savedAt', {
+                            time: lastSavedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+                          })
+                        : ''}
+                </small>
+                <button
+                  type="button"
+                  className="ticket-detail-footer-btn ticket-detail-footer-btn--primary"
+                  disabled={saving}
+                  onClick={() => void handleManualSave()}
+                >
+                  <i className="bi bi-check2" />
+                  {t('common.save')}
+                </button>
+                <button type="button" className="ticket-detail-footer-btn" onClick={handleClose}>
+                  {t('common.close')}
+                </button>
+              </div>
             </Modal.Footer>
           </>
         )}

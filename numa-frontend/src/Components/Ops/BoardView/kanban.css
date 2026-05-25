@@ -1031,6 +1031,21 @@
   color: #dc2626;
 }
 
+.ticket-detail-footer-btn--primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.ticket-detail-footer-btn--primary:hover {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.ticket-detail-footer-btn--primary:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
 /* ── Lifecycle strip ─────────────────────────────────────────────────────── */
 
 .ticket-lifecycle-strip {
