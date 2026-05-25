@@ -25,13 +25,11 @@ import {
 } from '../Components/Integrations/integrationCatalogHelpers';
 import { MethodBadge } from '../Components/Integrations/MethodBadge';
 import { NativeConfigurationModal } from '../Components/Integrations/NativeConfigurationModal';
-import { listCompanySecrets } from '../Services/VaultService';
 import { VaultUserSecretsPanel } from '../Components/Vault/VaultUserSecretsPanel';
 import { VaultCompanySecretsPanel } from '../Components/Vault/VaultCompanySecretsPanel';
 import { ManageMethodCard } from '../Components/Integrations/ManageMethodCard';
 import { UserChoiceCard } from '../Components/Integrations/UserChoiceCard';
 import { SynergyPatBadge } from '../Components/DataConnectors/SynergyPatBadge';
-import { GoogleCloudSetupWizard } from '../Components/DataConnectors/wizards/GoogleCloudSetupWizard';
 import {
   getConnectionDisplayName,
   getConnectionDescription,
@@ -270,10 +268,6 @@ export default function SettingsPage() {
   // of truth. We pull this list separately and merge it with the catalog so
   // existing setups still appear in the unified Integrations list.
   const [configuredNativeSlugs, setConfiguredNativeSlugs] = useState<Set<string>>(new Set());
-  // True when the shared Google OAuth client (`oauth-client-google`) has been
-  // saved to the company vault — the wizard reads this to render the "already
-  // configured" success state instead of walking the admin through full setup.
-  const [googleCloudConfigured, setGoogleCloudConfigured] = useState(false);
 
   const loadGlobal = async () => {
     try {
@@ -299,17 +293,6 @@ export default function SettingsPage() {
         .then(({ oauth, pat }) => {
           setConfiguredNativeSlugs(new Set([...oauth.map((c) => c.id), ...pat.map((c) => c.id)]));
         })
-        .catch(() => undefined);
-      // Whether the shared Google OAuth client has been provisioned. Drives
-      // the GoogleCloudSetupWizard's "already configured" branch. Non-fatal
-      // on failure (e.g. vault feature flag off) — we just default to false
-      // and the wizard runs full setup.
-      listCompanySecrets()
-        .then((secrets) =>
-          setGoogleCloudConfigured(
-            secrets.some((s) => s.name === 'oauth-client-google' || s.id === 'oauth-client-google')
-          )
-        )
         .catch(() => undefined);
       setError(null);
     } catch (e) {
@@ -366,12 +349,6 @@ export default function SettingsPage() {
   // data-connector-settings) is on. Adding flips the relevant flag; removing
   // turns both off.
   const [addModalOpen, setAddModalOpen] = useState(false);
-  // Google Cloud OAuth setup wizard. Optional one-time admin flow that
-  // provisions the shared Google OAuth client used by every Google-platform
-  // connector (Drive, Gmail, Sheets, etc.). The per-service Native setup
-  // path still works without this, but the wizard saves admins from
-  // pasting client_id/secret on every Google connector individually.
-  const [googleSetupWizardOpen, setGoogleSetupWizardOpen] = useState(false);
   // Connector currently being configured for native OAuth/PAT credentials.
   const [configuringConnector, setConfiguringConnector] = useState<string | null>(null);
   // Why the configurator is open. 'reconfigure' keeps the current preferred
@@ -2532,30 +2509,10 @@ export default function SettingsPage() {
                               defaultValue: '{{count}} integration added',
                             })}
                       </span>
-                      <div className="d-flex gap-2">
-                        <Button
-                          variant="outline-secondary"
-                          size="sm"
-                          onClick={() => setGoogleSetupWizardOpen(true)}
-                          disabled={previewMode}
-                          title={t('integrations.googleCloudSetupTooltip', {
-                            defaultValue:
-                              'One-time setup that auto-provisions a shared Google OAuth client for all Google connectors (Drive, Gmail, Sheets, etc.).',
-                          })}
-                        >
-                          <i className="bi bi-google me-1" />
-                          {t('integrations.googleCloudSetup', { defaultValue: 'Google Cloud setup' })}
-                        </Button>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => setAddModalOpen(true)}
-                          disabled={previewMode}
-                        >
-                          <i className="bi bi-plus-lg me-1" />
-                          {t('integrations.addIntegration', { defaultValue: 'Add integration' })}
-                        </Button>
-                      </div>
+                      <Button variant="primary" size="sm" onClick={() => setAddModalOpen(true)} disabled={previewMode}>
+                        <i className="bi bi-plus-lg me-1" />
+                        {t('integrations.addIntegration', { defaultValue: 'Add integration' })}
+                      </Button>
                     </div>
 
                     {addedServices.length === 0 ? (
@@ -2765,24 +2722,6 @@ export default function SettingsPage() {
         connectorSlug={configuringConnector}
         onHide={() => setConfiguringConnector(null)}
         onSaved={() => void handleConfiguredNative()}
-      />
-
-      {/* Google Cloud setup wizard — admin one-time flow. Self-checks whether
-          the shared Google OAuth client is already provisioned; if so, it
-          renders a success state, otherwise walks the admin through Google
-          sign-in + project creation + Google API enablement. */}
-      <GoogleCloudSetupWizard
-        show={googleSetupWizardOpen}
-        onHide={() => setGoogleSetupWizardOpen(false)}
-        onComplete={() => {
-          setGoogleSetupWizardOpen(false);
-          // Refresh global settings + catalog so any Google connectors the
-          // admin newly configured via the wizard pick up the new shared
-          // client. loadGlobal also re-derives googleCloudConfigured from
-          // the vault, so the wizard shows the success state next time.
-          void loadGlobal();
-        }}
-        isConfigured={googleCloudConfigured}
       />
 
       {isAdmin && (

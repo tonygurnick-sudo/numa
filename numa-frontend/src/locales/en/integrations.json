@@ -27,16 +27,6 @@
     "nativeTooltip": "Connected via Numa native connector",
     "pipedreamTooltip": "Connected via Pipedream"
   },
-  "methodPicker": {
-    "label": "Connection method",
-    "help": "When both methods are available for a service, choose which one users connect through. Leaving this blank lets users pick at connect time.",
-    "native": "Native",
-    "pipedream": "Pipedream",
-    "letUserChoose": "Let user choose",
-    "infoNative": "Direct OAuth with this service. Tighter scopes, simpler permissions, surfaced through Numa's connectors and Files Remote.",
-    "infoPipedream": "Pipedream-managed OAuth with a broad pre-built action library. Best when you want lots of ready-made actions without building them yourself.",
-    "infoLetUserChoose": "Each user picks their preferred method when connecting. Use this when both options are valid and you want the user's circumstances to decide."
-  },
   "hiddenByMethod": {
     "pipedreamHidden_one": "{{count}} integration hidden — admin chose the native connector",
     "pipedreamHidden_other": "{{count}} integrations hidden — admin chose the native connector",
@@ -388,10 +378,10 @@
     "alreadyAdded": "Added",
     "dualMethod": "2 methods",
     "nativeHeading": "Native connector",
-    "nativeBody": "Direct OAuth with the service. Tighter scopes, surfaced in Files Remote, simpler permissions for your users.",
+    "nativeBody": "Stays in Numa. Credentials and the data Numa accesses live in your Numa workspace — no third-party broker.",
     "nativeSetup": "Setup required: you'll register an OAuth app with this service and paste the client ID + secret. Takes a few minutes.",
     "pipedreamHeading": "Pipedream",
-    "pipedreamBody": "Pipedream-managed OAuth. Numa's shared OAuth app, broad pre-built action library users can call from chat.",
+    "pipedreamBody": "Routed through Pipedream, a third-party service. Pipedream stores credentials and brokers all calls to this service — your data passes through them.",
     "pipedreamSetup": "No setup required — enables immediately on this workspace.",
     "userChoiceBadge": "User choice",
     "userChoiceHeading": "Let users pick",
@@ -404,9 +394,9 @@
     "switchTitle": "Switch connection method",
     "switchIntro": "Your existing connection will be disconnected first. Any agents or automations relying on it will need to be reconnected.",
     "nativeHeading": "Connect natively",
-    "nativeBody": "Direct OAuth with the service. Tighter scopes, simpler permissions.",
+    "nativeBody": "Stays in Numa. Numa connects directly to the service — your credentials and the data accessed live in your Numa workspace, with no third party in between.",
     "pipedreamHeading": "Connect via Pipedream",
-    "pipedreamBody": "Pipedream-managed OAuth with a broad pre-built action library.",
+    "pipedreamBody": "Routed through Pipedream, a third-party service. Pipedream stores the credentials and brokers all calls to this service — your data passes through them.",
     "userPicks": "Choose method"
   },
   "badges": {
@@ -419,9 +409,9 @@
     "toolsHeading": "Tools",
     "method": {
       "pipedreamHeading": "Pipedream",
-      "pipedreamBody": "Pipedream-managed OAuth. Numa's shared OAuth app, broad pre-built action library users can call from chat.",
+      "pipedreamBody": "Routed through Pipedream. Credentials and calls flow through a third-party service.",
       "nativeHeading": "Native connector",
-      "nativeBody": "Direct OAuth with the service. Tighter scopes, surfaced in Files Remote, simpler permissions for users.",
+      "nativeBody": "Stays in Numa. Credentials and data live in your Numa workspace — no third party involved.",
       "nativeSetupNeeded": "Setup required: register an OAuth app with this service and paste the client ID + secret. Takes a few minutes.",
       "active": "Active",
       "available": "Available",

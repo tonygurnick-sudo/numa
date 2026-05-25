@@ -14,6 +14,9 @@ interface CallbackState {
   status: 'processing' | 'success' | 'error';
   message: string;
   provider?: string;
+  // Where the user will be sent after success. Drives the "Redirecting to X"
+  // line so it matches the actual destination (Files vs Integrations).
+  redirectTo?: 'files' | 'integrations';
 }
 
 const OAuthCallback: React.FC = () => {
@@ -140,12 +143,6 @@ const OAuthCallback: React.FC = () => {
             return;
           }
 
-          setState({
-            status: 'success',
-            message: t('oauthCallback.connectionSuccessful', { provider }),
-            provider,
-          });
-
           // Where to send the user back. The Integrations page stashes its
           // own return path (with a #<slug> deep-link to scroll to the right
           // card) before kicking off the OAuth redirect; honour that when
@@ -161,6 +158,17 @@ const OAuthCallback: React.FC = () => {
           } catch {
             /* sessionStorage unavailable — fall back to default */
           }
+
+          const redirectTo: 'files' | 'integrations' = returnPath.startsWith('/integrations')
+            ? 'integrations'
+            : 'files';
+
+          setState({
+            status: 'success',
+            message: t('oauthCallback.connectionSuccessful', { provider }),
+            provider,
+            redirectTo,
+          });
 
           setTimeout(() => {
             navigate(returnPath, { replace: true });
@@ -253,7 +261,11 @@ const OAuthCallback: React.FC = () => {
 
                 {state.status === 'success' && (
                   <div className="mt-2">
-                    <small className="text-muted">{t('oauthCallback.redirecting')}</small>
+                    <small className="text-muted">
+                      {state.redirectTo === 'integrations'
+                        ? t('oauthCallback.redirectingToIntegrations')
+                        : t('oauthCallback.redirectingToFiles')}
+                    </small>
                   </div>
                 )}
 

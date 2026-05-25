@@ -45,6 +45,7 @@ import { extractDroppedUploadBatch, isExternalFileDrag, type DroppedUploadBatch 
 import { useConnectedIntegrations, type ConnectedIntegration } from '../../hooks/useConnectedIntegrations';
 import { RemoteProviderBrowser, type SubFolderBreadcrumb } from './Remote/RemoteProviderBrowser';
 import { RemoteProviderInlineRows } from './Remote/RemoteProviderInlineRows';
+import { ComposeEmailModal } from '../Files/ComposeEmailModal';
 import { ConnectorStatusBadge, type ConnectorStatus } from '../DataConnectors/ConnectorStatusBadge';
 import { getFlag } from '../../utils/featureFlags';
 import { Link } from 'react-router-dom';
@@ -106,6 +107,10 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   // page toolbar renders the full crumbs as one bar.
   const [currentIntegration, setCurrentIntegration] = useState<ConnectedIntegration | null>(null);
   const [integrationSubPath, setIntegrationSubPath] = useState<SubFolderBreadcrumb[]>([]);
+  // Open the Compose Email modal from the toolbar when browsing the Gmail
+  // integration. Gmail is the only integration with a write action exposed
+  // here today; other providers don't get a compose button.
+  const [composeEmailOpen, setComposeEmailOpen] = useState(false);
 
   const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
   const { integrations, isLoading: integrationsLoading } = useConnectedIntegrations(dataConnectorsEnabled);
@@ -1747,6 +1752,16 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               entirely while browsing an integration — those actions target
               the user's KBs and would be confusing in that context. */}
           <div className="finder-toolbar__primary">
+            {isInsideIntegration && currentIntegration?.id === 'gmail' && (
+              <button
+                className="finder-btn finder-btn--primary finder-btn--labelled"
+                onClick={() => setComposeEmailOpen(true)}
+                title={t('compose.title', 'Compose')}
+              >
+                <i className="bi bi-pencil-square" />
+                <span className="finder-btn__label">{t('compose.title', 'Compose')}</span>
+              </button>
+            )}
             {isInsideIntegration ? null : !isInsideFolder && rootKB ? (
               <button
                 className="finder-btn finder-btn--primary finder-btn--labelled"
@@ -2802,6 +2817,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           )}
         </Modal.Body>
       </Modal>
+      <ComposeEmailModal show={composeEmailOpen} onHide={() => setComposeEmailOpen(false)} provider="gmail" />
     </div>
   );
 

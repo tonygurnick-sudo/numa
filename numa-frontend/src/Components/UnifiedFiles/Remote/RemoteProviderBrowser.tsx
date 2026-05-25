@@ -16,7 +16,6 @@ import { useToast } from '../../../Providers/ToastContext';
 import { ConnectorsService } from '../../../Services/ConnectorsService';
 import { extractApiError } from '../../../utils/extractApiError';
 import type { RemoteFileItem } from '../../Files/FileContextMenu';
-import { ComposeEmailModal } from '../../Files/ComposeEmailModal';
 import { EmailViewerModal } from '../../Files/EmailViewerModal';
 import { RemoteProviderInlineRows } from './RemoteProviderInlineRows';
 import { RemoteProviderTree } from './RemoteProviderTree';
@@ -161,7 +160,6 @@ function SynergyEmbeddedBrowser({
   subFolderPath: SubFolderBreadcrumb[];
   onSubFolderPathChange: (path: SubFolderBreadcrumb[]) => void;
 }): React.JSX.Element {
-  const [composeEmailOpen, setComposeEmailOpen] = useState(false);
   // Drill-in via double-click on a folder or job row: push the row's
   // identity onto the parent-owned sub-path. RemoteProviderInlineRows is
   // re-keyed on the path so the next render re-roots cleanly (matches the
@@ -199,8 +197,6 @@ function SynergyEmbeddedBrowser({
           onFolderDoubleClick={handleDrillIn}
         />
       </div>
-
-      <ComposeEmailModal show={composeEmailOpen} onHide={() => setComposeEmailOpen(false)} provider="gmail" />
     </div>
   );
 }
