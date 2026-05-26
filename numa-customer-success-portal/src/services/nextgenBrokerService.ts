@@ -46,6 +46,13 @@ async function invoke<TReq, TRes = any>(payload: TReq): Promise<TRes> {
   return parsed.result as TRes;
 }
 
+export interface NextgenOrgAccount {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+}
+
 export const nextgenBrokerService = {
   async updateAccountName(accountId: string, newName: string): Promise<{ accountId: string; name: string }> {
     return invoke({ action: 'updateAccountName', accountId, newName });
@@ -62,5 +69,9 @@ export const nextgenBrokerService = {
 
   async precheckAssumeClientRole(accountId: string, roleName?: string): Promise<{ assumedRoleArn: string }> {
     return invoke({ action: 'precheckAssumeClientRole', accountId, roleName });
+  },
+
+  async listOrgAccounts(): Promise<{ accounts: NextgenOrgAccount[] }> {
+    return invoke({ action: 'listOrgAccounts' });
   },
 };

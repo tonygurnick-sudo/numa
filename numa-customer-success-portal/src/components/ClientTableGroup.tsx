@@ -1,7 +1,7 @@
 import { Table, Button, Badge } from 'react-bootstrap';
 import { PencilSquare } from 'react-bootstrap-icons';
-import { Client, getStatusBadgeInfo } from '@/types';
-import type { ClientMetadata } from '@/types';
+import { Client, getStatusBadgeInfo, getAccountOrgBadgeInfo } from '@/types';
+import type { ClientMetadata, AccountOrgValue } from '@/types';
 import { groupClientsByType } from '@/services/clientService';
 
 interface ClientTableGroupProps {
@@ -11,6 +11,7 @@ interface ClientTableGroupProps {
   onUpdateClient?: (client: Client) => void;
   searchTerm?: string;
   metadataMap?: Map<string, ClientMetadata>;
+  orgMap?: Map<string, AccountOrgValue | null>;
 }
 
 export function ClientTableGroup({
@@ -20,6 +21,7 @@ export function ClientTableGroup({
   onUpdateClient,
   searchTerm = '',
   metadataMap,
+  orgMap,
 }: ClientTableGroupProps) {
   // Filter clients by search term if provided
   const filteredClients = searchTerm
@@ -30,6 +32,9 @@ export function ClientTableGroup({
 
   const renderClientRow = (client: Client) => {
     const badgeInfo = getStatusBadgeInfo(metadataMap?.get(client.name));
+    const orgBadge = getAccountOrgBadgeInfo(
+      orgMap?.get(client.name) ?? metadataMap?.get(client.name)?.accountOrg ?? null
+    );
     return (
       <tr key={client.name} className={selectedClient?.name === client.name ? 'table-primary' : ''}>
         <td
@@ -39,8 +44,13 @@ export function ClientTableGroup({
           onClick={() => onSelectClient?.(client)}
         >
           {client.name}
+          {orgBadge && (
+            <Badge bg={orgBadge.variant} className="ms-2" style={{ fontSize: '0.65rem' }}>
+              {orgBadge.label}
+            </Badge>
+          )}
           {badgeInfo && (
-            <Badge bg={badgeInfo.variant} className="ms-2" style={{ fontSize: '0.65rem' }}>
+            <Badge bg={badgeInfo.variant} className="ms-1" style={{ fontSize: '0.65rem' }}>
               {badgeInfo.label}
             </Badge>
           )}

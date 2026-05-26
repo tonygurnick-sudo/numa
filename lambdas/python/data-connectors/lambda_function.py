@@ -26,9 +26,12 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore.exceptions import BotoCoreError, ClientError
 
 from connectors import get_connector
+from prm import client as prm_client
 from prm import resource as prm_resource
 from storage import (
     create_sync_config,
+    delete_connector_record,
+    delete_secret,
     delete_sync_config,
     get_connector_record,
     get_secret_payload,
@@ -160,12 +163,141 @@ def _handle_status(user_id: str, table_name: str) -> Dict[str, Any]:
     return _response(200, {"items": items})
 
 
+def _handle_disconnect(
+    user_id: str, connector_id: str, table_name: str
+) -> Dict[str, Any]:
+    """Delete the user's row for this connector and clean up the secret.
+
+    Idempotent — returns 200 even when there was nothing to delete, so callers
+    can fire this unconditionally during the unified disconnect flow without
+    branching on whether the user actually had a row.
+    """
+    removed = delete_connector_record(table_name, user_id, connector_id)
+    if removed:
+        secret_arn = removed.get("secret_arn")
+        if isinstance(secret_arn, str):
+            delete_secret(secret_arn)
+    return _response(
+        200,
+        {"success": True, "removed": bool(removed), "connector_id": connector_id},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Vault-based credential helpers (mirror of the chat path).
+#
+# Synergy is configured in two places post-FEAT-143:
+#   * Company vault `{CLIENT_NAME}/vault/company` — admin-set `instance_url`
+#     under `connector-config-synergy.fields`.
+#   * User vault   `{CLIENT_NAME}/vault/users/{user_id}` — per-user PAT
+#     under `connector-synergy.fields.access_token`.
+# The workspace-chat-tools Lambda reads from there first; we mirror that
+# here so the Files surface uses the same source of truth, and so users
+# connected via the inline chat widget don't have to also write a legacy
+# DynamoDB row to make /files work.
+# ---------------------------------------------------------------------------
+
+
+def _read_vault_secret(secret_id: str) -> Optional[Dict[str, Any]]:
+    """Read + JSON-decode a Secrets Manager entry. None on miss or parse error."""
+    try:
+        sm = prm_client("secretsmanager")
+        response = sm.get_secret_value(SecretId=secret_id)
+        return json.loads(response.get("SecretString", "{}"))
+    except Exception as exc:  # noqa: BLE001 — Secrets Manager raises a hierarchy
+        if "ResourceNotFoundException" in str(
+            type(exc).__name__
+        ) or "ResourceNotFoundException" in str(exc):
+            return None
+        logger.warning(
+            "Failed to read vault secret", secret_id=secret_id, error=str(exc)
+        )
+        return None
+
+
+def _get_company_vault_secrets() -> Dict[str, Any]:
+    """Return the company vault's `secrets` dict (or empty)."""
+    if not CLIENT_NAME:
+        return {}
+    data = _read_vault_secret(f"{CLIENT_NAME}/vault/company")
+    if not isinstance(data, dict):
+        return {}
+    secrets = data.get("secrets")
+    return secrets if isinstance(secrets, dict) else {}
+
+
+def _get_user_vault(user_id: str) -> Dict[str, Any]:
+    """Return the user's consolidated vault payload (or empty)."""
+    if not CLIENT_NAME:
+        return {}
+    data = _read_vault_secret(f"{CLIENT_NAME}/vault/users/{user_id}")
+    return data if isinstance(data, dict) else {}
+
+
+def _get_synergy_admin_instance_url() -> Optional[str]:
+    """Return the admin-configured Synergy server URL, or None."""
+    company = _get_company_vault_secrets()
+    for key in ("connector-config-synergy", "connector-synergy"):
+        entry = company.get(key)
+        if not entry:
+            continue
+        fields = entry.get("fields") or entry
+        if not isinstance(fields, dict):
+            continue
+        url = fields.get("instance_url") or fields.get("server")
+        if url:
+            return str(url).strip()
+    return None
+
+
+def _get_synergy_credentials_from_vault(user_id: str) -> Optional[tuple[str, str]]:
+    """Return (server, access_token) sourced from the vault, or None.
+
+    Reads the user vault for the PAT and the company vault for the
+    admin-configured instance URL. Legacy fallback: if the user vault
+    still carries `instance_url` / `server` (pre-split connect), honour
+    it so existing users don't break mid-deploy.
+    """
+    vault = _get_user_vault(user_id)
+    if not vault:
+        return None
+
+    admin_server = _get_synergy_admin_instance_url()
+
+    secrets = vault.get("secrets", {}) if isinstance(vault, dict) else {}
+    if not isinstance(secrets, dict):
+        return None
+    for secret_key in ("connector-synergy", "oauth-synergy"):
+        entry = secrets.get(secret_key)
+        if not entry:
+            continue
+        fields = entry.get("fields") or entry
+        if not isinstance(fields, dict):
+            continue
+        token = (
+            fields.get("access_token")
+            or fields.get("api_key")
+            or fields.get("bearer_token")
+            or fields.get("token")
+        )
+        server = admin_server or fields.get("instance_url") or fields.get("server")
+        if token and server:
+            return str(server), str(token)
+    return None
+
+
 def _get_synergy_credentials(table_name: str, user_id: str) -> tuple[str, str] | None:
     """Return Synergy server and access token for the user.
 
-    If the PAT is within PAT_ROTATION_THRESHOLD_DAYS of expiry, attempts
-    automatic rotation via the Synergy API before returning credentials.
+    Tries the vault first (chat-path source of truth), then falls back to
+    the legacy DynamoDB record. The legacy path performs an inline PAT
+    rotation check; the vault path doesn't need to since vault PATs are
+    managed by the inline chat widget.
     """
+    vault_creds = _get_synergy_credentials_from_vault(user_id)
+    if vault_creds:
+        return vault_creds
+
     record = get_connector_record(table_name, user_id, "synergy")
     if not record or record.get("status") != "connected":
         return None
@@ -529,20 +661,27 @@ def _handle_synergy_jobs(
 
 
 def _handle_synergy_job_folders(
-    job_id: str, user_id: str, table_name: str
+    event: Dict[str, Any], job_id: str, user_id: str, table_name: str
 ) -> Dict[str, Any]:
-    """Return top-level folders for a Synergy job."""
+    """Return top-level folders for a Synergy job, paginated."""
     creds = _get_synergy_credentials(table_name, user_id)
     if not creds:
         return _response(400, {"error": "Synergy 12d connector not configured."})
     server, token = creds
+    params = event.get("queryStringParameters") or {}
+    page = int(params.get("page") or 1)
+    page_size = int(params.get("page_size") or 50)
     try:
-        items = list_job_folders(server, token, job_id)
+        payload = list_job_folders(
+            server, token, job_id, page=page, page_size=page_size
+        )
     except SynergyAuthError as exc:
         new_token = _synergy_auth_retry(table_name, user_id, server, token)
         if new_token:
             try:
-                items = list_job_folders(server, new_token, job_id)
+                payload = list_job_folders(
+                    server, new_token, job_id, page=page, page_size=page_size
+                )
             except (ValueError, httpx.HTTPError, SynergyAuthError):
                 return _synergy_auth_error_response(table_name, user_id, exc)
         else:
@@ -551,24 +690,31 @@ def _handle_synergy_job_folders(
         logger.warning("Synergy job folders failed", error=str(exc))
         return _response(400, {"error": str(exc)})
     update_connector_health(table_name, user_id, "synergy", "connected")
-    return _response(200, {"items": items}, cache_control="private, max-age=300")
+    return _response(200, payload, cache_control="private, max-age=300")
 
 
 def _handle_synergy_folder_items(
-    folder_id: str, user_id: str, table_name: str
+    event: Dict[str, Any], folder_id: str, user_id: str, table_name: str
 ) -> Dict[str, Any]:
-    """Return subfolders for a Synergy folder."""
+    """Return subfolders and files for a Synergy folder, paginated."""
     creds = _get_synergy_credentials(table_name, user_id)
     if not creds:
         return _response(400, {"error": "Synergy 12d connector not configured."})
     server, token = creds
+    params = event.get("queryStringParameters") or {}
+    page = int(params.get("page") or 1)
+    page_size = int(params.get("page_size") or 50)
     try:
-        payload = get_folder_items(server, token, folder_id)
+        payload = get_folder_items(
+            server, token, folder_id, page=page, page_size=page_size
+        )
     except SynergyAuthError as exc:
         new_token = _synergy_auth_retry(table_name, user_id, server, token)
         if new_token:
             try:
-                payload = get_folder_items(server, new_token, folder_id)
+                payload = get_folder_items(
+                    server, new_token, folder_id, page=page, page_size=page_size
+                )
             except (ValueError, httpx.HTTPError, SynergyAuthError):
                 return _synergy_auth_error_response(table_name, user_id, exc)
         else:
@@ -959,6 +1105,28 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
     if method == "POST" and path.endswith("/data-connectors/connect"):
         return _handle_connect(event, user_id, table_name, client_name)
 
+    # Per-user disconnect: DELETE /api/data-connectors/{connector_id}.
+    # The trailing segment is the connector_id (no further subpath). We have
+    # to guard against the other /data-connectors/{x}/{y} DELETE paths
+    # (sync-configs etc.) by requiring exactly one segment after the prefix.
+    if method == "DELETE" and "/data-connectors/" in path:
+        parts = [p for p in path.strip("/").split("/") if p]
+        try:
+            anchor = parts.index("data-connectors")
+        except ValueError:
+            anchor = -1
+        # Exactly one segment after `data-connectors` means
+        # /data-connectors/{connector_id}. Two-or-more segments belong to
+        # subroutes (sync-configs, event-configs, etc.) handled below.
+        if anchor >= 0 and len(parts) == anchor + 2:
+            connector_id = parts[-1]
+            # Don't shadow reserved keywords like "status" / "connect" — those
+            # don't take DELETE here, and a /data-connectors/status DELETE
+            # would be a programming error not a real disconnect intent.
+            if connector_id in {"status", "connect", "sync-configs"}:
+                return _response(405, {"error": "Method not allowed"})
+            return _handle_disconnect(user_id, connector_id, table_name)
+
     if method == "GET" and path.endswith("/data-connectors/synergy/pat-status"):
         return _handle_pat_status(user_id, table_name)
 
@@ -974,7 +1142,7 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
         and path.endswith("/folders")
     ):
         job_id = path.strip("/").split("/")[-2]
-        return _handle_synergy_job_folders(job_id, user_id, table_name)
+        return _handle_synergy_job_folders(event, job_id, user_id, table_name)
 
     if (
         method == "GET"
@@ -982,7 +1150,7 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
         and path.endswith("/items")
     ):
         folder_id = path.strip("/").split("/")[-2]
-        return _handle_synergy_folder_items(folder_id, user_id, table_name)
+        return _handle_synergy_folder_items(event, folder_id, user_id, table_name)
 
     # Gmail routes
     if method == "GET" and path.endswith("/data-connectors/gmail/labels"):

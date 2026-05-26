@@ -762,6 +762,7 @@ export class CoreNumaInfra extends Construct {
         // Pipedream-trigger lookup: deployed_trigger_id (dc_xxx) is the only
         // identifier the receiver lambda has on inbound webhook events.
         { name: 'deployed_trigger_id', type: 'S' },
+        { name: 'tenant_id', type: 'S' },
       ],
       globalSecondaryIndex: [
         {
@@ -794,6 +795,14 @@ export class CoreNumaInfra extends Construct {
           hashKey: 'deployed_trigger_id',
           projectionType: 'INCLUDE',
           nonKeyAttributes: ['user_id', 'schedule_id', 'trigger', 'status'],
+        },
+        {
+          // Used by `agent-schedules` for tenant-scope queries (admin audit
+          // screen, quota aggregation). Avoids Scan on the schedules table.
+          // Sort client-side — keeping the GSI definition minimal.
+          name: 'tenant-id-index',
+          hashKey: 'tenant_id',
+          projectionType: 'ALL',
         },
       ],
       pointInTimeRecovery: {
@@ -1969,11 +1978,12 @@ const _coreNumaInfraPropsSchema = z
      */
     agents: z.boolean().optional().default(false),
     /**
-     * Whether to enable Secrets Vault functionality for secure credential storage.
-     *
-     * @default false
+     * @deprecated Secrets Vault is now gated on `dataConnectorsEnabled` (TASK-146).
+     * Field kept on the schema as `.optional()` so existing client configs that
+     * still set it parse without error — the value is ignored by infra and the
+     * frontend.
      */
-    secretsVaultEnabled: z.boolean().optional().default(false),
+    secretsVaultEnabled: z.boolean().optional(),
     /**
      * Whether to enable Numa Ops (work management, kanban boards, CRM).
      * When true, the integrations-approval DynamoDB table is created even without

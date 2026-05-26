@@ -32,7 +32,7 @@ Content-Type: application/json
 
 - Access tokens expire in 3600 seconds (1 hour)
 - Refresh tokens expire in 14 days; single-use (becomes invalid once used)
-- Token URL: `https://auth.simpro.co/oauth/token`
+- Token URL: `https://{build}.simprosuite.com/oauth2/token` (per-build; `auth.simpro.co` does NOT exist — corrected 2026-05-19 against official PHP SDK)
 - Refresh: POST with `grant_type=refresh_token`, `client_id`, `client_secret`, `refresh_token`
 
 ## URL Structure
@@ -222,7 +222,7 @@ Content-Type: application/json
 1. **PATCH response (204) does not confirm success** -- verify with a subsequent GET [CONFIRMED]
 2. **No rate limit response headers** -- cannot detect approaching limit; use 80% threshold [CONFIRMED]
 3. **OAuth scopes not enumerated** -- specific scope values are not publicly documented [CONFIRMED]
-4. **Daily rate limit undisclosed** -- simPRO enforces daily limits but does not publish the number [DOCUMENTED]
+4. **Daily rate limit may exist but is unverified** -- a forum post mentions daily caps but no public source confirms a number. Do not budget against a specific figure. [INFERRED]
 5. **No bulk operations** -- must iterate one-by-one for mass creates/updates [CONFIRMED]
 
 ---

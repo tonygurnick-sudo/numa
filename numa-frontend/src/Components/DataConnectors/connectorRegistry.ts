@@ -19,29 +19,14 @@ export interface CredentialFieldDef {
   placeholder?: string;
   required: boolean;
   helpText?: string;
-}
-
-export interface ConnectorApiReference {
-  docsUrl?: string;
-  openApiUrl?: string;
-  postmanUrl?: string;
-  mcpServerRef?: string;
-  sdks?: { language: string; package: string; url?: string }[];
-  purpose: string;
-  dataTypes: string[];
-  capabilities: string[];
-  exampleRequests?: {
-    description: string;
-    method: string;
-    path: string;
-    headers?: Record<string, string>;
-    body?: string;
-  }[];
-  endpointCategories?: {
-    name: string;
-    description: string;
-    basePath?: string;
-  }[];
+  /**
+   * When true, the value is normalised to a DNS-safe hostname component
+   * (lowercased, `_` replaced with `-`) at URL-placeholder substitution time.
+   * Only affects values interpolated into authUrl / tokenUrl — the stored
+   * field value keeps the admin's original input. Needed for providers that
+   * embed tenant identifiers in the hostname (e.g. NetSuite account IDs).
+   */
+  hostnameSafe?: boolean;
 }
 
 export interface ConnectorEventType {
@@ -52,41 +37,17 @@ export interface ConnectorEventType {
   defaultEnabled: boolean;
 }
 
+// Per-connector cache TTL — controls how long `useRemoteBrowse` keeps a folder
+// listing in the in-memory + sessionStorage cache before refetching. Picked per
+// connector by data-change frequency.
 export interface CachingPolicy {
-  ttl: number; // seconds — how long cached data is considered fresh
-  staleWhileRevalidate: number; // seconds — serve stale while fetching fresh
-  prefetch: boolean; // auto-prefetch subfolders on navigate
-  invalidateOn: string[]; // events that bust cache (e.g. 'write', 'delete', 'send')
-  maxEntries: number; // max cached folder/listing entries
-  backgroundRefresh: number; // seconds — background poll interval (0 = off)
+  ttl: number; // seconds
 }
 
-// Sensible defaults by data-change frequency
 export const CACHING_PRESETS: Record<string, CachingPolicy> = {
-  email: {
-    ttl: 60,
-    staleWhileRevalidate: 120,
-    prefetch: false,
-    invalidateOn: ['send'],
-    maxEntries: 50,
-    backgroundRefresh: 0,
-  },
-  cloudStorage: {
-    ttl: 300,
-    staleWhileRevalidate: 600,
-    prefetch: true,
-    invalidateOn: ['write', 'delete'],
-    maxEntries: 100,
-    backgroundRefresh: 0,
-  },
-  projectManagement: {
-    ttl: 1800,
-    staleWhileRevalidate: 3600,
-    prefetch: true,
-    invalidateOn: ['write'],
-    maxEntries: 200,
-    backgroundRefresh: 300,
-  },
+  email: { ttl: 60 },
+  cloudStorage: { ttl: 300 },
+  projectManagement: { ttl: 1800 },
 };
 
 export interface ConnectorTemplate {
@@ -96,7 +57,6 @@ export interface ConnectorTemplate {
   description: string;
   category: string;
   authType: ConnectorAuthType;
-  tier: 1 | 2 | 3;
 
   // OAuth-specific
   oauth?: {
@@ -105,6 +65,7 @@ export interface ConnectorTemplate {
     scopes: string;
     extraAuthParams?: string;
     discoveryUrl?: string;
+    hideClientSecret?: boolean;
   };
 
   // Non-standard OAuth Authorization header scheme. Defaults to `Bearer`
@@ -118,17 +79,11 @@ export interface ConnectorTemplate {
 
   // Common metadata
   baseUrl?: string;
-  helpUrl?: string;
-  signupUrl?: string;
   rateLimitRpm?: number;
   rateLimitDaily?: number;
-  setupInstructions?: string;
 
   // OAuth-specific setup guidance
   oauthSetupSteps?: string[];
-
-  // API reference
-  apiReference?: ConnectorApiReference;
 
   // Event types this connector can produce
   eventTypes?: ConnectorEventType[];
@@ -144,9 +99,6 @@ export interface ConnectorTemplate {
   // only exposes itself from chat. Default is ['chat'] — explicitly opt a connector in to
   // files surfacing by including 'files'.
   surfaces?: ('files' | 'chat')[];
-
-  // Tier 3 only
-  contactInfo?: { email?: string; website?: string; notes?: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +114,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Data connector for Synergy 12d job data',
     category: 'Project Management',
     authType: 'token',
-    tier: 1,
     surfaces: ['files', 'chat'],
     cachingPolicy: CACHING_PRESETS.projectManagement,
     // Per-user credential: just the PAT. instance_url is admin-level
@@ -178,13 +129,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         required: true,
       },
     ],
-    helpUrl: 'https://www.12d.com/products/synergy/',
-    apiReference: {
-      docsUrl: 'https://www.12d.com/products/synergy/',
-      purpose: 'Project management and job tracking for civil engineering and surveying',
-      dataTypes: ['jobs', 'folders', 'files', 'documents'],
-      capabilities: ['read', 'search'],
-    },
   },
 
   // ─── Tier 1: OAuth2 (existing) ───────────────────────────────────────────
@@ -195,7 +139,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Access and browse Google Drive files',
     category: 'Cloud Storage',
     authType: 'oauth2',
-    tier: 1,
     oauthPlatform: 'google',
     surfaces: ['files', 'chat'],
     cachingPolicy: CACHING_PRESETS.cloudStorage,
@@ -206,7 +149,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       extraAuthParams: '{"access_type":"offline","prompt":"consent"}',
       discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
     },
-    helpUrl: 'https://console.cloud.google.com/apis/credentials',
     oauthSetupSteps: [
       'Go to Google Cloud Console → APIs & Services → Credentials',
       'Click "Create Credentials" → "OAuth Client ID"',
@@ -214,12 +156,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Add the redirect URI below under "Authorized redirect URIs"',
       'Copy the Client ID and Client Secret',
     ],
-    apiReference: {
-      docsUrl: 'https://developers.google.com/drive/api/reference/rest/v3',
-      purpose: 'Cloud file storage and sharing',
-      dataTypes: ['files', 'folders', 'permissions', 'comments'],
-      capabilities: ['read', 'write', 'search', 'share'],
-    },
   },
   {
     id: 'gmail',
@@ -228,7 +164,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Read, search, and send emails via Gmail',
     category: 'Email & Communication',
     authType: 'oauth2',
-    tier: 1,
     oauthPlatform: 'google',
     surfaces: ['files', 'chat'],
     cachingPolicy: CACHING_PRESETS.email,
@@ -239,7 +174,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       extraAuthParams: '{"access_type":"offline","prompt":"consent"}',
       discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
     },
-    helpUrl: 'https://console.cloud.google.com/apis/credentials',
     oauthSetupSteps: [
       'Enable the Gmail API in Google Cloud Console → APIs & Services → Library',
       'Go to Credentials → Create Credentials → OAuth Client ID',
@@ -247,12 +181,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Add the redirect URI below under "Authorized redirect URIs"',
       'Copy the Client ID and Client Secret',
     ],
-    apiReference: {
-      docsUrl: 'https://developers.google.com/gmail/api/reference/rest',
-      purpose: 'Email management — read, search, send, and organize messages',
-      dataTypes: ['messages', 'threads', 'labels', 'drafts', 'attachments'],
-      capabilities: ['read', 'write', 'send', 'search', 'webhooks'],
-    },
     eventTypes: [
       {
         id: 'new_email',
@@ -291,7 +219,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Access and browse Microsoft OneDrive files',
     category: 'Cloud Storage',
     authType: 'oauth2',
-    tier: 1,
     oauthPlatform: 'microsoft',
     surfaces: ['files', 'chat'],
     cachingPolicy: CACHING_PRESETS.cloudStorage,
@@ -302,7 +229,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       extraAuthParams: '{"response_mode":"query"}',
       discoveryUrl: 'https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration',
     },
-    helpUrl: 'https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps',
     oauthSetupSteps: [
       'Go to Azure Portal → App registrations → New registration',
       'Set a name and choose "Accounts in any organizational directory"',
@@ -310,12 +236,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Go to Certificates & secrets → New client secret → copy the Value',
       'Copy the Application (client) ID from the Overview page',
     ],
-    apiReference: {
-      docsUrl: 'https://learn.microsoft.com/en-us/graph/api/resources/onedrive',
-      purpose: 'Microsoft cloud file storage and collaboration',
-      dataTypes: ['files', 'folders', 'permissions', 'sharepoint-items'],
-      capabilities: ['read', 'write', 'search', 'share'],
-    },
   },
   {
     id: 'dropbox',
@@ -325,7 +245,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Cloud Storage',
     cachingPolicy: CACHING_PRESETS.cloudStorage,
     authType: 'oauth2',
-    tier: 1,
     surfaces: ['files', 'chat'],
     oauth: {
       authUrl: 'https://www.dropbox.com/oauth2/authorize',
@@ -334,19 +253,12 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       extraAuthParams: '{"token_access_type":"offline"}',
       discoveryUrl: 'https://www.dropbox.com/.well-known/openid-configuration',
     },
-    helpUrl: 'https://www.dropbox.com/developers/apps',
     oauthSetupSteps: [
       'Go to Dropbox App Console → Create app',
       'Choose "Scoped access" and "Full Dropbox" access type',
       'Under Settings → OAuth 2 → Redirect URIs, add the redirect URI below',
       'Copy the App key (Client ID) and App secret (Client Secret)',
     ],
-    apiReference: {
-      docsUrl: 'https://www.dropbox.com/developers/documentation/http/documentation',
-      purpose: 'Cloud file storage and sharing',
-      dataTypes: ['files', 'folders', 'sharing-links'],
-      capabilities: ['read', 'write', 'search', 'share'],
-    },
   },
 
   // ─── Tier 2: OAuth2 (new) ──────────────────────────────────────────────
@@ -357,32 +269,18 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Project management and job tracking for professional services',
     category: 'Project Management',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://oauth.workflowmax2.com/oauth/authorize',
       tokenUrl: 'https://oauth.workflowmax2.com/oauth/token',
       scopes: 'openid profile email workflowmax',
       extraAuthParams: '{"prompt":"consent"}',
     },
-    helpUrl: 'https://developer.xero.com/',
     oauthSetupSteps: [
       'Log in to the Xero Developer portal (developer.xero.com)',
       'Create a new app and select "Web app" as the integration type',
       'Add the redirect URI below under "OAuth 2.0 redirect URIs"',
       'Copy the Client ID and generate a Client Secret',
     ],
-    apiReference: {
-      docsUrl: 'https://developer.xero.com/documentation/api/workflowmax/overview',
-      purpose: 'Project management, time tracking, and invoicing for professional services firms',
-      dataTypes: ['jobs', 'clients', 'contacts', 'timesheets', 'invoices', 'quotes', 'tasks', 'staff'],
-      capabilities: ['read', 'write', 'search'],
-      endpointCategories: [
-        { name: 'Jobs', description: 'Manage jobs, tasks, and costs', basePath: '/jobs' },
-        { name: 'Clients', description: 'Client and contact management', basePath: '/clients' },
-        { name: 'Time', description: 'Timesheet entries and tracking', basePath: '/time' },
-        { name: 'Invoices', description: 'Invoice creation and management', basePath: '/invoices' },
-      ],
-    },
   },
   {
     id: 'podio',
@@ -391,31 +289,18 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Flexible work management and collaboration platform',
     category: 'Project Management',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://podio.com/oauth/authorize',
       tokenUrl: 'https://podio.com/oauth/token',
       scopes: '',
       extraAuthParams: '{}',
     },
-    helpUrl: 'https://developers.podio.com/',
     oauthSetupSteps: [
       'Go to Podio Developer Portal → API Keys',
       'Create a new API client application',
       'Set the redirect URI to the value shown below',
       'Copy the Client ID and Client Secret',
     ],
-    apiReference: {
-      docsUrl: 'https://developers.podio.com/doc',
-      purpose: 'Customizable work management platform with flexible workspaces, apps, and workflows',
-      dataTypes: ['items', 'apps', 'workspaces', 'tasks', 'files', 'contacts', 'comments'],
-      capabilities: ['read', 'write', 'search', 'webhooks'],
-      endpointCategories: [
-        { name: 'Items', description: 'Create, read, update items in Podio apps', basePath: '/item' },
-        { name: 'Apps', description: 'Manage Podio apps and app fields', basePath: '/app' },
-        { name: 'Tasks', description: 'Task management', basePath: '/task' },
-      ],
-    },
   },
   {
     id: 'simpro',
@@ -424,47 +309,17 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Field service management for trade and services businesses',
     category: 'Field Service',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://login.simprogroup.com/oauth2/authorize',
       tokenUrl: 'https://login.simprogroup.com/oauth2/token',
       scopes: '',
     },
-    helpUrl: 'https://developer.simprogroup.com/',
     oauthSetupSteps: [
       'Log in to the simPRO Developer Portal',
       'Register a new application under your company',
       'Add the redirect URI below to the application settings',
       'Copy the Client ID and Client Secret from the app details',
     ],
-    apiReference: {
-      docsUrl: 'https://developer.simprogroup.com/apidoc/',
-      purpose: 'End-to-end field service management for trades and service businesses',
-      dataTypes: ['jobs', 'quotes', 'invoices', 'schedules', 'customers', 'sites', 'assets', 'purchase-orders'],
-      capabilities: ['read', 'write', 'search'],
-      endpointCategories: [
-        {
-          name: 'Jobs',
-          description: 'Job and work order management',
-          basePath: '/api/v1.0/companies/{companyId}/jobs',
-        },
-        {
-          name: 'Quotes',
-          description: 'Quote creation and management',
-          basePath: '/api/v1.0/companies/{companyId}/quotes',
-        },
-        {
-          name: 'Customers',
-          description: 'Customer management',
-          basePath: '/api/v1.0/companies/{companyId}/customers',
-        },
-        {
-          name: 'Schedules',
-          description: 'Scheduling and dispatch',
-          basePath: '/api/v1.0/companies/{companyId}/schedules',
-        },
-      ],
-    },
   },
   {
     id: 'getjobber',
@@ -473,29 +328,16 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Home service management — scheduling, invoicing, and CRM',
     category: 'Field Service',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://api.getjobber.com/api/oauth/authorize',
       tokenUrl: 'https://api.getjobber.com/api/oauth/token',
       scopes: 'read_clients read_jobs read_invoices',
     },
-    helpUrl: 'https://developer.getjobber.com/',
     oauthSetupSteps: [
       'Go to Jobber Developer Portal → Create App',
       'Fill in the app details and add the redirect URI below',
       'Copy the Client ID and Client Secret from the app page',
     ],
-    apiReference: {
-      docsUrl: 'https://developer.getjobber.com/docs',
-      purpose: 'Home service management with scheduling, invoicing, quoting, and client CRM',
-      dataTypes: ['clients', 'jobs', 'invoices', 'quotes', 'requests', 'visits', 'expenses'],
-      capabilities: ['read', 'write', 'search'],
-      endpointCategories: [
-        { name: 'Clients', description: 'Client management (GraphQL)', basePath: '/api/graphql' },
-        { name: 'Jobs', description: 'Job tracking and scheduling', basePath: '/api/graphql' },
-        { name: 'Invoices', description: 'Invoice and payment management', basePath: '/api/graphql' },
-      ],
-    },
   },
   {
     id: 'wrike',
@@ -504,29 +346,16 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Enterprise work management and project collaboration',
     category: 'Project Management',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://login.wrike.com/oauth2/authorize/v4',
       tokenUrl: 'https://login.wrike.com/oauth2/token',
       scopes: 'wsReadOnly',
     },
-    helpUrl: 'https://developers.wrike.com/',
     oauthSetupSteps: [
       'Go to Wrike Developer Portal → Create App',
       'Set the redirect URI to the value shown below',
       'Copy the Client ID and Client Secret',
     ],
-    apiReference: {
-      docsUrl: 'https://developers.wrike.com/overview/',
-      purpose: 'Enterprise collaborative work management for projects, tasks, and workflows',
-      dataTypes: ['tasks', 'projects', 'folders', 'timesheets', 'contacts', 'comments', 'attachments'],
-      capabilities: ['read', 'write', 'search', 'webhooks'],
-      endpointCategories: [
-        { name: 'Tasks', description: 'Task CRUD and management', basePath: '/api/v4/tasks' },
-        { name: 'Folders/Projects', description: 'Folder and project hierarchy', basePath: '/api/v4/folders' },
-        { name: 'Timesheets', description: 'Time tracking', basePath: '/api/v4/timelogs' },
-      ],
-    },
   },
   {
     id: 'connecteam-oauth',
@@ -535,24 +364,16 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Employee management — time clock, scheduling, and forms (OAuth)',
     category: 'HR & Workforce',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://app.connecteam.com/oauth/authorize',
       tokenUrl: 'https://app.connecteam.com/oauth/token',
       scopes: 'forms.read attachments.write',
     },
-    helpUrl: 'https://developer.connecteam.com/',
     oauthSetupSteps: [
       'Go to Connecteam Developer Portal → Create an integration',
       'Set the redirect URI to the value shown below',
       'Copy the Client ID and Client Secret',
     ],
-    apiReference: {
-      docsUrl: 'https://developer.connecteam.com/',
-      purpose: 'All-in-one employee management — time tracking, scheduling, forms, training, and communication',
-      dataTypes: ['users', 'shifts', 'timesheets', 'forms', 'assets', 'courses'],
-      capabilities: ['read', 'write'],
-    },
   },
   {
     id: 'totalsynergy-oauth',
@@ -561,24 +382,16 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Architecture and engineering practice management (OAuth)',
     category: 'Project Management',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://app.totalsynergy.com/oauth2/authorize',
       tokenUrl: 'https://app.totalsynergy.com/oauth2/token',
       scopes: '',
     },
-    helpUrl: 'https://developer.totalsynergy.com/',
     oauthSetupSteps: [
       'Contact Total Synergy support to register an OAuth application',
       'Provide them with the redirect URI shown below',
       'They will supply you with a Client ID and Client Secret',
     ],
-    apiReference: {
-      docsUrl: 'https://developer.totalsynergy.com/api/',
-      purpose: 'Practice management for architecture, engineering, and construction firms',
-      dataTypes: ['projects', 'contacts', 'timesheets', 'invoices', 'documents', 'staff'],
-      capabilities: ['read', 'write', 'search'],
-    },
   },
 
   // ─── Tier 2: OAuth2 (Accounting) ────────────────────────────────────────
@@ -589,52 +402,36 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Cloud accounting for small businesses',
     category: 'Accounting',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://login.xero.com/identity/connect/authorize',
       tokenUrl: 'https://identity.xero.com/connect/token',
       scopes: 'openid profile email accounting.transactions.read accounting.contacts.read offline_access',
     },
-    helpUrl: 'https://developer.xero.com/',
     oauthSetupSteps: [
       'Go to Xero Developer Portal (developer.xero.com) → My Apps',
       'Click "New app" and select "Web app" as the integration type',
       'Add the redirect URI below under "OAuth 2.0 redirect URIs"',
       'Copy the Client ID and generate a Client Secret',
     ],
-    apiReference: {
-      docsUrl: 'https://developer.xero.com/documentation/api/accounting/overview',
-      purpose: 'Cloud accounting — invoicing, bank reconciliation, expenses, payroll, and reporting',
-      dataTypes: ['invoices', 'contacts', 'accounts', 'bank-transactions', 'payments', 'reports'],
-      capabilities: ['read', 'write', 'search', 'webhooks'],
-    },
   },
   {
-    id: 'myob',
-    displayName: 'MYOB',
+    id: 'myob-account-right',
+    displayName: 'MYOB AccountRight',
     icon: 'bi-journal-text',
     description: 'Business management and accounting for AU/NZ',
     category: 'Accounting',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://secure.myob.com/oauth2/account/authorize',
       tokenUrl: 'https://secure.myob.com/oauth2/v1/authorize',
       scopes: 'la',
     },
-    helpUrl: 'https://developer.myob.com/',
     oauthSetupSteps: [
       'Go to my.myob.com and register for API keys',
       'Create a new app under your MYOB developer account',
       'Add the redirect URI below to the app settings',
       'Copy the API Key (Client ID) and API Secret (Client Secret)',
     ],
-    apiReference: {
-      docsUrl: 'https://developer.myob.com/api/myob-business-api/',
-      purpose: 'Business management and accounting — invoicing, payroll, inventory, and banking',
-      dataTypes: ['invoices', 'contacts', 'accounts', 'journal-entries', 'employees', 'inventory'],
-      capabilities: ['read', 'write', 'search'],
-    },
   },
   {
     id: 'myob-acumatica',
@@ -643,44 +440,12 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Enterprise ERP for mid-market — financials, projects, manufacturing',
     category: 'ERP',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       // Per-instance — admins configure their own endpoint via the wizard.
       // These defaults are placeholders; auth/token URLs are instance-scoped.
       authUrl: '',
       tokenUrl: '',
       scopes: 'api',
-    },
-    helpUrl: 'https://help.myob.com/wiki/display/acad/MYOB+Acumatica',
-    apiReference: {
-      purpose: 'Enterprise ERP — GL, AP/AR, projects, inventory, manufacturing, CRM',
-      dataTypes: ['accounts', 'invoices', 'vendors', 'customers', 'projects', 'inventory', 'employees'],
-      capabilities: ['read', 'write', 'search'],
-    },
-  },
-  {
-    id: 'netsuite',
-    displayName: 'NetSuite',
-    icon: 'bi-graph-up',
-    description: 'Oracle NetSuite cloud ERP — financials, CRM, e-commerce',
-    category: 'ERP',
-    authType: 'oauth2',
-    tier: 2,
-    oauth: {
-      // NetSuite uses per-account endpoints where the account id is embedded
-      // in the hostname (e.g. `{account-id}.suitetalk.api.netsuite.com`).
-      // Admins supply the account id at registration time; auth/token URLs
-      // are derived at runtime. See ext-api-doc/netsuite/03-connector-setup.md.
-      authUrl: '',
-      tokenUrl: '',
-      scopes: 'rest_webservices',
-      extraAuthParams: '{"prompt":"consent"}',
-    },
-    helpUrl: 'https://docs.oracle.com/en/cloud/saas/netsuite/',
-    apiReference: {
-      purpose: 'Cloud ERP — accounting, inventory, order management, CRM, e-commerce',
-      dataTypes: ['accounts', 'invoices', 'customers', 'vendors', 'items', 'sales-orders', 'purchase-orders'],
-      capabilities: ['read', 'write', 'search'],
     },
   },
   {
@@ -690,7 +455,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Zoho CRM — leads, contacts, accounts, deals, tasks',
     category: 'CRM',
     authType: 'oauth2',
-    tier: 2,
     surfaces: ['chat'],
     cachingPolicy: CACHING_PRESETS.projectManagement,
     // Zoho uses its own Authorization scheme — NOT Bearer.
@@ -704,8 +468,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       scopes: 'ZohoCRM.modules.ALL,ZohoCRM.users.READ,ZohoCRM.org.READ',
       extraAuthParams: '{"access_type":"offline","prompt":"consent"}',
     },
-    helpUrl: 'https://api-console.zoho.com.au/',
-    signupUrl: 'https://www.zoho.com/crm/',
     oauthSetupSteps: [
       'Log in to the Zoho API Console for your data centre — AU: https://api-console.zoho.com.au/, US: https://api-console.zoho.com/, EU: https://api-console.zoho.eu/, IN: https://api-console.zoho.in/, JP: https://api-console.zoho.jp/, CN: https://api-console.zoho.com.cn/',
       'Choose "Server-based Applications" as the client type and click Create Now',
@@ -713,23 +475,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Zoho returns a Client ID and Client Secret — copy both into this wizard',
       'Non-AU customers: open Advanced below and replace `accounts.zoho.com.au` with your region host (e.g. `accounts.zoho.eu`). The API host changes in the same way — `www.zohoapis.{region}`.',
     ],
-    apiReference: {
-      docsUrl: 'https://www.zoho.com/crm/developer/docs/api/v8/',
-      purpose:
-        'Customer relationship management — pipeline, contacts, deals, tasks, and reporting across the Zoho ecosystem',
-      dataTypes: ['leads', 'contacts', 'accounts', 'deals', 'tasks', 'notes', 'activities', 'users'],
-      capabilities: ['read', 'write', 'search', 'bulk-read'],
-      endpointCategories: [
-        {
-          name: 'Records',
-          description: 'CRUD on Leads, Contacts, Accounts, Deals, etc.',
-          basePath: '/crm/v8/{module}',
-        },
-        { name: 'Search', description: 'COQL-style search across any module', basePath: '/crm/v8/{module}/search' },
-        { name: 'Users', description: 'CRM users and roles', basePath: '/crm/v8/users' },
-        { name: 'Org', description: 'Organisation metadata', basePath: '/crm/v8/org' },
-      ],
-    },
   },
   {
     id: 'quickbooks',
@@ -738,25 +483,17 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Cloud accounting and bookkeeping',
     category: 'Accounting',
     authType: 'oauth2',
-    tier: 2,
     oauth: {
       authUrl: 'https://appcenter.intuit.com/connect/oauth2',
       tokenUrl: 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',
       scopes: 'com.intuit.quickbooks.accounting',
     },
-    helpUrl: 'https://developer.intuit.com/',
     oauthSetupSteps: [
       'Go to Intuit Developer Portal (developer.intuit.com) → Dashboard',
       'Click "Create an app" and select "QuickBooks Online and Payments"',
       'Under Keys & credentials → Redirect URIs, add the URI below',
       'Copy the Client ID and Client Secret from the app dashboard',
     ],
-    apiReference: {
-      docsUrl: 'https://developer.intuit.com/app/developer/qbo/docs/api/accounting/most-commonly-used/account',
-      purpose: 'Cloud accounting — invoicing, expenses, payroll, tax, and financial reporting',
-      dataTypes: ['invoices', 'customers', 'accounts', 'payments', 'estimates', 'reports'],
-      capabilities: ['read', 'write', 'search', 'webhooks'],
-    },
   },
 
   // ─── Tier 2: API Key ──────────────────────────────────────────────────
@@ -767,7 +504,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Equipment rental and event hire management',
     category: 'Equipment & Rental',
     authType: 'api-key',
-    tier: 2,
     credentialFields: [
       {
         key: 'api_token',
@@ -786,30 +522,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         helpText: 'dataConnectors.fields.baseUrlHint',
       },
     ],
-    helpUrl: 'https://www.hirehop.com/',
-    apiReference: {
-      docsUrl: 'https://www.hirehop.com/',
-      purpose: 'Equipment rental and event hire management with job tracking, invoicing, and resource scheduling',
-      dataTypes: ['jobs', 'contacts', 'items', 'invoices', 'depots', 'categories'],
-      capabilities: ['read', 'write', 'sql-query'],
-      exampleRequests: [
-        {
-          description: 'Search jobs',
-          method: 'GET',
-          path: '/php_functions/job_search.php?token=X&search=keyword',
-        },
-        {
-          description: 'Get job details',
-          method: 'GET',
-          path: '/php_functions/job_refresh.php?token=X&job=123',
-        },
-      ],
-      endpointCategories: [
-        { name: 'Jobs', description: 'Job creation, search, and management', basePath: '/php_functions/job_*.php' },
-        { name: 'Stock', description: 'Equipment and stock management', basePath: '/php_functions/stock_*.php' },
-        { name: 'Contacts', description: 'Contact and company management', basePath: '/php_functions/contact_*.php' },
-      ],
-    },
   },
   {
     id: 'connecteam-api',
@@ -818,7 +530,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Employee management — time clock, scheduling, and forms (API key)',
     category: 'HR & Workforce',
     authType: 'api-key',
-    tier: 2,
     credentialFields: [
       {
         key: 'api_token',
@@ -828,13 +539,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         required: true,
       },
     ],
-    helpUrl: 'https://developer.connecteam.com/',
-    apiReference: {
-      docsUrl: 'https://developer.connecteam.com/',
-      purpose: 'All-in-one employee management — time tracking, scheduling, forms, training, and communication',
-      dataTypes: ['users', 'shifts', 'timesheets', 'forms', 'assets', 'courses'],
-      capabilities: ['read', 'write'],
-    },
   },
   {
     id: 'totalsynergy-api',
@@ -843,7 +547,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Architecture and engineering practice management (API key)',
     category: 'Project Management',
     authType: 'api-key',
-    tier: 2,
     credentialFields: [
       {
         key: 'api_key',
@@ -860,16 +563,47 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         required: true,
       },
     ],
-    helpUrl: 'https://developer.totalsynergy.com/',
-    apiReference: {
-      docsUrl: 'https://developer.totalsynergy.com/api/',
-      purpose: 'Practice management for architecture, engineering, and construction firms',
-      dataTypes: ['projects', 'contacts', 'timesheets', 'invoices', 'documents', 'staff'],
-      capabilities: ['read', 'write', 'search'],
-    },
   },
 
   // ─── Tier 2: Token ─────────────────────────────────────────────────────
+  {
+    id: 'netsuite',
+    displayName: 'NetSuite',
+    icon: 'bi-box',
+    description: 'Connect to Oracle NetSuite ERP for customers, orders, invoices, inventory, and financial reports',
+    category: 'ERP',
+    authType: 'oauth2',
+    oauth: {
+      authUrl: 'https://<ACCOUNT_ID>.app.netsuite.com/app/login/oauth2/authorize.nl',
+      tokenUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token',
+      // Fallback default — the scope picker (oauthScopeDefinitions.ts:netsuite)
+      // overrides this. NetSuite's `mcp` scope is mutually exclusive with the
+      // REST/RESTlets/SuiteAnalytics group, so never combine them on one
+      // integration record. The four scopes are surfaced as separate
+      // checkboxes; the admin picks whichever subset matches the Integration
+      // Record's Scope field on the NetSuite side.
+      //
+      // Client secret is required because REST Web Services / RESTlets /
+      // SuiteAnalytics scopes use NetSuite's Confidential Client flow.
+      // Pure-PKCE Public Client is only valid for the `mcp` scope; since the
+      // wizard supports both, we always collect the secret. PKCE params are
+      // also still sent on the authorize URL — NetSuite ignores them for
+      // confidential clients, so this is safe in either mode.
+      scopes: 'rest_webservices',
+    },
+    credentialFields: [
+      {
+        key: 'account_id',
+        label: 'NetSuite Account ID',
+        type: 'text',
+        placeholder: 'e.g. 1234567 or 1234567_SB1',
+        required: true,
+        hostnameSafe: true,
+        helpText: 'Your NetSuite Account ID. This is required for OAuth routing.',
+      },
+    ],
+    cachingPolicy: { ttl: 3600 },
+  },
   {
     id: 'workbench',
     displayName: 'Workbench International',
@@ -877,7 +611,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'ERP for trade and distribution businesses',
     category: 'ERP',
     authType: 'token',
-    tier: 2,
     credentialFields: [
       {
         key: 'bearer_token',
@@ -894,11 +627,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         required: true,
       },
     ],
-    apiReference: {
-      purpose: 'ERP system for trade and distribution businesses with inventory, orders, and financials',
-      dataTypes: ['products', 'orders', 'customers', 'invoices', 'inventory'],
-      capabilities: ['read', 'write'],
-    },
   },
   {
     id: 'fergus',
@@ -907,7 +635,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Job management for trade businesses',
     category: 'Field Service',
     authType: 'token',
-    tier: 2,
     credentialFields: [
       {
         key: 'api_key',
@@ -917,12 +644,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         required: true,
       },
     ],
-    helpUrl: 'https://info.fergus.com/developers',
-    apiReference: {
-      purpose: 'Job management for plumbers, electricians, builders, and other trade businesses',
-      dataTypes: ['jobs', 'contacts', 'quotes', 'invoices', 'timesheets', 'schedules'],
-      capabilities: ['read', 'write', 'search'],
-    },
   },
 
   // ─── Tier 2: Username/Password ─────────────────────────────────────────
@@ -933,7 +654,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Custom database application platform',
     category: 'Database',
     authType: 'username-password',
-    tier: 2,
     credentialFields: [
       {
         key: 'server_url',
@@ -965,43 +685,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         helpText: 'dataConnectors.fields.databaseHint',
       },
     ],
-    helpUrl: 'https://help.claris.com/en/data-api-guide/',
-    apiReference: {
-      docsUrl: 'https://help.claris.com/en/data-api-guide/',
-      purpose: 'Custom low-code database application platform with RESTful Data API',
-      dataTypes: ['records', 'layouts', 'scripts', 'containers'],
-      capabilities: ['read', 'write', 'search', 'run-scripts'],
-      exampleRequests: [
-        {
-          description: 'Get records from a layout',
-          method: 'GET',
-          path: '/fmi/data/v1/databases/{database}/layouts/{layout}/records',
-        },
-        {
-          description: 'Find records',
-          method: 'POST',
-          path: '/fmi/data/v1/databases/{database}/layouts/{layout}/_find',
-          body: '{"query":[{"fieldName":"=value"}]}',
-        },
-      ],
-      endpointCategories: [
-        {
-          name: 'Records',
-          description: 'CRUD operations on records',
-          basePath: '/fmi/data/v1/databases/{db}/layouts/{layout}/records',
-        },
-        {
-          name: 'Find',
-          description: 'Search records with queries',
-          basePath: '/fmi/data/v1/databases/{db}/layouts/{layout}/_find',
-        },
-        {
-          name: 'Scripts',
-          description: 'Execute FileMaker scripts',
-          basePath: '/fmi/data/v1/databases/{db}/layouts/{layout}/script/{script}',
-        },
-      ],
-    },
   },
   {
     id: 'flowingly',
@@ -1010,7 +693,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Business process management and workflow automation',
     category: 'Workflow',
     authType: 'username-password',
-    tier: 2,
     credentialFields: [
       {
         key: 'username',
@@ -1027,12 +709,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         required: true,
       },
     ],
-    helpUrl: 'https://www.flowingly.io/',
-    apiReference: {
-      purpose: 'Business process automation and workflow management platform',
-      dataTypes: ['flows', 'instances', 'tasks', 'users', 'forms'],
-      capabilities: ['read', 'write', 'search'],
-    },
   },
   {
     id: 'printiq',
@@ -1041,7 +717,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Print MIS and workflow management',
     category: 'Manufacturing',
     authType: 'username-password',
-    tier: 2,
     credentialFields: [
       {
         key: 'username',
@@ -1072,213 +747,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         required: true,
       },
     ],
-    helpUrl: 'https://www.printiq.com/',
-    apiReference: {
-      purpose: 'Print management information system (MIS) with estimating, scheduling, and invoicing',
-      dataTypes: ['jobs', 'quotes', 'products', 'customers', 'invoices', 'purchase-orders'],
-      capabilities: ['read', 'write', 'search'],
-    },
-  },
-
-  // ─── Tier 3: Contact Required ──────────────────────────────────────────
-  {
-    id: 'buildertrend',
-    displayName: 'BuilderTrend',
-    icon: 'bi-house-gear',
-    description: 'Construction project management for builders and remodelers',
-    category: 'Construction',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.buildertrend.com/',
-      notes: 'API access requires a BuilderTrend enterprise plan. Contact their team for integration partnership.',
-    },
-    apiReference: {
-      purpose: 'Construction project management — scheduling, budgeting, customer management, and daily logs',
-      dataTypes: ['projects', 'schedules', 'budgets', 'daily-logs', 'change-orders'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'abel-software',
-    displayName: 'Abel Software',
-    icon: 'bi-box-seam',
-    description: 'ERP for manufacturing and distribution businesses',
-    category: 'ERP',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.intsolnz.com/',
-      email: 'info@intsolnz.com',
-      notes: 'Contact Integrated Solutions NZ for API access and integration partnership.',
-    },
-    apiReference: {
-      purpose: 'ERP for manufacturing, distribution, and job costing businesses in NZ/AU',
-      dataTypes: ['orders', 'inventory', 'customers', 'suppliers', 'invoices'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'sistemi',
-    displayName: 'Sistemi',
-    icon: 'bi-briefcase',
-    description: 'Accounting and business management for NZ businesses',
-    category: 'Accounting',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.sistemi.co.nz/',
-      notes: 'Contact Sistemi for API access details and integration partnership.',
-    },
-    apiReference: {
-      purpose: 'Business management and accounting system designed for NZ small businesses',
-      dataTypes: ['invoices', 'customers', 'suppliers', 'general-ledger'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'geroc',
-    displayName: 'Geroc',
-    icon: 'bi-geo-alt',
-    description: 'Geographic and asset management',
-    category: 'Asset Management',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.geroc.co.nz/',
-      notes: 'Contact Geroc for API access and integration possibilities.',
-    },
-    apiReference: {
-      purpose: 'Geographic and asset management for infrastructure and utilities',
-      dataTypes: ['assets', 'locations', 'inspections', 'work-orders'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'tablogs',
-    displayName: 'TabLogs',
-    icon: 'bi-card-checklist',
-    description: 'Digital forms and inspection management',
-    category: 'Field Service',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.tablogs.com/',
-      notes: 'Contact TabLogs for API access and data export options.',
-    },
-    apiReference: {
-      purpose: 'Digital forms, checklists, and inspection management for field teams',
-      dataTypes: ['forms', 'inspections', 'reports', 'templates'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'ravebuild',
-    displayName: 'Rave Build',
-    icon: 'bi-bricks',
-    description: 'Construction management for residential builders',
-    category: 'Construction',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.ravebuild.com/',
-      notes: 'Contact Rave Build for API integration and data access.',
-    },
-    apiReference: {
-      purpose: 'Residential construction management — estimates, schedules, variations, and client portal',
-      dataTypes: ['projects', 'schedules', 'estimates', 'variations'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'myhub-intranet',
-    displayName: 'MyHub Intranet',
-    icon: 'bi-globe2',
-    description: 'Cloud intranet for internal communications',
-    category: 'Collaboration',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.myhubintranet.com/',
-      notes: 'Contact MyHub for API access and integration partnership.',
-    },
-    apiReference: {
-      purpose: 'Cloud-based intranet for internal communications, knowledge sharing, and document management',
-      dataTypes: ['pages', 'documents', 'news', 'staff-directory'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'siteapp-pro',
-    displayName: 'SiteApp Pro',
-    icon: 'bi-cone-striped',
-    description: 'Construction site safety and compliance management',
-    category: 'Construction',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.siteapppro.com/',
-      notes: 'Contact SiteApp Pro for API access and integration options.',
-    },
-    apiReference: {
-      purpose: 'Construction site safety management — hazard identification, incident reporting, and compliance',
-      dataTypes: ['sites', 'hazards', 'incidents', 'inspections', 'workers'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'rosterelf',
-    displayName: 'RosterElf / WFS',
-    icon: 'bi-calendar-check',
-    description: 'Staff rostering and workforce scheduling',
-    category: 'HR & Workforce',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.rosterelf.com/',
-      notes: 'Contact RosterElf for API access and integration options.',
-    },
-    apiReference: {
-      purpose: 'Staff rostering, time and attendance, and workforce scheduling',
-      dataTypes: ['rosters', 'shifts', 'timesheets', 'staff', 'leave'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'eci-m1',
-    displayName: 'ECI M1',
-    icon: 'bi-gear-wide-connected',
-    description: 'ERP for make-to-order manufacturers',
-    category: 'ERP',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.ecisolutions.com/erp/m1-erp/',
-      notes: 'Contact ECI Solutions for M1 API access and integration partnership.',
-    },
-    apiReference: {
-      purpose: 'ERP system designed for small to mid-sized make-to-order manufacturers',
-      dataTypes: ['orders', 'inventory', 'bom', 'routing', 'purchasing'],
-      capabilities: ['read'],
-    },
-  },
-  {
-    id: 'klevr',
-    displayName: 'Klevr',
-    icon: 'bi-lightning',
-    description: 'Workflow automation and field service management',
-    category: 'Field Service',
-    authType: 'contact-required',
-    tier: 3,
-    contactInfo: {
-      website: 'https://www.klevr.co.nz/',
-      notes: 'Contact Klevr for API access and integration options.',
-    },
-    apiReference: {
-      purpose: 'Workflow automation and field service management for NZ service companies',
-      dataTypes: ['jobs', 'workflows', 'forms', 'assets', 'schedules'],
-      capabilities: ['read'],
-    },
   },
 ];
 
@@ -1343,7 +811,6 @@ export const toProviderTemplate = (ct: ConnectorTemplate): ProviderTemplate | nu
     tokenUrl: ct.oauth.tokenUrl,
     scopes: ct.oauth.scopes,
     extraAuthParams: ct.oauth.extraAuthParams || '',
-    helpUrl: ct.helpUrl || '',
     discoveryUrl: ct.oauth.discoveryUrl,
   };
 };

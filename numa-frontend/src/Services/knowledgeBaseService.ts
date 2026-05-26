@@ -13,6 +13,8 @@ export interface KnowledgeBase {
   is_shared: boolean; // Whether KB is shared with other users
   viewers: string[];
   editors: string[];
+  personas?: string[];
+  industries?: string[];
   editor_emails?: string[];
   viewer_emails?: string[];
   created_by: string;
@@ -28,6 +30,8 @@ export interface UserKB {
   is_shared?: boolean; // Whether KB is shared with other users
   is_root?: boolean; // Whether this is the user's root files KB
   document_count?: number; // Cached count, updated when KB is viewed
+  personas?: string[];
+  industries?: string[];
 }
 
 export interface CreateKBRequest {
@@ -35,6 +39,8 @@ export interface CreateKBRequest {
   is_shared: boolean; // True for shared KB, false for personal
   viewers: string[]; // Only used when is_shared=true
   editors: string[]; // Only used when is_shared=true
+  personas?: string[];
+  industries?: string[];
 }
 
 export interface UpdateKBRequest {
@@ -42,6 +48,8 @@ export interface UpdateKBRequest {
   is_shared?: boolean;
   viewers?: string[];
   editors?: string[];
+  personas?: string[];
+  industries?: string[];
 }
 
 export interface S3FileInfo {

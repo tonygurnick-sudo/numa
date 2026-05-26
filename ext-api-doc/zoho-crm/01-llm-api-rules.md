@@ -26,7 +26,7 @@ line_count_target: '< 300 lines'
 Authorization: Zoho-oauthtoken {access_token}
 ```
 
-The backend reads the scheme from `oauth-client-zoho-crm.fields.auth_header_scheme` and injects this header automatically — you never build it yourself.
+The header scheme is `Zoho-oauthtoken` (NOT `Bearer`). Build it verbatim — using `Bearer` returns `INVALID_TOKEN` 401.
 
 **Token lifecycle:**
 
@@ -58,7 +58,7 @@ The backend reads the scheme from `oauth-client-zoho-crm.fields.auth_header_sche
 1. **`fields` is required when listing records.** `GET /crm/v8/Leads` returns 400 `REQUIRED_PARAM_MISSING` without `?fields=...` (max 50). Use `GET /crm/v8/settings/fields?module=Leads` first when you don't know what to ask for.
 2. **Module api_name is case-sensitive.** `Leads`, `Contacts`, `Accounts`, `Deals`, `Tasks`, `Calls`, `Meetings`, `Notes`. Custom modules use whatever the admin set (e.g. `CustomModule1`). Lowercase will 400 as `INVALID_MODULE`.
 3. **Body wrapper is `{"data": [ … ]}`** for every create/update/upsert — even when sending one record. Max 100 records per call.
-4. **Pagination has two modes.** Use `page` + `per_page` up to record 2000. Beyond that, switch to `page_token` (from the previous response's `info.next_page_token`). Sending both on the same request returns 400.
+4. **Pagination has two modes — and a hard cap.** Use `page` + `per_page` up to record 2000. Beyond that, switch to `page_token` (from the previous response's `info.next_page_token`). Sending both on the same request returns 400. **Cursor chain caps at 100,000 records total per query, and each `page_token` expires after 24 hours.** A `previous_page_token` is also returned. Long backfills must checkpoint and restart past 100k or after 24h, or they silently truncate. [VERIFIED 2026-05-19 against https://www.zoho.com/crm/developer/docs/api/v8/get-records.html]
 5. **Search has four mutually-exclusive params.** One of `criteria`, `email`, `phone`, `word` per call. Priority if multiple: criteria → email → phone → word. Max 2000 rows retrievable via search; use COQL for more.
 6. **Dates with timezone offset in criteria.** Use `+00:00` / `+10:00` form. A `Z` suffix is accepted but the URL-encoder sometimes mangles it — stick to explicit offsets.
 7. **IDs are strings, not integers.** 18–19 digit numeric strings like `"410405000002264040"`. Always treat as opaque strings.

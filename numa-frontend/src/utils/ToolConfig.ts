@@ -7,6 +7,8 @@ import { AgentCreationRenderer } from '../toolRenderers/AgentCreationRenderer';
 import { IntegrationsRenderer } from '../toolRenderers/IntegrationsRenderer';
 import { OpsToolRenderer } from '../toolRenderers/OpsToolRenderer';
 import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
+import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+import { resolveServiceIcon, pipedreamSlugForConnector } from '../Components/Integrations/integrationCatalogHelpers';
 import i18n from '../i18n';
 
 type ToolRenderer = (props: { result: unknown }) => React.ReactNode;
@@ -113,6 +115,14 @@ export function resolveToolDescriptor(toolName: string | null | undefined): Tool
     return { label: display, renderer: IntegrationsRenderer };
   }
 
+  // Native connector tools follow `<connectorId>_connector` (synthesised in
+  // formatIntegrationToolLabel from mcp__connectors__connectors input.params.connector)
+  if (name.endsWith('_connector')) {
+    const connectorId = name.replace(/_connector$/, '');
+    const display = getConnectorById(connectorId)?.displayName || humanize(connectorId, { titleCase: true });
+    return { label: display, renderer: TOOL_CONFIG._default.renderer };
+  }
+
   // Fallback
   return TOOL_CONFIG._default;
 }
@@ -146,6 +156,16 @@ export function resolveToolVisual(toolName: string | null | undefined): ToolVisu
     if (img) return { kind: 'image', src: img, alt: integrationId };
     const fallback = getConnectionFallbackIcon(integrationId) || 'bi bi-plug';
     return { kind: 'icon', className: fallback };
+  }
+
+  // Native connectors: reuse the Pipedream image when the connector has a paired
+  // SaaS slug (Google Drive, Dropbox, etc.); otherwise fall back to the registry's
+  // bootstrap icon (synergy → bi-building, fergus → bi-tools, etc.)
+  if (name.endsWith('_connector')) {
+    const connectorId = name.replace(/_connector$/, '');
+    const { iconUrl, iconClass } = resolveServiceIcon(pipedreamSlugForConnector(connectorId), connectorId);
+    if (iconUrl) return { kind: 'image', src: iconUrl, alt: connectorId };
+    return { kind: 'icon', className: iconClass || 'bi bi-plug' };
   }
 
   return { kind: 'icon', className: 'bi bi-tools' };

@@ -12,19 +12,19 @@ Routes are defined in `src/utils/routeConfig.tsx` and rendered in `src/Routes.ts
 
 Key routes:
 
-| Route              | Page                      | Notes                             |
-| ------------------ | ------------------------- | --------------------------------- |
-| `/chat`            | `NumaWorkspaceChatAgents` | Primary chat (workspace agent)    |
-| `/dash`            | `Dash`                    | App marketplace/launcher          |
-| `/agents`          | `AgentsManagement`        | Agent builder & management        |
-| `/ops`             | `OpsPage`                 | Numa Ops (tickets/projects/teams) |
-| `/files`           | `Files`                   | File manager (remote + workspace) |
-| `/knowledge-bases` | `CompanyKnowledgeBase`    | KB admin                          |
-| `/data-connectors` | `DataConnectorsPage`      | OAuth data connectors             |
-| `/scheduling`      | `SchedulingPage`          | Agent scheduling                  |
-| `/integrations`    | `NumaIntegrations`        | Pipedream integrations            |
-| `/settings`        | `Settings`                | Admin settings                    |
-| `/shared/:uuid`    | Shared doc Q&A            | **No auth required**              |
+| Route              | Page                      | Notes                                                                                   |
+| ------------------ | ------------------------- | --------------------------------------------------------------------------------------- |
+| `/chat`            | `NumaWorkspaceChatAgents` | Primary chat (workspace agent)                                                          |
+| `/dash`            | `Dash`                    | App marketplace/launcher                                                                |
+| `/agents`          | `AgentsManagement`        | Agent builder & management                                                              |
+| `/ops`             | `OpsPage`                 | Numa Ops (tickets/projects/teams)                                                       |
+| `/files`           | `Files`                   | File manager (remote + workspace)                                                       |
+| `/knowledge-bases` | `CompanyKnowledgeBase`    | KB admin                                                                                |
+| `/integrations`    | `UnifiedIntegrationsPage` | Unified Integrations surface — Pipedream + native connectors, deep-linkable via `#slug` |
+| `/data-connectors` | _redirect_                | 301-style `Navigate` to `/integrations` (FEAT-143)                                      |
+| `/scheduling`      | `SchedulingPage`          | Agent scheduling                                                                        |
+| `/settings`        | `Settings`                | Admin settings                                                                          |
+| `/shared/:uuid`    | Shared doc Q&A            | **No auth required**                                                                    |
 
 Routes are gated by feature flags (`featureFlag`) and required features (`requiredFeature`) from config.
 
@@ -189,11 +189,10 @@ Feature flags are accessed via `getFlag(flagName)` from `src/utils/featureFlags.
 | `NUMA_WORKSPACE_CHAT`     | Workspace chat agent                                                                                                                                                                                      |
 | `SCHEDULING`              | The /automations route + scheduling/triggers wizard (master switch)                                                                                                                                       |
 | `EVENT_TRIGGERS`          | Event-triggered automations (the "When something happens" path). Off → only cron schedules are offerable. Independent of `PIPEDREAM_INTEGRATIONS` (which gates Pipedream-backed sources within triggers). |
-| `DATA_CONNECTORS_ENABLED` | Data connectors (SharePoint, Teams, Box, etc.)                                                                                                                                                            |
+| `DATA_CONNECTORS_ENABLED` | Data connectors (SharePoint, Teams, Box, etc.) — also gates the Secrets Vault (lives in Settings > My Secrets / Company Secrets)                                                                          |
 | `NUMA_OPS`                | Numa Ops (tickets/projects)                                                                                                                                                                               |
 | `V2_APPS`                 | V2 Apps (experimental)                                                                                                                                                                                    |
 | `AGENTS`                  | Agent builder                                                                                                                                                                                             |
-| `SECRETS_VAULT_ENABLED`   | Secrets vault                                                                                                                                                                                             |
 
 ---
 

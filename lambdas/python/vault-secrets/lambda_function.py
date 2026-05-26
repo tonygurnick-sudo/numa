@@ -65,22 +65,15 @@ def _response(status: int, body: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _get_user_id(event: Dict[str, Any]) -> Optional[str]:
-    """Extract a user id from the request context or JWT token."""
-    auth = event.get("requestContext", {}).get("authorizer", {})
-    jwt = auth.get("jwt", {})
-    claims = jwt.get("claims", {}) or {}
-    if isinstance(claims, dict) and claims.get("sub"):
-        return claims.get("sub")
-
+def _decode_jwt_payload(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Decode the JWT body from the Authorization header (no signature check)."""
     headers = event.get("headers") or {}
     token = headers.get("authorization") or headers.get("Authorization")
     if not token:
-        return None
+        return {}
     try:
         payload = token.split(".")[1]
-        decoded = json.loads(base64.b64decode(payload + "===").decode("utf-8"))
-        return decoded.get("sub")
+        return json.loads(base64.b64decode(payload + "===").decode("utf-8"))
     except (
         IndexError,
         ValueError,
@@ -88,7 +81,45 @@ def _get_user_id(event: Dict[str, Any]) -> Optional[str]:
         UnicodeDecodeError,
         binascii.Error,
     ):
-        return None
+        return {}
+
+
+def _get_claims(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Return JWT claims from the API Gateway authorizer or the raw token."""
+    auth = event.get("requestContext", {}).get("authorizer", {})
+
+    # JWT authorizer
+    claims = auth.get("jwt", {}).get("claims", {}) or {}
+    if isinstance(claims, dict) and claims:
+        return claims
+
+    # Lambda authorizer: jwt is sometimes serialised as a JSON string
+    lambda_ctx = auth.get("lambda", {}) or {}
+    jwt_str = lambda_ctx.get("jwt", "")
+    if jwt_str and isinstance(jwt_str, str):
+        try:
+            jwt_obj = json.loads(jwt_str)
+            inner = jwt_obj.get("claims", {})
+            if isinstance(inner, dict) and inner:
+                return inner
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    return _decode_jwt_payload(event)
+
+
+def _get_user_id(event: Dict[str, Any]) -> Optional[str]:
+    """Extract a user id from the request context or JWT token."""
+    claims = _get_claims(event)
+    sub = claims.get("sub")
+    return sub if isinstance(sub, str) and sub else None
+
+
+def _get_user_email(event: Dict[str, Any]) -> str:
+    """Extract the caller's email claim from the JWT (empty string if absent)."""
+    claims = _get_claims(event)
+    email = claims.get("email") or claims.get("preferred_username") or ""
+    return email if isinstance(email, str) else ""
 
 
 def _get_path(event: Dict[str, Any]) -> str:
@@ -152,8 +183,15 @@ def _write_audit_log(
     accessor: str = "user",
     purpose: str = "",
     conversation_id: str = "",
+    actor_email: str = "",
 ) -> None:
-    """Write audit log entry if audit table is configured."""
+    """Write audit log entry if audit table is configured.
+
+    NB: `approved_by` is intentionally NOT set here. Direct authenticated CRUD
+    has no approval step — the "Approved By" column only carries meaning for
+    chat-driven `ai_access` events, which are written via the workspace-chat
+    tool's own audit writer with `approved_by="user"` or `"danger_mode"`.
+    """
     if not AUDIT_TABLE_NAME:
         return
 
@@ -167,7 +205,8 @@ def _write_audit_log(
             accessor,
             purpose,
             conversation_id,
-            approved_by="user",
+            approved_by="",
+            actor_email=actor_email,
         )
     except Exception as e:
         logger.error("Failed to write audit log", error=str(e))
@@ -221,7 +260,9 @@ def _handle_list_secrets(user_id: str) -> Dict[str, Any]:
         return _response(500, {"error": "Failed to retrieve secrets"})
 
 
-def _handle_get_secret(user_id: str, secret_name: str) -> Dict[str, Any]:
+def _handle_get_secret(
+    user_id: str, secret_name: str, user_email: str = ""
+) -> Dict[str, Any]:
     """Get a single secret with full field values."""
     try:
         secret = get_vault_secret(user_id, secret_name, CLIENT_NAME)
@@ -229,7 +270,7 @@ def _handle_get_secret(user_id: str, secret_name: str) -> Dict[str, Any]:
             return _response(404, {"error": "Secret not found"})
 
         # Write audit log
-        _write_audit_log(user_id, secret_name, "user_view")
+        _write_audit_log(user_id, secret_name, "user_view", actor_email=user_email)
 
         return _response(200, {"secret": secret})
     except Exception as e:
@@ -242,7 +283,9 @@ def _handle_get_secret(user_id: str, secret_name: str) -> Dict[str, Any]:
         return _response(500, {"error": "Failed to retrieve secret"})
 
 
-def _handle_create_secret(event: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+def _handle_create_secret(
+    event: Dict[str, Any], user_id: str, user_email: str = ""
+) -> Dict[str, Any]:
     """Create a new vault secret (template-based or free-form)."""
     try:
         body = _parse_body(event)
@@ -300,11 +343,17 @@ def _handle_create_secret(event: Dict[str, Any], user_id: str) -> Dict[str, Any]
 
         # Add to vault
         created_secret = add_secret_to_vault(
-            user_id, secret_name, secret_data, template_name, CLIENT_NAME
+            user_id,
+            secret_name,
+            secret_data,
+            template_name,
+            CLIENT_NAME,
+            actor_user_id=user_id,
+            actor_email=user_email,
         )
 
         # Write audit log
-        _write_audit_log(user_id, secret_name, "user_create")
+        _write_audit_log(user_id, secret_name, "user_create", actor_email=user_email)
 
         return _response(201, {"secret": created_secret})
 
@@ -316,7 +365,7 @@ def _handle_create_secret(event: Dict[str, Any], user_id: str) -> Dict[str, Any]
 
 
 def _handle_update_secret(
-    event: Dict[str, Any], user_id: str, secret_name: str
+    event: Dict[str, Any], user_id: str, secret_name: str, user_email: str = ""
 ) -> Dict[str, Any]:
     """Update an existing vault secret."""
     try:
@@ -356,11 +405,17 @@ def _handle_update_secret(
 
         # Update secret
         updated_secret = add_secret_to_vault(
-            user_id, secret_name, updated_data, template_name, CLIENT_NAME
+            user_id,
+            secret_name,
+            updated_data,
+            template_name,
+            CLIENT_NAME,
+            actor_user_id=user_id,
+            actor_email=user_email,
         )
 
         # Write audit log
-        _write_audit_log(user_id, secret_name, "user_update")
+        _write_audit_log(user_id, secret_name, "user_update", actor_email=user_email)
 
         return _response(200, {"secret": updated_secret})
 
@@ -374,7 +429,9 @@ def _handle_update_secret(
         return _response(500, {"error": "Failed to update secret"})
 
 
-def _handle_delete_secret(user_id: str, secret_name: str) -> Dict[str, Any]:
+def _handle_delete_secret(
+    user_id: str, secret_name: str, user_email: str = ""
+) -> Dict[str, Any]:
     """Delete a vault secret."""
     try:
         success = remove_secret_from_vault(user_id, secret_name, CLIENT_NAME)
@@ -382,7 +439,7 @@ def _handle_delete_secret(user_id: str, secret_name: str) -> Dict[str, Any]:
             return _response(404, {"error": "Secret not found"})
 
         # Write audit log
-        _write_audit_log(user_id, secret_name, "user_delete")
+        _write_audit_log(user_id, secret_name, "user_delete", actor_email=user_email)
 
         return _response(
             200, {"success": True, "message": f"Secret '{secret_name}' deleted"}
@@ -453,6 +510,10 @@ def _handle_bulk_create_secrets(event: Dict[str, Any], user_id: str) -> Dict[str
         for result in results:
             if result.get("status") == "success":
                 _write_audit_log(user_id, result["name"], "user_bulk_create")
+                # NB: bulk import does not stamp actor metadata on the secrets —
+                # add_secret_to_vault here is called via consolidated_storage and
+                # we'd need to plumb actor through that path too. Acceptable
+                # because bulk import is admin-driven tooling, not user UI.
 
         return _response(
             200,
@@ -485,22 +546,39 @@ def _handle_list_categories(user_id: str) -> Dict[str, Any]:
         return _response(500, {"error": "Failed to retrieve categories"})
 
 
-def _handle_list_audit_log(user_id: str, is_admin: bool = False) -> Dict[str, Any]:
-    """List recent audit log entries for the user.
+def _handle_list_audit_log(
+    user_id: str, is_admin: bool = False, scope: str = "user"
+) -> Dict[str, Any]:
+    """List recent audit log entries.
 
-    Admins also see company-secret audit entries (stored under COMPANY_USER_ID).
+    scope="user"    → only entries for this user's personal vault.
+    scope="company" → only company-vault entries (admin only).
+    scope="all"     → both, merged newest-first (admin only — for legacy callers
+                      that haven't been updated to pass a scope).
+
+    Mixing user + company by default leaked admin actions into the personal
+    "My Secrets > Activity" view, which is why each panel now passes its own
+    scope explicitly (TASK-146 follow-up).
     """
     try:
         if not AUDIT_TABLE_NAME:
             return _response(200, {"items": []})
-        entries = list_audit_logs(AUDIT_TABLE_NAME, user_id)
-        if is_admin:
+
+        if scope == "company":
+            if not is_admin:
+                return _response(403, {"error": "Admin access required"})
+            entries = list_audit_logs(AUDIT_TABLE_NAME, COMPANY_USER_ID)
+        elif scope == "all" and is_admin:
+            user_entries = list_audit_logs(AUDIT_TABLE_NAME, user_id)
             company_entries = list_audit_logs(AUDIT_TABLE_NAME, COMPANY_USER_ID)
             entries = sorted(
-                entries + company_entries,
+                user_entries + company_entries,
                 key=lambda e: e.get("created_at", ""),
                 reverse=True,
             )
+        else:
+            entries = list_audit_logs(AUDIT_TABLE_NAME, user_id)
+
         return _response(200, {"items": entries})
     except Exception as e:
         logger.error("Failed to list audit log", user_id=user_id, error=str(e))
@@ -656,7 +734,9 @@ def _handle_list_company_secrets() -> Dict[str, Any]:
         return _response(500, {"error": "Failed to retrieve company secrets"})
 
 
-def _handle_get_company_secret(secret_name: str, admin_user_id: str) -> Dict[str, Any]:
+def _handle_get_company_secret(
+    secret_name: str, admin_user_id: str, admin_email: str = ""
+) -> Dict[str, Any]:
     """Get a company secret with decrypted fields. Admin only."""
     try:
         secret = get_vault_secret(COMPANY_USER_ID, secret_name, CLIENT_NAME)
@@ -665,7 +745,11 @@ def _handle_get_company_secret(secret_name: str, admin_user_id: str) -> Dict[str
 
         # Write audit log
         _write_audit_log(
-            COMPANY_USER_ID, secret_name, "admin_view", accessor=admin_user_id
+            COMPANY_USER_ID,
+            secret_name,
+            "admin_view",
+            accessor=admin_user_id,
+            actor_email=admin_email,
         )
 
         return _response(200, {"secret": secret})
@@ -680,7 +764,7 @@ def _handle_get_company_secret(secret_name: str, admin_user_id: str) -> Dict[str
 
 
 def _handle_create_company_secret(
-    event: Dict[str, Any], admin_user_id: str
+    event: Dict[str, Any], admin_user_id: str, admin_email: str = ""
 ) -> Dict[str, Any]:
     """Create a company-level vault secret. Admin only."""
     try:
@@ -701,12 +785,22 @@ def _handle_create_company_secret(
 
         # Add to company vault
         created_secret = add_secret_to_vault(
-            COMPANY_USER_ID, secret_name, secret_data, None, CLIENT_NAME
+            COMPANY_USER_ID,
+            secret_name,
+            secret_data,
+            None,
+            CLIENT_NAME,
+            actor_user_id=admin_user_id,
+            actor_email=admin_email,
         )
 
         # Write audit log
         _write_audit_log(
-            COMPANY_USER_ID, secret_name, "admin_create", accessor=admin_user_id
+            COMPANY_USER_ID,
+            secret_name,
+            "admin_create",
+            accessor=admin_user_id,
+            actor_email=admin_email,
         )
 
         return _response(201, {"secret": created_secret})
@@ -721,7 +815,7 @@ def _handle_create_company_secret(
 
 
 def _handle_update_company_secret(
-    event: Dict[str, Any], secret_name: str, admin_user_id: str
+    event: Dict[str, Any], secret_name: str, admin_user_id: str, admin_email: str = ""
 ) -> Dict[str, Any]:
     """Update a company-level vault secret. Admin only."""
     try:
@@ -741,12 +835,22 @@ def _handle_update_company_secret(
 
         # Update secret
         updated_secret = add_secret_to_vault(
-            COMPANY_USER_ID, secret_name, updated_data, None, CLIENT_NAME
+            COMPANY_USER_ID,
+            secret_name,
+            updated_data,
+            None,
+            CLIENT_NAME,
+            actor_user_id=admin_user_id,
+            actor_email=admin_email,
         )
 
         # Write audit log
         _write_audit_log(
-            COMPANY_USER_ID, secret_name, "admin_update", accessor=admin_user_id
+            COMPANY_USER_ID,
+            secret_name,
+            "admin_update",
+            accessor=admin_user_id,
+            actor_email=admin_email,
         )
 
         return _response(200, {"secret": updated_secret})
@@ -762,7 +866,7 @@ def _handle_update_company_secret(
 
 
 def _handle_delete_company_secret(
-    secret_name: str, admin_user_id: str
+    secret_name: str, admin_user_id: str, admin_email: str = ""
 ) -> Dict[str, Any]:
     """Delete a company-level vault secret. Admin only."""
     try:
@@ -772,7 +876,11 @@ def _handle_delete_company_secret(
 
         # Write audit log
         _write_audit_log(
-            COMPANY_USER_ID, secret_name, "admin_delete", accessor=admin_user_id
+            COMPANY_USER_ID,
+            secret_name,
+            "admin_delete",
+            accessor=admin_user_id,
+            actor_email=admin_email,
         )
 
         return _response(
@@ -794,7 +902,7 @@ def _handle_delete_company_secret(
 
 
 def _route(
-    method: str, path: str, event: Dict[str, Any], user_id: str
+    method: str, path: str, event: Dict[str, Any], user_id: str, user_email: str = ""
 ) -> Dict[str, Any]:
     """Route requests to appropriate handlers."""
     # Clean and normalize path
@@ -820,21 +928,21 @@ def _route(
         # GET /vault/secrets/{secret_name} - get specific secret
         if method == "GET" and len(path_segments) == 3:
             secret_name = path_segments[2]
-            return _handle_get_secret(user_id, secret_name)
+            return _handle_get_secret(user_id, secret_name, user_email)
 
         # POST /vault/secrets - create new secret
         if method == "POST" and len(path_segments) == 2:
-            return _handle_create_secret(event, user_id)
+            return _handle_create_secret(event, user_id, user_email)
 
         # PUT /vault/secrets/{secret_name} - update secret
         if method == "PUT" and len(path_segments) == 3:
             secret_name = path_segments[2]
-            return _handle_update_secret(event, user_id, secret_name)
+            return _handle_update_secret(event, user_id, secret_name, user_email)
 
         # DELETE /vault/secrets/{secret_name} - delete secret
         if method == "DELETE" and len(path_segments) == 3:
             secret_name = path_segments[2]
-            return _handle_delete_secret(user_id, secret_name)
+            return _handle_delete_secret(user_id, secret_name, user_email)
 
         # POST /vault/secrets/bulk - bulk create secrets
         if method == "POST" and len(path_segments) == 3 and path_segments[2] == "bulk":
@@ -854,7 +962,8 @@ def _route(
 
     # Audit log endpoint
     elif path_segments == ["vault", "audit-log"] and method == "GET":
-        return _handle_list_audit_log(user_id, is_admin=is_admin)
+        scope_param = (event.get("queryStringParameters") or {}).get("scope") or "user"
+        return _handle_list_audit_log(user_id, is_admin=is_admin, scope=scope_param)
 
     # Template management endpoints
     elif (
@@ -913,6 +1022,7 @@ def _route(
                 "*",
                 "admin_step_up_grant",
                 accessor=user_id,
+                actor_email=user_email,
             )
             return _response(200, {"ok": True})
 
@@ -930,6 +1040,7 @@ def _route(
                 "*",
                 "admin_step_up_failed",
                 accessor=user_id,
+                actor_email=user_email,
             )
             return _response(200, {"ok": True})
 
@@ -946,7 +1057,7 @@ def _route(
             secret_name = path_segments[2]
             if secret_name in RESERVED_COMPANY_PATHS:
                 return _response(404, {"error": "Endpoint not found"})
-            return _handle_get_company_secret(secret_name, user_id)
+            return _handle_get_company_secret(secret_name, user_id, user_email)
 
         # POST /vault/company-secrets - create company secret (admin only)
         if method == "POST" and len(path_segments) == 2:
@@ -958,7 +1069,7 @@ def _route(
                     400,
                     {"error": "Secret name is reserved"},
                 )
-            return _handle_create_company_secret(event, user_id)
+            return _handle_create_company_secret(event, user_id, user_email)
 
         # PUT /vault/company-secrets/{secret_name} - update company secret (admin only)
         if method == "PUT" and len(path_segments) == 3:
@@ -973,7 +1084,9 @@ def _route(
                     400,
                     {"error": "Secret name is reserved"},
                 )
-            return _handle_update_company_secret(event, secret_name, user_id)
+            return _handle_update_company_secret(
+                event, secret_name, user_id, user_email
+            )
 
         # DELETE /vault/company-secrets/{secret_name} - delete company secret (admin only)
         if method == "DELETE" and len(path_segments) == 3:
@@ -982,7 +1095,7 @@ def _route(
             secret_name = path_segments[2]
             if secret_name in RESERVED_COMPANY_PATHS:
                 return _response(404, {"error": "Endpoint not found"})
-            return _handle_delete_company_secret(secret_name, user_id)
+            return _handle_delete_company_secret(secret_name, user_id, user_email)
 
     # No matching route
     return _response(404, {"error": "Endpoint not found"})
@@ -1007,9 +1120,10 @@ def handler(event: Dict[str, Any], _context: LambdaContext) -> Dict[str, Any]:
         user_id = _get_user_id(event)
         if not user_id:
             return _response(401, {"error": "Authentication required"})
+        user_email = _get_user_email(event)
 
         # Route request
-        return _route(method, path, event, user_id)
+        return _route(method, path, event, user_id, user_email)
 
     except Exception:
         logger.exception(

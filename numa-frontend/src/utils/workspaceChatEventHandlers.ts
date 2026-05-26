@@ -44,6 +44,7 @@ import type {
 // Document processing utilities
 import { parseChunkWithoutDocComments, extractSingleDocBlock, createDocStripState } from './streamingProcessors';
 import { resolveToolVisual, getToolActionSteps, resolveToolDescriptor } from './ToolConfig';
+import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
 
 // Type guards (runtime functions, not types)
 import {
@@ -296,11 +297,16 @@ export function resetSDKEventContext(context: SDKEventContext): void {
 // Integration Tool Label Formatting
 // ============================================================
 
-/** MCP integration tool names that should get branded rendering */
+/** MCP tool names that should get branded per-service rendering in chat.
+ *  Covers both Pipedream integrations (`mcp__integrations__*`) and native data
+ *  connectors (`mcp__connectors__connectors`) — the latter dispatches via its
+ *  `params.connector` field to provider-specific handlers, so we resolve the
+ *  display name & icon from the connector id rather than the generic tool name. */
 export const INTEGRATION_MCP_TOOLS = new Set([
   'mcp__integrations__run_action',
   'mcp__integrations__configure_props',
   'mcp__integrations__proxy_request',
+  'mcp__connectors__connectors',
 ]);
 
 /**
@@ -343,6 +349,20 @@ export function formatIntegrationToolLabel(
     const description = (input.description as string) || '';
     const label = description ? `API Request: ${description}` : `API Request: ${method}`;
     return { label, actionName: 'API Request', description: description || method, integrationToolName: '' };
+  }
+  if (toolName === 'mcp__connectors__connectors') {
+    const params = (input.params && typeof input.params === 'object' ? input.params : {}) as Record<string, unknown>;
+    const connectorId = typeof params.connector === 'string' ? params.connector : '';
+    const description = (input.description as string) || '';
+    const tmpl = connectorId ? getConnectorById(connectorId) : undefined;
+    const actionName = tmpl?.displayName || connectorId || 'Connectors';
+    const label = description ? `${actionName}: ${description}` : actionName;
+    return {
+      label,
+      actionName,
+      description,
+      integrationToolName: connectorId ? `${connectorId}_connector` : '',
+    };
   }
   return null;
 }

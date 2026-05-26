@@ -275,21 +275,21 @@ Content-Type: application/json
 
 ### Recovery Playbook
 
-| HTTP Status | Meaning                    | Retryable? | Recovery Action                                                                               | Max Retries |
-| ----------- | -------------------------- | ---------- | --------------------------------------------------------------------------------------------- | ----------- |
-| 200         | Success (GET, POST)        | -          | -                                                                                             | -           |
-| 204         | No Content (PATCH success) | -          | Verify with GET (may be silent rejection)                                                     | -           |
-| 400         | Bad request                | No         | Fix request per `data.errors[].message`                                                       | 0           |
-| 401         | Unauthorized               | Yes        | Refresh OAuth token (POST to auth.simpro.co/oauth/token with refresh_token grant), then retry | 1           |
-| 403         | Forbidden                  | No         | Check API application permissions (Direct Access vs User Token); verify access type           | 0           |
-| 404         | Not found                  | No         | Verify resource ID exists; check companyID is correct (0 for single-company)                  | 0           |
-| 405         | Method not allowed         | No         | Verify HTTP method is supported for this endpoint                                             | 0           |
-| 409         | Conflict                   | Maybe      | Resource may have been modified concurrently; re-fetch and retry                              | 1           |
-| 422         | Validation failed          | No         | Fix fields per `data.errors` array                                                            | 0           |
-| 429         | Rate limited               | Yes        | Wait at least 1 second; implement exponential backoff                                         | 3           |
-| 500         | Internal error             | Yes        | Retry with exponential backoff; check for known column/filter conflicts                       | 3           |
-| 502         | Bad gateway                | Yes        | Retry after 5 seconds                                                                         | 3           |
-| 503         | Service unavailable        | Yes        | Check status.simprogroup.com; retry with backoff                                              | 3           |
+| HTTP Status | Meaning                    | Retryable? | Recovery Action                                                                                           | Max Retries |
+| ----------- | -------------------------- | ---------- | --------------------------------------------------------------------------------------------------------- | ----------- |
+| 200         | Success (GET, POST)        | -          | -                                                                                                         | -           |
+| 204         | No Content (PATCH success) | -          | Verify with GET (may be silent rejection)                                                                 | -           |
+| 400         | Bad request                | No         | Fix request per `data.errors[].message`                                                                   | 0           |
+| 401         | Unauthorized               | Yes        | Refresh OAuth token (POST to `{build}.simprosuite.com/oauth2/token` with refresh_token grant), then retry | 1           |
+| 403         | Forbidden                  | No         | Check API application permissions (Direct Access vs User Token); verify access type                       | 0           |
+| 404         | Not found                  | No         | Verify resource ID exists; check companyID is correct (0 for single-company)                              | 0           |
+| 405         | Method not allowed         | No         | Verify HTTP method is supported for this endpoint                                                         | 0           |
+| 409         | Conflict                   | Maybe      | Resource may have been modified concurrently; re-fetch and retry                                          | 1           |
+| 422         | Validation failed          | No         | Fix fields per `data.errors` array                                                                        | 0           |
+| 429         | Rate limited               | Yes        | Wait at least 1 second; implement exponential backoff                                                     | 3           |
+| 500         | Internal error             | Yes        | Retry with exponential backoff; check for known column/filter conflicts                                   | 3           |
+| 502         | Bad gateway                | Yes        | Retry after 5 seconds                                                                                     | 3           |
+| 503         | Service unavailable        | Yes        | Check status.simprogroup.com; retry with backoff                                                          | 3           |
 
 ### Rate Limit Details
 

@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Form, Button, ButtonGroup, Alert, Spinner } from 'react-bootstrap';
 import { Plus, Trash2, Mail } from 'lucide-react';
-import { useNumaRequest } from '../../Providers/NumaRequestContext';
-import { DataConnectorsService } from '../../Services/DataConnectorsService';
+import { ConnectorsService } from '../../Services/ConnectorsService';
 import type { EmailFilter, EmailFilterField, EmailFilterOp, GmailEventTrigger } from '../../types/agentSchedules';
 
 type EmailFilterBuilderProps = {
@@ -16,18 +15,16 @@ const OPS: EmailFilterOp[] = ['contains', 'equals', 'not_contains', 'matches'];
 
 export const EmailFilterBuilder = ({ trigger, onChange }: EmailFilterBuilderProps) => {
   const { t } = useTranslation('automations');
-  const { numaGet } = useNumaRequest();
 
-  // Check Gmail connection status when this step loads
+  // Check Gmail connection status when this step loads. Vault is the source
+  // of truth — the legacy data-connectors DDB table lags behind PAT vault
+  // writes for unified connectors.
   const [gmailStatus, setGmailStatus] = useState<'loading' | 'connected' | 'not_connected'>('loading');
   useEffect(() => {
-    DataConnectorsService.listStatus(numaGet)
-      .then((items) => {
-        const gmail = items.find((c) => c.connector_id === 'gmail');
-        setGmailStatus(gmail?.status === 'connected' ? 'connected' : 'not_connected');
-      })
+    ConnectorsService.getStatus('gmail')
+      .then((s) => setGmailStatus(s.status === 'connected' ? 'connected' : 'not_connected'))
       .catch(() => setGmailStatus('not_connected'));
-  }, [numaGet]);
+  }, []);
 
   const updateFilter = (idx: number, patch: Partial<EmailFilter>) => {
     const next = trigger.filters.map((f, i) => (i === idx ? { ...f, ...patch } : f));

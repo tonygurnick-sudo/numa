@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import json
 import os
+import time
+import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -23,6 +25,66 @@ logger = structlog.get_logger()
 # Environment configuration
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "demo")
 DATA_CONNECTORS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_TABLE_NAME", "")
+VAULT_AUDIT_LOG_TABLE_NAME = os.environ.get("VAULT_AUDIT_LOG_TABLE_NAME", "")
+
+# Audit dedup: a chat turn that calls Synergy 20 times shouldn't write 20
+# audit rows. Module-level so it survives across warm-container invocations.
+_LAST_SYNERGY_AUDIT_TS: Dict[Tuple[str, str], float] = {}
+_SYNERGY_AUDIT_DEDUP_SECONDS = 60
+
+
+def _audit_synergy_fetch(user_sub: str, secret_name: str) -> None:
+    """Write an ai_access audit row when chat resolves Synergy credentials.
+
+    Synergy's credential lookup bypasses get_oauth_token entirely (it reads
+    the user's PAT plus an admin-configured server URL), so we audit at the
+    public credential-resolver instead.
+    """
+    if not VAULT_AUDIT_LOG_TABLE_NAME or not user_sub:
+        return
+
+    key = (user_sub, secret_name)
+    now = time.time()
+    last = _LAST_SYNERGY_AUDIT_TS.get(key, 0.0)
+    if now - last < _SYNERGY_AUDIT_DEDUP_SECONDS:
+        return
+    _LAST_SYNERGY_AUDIT_TS[key] = now
+
+    try:
+        dynamodb = prm_client("dynamodb")
+        audit_id = str(uuid.uuid4())
+        ttl = int(now) + (90 * 86400)
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now))
+        item: Dict[str, Any] = {
+            "user_id": user_sub,
+            "timestamp_audit_id": f"{timestamp}#{audit_id}",
+            "secret_id": secret_name,
+            "secret_name": secret_name,
+            "action": "ai_access",
+            "accessor": "workspace_agent",
+            "actor_email": "",
+            "purpose": "Connector credential fetch: synergy",
+            "conversation_id": "",
+            "approved_by": "oauth_grant",
+            "created_at": timestamp,
+            "ttl": ttl,
+        }
+        dynamodb.put_item(
+            TableName=VAULT_AUDIT_LOG_TABLE_NAME,
+            Item={
+                k: {"S": str(v)} if not isinstance(v, int) else {"N": str(v)}
+                for k, v in item.items()
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to write Synergy audit log",
+            user_sub=user_sub,
+            secret_name=secret_name,
+            error=str(e),
+        )
+
+
 DATA_CONNECTORS_SECRETS_PREFIX = os.environ.get(
     "DATA_CONNECTORS_SECRETS_PREFIX", f"{CLIENT_NAME}/data-connectors"
 )
@@ -177,10 +239,15 @@ def get_synergy_credentials(user_sub: str) -> Optional[tuple[str, str]]:
     flow), then falls back to the legacy data-connectors DynamoDB + Secrets
     Manager record. The DynamoDB path still handles PAT rotation for users
     who set up Synergy via the old /data-connectors admin page.
+
+    Audit: any successful credential resolve is logged as an `ai_access` row
+    against the user's vault audit table — Synergy bypasses get_oauth_token
+    so we have to instrument here directly (TASK-146).
     """
     # Preferred: per-user vault credential.
     vault_creds = _get_synergy_credentials_from_user_vault(user_sub)
     if vault_creds:
+        _audit_synergy_fetch(user_sub, "connector-synergy")
         return vault_creds
 
     # Fallback: legacy DynamoDB record with auto-rotation.
@@ -240,6 +307,7 @@ def get_synergy_credentials(user_sub: str) -> Optional[tuple[str, str]]:
                 "Failed to parse PAT expiry", _name="PAT_ROTATION", error=str(exc)
             )
 
+        _audit_synergy_fetch(user_sub, "connector-synergy-legacy")
         return server, token
 
     except Exception as e:

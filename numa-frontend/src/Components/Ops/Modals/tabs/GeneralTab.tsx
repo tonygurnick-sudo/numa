@@ -3,6 +3,8 @@ import React, { useMemo } from 'react';
 import { Form, Row, Col } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { StaffAvatar } from '../../Shared/StaffAvatar';
+import { TaxonomyMultiSelect } from '../../../Inputs/TaxonomyMultiSelect';
+import { INDUSTRIES, PERSONAS } from '../../../../utils/resourceTaxonomy';
 import type { WorkZone, WorkStage, StaffProfile } from '../../../../types/ops';
 
 const ANNOUNCEMENT_MAX_LENGTH = 280;
@@ -18,6 +20,10 @@ interface GeneralTabProps {
   setDefaultZoneId: (v: string) => void;
   defaultStageId: string;
   setDefaultStageId: (v: string) => void;
+  personas: string[];
+  setPersonas: (v: string[]) => void;
+  industries: string[];
+  setIndustries: (v: string[]) => void;
   zones: Partial<WorkZone>[];
   stages: Partial<WorkStage>[];
   createdBy?: string;
@@ -35,6 +41,10 @@ export function GeneralTab({
   setDefaultZoneId,
   defaultStageId,
   setDefaultStageId,
+  personas,
+  setPersonas,
+  industries,
+  setIndustries,
   zones,
   stages,
   createdBy,
@@ -131,6 +141,34 @@ export function GeneralTab({
             </span>
           </div>
         </Form.Group>
+      </div>
+
+      {/* Personas & Industries — controlled taxonomy for FEAT-127 filtering */}
+      <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+        <h6 className="fw-bold text-dark mb-1">{t('settings.taxonomyHeading')}</h6>
+        <p className="text-muted small mb-3">{t('settings.taxonomyHelp')}</p>
+        <Row>
+          <Col md={6}>
+            <TaxonomyMultiSelect
+              id="board-personas"
+              label={t('settings.personasLabel')}
+              helperText={t('settings.personasHelp')}
+              options={PERSONAS}
+              selected={personas}
+              onChange={setPersonas}
+            />
+          </Col>
+          <Col md={6}>
+            <TaxonomyMultiSelect
+              id="board-industries"
+              label={t('settings.industriesLabel')}
+              helperText={t('settings.industriesHelp')}
+              options={INDUSTRIES}
+              selected={industries}
+              onChange={setIndustries}
+            />
+          </Col>
+        </Row>
       </div>
 
       {/* Default Location */}

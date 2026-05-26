@@ -1,542 +1,304 @@
 ---
-api_name: 'NetSuite AI Connector Service (MCP)'
-connector_id: 'netsuite'
-auth_type: 'oauth2'
-tier: 'premium'
+api_name: 'NetSuite SuiteTalk REST + NetSuite AI Connector Service (MCP)'
+auth_type: 'oauth2-pkce'
 category: 'erp'
-integration_path: 'data-connector'
 ---
 
-# NetSuite MCP -- Connector & Integration Setup
+# Connecting to NetSuite
 
-> **[TEMPLATE -- verify against current Numa codebase before implementation]**
-> **Auth type:** OAuth 2.0 Authorization Code with PKCE (public client)
-> **Integration path:** Data Connector (OAuth2) + Direct MCP API
->
-> **Prerequisites:** Read the completed investigation questionnaire and the
-> [Numa Connectors documentation](../../documentation/connectors/README.md) first.
+> Step-by-step setup for obtaining credentials and getting the first successful API call against a NetSuite account. Pure NetSuite-side reference — no Numa internals.
+
+NetSuite is **per-account**: every URL — OAuth, REST, MCP — contains your `accountId` (e.g. `5721181`, `5721181_SB1` for a sandbox). There is no global "NetSuite API" endpoint.
 
 ---
 
-## Overview
+## 1. Choose the API surface
 
-NetSuite MCP uses per-account OAuth 2.0 with PKCE. Unlike standard SaaS connectors, each NetSuite account has its own OAuth endpoints and MCP URL. The account ID is embedded in the hostname.
+NetSuite exposes the same underlying data through several APIs. Pick the one that matches your use case:
 
-This means the connector must:
+| Surface                                 | Endpoint root                                                 | Best for                                                            | OAuth scope        |
+| --------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------ |
+| **SuiteTalk REST — Record API**         | `/services/rest/record/v1/{recordType}`                       | CRUD on individual records (`customer`, `salesOrder`, `invoice`, …) | `rest_webservices` |
+| **SuiteTalk REST — SuiteQL**            | `/services/rest/query/v1/suiteql`                             | Ad-hoc SQL-like queries across records                              | `rest_webservices` |
+| **RESTlets**                            | `/app/site/hosted/restlet.nl?script=…&deploy=…`               | Custom server-side SuiteScript endpoints                            | `restlets`         |
+| **SuiteAnalytics Connect**              | (driver)                                                      | BI / data warehouse loads                                           | `suite_analytics`  |
+| **NetSuite AI Connector Service (MCP)** | `/services/mcp/v1/suiteapp/{appId}` or `/services/mcp/v1/all` | LLM/agent integration via JSON-RPC tools                            | `mcp`              |
 
-1. Store the account ID as part of the company/admin configuration
-2. Dynamically construct OAuth URLs and MCP endpoint URLs using the account ID
-3. Handle PKCE (public client -- no client secret)
-4. Make JSON-RPC 2.0 calls instead of standard REST calls
-5. Handle the `data` parameter as stringified JSON for create/update operations
+> ⚠️ **The `mcp` scope is exclusive.** You cannot combine it with `restlets`, `rest_webservices`, or `suite_analytics` in the same OAuth flow. If your integration needs both MCP and REST, run two independent OAuth flows.
 
----
-
-## Prerequisites
-
-Before configuring the Numa connector, the customer must:
-
-- [ ] Have an active NetSuite account with a known Account ID (e.g., `5721181`)
-- [ ] Have OAuth 2.0, Server SuiteScript, and REST Web Services features enabled
-- [ ] Create a **custom role** (NOT Administrator) with these permissions:
-  - MCP Server Connection
-  - OAuth 2.0 Access Tokens
-  - Any additional permissions required for the data they want to expose
-- [ ] Have the **MCP Standard Tools SuiteApp** installed (usually bundled by default)
-- [ ] Create an **Integration Record** with:
-  - "NetSuite AI Connector Service" scope enabled
-  - "Public Client" checked (no client secret)
-  - Redirect URI set to Numa's OAuth callback URL
-- [ ] Assign the custom role to the user who will authorize the connection
+[DOCUMENTED] https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_158081944642.html
 
 ---
 
-## Integration Type
+## 2. Account-level prerequisites
 
-**Selected path:** Data Connector (OAuth2) -- custom MCP protocol
+The customer's NetSuite administrator must enable these features (Setup → Company → Enable Features):
 
-| Component                | Required? | Notes                                               |
-| ------------------------ | --------- | --------------------------------------------------- |
-| Connector Registry entry | Yes       | Custom ERP category, per-account URL config         |
-| Admin setup wizard       | Yes       | Must collect Account ID and Client ID               |
-| Backend provider class   | Yes       | Custom MCP client (JSON-RPC 2.0), not standard REST |
-| Workspace agent prompt   | Yes       | 01-llm-api-rules.md and companions                  |
-| Feature flag             | Yes       | `NETSUITE_CONNECTOR` or similar                     |
-| i18n keys                | Yes       | Standard connector translations                     |
+- [ ] **OAuth 2.0** (SuiteCloud subtab)
+- [ ] **REST Web Services** (SuiteCloud subtab) — required for the REST + SuiteQL surfaces
+- [ ] **Server SuiteScript** (SuiteCloud subtab) — required for RESTlets and MCP
+- [ ] **Token-Based Authentication** (only if also using TBA alongside OAuth — optional)
+
+For MCP specifically:
+
+- [ ] Install the **MCP Standard Tools SuiteApp** (`com.netsuite.mcpstandardtools`) from SuiteApp Marketplace. NetSuite often bundles this by default in newer accounts.
 
 ---
 
-## 1. Connector Registry Entry
+## 3. Create the Integration Record
 
-**[TEMPLATE -- verify field names against current `connectorRegistry.ts`]**
+Setup → Integration → Manage Integrations → New.
 
-```typescript
-// In numa-frontend/src/Config/connectorRegistry.ts
+| Field                      | Value                                                                                                                                                                         |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Name                       | Free text (shown to users on the consent screen)                                                                                                                              |
+| State                      | Enabled                                                                                                                                                                       |
+| Concurrency Limit          | Leave default (account-level setting; per-integration cap)                                                                                                                    |
+| User Credentials           | Unchecked                                                                                                                                                                     |
+| Token-Based Authentication | Optional                                                                                                                                                                      |
+| Authorization Code Grant   | **Checked**                                                                                                                                                                   |
+| Public Client              | **Checked** for PKCE-only flows (no client secret); unchecked for confidential clients                                                                                        |
+| Redirect URI               | The exact callback URL your application will use — must match byte-for-byte on every OAuth request                                                                            |
+| Scope                      | One of: `RESTlets`, `REST Web Services`, `SuiteAnalytics Connect`, `NetSuite AI Connector Service` (one per integration record; multiple records if you need multiple scopes) |
+| OAuth 2.0 Consent Policy   | Usually `Ask First Time`                                                                                                                                                      |
 
-{
-  id: 'netsuite',
-  displayName: 'NetSuite',
-  description: 'Connect to Oracle NetSuite ERP for customers, orders, invoices, inventory, and financial reports',
-  icon: 'netsuite', // requires icon asset -- use NetSuite/Oracle N logo
-  category: 'erp',
-  authType: 'oauth2',
-  credentialFields: [
-    {
-      key: 'accountId',
-      label: 'NetSuite Account ID',
-      type: 'text',
-      placeholder: '5721181',
-      required: true,
-      helpText: 'Your NetSuite account ID. Found in Setup > Company > Company Information, or in your NetSuite URL.',
-    },
-    {
-      key: 'clientId',
-      label: 'Integration Client ID',
-      type: 'text',
-      placeholder: '',
-      required: true,
-      helpText: 'The Client ID from the Integration Record in NetSuite (Setup > Integration > Manage Integrations).',
-    },
-  ],
-  oauthConfig: {
-    // URLs are dynamically constructed from accountId
-    authorizationUrl: 'https://{accountId}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/authorize',
-    tokenUrl: 'https://{accountId}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token',
-    scopes: ['mcp'],
-    pkce: true,
-    publicClient: true, // no client_secret
-  },
-  cachingPolicy: {
-    enabled: true,
-    ttlMinutes: 60,
-    cacheableOperations: ['metadata'], // Cache ns_getRecordTypeMetadata and ns_getSuiteQLMetadata
-  },
-  apiReference: {
-    capabilities: [
-      'query',     // SuiteQL queries
-      'read',      // Get records by ID
-      'create',    // Create records
-      'update',    // Update records
-      'search',    // Saved searches
-      'report',    // Financial reports
-    ],
-    specialCapabilities: [
-      { name: 'suiteql', description: 'Oracle-dialect SQL queries against all NetSuite data' },
-      { name: 'savedSearch', description: 'Execute pre-built NetSuite saved searches' },
-      { name: 'reports', description: 'Run financial and operational reports' },
-    ],
-  },
-  tier: 'premium',
-}
+On save, NetSuite displays:
+
+- **Client ID** (also called `Consumer Key`) — capture immediately
+- **Client Secret** (also called `Consumer Secret`) — capture immediately, **shown once**. If using a Public Client, no secret is generated.
+
+[DOCUMENTED] https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157771733782.html
+
+---
+
+## 4. Role & user requirements
+
+OAuth 2.0 access is bound to the user who completes the consent flow. That user's role determines what data the integration can touch.
+
+- For **REST Web Services / RESTlets**: the user's role needs the relevant record-level permissions (e.g. Lists → Customers: View/Edit) plus **REST Web Services** and **OAuth 2.0 Access Tokens**.
+- For **MCP**: create a **custom role** (the Administrator role is **not supported** for MCP) with at least: `MCP Server Connection` + `OAuth 2.0 Access Tokens` + any record permissions the agent needs.
+
+[DOCUMENTED — MCP custom-role requirement] https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157771733782.html
+
+---
+
+## 5. OAuth 2.0 — Authorization Code with PKCE
+
+### 5.1 Authorize URL
+
+```
+https://<accountID>.app.netsuite.com/app/login/oauth2/authorize.nl
+  ?response_type=code
+  &client_id={CLIENT_ID}
+  &redirect_uri={REDIRECT_URI}             ← URL-encoded; must match integration record exactly
+  &scope=rest_webservices                  ← OR: restlets, suite_analytics, mcp (one of)
+  &state={22_TO_1024_CHAR_OPAQUE_STRING}
+  &code_challenge={SHA256(code_verifier)}  ← required for public clients and ALL mcp flows
+  &code_challenge_method=S256
 ```
 
-**Key difference from standard connectors:** The OAuth URLs contain a dynamic `{accountId}` placeholder. The admin wizard must collect the Account ID first, then construct the OAuth URLs at runtime.
+If the account ID is unknown at flow-start time, use the catch-all host:
 
----
-
-## 2. Backend Provider Class
-
-**[TEMPLATE -- verify base class interface against current codebase]**
-
-> File: `lib/oauth-providers/netsuite_provider.py`
-
-```python
-"""NetSuite AI Connector Service (MCP) provider implementation."""
-
-import json
-from typing import Any
-
-from .base_provider import OAuthProvider
-
-
-class NetSuiteProvider(OAuthProvider):
-    """NetSuite MCP data connector.
-
-    Auth type: OAuth 2.0 Authorization Code + PKCE (public client)
-    Protocol: MCP (JSON-RPC 2.0) over HTTPS
-    Base URL: https://{account_id}.suitetalk.api.netsuite.com
-    """
-
-    PROVIDER_ID = "netsuite"
-    MCP_PATH = "/services/mcp/v1/suiteapp/com.netsuite.mcpstandardtools"
-
-    def __init__(self, credentials: dict[str, Any]):
-        super().__init__(credentials)
-        self.account_id = credentials.get("accountId", "")
-        self.base_url = f"https://{self.account_id}.suitetalk.api.netsuite.com"
-        self.mcp_url = f"{self.base_url}{self.MCP_PATH}"
-
-    def _build_auth_url(self) -> str:
-        """Construct the per-account authorization URL."""
-        return f"{self.base_url}/services/rest/auth/oauth2/v1/authorize"
-
-    def _build_token_url(self) -> str:
-        """Construct the per-account token URL."""
-        return f"{self.base_url}/services/rest/auth/oauth2/v1/token"
-
-    async def _mcp_call(self, tool_name: str, arguments: dict[str, Any]) -> dict:
-        """Execute an MCP tool call via JSON-RPC 2.0.
-
-        All MCP calls go through this method.
-        """
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": tool_name,
-                "arguments": arguments,
-            },
-        }
-        # TODO: Implement HTTP POST to self.mcp_url with Bearer token
-        # Headers: Authorization: Bearer {access_token}, Content-Type: application/json
-        raise NotImplementedError
-
-    async def get_record_type_metadata(self, record_type: str | None = None) -> dict:
-        """Get metadata for record types.
-
-        Maps to: ns_getRecordTypeMetadata
-        """
-        args: dict[str, Any] = {}
-        if record_type:
-            args["recordType"] = record_type
-        return await self._mcp_call("ns_getRecordTypeMetadata", args)
-
-    async def get_record(
-        self, record_type: str, record_id: str, fields: str | None = None
-    ) -> dict:
-        """Get a single record by type and ID.
-
-        Maps to: ns_getRecord
-        """
-        args: dict[str, Any] = {"recordType": record_type, "recordId": record_id}
-        if fields:
-            args["fields"] = fields
-        return await self._mcp_call("ns_getRecord", args)
-
-    async def create_record(self, record_type: str, data: dict[str, Any]) -> dict:
-        """Create a new record.
-
-        Maps to: ns_createRecord
-        Note: data is automatically stringified.
-        """
-        return await self._mcp_call("ns_createRecord", {
-            "recordType": record_type,
-            "data": json.dumps(data),
-        })
-
-    async def update_record(
-        self, record_type: str, record_id: str, data: dict[str, Any]
-    ) -> dict:
-        """Update an existing record.
-
-        Maps to: ns_updateRecord
-        Note: data is automatically stringified.
-        """
-        return await self._mcp_call("ns_updateRecord", {
-            "recordType": record_type,
-            "recordId": record_id,
-            "data": json.dumps(data),
-        })
-
-    async def run_suiteql(
-        self, query: str, description: str, page_size: int | None = None
-    ) -> dict:
-        """Execute a SuiteQL query.
-
-        Maps to: ns_runCustomSuiteQL
-        """
-        args: dict[str, Any] = {"sqlQuery": query, "description": description}
-        if page_size:
-            args["pageSize"] = page_size
-        return await self._mcp_call("ns_runCustomSuiteQL", args)
-
-    async def get_suiteql_metadata(self, record_type: str | None = None) -> dict:
-        """Get SuiteQL table/field metadata.
-
-        Maps to: ns_getSuiteQLMetadata
-        """
-        args: dict[str, Any] = {}
-        if record_type:
-            args["recordType"] = record_type
-        return await self._mcp_call("ns_getSuiteQLMetadata", args)
-
-    async def list_saved_searches(self, query: str | None = None) -> dict:
-        """List saved searches.
-
-        Maps to: ns_listSavedSearches
-        """
-        args: dict[str, Any] = {}
-        if query:
-            args["query"] = query
-        return await self._mcp_call("ns_listSavedSearches", args)
-
-    async def run_saved_search(
-        self,
-        search_id: str,
-        search_type: str | None = None,
-        range_start: int | None = None,
-        range_end: int | None = None,
-    ) -> dict:
-        """Run a saved search.
-
-        Maps to: ns_runSavedSearch
-        """
-        args: dict[str, Any] = {"searchId": search_id}
-        if search_type:
-            args["type"] = search_type
-        if range_start is not None:
-            args["range_start"] = range_start
-        if range_end is not None:
-            args["range_end"] = range_end
-        return await self._mcp_call("ns_runSavedSearch", args)
-
-    async def list_reports(self) -> dict:
-        """List all available reports.
-
-        Maps to: ns_listAllReports
-        """
-        return await self._mcp_call("ns_listAllReports", {})
-
-    async def run_report(
-        self,
-        report_id: int,
-        date_to: str,
-        date_from: str | None = None,
-        subsidiary_id: int | None = None,
-    ) -> dict:
-        """Run a report.
-
-        Maps to: ns_runReport
-        Prerequisite: Call list_reports first to get valid report IDs.
-        """
-        args: dict[str, Any] = {"reportId": report_id, "dateTo": date_to}
-        if date_from:
-            args["dateFrom"] = date_from
-        if subsidiary_id is not None:
-            args["subsidiaryId"] = subsidiary_id
-        return await self._mcp_call("ns_runReport", args)
-
-    async def get_subsidiaries(self) -> dict:
-        """Get subsidiaries for report filtering.
-
-        Maps to: ns_getSubsidiaries
-        """
-        return await self._mcp_call("ns_getSubsidiaries", {})
+```
+https://system.netsuite.com/app/login/oauth2/authorize.nl?...
 ```
 
----
+After the user signs in, NetSuite resolves the account and redirects back to `{REDIRECT_URI}?code={AUTH_CODE}&state={STATE}&company={accountId}`.
 
-## 3. Registration in **init**.py
+**NetSuite-specific constraints:**
 
-> File: `lib/oauth-providers/__init__.py`
+- `state` must be **22–1024 characters**, printable ASCII, unique per flow.
+- `code_verifier` must be **43–128 characters** from `[A-Za-z0-9-._~]`.
+- `code_challenge` = `BASE64URL( SHA256(code_verifier) )`.
+- `code_challenge_method` **must be `S256`**. `plain` is unsupported since 2020.2.
+- `code_challenge` is **required even for confidential clients** when scope is `mcp`.
 
-```python
-from .netsuite_provider import NetSuiteProvider
+Example (verbatim from Oracle docs):
 
-PROVIDER_REGISTRY = {
-    # ... existing providers ...
-    "netsuite": NetSuiteProvider,
-}
+```
+https://<accountID>.app.netsuite.com/app/login/oauth2/authorize.nl
+  ?scope=restlets+rest_webservices
+  &redirect_uri=https%3A%2F%2Fmyapplication.com%2Fnetsuite%2Foauth2callback
+  &response_type=code
+  &client_id=6794a3086e4f61a120350d01b8527aed3631472ef33412212495be65a8fc8d4c
+  &state=ykv2XLx1BpT5Q0F3MRPHb94j
+  &code_challenge=Who5QBshz2Mu1Mq6GuAknYA5TnjA-0z7VhAgLloec1s
+  &code_challenge_method=S256
 ```
 
----
+[DOCUMENTED] https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_158081944642.html
 
-## 4. Dynamic OAuth URL Construction
+### 5.2 Token endpoint
 
-**This is the key architectural difference from standard connectors.**
-
-The admin wizard must:
-
-1. Collect the Account ID from the admin
-2. Construct OAuth URLs at runtime: `https://{accountId}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/authorize`
-3. Store the Account ID in the company secret alongside the OAuth tokens
-4. Use PKCE flow (no client secret needed)
-
-**Frontend OAuth flow modification:**
-
-```typescript
-// When initiating OAuth for NetSuite, construct the auth URL dynamically:
-const accountId = companyConfig.accountId; // From admin wizard input
-const authUrl = `https://${accountId}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/authorize`;
-const tokenUrl = `https://${accountId}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token`;
-
-// PKCE flow: generate code_verifier and code_challenge
-// scope: 'mcp'
-// client_id: from Integration Record
-// No client_secret (public client)
+```
+POST https://<accountID>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token
+Content-Type: application/x-www-form-urlencoded
 ```
 
----
+Three authentication variants — pick one based on client type:
 
-## 5. Integration Prompt Deployment
+**(a) Confidential client (HTTP Basic header):**
 
-**Prompt files to deploy:**
+```
+Authorization: Basic BASE64URL(client_id:client_secret)
 
-- `01-llm-api-rules.md` (main rules, under 300 lines)
-- `01a-domain-model-reference.md` (entity reference)
-- `01b-query-patterns.md` (SuiteQL, saved searches, reports)
-- `01c-mutation-patterns.md` (create/update patterns)
-- `01d-event-and-error-handling.md` (errors, rate limits, polling)
+code={AUTH_CODE}
+&redirect_uri={REDIRECT_URI}
+&grant_type=authorization_code
+&code_verifier={ORIGINAL_CODE_VERIFIER}
+```
 
-**Deployment location:** Workspace agent skill/plugin system. The `01-llm-api-rules.md` is loaded into context when the NetSuite connector is active for a user.
+**(b) Public client — variant 1 (`client_id` in body):**
 
----
+```
+code={AUTH_CODE}
+&redirect_uri={REDIRECT_URI}
+&grant_type=authorization_code
+&code_verifier={ORIGINAL_CODE_VERIFIER}
+&client_id={CLIENT_ID}
+```
 
-## 6. i18n Keys
+**(c) Public client — variant 2 (`client_id` in Basic header, empty secret):**
 
-> File: `numa-frontend/src/i18n/en.json` (and other locale files)
+```
+Authorization: Basic BASE64URL(client_id:)
+
+code=...&redirect_uri=...&grant_type=authorization_code&code_verifier=...
+```
+
+Response (JSON):
 
 ```json
 {
-  "connectors.netsuite.displayName": "NetSuite",
-  "connectors.netsuite.description": "Connect to Oracle NetSuite ERP for customers, orders, invoices, inventory, and financial reports",
-  "connectors.netsuite.setupTitle": "Connect NetSuite",
-  "connectors.netsuite.setupDescription": "Connect your NetSuite account to query customers, orders, invoices, items, and run financial reports via the AI Connector Service.",
-  "connectors.netsuite.fields.accountId.label": "NetSuite Account ID",
-  "connectors.netsuite.fields.accountId.help": "Your NetSuite account ID. Found in Setup > Company > Company Information.",
-  "connectors.netsuite.fields.clientId.label": "Integration Client ID",
-  "connectors.netsuite.fields.clientId.help": "The Client ID from the Integration Record (Setup > Integration > Manage Integrations).",
-  "connectors.netsuite.connected": "Connected to NetSuite",
-  "connectors.netsuite.disconnected": "Disconnected from NetSuite"
+  "access_token": "{JWT_RS256}",
+  "refresh_token": "{JWT}",
+  "expires_in": 3600,
+  "token_type": "bearer",
+  "id_token": "{JWT — OIDC only, optional}"
 }
 ```
 
----
+### 5.3 Token lifetimes
 
-## 7. Deployment Checklist
+|                         | Access token | Refresh token                                                               | Rotates on refresh?                                                 |
+| ----------------------- | ------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **Confidential client** | 3600s (1 hr) | 7 days                                                                      | No — refresh token can be reused until expiry                       |
+| **Public client**       | 3600s (1 hr) | 2 days (default; configurable 1 hour – 720 hours on the integration record) | **Yes — one-time use**, response always returns a new refresh token |
 
-> Complete this checklist before considering the integration done.
+[DOCUMENTED — token endpoint reference]
 
-### Code
+### 5.4 Refresh
 
-- [ ] Registry entry added to `connectorRegistry.ts` with dynamic OAuth URL support
-- [ ] NetSuite icon asset added (SVG)
-- [ ] Admin wizard collects Account ID and Client ID
-- [ ] Backend provider class implemented (`netsuite_provider.py`)
-- [ ] `_mcp_call` method implemented with HTTP POST, JSON-RPC 2.0, Bearer auth
-- [ ] PKCE flow implemented (code_verifier + code_challenge generation)
-- [ ] Provider registered in `__init__.py`
-- [ ] Vault integration for OAuth tokens (access_token, refresh_token, account_id)
-- [ ] Token refresh logic handles per-account token URL
-- [ ] i18n keys added for all locales
-- [ ] Metadata caching implemented (1hr TTL for record type and SuiteQL metadata)
-
-### Auth Flows
-
-- [ ] Admin setup wizard saves company config (account_id, client_id) to vault
-- [ ] OAuth flow constructs per-account authorization URL
-- [ ] PKCE challenge is generated and verified
-- [ ] Token endpoint uses per-account URL
-- [ ] Token refresh works (auto-refreshes before expiry)
-- [ ] User disconnect deletes user tokens only
-- [ ] Admin disconnect deletes company configuration correctly
-
-### Functionality
-
-- [ ] `ns_getRecordTypeMetadata` returns field schemas
-- [ ] `ns_getRecord` retrieves single records
-- [ ] `ns_createRecord` creates records with stringified JSON data
-- [ ] `ns_updateRecord` updates records with stringified JSON data
-- [ ] `ns_runCustomSuiteQL` executes SuiteQL queries
-- [ ] `ns_listSavedSearches` and `ns_runSavedSearch` work with pagination
-- [ ] `ns_listAllReports` and `ns_runReport` work (including subsidiary filter flow)
-- [ ] `ns_getSuiteQLMetadata` returns table schemas
-- [ ] `ns_getSubsidiaries` returns subsidiary list
-- [ ] Error handling covers 400, 401, 403, 404, 429, 500
-- [ ] Rate limiting with exponential backoff on 429
-
-### Workspace Agent
-
-- [ ] Integration prompt (`01-llm-api-rules.md`) deployed to workspace agent
-- [ ] Companion files (01a-01d) available as reference
-- [ ] Agent can query records via SuiteQL
-- [ ] Agent can retrieve individual records
-- [ ] Agent can create records (with metadata preflight)
-- [ ] Agent can update records
-- [ ] Agent can run saved searches
-- [ ] Agent can run financial reports
-
-### CI/CD
-
-- [ ] Lambda added to CI matrix in `.gitlab-ci.yml`
-- [ ] Lambda added to `package-all.sh`
-- [ ] Build succeeds in pipeline
+Same endpoint, `grant_type=refresh_token`, body shape mirrors the chosen client variant. For public clients, **persist the rotated refresh token immediately** — the old one is dead after the first refresh.
 
 ---
 
-## 8. Testing Plan
+## 6. Required headers (data calls)
 
-### Manual Testing Sequence
+```
+Authorization:  Bearer {ACCESS_TOKEN}
+Content-Type:   application/json    ← POST/PATCH only
+Prefer:         transient           ← optional, for SuiteQL — avoids saving the query
+```
 
-1. **Admin setup:** Enter Account ID and Client ID in admin wizard
-2. **OAuth flow:** Initiate OAuth, verify PKCE flow completes, token stored
-3. **Metadata:** Call `ns_getRecordTypeMetadata` -- verify field schemas returned
-4. **Read:** Call `ns_getRecord` for a known customer ID
-5. **Query:** Run a basic SuiteQL query (`SELECT id, companyname FROM customer WHERE ROWNUM <= 5`)
-6. **Saved search:** List saved searches, run one with pagination
-7. **Report:** List reports, run one with date range
-8. **Create:** Create a test customer record (use sandbox/test account)
-9. **Update:** Update the test customer's email
-10. **Agent query:** Ask the workspace agent "List the top 5 customers by balance"
-11. **Agent create:** Ask the workspace agent to create a customer (confirm with user first)
-12. **Token refresh:** Wait for token expiry, verify auto-refresh works
-13. **Disconnect:** Disconnect, verify tokens are cleared
-
-### Edge Cases
-
-- [ ] Invalid Account ID (produces DNS/connection error)
-- [ ] Expired OAuth token (auto-refresh)
-- [ ] Revoked OAuth token (re-auth required)
-- [ ] Rate limit / 429 handling (exponential backoff)
-- [ ] Invalid SuiteQL query (graceful error message)
-- [ ] Non-existent record ID (404 handling)
-- [ ] Permission denied for record type (403 handling)
-- [ ] Large SuiteQL result set (>5000 rows, pagination)
-- [ ] OneWorld account without subsidiary param (missing mandatory field)
-- [ ] Custom record types (customrecord\_{id})
-- [ ] Concurrent requests from multiple users sharing same account
+The access token is a signed JWT (RS256). You don't validate its signature client-side; just present it.
 
 ---
 
-## Architecture Notes
+## 7. First successful call — smoke test
 
-### Why MCP Instead of Direct REST?
+Pick one based on your scope:
 
-NetSuite's AI Connector Service wraps the SuiteTalk REST API in MCP (JSON-RPC 2.0). The MCP layer provides:
+### REST Web Services
 
-1. Pre-built tools with input validation
-2. Mandatory workflows (metadata before create/update)
-3. Unified access to records, SuiteQL, saved searches, AND reports through one endpoint
-4. Role-based permission enforcement at the tool level
+```http
+GET https://<accountID>.suitetalk.api.netsuite.com/services/rest/record/v1/customer?limit=1
+Authorization: Bearer {ACCESS_TOKEN}
+```
 
-The alternative (direct SuiteTalk REST) would require:
+Expected: `200 OK` with `{ "links": [...], "count": 1, "hasMore": …, "items": [ { "id": "…", "links": […] } ], "offset": 0, "totalResults": … }`.
 
-- Multiple endpoint patterns (`/record/v1/`, `/query/v1/suiteql`)
-- Manual schema discovery
-- Separate auth scopes (`restlets rest_webservices` vs `mcp`)
+### SuiteQL
 
-MCP is the recommended path for AI integrations by Oracle/NetSuite.
+```http
+POST https://<accountID>.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql?limit=10
+Authorization: Bearer {ACCESS_TOKEN}
+Content-Type: application/json
+Prefer: transient
 
-### Per-Account URL Pattern
+{"q": "SELECT id, companyname FROM customer WHERE ROWNUM <= 10"}
+```
 
-Every NetSuite URL uses the pattern `https://{accountid}.suitetalk.api.netsuite.com/...`. This means:
+### MCP
 
-- The Account ID must be collected during admin setup
-- All OAuth and API URLs are constructed dynamically
-- There is no single "NetSuite API" endpoint -- each customer has their own
+```http
+POST https://<accountID>.suitetalk.api.netsuite.com/services/mcp/v1/suiteapp/com.netsuite.mcpstandardtools
+Authorization: Bearer {ACCESS_TOKEN}
+Content-Type: application/json
 
-### Public Client (No Secret)
+{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+```
 
-NetSuite MCP uses OAuth 2.0 public client with PKCE. This means:
+Failure modes:
 
-- No `client_secret` is stored or transmitted
-- PKCE `code_verifier` and `code_challenge` are required on every auth flow
-- The `client_id` comes from the customer's Integration Record in NetSuite
+- **400 INVALID_LOGIN_ATTEMPT** with `Insufficient scope` → integration record's scope doesn't match what you requested in the authorize URL.
+- **401 INVALID_LOGIN** → access token expired → refresh.
+- **403 USER_ERROR** → role lacks the record permission (REST) or `MCP Server Connection` permission (MCP).
+- **429 / Concurrency** → account-level concurrency limit hit; exponential backoff.
 
 ---
 
-_Generated from the investigation questionnaire. See also:_
+## 8. Account ID vs hostname
 
-- _[Connector Framework Documentation](../../documentation/connectors/README.md)_
-- _Investigation questionnaire for detailed API research_
+The `accountId` you put into URLs is _not_ the company name — it's a numeric (or numeric+suffix) identifier visible at:
+
+```
+Setup → Company → Company Information → Account ID
+```
+
+| Account type    | Format                               | Example       |
+| --------------- | ------------------------------------ | ------------- |
+| Production      | digits only                          | `5721181`     |
+| Sandbox         | `{prod_id}_SB{n}` (lowercase in URL) | `5721181_sb1` |
+| Release Preview | `{prod_id}_RP`                       | `5721181_rp`  |
+
+The same account ID appears in OAuth URLs (`<accountID>.app.netsuite.com`), data URLs (`<accountID>.suitetalk.api.netsuite.com`), and UI URLs (`<accountID>.app.netsuite.com`).
+
+---
+
+## 9. Per-account concurrency model
+
+NetSuite governs API usage by **concurrency** (parallel in-flight requests), not request rate. Quotas:
+
+| Tier                           | Default concurrency limit  |
+| ------------------------------ | -------------------------- |
+| Standard                       | 5 concurrent               |
+| Premium                        | 10 concurrent              |
+| Premium Plus / SuiteCloud Plus | 10–25, scalable per add-on |
+
+Exceeding it returns **HTTP 429** with `o:errorCode: "CONCURRENCY_LIMIT_EXCEEDED"`. There is no `Retry-After` header — back off exponentially (1s, 2s, 4s, …).
+
+Per-integration-record limits can further cap a single integration below the account total — check the integration record's "Concurrency Limit" field.
+
+---
+
+## 10. Sandbox testing
+
+- Sandbox refreshes copy production data + integration records, but **integration secrets must be re-issued** for the sandbox-account ID (re-create the integration record under the sandbox account).
+- Sandbox account ID uses the `_sb{n}` suffix (e.g. `5721181_sb1`); use this everywhere — host, scope target, integration record ID.
+- The "Release Preview" account (`_rp`) lets you validate against the next NetSuite version before it hits production.
+
+---
+
+## 11. Quick-reference URLs
+
+| Resource                    | URL                                                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| OAuth 2.0 overview          | https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157771733782.html             |
+| Step 1 (authorize)          | https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_158081944642.html             |
+| Step 2 (token)              | https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_158081952044.html             |
+| REST API Browser            | https://system.netsuite.com/help/helpcenter/en_US/APIs/REST_API_Browser/record/v1/2024.1/index.html |
+| SuiteQL documentation       | https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_156257770590.html             |
+| Status page                 | https://status.netsuite.com                                                                         |
+| Release notes (per quarter) | https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1539886829.html               |
+| Community forum             | https://community.oracle.com/netsuite                                                               |

@@ -149,7 +149,7 @@ Numa's current default. Use when the user asks "has X been updated?" or we need 
 
 - **Change detection field:** `Modified_Time` (always server-set).
 - **Recommended interval:** 5–15 minutes for active sync; 30–60 minutes for background; **never below 1 minute** (concurrency limits are 5–25 per app per org).
-- **Credit budget:** each poll is 1 credit on COQL / 1 on list. Concurrency matters more than credit total.
+- **Credit budget:** each poll is "approximately 1 credit" on COQL / 1 on list. [INFERRED — the Zoho COQL credits doc URL we cited 404s today (2026-05-19); a community claim is COQL is tiered 1–3 credits depending on LIMIT (1–200 → 1, 201–1000 → 2, 1001–2000 → 3). Treat 1 as a lower bound; re-check Zoho docs before tight budgeting.] Concurrency matters more than credit total.
 
 ### Polling Pattern
 

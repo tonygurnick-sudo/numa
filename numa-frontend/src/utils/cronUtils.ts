@@ -466,7 +466,7 @@ const convertRateToCron = (rateExpr: string): string | null => {
 export const calculateNextRun = (
   cronExpression: string,
   timezone: string = 'UTC',
-  status: 'active' | 'paused' | 'deleted' = 'active'
+  status: 'active' | 'paused' | 'deleted' | 'pending_approval' | 'admin_locked' = 'active'
 ): NextRunInfo => {
   const defaultResult: NextRunInfo = {
     nextRun: null,
@@ -475,9 +475,15 @@ export const calculateNextRun = (
   };
 
   if (status !== 'active') {
+    const labelByStatus: Record<Exclude<typeof status, 'active'>, string> = {
+      paused: 'Paused',
+      deleted: 'Deleted',
+      pending_approval: 'Pending approval',
+      admin_locked: 'Locked by admin',
+    };
     return {
       nextRun: null,
-      humanReadable: status === 'paused' ? 'Paused' : 'Deleted',
+      humanReadable: labelByStatus[status],
       isActive: false,
     };
   }

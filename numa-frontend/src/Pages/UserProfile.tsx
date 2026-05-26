@@ -26,6 +26,14 @@ import {
   type UserProfile,
 } from '../Services/ChatSettingsService';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
+import { ConnectorsService } from '../Services/ConnectorsService';
+import { DataConnectorsService } from '../Services/DataConnectorsService';
+import { AdminIntegrationsService } from '../Services/AdminIntegrationsService';
+import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+import {
+  connectorSlugForPipedream,
+  pipedreamSlugForConnector,
+} from '../Components/Integrations/integrationCatalogHelpers';
 import { withPRM } from '../utils/prmUtils';
 import { MY_FILES_SENTINEL, expandMyFilesSentinel, sortKnowledgeBases } from '../constants/knowledgeBase';
 
@@ -500,6 +508,10 @@ export default function UserProfilePage({
   const [globalIntegrationSettings, setGlobalIntegrationSettings] = useState<
     Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }>
   >({});
+  // Native connectors the user can pick as chat defaults — admin-configured
+  // for the workspace AND the user has actually authed. Mirror of
+  // `availableConnections` (Pipedream) so the UI can list both kinds.
+  const [availableNativeConnectors, setAvailableNativeConnectors] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     // Skip fetching while the admin view is active — re-fetch when switching back to 'user'.
@@ -646,66 +658,164 @@ export default function UserProfilePage({
   const canEditUserDefaults = globalLoaded && globalAllowUserDefaults;
   const canEditProfile = globalLoaded;
 
-  // Clear connections state when in preview mode
+  // Atomic loader for everything the chat-defaults "integrations" picker
+  // needs. Previously this was three independent useEffects:
+  //   1. /api/settings/integrations → globalIntegrationSettings
+  //   2. Pipedream proxy → availableConnections
+  //   3. catalog + DDB + OAuth status → availableNativeConnectors
+  // Each finished at its own time so the picker rendered piecewise (4
+  // entries, then 5, then 6...). Now we Promise.all all of them and flip
+  // ONE ready flag at the end so the user sees the complete, true list in
+  // one paint. Single source of truth on every load.
   useEffect(() => {
     if (previewMode) {
       setConnectionsLoading(false);
       setAvailableConnections([]);
+      setAvailableNativeConnectors([]);
+      setGlobalIntegrationSettings({});
+      return;
     }
-  }, [previewMode]);
-
-  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setConnectionsLoading(true);
     (async () => {
       try {
-        if (!user) return;
-        const items = (await numaGet('/api/settings/integrations')) as Array<{
-          integration: string;
-          status: 'enabled' | 'disabled';
-          denyTools: string[];
-        }>;
-        const map: Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }> = {};
-        for (const item of items || []) {
-          map[item.integration] = { status: item.status, denyTools: item.denyTools || [] };
+        const [integrationSettingsItems, pipedreamStatus, catalog, nativeRows, configured] = await Promise.all([
+          (numaGet('/api/settings/integrations') as Promise<unknown>).catch(() => []),
+          lambdaClient
+            ? PipedreamProxyService.getIntegrationStatus(
+                lambdaClient,
+                PipedreamProxyService.deriveExternalUserId(user),
+                { ttlMs: 30 * 60 * 1000 }
+              ).catch(() => null)
+            : Promise.resolve(null),
+          AdminIntegrationsService.catalogWithNuma(numaGet).catch(() => []),
+          DataConnectorsService.listStatus(numaGet).catch(() => [] as Array<{ connector_id: string; status?: string }>),
+          ConnectorsService.listConfigured().catch(
+            () =>
+              ({ oauth: [] as Array<{ id: string }>, pat: [] as Array<{ id: string }> }) as {
+                oauth: Array<{ id: string }>;
+                pat: Array<{ id: string }>;
+              }
+          ),
+        ]);
+        if (cancelled) return;
+
+        // 1. admin integration-settings (admin-side enable + denyTools map)
+        const settingsMap: Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }> = {};
+        const items = Array.isArray(integrationSettingsItems)
+          ? (integrationSettingsItems as Array<{
+              integration: string;
+              status: 'enabled' | 'disabled';
+              denyTools?: string[];
+            }>)
+          : [];
+        for (const item of items) {
+          settingsMap[item.integration] = {
+            status: item.status,
+            denyTools: item.denyTools || [],
+          };
         }
-        setGlobalIntegrationSettings(map);
-      } catch {
-        /* ignore */
+
+        // 2. Pipedream connections (filter to admin-enabled + user-connected)
+        const pipedreamConnections: Connection[] = pipedreamStatus
+          ? (pipedreamStatus.connections || [])
+              .map((conn) => ({
+                id: conn.app_name,
+                isConnected: conn.status === 'connected',
+                mcpServerUrl: undefined as string | undefined,
+              }))
+              .filter((c) => c.isConnected)
+              .filter((c) => settingsMap[c.id]?.status !== 'disabled')
+          : [];
+
+        // 3. Native connectors — same union the integrations page uses.
+        //    OAuth: /oauth/{slug}/status (vault)
+        //    PAT:   /pat/{slug}/status   (vault)
+        //    DDB:   legacy data-connectors row (kept as a backstop only;
+        //           the vault paths are authoritative for the post-FEAT-143
+        //           unified model). Without the PAT-vault check a user who
+        //           had just connected a PAT connector wouldn't see it
+        //           listed in their Chat Defaults until something else
+        //           wrote the legacy DDB row.
+        const oauthSlugs = configured.oauth.map((c) => c.id);
+        const patSlugs = configured.pat.map((c) => c.id);
+        // Both OAuth and PAT status go through ConnectorsService.getStatus,
+        // which routes each id to the correct vault endpoint via the
+        // registry. Calling OAuthProvidersService directly here previously
+        // sent PAT connectors through the OAuth endpoint, which 400-rejected.
+        const [oauthStatuses, patStatuses] = await Promise.all([
+          Promise.all(
+            oauthSlugs.map(async (slug) => {
+              try {
+                const s = await ConnectorsService.getStatus(slug);
+                return [slug, s.status === 'connected'] as const;
+              } catch {
+                return [slug, false] as const;
+              }
+            })
+          ),
+          Promise.all(
+            patSlugs.map(async (slug) => {
+              try {
+                const s = await ConnectorsService.getStatus(slug);
+                return [slug, s.status === 'connected'] as const;
+              } catch {
+                return [slug, false] as const;
+              }
+            })
+          ),
+        ]);
+        if (cancelled) return;
+        const oauthConnected = new Set(oauthStatuses.filter(([, ok]) => ok).map(([slug]) => slug));
+        const patConnected = new Set(patStatuses.filter(([, ok]) => ok).map(([slug]) => slug));
+        const ddbConnected = new Set(nativeRows.filter((r) => r.status === 'connected').map((r) => r.connector_id));
+
+        // Native connectors surfaced for the Chat Defaults picker. Must be
+        // BOTH admin-enabled (catalog entry with `connectorEnabled === true`)
+        // AND user-connected on at least one of the three sources above.
+        //
+        // The previous code had a fallback loop that included any slug the
+        // user had ever OAuth-connected, regardless of admin enable state.
+        // That left stale entries hanging around after an admin disabled a
+        // service (Synergy 12d showed up here in tom@'s account because the
+        // OAuth token persisted past the admin disabling the connector).
+        // Catalog is the only source of truth; legacy vault state alone is
+        // not enough to surface a row.
+        const nativeOut: Array<{ id: string; name: string }> = [];
+        const seen = new Set<string>();
+        for (const entry of catalog) {
+          const slug = entry.connectorSlug;
+          if (!slug) continue;
+          if (entry.connectorEnabled !== true) continue;
+          if (!oauthConnected.has(slug) && !patConnected.has(slug) && !ddbConnected.has(slug)) continue;
+          if (seen.has(slug)) continue;
+          seen.add(slug);
+          const tmpl = getConnectorById(slug);
+          nativeOut.push({ id: slug, name: tmpl?.displayName ?? slug });
+        }
+        nativeOut.sort((a, b) => a.name.localeCompare(b.name));
+
+        // Single atomic state update — all three lists land together, so
+        // the picker re-renders once with the complete, true state.
+        setGlobalIntegrationSettings(settingsMap);
+        setAvailableConnections(pipedreamConnections);
+        setAvailableNativeConnectors(nativeOut);
+      } catch (e) {
+        console.warn('[UserProfile] Failed to load chat-defaults integrations', e);
+        if (!cancelled) {
+          setGlobalIntegrationSettings({});
+          setAvailableConnections([]);
+          setAvailableNativeConnectors([]);
+        }
+      } finally {
+        if (!cancelled) setConnectionsLoading(false);
       }
     })();
-  }, [numaGet, user]);
-
-  useEffect(() => {
-    const loadConnectionStatus = async () => {
-      if (!lambdaClient || !user) return;
-      try {
-        setConnectionsLoading(true);
-        const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
-        const response = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
-          ttlMs: 30 * 60 * 1000,
-        });
-
-        const allConnections: Connection[] = (response.connections || []).map((conn) => ({
-          id: conn.app_name,
-          isConnected: conn.status === 'connected',
-          mcpServerUrl: undefined,
-        }));
-
-        const connected = allConnections
-          .filter((conn) => conn.isConnected)
-          .filter((conn) => globalIntegrationSettings[conn.id]?.status !== 'disabled');
-
-        setAvailableConnections(connected);
-      } catch {
-        setAvailableConnections([]);
-      } finally {
-        setConnectionsLoading(false);
-      }
+    return () => {
+      cancelled = true;
     };
-
-    if (lambdaClient && !previewMode) {
-      loadConnectionStatus();
-    }
-  }, [globalIntegrationSettings, lambdaClient, user]);
+  }, [numaGet, user, lambdaClient, previewMode]);
 
   // When user defaults are disabled, show company defaults in the form
   const displayedSettings = useMemo(() => {
@@ -716,9 +826,9 @@ export default function UserProfilePage({
         webSearchEnabled: companyDefaults.webSearchEnabled,
         createAgentEnabled: companyDefaults.createAgentEnabled,
         memoriesEnabled: companyDefaults.memoriesEnabled,
-        dataConnectorsEnabled: companyDefaults.dataConnectorsEnabled,
         dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
         defaultConnectionIds: companyDefaults.defaultConnectionIds,
+        defaultNativeConnectorIds: companyDefaults.defaultNativeConnectorIds,
       };
     }
     return userDefaults;
@@ -735,6 +845,10 @@ export default function UserProfilePage({
   const enabledConnectionSet = useMemo(
     () => new Set(displayedSettings.defaultConnectionIds),
     [displayedSettings.defaultConnectionIds]
+  );
+  const enabledNativeConnectorSet = useMemo(
+    () => new Set(displayedSettings.defaultNativeConnectorIds ?? []),
+    [displayedSettings.defaultNativeConnectorIds]
   );
   const getKBLabel = (kbId: string, kbName?: string) => {
     if (kbId === 'company') {
@@ -832,9 +946,9 @@ export default function UserProfilePage({
         webSearchEnabled: userDefaults.webSearchEnabled,
         createAgentEnabled: userDefaults.createAgentEnabled,
         memoriesEnabled: userDefaults.memoriesEnabled,
-        dataConnectorsEnabled: userDefaults.dataConnectorsEnabled,
         dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
         defaultConnectionIds: userDefaults.defaultConnectionIds,
+        defaultNativeConnectorIds: userDefaults.defaultNativeConnectorIds,
         language: userDefaults.language,
         approvalMode: userDefaults.approvalMode,
         numaToolApprovalMode: userDefaults.numaToolApprovalMode,
@@ -1846,14 +1960,12 @@ export default function UserProfilePage({
                                 dataAnalysisEnabled: true,
                                 createAgentEnabled: true,
                                 memoriesEnabled: true,
-                                dataConnectorsEnabled: true,
                               }
                             : {
                                 webSearchEnabled: false,
                                 dataAnalysisEnabled: false,
                                 createAgentEnabled: false,
                                 memoriesEnabled: false,
-                                dataConnectorsEnabled: false,
                               }),
                         }));
                         setDirty(true);
@@ -1941,28 +2053,6 @@ export default function UserProfilePage({
                         <div className="profile-tool-row__help">{t('userProfile.defaults.memoryManagement.help')}</div>
                       </div>
                     </div>
-
-                    {getFlag('DATA_CONNECTORS_ENABLED') && (
-                      <div className="profile-tool-row">
-                        <Form.Check
-                          type="switch"
-                          id="profile-defaults-data-connectors"
-                          label=""
-                          checked={displayedSettings.autoToolsEnabled || displayedSettings.dataConnectorsEnabled}
-                          disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
-                          onChange={(e) => {
-                            setUserDefaults((prev) => ({ ...prev, dataConnectorsEnabled: e.target.checked }));
-                            setDirty(true);
-                          }}
-                        />
-                        <div className="profile-tool-row__text">
-                          <div className="profile-tool-row__label">
-                            {t('userProfile.defaults.dataConnectors.title')}
-                          </div>
-                          <div className="profile-tool-row__help">{t('userProfile.defaults.dataConnectors.help')}</div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -1975,51 +2065,128 @@ export default function UserProfilePage({
                   ) : (
                     <>
                       <ExpandableOverflowBox className="profile-checkbox-list" maxHeight={240}>
-                        {availableConnections
-                          .sort((a, b) => getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id)))
-                          .map((conn) => {
-                            const id = conn.id;
-                            const checked = enabledConnectionSet.has(id);
-                            const iconSrc = getConnectionIcon(id);
-                            const fallbackIcon = getConnectionFallbackIcon(id);
+                        {/* One row per unique service. For dual-method services
+                            (Gmail, Drive, etc.) we collapse the Pipedream and
+                            native rows into a single entry, always using the
+                            Pipedream art + display name — the native row is
+                            dropped so users see one "Gmail" not two. Toggling
+                            adds the slug to BOTH default lists so whichever
+                            method the user has actually connected gets
+                            enabled on the next chat. */}
+                        {(() => {
+                          type Row = {
+                            key: string;
+                            label: string;
+                            iconSrc?: string;
+                            iconClass?: string;
+                            pipedreamSlug?: string;
+                            nativeSlug?: string;
+                          };
+                          const rows: Row[] = [];
+
+                          // Pipedream entries first — these take priority for
+                          // dual-method services. Carry forward the matching
+                          // native slug so the toggle handler can flip both.
+                          for (const conn of availableConnections) {
+                            const pdSlug = conn.id;
+                            const nativeSlug = connectorSlugForPipedream(pdSlug);
+                            rows.push({
+                              key: `pd-${pdSlug}`,
+                              label: getConnectionDisplayName(pdSlug),
+                              iconSrc: getConnectionIcon(pdSlug),
+                              iconClass: getConnectionFallbackIcon(pdSlug),
+                              pipedreamSlug: pdSlug,
+                              nativeSlug: nativeSlug ?? undefined,
+                            });
+                          }
+
+                          // Then native-only entries — anything with a Pipedream
+                          // counterpart is intentionally dropped here so we don't
+                          // emit "Gmail (native)" alongside "Gmail (Pipedream)".
+                          // For native entries that DO have a Pipedream slug, we
+                          // still want the Pipedream art even though Pipedream
+                          // isn't installed for this user.
+                          for (const conn of availableNativeConnectors) {
+                            const nativeSlug = conn.id;
+                            const pdSlug = pipedreamSlugForConnector(nativeSlug);
+                            // Skip if a Pipedream row already covered this
+                            // service.
+                            if (pdSlug && rows.some((r) => r.pipedreamSlug === pdSlug)) {
+                              continue;
+                            }
+                            const tmpl = getConnectorById(nativeSlug);
+                            rows.push({
+                              key: `nv-${nativeSlug}`,
+                              label: pdSlug ? getConnectionDisplayName(pdSlug) : conn.name,
+                              iconSrc: pdSlug ? getConnectionIcon(pdSlug) : undefined,
+                              iconClass: pdSlug ? getConnectionFallbackIcon(pdSlug) : (tmpl?.icon ?? 'bi bi-plug'),
+                              pipedreamSlug: undefined,
+                              nativeSlug,
+                            });
+                          }
+
+                          rows.sort((a, b) => a.label.localeCompare(b.label));
+
+                          return rows.map((row) => {
+                            const isPdEnabled = row.pipedreamSlug ? enabledConnectionSet.has(row.pipedreamSlug) : false;
+                            const isNativeEnabled = row.nativeSlug
+                              ? enabledNativeConnectorSet.has(row.nativeSlug)
+                              : false;
+                            const checked = isPdEnabled || isNativeEnabled;
                             return (
                               <Form.Check
-                                key={id}
+                                key={row.key}
                                 type="checkbox"
-                                id={`profile-defaults-integration-${id}`}
+                                id={`profile-defaults-${row.key}`}
                                 label={
                                   <span className="d-flex align-items-center gap-2">
-                                    {iconSrc ? (
+                                    {row.iconSrc ? (
                                       <img
-                                        src={iconSrc}
-                                        alt={getConnectionDisplayName(id)}
+                                        src={row.iconSrc}
+                                        alt={row.label}
                                         className="profile-integration-icon"
                                         onError={(e) => {
                                           e.currentTarget.style.display = 'none';
                                         }}
                                       />
                                     ) : (
-                                      <i className={fallbackIcon} />
+                                      <i className={row.iconClass} />
                                     )}
-                                    {getConnectionDisplayName(id)}
+                                    {row.label}
                                   </span>
                                 }
                                 checked={checked}
                                 disabled={disableDefaultsForm}
                                 onChange={(e) => {
                                   const nextChecked = e.target.checked;
-                                  setUserDefaults((prev) => ({
-                                    ...prev,
-                                    defaultConnectionIds: nextChecked
-                                      ? Array.from(new Set([...prev.defaultConnectionIds, id]))
-                                      : prev.defaultConnectionIds.filter((x) => x !== id),
-                                  }));
+                                  setUserDefaults((prev) => {
+                                    const pd = prev.defaultConnectionIds;
+                                    const nv = prev.defaultNativeConnectorIds ?? [];
+                                    let nextPd = pd;
+                                    let nextNv = nv;
+                                    if (row.pipedreamSlug) {
+                                      nextPd = nextChecked
+                                        ? Array.from(new Set([...pd, row.pipedreamSlug]))
+                                        : pd.filter((x) => x !== row.pipedreamSlug);
+                                    }
+                                    if (row.nativeSlug) {
+                                      nextNv = nextChecked
+                                        ? Array.from(new Set([...nv, row.nativeSlug]))
+                                        : nv.filter((x) => x !== row.nativeSlug);
+                                    }
+                                    return {
+                                      ...prev,
+                                      defaultConnectionIds: nextPd,
+                                      defaultNativeConnectorIds: nextNv,
+                                    };
+                                  });
                                   setDirty(true);
                                 }}
                               />
                             );
-                          })}
-                        {availableConnections.length === 0 && (
+                          });
+                        })()}
+                        {availableConnections.length === 0 && availableNativeConnectors.length === 0 && (
                           <div className="profile-empty-state">{t('userProfile.defaults.integrations.empty')}</div>
                         )}
                       </ExpandableOverflowBox>

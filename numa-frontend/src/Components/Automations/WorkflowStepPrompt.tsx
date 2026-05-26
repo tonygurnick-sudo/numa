@@ -5,6 +5,8 @@ import { X } from 'lucide-react';
 import { getAllTimezones } from '../../utils/timezoneUtils';
 import { UsersService, type WorkspaceUser } from '../../Services/UsersService';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { ScheduleService, type QuotaSummary } from '../../Services/ScheduleService';
+import { projectMonthlyRuns } from '../../utils/cronProjection';
 
 type WorkflowStepPromptProps = {
   name: string;
@@ -13,8 +15,6 @@ type WorkflowStepPromptProps = {
   onPromptChange: (value: string) => void;
   maxRuns: number;
   onMaxRunsChange: (value: number) => void;
-  emailNotifications: boolean;
-  onEmailNotificationsChange: (value: boolean) => void;
   notificationEmails: string[];
   onNotificationEmailsChange: (emails: string[]) => void;
   currentUserEmail?: string;
@@ -22,6 +22,12 @@ type WorkflowStepPromptProps = {
   onTimezoneChange: (value: string) => void;
   submitting: boolean;
   nameError?: string;
+  /**
+   * Cron expression from the schedule step. Used to compute the inline
+   * "up to N would fit" hint next to the Max-runs field — only shown when
+   * the raw cron projection would breach a remaining cap.
+   */
+  cronExpression?: string;
 };
 
 export const WorkflowStepPrompt = ({
@@ -31,8 +37,6 @@ export const WorkflowStepPrompt = ({
   onPromptChange,
   maxRuns,
   onMaxRunsChange,
-  emailNotifications,
-  onEmailNotificationsChange,
   notificationEmails,
   onNotificationEmailsChange,
   currentUserEmail,
@@ -40,6 +44,7 @@ export const WorkflowStepPrompt = ({
   onTimezoneChange,
   submitting,
   nameError,
+  cronExpression,
 }: WorkflowStepPromptProps) => {
   const { t } = useTranslation('automations');
   const { numaGet } = useNumaRequest();
@@ -49,10 +54,10 @@ export const WorkflowStepPrompt = ({
   const [usersLoading, setUsersLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [quotaSummary, setQuotaSummary] = useState<QuotaSummary | null>(null);
 
-  // Load workspace users when email notifications are enabled
+  // Load workspace users for the recipient picker.
   useEffect(() => {
-    if (!emailNotifications) return;
     let cancelled = false;
     const load = async () => {
       setUsersLoading(true);
@@ -69,7 +74,54 @@ export const WorkflowStepPrompt = ({
     return () => {
       cancelled = true;
     };
-  }, [emailNotifications, numaGet]);
+  }, [numaGet]);
+
+  // Quota summary for the "up to N would fit" hint next to Max-runs.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ScheduleService.quotaSummary(numaGet);
+        if (!cancelled) setQuotaSummary(res);
+      } catch {
+        // Silent — the hint is purely advisory.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [numaGet]);
+
+  // "Up to N would fit your remaining quota" — only shown when the raw
+  // cron projection would breach a remaining cap. binding cap = whichever
+  // of user/company remaining fills up first.
+  const fitHint = useMemo<string | null>(() => {
+    if (!quotaSummary || !cronExpression) return null;
+    const q = quotaSummary.quotas;
+    const rawProjected = projectMonthlyRuns(cronExpression);
+    const userRemaining = Math.max(0, q.maxRunsPerUserPerMonth - quotaSummary.user.runsPerMonth);
+    const companyRemaining = Math.max(0, q.maxRunsPerCompanyPerMonth - quotaSummary.company.runsPerMonth);
+    const bindingRemaining = Math.min(userRemaining, companyRemaining);
+    // Only show the tip when the cron alone would exceed the binding cap —
+    // otherwise Max-runs is purely a defensive limit and there's nothing
+    // useful to suggest.
+    if (rawProjected <= bindingRemaining) return null;
+    if (bindingRemaining === 0) {
+      return `Your remaining quota this month is 0 runs — pause an existing schedule to free up room.`;
+    }
+    const scopeLabel =
+      bindingRemaining === companyRemaining && companyRemaining < userRemaining ? 'company' : 'personal';
+    return `Set this to ${bindingRemaining.toLocaleString()} or less to fit your remaining ${scopeLabel} quota this month.`;
+  }, [quotaSummary, cronExpression]);
+
+  // Visual cue when the user's typed value still wouldn't fit.
+  const userExceedsBinding = useMemo<boolean>(() => {
+    if (!quotaSummary || maxRuns <= 0) return false;
+    const q = quotaSummary.quotas;
+    const userRemaining = Math.max(0, q.maxRunsPerUserPerMonth - quotaSummary.user.runsPerMonth);
+    const companyRemaining = Math.max(0, q.maxRunsPerCompanyPerMonth - quotaSummary.company.runsPerMonth);
+    return maxRuns > Math.min(userRemaining, companyRemaining);
+  }, [quotaSummary, maxRuns]);
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery) return workspaceUsers;
@@ -90,9 +142,11 @@ export const WorkflowStepPrompt = ({
 
   const removeEmail = useCallback(
     (email: string) => {
+      // The creator's email is locked — they always receive notifications.
+      if (email === currentUserEmail) return;
       onNotificationEmailsChange(notificationEmails.filter((e) => e !== email));
     },
-    [notificationEmails, onNotificationEmailsChange]
+    [notificationEmails, onNotificationEmailsChange, currentUserEmail]
   );
 
   return (
@@ -129,122 +183,121 @@ export const WorkflowStepPrompt = ({
           <Form.Text muted>{t('prompt.instructions.help')}</Form.Text>
         </div>
 
-        {/* Max runs — capped at 100 for the internal-only rollout. Productionising
-            this (raising the cap, per-customer overrides) is tracked separately. */}
+        {/* Max runs — enforced server-side by the per-user / per-company
+            monthly quota system. No FE hard cap. `0` is the unlimited
+            sentinel (no per-schedule cap; the run is still bounded by the
+            monthly quota). */}
         <div>
           <Form.Label>{t('prompt.maxRuns.label')}</Form.Label>
           <div className="d-flex align-items-center gap-3">
             <Form.Control
               type="number"
-              min={1}
-              max={100}
-              value={maxRuns || 100}
+              min={0}
+              value={maxRuns}
               onChange={(e) => {
                 const parsed = parseInt(e.target.value, 10);
-                if (Number.isNaN(parsed)) return;
-                onMaxRunsChange(Math.min(100, Math.max(1, parsed)));
+                onMaxRunsChange(Math.max(0, Number.isNaN(parsed) ? 0 : parsed));
               }}
               disabled={submitting}
               style={{ width: 120 }}
+              isInvalid={userExceedsBinding}
             />
+            <span className="text-muted small">{maxRuns === 0 ? t('prompt.maxRuns.unlimited') : ''}</span>
           </div>
           <Form.Text muted>{t('prompt.maxRuns.help')}</Form.Text>
+          {fitHint && (
+            <div className="small mt-1 text-warning-emphasis">
+              <i className="bi bi-info-circle me-1" />
+              {fitHint}
+            </div>
+          )}
         </div>
 
-        {/* Email notifications */}
+        {/* Email notifications — always on; admin chooses recipients (defaults to creator). */}
         <div>
-          <Form.Check
-            type="switch"
-            id="email-notifications"
-            label={t('prompt.emailNotifications.label')}
-            checked={emailNotifications}
-            onChange={(e) => onEmailNotificationsChange(e.target.checked)}
-            disabled={submitting}
-          />
+          <Form.Label>{t('prompt.emailNotifications.label')}</Form.Label>
+          <div>
+            <Form.Label className="small">{t('prompt.emailNotifications.recipientsLabel')}</Form.Label>
 
-          {/* Multi-email picker */}
-          {emailNotifications && (
-            <div className="mt-3 ms-1">
-              <Form.Label className="small">{t('prompt.emailNotifications.recipientsLabel')}</Form.Label>
-
-              {/* Selected emails as chips */}
-              {notificationEmails.length > 0 && (
-                <div className="d-flex flex-wrap gap-1 mb-2">
-                  {notificationEmails.map((email) => (
-                    <Badge
-                      key={email}
-                      bg="light"
-                      text="dark"
-                      className="d-flex align-items-center gap-1 px-2 py-1"
-                      style={{ fontSize: '0.8rem', border: '1px solid #dee2e6' }}
-                    >
-                      {email}
-                      {email === currentUserEmail && (
-                        <span className="text-muted" style={{ fontSize: '0.7rem' }}>
-                          {t('labels.you', '(you)')}
-                        </span>
-                      )}
+            {/* Selected emails as chips */}
+            {notificationEmails.length > 0 && (
+              <div className="d-flex flex-wrap gap-1 mb-2">
+                {notificationEmails.map((email) => (
+                  <Badge
+                    key={email}
+                    bg="light"
+                    text="dark"
+                    className="d-flex align-items-center gap-1 px-2 py-1"
+                    style={{ fontSize: '0.8rem', border: '1px solid #dee2e6' }}
+                  >
+                    {email}
+                    {email === currentUserEmail && (
+                      <span className="text-muted" style={{ fontSize: '0.7rem' }}>
+                        {t('labels.you', '(you, required)')}
+                      </span>
+                    )}
+                    {email !== currentUserEmail && (
                       <X size={12} style={{ cursor: 'pointer', marginLeft: 2 }} onClick={() => removeEmail(email)} />
-                    </Badge>
-                  ))}
+                    )}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* Search input */}
+            <div className="position-relative">
+              <Form.Control
+                type="text"
+                size="sm"
+                placeholder={t('prompt.emailNotifications.searchPlaceholder')}
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowDropdown(true);
+                }}
+                onFocus={() => setShowDropdown(true)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                disabled={submitting || usersLoading}
+              />
+
+              {usersLoading && (
+                <div className="text-muted small mt-1 d-flex align-items-center gap-1">
+                  <Spinner animation="border" size="sm" />
+                  {t('prompt.emailNotifications.loadingUsers')}
                 </div>
               )}
 
-              {/* Search input */}
-              <div className="position-relative">
-                <Form.Control
-                  type="text"
-                  size="sm"
-                  placeholder={t('prompt.emailNotifications.searchPlaceholder')}
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setShowDropdown(true);
-                  }}
-                  onFocus={() => setShowDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                  disabled={submitting || usersLoading}
-                />
-
-                {usersLoading && (
-                  <div className="text-muted small mt-1 d-flex align-items-center gap-1">
-                    <Spinner animation="border" size="sm" />
-                    {t('prompt.emailNotifications.loadingUsers')}
-                  </div>
-                )}
-
-                {/* Dropdown */}
-                {showDropdown && !usersLoading && filteredUsers.length > 0 && (
-                  <div
-                    className="position-absolute w-100 bg-white border rounded shadow-sm"
-                    style={{ top: '100%', zIndex: 10, maxHeight: 200, overflowY: 'auto' }}
-                  >
-                    {filteredUsers
-                      .filter((u) => !notificationEmails.includes(u.email))
-                      .map((user) => (
-                        <div
-                          key={user.email}
-                          className="px-3 py-2 d-flex justify-content-between align-items-center"
-                          style={{ cursor: 'pointer', fontSize: '0.85rem' }}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            addEmail(user.email);
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8f9fa')}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '')}
-                        >
-                          <span className="fw-medium">{user.name}</span>
-                          <span className="text-muted small">{user.email}</span>
-                        </div>
-                      ))}
-                    {filteredUsers.filter((u) => !notificationEmails.includes(u.email)).length === 0 && (
-                      <div className="px-3 py-2 text-muted small">{t('prompt.emailNotifications.noUsers')}</div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {/* Dropdown */}
+              {showDropdown && !usersLoading && filteredUsers.length > 0 && (
+                <div
+                  className="position-absolute w-100 bg-white border rounded shadow-sm"
+                  style={{ top: '100%', zIndex: 10, maxHeight: 200, overflowY: 'auto' }}
+                >
+                  {filteredUsers
+                    .filter((u) => !notificationEmails.includes(u.email))
+                    .map((user) => (
+                      <div
+                        key={user.email}
+                        className="px-3 py-2 d-flex justify-content-between align-items-center"
+                        style={{ cursor: 'pointer', fontSize: '0.85rem' }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          addEmail(user.email);
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8f9fa')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '')}
+                      >
+                        <span className="fw-medium">{user.name}</span>
+                        <span className="text-muted small">{user.email}</span>
+                      </div>
+                    ))}
+                  {filteredUsers.filter((u) => !notificationEmails.includes(u.email)).length === 0 && (
+                    <div className="px-3 py-2 text-muted small">{t('prompt.emailNotifications.noUsers')}</div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         {/* Timezone */}

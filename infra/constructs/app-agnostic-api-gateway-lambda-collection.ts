@@ -1,13 +1,16 @@
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import { CloudwatchMetricAlarm } from '@cdktf/provider-aws/lib/cloudwatch-metric-alarm';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { CloudwatchEventRule } from '@cdktf/provider-aws/lib/cloudwatch-event-rule';
 import { CloudwatchEventTarget } from '@cdktf/provider-aws/lib/cloudwatch-event-target';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
+import { S3BucketLifecycleConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-lifecycle-configuration';
 import { SchedulerSchedule } from '@cdktf/provider-aws/lib/scheduler-schedule';
 import { SchedulerScheduleGroup } from '@cdktf/provider-aws/lib/scheduler-schedule-group';
 import { ServerlessapplicationrepositoryCloudformationStack } from '@cdktf/provider-aws/lib/serverlessapplicationrepository-cloudformation-stack';
+import { SqsQueue } from '@cdktf/provider-aws/lib/sqs-queue';
 import { Construct } from 'constructs';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
 import { NumaLogGroup } from './numa-log-group';
@@ -372,16 +375,28 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       });
     }
 
-    // Admin Integration Settings API (GET list, PUT single)
+    // Admin Integration Settings API (GET list, PUT single, GET catalog)
+    // The catalog endpoint merges Pipedream + native connector state into a
+    // single canonical service list, so the lambda also needs read access to
+    // the data-connector settings table.
     const adminIntegrationEnv = {
       CLIENT_NAME: props.clientName,
       GLOBAL_TABLE_NAME: `${props.clientName}-global-integration-settings`,
+      CONNECTOR_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
+      // Admin-side native-availability gate. The catalog handler reads
+      // this and suppresses native rows entirely when off.
+      DATA_CONNECTORS_ENABLED: String(props.dataConnectorsEnabled ?? false),
     } as Record<string, string>;
     const adminIntegrationPolicy = [
       {
         effect: 'Allow',
         actions: ['dynamodb:GetItem', 'dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
         resources: [`arn:aws:dynamodb:*:*:table/${props.clientName}-global-integration-settings`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:Scan'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSettingsTableName}`],
       },
     ];
 
@@ -394,6 +409,15 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: adminIntegrationEnv,
       additionalPolicyStatements: adminIntegrationPolicy,
       route: { verb: 'GET', path: 'settings/integrations' },
+    });
+    this.addLambdaFunction(this, 'admin-integration-settings-catalog', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-integration-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminIntegrationEnv,
+      additionalPolicyStatements: adminIntegrationPolicy,
+      route: { verb: 'GET', path: 'settings/integrations/catalog' },
     });
     this.addLambdaFunction(this, 'admin-integration-settings-put', {
       addAuthorizer: true,
@@ -417,14 +441,28 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSettingsTableName}`],
       },
     ];
+    // GET also lists the ext-api-doc bucket to report which connectors have
+    // their per-slug docs deployed. PUT doesn't need this.
+    const adminDataConnectorGetEnv = {
+      ...adminDataConnectorEnv,
+      EXT_API_DOC_BUCKET_NAME: props.extApiDocBucketName,
+    };
+    const adminDataConnectorGetPolicy = [
+      ...adminDataConnectorPolicy,
+      {
+        effect: 'Allow',
+        actions: ['s3:ListBucket'],
+        resources: [props.extApiDocBucketArn],
+      },
+    ];
 
     this.addLambdaFunction(this, 'admin-data-connector-settings-get', {
       addAuthorizer: true,
       lambdaDirectory: 'node/admin-data-connector-settings',
       runtime: 'nodejs22.x',
       handler: 'index.handler',
-      environment: adminDataConnectorEnv,
-      additionalPolicyStatements: adminDataConnectorPolicy,
+      environment: adminDataConnectorGetEnv,
+      additionalPolicyStatements: adminDataConnectorGetPolicy,
       route: { verb: 'GET', path: 'settings/data-connectors' },
     });
     this.addLambdaFunction(this, 'admin-data-connector-settings-put', {
@@ -506,8 +544,32 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ...(props.perClientSchedulingMinIntervalMinutes != null && {
         SCHEDULING_MIN_INTERVAL_MINUTES: String(props.perClientSchedulingMinIntervalMinutes),
       }),
-      ...(props.globalSchedulingMinIntervalMinutes != null && {
-        GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: String(props.globalSchedulingMinIntervalMinutes),
+      ...(props.scheduleQuotas?.maxRunsPerCompanyPerMonth != null && {
+        SCHEDULE_QUOTA_MAX_RUNS_PER_COMPANY_PER_MONTH: String(props.scheduleQuotas.maxRunsPerCompanyPerMonth),
+      }),
+      ...(props.scheduleQuotas?.maxRunsPerUserPerMonth != null && {
+        SCHEDULE_QUOTA_MAX_RUNS_PER_USER_PER_MONTH: String(props.scheduleQuotas.maxRunsPerUserPerMonth),
+      }),
+      ...(props.scheduleQuotas?.maxConcurrentActiveSchedulesPerCompany != null && {
+        SCHEDULE_QUOTA_MAX_CONCURRENT_ACTIVE_SCHEDULES_PER_COMPANY: String(
+          props.scheduleQuotas.maxConcurrentActiveSchedulesPerCompany
+        ),
+      }),
+      ...(props.scheduleQuotas?.maxConcurrentActiveSchedulesPerUser != null && {
+        SCHEDULE_QUOTA_MAX_CONCURRENT_ACTIVE_SCHEDULES_PER_USER: String(
+          props.scheduleQuotas.maxConcurrentActiveSchedulesPerUser
+        ),
+      }),
+      ...(props.scheduleQuotas?.requireApprovalAboveUserCap != null && {
+        SCHEDULE_QUOTA_REQUIRE_APPROVAL_ABOVE_USER_CAP: String(props.scheduleQuotas.requireApprovalAboveUserCap),
+      }),
+      ...(props.scheduleQuotas?.maxTriggerRunsPerCompanyPerMonth != null && {
+        SCHEDULE_QUOTA_MAX_TRIGGER_RUNS_PER_COMPANY_PER_MONTH: String(
+          props.scheduleQuotas.maxTriggerRunsPerCompanyPerMonth
+        ),
+      }),
+      ...(props.scheduleQuotas?.maxTriggerRunsPerUserPerMonth != null && {
+        SCHEDULE_QUOTA_MAX_TRIGGER_RUNS_PER_USER_PER_MONTH: String(props.scheduleQuotas.maxTriggerRunsPerUserPerMonth),
       }),
     } as Record<string, string>;
     const adminSchedulingPolicy = [
@@ -1054,7 +1116,17 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     const dataConnectorsPolicy = [
       {
         effect: 'Allow',
-        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:Query',
+          // DeleteItem needed by the per-user disconnect route
+          // (DELETE /api/data-connectors/{connector_id}) so users can
+          // actually clear their connection rows from the unified
+          // Integrations page.
+          'dynamodb:DeleteItem',
+          'dynamodb:UpdateItem',
+        ],
         resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
       },
       {
@@ -1069,6 +1141,9 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           'secretsmanager:PutSecretValue',
           'secretsmanager:DescribeSecret',
           'secretsmanager:GetSecretValue',
+          // DeleteSecret needed by the disconnect route so the SM payload
+          // is cleaned up alongside the DDB row.
+          'secretsmanager:DeleteSecret',
         ],
         resources: ['*'],
       },
@@ -1106,6 +1181,19 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: dataConnectorsEnv,
       additionalPolicyStatements: dataConnectorsPolicy,
       route: { verb: 'POST', path: 'data-connectors/connect' },
+    });
+
+    // Per-user disconnect: removes the user's row + cleans up the secret in
+    // SM. Used by the unified Integrations page so a user-side disconnect
+    // actually clears the data-connector row (otherwise the row keeps the
+    // connector "connected" in the UI even after OAuth revoke / PAT delete).
+    this.addLambdaFunction(this, 'data-connectors-disconnect', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'DELETE', path: 'data-connectors/{connector_id}' },
     });
 
     this.addLambdaFunction(this, 'data-connectors-synergy-jobs', {
@@ -1564,12 +1652,75 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
+    // FEAT-105 round-2 — DLQ for the runner. Catches async invocation failures
+    // (EventBridge fires, throws inside the lambda) so we don't lose the run
+    // record. 14-day retention is the SQS max; pair with the alarm below.
+    const agentScheduleRunnerDlq = new SqsQueue(this, 'agent-schedule-runner-dlq', {
+      name: `${props.clientName}-agent-schedule-runner-dlq`,
+      messageRetentionSeconds: 14 * 24 * 60 * 60, // 14 days
+      tags: {
+        Purpose: 'agent-schedule-runner-dlq',
+        ClientName: props.clientName,
+      },
+    });
+
+    // FEAT-105 round-2 — alarm when ANY message lands in the DLQ. SNS topic
+    // intentionally not wired here — Arcanum's existing CloudWatch alarms
+    // surface to the same notification channel via account-level hookup.
+    new CloudwatchMetricAlarm(this, 'agent-schedule-runner-dlq-alarm', {
+      alarmName: `${props.clientName}-agent-schedule-runner-dlq-not-empty`,
+      alarmDescription: 'Agent schedule runner produced a DLQ message — investigate the failed run.',
+      namespace: 'AWS/SQS',
+      metricName: 'ApproximateNumberOfMessagesVisible',
+      dimensions: { QueueName: agentScheduleRunnerDlq.name },
+      statistic: 'Maximum',
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: 'GreaterThanOrEqualToThreshold',
+      treatMissingData: 'notBreaching',
+    });
+
+    // FEAT-105 round-2 — 90-day retention on the scheduled-runs S3 prefix.
+    // Keeps the audit history bounded; the schedule record itself stays in
+    // DynamoDB. Same outputs bucket holds other prefixes (chat uploads, app
+    // artifacts) — using a prefixed rule so we don't expire those by accident.
+    new S3BucketLifecycleConfiguration(this, 'scheduled-runs-lifecycle', {
+      bucket: props.outputsBucketName,
+      rule: [
+        {
+          id: 'expire-scheduled-runs-90d',
+          status: 'Enabled',
+          filter: [{ prefix: 'numa-chat/scheduled-runs/' }],
+          expiration: [{ days: 90 }],
+        },
+      ],
+    });
+
     // Runner Lambda handles EventBridge + manual executions
     this.agentScheduleRunnerLambda = this.addLambdaFunction(this, 'agent-schedule-runner', {
       addAuthorizer: true,
       lambdaDirectory: 'node/agent-schedule-runner',
       runtime: 'nodejs22.x',
       handler: 'index.handler',
+      // FEAT-105 — cap parallelism so a noon convergence spike can't take down
+      // the workspace agent proxy or AgentCore. Bumped 10→50 because the
+      // documented 100-concurrent-automations-per-tenant default was
+      // throttling at 10 — a tenant with ~30 hourly-aligned schedules at the
+      // top of the hour would lose any past the 10th to the DLQ, with no
+      // owner-visible signal.
+      //
+      // TODO(FEAT-105 round-3): investigate moving the runner behind an SQS
+      // queue with event-source-mapping. That gives us smoothing across
+      // bursts (no throttle → no DLQ → no missed runs), retain the
+      // concurrency cap as the queue's batchSize × maxConcurrency, and free
+      // us from picking a single number that fits all tenants. Trade-off:
+      // adds queue latency to every fire, partial-batch-failure handling,
+      // and a new infra surface area. Worth it once we see real throttle
+      // events on this DLQ alarm in production.
+      reservedConcurrentExecutions: 50,
+      // FEAT-105 round-2 — async failures land in the DLQ (alarm above).
+      deadLetterTargetArn: agentScheduleRunnerDlq.arn,
       timeout: 900,
       route: {
         verb: 'POST',
@@ -1588,6 +1739,21 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         // Agent tables for refreshing stale snapshots before each scheduled run
         WORKSPACE_AGENTS_TABLE_NAME: props.workspaceAgentsTableName,
         USER_AGENTS_TABLE_NAME: props.userAgentsTableName,
+        // FEAT-143 — unified integrations payload needs admin preferred_method,
+        // user native connector state, and the pipedream relay arn to resolve
+        // per-slug method at run time. Mirrors workspace-agent-construct wiring.
+        GLOBAL_INTEGRATION_SETTINGS_TABLE_NAME: `${props.clientName}-global-integration-settings`,
+        DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
+        DATA_CONNECTORS_ENABLED: String(props.dataConnectorsEnabled ?? false),
+        // Mirrored into the workspace-agent request body's `featureFlags`
+        // so scheduled runs register the same MCP servers (connectors, vault)
+        // that chat does. Without these, native connector tools are
+        // unavailable in scheduled runs even when the user has them authed.
+        // Vault MCP is gated on DATA_CONNECTORS_ENABLED above (TASK-146).
+        OAUTH_INTEGRATIONS_ENABLED: String(props.oauthIntegrationsEnabled ?? false),
+        ...(props.pipedreamRelayLambdaArn && {
+          PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn,
+        }),
         // Centralized email sender (deployer account, cross-account invocation)
         ...(props.emailSenderLambdaArn && {
           EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn,
@@ -1596,8 +1762,52 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         ...(props.cognitoUserPoolId && {
           USER_POOL_ID: props.cognitoUserPoolId,
         }),
+        // Trigger-quota enforcement moved here from the dispatcher — runner
+        // does the cap-check + counter increment AFTER `claimRunSlot` so
+        // counts only tick for fires that actually run. Needs the same
+        // env block as agent-schedules to satisfy `resolveEffectiveQuotas`.
+        SCHEDULING_SETTINGS_TABLE_NAME: props.schedulingSettingsTableName,
+        ...(props.scheduleQuotas?.maxRunsPerCompanyPerMonth != null && {
+          SCHEDULE_QUOTA_MAX_RUNS_PER_COMPANY_PER_MONTH: String(props.scheduleQuotas.maxRunsPerCompanyPerMonth),
+        }),
+        ...(props.scheduleQuotas?.maxRunsPerUserPerMonth != null && {
+          SCHEDULE_QUOTA_MAX_RUNS_PER_USER_PER_MONTH: String(props.scheduleQuotas.maxRunsPerUserPerMonth),
+        }),
+        ...(props.scheduleQuotas?.maxConcurrentActiveSchedulesPerCompany != null && {
+          SCHEDULE_QUOTA_MAX_CONCURRENT_ACTIVE_SCHEDULES_PER_COMPANY: String(
+            props.scheduleQuotas.maxConcurrentActiveSchedulesPerCompany
+          ),
+        }),
+        ...(props.scheduleQuotas?.maxConcurrentActiveSchedulesPerUser != null && {
+          SCHEDULE_QUOTA_MAX_CONCURRENT_ACTIVE_SCHEDULES_PER_USER: String(
+            props.scheduleQuotas.maxConcurrentActiveSchedulesPerUser
+          ),
+        }),
+        ...(props.scheduleQuotas?.requireApprovalAboveUserCap != null && {
+          SCHEDULE_QUOTA_REQUIRE_APPROVAL_ABOVE_USER_CAP: String(props.scheduleQuotas.requireApprovalAboveUserCap),
+        }),
+        ...(props.perClientSchedulingMinIntervalMinutes != null && {
+          SCHEDULING_MIN_INTERVAL_MINUTES: String(props.perClientSchedulingMinIntervalMinutes),
+        }),
+        ...(props.scheduleQuotas?.maxTriggerRunsPerCompanyPerMonth != null && {
+          SCHEDULE_QUOTA_MAX_TRIGGER_RUNS_PER_COMPANY_PER_MONTH: String(
+            props.scheduleQuotas.maxTriggerRunsPerCompanyPerMonth
+          ),
+        }),
+        ...(props.scheduleQuotas?.maxTriggerRunsPerUserPerMonth != null && {
+          SCHEDULE_QUOTA_MAX_TRIGGER_RUNS_PER_USER_PER_MONTH: String(
+            props.scheduleQuotas.maxTriggerRunsPerUserPerMonth
+          ),
+        }),
       },
       additionalPolicyStatements: [
+        // FEAT-105 round-2 — DLQ permission. Lambda needs SendMessage so async
+        // failures land in the DLQ instead of being silently dropped.
+        {
+          effect: 'Allow',
+          actions: ['sqs:SendMessage'],
+          resources: [agentScheduleRunnerDlq.arn],
+        },
         {
           effect: 'Allow',
           actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:GetItem', 'dynamodb:Query'],
@@ -1649,6 +1859,28 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           actions: ['dynamodb:Query'],
           resources: [`arn:aws:dynamodb:*:*:table/numa-${props.clientName}-knowledge-bases`],
         },
+        // FEAT-143 — unified integrations payload reads admin preferred_method
+        // from the global-integration-settings table (Scan) and per-user native
+        // connector rows from data-connectors (Query keyed by user_id).
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Scan'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.clientName}-global-integration-settings`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
+        },
+        // GetItem for Level-3 admin overrides (read on each invocation so
+        // admin toggle changes apply immediately). UpdateItem for the
+        // atomic trigger-counter rows (`trigger_count_*`) the runner
+        // increments via TransactWriteItems when an event-trigger fires.
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.schedulingSettingsTableName}`],
+        },
         // Cognito lookup for resolving user email when notification_email is missing on schedule record
         ...(props.cognitoUserPoolArn
           ? [
@@ -1672,6 +1904,34 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
+    // FEAT-105 — DLQ for the connector-event-dispatcher. The dispatcher runs
+    // off EventBridge async invocations. Without a DLQ, any unhandled throw
+    // (vault read fails, Gmail API 5xx, TransactWrite throttle on the
+    // trigger-counter row) is invisible — the Gmail event is lost and the
+    // owner's automation silently drops fires. Mirrors the runner's pattern.
+    const connectorEventDispatcherDlq = new SqsQueue(this, 'connector-event-dispatcher-dlq', {
+      name: `${props.clientName}-connector-event-dispatcher-dlq`,
+      messageRetentionSeconds: 14 * 24 * 60 * 60, // 14 days
+      tags: {
+        Purpose: 'connector-event-dispatcher-dlq',
+        ClientName: props.clientName,
+      },
+    });
+
+    new CloudwatchMetricAlarm(this, 'connector-event-dispatcher-dlq-alarm', {
+      alarmName: `${props.clientName}-connector-event-dispatcher-dlq-not-empty`,
+      alarmDescription: 'Connector event dispatcher produced a DLQ message — a Gmail trigger event was lost.',
+      namespace: 'AWS/SQS',
+      metricName: 'ApproximateNumberOfMessagesVisible',
+      dimensions: { QueueName: connectorEventDispatcherDlq.name },
+      statistic: 'Maximum',
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: 'GreaterThanOrEqualToThreshold',
+      treatMissingData: 'notBreaching',
+    });
+
     // Connector Event Dispatcher — routes connector events to user automation triggers
     const connectorEventDispatcherLambda = this.addLambdaFunction(this, 'connector-event-dispatcher', {
       addAuthorizer: false,
@@ -1679,6 +1939,8 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       runtime: 'nodejs22.x',
       handler: 'index.handler',
       timeout: 60,
+      // Async failures (throws past Lambda's automatic 2 retries) land here.
+      deadLetterTargetArn: connectorEventDispatcherDlq.arn,
       environment: {
         CLIENT_NAME: props.clientName,
         DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
@@ -1687,20 +1949,80 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         // Used by the Pipedream branch to fetch the full event payload that
         // the receiver lambda persisted under connector-events/pipedream/...
         OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+        SCHEDULING_SETTINGS_TABLE_NAME: props.schedulingSettingsTableName,
+        // Per-client (Level-2) quota overrides. The dispatcher only consumes
+        // the trigger-quota fields at runtime, but `resolveEffectiveQuotas`
+        // validates the full Level-2 record up-front (fail-loud). Pass the
+        // complete set so we don't throw on every Gmail/pipedream event the
+        // moment a single field is missing — same wiring as agent-schedules
+        // above.
+        ...(props.scheduleQuotas?.maxRunsPerCompanyPerMonth != null && {
+          SCHEDULE_QUOTA_MAX_RUNS_PER_COMPANY_PER_MONTH: String(props.scheduleQuotas.maxRunsPerCompanyPerMonth),
+        }),
+        ...(props.scheduleQuotas?.maxRunsPerUserPerMonth != null && {
+          SCHEDULE_QUOTA_MAX_RUNS_PER_USER_PER_MONTH: String(props.scheduleQuotas.maxRunsPerUserPerMonth),
+        }),
+        ...(props.scheduleQuotas?.maxConcurrentActiveSchedulesPerCompany != null && {
+          SCHEDULE_QUOTA_MAX_CONCURRENT_ACTIVE_SCHEDULES_PER_COMPANY: String(
+            props.scheduleQuotas.maxConcurrentActiveSchedulesPerCompany
+          ),
+        }),
+        ...(props.scheduleQuotas?.maxConcurrentActiveSchedulesPerUser != null && {
+          SCHEDULE_QUOTA_MAX_CONCURRENT_ACTIVE_SCHEDULES_PER_USER: String(
+            props.scheduleQuotas.maxConcurrentActiveSchedulesPerUser
+          ),
+        }),
+        ...(props.scheduleQuotas?.requireApprovalAboveUserCap != null && {
+          SCHEDULE_QUOTA_REQUIRE_APPROVAL_ABOVE_USER_CAP: String(props.scheduleQuotas.requireApprovalAboveUserCap),
+        }),
+        ...(props.perClientSchedulingMinIntervalMinutes != null && {
+          SCHEDULING_MIN_INTERVAL_MINUTES: String(props.perClientSchedulingMinIntervalMinutes),
+        }),
+        ...(props.scheduleQuotas?.maxTriggerRunsPerCompanyPerMonth != null && {
+          SCHEDULE_QUOTA_MAX_TRIGGER_RUNS_PER_COMPANY_PER_MONTH: String(
+            props.scheduleQuotas.maxTriggerRunsPerCompanyPerMonth
+          ),
+        }),
+        ...(props.scheduleQuotas?.maxTriggerRunsPerUserPerMonth != null && {
+          SCHEDULE_QUOTA_MAX_TRIGGER_RUNS_PER_USER_PER_MONTH: String(
+            props.scheduleQuotas.maxTriggerRunsPerUserPerMonth
+          ),
+        }),
       },
       additionalPolicyStatements: [
+        // DLQ permission. Lambda needs SendMessage so async failures land in
+        // the DLQ instead of being silently dropped after the 2 automatic
+        // retries.
+        {
+          effect: 'Allow',
+          actions: ['sqs:SendMessage'],
+          resources: [connectorEventDispatcherDlq.arn],
+        },
         {
           effect: 'Allow',
           actions: ['dynamodb:Scan', 'dynamodb:UpdateItem'],
           resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
         },
         {
+          // Query for matching event schedules + tenant-wide trigger-load
+          // aggregation; UpdateItem to increment recent_runs / total_runs and
+          // stamp last_quota_blocked_month on quota-block notifications.
           effect: 'Allow',
-          actions: ['dynamodb:Query'],
+          actions: ['dynamodb:Query', 'dynamodb:UpdateItem'],
           resources: [
             `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
             `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/*`,
           ],
+        },
+        {
+          // GetItem for Level-3 admin overrides; UpdateItem for the atomic
+          // trigger-counter rows (`trigger_count_company_<YYYY-MM>` and
+          // `trigger_count_user_<sub>_<YYYY-MM>`) that gate cap enforcement
+          // via TransactWriteItems. Without UpdateItem the transaction
+          // throws AccessDeniedException and every Gmail trigger fails.
+          effect: 'Allow',
+          actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.schedulingSettingsTableName}`],
         },
         {
           effect: 'Allow',
@@ -1769,6 +2091,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
             actions: ['lambda:InvokeFunction'],
             resources: [this.agentScheduleRunnerLambda.arn],
           },
+          // FEAT-105 — EB Scheduler must be able to write to the DLQ when
+          // synchronous Lambda invocations fail past their retry budget.
+          // Without this grant, DeadLetterConfig is silently a no-op.
+          {
+            effect: 'Allow',
+            actions: ['sqs:SendMessage'],
+            resources: [agentScheduleRunnerDlq.arn],
+          },
         ],
       }).json,
     });
@@ -1792,12 +2122,17 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
       AGENT_SCHEDULE_EXECUTION_ROLE_ARN: agentScheduleExecutionRole.arn,
       AGENT_SCHEDULE_RUNNER_ARN: this.agentScheduleRunnerLambda.arn,
+      // FEAT-105 — every EB Scheduler target carries a DLQ + retry policy so
+      // sync invocations that fail after the runner stopped swallowing errors
+      // surface in the same DLQ as the lambda's async-invocation failures.
+      AGENT_SCHEDULE_DLQ_ARN: agentScheduleRunnerDlq.arn,
       SCHEDULING_SETTINGS_TABLE_NAME: props.schedulingSettingsTableName,
+      // Email-sender + Cognito wiring — used when an admin pauses / locks
+      // another user's schedule, to notify the owner.
+      ...(props.emailSenderLambdaArn && { EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn }),
+      ...(props.cognitoUserPoolId && { USER_POOL_ID: props.cognitoUserPoolId }),
       ...(props.perClientSchedulingMinIntervalMinutes != null && {
         SCHEDULING_MIN_INTERVAL_MINUTES: String(props.perClientSchedulingMinIntervalMinutes),
-      }),
-      ...(props.globalSchedulingMinIntervalMinutes != null && {
-        GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: String(props.globalSchedulingMinIntervalMinutes),
       }),
       // Pipedream-trigger lifecycle. Both empty when integrations are disabled
       // for this client; the lambda gracefully rejects pipedream-trigger
@@ -1806,11 +2141,42 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn,
         PIPEDREAM_WEBHOOK_URL: `https://${props.domainName}/api/webhooks/pipedream-events/${props.cloudfrontSharedSecret}`,
       }),
+      ...(props.scheduleQuotas?.maxRunsPerCompanyPerMonth != null && {
+        SCHEDULE_QUOTA_MAX_RUNS_PER_COMPANY_PER_MONTH: String(props.scheduleQuotas.maxRunsPerCompanyPerMonth),
+      }),
+      ...(props.scheduleQuotas?.maxRunsPerUserPerMonth != null && {
+        SCHEDULE_QUOTA_MAX_RUNS_PER_USER_PER_MONTH: String(props.scheduleQuotas.maxRunsPerUserPerMonth),
+      }),
+      ...(props.scheduleQuotas?.maxConcurrentActiveSchedulesPerCompany != null && {
+        SCHEDULE_QUOTA_MAX_CONCURRENT_ACTIVE_SCHEDULES_PER_COMPANY: String(
+          props.scheduleQuotas.maxConcurrentActiveSchedulesPerCompany
+        ),
+      }),
+      ...(props.scheduleQuotas?.maxConcurrentActiveSchedulesPerUser != null && {
+        SCHEDULE_QUOTA_MAX_CONCURRENT_ACTIVE_SCHEDULES_PER_USER: String(
+          props.scheduleQuotas.maxConcurrentActiveSchedulesPerUser
+        ),
+      }),
+      ...(props.scheduleQuotas?.requireApprovalAboveUserCap != null && {
+        SCHEDULE_QUOTA_REQUIRE_APPROVAL_ABOVE_USER_CAP: String(props.scheduleQuotas.requireApprovalAboveUserCap),
+      }),
+      ...(props.scheduleQuotas?.maxTriggerRunsPerCompanyPerMonth != null && {
+        SCHEDULE_QUOTA_MAX_TRIGGER_RUNS_PER_COMPANY_PER_MONTH: String(
+          props.scheduleQuotas.maxTriggerRunsPerCompanyPerMonth
+        ),
+      }),
+      ...(props.scheduleQuotas?.maxTriggerRunsPerUserPerMonth != null && {
+        SCHEDULE_QUOTA_MAX_TRIGGER_RUNS_PER_USER_PER_MONTH: String(props.scheduleQuotas.maxTriggerRunsPerUserPerMonth),
+      }),
     } as Record<string, string>;
 
     const agentSchedulesPolicy = [
       {
         effect: 'Allow',
+        // No `dynamodb:Scan` — tenant-wide aggregation uses Query against
+        // `tenant-id-index` (see scanTenantSchedulesForQuota despite its
+        // legacy name). If you find yourself wanting Scan here, add a GSI
+        // instead.
         actions: [
           'dynamodb:Query',
           'dynamodb:GetItem',
@@ -1840,7 +2206,10 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       },
       {
         effect: 'Allow',
-        actions: ['dynamodb:GetItem'],
+        // GetItem for level-3 quota override reads + UpdateItem for the
+        // quota-warning email dedupe rows (`quota_warn_user_<sub>` and
+        // `quota_warn_company` keys).
+        actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
         resources: [`arn:aws:dynamodb:*:*:table/${props.schedulingSettingsTableName}`],
       },
       // Pipedream relay invocation for trigger lifecycle. When the relay isn't
@@ -1852,6 +2221,28 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
               effect: 'Allow' as const,
               actions: ['lambda:InvokeFunction'],
               resources: [props.pipedreamRelayLambdaArn],
+            },
+          ]
+        : []),
+      // Email-sender + Cognito-lookup grants for the admin-paused-your-
+      // automation notification path. Wrapped in spreads so they're only
+      // attached when the corresponding props exist (matches the env-var
+      // gating above).
+      ...(props.emailSenderLambdaArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['lambda:InvokeFunction'],
+              resources: [props.emailSenderLambdaArn],
+            },
+          ]
+        : []),
+      ...(props.cognitoUserPoolArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['cognito-idp:AdminGetUser'],
+              resources: [props.cognitoUserPoolArn],
             },
           ]
         : []),
@@ -1926,77 +2317,11 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       timeout: 900, // 15 minutes for streaming
     });
 
-    // Application Scheduler - handles scheduled application runs
-    this.addLambdaFunction(this, 'application-scheduler', {
-      addAuthorizer: false, // Invoked by EventBridge Scheduler only
-      lambdaDirectory: 'node/application-scheduler',
-      runtime: 'nodejs22.x',
-      handler: 'index.handler',
-      environment: {
-        CLIENT_NAME: props.clientName,
-        REGION: props.region,
-        AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
-        SCHEDULE_RUNNER_SECRET: props.agentScheduleRunnerSecret || 'placeholder',
-        OUTPUTS_BUCKET_NAME: props.outputsBucketName,
-      },
-      additionalPolicyStatements: [
-        {
-          effect: 'Allow',
-          actions: ['dynamodb:Query', 'dynamodb:UpdateItem'],
-          resources: [
-            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
-            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/*`,
-          ],
-        },
-        {
-          effect: 'Allow',
-          actions: ['states:StartExecution', 'states:DescribeExecution'],
-          resources: ['*'], // Step Function ARNs vary by app
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:GetObject', 's3:PutObject'],
-          resources: [`arn:aws:s3:::${props.outputsBucketName}/*`],
-        },
-      ],
-    });
-
-    // Data Sync Scheduler - handles scheduled data synchronization
-    this.addLambdaFunction(this, 'data-sync-scheduler', {
-      addAuthorizer: false, // Invoked by EventBridge Scheduler only
-      lambdaDirectory: 'node/data-sync-scheduler',
-      runtime: 'nodejs22.x',
-      handler: 'index.handler',
-      environment: {
-        CLIENT_NAME: props.clientName,
-        REGION: props.region,
-        AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
-        SCHEDULE_RUNNER_SECRET: props.agentScheduleRunnerSecret || 'placeholder',
-        DATA_BUCKET_NAME: props.dataBucketName,
-        BEDROCK_KB_ID: props.bedrockKbId || '',
-        BEDROCK_DATA_SOURCE_ID: props.bedrockDataSourceId || '',
-      },
-      additionalPolicyStatements: [
-        {
-          effect: 'Allow',
-          actions: ['dynamodb:Query', 'dynamodb:UpdateItem'],
-          resources: [
-            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
-            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/*`,
-          ],
-        },
-        {
-          effect: 'Allow',
-          actions: ['bedrock:StartIngestionJob', 'bedrock:GetIngestionJob', 'bedrock:ListIngestionJobs'],
-          resources: ['*'],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:GetObject', 's3:PutObject', 's3:ListBucket', 's3:CopyObject'],
-          resources: [`arn:aws:s3:::${props.dataBucketName}`, `arn:aws:s3:::${props.dataBucketName}/*`],
-        },
-      ],
-    });
+    // application-scheduler and data-sync-scheduler were removed as part of
+    // FEAT-105. They were deployed but never wired to any EventBridge target —
+    // user-facing recurrence goes exclusively through `agent-schedules` /
+    // `agent-schedule-runner`. Application and data-sync scheduling will be
+    // re-added under the same agent-schedules surface area when needed.
 
     // Users API - list workspace users (Cognito + profile enrichment from chat-settings)
     if (props.cognitoUserPoolId && props.cognitoUserPoolArn) {
@@ -2443,6 +2768,21 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   perClientSchedulingMinIntervalMinutes?: number;
   /** Global scheduling minimum interval (minutes), from platform-settings. */
   globalSchedulingMinIntervalMinutes?: number;
+  /**
+   * Per-client + global scheduled-run quota overrides (Level 2 of the
+   * quota chain). Sourced from the platform-settings record in the
+   * deployer `numa-client-config` table — the sole source of truth.
+   * Lambdas throw at runtime if any required value is missing.
+   */
+  scheduleQuotas?: {
+    maxRunsPerCompanyPerMonth?: number;
+    maxRunsPerUserPerMonth?: number;
+    maxTriggerRunsPerCompanyPerMonth?: number;
+    maxTriggerRunsPerUserPerMonth?: number;
+    maxConcurrentActiveSchedulesPerCompany?: number;
+    maxConcurrentActiveSchedulesPerUser?: number;
+    requireApprovalAboveUserCap?: boolean;
+  };
   /** MFA settings table name for device remember duration. */
   mfaSettingsTableName: string;
   /** Cognito User Pool ID — needed for admin MFA reset operations. */
@@ -2453,10 +2793,26 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   dataConnectorsTableName: string;
   /** Data connector settings table name for admin feature flags. */
   dataConnectorsSettingsTableName: string;
+  /** ext-api-doc bucket name — admin-data-connector-settings-get reads it to
+   *  tell the frontend which per-slug docs are deployed and therefore which
+   *  connectors can be enabled. */
+  extApiDocBucketName: string;
+  /** ext-api-doc bucket ARN — used to grant the GET lambda s3:ListBucket. */
+  extApiDocBucketArn: string;
   /** Capabilities table name for admin feature flag overrides. */
   capabilitiesTableName: string;
   /** Data connector selection configs table name. */
   dataConnectorsSyncConfigsTableName: string;
+  /** Admin-side gate. When false, the unified integrations catalog returns
+   *  no native rows; admins can't add them and users don't see them. The
+   *  flag is the only way to suppress natives entirely — there's no
+   *  per-chat user toggle anymore (per-integration enable replaces it). */
+  dataConnectorsEnabled?: boolean;
+  /** Forwarded as `featureFlags.OAUTH_INTEGRATIONS_ENABLED` on the
+   *  workspace-agent request body fired by the schedule runner. The
+   *  `connectors` MCP in `sdk_config.py` is gated on this flag, so leaving
+   *  it false silently breaks native connector tools in scheduled runs. */
+  oauthIntegrationsEnabled?: boolean;
   /** Connector events table name (permanent event records). */
   connectorEventsTableName: string;
   /** Connector event configs table name (admin toggle/tags per event type). */

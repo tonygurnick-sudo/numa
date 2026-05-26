@@ -10,10 +10,48 @@ import { authService } from './authService';
  */
 
 export interface PlatformSettings {
+  /** Existing min interval (minutes) — Level 1 floor. */
   schedulingMinIntervalMinutes?: number;
+  /** Hard ceiling on scheduled (cron) runs per company per month. */
+  maxRunsPerCompanyPerMonth?: number;
+  /** Cap on scheduled (cron) runs per user per month. Above this triggers admin approval. */
+  maxRunsPerUserPerMonth?: number;
+  /** Cap on event-trigger fires per company per month (actuals). */
+  maxTriggerRunsPerCompanyPerMonth?: number;
+  /** Cap on event-trigger fires per user per month (actuals). */
+  maxTriggerRunsPerUserPerMonth?: number;
+  /** Cap on simultaneously active automations (cron + triggers) across the tenant. */
+  maxConcurrentActiveSchedulesPerCompany?: number;
+  /** Cap on simultaneously active automations per user (cron + triggers). */
+  maxConcurrentActiveSchedulesPerUser?: number;
+  /** If true, schedules above the user cap are routed to admin approval. Default true. */
+  requireApprovalAboveUserCap?: boolean;
 }
 
 const PLATFORM_SETTINGS_KEY = 'platform-settings';
+
+/**
+ * Bootstrap seed values, used ONLY when the platform-settings record in
+ * DynamoDB is missing or has incomplete fields (e.g. a fresh deployer
+ * account that has never opened the Platform Settings page). The runtime
+ * authority is the DynamoDB record itself — these constants are not used
+ * once the record is fully populated.
+ *
+ * The values mirror what the original PLATFORM_DEFAULT_QUOTAS in
+ * `lib/schedule-load.ts` used to fall back to. They no longer exist there
+ * because lambdas now throw if the record is incomplete (fail loud rather
+ * than silently masking a misconfiguration).
+ */
+export const PLATFORM_QUOTA_INITIAL_VALUES = {
+  schedulingMinIntervalMinutes: 60,
+  maxRunsPerCompanyPerMonth: 2_000,
+  maxRunsPerUserPerMonth: 750,
+  maxTriggerRunsPerCompanyPerMonth: 1_000,
+  maxTriggerRunsPerUserPerMonth: 100,
+  maxConcurrentActiveSchedulesPerCompany: 1_000,
+  maxConcurrentActiveSchedulesPerUser: 100,
+  requireApprovalAboveUserCap: true,
+} as const;
 
 function getCredentialsProvider() {
   if (typeof window === 'undefined') return undefined;
@@ -51,9 +89,16 @@ export const platformSettingsService = {
 
   async save(settings: PlatformSettings): Promise<void> {
     const credentials = getCredentialsProvider();
+    // Strip undefined values — putClientConfig writes via DynamoDB
+    // DocumentClient which rejects undefined unless `removeUndefinedValues`
+    // is set on its marshall options. The library doesn't expose that knob,
+    // so we drop the keys here. An empty field on the form should mean
+    // "inherit platform default", which is exactly what an absent attribute
+    // gives us.
+    const cleaned = Object.fromEntries(Object.entries(settings).filter(([, v]) => v !== undefined)) as PlatformSettings;
     await putClientConfig({
       clientName: PLATFORM_SETTINGS_KEY,
-      config: settings,
+      config: cleaned,
       credentials,
     });
   },

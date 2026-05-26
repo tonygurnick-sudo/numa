@@ -100,7 +100,9 @@
     "active": "Active",
     "paused": "Paused",
     "deleted": "Deleted",
-    "completed": "Completed"
+    "completed": "Completed",
+    "pending": "Pending approval",
+    "locked": "Locked by admin"
   },
   "builder": {
     "title": {
@@ -210,8 +212,9 @@
       "help": "These instructions are sent to the agent each time the automation runs, in addition to the agent's built-in prompt."
     },
     "maxRuns": {
-      "label": "Maximum runs",
-      "help": "The automation will pause once it has run this many times. Maximum 100."
+      "label": "Max runs per month",
+      "help": "The automation pauses when this many runs is hit. Resume it manually any time after the 1st of next month when your quota resets. Set to 0 for unlimited.",
+      "unlimited": "Unlimited"
     },
     "emailNotifications": {
       "label": "Send email notifications when this automation runs",
@@ -238,6 +241,7 @@
     "timezoneLabel": "Timezone",
     "emailLabel": "Email notifications",
     "noPrompt": "No additional instructions",
+    "unlimited": "Unlimited",
     "enabled": "Enabled",
     "disabled": "Disabled",
     "edit": "Edit"
@@ -302,7 +306,9 @@
     "run": "Failed to run automation",
     "nameRequired": "Automation name is required",
     "agentRequired": "Please select an agent",
-    "scheduleRequired": "Please configure a schedule"
+    "scheduleRequired": "Please configure a schedule",
+    "notFoundTitle": "Automation not found",
+    "notFoundDescription": "This automation no longer exists. It may have been deleted, or the link is stale."
   },
   "toast": {
     "created": "Automation created successfully",

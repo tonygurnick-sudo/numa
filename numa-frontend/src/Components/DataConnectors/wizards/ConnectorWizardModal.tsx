@@ -56,7 +56,7 @@ export const ConnectorWizardModal = ({
         </Modal.Title>
       </Modal.Header>
 
-      <Modal.Body style={{ minHeight: 300 }}>
+      <Modal.Body className="connector-wizard-modal__body">
         {error && (
           <Alert variant="danger" className="py-2">
             {error}
@@ -74,19 +74,37 @@ export const ConnectorWizardModal = ({
           </div>
         ) : (
           <>
-            {/* Step indicator */}
-            <div className="d-flex justify-content-center mb-2 gap-2">
-              {steps.map((step, i) => (
-                <span
-                  key={step.id}
-                  className={`badge rounded-pill ${i + 1 <= currentStep ? 'bg-primary' : 'bg-secondary'}`}
-                  style={{ width: 28, height: 28, lineHeight: '20px', textAlign: 'center' }}
-                >
-                  {i + 1}
-                </span>
-              ))}
+            {/* Step indicator + label, centered as a single block */}
+            <div
+              className="d-flex flex-column align-items-center mb-3"
+              role="group"
+              aria-label={t('dataConnectors.wizard.stepIndicator', { defaultValue: 'Progress' })}
+            >
+              <ol className="d-flex gap-2 mb-2 connector-wizard-modal__steps">
+                {steps.map((step, i) => {
+                  const stepNumber = i + 1;
+                  const isComplete = stepNumber < currentStep;
+                  const isCurrent = stepNumber === currentStep;
+                  return (
+                    <li
+                      key={step.id}
+                      className={`connector-wizard-modal__step badge rounded-pill ${
+                        stepNumber <= currentStep ? 'bg-primary' : 'bg-secondary'
+                      }`}
+                      aria-current={isCurrent ? 'step' : undefined}
+                      aria-label={t('dataConnectors.wizard.stepLabel', {
+                        defaultValue: 'Step {{number}}: {{label}}',
+                        number: stepNumber,
+                        label: step.label,
+                      })}
+                    >
+                      {isComplete ? <i className="bi bi-check-lg" aria-hidden /> : stepNumber}
+                    </li>
+                  );
+                })}
+              </ol>
+              <h6 className="text-muted mb-0">{steps[currentStep - 1]?.label}</h6>
             </div>
-            <h6 className="text-center text-muted mb-3">{steps[currentStep - 1]?.label}</h6>
 
             {children}
           </>

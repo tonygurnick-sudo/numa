@@ -7,7 +7,12 @@ export type FolderContextAction = 'addSubfolder' | 'upload' | 'settings' | 'dele
 
 export type FolderContextTarget =
   | { kind: 'topLevel'; kb: UserKB }
-  | { kind: 'subfolder'; kbId: string; folderId: string; folderName: string };
+  | { kind: 'subfolder'; kbId: string; folderId: string; folderName: string }
+  /** Integration "folder" rows surface the same context menu as KB folders so
+   *  the right-click affordance is consistent, but every action is disabled —
+   *  add/upload/settings/delete don't have a defined behaviour against an
+   *  external integration yet. */
+  | { kind: 'integration'; integrationId: string; integrationName: string };
 
 interface FolderContextMenuProps {
   show: boolean;
@@ -76,10 +81,15 @@ export function FolderContextMenu({
   }
 
   const isTopLevel = target.kind === 'topLevel';
+  const isIntegration = target.kind === 'integration';
   // Personal is a virtual per-user KB — it can't be shared (no permissions
   // to configure) and can't be deleted (auto-provisioned on every list).
   // Hide both menu items entirely rather than showing them disabled.
   const isPersonal = target.kind === 'topLevel' && !!target.kb.is_root;
+  // Integrations show all the same items so the menu doesn't look stunted,
+  // but every action is disabled until we decide what (if anything) they
+  // should do against an external connector.
+  const showTopLevelExtras = isTopLevel || isIntegration;
 
   const dispatch = (action: FolderContextAction) => {
     onAction(action);
@@ -107,22 +117,27 @@ export function FolderContextMenu({
       <MenuItem
         icon="bi-folder-plus"
         label={t('contextMenu.addSubfolder')}
-        disabled={!canEdit}
+        disabled={isIntegration || !canEdit}
         onClick={() => dispatch('addSubfolder')}
       />
 
-      {isTopLevel && (
+      {showTopLevelExtras && (
         <>
           <MenuItem
             icon="bi-upload"
             label={t('contextMenu.upload')}
-            disabled={!canEdit}
+            disabled={isIntegration || !canEdit}
             onClick={() => dispatch('upload')}
           />
           {!isPersonal && (
             <>
               <MenuDivider />
-              <MenuItem icon="bi-gear" label={t('contextMenu.settings')} onClick={() => dispatch('settings')} />
+              <MenuItem
+                icon="bi-gear"
+                label={t('contextMenu.settings')}
+                disabled={isIntegration}
+                onClick={() => dispatch('settings')}
+              />
             </>
           )}
         </>
@@ -135,7 +150,7 @@ export function FolderContextMenu({
             icon="bi-trash"
             label={t('contextMenu.delete')}
             danger
-            disabled={isTopLevel ? !canDeleteTopLevel : !canEdit}
+            disabled={isIntegration || (isTopLevel ? !canDeleteTopLevel : !canEdit)}
             onClick={() => dispatch('delete')}
           />
         </>

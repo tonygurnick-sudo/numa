@@ -116,6 +116,7 @@ blockers:
 - **Token URL (AU):** `https://accounts.zoho.com.au/oauth/v2/token` [DOCUMENTED]
 - **Revocation URL (AU):** `https://accounts.zoho.com.au/oauth/v2/token/revoke` [DOCUMENTED]
 - **Host swaps by region** (accounts host + API host are in the same region): `.com.au` / `.com` / `.eu` / `.in` / `.jp` / `.com.cn` [DOCUMENTED]
+- **⚠️ Canada special case:** accounts host is **`accounts.zohocloud.ca`** (NOT `accounts.zoho.ca`); API host is `www.zohoapis.ca`. The naive `accounts.zoho.{region}` substitution pattern breaks for CA. [VERIFIED 2026-05-19 against https://www.zoho.com/crm/developer/docs/api/v8/multi-dc.html]
 
 **Required scopes:**
 
@@ -1054,11 +1055,15 @@ Applies to Bulk Read/Write only.
 
 ### 9.2 Connector Requirements [IMPORTANT]
 
-Direct API Only — no provider class required. The existing generic `connect_request` handler in `oauth-workspace-tools` covers all CRUD against Zoho provided:
+Zoho CRM is a fully documented public REST API — any HTTP client that can perform OAuth 2.0 Authorization Code (per-region) and inject `Authorization: Zoho-oauthtoken {token}` headers can drive the entire API surface. There is no special SDK or provider class required to call the API itself.
 
-1. Admin-supplied OAuth client_id/client_secret stored at `oauth-client-zoho-crm`.
-2. `auth_header_scheme: "Zoho-oauthtoken"` persisted to the same vault entry so the backend skips the default `Bearer`. **Already shipped in commit `d5333a75`.**
-3. Optional: `instance_url` in `connector-config-zoho-crm.fields.instance_url` (e.g. `https://www.zohoapis.com.au/crm/v8`) so the LLM can pass relative paths (`/Leads`) and the backend prepends the region-correct host.
+Requirements for any integrator:
+
+1. OAuth client (`client_id` / `client_secret`) registered in the customer's region-correct Zoho API Console — see §2.3 above for per-region URLs.
+2. Use the Zoho-specific header scheme `Authorization: Zoho-oauthtoken {access_token}` (NOT `Bearer`).
+3. Pin to the region-correct API host: `www.zohoapis.{region}/crm/v8` (CA: `www.zohoapis.ca`).
+
+> Numa-internal wiring details (vault keys, registry entries, commit references) live in the connector skill or the relevant Numa-side documentation — they are not part of the Zoho API surface and should not be documented here.
 
 ### 9.3 Workspace Agent Capabilities [REQUIRED]
 

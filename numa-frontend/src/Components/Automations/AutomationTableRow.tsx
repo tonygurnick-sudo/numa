@@ -5,6 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { Clock, MoreVertical, Play, Pencil, Trash2, Eye } from 'lucide-react';
 import { AgentAvatar } from '../Agents/AgentAvatar';
 import { describeCronExpression, getNextRunTimes } from '../../utils/cronUtils';
+import {
+  getDerivedAutomationStatus,
+  automationStatusBadgeVariant,
+  automationUsesCompanyQuota,
+} from '../../utils/automationUtils';
 import type { AgentSchedule } from '../../types/agentSchedules';
 import type { AgentSummary } from '../../types/agents';
 
@@ -60,6 +65,9 @@ export const AutomationTableRow = ({
   const displayName = automation.label || automation.agentTitle || t('card.noSchedule');
   const scheduleDescription = describeCronExpression(automation.cronExpression);
   const isActive = automation.status === 'active';
+  const derivedStatus = getDerivedAutomationStatus(automation);
+  const usesCompanyQuota = automationUsesCompanyQuota(automation);
+  const canToggle = automation.status === 'active' || automation.status === 'paused';
   const runsLabel =
     automation.maxRuns && automation.maxRuns > 0
       ? `${automation.totalRuns || 0} / ${automation.maxRuns}`
@@ -94,11 +102,23 @@ export const AutomationTableRow = ({
             type="switch"
             checked={isActive}
             onChange={() => onToggleStatus(automation)}
+            disabled={!canToggle}
             aria-label={isActive ? t('actions.pause') : t('actions.resume')}
           />
-          <Badge bg={isActive ? 'success' : 'warning'} className="small">
-            {isActive ? t('status.active') : t('status.paused')}
+          <Badge bg={automationStatusBadgeVariant(derivedStatus)} className="small">
+            {t(`status.${derivedStatus}`)}
           </Badge>
+          {usesCompanyQuota && (
+            <span
+              className="text-muted"
+              style={{ fontSize: '0.7rem' }}
+              title={t('card.companyQuotaTooltip', {
+                defaultValue: 'Admin-approved — runs against the company quota only, not your personal monthly cap.',
+              })}
+            >
+              {t('card.companyQuota', { defaultValue: 'company quota' })}
+            </span>
+          )}
         </div>
       </td>
       <td className="align-middle text-muted small">{formatDateTime(automation.lastRunEpoch)}</td>

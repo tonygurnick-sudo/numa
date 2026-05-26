@@ -136,11 +136,11 @@ All successful responses use this envelope:
 
 ### Confirmed NOT Working [CONFIRMED -- live API test 2026-04-04]
 
-| Method | Path                  | Error                                                 | Use Instead                                                       |
-| ------ | --------------------- | ----------------------------------------------------- | ----------------------------------------------------------------- |
-| GET    | `/quotes`             | 404: `"Route GET:/api/partner/quotes not found"`      | `/jobs/quotes`                                                    |
-| GET    | `/stockOnHand`        | 404: `"Route GET:/api/partner/stockOnHand not found"` | `/phases/{id}/stockOnHand`                                        |
-| POST   | `/jobs/{id}/finalise` | 404                                                   | [NEEDS VERIFICATION] -- link in HATEOAS but endpoint may not work |
+| Method | Path                  | Error                                                 | Use Instead                                                                                              |
+| ------ | --------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| GET    | `/quotes`             | 404: `"Route GET:/api/partner/quotes not found"`      | `/jobs/quotes`                                                                                           |
+| GET    | `/stockOnHand`        | 404: `"Route GET:/api/partner/stockOnHand not found"` | `/phases/{id}/stockOnHand`                                                                               |
+| POST   | `/jobs/{id}/finalise` | 404 — wrong verb                                      | Use `PUT /jobs/{jobId}/finalise` (HATEOAS link claims POST but spec is `put` only) [VERIFIED 2026-05-19] |
 
 ### Jobs
 
@@ -154,7 +154,7 @@ All successful responses use this envelope:
 | POST   | `/jobs/{jobId}/resume`           | Resume from hold  | Yes  | No        | No         |
 | GET    | `/jobs/{jobId}/financialSummary` | Financial summary | Yes  | No        | Yes        |
 
-**NOTE:** `PUT /jobs/{jobId}/finalise` listed in OpenAPI spec but POST /jobs/{id}/finalise returns 404 in live testing. HATEOAS link exists but endpoint may not be available. [NEEDS VERIFICATION]
+Add `PUT /jobs/{jobId}/finalise` to the table above — it IS in the OpenAPI spec; the prior 404s were because the HATEOAS link incorrectly claims `"type": "POST"`. Use PUT. Response schema is `JobResponse`. [VERIFIED 2026-05-19 against https://api.fergus.com/docs/json]
 
 ### Job Phases
 
@@ -477,7 +477,7 @@ Webhooks are listed as a Fergus API feature on API Tracker, but no webhook endpo
 8. No field selection / sparse fields support
 9. **`/quotes` standalone endpoint does NOT exist (404)** -- use `/jobs/quotes` [CONFIRMED]
 10. **`/stockOnHand` standalone endpoint does NOT exist (404)** -- use `/phases/{id}/stockOnHand` [CONFIRMED]
-11. **POST /jobs/{id}/finalise returns 404** despite HATEOAS link [NEEDS VERIFICATION]
+11. **/jobs/{id}/finalise is PUT, not POST** — the HATEOAS link's `"type": "POST"` is a server-side bug [VERIFIED 2026-05-19]
 12. **jobType only accepts `"Quote"`, `"Estimate"`, `"Charge Up"`** -- "Service"/"Project" are NOT valid [CONFIRMED]
 13. **DELETE must NOT include Content-Type header** [CONFIRMED]
 14. **PATCH /sites always requires `siteAddress`** even for partial updates [CONFIRMED]

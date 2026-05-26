@@ -404,6 +404,7 @@ const ChatInput = ({
           id="send-message-button"
           disabled={true}
           className="send-button spinner-button-bold"
+          aria-label={t('workspace.settings.sendingButton')}
         >
           <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
         </Button>
@@ -432,6 +433,7 @@ const ChatInput = ({
         id="send-message-button"
         className="send-button"
         disabled={isSendDisabled || !inputMessage.trim()}
+        aria-label={t('workspace.settings.sendButton')}
         style={
           variant === 'v2'
             ? {

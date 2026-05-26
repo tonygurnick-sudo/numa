@@ -82,14 +82,47 @@ if (override === undefined || override === 'none') {
   });
   // Read platform-level settings (global defaults for all clients)
   let globalSchedulingMinIntervalMinutes: number | undefined;
+  let globalScheduleQuotas:
+    | {
+        maxRunsPerCompanyPerMonth?: number;
+        maxRunsPerUserPerMonth?: number;
+        maxTriggerRunsPerCompanyPerMonth?: number;
+        maxTriggerRunsPerUserPerMonth?: number;
+        maxConcurrentActiveSchedulesPerCompany?: number;
+        maxConcurrentActiveSchedulesPerUser?: number;
+        requireApprovalAboveUserCap?: boolean;
+      }
+    | undefined;
   try {
-    const platformSettings = await getClientConfig<{ schedulingMinIntervalMinutes?: number }>({
+    const platformSettings = await getClientConfig<{
+      schedulingMinIntervalMinutes?: number;
+      maxRunsPerCompanyPerMonth?: number;
+      maxRunsPerUserPerMonth?: number;
+      maxTriggerRunsPerCompanyPerMonth?: number;
+      maxTriggerRunsPerUserPerMonth?: number;
+      maxConcurrentActiveSchedulesPerCompany?: number;
+      maxConcurrentActiveSchedulesPerUser?: number;
+      requireApprovalAboveUserCap?: boolean;
+    }>({
       clientName: 'platform-settings',
       credentials,
     });
     globalSchedulingMinIntervalMinutes = platformSettings?.schedulingMinIntervalMinutes;
+    globalScheduleQuotas = platformSettings
+      ? {
+          maxRunsPerCompanyPerMonth: platformSettings.maxRunsPerCompanyPerMonth,
+          maxRunsPerUserPerMonth: platformSettings.maxRunsPerUserPerMonth,
+          maxTriggerRunsPerCompanyPerMonth: platformSettings.maxTriggerRunsPerCompanyPerMonth,
+          maxTriggerRunsPerUserPerMonth: platformSettings.maxTriggerRunsPerUserPerMonth,
+          maxConcurrentActiveSchedulesPerCompany: platformSettings.maxConcurrentActiveSchedulesPerCompany,
+          maxConcurrentActiveSchedulesPerUser: platformSettings.maxConcurrentActiveSchedulesPerUser,
+          requireApprovalAboveUserCap: platformSettings.requireApprovalAboveUserCap,
+        }
+      : undefined;
   } catch {
-    // platform-settings record may not exist yet — fall back to platform default (5 min)
+    // platform-settings record could not be read — lambdas will throw on first
+    // invocation if env vars are missing. Populate the record via the CSP
+    // Platform Settings page before deploying client stacks.
   }
 
   const allClients = override ? [override] : await listClients({ credentials });
@@ -101,6 +134,7 @@ if (override === undefined || override === 'none') {
       ...environmentConfig,
       clientConfig,
       globalSchedulingMinIntervalMinutes,
+      globalScheduleQuotas,
     });
   }
 }

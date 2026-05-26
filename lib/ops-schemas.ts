@@ -195,6 +195,10 @@ export const crmConfigSchema = z.object({
   defaultStageId: z.string().optional(),
   customerRecord: customerRecordConfigSchema.optional(),
   layout: customerRecordLayoutSchema.optional(),
+  // Per-client label overrides for built-in customer fields, keyed by
+  // built-in field id (e.g. "companyName"). Empty/missing → fall back to
+  // the i18n default label.
+  builtinFieldLabels: z.record(z.string()).optional(),
   updatedAt: z.string(),
 });
 
@@ -260,6 +264,11 @@ export const boardSchema = z.object({
   accessControl: accessControlSchema,
   defaultZoneId: z.string().optional(),
   preset: z.string().optional(),
+  // Membership in the persona/industry taxonomy is validated at the API write boundary
+  // (see normalisePersonas/normaliseIndustries from lib/resource-taxonomy) — kept permissive
+  // here so read-time parsing tolerates legacy/future taxonomy values.
+  personas: z.array(z.string()).optional().default([]),
+  industries: z.array(z.string()).optional().default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
   order: z.number(),

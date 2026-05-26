@@ -22,6 +22,7 @@ import {
   buildSectionUpdatePayload,
   getCustomerFieldValue,
   isBuiltinField,
+  resolveBuiltinFieldLabel,
   resolveCustomerRecordLayout,
 } from '../Shared/customerRecordFields';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
@@ -147,9 +148,9 @@ export function CustomerRecordSectionBlock({
   const addableOptions = useMemo(() => {
     const inSection = new Set(section.fieldIds);
     const opts: { id: string; label: string }[] = [];
-    for (const [id, meta] of Object.entries(BUILTIN_CUSTOMER_FIELDS)) {
+    for (const id of Object.keys(BUILTIN_CUSTOMER_FIELDS)) {
       if (inSection.has(id) || usedFieldIds.has(id)) continue;
-      opts.push({ id, label: t(meta.labelKey) });
+      opts.push({ id, label: resolveBuiltinFieldLabel(crmConfig?.builtinFieldLabels, id, t) });
     }
     for (const f of allFields) {
       if (f.category !== 'crm') continue;
@@ -158,7 +159,7 @@ export function CustomerRecordSectionBlock({
     }
     opts.sort((a, b) => a.label.localeCompare(b.label));
     return opts;
-  }, [allFields, section.fieldIds, usedFieldIds, t]);
+  }, [allFields, section.fieldIds, usedFieldIds, crmConfig, t]);
 
   const layout = useMemo(() => resolveCustomerRecordLayout(crmConfig), [crmConfig]);
   const editColClass = `col-md-6 col-lg-${12 / layout.columnsPerSection}`;
@@ -871,10 +872,12 @@ function renderReadValue(fieldId: string, value: unknown, customer: Customer, ct
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function labelFor(fieldId: string, ctx: { fieldDefById: Map<string, FieldDefinition>; t: FieldContext['t'] }): string {
+function labelFor(
+  fieldId: string,
+  ctx: { fieldDefById: Map<string, FieldDefinition>; t: FieldContext['t']; crmConfig: CrmConfig }
+): string {
   if (isBuiltinField(fieldId)) {
-    const meta = BUILTIN_CUSTOMER_FIELDS[fieldId];
-    return ctx.t(meta.labelKey);
+    return resolveBuiltinFieldLabel(ctx.crmConfig.builtinFieldLabels, fieldId, ctx.t);
   }
   const field = ctx.fieldDefById.get(fieldId);
   return field?.name ?? fieldId;

@@ -29,13 +29,29 @@ logger = structlog.get_logger()
 # Connector type sets for routing
 SYNERGY_CONNECTORS = {"synergy"}
 
-# Operations that are read-only and safe to auto-approve
+# Operations that are read-only and safe to auto-approve. `mcp_call` is
+# conditionally safe (per-method); the handler gates write methods on approval.
 SAFE_CONNECTOR_OPERATIONS = frozenset(
-    {"status", "list_files", "search_files", "download_file", "get_file_info"}
+    {
+        "status",
+        "list_files",
+        "search_files",
+        "download_file",
+        "get_file_info",
+        "mcp_call",
+    }
 )
 
-# Operations that mutate external state and require approval
+# Operations that always mutate external state and require approval
 UNSAFE_CONNECTOR_OPERATIONS = frozenset({"request"})
+
+# Connector-specific write methods. Keys are method names the agent passes to
+# `mcp_call`; values are human-readable descriptions shown in the approval
+# prompt. Listed methods require explicit user approval before dispatch.
+MCP_WRITE_METHODS: dict[str, str] = {
+    "ns_createRecord": "Create a NetSuite record",
+    "ns_updateRecord": "Update a NetSuite record",
+}
 
 
 def is_safe_connector_operation(operation: str) -> bool:
@@ -220,12 +236,30 @@ async def _handle_status(params: dict[str, Any]) -> dict[str, Any]:
             ],
         }
 
+    # Per-chat enable filter: only surface connectors the user has enabled
+    # for THIS conversation. Without this filter the status output lists
+    # every admin-configured connector, which misleads the agent into
+    # trying disabled ones (and then we have to reject each call). The
+    # var is always set by sdk_config.py — empty string means
+    # "no native connectors enabled" (i.e. the whole tool family is off).
+    _enabled_raw = os.environ.get("NUMA_ENABLED_NATIVE_CONNECTORS", "")
+    try:
+        _enabled_native = json.loads(_enabled_raw) if _enabled_raw else []
+    except json.JSONDecodeError:
+        _enabled_native = []
+    _enabled_set = set(_enabled_native)
+
     lines = ["Connector Status:\n"]
     credential_markers: list[str] = []
 
     for connector_id, info in status_data.items():
         # Skip data-bucket — it's in numa_tool files now
         if connector_id == "data-bucket":
+            continue
+        # Hide connectors not enabled for this chat. Tells the agent the
+        # truth about what it CAN call — anything else gets rejected at
+        # the dispatch layer anyway.
+        if connector_id not in _enabled_set:
             continue
         display_name = info.get("display_name", connector_id.replace("-", " ").title())
         status = info.get("status", "unknown")
@@ -279,6 +313,24 @@ async def _handle_status(params: dict[str, Any]) -> dict[str, Any]:
             error_msg = info.get("error", "")
             lines.append(f"  {display_name}{auth_label}: {status} - {error_msg}")
 
+    # If the filter dropped everything, the header alone is confusing.
+    # Give the agent a clear "nothing usable" signal so it doesn't keep
+    # trying connector calls that will all be rejected.
+    if len(lines) == 1:
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "No native connectors are enabled for this chat session. "
+                        "The user has them turned off in the Integrations panel of "
+                        "the chat sidebar. Tell them to enable a connector there if "
+                        "they want you to use one."
+                    ),
+                }
+            ],
+        }
+
     text = "\n".join(lines)
     if credential_markers:
         text = "\n".join(credential_markers) + "\n" + text
@@ -297,7 +349,7 @@ def _check_auth_error(result: dict[str, Any]) -> dict[str, Any] | None:
                     "type": "text",
                     "text": (
                         "The user's Synergy 12d access token has expired or been revoked. "
-                        "They need to reconnect with new credentials in Files > Remote. "
+                        "They need to reconnect with new credentials on the Integrations page. "
                         "Do not retry this operation until they confirm reconnection."
                     ),
                 }
@@ -718,6 +770,77 @@ async def _handle_request(params: dict[str, Any]) -> dict[str, Any]:
 # Connector operation dispatch map + MCP tool definition
 # ═════════════════════════════════════════════════════════════════════════════
 
+
+async def _handle_mcp_call(params: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch a JSON-RPC 2.0 MCP method to a connector that speaks MCP.
+
+    Today only NetSuite exposes an MCP endpoint (`com.netsuite.mcpstandardtools`).
+    The Lambda-side routing key is `connect_{connector}_mcp`.
+
+    Write methods listed in `MCP_WRITE_METHODS` are gated by the approval
+    system; read methods run immediately.
+    """
+    connector = (params.get("connector") or "").strip()
+    method = (params.get("method") or "").strip()
+    arguments = params.get("arguments") or {}
+
+    if not connector:
+        return {
+            "content": [
+                {"type": "text", "text": "Error: 'connector' is required for mcp_call"}
+            ],
+            "isError": True,
+        }
+    if not method:
+        return {
+            "content": [
+                {"type": "text", "text": "Error: 'method' is required for mcp_call"}
+            ],
+            "isError": True,
+        }
+
+    write_desc = MCP_WRITE_METHODS.get(method)
+    if write_desc:
+        decision = _await_approval(f"{connector}-{method}", write_desc)
+        if decision != "approved":
+            return {
+                "content": [
+                    {"type": "text", "text": f"Action not approved ({decision})."}
+                ],
+                "isError": True,
+            }
+
+    result = _invoke_connect_tool(
+        f"connect_{connector}_mcp",
+        {"method": method, "arguments": arguments},
+    )
+
+    if isinstance(result, dict) and (result.get("error") or result.get("error_code")):
+        needs_cred = _check_needs_credential(result)
+        if needs_cred:
+            return needs_cred
+        auth_err = _check_auth_error(result)
+        if auth_err:
+            return auth_err
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Error: {result.get('error', result.get('error_code'))}",
+                }
+            ],
+            "isError": True,
+        }
+
+    data = result.get("result", {}) if isinstance(result, dict) else {}
+    body_str = (
+        json.dumps(data, indent=2) if isinstance(data, (dict, list)) else str(data)
+    )
+    if len(body_str) > 10000:
+        body_str = body_str[:10000] + "\n... (truncated)"
+    return {"content": [{"type": "text", "text": body_str}]}
+
+
 CONNECTOR_HANDLERS = {
     "status": _handle_status,
     "list_files": _handle_list_files,
@@ -725,6 +848,7 @@ CONNECTOR_HANDLERS = {
     "download_file": _handle_download_file,
     "get_file_info": _handle_get_file_info,
     "request": _handle_request,
+    "mcp_call": _handle_mcp_call,
 }
 
 CONNECTOR_OPERATIONS = list(CONNECTOR_HANDLERS.keys())
@@ -734,9 +858,11 @@ CONNECTOR_OPERATIONS = list(CONNECTOR_HANDLERS.keys())
     name="connectors",
     description=(
         "Access connected cloud storage and external services. Use for OAuth cloud "
-        "storage (Google Drive, OneDrive, Dropbox), Synergy 12d, and authenticated "
-        "HTTP calls to any OAuth-connected API. Use 'status' to see available "
-        "connectors, then browse/search/download files or make API requests."
+        "storage (Google Drive, OneDrive, Dropbox), Synergy 12d, authenticated "
+        "HTTP calls to any OAuth-connected API, and MCP-based ERPs (NetSuite). "
+        "Use 'status' to see available connectors, then browse/search/download "
+        "files, make API requests, or invoke MCP methods via 'mcp_call' with "
+        "{connector, method, arguments}."
     ),
     input_schema={
         "type": "object",
@@ -750,9 +876,11 @@ CONNECTOR_OPERATIONS = list(CONNECTOR_HANDLERS.keys())
                 "type": "object",
                 "description": (
                     "Operation-specific parameters. Most operations need 'connector' "
-                    "(e.g. googledrive, onedrive, dropbox, synergy). "
+                    "(e.g. googledrive, onedrive, dropbox, synergy, netsuite). "
                     "list_files/download_file need 'file_id' or 'folder_id'. "
-                    "search_files needs 'query'. request needs 'url'."
+                    "search_files needs 'query'. request needs 'url'. "
+                    "mcp_call needs 'connector', 'method' (e.g. ns_runCustomSuiteQL), "
+                    "and 'arguments' (method-specific object)."
                 ),
             },
             "description": {
@@ -825,6 +953,60 @@ async def connectors(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
             "isError": True,
         }
+
+    # Honour the admin's per-service preferred_method choice. When admin has
+    # chosen Pipedream for a service that exists as both, refuse the native
+    # connector call and let the agent fall through to the integrations tools.
+    connector = params.get("connector", "") if isinstance(params, dict) else ""
+    if connector:
+        from numa_workspace_agent.mcp_tools.integration_preferences import (
+            is_native_allowed,
+        )
+
+        if not is_native_allowed(connector):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"This workspace uses Pipedream for '{connector}', not the native "
+                            "Numa connector. Use the integration tools (mcp__integrations__*) instead."
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+
+        # Per-chat enable check — fail-CLOSED to mirror the Pipedream
+        # enforcement in mcp_tools/integrations.py exactly: if the env var
+        # is unset, empty, or doesn't list this connector, refuse the call.
+        # sdk_config.py always sets NUMA_ENABLED_NATIVE_CONNECTORS (at
+        # minimum to "[]") for any container shipping this code path, so
+        # there is no legitimate scenario where the var is missing — only
+        # disabled chats. The prompt already lists only enabled connectors,
+        # but the agent can still try a disabled one from memory, from a
+        # `status` call's output, or from the user's own context, and we
+        # don't want that to succeed.
+        enabled_raw = os.environ.get("NUMA_ENABLED_NATIVE_CONNECTORS", "")
+        try:
+            enabled_native = json.loads(enabled_raw) if enabled_raw else []
+        except json.JSONDecodeError:
+            enabled_native = []
+        if not enabled_native or connector not in enabled_native:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"The '{connector}' connector is not enabled for this chat session. "
+                            "The user has it turned off in the Integrations panel of the chat "
+                            "sidebar. Tell them to enable it there if they want you to use it; "
+                            "do not retry."
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
 
     # Gate unsafe operations behind approval (fail-closed)
     if not is_safe_connector_operation(name):

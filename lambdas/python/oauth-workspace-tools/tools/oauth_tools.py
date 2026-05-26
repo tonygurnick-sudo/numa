@@ -10,8 +10,9 @@ import gzip
 import json
 import os
 import time
+import uuid
 from base64 import b64decode
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import structlog
 
@@ -32,6 +33,14 @@ secrets_manager = client("secretsmanager")
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "demo")
 VAULT_SECRETS_PREFIX = os.environ.get("VAULT_SECRETS_PREFIX", f"{CLIENT_NAME}/vault")
 OUTPUTS_BUCKET = os.environ.get("OUTPUTS_BUCKET_NAME", "")
+VAULT_AUDIT_LOG_TABLE_NAME = os.environ.get("VAULT_AUDIT_LOG_TABLE_NAME", "")
+
+# Audit dedup: a chat turn that calls Gmail 20 times shouldn't write 20 audit
+# rows. Track last write per (user, secret) and skip if within window.
+# Module-level so it survives across calls within the same Lambda container.
+# Cold starts will re-audit — acceptable trade for visibility (TASK-146).
+_LAST_OAUTH_AUDIT_TS: Dict[Tuple[str, str], float] = {}
+_OAUTH_AUDIT_DEDUP_SECONDS = 60
 
 # Maximum file download size (50MB)
 MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024
@@ -345,6 +354,64 @@ async def _refresh_access_token(provider: str, refresh_token: str) -> Optional[d
 # ---------------------------------------------------------------------------
 
 
+def _audit_oauth_fetch(user_sub: str, secret_name: str, provider: str) -> None:
+    """Write an ai_access audit row for a chat OAuth token fetch.
+
+    Connector tools historically pulled OAuth tokens straight from the vault
+    with no audit trail. This records each fetch as ai_access so the user's
+    "My Secrets > Activity" view reflects chat usage. Deduped within
+    `_OAUTH_AUDIT_DEDUP_SECONDS` per (user, secret) to avoid spamming for
+    chat sessions that call the same connector many times in a row.
+
+    `accessor="workspace_agent"` lets the frontend recognise this row as
+    chat-driven and label it "Numa chat" instead of resolving against the
+    user list.
+    """
+    if not VAULT_AUDIT_LOG_TABLE_NAME:
+        return
+
+    key = (user_sub, secret_name)
+    now = time.time()
+    last = _LAST_OAUTH_AUDIT_TS.get(key, 0.0)
+    if now - last < _OAUTH_AUDIT_DEDUP_SECONDS:
+        return
+    _LAST_OAUTH_AUDIT_TS[key] = now
+
+    try:
+        dynamodb = client("dynamodb")
+        audit_id = str(uuid.uuid4())
+        ttl = int(now) + (90 * 86400)
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now))
+        item: Dict[str, Any] = {
+            "user_id": user_sub,
+            "timestamp_audit_id": f"{timestamp}#{audit_id}",
+            "secret_id": secret_name,
+            "secret_name": secret_name,
+            "action": "ai_access",
+            "accessor": "workspace_agent",
+            "actor_email": "",
+            "purpose": f"Connector OAuth fetch: {provider}",
+            "conversation_id": "",
+            "approved_by": "oauth_grant",
+            "created_at": timestamp,
+            "ttl": ttl,
+        }
+        dynamodb.put_item(
+            TableName=VAULT_AUDIT_LOG_TABLE_NAME,
+            Item={
+                k: {"S": str(v)} if not isinstance(v, int) else {"N": str(v)}
+                for k, v in item.items()
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to write OAuth audit log",
+            user_sub=user_sub,
+            secret_name=secret_name,
+            error=str(e),
+        )
+
+
 async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
     """Get valid OAuth access token from consolidated user vault.
 
@@ -382,6 +449,7 @@ async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
                 for k in ("api_key", "bearer_token", "access_token", "token"):
                     v = cfields.get(k)
                     if v:
+                        _audit_oauth_fetch(user_sub, f"connector-{provider}", provider)
                         return str(v)
 
         # Fallback: oauth-{provider} (OAuth tokens, or legacy single-token PAT).
@@ -418,6 +486,7 @@ async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
 
         # Return immediately if token is still valid
         if not token_expired:
+            _audit_oauth_fetch(user_sub, secret_key, provider)
             return access_token
 
         # Token expired — attempt refresh
@@ -461,6 +530,7 @@ async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
             logger.info(
                 f"Successfully refreshed OAuth token for {provider} user {user_sub}"
             )
+            _audit_oauth_fetch(user_sub, secret_key, provider)
             return new_access_token
         else:
             logger.error(

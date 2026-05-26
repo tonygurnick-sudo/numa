@@ -4,8 +4,16 @@
     "cancel": "Cancel",
     "close": "Close",
     "delete": "Delete",
-    "search": "Search...",
-    "noResults": "No matches"
+    "done": "Done",
+    "noResults": "No matches",
+    "refresh": "Refresh",
+    "save": "Save",
+    "search": "Search..."
+  },
+  "imageLightbox": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetZoom": "Reset zoom"
   },
   "confirm": {
     "defaultTitle": "Confirm",
@@ -13,7 +21,9 @@
     "disconnect": "Disconnect",
     "leave": "Leave",
     "discard": "Discard",
-    "save": "Save"
+    "save": "Save",
+    "remove": "Remove",
+    "areYouSure": "Are you sure?"
   },
   "alert": {
     "titles": {
@@ -386,6 +396,10 @@
     },
     "creating": "Creating...",
     "createButton": "Create folder",
+    "personasLabel": "Personas",
+    "personasHelp": "Which roles this folder is most useful for.",
+    "industriesLabel": "Industries",
+    "industriesHelp": "Which industries this folder is most relevant to.",
     "errors": {
       "nameRequired": "Please provide a name for the folder.",
       "editorsMustBeViewers": "Editors must also be viewers for shared folders."
@@ -854,7 +868,8 @@
     "connectionSuccessful": "Successfully connected to {{provider}}!",
     "connectionFailed": "Failed to complete OAuth connection",
     "unknownError": "An unknown error occurred during OAuth processing",
-    "redirecting": "Redirecting to Files page...",
+    "redirectingToFiles": "Redirecting to Files page...",
+    "redirectingToIntegrations": "Redirecting to Integrations page...",
     "returnToFiles": "Return to Files",
     "pleaseWait": "Please wait while we complete the connection..."
   },

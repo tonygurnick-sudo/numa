@@ -135,7 +135,11 @@
       "tagsLabel": "Tags",
       "tagsPlaceholder": "e.g., Sales, Support, Analytics",
       "tagsHelp": "Add tags to categorise this agent. Press Enter or comma to add.",
-      "tagsSuggestions": "Suggested tags"
+      "tagsSuggestions": "Suggested tags",
+      "personasLabel": "Personas",
+      "personasHelp": "Which roles this agent is most useful for.",
+      "industriesLabel": "Industries",
+      "industriesHelp": "Which industries this agent is most relevant to."
     },
     "appearance": {
       "selectedAvatarAlt": "Selected agent avatar",
@@ -852,6 +856,8 @@
           "inProgress": "In Progress"
         },
         "loadingDetails": "Loading run details...",
+        "continueInChat": "Continue in Chat",
+        "openInChat": "Open in Chat",
         "noContent": "No content",
         "noMessages": "No messages in this run",
         "showMessages": "Conversation ({{count}} messages)",

@@ -8,7 +8,7 @@
 
 ## Auth Type: OAuth 2.0 (authorization_code)
 
-Zoho uses its own bearer scheme on the API side — `Authorization: Zoho-oauthtoken {token}` — but the OAuth handshake itself is standard RFC 6749. The backend injects the `Zoho-oauthtoken` header automatically (see `connectorRegistry.ts` → `authHeaderScheme`).
+Zoho uses its own bearer scheme on the API side — `Authorization: Zoho-oauthtoken {token}`, NOT `Bearer` — but the OAuth handshake itself is standard RFC 6749. Make sure your HTTP client builds this header verbatim; using `Bearer` returns `INVALID_TOKEN` 401.
 
 ---
 
@@ -18,16 +18,19 @@ The admin does this once per Numa deployment. The app is registered in the Zoho 
 
 ### Per-region developer consoles
 
-| Region | Developer console                  | Accounts host          | API host              |
-| ------ | ---------------------------------- | ---------------------- | --------------------- |
-| AU     | `https://api-console.zoho.com.au/` | `accounts.zoho.com.au` | `www.zohoapis.com.au` |
-| US     | `https://api-console.zoho.com/`    | `accounts.zoho.com`    | `www.zohoapis.com`    |
-| EU     | `https://api-console.zoho.eu/`     | `accounts.zoho.eu`     | `www.zohoapis.eu`     |
-| IN     | `https://api-console.zoho.in/`     | `accounts.zoho.in`     | `www.zohoapis.in`     |
-| JP     | `https://api-console.zoho.jp/`     | `accounts.zoho.jp`     | `www.zohoapis.jp`     |
-| CN     | `https://api-console.zoho.com.cn/` | `accounts.zoho.com.cn` | `www.zohoapis.com.cn` |
+| Region | Developer console                   | Accounts host                  | API host              |
+| ------ | ----------------------------------- | ------------------------------ | --------------------- |
+| AU     | `https://api-console.zoho.com.au/`  | `accounts.zoho.com.au`         | `www.zohoapis.com.au` |
+| US     | `https://api-console.zoho.com/`     | `accounts.zoho.com`            | `www.zohoapis.com`    |
+| EU     | `https://api-console.zoho.eu/`      | `accounts.zoho.eu`             | `www.zohoapis.eu`     |
+| IN     | `https://api-console.zoho.in/`      | `accounts.zoho.in`             | `www.zohoapis.in`     |
+| JP     | `https://api-console.zoho.jp/`      | `accounts.zoho.jp`             | `www.zohoapis.jp`     |
+| CN     | `https://api-console.zoho.com.cn/`  | `accounts.zoho.com.cn`         | `www.zohoapis.com.cn` |
+| **CA** | `https://api-console.zohocloud.ca/` | **`accounts.zohocloud.ca`** ⚠️ | `www.zohoapis.ca`     |
 
 All three hosts (console, accounts, API) live in the same region. A token minted at `accounts.zoho.com.au` only works against `www.zohoapis.com.au`.
+
+> ⚠️ **Canada is a special case.** The accounts host is **`accounts.zohocloud.ca`** (NOT `accounts.zoho.ca`). Naive `accounts.zoho.{region}` URL substitution silently routes CA customers to a host that doesn't exist — OAuth fails at DNS resolution before the user sees any error UI. Special-case CA explicitly. [VERIFIED 2026-05-19 against https://www.zoho.com/crm/developer/docs/api/v8/multi-dc.html]
 
 ### Steps
 
@@ -56,8 +59,8 @@ All three hosts (console, accounts, API) live in the same region. A token minted
 | Property          | Value                                                                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Grant type        | `authorization_code`                                                                                                                   |
-| Authorization URL | `https://accounts.zoho.{region}/oauth/v2/auth`                                                                                         |
-| Token URL         | `https://accounts.zoho.{region}/oauth/v2/token`                                                                                        |
+| Authorization URL | `https://accounts.zoho.{region}/oauth/v2/auth` — **except CA: `https://accounts.zohocloud.ca/oauth/v2/auth`**                          |
+| Token URL         | `https://accounts.zoho.{region}/oauth/v2/token` — **except CA: `https://accounts.zohocloud.ca/oauth/v2/token`**                        |
 | Redirect URI      | `https://{client-name}.numa.arcanum.ai/oauth/callback/zoho-crm`                                                                        |
 | Scopes            | `ZohoCRM.modules.ALL,ZohoCRM.users.READ,ZohoCRM.org.READ,ZohoCRM.settings.modules.READ,ZohoCRM.settings.fields.READ,ZohoCRM.coql.READ` |
 | PKCE required?    | No                                                                                                                                     |
@@ -187,46 +190,20 @@ In both cases, subsequent calls with the revoked tokens return `INVALID_TOKEN`.
 
 ---
 
-## 6. Numa Connector Wiring
-
-### Credentials to store
-
-**Company vault entry** (`oauth-client-zoho-crm`, written by the admin wizard):
-
-| Key                  | Type   | Description                                      |
-| -------------------- | ------ | ------------------------------------------------ |
-| `client_id`          | string | From Zoho API Console                            |
-| `client_secret`      | string | From Zoho API Console (one-time display)         |
-| `auth_url`           | string | `https://accounts.zoho.{region}/oauth/v2/auth`   |
-| `token_url`          | string | `https://accounts.zoho.{region}/oauth/v2/token`  |
-| `scopes`             | string | Comma-separated scope list                       |
-| `extra_auth_params`  | JSON   | `{"access_type":"offline","prompt":"consent"}`   |
-| `auth_header_scheme` | string | `Zoho-oauthtoken` (auto-persisted from registry) |
-| `display_name`       | string | `Zoho CRM`                                       |
-| `icon`               | string | `bi-person-rolodex`                              |
-
-**Per-user vault entry** (`oauth-zoho-crm`, written on user connect):
-
-| Key             | Type   | Description                                               |
-| --------------- | ------ | --------------------------------------------------------- |
-| `access_token`  | string | Current access token (refreshed every ~55min by backend)  |
-| `refresh_token` | string | Long-lived refresh token                                  |
-| `expires_at`    | ISO dt | Computed from `expires_in`; used to decide refresh timing |
-| `api_domain`    | string | From token response — actual API host for this user       |
-| `user_email`    | string | For display only                                          |
-| `connected_at`  | ISO dt | Audit                                                     |
-
-### Test connection sequence
+## 6. Test connection sequence (vendor-side)
 
 ```
 1. GET https://accounts.zoho.{region}/                       → 200 (basic reachability)
+   (CA exception: GET https://accounts.zohocloud.ca/)
 2. POST /oauth/v2/token (grant=refresh_token)                → 200 + fresh access_token
 3. GET https://{api_domain}/crm/v8/org                       → 200 + { org: [...] }
    Header: Authorization: Zoho-oauthtoken {access_token}
    If this returns 401 despite a valid refresh, the regional host is wrong.
 ```
 
-### Auto-reconnect logic
+`{api_domain}` comes back as a field in the token response — use that exact value rather than computing one yourself.
+
+### Auto-reconnect logic (recommended)
 
 ```
 on 401 INVALID_TOKEN on an API call:
@@ -234,11 +211,12 @@ on 401 INVALID_TOKEN on an API call:
     if refresh returns 200:
         retry original call once
     if refresh returns 4xx:
-        mark user disconnected
-        raise "zoho-crm-reauth-required" — UI prompts user to reconnect
+        mark user disconnected — full re-consent required
 ```
 
-No transient retries — Zoho refresh tokens don't silently expire, so a 4xx from refresh means the refresh token is genuinely bad (revoked or the 20-token limit rolled over).
+No transient retries — Zoho refresh tokens don't silently expire, so a 4xx from refresh means the refresh token is genuinely bad (revoked, or the per-user-per-app active-token cap rolled over).
+
+> Numa-internal vault/registry/key-name details previously documented in this section have been moved to the Numa connector skill — this file is API-vendor-side only.
 
 ---
 

@@ -14,6 +14,9 @@ interface CallbackState {
   status: 'processing' | 'success' | 'error';
   message: string;
   provider?: string;
+  // Where the user will be sent after success. Drives the "Redirecting to X"
+  // line so it matches the actual destination (Files vs Integrations).
+  redirectTo?: 'files' | 'integrations';
 }
 
 const OAuthCallback: React.FC = () => {
@@ -140,15 +143,35 @@ const OAuthCallback: React.FC = () => {
             return;
           }
 
+          // Where to send the user back. The Integrations page stashes its
+          // own return path (with a #<slug> deep-link to scroll to the right
+          // card) before kicking off the OAuth redirect; honour that when
+          // present so users who initiated the connect from /integrations
+          // land back there instead of on Files Remote.
+          let returnPath = '/numa-files?tab=remote';
+          try {
+            const stashed = sessionStorage.getItem('integrations-return-path');
+            if (stashed && stashed.startsWith('/')) {
+              returnPath = stashed;
+            }
+            sessionStorage.removeItem('integrations-return-path');
+          } catch {
+            /* sessionStorage unavailable — fall back to default */
+          }
+
+          const redirectTo: 'files' | 'integrations' = returnPath.startsWith('/integrations')
+            ? 'integrations'
+            : 'files';
+
           setState({
             status: 'success',
             message: t('oauthCallback.connectionSuccessful', { provider }),
             provider,
+            redirectTo,
           });
 
-          // Redirect to Files page after a short delay
           setTimeout(() => {
-            navigate('/numa-files?tab=remote', { replace: true });
+            navigate(returnPath, { replace: true });
           }, 2000);
         } else {
           throw new Error(data.message || t('oauthCallback.connectionFailed'));
@@ -182,6 +205,14 @@ const OAuthCallback: React.FC = () => {
           return;
         }
 
+        // Clear any stashed return path — the user is staying on the error
+        // page, and we don't want a stale marker leaking into a future
+        // OAuth flow on a different page.
+        try {
+          sessionStorage.removeItem('integrations-return-path');
+        } catch {
+          /* ignore */
+        }
         setState({
           status: 'error',
           message: error instanceof Error ? error.message : t('oauthCallback.unknownError'),
@@ -230,7 +261,11 @@ const OAuthCallback: React.FC = () => {
 
                 {state.status === 'success' && (
                   <div className="mt-2">
-                    <small className="text-muted">{t('oauthCallback.redirecting')}</small>
+                    <small className="text-muted">
+                      {state.redirectTo === 'integrations'
+                        ? t('oauthCallback.redirectingToIntegrations')
+                        : t('oauthCallback.redirectingToFiles')}
+                    </small>
                   </div>
                 )}
 

@@ -33,8 +33,10 @@
 
 ## Account credentials for testing
 
-- Email: tony.gurnick@gmail.com
-- Password: T1ddlywink123!!
-- PAT: fergPAT_dfd871b6-0047-447c5c325595-c2ab-469f210eb3c6-81e9-4f22-b17b-9481ff4344dadba8a8b5
+> **REDACTED 2026-05-19** — credentials were previously committed in plaintext. Rotate the Fergus password and revoke any PATs issued against this account before re-using. Keep test credentials in a local untracked file (`.env.local` or password manager), never in committed docs.
+
+- Email: `<REDACTED — see password manager>`
+- Password: `<REDACTED — rotated>`
+- PAT: `<REDACTED — revoke + reissue>`
 - Company: Arcanum AI
 - Trial expires: ~17 April 2026

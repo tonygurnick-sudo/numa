@@ -54,6 +54,7 @@ NUMA_CHAT = AgentTypeConfig(
         "mcp__integrations__proxy_request",  # Raw API proxy calls (with approval)
         # External connectors (OAuth cloud storage, Synergy, generic HTTP)
         "mcp__connectors__connectors",
+        "mcp__connectors__ns_*",  # NetSuite Native Tools
         # Secrets vault (user credentials with approval flow)
         "mcp__vault__vault",
         # Bash with allowed commands

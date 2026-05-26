@@ -75,8 +75,26 @@ def search_jobs(  # pylint: disable=too-many-arguments
     }
 
 
-def list_job_folders(server: str, token: str, job_id: str) -> List[Dict[str, Any]]:
-    """Return top-level folders for a job."""
+def list_job_folders(
+    server: str,
+    token: str,
+    job_id: str,
+    page: int = 1,
+    page_size: int = 50,
+) -> Dict[str, Any]:
+    """Return top-level folders for a job, with pagination metadata.
+
+    The upstream Synergy `/api/v1/jobs/{id}/items` endpoint always returns
+    every folder in one shot — there's no `Page`/`PageSize` support on that
+    route. We therefore fetch the whole list once and slice in-memory. This
+    is still a win because:
+
+    * For a job with thousands of folders, returning all of them in one
+      API response causes the Files UI to render a huge tree at once,
+      which is what causes the "loads forever" experience users see.
+    * The total folder count for a job (`no_of_folders` from the job
+      record) is usually modest, so the upstream call itself is fast.
+    """
     base_url = _build_base_url(server)
     url = f"{base_url}/api/v1/jobs/{job_id}/items"
     headers = {
@@ -93,11 +111,42 @@ def list_job_folders(server: str, token: str, job_id: str) -> List[Dict[str, Any
         or data.get("items")
         or []
     )
-    return [_normalize_folder(folder) for folder in items if isinstance(folder, dict)]
+    all_folders = [
+        _normalize_folder(folder) for folder in items if isinstance(folder, dict)
+    ]
+    total = len(all_folders)
+    page = max(1, page)
+    page_size = max(1, page_size)
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_folders = all_folders[start:end]
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    return {
+        "items": page_folders,
+        "page": page,
+        "page_size": page_size,
+        "total_rows": total,
+        "total_pages": total_pages,
+    }
 
 
-def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
-    """Return subfolders and files for a folder."""
+def get_folder_items(
+    server: str,
+    token: str,
+    folder_id: str,
+    page: int = 1,
+    page_size: int = 50,
+) -> Dict[str, Any]:
+    """Return subfolders and files for a folder, with pagination metadata.
+
+    Subfolders come back un-paginated from upstream — we slice them in
+    memory once we've fetched everything (cheap; folders are small). Files
+    *can* be large for a single folder, but the upstream
+    `/api/v1/folders/{id}/items` route doesn't expose `Page`/`PageSize`
+    either; we apply the same in-memory slicing strategy. The pagination
+    cursors returned here describe the *combined* page index — the
+    frontend advances a single `page` cursor that walks both arrays.
+    """
     base_url = _build_base_url(server)
     url = f"{base_url}/api/v1/folders/{folder_id}/items"
     headers = {
@@ -107,7 +156,7 @@ def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
     response = httpx.get(url, headers=headers, timeout=60)
     _check_response(response)
     data = response.json()
-    subfolders = [
+    all_subfolders = [
         _normalize_folder(folder)
         for folder in data.get("SubFolders", [])
         if isinstance(folder, dict)
@@ -119,12 +168,34 @@ def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
         or files_data.get("items")
         or []
     )
-    files = [_normalize_file(f) for f in file_items if isinstance(f, dict)]
+    all_files = [_normalize_file(f) for f in file_items if isinstance(f, dict)]
+
+    page = max(1, page)
+    page_size = max(1, page_size)
+    # Folders first, then files — same ordering the UI renders.
+    combined_total = len(all_subfolders) + len(all_files)
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_subfolders: List[Dict[str, Any]] = []
+    page_files: List[Dict[str, Any]] = []
+    if start < len(all_subfolders):
+        page_subfolders = all_subfolders[start : min(end, len(all_subfolders))]
+    file_start = max(0, start - len(all_subfolders))
+    file_end = max(0, end - len(all_subfolders))
+    if file_end > 0 and file_start < len(all_files):
+        page_files = all_files[file_start:file_end]
+
+    total_pages = max(1, (combined_total + page_size - 1) // page_size)
+
     return {
         "folder_id": folder_id,
-        "subfolders": subfolders,
-        "files": files,
-        "files_total": files_data.get("TotalRows"),
+        "subfolders": page_subfolders,
+        "files": page_files,
+        "files_total": files_data.get("TotalRows") or len(all_files),
+        "page": page,
+        "page_size": page_size,
+        "total_rows": combined_total,
+        "total_pages": total_pages,
     }
 
 

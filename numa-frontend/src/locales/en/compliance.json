@@ -8,58 +8,92 @@
     "effectiveDate": "Effective date",
     "lastUpdated": "Last updated",
     "documentVersion": "Document version",
-    "version": "1.0",
-    "date": "9 May 2026",
+    "version": "1.1",
+    "date": "20 May 2026",
     "intro": {
       "body": "Numa is an enterprise AI platform operated by Arcanum AI Limited. This page summarises the security and compliance posture of the production Numa SaaS platform for prospective customers, existing customers, partners, and auditors. Specific evidence — reports, attestations, subprocessor lists — is available to qualified parties under non-disclosure terms on request."
     },
     "sections": {
+      "strategicIntent": {
+        "title": "1. What we are building toward",
+        "body": "Numa's security and compliance programme is built around the following frameworks:",
+        "frameworks": [
+          { "name": "SOC 2", "description": "operational control assurance." },
+          { "name": "NZ Privacy Act 2020 and EU GDPR", "description": "personal data protection." },
+          { "name": "NZ Government Cyber Security Framework", "description": "NZ public sector alignment." },
+          {
+            "name": "NZISM",
+            "description": "NZ public sector, targeting IN-CONFIDENCE and SENSITIVE classifications."
+          },
+          { "name": "NIST AI Risk Management Framework and ISO/IEC 42001", "description": "AI governance." }
+        ]
+      },
       "cloudFoundation": {
-        "title": "1. Cloud foundation",
-        "body": "Numa runs on Amazon Web Services. The platform inherits the physical, environmental, and infrastructure controls covered by AWS's certifications (including SOC 1/2/3, ISO 27001, and PCI DSS). Numa is deployable in any AWS commercial region."
+        "title": "2. Cloud foundation",
+        "body": "Numa runs on Amazon Web Services. The platform inherits the physical, environmental, and infrastructure controls covered by AWS's certifications, including SOC 1/2/3, ISO 27001, and PCI DSS. The AWS region is selected per customer at onboarding and customer data does not leave the selected region."
       },
       "tenantIsolation": {
-        "title": "2. Tenant isolation",
+        "title": "3. Tenant isolation",
         "body": "Each customer is provisioned into a dedicated AWS environment. Compute, storage, identity, and data planes are separated at the account boundary, eliminating shared-tenant data co-mingling at the infrastructure layer."
       },
       "authentication": {
-        "title": "3. Authentication & access",
-        "body": "User access is gated by managed identity with multi-factor authentication available, role-based access controls, and configurable session lifetimes. Administrative access by Arcanum AI personnel is authenticated, role-scoped, and logged."
+        "title": "4. Authentication & access",
+        "body": "User access is gated by managed identity. Multi-factor authentication is enforced for administrative access and available for all users. Role-based access controls and configurable session lifetimes apply throughout. Administrative access by Arcanum AI personnel is authenticated, role-scoped, and logged."
       },
       "dataProtection": {
-        "title": "4. Data protection",
-        "body": "Customer data is encrypted in transit using TLS 1.2 or higher and at rest using AWS-managed encryption keys. AI processing is performed via Amazon Bedrock; customer data is not used to train foundation models."
+        "title": "5. Data protection",
+        "body": "Customer data is encrypted in transit using TLS 1.2 or higher and at rest using AWS-managed encryption keys. Customer-managed keys are available on request. AI processing is performed via Amazon Bedrock under enterprise terms; customer data is not used to train foundation models."
       },
       "network": {
-        "title": "5. Network",
+        "title": "6. Network",
         "body": "Public traffic is served exclusively over HTTPS behind a managed CDN with DDoS mitigation. APIs are fronted by an authenticated gateway that validates every request before it reaches application logic."
       },
       "integrationSecurity": {
-        "title": "6. Integration security",
-        "body": "External SaaS integrations are mediated through an isolated, Arcanum-operated proxy. Credentials are scoped per user, never shared across tenants, and never stored in customer environments. Numa relies on AWS and a small number of selected processors; the full subprocessor list is available under NDA."
+        "title": "7. Integration security",
+        "body": "External SaaS integrations are mediated through an isolated, Arcanum-operated proxy. Credentials are scoped per user, never shared across tenants, and never stored in customer environments. The current subprocessor list is available to qualified parties under NDA."
+      },
+      "aiGovernance": {
+        "title": "8. AI governance",
+        "body": "Foundation models are accessed via Amazon Bedrock under enterprise terms that prohibit customer data being used to train foundation models. Model selection, prompt design, and tool access for each Numa capability are version-controlled and reviewed before release. Prompts, tool invocations, and responses produced within authenticated user sessions are recorded in audit logs available to the customer."
       },
       "operationalSecurity": {
-        "title": "7. Operational security",
-        "body": "All infrastructure changes flow through automated, peer-reviewed deployment pipelines. Production access follows least-privilege principles with audit logging. Numa undergoes both continuous automated security assessment and periodic third-party penetration testing.",
+        "title": "9. Operational security",
+        "body": "All infrastructure changes flow through automated, peer-reviewed deployment pipelines. Production access follows least-privilege principles with audit logging. Numa undergoes continuous automated security assessment and periodic third-party penetration testing.",
         "penTesting": {
           "tableHeaders": {
-            "date": "Date",
-            "type": "Type"
+            "date": "Assessment",
+            "type": "Cadence"
           },
           "engagements": [
-            { "date": "May 2026", "type": "Automated" },
-            { "date": "Date TBC", "type": "Third-party" }
+            { "date": "Automated security assessment", "type": "Continuous" },
+            { "date": "Third-party penetration testing", "type": "Annual" },
+            { "date": "CIS Benchmark review", "type": "Annual" },
+            { "date": "AWS Well-Architected Review", "type": "Annual" }
           ],
           "footnote": "Full reports are available to qualified parties under NDA."
         }
       },
       "dataResidency": {
-        "title": "8. Data residency",
-        "body": "Numa can be deployed in any AWS region. Current production deployments use US East (N. Virginia), Asia Pacific (Sydney), and Asia Pacific (Jakarta), selected per customer at onboarding. Customer data remains in the selected region. Other regions, including AWS Auckland, are available on request."
+        "title": "10. Data residency",
+        "body": "Numa is deployed in customer-selected AWS regions. Current production deployments use US East (N. Virginia), Asia Pacific (Sydney), and Asia Pacific (Jakarta). Customer data remains in the selected region. Other regions, including AWS Auckland, are available on request."
       },
       "roadmap": {
-        "title": "9. Roadmap",
-        "body": "SOC 2 attestation is in progress. Single sign-on via Microsoft Entra ID is in active development. Additional regional certifications and identity providers are added based on customer demand."
+        "title": "11. The order we are progressing in",
+        "body": "Numa's certification programme advances in the following order. Each stage is initiated when customer demand justifies it and completed before the next is opened.",
+        "stages": [
+          {
+            "name": "Stage 1 — Operational assurance",
+            "description": "SOC 2 Type II certification and alignment to the NZ Government Cyber Security Framework."
+          },
+          {
+            "name": "Stage 2 — Public sector readiness",
+            "description": "NZISM at IN-CONFIDENCE, followed by SENSITIVE. Engagement is driven by NZ Government agency commitments and the Certification & Accreditation process each agency runs."
+          },
+          {
+            "name": "Stage 3 — AI governance certification",
+            "description": "ISO/IEC 42001. NIST AI Risk Management Framework alignment underpins this stage."
+          }
+        ]
       }
     },
     "cta": {

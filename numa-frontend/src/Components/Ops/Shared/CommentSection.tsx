@@ -9,6 +9,7 @@ import * as OpsService from '../../../Services/OpsService';
 import type { Comment } from '../../../types/ops';
 import { RichTextEditor } from './RichTextEditor';
 import { StaffAvatar } from './StaffAvatar';
+import { ImageLightbox } from './ImageLightbox';
 import { useOps } from '../OpsContext';
 
 /**
@@ -78,6 +79,16 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  const handleCommentBodyClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'IMG') {
+      e.preventDefault();
+      const img = target as HTMLImageElement;
+      if (img.src) setLightboxSrc(img.src);
+    }
+  }, []);
 
   const currentUserId: string = user?.decoded_tokens?.idToken?.sub ?? '';
 
@@ -157,6 +168,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
 
   return (
     <div>
+      <style>{`.ops-comment-body img { cursor: zoom-in; }`}</style>
       {/* Add comment form — at top, Jira-style with avatar */}
       <div
         className="d-flex gap-3 mb-3 pb-3"
@@ -280,8 +292,9 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                     </div>
                   ) : (
                     <div
-                      className="mb-0"
+                      className="mb-0 rich-text-editor-content ops-comment-body"
                       style={{ fontSize: '0.875rem', color: '#374151' }}
+                      onClick={handleCommentBodyClick}
                       dangerouslySetInnerHTML={{ __html: comment.content }}
                     />
                   )}
@@ -291,6 +304,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
           })}
         </div>
       )}
+      <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </div>
   );
 }

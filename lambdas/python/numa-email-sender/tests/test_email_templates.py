@@ -26,6 +26,20 @@ class TestTemplateRegistry:
         }
         assert expected == set(EMAIL_TEMPLATES.keys())
 
+    def test_html_escapes_user_controlled_fields(self):
+        """User-controlled values must be HTML-escaped in the rendered HTML
+        body to prevent XSS in email clients. Plain-text subject/body are not
+        escaped (entities would render literally in the inbox)."""
+        payload = "<script>alert(1)</script>"
+        result = render_template(
+            "schedule_completed",
+            {"schedule_name": payload, "summary": payload},
+            domain="numa.arcanum.ai",
+        )
+        assert result is not None
+        assert payload not in result["html"], "raw script tag in HTML output (XSS)"
+        assert "&lt;script&gt;" in result["html"], "expected HTML-escaped script tag"
+
 
 class TestRenderTemplate:
     """Test template rendering."""

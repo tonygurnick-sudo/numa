@@ -299,6 +299,14 @@ def list_vault_secrets(
             "validation_passed": secret.get("metadata", {}).get(
                 "validation_passed", True
             ),
+            "created_by_id": secret.get("metadata", {}).get("created_by_id"),
+            "created_by_email": secret.get("metadata", {}).get("created_by_email"),
+            "last_modified_by_id": secret.get("metadata", {}).get(
+                "last_modified_by_id"
+            ),
+            "last_modified_by_email": secret.get("metadata", {}).get(
+                "last_modified_by_email"
+            ),
         }
         secrets_list.append(secret_meta)
 
@@ -330,8 +338,15 @@ def add_secret_to_vault(
     secret_data: Dict[str, Any],
     template: Optional[str] = None,
     client_name: Optional[str] = None,
+    actor_user_id: Optional[str] = None,
+    actor_email: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Add or update a single secret in user's consolidated vault."""
+    """Add or update a single secret in user's consolidated vault.
+
+    actor_user_id / actor_email identify the human who performed the write.
+    They are stamped onto the secret metadata so company secrets show which
+    admin last touched them.
+    """
     vault = get_consolidated_vault(user_id, client_name)
 
     now = _get_current_timestamp()
@@ -343,6 +358,16 @@ def add_secret_to_vault(
         existing_secret.get("metadata", {}).get("created_at")
         if existing_secret
         else now
+    )
+    created_by_id = (
+        existing_secret.get("metadata", {}).get("created_by_id")
+        if existing_secret
+        else actor_user_id
+    )
+    created_by_email = (
+        existing_secret.get("metadata", {}).get("created_by_email")
+        if existing_secret
+        else actor_email
     )
 
     # Create secret structure
@@ -364,6 +389,10 @@ def add_secret_to_vault(
             "created_at": created_at,
             "updated_at": now,
             "last_accessed_at": now,
+            "created_by_id": created_by_id,
+            "created_by_email": created_by_email,
+            "last_modified_by_id": actor_user_id,
+            "last_modified_by_email": actor_email,
         },
     }
 

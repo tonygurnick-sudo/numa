@@ -319,19 +319,20 @@ def _sanitize_request_body(body: dict) -> dict:
         "modelId": FORCED_MODEL_ID,
         # Use the demo-specific agent type (tailored identity + restricted tools)
         "type": "numa-chat-demo",
-        # Disable enterprise features
+        # Disable enterprise features. (Native connectors are also gated on
+        # OAUTH_INTEGRATIONS_ENABLED in the workspace agent, so leaving it
+        # False here suppresses both Pipedream and native integrations.)
         "featureFlags": {
             "OAUTH_INTEGRATIONS_ENABLED": False,
-            "DATA_CONNECTORS_CHAT_ENABLED": False,
         },
         # Allowed tools -- web search + read-only KB access
         "enabledTools": ["web_search", "knowledge_base"],
         # Read-only KB access (agent type restricts to query/list/download only)
         "availableKBs": [{"id": "company", "name": "Company KB"}],
         "enabledKBIds": ["company"],
+        # New unified shape — public demo never has any integrations enabled.
+        "enabledIntegrations": [],
         "availableIntegrations": [],
-        "connectedDataConnectors": [],
-        "dataConnectorsEnabled": False,
         # Synthetic user identity
         "userEmail": "demo@numa.arcanum.ai",
     }

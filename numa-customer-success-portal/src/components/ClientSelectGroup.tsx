@@ -172,19 +172,22 @@ export function ClientSelectGroup({
         )}
       </div>
 
-      {/* Selected indicator */}
+      {/* Selected indicator — "selected" is a brand state, not a status, so
+       * we use the primary purple pill regardless of dev/prod. The dev/prod
+       * distinction is already conveyed by the orange Internal badge inline
+       * with the client name in the picker list. */}
       {value && (
         <div className="mt-2 d-flex align-items-center gap-2">
           <span className="text-muted small">Selected:</span>
           <Badge
-            bg={isDevSelected ? 'warning' : 'success'}
-            text={isDevSelected ? 'dark' : undefined}
+            bg="primary"
             className="d-flex align-items-center"
             style={{ cursor: disabled ? 'not-allowed' : 'pointer' }}
             onClick={() => !disabled && onChange('')}
             title="Click to clear"
           >
             {value}
+            {isDevSelected && <span className="ms-1 opacity-75">· dev</span>}
             <X className="ms-1" size={12} />
           </Badge>
         </div>

@@ -125,6 +125,9 @@
     "count": "{{count}} tickets",
     "version": "Version {{version}}",
     "conflictMessage": "This ticket was modified by someone else. Please refresh and try again.",
+    "saveFailed": "Save failed",
+    "savedAt": "Saved {{time}}",
+    "allChangesSaved": "All changes saved",
     "deleteConfirm": "Are you sure you want to delete this ticket?",
     "fields": "Fields",
     "comments": "Comments",
@@ -160,6 +163,7 @@
     "selectTypeHint": "Choose the type of work to get started",
     "attachments": "Attachments",
     "attachmentHint": "Drop files here \u2014 or attach from the ticket detail after creating",
+    "dropOrAttach": "Drop files here or click to attach",
     "largeImagePastedAttached": "Image was too large to embed. Added as an attachment instead.",
     "largeImagePastedQueued": "Image was too large to embed. It will be attached after the ticket is created.",
     "activity": "Activity",
@@ -397,7 +401,13 @@
     "announcementHelp": "Optional message shown at the top of the board",
     "announcementPlaceholder": "e.g., Sprint goal: Ship the CRM integration by Friday",
     "announcementClear": "Clear",
-    "announcementCharCount": "{{count}}/280"
+    "announcementCharCount": "{{count}}/280",
+    "taxonomyHeading": "Audience",
+    "taxonomyHelp": "Tag this board with the personas and industries it's relevant to. Used for filtering.",
+    "personasLabel": "Personas",
+    "personasHelp": "Which roles this board is most useful for.",
+    "industriesLabel": "Industries",
+    "industriesHelp": "Which industries this board is most relevant to."
   },
   "sprints": {
     "new": "New Sprint",
@@ -476,7 +486,12 @@
     "allCustomers": "All Customers",
     "bulkArchive": "Archive",
     "moveUp": "Move section up",
-    "moveDown": "Move section down"
+    "moveDown": "Move section down",
+    "statusCounts": {
+      "backlog": "{{count}} backlog",
+      "active": "{{count}} active",
+      "done": "{{count}} done"
+    }
   },
   "toolbar": {
     "searchPlaceholder": "Search tickets...",
@@ -920,6 +935,7 @@
     "addCustomField": "Add Custom Field",
     "addField": "Add Field",
     "editField": "Edit Field",
+    "builtinFieldEditHint": "Built-in fields keep their underlying type; you can only rename the label. Clear the name to restore the default.",
     "fieldType": "Field Type",
     "category": "Category",
     "options": "Options",

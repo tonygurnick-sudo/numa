@@ -469,9 +469,8 @@ async def stream_claude_sdk(
     agent_config: Optional[AgentConfig] = None,
     agent_file_paths: Optional[list[str]] = None,
     external_user_id: Optional[str] = None,
-    enabled_integrations: Optional[list[str]] = None,
+    enabled_integrations: Optional[list[dict]] = None,
     available_integrations: Optional[list[dict]] = None,
-    connected_data_connectors: Optional[list[dict]] = None,
     approval_mode: str = "always",
     numa_tool_approval_mode: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
@@ -724,7 +723,6 @@ async def stream_claude_sdk(
         external_user_id=external_user_id,
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
-        connected_data_connectors=connected_data_connectors,
         request_id=request_id,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
@@ -1233,11 +1231,12 @@ async def stream_claude_sdk(
                                 )
 
                                 operation = tool_input.get("name", "")
-                                connector = (
-                                    tool_input.get("params", {}).get("connector", "")
+                                _params_dict = (
+                                    tool_input.get("params", {})
                                     if isinstance(tool_input.get("params"), dict)
-                                    else ""
+                                    else {}
                                 )
+                                connector = _params_dict.get("connector", "")
                                 _approval_key = (
                                     f"connector-{connector}-{operation}"
                                     if connector
@@ -1245,6 +1244,25 @@ async def stream_claude_sdk(
                                 )
 
                                 _connector_safe = is_safe_connector_operation(operation)
+                                # `request` is the catch-all authenticated-HTTP op
+                                # used by services with no dedicated handler (e.g.
+                                # native Gmail). Without method-aware inference
+                                # every Gmail read prompts for approval. Mirror
+                                # the Pipedream proxy_request rule: GET/HEAD are
+                                # read-only and safe under non_destructive.
+                                if operation == "request" and not _connector_safe:
+                                    # Mirror connect_tools.handle_connect_request:
+                                    # an omitted method defaults to GET in the
+                                    # handler, so treat the empty case as GET
+                                    # here too. Otherwise the LLM's read calls
+                                    # that rely on the default fall through to
+                                    # "requires approval".
+                                    _http_method = (
+                                        str(_params_dict.get("method", "")).upper()
+                                        or "GET"
+                                    )
+                                    if _http_method in ("GET", "HEAD"):
+                                        _connector_safe = True
                                 _conn_mode = _nt_modes.get(
                                     "connectors", "non_destructive"
                                 )
@@ -1275,9 +1293,15 @@ async def stream_claude_sdk(
                                 integration_slug = tool_input.get(
                                     "integration_slug"
                                 ) or (action_key.split("-")[0] if action_key else "")
+                                _enabled_pipedream_slugs = {
+                                    it.get("slug")
+                                    for it in (enabled_integrations or [])
+                                    if isinstance(it, dict)
+                                    and it.get("method") == "pipedream"
+                                }
                                 if integration_slug and (
-                                    not enabled_integrations
-                                    or integration_slug not in enabled_integrations
+                                    not _enabled_pipedream_slugs
+                                    or integration_slug not in _enabled_pipedream_slugs
                                 ):
                                     continue
 
@@ -1493,7 +1517,6 @@ async def stream_claude_sdk(
                 external_user_id=external_user_id,
                 enabled_integrations=enabled_integrations,
                 available_integrations=available_integrations,
-                connected_data_connectors=connected_data_connectors,
                 request_id=request_id,
                 email_signature=email_signature,
                 agent_type_config=agent_type_config,
@@ -1694,9 +1717,8 @@ async def run_claude_sdk(
     agent_config: Optional[AgentConfig] = None,
     agent_file_paths: Optional[list[str]] = None,
     external_user_id: Optional[str] = None,
-    enabled_integrations: Optional[list[str]] = None,
+    enabled_integrations: Optional[list[dict]] = None,
     available_integrations: Optional[list[dict]] = None,
-    connected_data_connectors: Optional[list[dict]] = None,
     approval_mode: str = "always",
     numa_tool_approval_mode: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
@@ -1825,7 +1847,6 @@ async def run_claude_sdk(
         external_user_id=external_user_id,
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
-        connected_data_connectors=connected_data_connectors,
         request_id=request_id,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
@@ -2007,11 +2028,12 @@ async def run_claude_sdk(
                                 )
 
                                 operation = tool_input.get("name", "")
-                                connector = (
-                                    tool_input.get("params", {}).get("connector", "")
+                                _params_dict = (
+                                    tool_input.get("params", {})
                                     if isinstance(tool_input.get("params"), dict)
-                                    else ""
+                                    else {}
                                 )
+                                connector = _params_dict.get("connector", "")
                                 _approval_key = (
                                     f"connector-{connector}-{operation}"
                                     if connector
@@ -2019,6 +2041,22 @@ async def run_claude_sdk(
                                 )
 
                                 _connector_safe = is_safe_connector_operation(operation)
+                                # Mirror the async path: `connectors.request` with
+                                # an HTTP method of GET/HEAD is read-only and
+                                # qualifies for auto-approval under non_destructive.
+                                if operation == "request" and not _connector_safe:
+                                    # Mirror connect_tools.handle_connect_request:
+                                    # an omitted method defaults to GET in the
+                                    # handler, so treat the empty case as GET
+                                    # here too. Otherwise the LLM's read calls
+                                    # that rely on the default fall through to
+                                    # "requires approval".
+                                    _http_method = (
+                                        str(_params_dict.get("method", "")).upper()
+                                        or "GET"
+                                    )
+                                    if _http_method in ("GET", "HEAD"):
+                                        _connector_safe = True
                                 _conn_mode_sync = _nt_modes_sync.get(
                                     "connectors", "non_destructive"
                                 )
@@ -2033,9 +2071,15 @@ async def run_claude_sdk(
                                 integration_slug = tool_input.get(
                                     "integration_slug"
                                 ) or (action_key.split("-")[0] if action_key else "")
+                                _enabled_pipedream_slugs = {
+                                    it.get("slug")
+                                    for it in (enabled_integrations or [])
+                                    if isinstance(it, dict)
+                                    and it.get("method") == "pipedream"
+                                }
                                 if integration_slug and (
-                                    not enabled_integrations
-                                    or integration_slug not in enabled_integrations
+                                    not _enabled_pipedream_slugs
+                                    or integration_slug not in _enabled_pipedream_slugs
                                 ):
                                     continue
 
@@ -2215,7 +2259,6 @@ async def run_claude_sdk(
                 external_user_id=external_user_id,
                 enabled_integrations=enabled_integrations,
                 available_integrations=available_integrations,
-                connected_data_connectors=connected_data_connectors,
                 request_id=request_id,
                 email_signature=email_signature,
                 agent_type_config=agent_type_config,

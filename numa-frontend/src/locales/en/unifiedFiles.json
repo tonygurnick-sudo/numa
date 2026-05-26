@@ -5,9 +5,12 @@
     "userFiles": "User Files",
     "companyFiles": "Company Files",
     "shared": "External Share",
-    "remote": "Connector Files",
     "webCrawler": "Web Crawler",
     "chatArtifacts": "Chat Artifacts"
+  },
+  "integrationFolder": {
+    "typeLabel": "Integration",
+    "reconnectLink": "Reconnect at Integrations"
   },
   "actions": {
     "newFolder": "New Folder",
@@ -53,7 +56,9 @@
   },
   "sections": {
     "myFiles": "My Files",
-    "sharedFiles": "Shared Files"
+    "sharedFiles": "Shared Files",
+    "remoteFiles": "Remote Files",
+    "connectIntegration": "Connect Integration"
   },
   "createFolder": {
     "title": "Create New Folder",
@@ -81,10 +86,17 @@
     },
     "creating": "Creating...",
     "createButton": "Create Folder",
+    "personasLabel": "Personas",
+    "personasHelp": "Which roles this folder is most useful for.",
+    "industriesLabel": "Industries",
+    "industriesHelp": "Which industries this folder is most relevant to.",
     "errors": {
       "nameRequired": "Please provide a name for the folder.",
       "editorsMustBeViewers": "Editors must also be viewers for shared folders."
     }
+  },
+  "companySettings": {
+    "title": "Company folder settings"
   },
   "createSubfolder": {
     "title": "New folder in \"{{parent}}\"",
@@ -177,7 +189,7 @@
     "folderHintButton": "Create folder",
     "destinationLabel": "Upload destination",
     "destinationPlaceholder": "Personal (your default folder)",
-    "destinationHelp": "Pick the folder you want files to land in. Each top-level folder has its own sharing controls.",
+    "destinationHelp": "Defaults to your Personal folder. Pick another folder to upload there instead — each folder has its own sharing controls.",
     "pickDestinationHint": "Pick a destination folder above to continue."
   },
   "bulk": {

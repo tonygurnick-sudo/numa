@@ -38,6 +38,7 @@ import { FilePreviewPanel } from '../FilePreviewPanel';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 import type { S3FileInfo } from '../../Services/knowledgeBaseService';
 import { CreateSubfolderModal } from './CreateSubfolderModal';
+import { FolderSettingsDrawer } from './FolderSettingsDrawer';
 import { FolderContextMenu, type FolderContextAction, type FolderContextTarget } from './FolderContextMenu';
 import { extractDroppedUploadBatch, isExternalFileDrag, type DroppedUploadBatch } from './dropUploadUtils';
 
@@ -201,6 +202,8 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const canView = Boolean(user?.features?.includes('useCompanyData'));
   const canAdd = Boolean(user?.features?.includes('addToCompanyData'));
   const canDelete = Boolean(user?.features?.includes('deleteFromCompanyData'));
+  const isAdmin = Boolean(user?.groups?.includes('admin'));
+  const [showSettings, setShowSettings] = useState(false);
 
   // Hide parent page actions -- we handle them in the toolbar
   useEffect(() => {
@@ -1280,6 +1283,17 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
             <option value="7d">{t('filters.dateOptions.last7')}</option>
             <option value="30d">{t('filters.dateOptions.last30')}</option>
           </select>
+          {canDelete && selectedKeys.size > 0 && (
+            <button
+              className="finder-btn finder-btn--danger"
+              onClick={() => confirmDeleteFiles(Array.from(selectedKeys))}
+              title={t('delete.confirm', { count: selectedKeys.size })}
+              aria-label={t('delete.confirm', { count: selectedKeys.size })}
+            >
+              <i className="bi bi-trash" />
+              <span className="d-none d-sm-inline ms-1">{selectedKeys.size}</span>
+            </button>
+          )}
           {canAdd && (
             <button
               className="finder-btn finder-btn--primary finder-btn--labelled"
@@ -1316,9 +1330,21 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
               fetchFiles();
               fetchDeepFiles(true);
             }}
+            title={t('actions.refresh')}
+            aria-label={t('actions.refresh')}
           >
             <i className="bi bi-arrow-clockwise" />
           </button>
+          {isAdmin && (
+            <button
+              className="finder-btn"
+              onClick={() => setShowSettings(true)}
+              title={t('companySettings.title')}
+              aria-label={t('companySettings.title')}
+            >
+              <i className="bi bi-gear" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1805,6 +1831,18 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
           )}
         </Modal.Body>
       </Modal>
+
+      {/* Company KB settings drawer — admin-only entry from toolbar gear */}
+      <FolderSettingsDrawer
+        show={showSettings}
+        onHide={() => setShowSettings(false)}
+        kbId="company"
+        kbName={t('tabs.companyFiles')}
+        role="VIEWER"
+        onUpdated={() => {
+          /* taxonomy-only update; nothing to refresh in the file list */
+        }}
+      />
 
       {/* Bulk move destination picker */}
       <DestinationFolderPickerModal

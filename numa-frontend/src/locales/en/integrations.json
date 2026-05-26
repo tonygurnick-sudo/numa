@@ -21,6 +21,18 @@
     "title": "Numa Integrations",
     "subtitle": "Connect external tools and services to enhance your Numa experience"
   },
+  "methodBadge": {
+    "native": "Native",
+    "pipedream": "Pipedream",
+    "nativeTooltip": "Connected via Numa native connector",
+    "pipedreamTooltip": "Connected via Pipedream"
+  },
+  "hiddenByMethod": {
+    "pipedreamHidden_one": "{{count}} integration hidden — admin chose the native connector",
+    "pipedreamHidden_other": "{{count}} integrations hidden — admin chose the native connector",
+    "nativeHidden_one": "{{count}} connector hidden — admin chose the Pipedream integration",
+    "nativeHidden_other": "{{count}} connectors hidden — admin chose the Pipedream integration"
+  },
   "connections": {
     "defaults": {
       "exampleQuery": "Test my connection to this service"
@@ -343,7 +355,87 @@
     "refresh": "Refresh",
     "refreshing": "Refreshing",
     "saveChanges": "Save Changes",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "switch": "Switch",
+    "confirmSwitch": "Switch connection method for {{name}}? Your current connection will be disconnected first.",
+    "done": "Done",
+    "disconnectConfirmIntro": "Disconnect {{name}}?",
+    "disconnectWarnTitle": "This may break things that depend on it",
+    "disconnectWarnAgents": "Agents that use this integration will stop working until you reconnect.",
+    "disconnectWarnAutomations": "Automations (triggers and scheduled agents) wired to this integration will fail to run."
+  },
+  "errors": {
+    "switchFailed": "Switch failed"
+  },
+  "addModal": {
+    "title": "Add integration",
+    "methodTitle": "Choose connection method",
+    "back": "Back",
+    "intro": "Pick a service to add. Services with multiple connection options will ask you which to use next.",
+    "methodIntro": "This service is available through both Numa's native connector and Pipedream. Pick the method that fits this workspace.",
+    "searchPlaceholder": "Search integrations...",
+    "noResults": "No integrations match your search.",
+    "alreadyAdded": "Added",
+    "dualMethod": "2 methods",
+    "nativeHeading": "Native connector",
+    "nativeBody": "Stays in Numa. Credentials and the data Numa accesses live in your Numa workspace — no third-party broker.",
+    "nativeSetup": "Setup required: you'll register an OAuth app with this service and paste the client ID + secret. Takes a few minutes.",
+    "pipedreamHeading": "Pipedream",
+    "pipedreamBody": "Routed through Pipedream, a third-party service. Pipedream stores credentials and brokers all calls to this service — your data passes through them.",
+    "pipedreamSetup": "No setup required — enables immediately on this workspace.",
+    "userChoiceBadge": "User choice",
+    "userChoiceHeading": "Let users pick",
+    "userChoiceBody": "Enable both methods. Users see both options at connect time and pick the one that fits them — no default forced.",
+    "userChoiceSetup": "Enables Pipedream immediately, then opens the native setup wizard so both methods are available."
+  },
+  "methodChooser": {
+    "title": "Choose connection method",
+    "intro": "This service is available through both Numa's native connector and Pipedream. Pick whichever fits your needs.",
+    "switchTitle": "Switch connection method",
+    "switchIntro": "Your existing connection will be disconnected first. Any agents or automations relying on it will need to be reconnected.",
+    "nativeHeading": "Connect natively",
+    "nativeBody": "Stays in Numa. Numa connects directly to the service — your credentials and the data accessed live in your Numa workspace, with no third party in between.",
+    "pipedreamHeading": "Connect via Pipedream",
+    "pipedreamBody": "Routed through Pipedream, a third-party service. Pipedream stores the credentials and brokers all calls to this service — your data passes through them.",
+    "userPicks": "Choose method"
+  },
+  "badges": {
+    "fileStore": "Files",
+    "fileStoreTooltip": "Files from this integration appear under Files → Remote Files"
+  },
+  "manage": {
+    "title": "Manage {{name}}",
+    "methodHeading": "Connection method",
+    "toolsHeading": "Tools",
+    "method": {
+      "pipedreamHeading": "Pipedream",
+      "pipedreamBody": "Routed through Pipedream. Credentials and calls flow through a third-party service.",
+      "nativeHeading": "Native connector",
+      "nativeBody": "Stays in Numa. Credentials and data live in your Numa workspace — no third party involved.",
+      "nativeSetupNeeded": "Setup required: register an OAuth app with this service and paste the client ID + secret. Takes a few minutes.",
+      "active": "Active",
+      "available": "Available",
+      "useThis": "Use this method",
+      "makeDefault": "Make default",
+      "setUp": "Set up",
+      "reconfigure": "Reconfigure",
+      "activate": "Activate",
+      "letUserChoose": "Let users pick at connect time",
+      "letUserChooseHelp": "Users see both connection options and pick when they connect to this service.",
+      "userChoiceBadge": "User choice",
+      "userChoiceBadgeTooltip": "Users pick the connection method at connect time",
+      "userChoiceHeading": "Let users pick",
+      "userChoiceBody": "Users see both connection options at connect time and pick the one that fits them. No method is forced as the default."
+    }
+  },
+  "patCredentials": {
+    "title": "Connect {{name}}",
+    "intro": "Enter your credentials. They are stored securely and only used to access this service on your behalf."
+  },
+  "view": {
+    "viewMode": "View mode",
+    "grid": "Grid view",
+    "list": "List view"
   },
   "toolPolicy": {
     "applying": "Applying default tool policy...",
@@ -398,11 +490,6 @@
       "loadFailed": "Failed to load data connectors.",
       "connectFailed": "Failed to connect to Synergy 12d.",
       "disconnectFailed": "Failed to disconnect {{name}}."
-    },
-    "signup": {
-      "noAccount": "Don't have an account yet?",
-      "signUp": "Sign up at {{provider}}",
-      "setupGuide": "View setup guide"
     },
     "synergy": {
       "iconAlt": "Synergy 12d Icon",
@@ -475,6 +562,7 @@
       "configuring": "Configuring...",
       "notConfigured": "Not configured",
       "credentialsMissing": "Admin must configure OAuth client credentials.",
+      "docsUnavailable": "API docs not deployed for this client — re-deploy to enable",
       "configureTitle": "Configure {{provider}}",
       "clientId": "Client ID",
       "clientIdPlaceholder": "Paste your client ID",
@@ -482,7 +570,6 @@
       "clientSecretPlaceholder": "Paste your client secret",
       "redirectUri": "Redirect URI",
       "redirectUriHint": "Copy this URI into your provider's OAuth redirect configuration.",
-      "helpLink": "Setup instructions",
       "saveCredentials": "Save Credentials",
       "saving": "Saving...",
       "updateCredentials": "Update Credentials",
@@ -526,7 +613,9 @@
       "save": "Save",
       "saving": "Saving...",
       "cancel": "Cancel",
-      "done": "Done"
+      "done": "Done",
+      "stepIndicator": "Progress",
+      "stepLabel": "Step {{number}}: {{label}}"
     },
     "synergyWizard": {
       "title": "Configure Synergy 12d",
@@ -561,16 +650,13 @@
       "genericStep4": "Copy the Client ID and Client Secret",
       "genericStep5": "Paste them in the fields below",
       "scopesLabel": "Permissions",
-      "scopesHint": "Select the access permissions this connector needs.",
+      "scopesHint": "Select the OAuth scopes this connector should request. These choices only ask for the listed access — the OAuth provider has the final say. Anything beyond what the provider's app configuration allows will be denied at consent time.",
       "scopesRawLabel": "Scopes",
       "scopesRawPlaceholder": "scope1 scope2",
       "scopesRawHintSpaces": "Space-separated, in the format shown in the provider's docs (e.g. Google, Microsoft, Dropbox).",
       "scopesRawHintCommas": "Comma-separated, in the format shown in the provider's docs (e.g. Zoho, Xero).",
       "scopesRawHintAuto": "Separator matches what's pre-filled for this provider — don't switch between commas and spaces.",
       "advancedOauth": "Advanced OAuth Settings",
-      "apiDocsUrlLabel": "API Documentation URL",
-      "apiDocsUrlPlaceholder": "https://docs.provider.com/api/v1",
-      "apiDocsUrlHint": "A link to the provider's API documentation, Swagger spec, or MCP definition. Helps the AI assistant understand how to use this connector.",
       "rateLimitsLabel": "Rate Limits",
       "rateLimitRpmLabel": "Requests per minute",
       "rateLimitRpmPlaceholder": "60",
@@ -585,7 +671,6 @@
       "reviewCredentials": "Credentials",
       "reviewScopes": "Permissions",
       "reviewOauthConfig": "OAuth Configuration",
-      "reviewApiDocs": "API Documentation",
       "reviewRateLimits": "Rate Limits",
       "reviewCustomHeaders": "Custom Headers",
       "reviewMasked": "••••••••",
@@ -629,7 +714,8 @@
       "databaseHint": "The name of the FileMaker database to connect to.",
       "bearerToken": "Bearer Token",
       "appName": "Application Name",
-      "appKey": "Application Key"
+      "appKey": "Application Key",
+      "pat": "Personal Access Token"
     },
     "apiKeyWizard": {
       "title": "Configure {{connector}}",
@@ -650,27 +736,19 @@
       "storedInVault": "(stored in vault)",
       "saveSuccess": "Connector configured successfully.",
       "saveError": "Failed to save connector configuration.",
-      "doneHint": "Your connector credentials are stored securely. The AI assistant can now use this connector when configured."
+      "doneHint": "Your connector credentials are stored securely. The AI assistant can now use this connector when configured.",
+      "perUserNotice": "No credential needed here. Each user will be asked for their own credential the first time they use this connector from chat.",
+      "metadataOnly": "metadata only, no credential",
+      "credentialCapturedInChatHint": "Per-user credentials are captured in chat, not here.",
+      "optional": "optional",
+      "instanceUrlLabel": "Instance URL",
+      "instanceUrlPlaceholder": "https://your-instance.example.com",
+      "instanceUrlHelp": "Set this only if your connector's API is hosted at a customer-specific address (e.g. a private Synergy 12d server). Leave empty to use the connector's built-in default.",
+      "instanceUrlInvalid": "Invalid URL",
+      "instanceUrlInvalidProtocol": "Must start with http:// or https://"
     },
     "apiReference": {
-      "title": "API Reference",
-      "autoConfigured": "Auto-configured",
-      "customize": "Customize",
-      "dataTypesLabel": "Data Types",
-      "capabilitiesLabel": "Capabilities",
-      "docsUrl": "API Documentation URL",
-      "docsUrlPlaceholder": "https://docs.provider.com/api/v1",
-      "openApiUrl": "OpenAPI / Swagger URL",
-      "openApiUrlPlaceholder": "https://api.provider.com/swagger.json",
-      "postmanUrl": "Postman Collection URL",
-      "postmanUrlPlaceholder": "https://www.postman.com/collection/...",
-      "mcpServerRef": "MCP Server Reference",
-      "mcpServerRefPlaceholder": "@modelcontextprotocol/server-name",
-      "purposeHint": "Purpose / Description",
-      "purposeHintPlaceholder": "What this platform does and what data it exposes...",
-      "purposeHintDesc": "Helps the AI assistant understand how to use this connector.",
-      "endpointCategories": "Endpoint Categories",
-      "exampleRequests": "Example API Requests"
+      "customize": "Customize"
     },
     "events": {
       "title": "Events",

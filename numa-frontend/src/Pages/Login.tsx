@@ -600,6 +600,8 @@ const NumaLogin = () => {
             <Form.Label>{t('login.usernameLabel')}</Form.Label>
             <Form.Control
               type="text"
+              name="username"
+              autoComplete="username"
               ref={usernameRef}
               placeholder={t('login.usernamePlaceholder')}
               data-testid="username-input"
@@ -613,6 +615,7 @@ const NumaLogin = () => {
                 id="password"
                 name="password"
                 type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
                 ref={passwordRef}
                 data-testid="password-input"
               />
@@ -681,6 +684,7 @@ const NumaLogin = () => {
               id="newPassword"
               name="newPassword"
               type="password"
+              autoComplete="new-password"
               ref={newPasswordRef}
               data-testid="new-password-input"
             />
@@ -692,6 +696,7 @@ const NumaLogin = () => {
               id="confirmPassword"
               name="confirmPassword"
               type="password"
+              autoComplete="new-password"
               ref={confirmPasswordRef}
               data-testid="confirm-password-input"
             />

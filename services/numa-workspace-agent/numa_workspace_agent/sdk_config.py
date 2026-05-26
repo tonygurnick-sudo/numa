@@ -373,6 +373,7 @@ ALLOWED_TOOLS = [
     "mcp__numa__numa_tool",
     # External connectors (OAuth cloud storage, Synergy, generic HTTP)
     "mcp__connectors__connectors",
+    "mcp__connectors__ns_*",  # NetSuite Native Tools
     # Secrets vault (user credentials with approval flow)
     "mcp__vault__vault",
     # Bash with allowed commands
@@ -439,9 +440,8 @@ def create_agent_options(
     agent_config: Optional["AgentConfig"] = None,
     agent_file_paths: Optional[list[str]] = None,
     external_user_id: Optional[str] = None,
-    enabled_integrations: Optional[list[str]] = None,
+    enabled_integrations: Optional[list[dict]] = None,
     available_integrations: Optional[list[dict]] = None,
-    connected_data_connectors: Optional[list[dict]] = None,
     request_id: Optional[str] = None,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional[AgentTypeConfig] = None,
@@ -502,7 +502,6 @@ def create_agent_options(
         agent_file_paths=agent_file_paths,
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
-        connected_data_connectors=connected_data_connectors,
         email_signature=email_signature,
         identity_override=type_config.identity_override,
         user_profile=user_profile,
@@ -670,9 +669,28 @@ def create_agent_options(
     if request_id:
         env["NUMA_REQUEST_ID"] = request_id
 
-    # Pass enabled integrations list to SDK subprocess
-    if enabled_integrations:
-        env["NUMA_ENABLED_INTEGRATIONS"] = json.dumps(enabled_integrations)
+    # Pass enabled Pipedream integration slugs to SDK subprocess (filtered
+    # from the unified list — the workspace-chat-tools Lambda enforces per-
+    # integration access using this var).
+    _enabled_pipedream_slugs = [
+        it.get("slug", "")
+        for it in (enabled_integrations or [])
+        if isinstance(it, dict) and it.get("method") == "pipedream" and it.get("slug")
+    ]
+    if _enabled_pipedream_slugs:
+        env["NUMA_ENABLED_INTEGRATIONS"] = json.dumps(_enabled_pipedream_slugs)
+
+    # Pass enabled native connector slugs (filtered from the unified list).
+    # The `connectors` MCP tool enforces per-call which connectors are
+    # callable so a stale agent can't reach a service the user disabled
+    # mid-conversation. Empty list means "none enabled" (explicit) — the
+    # tool fails open only when the env var is unset entirely.
+    _enabled_native_slugs = [
+        it.get("slug", "")
+        for it in (enabled_integrations or [])
+        if isinstance(it, dict) and it.get("method") == "native" and it.get("slug")
+    ]
+    env["NUMA_ENABLED_NATIVE_CONNECTORS"] = json.dumps(_enabled_native_slugs)
 
     # IMPORTANT: Capture local credentials BEFORE cross-account assume.
     # Tools need these to invoke Lambdas/S3 in the local account while
@@ -695,6 +713,7 @@ def create_agent_options(
         "NUMA_ALLOWED_OPERATIONS",
         "NUMA_ALLOWED_KB_OPERATIONS",
         "NUMA_ENABLED_INTEGRATIONS",
+        "NUMA_ENABLED_NATIVE_CONNECTORS",
         "NUMA_EXTERNAL_USER_ID",
         # Numa tool needs these for Lambda invocation, KB operations, S3 file sync
         "WORKSPACE_TOOLS_LAMBDA_NAME",
@@ -755,19 +774,26 @@ def create_agent_options(
             tools=numa_tools,
         )
 
-    # Connectors: only register if the per-chat toggle is ON (DATA_CONNECTORS_CHAT_ENABLED),
-    # OAuth integrations feature is enabled, and agent config allows connectors.
-    # When DATA_CONNECTORS_CHAT_ENABLED is False the MCP server is NOT registered,
-    # which is the ONLY reliable way to prevent the agent from calling the tool.
-    _connectors_allowed_by_agent = True
-    if agent_config and not agent_config.tools_config.auto_tools_enabled:
-        _connectors_allowed_by_agent = agent_config.tools_config.data_connectors_enabled
+    # Connectors MCP — register iff any enabled item is method=native.
+    # The unified Integrations list is the single source of truth: if the
+    # user has at least one native row enabled for this chat, the agent
+    # gets the `connectors` tool. Otherwise it isn't registered, so the
+    # agent literally can't call it. Per-integration enforcement (within
+    # the registered tool) uses NUMA_ENABLED_NATIVE_CONNECTORS, set above.
+    #
+    # Admin gating: DATA_CONNECTORS_CHAT_ENABLED no longer controls per-chat
+    # registration — it only controls whether the unified catalog surfaces
+    # natives to admins/users in the first place. When off, no native row
+    # ever reaches this code path, so the MCP is naturally not registered.
+    _has_native_enabled = any(
+        isinstance(it, dict) and it.get("method") == "native"
+        for it in (enabled_integrations or [])
+    )
 
     if (
         type_config.enable_connect_mcp
         and flags.get("OAUTH_INTEGRATIONS_ENABLED", False)
-        and flags.get("DATA_CONNECTORS_CHAT_ENABLED", False)
-        and _connectors_allowed_by_agent
+        and _has_native_enabled
     ):
         mcp_servers["connectors"] = create_sdk_mcp_server(
             name="connectors",
@@ -775,8 +801,11 @@ def create_agent_options(
             tools=[connectors],
         )
 
-    # Vault: only register if secrets vault feature is enabled
-    if type_config.enable_vault_mcp and flags.get("SECRETS_VAULT_ENABLED", False):
+    # Vault: register when native data connectors are enabled. The vault and
+    # connectors travel together — connectors are the only thing that auto-
+    # populates secrets, so gating both on DATA_CONNECTORS_ENABLED keeps a
+    # single switch for admins (TASK-146).
+    if type_config.enable_vault_mcp and flags.get("DATA_CONNECTORS_ENABLED", False):
         mcp_servers["vault"] = create_sdk_mcp_server(
             name="vault",
             version="1.0.0",

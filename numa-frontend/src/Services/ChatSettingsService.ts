@@ -38,6 +38,11 @@ export type ChatSettings = {
   dataConnectorsEnabled: boolean;
   dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
+  /** Default per-chat-enable list for NATIVE connectors. Mirrors
+   *  `defaultConnectionIds` for Pipedream — controls which connectors are
+   *  enabled by default when a new chat starts. Empty array = "none enabled
+   *  by default" (matches Pipedream behaviour). */
+  defaultNativeConnectorIds: string[];
   language: string | null;
   approvalMode: ApprovalMode;
   numaToolApprovalMode: NumaToolApprovalMode;
@@ -116,6 +121,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   dataConnectorsEnabled: true,
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
+  defaultNativeConnectorIds: [],
   language: 'browser',
   approvalMode: 'non_destructive',
   numaToolApprovalMode: { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE },
@@ -344,6 +350,9 @@ function validateSettings(data: unknown): ChatSettings {
     defaultConnectionIds: Array.isArray(obj.defaultConnectionIds)
       ? obj.defaultConnectionIds.filter((id): id is string => typeof id === 'string')
       : DEFAULT_CHAT_SETTINGS.defaultConnectionIds,
+    defaultNativeConnectorIds: Array.isArray(obj.defaultNativeConnectorIds)
+      ? obj.defaultNativeConnectorIds.filter((id): id is string => typeof id === 'string')
+      : DEFAULT_CHAT_SETTINGS.defaultNativeConnectorIds,
     language:
       typeof obj.language === 'string' || obj.language === null
         ? (obj.language as string | null)

@@ -142,6 +142,7 @@ export type CrmConfig = {
   useAutoColors?: boolean;
   customerRecord?: CustomerRecordConfig;
   layout?: CustomerRecordLayout;
+  builtinFieldLabels?: Record<string, string>;
 };
 
 export type SupplierFlag = {
@@ -227,6 +228,8 @@ export type Board = {
   defaultStageId?: string;
   announcement?: string | null;
   preset?: string;
+  personas?: string[];
+  industries?: string[];
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -600,6 +603,8 @@ export type CreateBoardPayload = {
   defaultZoneId?: string;
   defaultStageId?: string;
   announcement?: string | null;
+  personas?: string[];
+  industries?: string[];
 };
 
 /** @deprecated Use CreateBoardPayload instead. */

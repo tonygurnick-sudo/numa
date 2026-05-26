@@ -1,259 +1,598 @@
-/* Arcanum Brand Colors */
+/*
+ * Numa Customer Success Portal — design system.
+ *
+ * Single source of truth for portal-wide colors, typography, radii, and
+ * shadows. Imported once at the App root (App.tsx).
+ *
+ * Palette derived from asknuma.ai. See dev-notes/notes/asknuma-design-palette.md.
+ * JS / TS files that need literal hex values import from @/styles/theme.ts,
+ * which mirrors these tokens by name.
+ *
+ * --nd-* names match the dashboard's pre-existing scheme so the dashboard
+ *        CSS can lean on these without redefining them.
+ * --arcanum-* names are kept as aliases for back-compat with the old portal
+ *        styling (some components reference these directly).
+ * --bs-* overrides remap Bootstrap's primary color to Numa purple.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
 :root {
-  --arcanum-purple: #8e50a7;
-  --arcanum-purple-light: #a366bb;
-  --arcanum-purple-dark: #7a4593;
-  --arcanum-purple-lighter: #b87ccf;
-  --arcanum-purple-darker: #663870;
-  --arcanum-black: #2c2c2c;
-  --arcanum-black-light: #404040;
-  --arcanum-black-dark: #1a1a1a;
+  /* ── Numa palette (asknuma) ──────────────────────────────────────────── */
+  --nd-bg: #f7f5f1;
+  --nd-panel: #ffffff;
+  --nd-panel-2: #f7f5f1;
+  --nd-panel-3: #efeae2;
+  --nd-border: rgba(31, 31, 31, 0.1);
+  --nd-border-strong: rgba(31, 31, 31, 0.18);
 
-  /* Override Bootstrap primary colors */
-  --bs-primary: #8e50a7;
-  --bs-primary-rgb: 142, 80, 167;
-  --bs-primary-text-emphasis: #663870;
-  --bs-primary-bg-subtle: #f3edf6;
-  --bs-primary-border-subtle: #d4b8de;
+  --nd-text: #1f1f1f;
+  --nd-text-dim: #323232;
+  --nd-text-faint: #6b6b6b;
 
-  /* Override Bootstrap success colors with off-black */
-  --bs-success: #2c2c2c;
-  --bs-success-rgb: 44, 44, 44;
+  --nd-accent: #9949ac;
+  --nd-accent-light: #dfbde7;
+  --nd-accent-dark: #7d3490;
+  --nd-accent-2: #1f4b5e;
+
+  --nd-warn: #d97706;
+  --nd-bad: #ef4444;
+  --nd-good: #22c55e;
+  --nd-info: #1f4b5e;
+
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  --nd-font-display: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --nd-font-body: 'Inter', 'Axiforma Book', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --nd-font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
+
+  /* ── Radii / shadows ─────────────────────────────────────────────────── */
+  --nd-radius-sm: 6px;
+  --nd-radius-md: 10px;
+  --nd-radius-card: 16px;
+  --nd-radius-pill: 999px;
+  --nd-shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --nd-shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --nd-shadow-hover: 0 4px 18px rgba(0, 0, 0, 0.08);
+  --nd-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* ── Arcanum aliases (back-compat) ───────────────────────────────────── */
+  --arcanum-purple: #9949ac;
+  --arcanum-purple-light: #dfbde7;
+  --arcanum-purple-dark: #7d3490;
+  --arcanum-purple-lighter: #ebd3f0;
+  --arcanum-purple-darker: #5e2370;
+  --arcanum-black: #1f1f1f;
+  --arcanum-black-light: #323232;
+  --arcanum-black-dark: #0f0f0f;
+
+  /* ── Bootstrap overrides ─────────────────────────────────────────────── */
+  --bs-primary: #9949ac;
+  --bs-primary-rgb: 153, 73, 172;
+  --bs-primary-text-emphasis: #5e2370;
+  --bs-primary-bg-subtle: rgba(153, 73, 172, 0.08);
+  --bs-primary-border-subtle: #dfbde7;
+
+  --bs-body-bg: #f7f5f1;
+  --bs-body-color: #323232;
+  --bs-body-font-family: var(--nd-font-body);
+
+  --bs-border-radius: 10px;
+  --bs-border-radius-sm: 6px;
+  --bs-border-radius-lg: 16px;
+  --bs-border-color: rgba(31, 31, 31, 0.1);
+
+  --bs-link-color: #9949ac;
+  --bs-link-color-rgb: 153, 73, 172;
+  --bs-link-hover-color: #7d3490;
+  --bs-link-hover-color-rgb: 125, 52, 144;
 }
 
-/* Primary button styling */
-.btn-primary {
-  background-color: var(--arcanum-purple);
-  border-color: var(--arcanum-purple);
-  color: white;
+/* ── Global body ──────────────────────────────────────────────────────── */
+body {
+  font-family: var(--nd-font-body);
+  color: var(--nd-text-dim);
+  background-color: var(--nd-bg);
+  font-feature-settings: 'cv11', 'ss01';
 }
 
-.btn-primary:hover {
-  background-color: var(--arcanum-purple-dark);
-  border-color: var(--arcanum-purple-dark);
-  color: white;
+/* Headings: Figtree, softer weights for the asknuma feel */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6 {
+  font-family: var(--nd-font-display);
+  color: var(--nd-text);
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
-.btn-primary:focus {
-  background-color: var(--arcanum-purple-dark);
-  border-color: var(--arcanum-purple-dark);
-  box-shadow: 0 0 0 0.2rem rgba(142, 80, 167, 0.25);
+h1,
+.h1 {
+  font-weight: 500;
 }
-
-.btn-primary:active {
-  background-color: var(--arcanum-purple-darker);
-  border-color: var(--arcanum-purple-darker);
+h2,
+.h2 {
+  font-weight: 500;
 }
-
-/* Navbar styling */
-.navbar-brand {
-  display: flex;
-  align-items: center;
+h3,
+.h3 {
   font-weight: 600;
-  color: var(--arcanum-purple) !important;
 }
-
-.navbar-brand svg {
-  height: 32px;
-  width: auto;
-  margin-right: 12px;
-}
-
-/* Link styling */
-.text-primary {
-  color: var(--arcanum-purple) !important;
+h4,
+.h4 {
+  font-weight: 600;
 }
 
 a {
-  color: var(--arcanum-purple);
+  color: var(--bs-link-color);
+  text-decoration: none;
+  font-weight: 500;
 }
-
 a:hover {
-  color: var(--arcanum-purple-dark);
+  color: var(--bs-link-hover-color);
+  text-decoration: underline;
 }
 
-/* Form controls focus */
-.form-control:focus {
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--nd-font-mono);
+}
+
+/* ── Bootstrap buttons (Numa purple + softer radius) ──────────────────── */
+.btn {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.btn-primary {
+  background-color: var(--arcanum-purple);
+  border-color: var(--arcanum-purple);
+  color: #fff;
+}
+.btn-primary:hover {
+  background-color: var(--arcanum-purple-dark);
+  border-color: var(--arcanum-purple-dark);
+  color: #fff;
+}
+.btn-primary:focus,
+.btn-primary:focus-visible {
+  background-color: var(--arcanum-purple-dark);
+  border-color: var(--arcanum-purple-dark);
+  color: #fff;
+  box-shadow: 0 0 0 0.2rem rgba(153, 73, 172, 0.25);
+}
+.btn-primary:active,
+.btn-primary.active {
+  background-color: var(--arcanum-purple-darker) !important;
+  border-color: var(--arcanum-purple-darker) !important;
+}
+.btn-primary:disabled,
+.btn-primary.disabled {
+  background-color: var(--arcanum-purple);
+  border-color: var(--arcanum-purple);
+  opacity: 0.4;
+}
+
+.btn-outline-primary {
+  color: var(--arcanum-purple);
+  border-color: var(--arcanum-purple);
+}
+.btn-outline-primary:hover,
+.btn-outline-primary:focus {
+  background-color: var(--arcanum-purple);
+  border-color: var(--arcanum-purple);
+  color: #fff;
+}
+
+.btn-outline-secondary {
+  color: var(--nd-text-dim);
+  border-color: var(--nd-border-strong);
+  background-color: transparent;
+}
+.btn-outline-secondary:hover,
+.btn-outline-secondary:focus {
+  background-color: var(--nd-panel-2);
+  border-color: var(--nd-text-dim);
+  color: var(--nd-text);
+}
+
+/* Warning + danger buttons retoned to the asknuma palette. */
+.btn-warning {
+  background-color: var(--nd-warn);
+  border-color: var(--nd-warn);
+  color: #fff;
+}
+.btn-warning:hover,
+.btn-warning:focus {
+  background-color: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+.btn-outline-warning {
+  color: var(--nd-warn);
+  border-color: var(--nd-warn);
+  background-color: transparent;
+}
+.btn-outline-warning:hover,
+.btn-outline-warning:focus {
+  background-color: var(--nd-warn);
+  border-color: var(--nd-warn);
+  color: #fff;
+}
+
+.btn-danger {
+  background-color: var(--nd-bad);
+  border-color: var(--nd-bad);
+  color: #fff;
+}
+.btn-danger:hover,
+.btn-danger:focus {
+  background-color: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+}
+.btn-outline-danger {
+  color: var(--nd-bad);
+  border-color: var(--nd-bad);
+  background-color: transparent;
+}
+.btn-outline-danger:hover,
+.btn-outline-danger:focus {
+  background-color: var(--nd-bad);
+  border-color: var(--nd-bad);
+  color: #fff;
+}
+
+/* Bootstrap utility .bg-light defaults to a cool gray (#f8f9fa) that
+ * clashes with our warm-off-white background. Re-point to the warm panel. */
+.bg-light {
+  background-color: var(--nd-panel-2) !important;
+}
+
+.btn-success {
+  background-color: var(--arcanum-black);
+  border-color: var(--arcanum-black);
+  color: #fff;
+}
+.btn-success:hover,
+.btn-success:focus {
+  background-color: var(--arcanum-black-dark);
+  border-color: var(--arcanum-black-dark);
+  color: #fff;
+}
+.btn-success:active {
+  background-color: #000;
+  border-color: #000;
+}
+
+/* ── Bootstrap cards ──────────────────────────────────────────────────── */
+.card {
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-card);
+  background-color: var(--nd-panel);
+  box-shadow: var(--nd-shadow-card);
+}
+.card-header {
+  background-color: transparent;
+  border-bottom: 1px solid var(--nd-border);
+  font-family: var(--nd-font-display);
+  font-weight: 600;
+  color: var(--nd-text);
+}
+.card-header.bg-primary {
+  background-color: var(--arcanum-purple) !important;
+  color: #fff;
+  border-bottom-color: var(--arcanum-purple);
+}
+.card-title {
+  font-family: var(--nd-font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--nd-text);
+  letter-spacing: -0.005em;
+}
+
+/* ── Bootstrap forms ──────────────────────────────────────────────────── */
+.form-control,
+.form-select {
+  border-color: var(--nd-border);
+  background-color: var(--nd-panel);
+  color: var(--nd-text);
+  border-radius: var(--nd-radius-md);
+}
+.form-control::placeholder {
+  color: var(--nd-text-faint);
+}
+.form-control:focus,
+.form-select:focus {
   border-color: var(--arcanum-purple-light);
-  box-shadow: 0 0 0 0.2rem rgba(142, 80, 167, 0.25);
+  box-shadow: 0 0 0 0.2rem rgba(153, 73, 172, 0.22);
+  background-color: var(--nd-panel);
+  color: var(--nd-text);
+}
+.form-label {
+  font-weight: 600;
+  color: var(--nd-text);
+  font-size: 0.9rem;
+}
+.input-group-text {
+  background-color: var(--arcanum-purple);
+  border-color: var(--arcanum-purple);
+  color: #fff;
+}
+.input-group > .form-control:focus {
+  border-color: var(--arcanum-purple-light);
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.04),
+    0 0 0 0.2rem rgba(153, 73, 172, 0.22);
 }
 
-/* Alert styling */
+/* ── Bootstrap tables ─────────────────────────────────────────────────── */
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-border-color: var(--nd-border);
+  --bs-table-color: var(--nd-text-dim);
+  --bs-table-striped-bg: rgba(153, 73, 172, 0.025);
+  --bs-table-hover-bg: rgba(153, 73, 172, 0.05);
+  color: var(--nd-text-dim);
+}
+.table > thead {
+  color: var(--nd-text-faint);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.table > thead th {
+  border-bottom-color: var(--nd-border);
+}
+.table-primary {
+  --bs-table-bg: var(--bs-primary-bg-subtle);
+  --bs-table-border-color: var(--bs-primary-border-subtle);
+}
+
+/* ── Bootstrap badges ─────────────────────────────────────────────────────
+ * Status badges (success/info/warning/danger/secondary) render as subtle
+ * tinted pills — soft background + colored text — to match the asknuma
+ * aesthetic where vivid color is reserved for primary CTAs.
+ * Primary badges keep the solid Numa purple. */
+.badge {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: var(--nd-radius-pill);
+  padding: 0.32em 0.7em;
+}
+.badge.bg-primary {
+  background-color: var(--arcanum-purple) !important;
+  color: #fff;
+}
+.badge.bg-success {
+  background-color: rgba(34, 197, 94, 0.14) !important;
+  color: #15803d !important;
+}
+.badge.bg-info {
+  background-color: rgba(31, 75, 94, 0.14) !important;
+  color: var(--nd-accent-2) !important;
+}
+.badge.bg-warning {
+  background-color: rgba(217, 119, 6, 0.14) !important;
+  color: var(--nd-warn) !important;
+}
+.badge.bg-danger {
+  background-color: rgba(239, 68, 68, 0.14) !important;
+  color: #b91c1c !important;
+}
+.badge.bg-secondary {
+  background-color: var(--nd-panel-3) !important;
+  color: var(--nd-text-dim) !important;
+}
+
+/* ── Bootstrap alerts ─────────────────────────────────────────────────── */
+.alert {
+  border-radius: var(--nd-radius-card);
+  border-width: 1px;
+}
 .alert-primary {
   background-color: var(--bs-primary-bg-subtle);
   border-color: var(--bs-primary-border-subtle);
   color: var(--bs-primary-text-emphasis);
 }
 
-/* Badge styling */
-.badge.bg-primary {
-  background-color: var(--arcanum-purple) !important;
+/* ── Navbar ───────────────────────────────────────────────────────────── */
+.navbar {
+  background-color: var(--nd-panel) !important;
+  border-bottom: 1px solid var(--nd-border);
+}
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  font-family: var(--nd-font-display);
+  font-weight: 600;
+  color: var(--arcanum-purple) !important;
+  letter-spacing: -0.01em;
+}
+.navbar-brand svg {
+  height: 32px;
+  width: auto;
+  margin-right: 12px;
+}
+.navbar .nav-link {
+  font-weight: 500;
+  color: var(--nd-text-dim);
+}
+.navbar .nav-link:hover,
+.navbar .nav-link.active {
+  color: var(--arcanum-purple);
 }
 
-.badge.bg-success {
-  background-color: var(--arcanum-black) !important;
-  color: white;
+/* ── Text colors ──────────────────────────────────────────────────────── */
+.text-primary {
+  color: var(--arcanum-purple) !important;
 }
-
-/* Success button styling */
-.btn-success {
-  background-color: var(--arcanum-black);
-  border-color: var(--arcanum-black);
-  color: white;
-}
-
-.btn-success:hover {
-  background-color: var(--arcanum-black-dark);
-  border-color: var(--arcanum-black-dark);
-  color: white;
-}
-
-.btn-success:focus {
-  background-color: var(--arcanum-black-dark);
-  border-color: var(--arcanum-black-dark);
-  box-shadow: 0 0 0 0.2rem rgba(44, 44, 44, 0.25);
-}
-
-.btn-success:active {
-  background-color: #000000;
-  border-color: #000000;
-}
-
-/* Success text color */
 .text-success {
-  color: var(--arcanum-black) !important;
+  color: var(--nd-good) !important;
 }
-
-/* Success icons */
+.text-warning {
+  color: var(--nd-warn) !important;
+}
+.text-danger {
+  color: var(--nd-bad) !important;
+}
+.text-info {
+  color: var(--nd-accent-2) !important;
+}
 .text-success svg,
 svg.text-success {
-  color: var(--arcanum-black) !important;
+  color: var(--nd-good) !important;
+}
+.text-muted {
+  color: var(--nd-text-faint) !important;
 }
 
-.badge.bg-warning {
-  background-color: #ffc107;
+/* ── Progress bars (used by PublicDemoStats etc.) ─────────────────────── */
+.progress {
+  background-color: var(--nd-panel-3);
+  border-radius: var(--nd-radius-pill);
+  height: 8px;
+}
+.progress-bar {
+  border-radius: var(--nd-radius-pill);
+}
+.progress-bar.bg-success {
+  background-color: var(--nd-good) !important;
+}
+.progress-bar.bg-warning {
+  background-color: var(--nd-warn) !important;
+}
+.progress-bar.bg-danger {
+  background-color: var(--nd-bad) !important;
+}
+.progress-bar.bg-info {
+  background-color: var(--nd-accent-2) !important;
 }
 
-.badge.bg-danger {
-  background-color: #dc3545;
-}
-
-/* Card header with purple accent */
-.card-header.bg-primary {
-  background-color: var(--arcanum-purple) !important;
-  color: white;
-}
-
-/* Table styling */
-.table-primary {
-  --bs-table-bg: var(--bs-primary-bg-subtle);
-  --bs-table-border-color: var(--bs-primary-border-subtle);
-}
-
-/* Loading spinner */
+/* ── Spinner ──────────────────────────────────────────────────────────── */
 .spinner-border.text-primary {
   color: var(--arcanum-purple) !important;
 }
 
-/* Dropdown items */
+/* ── Dropdown ─────────────────────────────────────────────────────────── */
+.dropdown-menu {
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-md);
+  box-shadow: var(--nd-shadow-card);
+}
 .dropdown-item:active {
   background-color: var(--arcanum-purple);
 }
-
-/* Hide dropdown arrow for user dropdown */
 .user-dropdown .dropdown-toggle::after {
   display: none !important;
 }
-
 .user-dropdown .dropdown-toggle {
   border: none;
   background: none;
 }
-
 .user-dropdown .dropdown-toggle:focus {
   box-shadow: none;
 }
 
-/* Input group styling */
-.input-group-text {
-  background-color: var(--arcanum-purple);
-  border-color: var(--arcanum-purple);
-  color: white;
-}
-
-.input-group > .input-group-text + .form-control {
-  border-left: none;
-}
-
-.input-group > .form-control:focus {
-  border-color: var(--arcanum-purple-light);
-  box-shadow:
-    inset 0 1px 1px rgba(0, 0, 0, 0.075),
-    0 0 0 0.2rem rgba(142, 80, 167, 0.25);
-}
-
-/* Login form specific styling */
+/* ── Login form ───────────────────────────────────────────────────────── */
 .login-logo {
+  /* Tint a black SVG to Numa purple */
   filter: brightness(0) saturate(100%) invert(22%) sepia(76%) saturate(2300%) hue-rotate(266deg) brightness(91%)
     contrast(91%);
 }
-
-/* Login button - sleek black theme */
 .btn-login {
-  background-color: #2c2c2c;
-  border-color: #2c2c2c;
-  color: white;
+  background-color: var(--arcanum-black);
+  border-color: var(--arcanum-black);
+  color: #fff;
   font-weight: 500;
+  border-radius: var(--nd-radius-md);
   transition: all 0.2s ease;
 }
-
 .btn-login:hover {
-  background-color: #1a1a1a;
-  border-color: #1a1a1a;
-  color: white;
+  background-color: var(--arcanum-black-dark);
+  border-color: var(--arcanum-black-dark);
+  color: #fff;
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
-
 .btn-login:focus {
-  background-color: #1a1a1a;
-  border-color: #1a1a1a;
-  color: white;
-  box-shadow: 0 0 0 0.2rem rgba(142, 80, 167, 0.25);
+  background-color: var(--arcanum-black-dark);
+  border-color: var(--arcanum-black-dark);
+  color: #fff;
+  box-shadow: 0 0 0 0.2rem rgba(153, 73, 172, 0.25);
 }
-
 .btn-login:active {
-  background-color: #000000;
-  border-color: #000000;
-  transform: translateY(0px);
+  background-color: #000;
+  border-color: #000;
+  transform: translateY(0);
 }
 
-/* Custom tab styling */
+/* ── Pill tabs (existing pattern, retoned) ────────────────────────────── */
 .nav-pills-custom .nav-link {
   background-color: transparent;
-  border: 1px solid #e9ecef;
-  color: var(--arcanum-black-light);
+  border: 1px solid var(--nd-border);
+  color: var(--nd-text-dim);
   font-weight: 500;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 1.1rem;
   margin-right: 0.5rem;
-  border-radius: 0.375rem;
+  border-radius: var(--nd-radius-pill);
   transition: all 0.2s ease;
 }
-
 .nav-pills-custom .nav-link:hover {
   background-color: var(--bs-primary-bg-subtle);
   border-color: var(--arcanum-purple-light);
   color: var(--arcanum-purple);
 }
-
 .nav-pills-custom .nav-link.active {
   background-color: var(--arcanum-purple);
   border-color: var(--arcanum-purple);
-  color: white;
+  color: #fff;
 }
-
 .nav-pills-custom .nav-link.active:hover {
   background-color: var(--arcanum-purple-dark);
   border-color: var(--arcanum-purple-dark);
-  color: white;
+  color: #fff;
+}
+
+/* ── Interactive StatsCards ───────────────────────────────────────────── */
+.stats-card-interactive {
+  transition:
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    border-color 150ms ease;
+  color: inherit;
+  display: block;
+}
+.stats-card-interactive:hover {
+  box-shadow: var(--nd-shadow-hover);
+  border-color: var(--nd-border-strong);
+  transform: translateY(-1px);
+}
+.stats-card-interactive:focus-visible {
+  outline: 2px solid var(--arcanum-purple);
+  outline-offset: 2px;
+}
+
+/* ── Focus rings (accessibility) ──────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--arcanum-purple);
+  outline-offset: 2px;
+  border-radius: var(--nd-radius-sm);
+}
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible {
+  outline: none; /* Bootstrap already handles via box-shadow */
 }

@@ -5,6 +5,8 @@ import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 import { UsersService, type WorkspaceUser } from '../../Services/UsersService';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { UserPicker } from '../Inputs/UserPicker';
+import { TaxonomyMultiSelect } from '../Inputs/TaxonomyMultiSelect';
+import { INDUSTRIES, PERSONAS } from '../../utils/resourceTaxonomy';
 import type { StaffProfile } from '../../types/ops';
 
 type Visibility = 'personal' | 'shared' | 'public' | 'public_editor';
@@ -41,6 +43,8 @@ export function CreateFolderModal({
   const [viewerIds, setViewerIds] = useState<string[]>([]);
   const [editorIds, setEditorIds] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<Visibility>(initialVisibility ?? 'personal');
+  const [personas, setPersonas] = useState<string[]>([]);
+  const [industries, setIndustries] = useState<string[]>([]);
 
   // Re-seed visibility when the caller opens the modal with a different
   // initial value (e.g. clicking "Create folder" under Shared Files vs the
@@ -76,6 +80,8 @@ export function CreateFolderModal({
     setViewerIds([]);
     setEditorIds([]);
     setVisibility('personal');
+    setPersonas([]);
+    setIndustries([]);
     setError(null);
     onHide();
   };
@@ -113,6 +119,8 @@ export function CreateFolderModal({
         is_shared: visibility !== 'personal',
         viewers: normalizedViewers,
         editors: normalizedEditors,
+        personas: personas.length > 0 ? personas : undefined,
+        industries: industries.length > 0 ? industries : undefined,
       });
       handleClose();
       onSuccess();
@@ -236,6 +244,32 @@ export function CreateFolderModal({
               />
             </div>
           )}
+
+          {/* Personas */}
+          <div className="create-folder-modal__section">
+            <label className="create-folder-modal__label">{t('createFolder.personasLabel')}</label>
+            <p className="create-folder-modal__hint">{t('createFolder.personasHelp')}</p>
+            <TaxonomyMultiSelect
+              id="folder-personas"
+              options={PERSONAS}
+              selected={personas}
+              onChange={setPersonas}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Industries */}
+          <div className="create-folder-modal__section">
+            <label className="create-folder-modal__label">{t('createFolder.industriesLabel')}</label>
+            <p className="create-folder-modal__hint">{t('createFolder.industriesHelp')}</p>
+            <TaxonomyMultiSelect
+              id="folder-industries"
+              options={INDUSTRIES}
+              selected={industries}
+              onChange={setIndustries}
+              disabled={isSubmitting}
+            />
+          </div>
 
           {/* Notes */}
           <div className="create-folder-modal__notes">

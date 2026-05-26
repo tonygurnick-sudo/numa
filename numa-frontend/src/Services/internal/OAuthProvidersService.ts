@@ -129,13 +129,17 @@ export class OAuthProvidersService {
       statusCache[provider] = { status, lastChecked: Date.now() };
       return status;
     } catch (error) {
+      // Status fetch itself failed (network/5xx/malformed) — distinct from
+      // the backend reporting an actual auth problem. Return `check_failed`
+      // so the UI can offer "Try again" instead of misleading the user into
+      // a reconnect. Crucially, do NOT cache: caching the fake error would
+      // suppress retries for 30s and lock in the wrong remediation prompt.
       console.warn(`[OAuth] Error checking ${provider} status:`, error);
-      const status: OAuthConnectionStatus = {
-        status: 'error',
-        error_message: 'Failed to check connection status',
+      delete statusCache[provider];
+      return {
+        status: 'check_failed',
+        error_message: error instanceof Error ? error.message : String(error),
       };
-      statusCache[provider] = { status, lastChecked: Date.now() };
-      return status;
     }
   }
 
@@ -183,6 +187,12 @@ export class OAuthProvidersService {
     assertOAuthAtRuntime(provider, 'disconnect');
     try {
       const endpoint = getApiEndpoint();
+      // Per-connector revoke URL: user tokens are stored under
+      // `oauth-{connectorId}` in the consolidated vault (connect-time uses
+      // `session.connector || provider` when writing), so we need the
+      // connector slug in the URL, NOT the OAuth platform. Sharing a platform
+      // (e.g. google -> gmail + googledrive) only affects the *client*
+      // credentials, not the per-user token storage.
       const response = await fetch(`${endpoint}/oauth/${provider}/revoke`, {
         method: 'POST',
         headers: getAuthHeaders(),

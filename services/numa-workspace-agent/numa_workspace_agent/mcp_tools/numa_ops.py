@@ -160,17 +160,31 @@ MAX_INLINE = 2000
 
 
 def _enrich_ticket_urls(result: Any) -> Any:
-    """Add ticketUrl to ticket objects that have a displayId."""
+    """Add ticketUrl to ticket objects that have a displayId.
+
+    Handles the three response shapes the ops API returns:
+      - top-level ticket:          {"displayId": ..., ...}
+      - wrapped ticket (create/get/update/restore): {"ticket": {"displayId": ..., ...}, ...}
+      - list of tickets (list/search):              {"tickets": [{"displayId": ..., ...}, ...]}
+
+    Skips entries that already carry a ticketUrl (the HTTP API may have
+    populated it from the request Origin header for browser/integration
+    callers; we don't want to clobber that with the env-var fallback URL).
+    """
+
+    def _set_url(d: dict) -> None:
+        if "displayId" in d and "ticketUrl" not in d:
+            d["ticketUrl"] = f"{_FRONTEND_URL}/ops?ticket={d['displayId']}"
+
     if isinstance(result, dict):
-        if "displayId" in result:
-            result["ticketUrl"] = f"{_FRONTEND_URL}/ops?ticket={result['displayId']}"
+        _set_url(result)
         for v in result.values():
             if isinstance(v, list):
                 for item in v:
-                    if isinstance(item, dict) and "displayId" in item:
-                        item["ticketUrl"] = (
-                            f"{_FRONTEND_URL}/ops?ticket={item['displayId']}"
-                        )
+                    if isinstance(item, dict):
+                        _set_url(item)
+            elif isinstance(v, dict):
+                _set_url(v)
     return result
 
 

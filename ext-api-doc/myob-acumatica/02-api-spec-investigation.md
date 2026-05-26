@@ -1,6 +1,6 @@
 # MYOB Acumatica -- API Specification & Investigation
 
-> **API Version:** 24.200.001 | **Base URL:** `https://{instance}.myob.com`
+> **API Version:** 24.200.001 | **Base URL:** `https://{instance}.myobadvanced.com`
 > **Researched:** 2026-03-30
 
 ---
@@ -9,7 +9,7 @@
 
 - **Vendor:** MYOB (Acumatica-based ERP, ANZ market)
 - **API version:** 24.200.001 (2024 R2)
-- **Base URL:** `https://{instance}.myob.com/entity/Default/24.200.001/{Entity}`
+- **Base URL:** `https://{instance}.myobadvanced.com/entity/Default/24.200.001/{Entity}`
 - **API type:** Contract-Based REST API with OData query syntax
 - **Data format:** JSON
 - **Documentation:** https://enterprise-support.myob.com/acudev/api-documentation
@@ -27,16 +27,16 @@
 
 **[DOCUMENTED]** -- Per-instance OAuth. Each Acumatica instance has its own identity server.
 
-| Parameter              | Value                                                    |
-| ---------------------- | -------------------------------------------------------- |
-| Grant type             | authorization_code (+ refresh_token)                     |
-| Authorization URL      | `https://{instance}.myob.com/identity/connect/authorize` |
-| Token URL              | `https://{instance}.myob.com/identity/connect/token`     |
-| OIDC Discovery         | `https://{instance}.myob.com/identity/`                  |
-| Access token lifetime  | ~3600 seconds (instance-configurable)                    |
-| Refresh token lifetime | 30 days (configurable from 2023 R2 via SM303010)         |
-| Refresh behavior       | Rotate on use (old token invalidated)                    |
-| PKCE required          | No (recommended but not enforced)                        |
+| Parameter              | Value                                                            |
+| ---------------------- | ---------------------------------------------------------------- |
+| Grant type             | authorization_code (+ refresh_token)                             |
+| Authorization URL      | `https://{instance}.myobadvanced.com/identity/connect/authorize` |
+| Token URL              | `https://{instance}.myobadvanced.com/identity/connect/token`     |
+| OIDC Discovery         | `https://{instance}.myobadvanced.com/identity/`                  |
+| Access token lifetime  | ~3600 seconds (instance-configurable)                            |
+| Refresh token lifetime | 30 days (configurable from 2023 R2 via SM303010)                 |
+| Refresh behavior       | Rotate on use (old token invalidated)                            |
+| PKCE required          | No (recommended but not enforced)                                |
 
 **Required scopes:**
 
@@ -54,14 +54,16 @@ Content-Type: application/json
 
 **Token exchange:**
 
+> ⚠️ `client_id` must include the `@CompanyId` suffix, e.g. `392B04F6-6CA4-43FA-48D9-45A6E6DF5579@Company`. Without it the OAuth server cannot resolve the tenant. [VERIFIED 2026-05-19 — `fast-programmer/myob_acumatica` README + Keboola helper]
+
 ```http
-POST https://{instance}.myob.com/identity/connect/token
+POST https://{instance}.myobadvanced.com/identity/connect/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code
 &code={authorization_code}
 &redirect_uri={redirect_uri}
-&client_id={client_id}
+&client_id={GUID}@{CompanyId}
 &client_secret={client_secret}
 ```
 
@@ -79,12 +81,12 @@ grant_type=authorization_code
 **Token refresh:**
 
 ```http
-POST https://{instance}.myob.com/identity/connect/token
+POST https://{instance}.myobadvanced.com/identity/connect/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=refresh_token
 &refresh_token={refresh_token}
-&client_id={client_id}
+&client_id={GUID}@{CompanyId}
 &client_secret={client_secret}
 ```
 

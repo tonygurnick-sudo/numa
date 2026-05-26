@@ -119,7 +119,7 @@ export function RemoteFileBrowser({
   if (mode === 'oauth') {
     if (oauthContentLoading) {
       return (
-        <div className="finder-loading" style={{ padding: '3rem' }}>
+        <div className="finder-loading">
           <Spinner animation="border" size="sm" variant="secondary" />
           <span>{t('remote.loadingProviderFiles', { provider: selectedOauthProvider })}</span>
         </div>
@@ -128,8 +128,8 @@ export function RemoteFileBrowser({
 
     if (oauthFolders.length === 0 && oauthFiles.length === 0 && !oauthRevalidating) {
       return (
-        <div className="finder-empty" style={{ padding: '3rem' }}>
-          <i className="bi bi-folder2-open" style={{ fontSize: '1.5rem' }} />
+        <div className="finder-empty">
+          <i className="bi bi-folder2-open" aria-hidden />
           <h6>{t('remote.noFilesFound')}</h6>
           <p className="text-muted small">{t('remote.folderEmpty')}</p>
         </div>
@@ -161,17 +161,32 @@ export function RemoteFileBrowser({
         {/* Pagination */}
         {(oauthHasPrevPage || oauthPageToken) && !oauthContentLoading && (
           <div className="d-flex justify-content-center align-items-center gap-3 py-3">
-            <button className="btn btn-sm btn-outline-secondary" disabled={!oauthHasPrevPage} onClick={onOAuthPrevPage}>
-              <i className="bi bi-chevron-left me-1" />
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary"
+              disabled={!oauthHasPrevPage}
+              onClick={onOAuthPrevPage}
+            >
+              <i className="bi bi-chevron-left me-1" aria-hidden />
               {t('common:pagination.previous', 'Previous')}
             </button>
             <span className="text-muted small">
-              Page {oauthCurrentPage}
-              {oauthTotalCount != null && ` \u2014 ${oauthTotalCount} items`}
+              {oauthTotalCount != null
+                ? t('remote.pageInfoWithCount', {
+                    page: oauthCurrentPage,
+                    total: oauthTotalCount,
+                    defaultValue: 'Page {{page}} \u2014 {{total}} items',
+                  })
+                : t('remote.pageInfo', { page: oauthCurrentPage, defaultValue: 'Page {{page}}' })}
             </span>
-            <button className="btn btn-sm btn-outline-secondary" disabled={!oauthPageToken} onClick={onOAuthNextPage}>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary"
+              disabled={!oauthPageToken}
+              onClick={onOAuthNextPage}
+            >
               {t('common:pagination.next', 'Next')}
-              <i className="bi bi-chevron-right ms-1" />
+              <i className="bi bi-chevron-right ms-1" aria-hidden />
             </button>
           </div>
         )}
@@ -183,7 +198,7 @@ export function RemoteFileBrowser({
   if (mode === 'synergy-jobs') {
     if (synergyJobsLoading) {
       return (
-        <div className="finder-loading" style={{ padding: '3rem' }}>
+        <div className="finder-loading">
           <Spinner animation="border" size="sm" variant="secondary" />
           <span>{t('remote.loadingJobs')}</span>
         </div>
@@ -218,8 +233,8 @@ export function RemoteFileBrowser({
 
   if (synergyFolders.length === 0 && synergyFiles.length === 0) {
     return (
-      <div className="finder-empty" style={{ padding: '3rem' }}>
-        <i className="bi bi-folder2-open" style={{ fontSize: '1.5rem' }} />
+      <div className="finder-empty">
+        <i className="bi bi-folder2-open" aria-hidden />
         <h6>{t('remote.noItems')}</h6>
       </div>
     );
@@ -297,11 +312,20 @@ function OAuthListView({
             ref={(el) => observeFolder(folder.folder_id, el)}
             className="finder-row finder-row--folder"
             style={{ gridTemplateColumns: '1fr 100px 120px 80px', cursor: 'pointer' }}
+            role="button"
+            tabIndex={0}
+            aria-label={folder.name}
             onClick={() => onFolderClick(folder)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onFolderClick(folder);
+              }
+            }}
           >
             <div className="finder-row__name-content">
               <span className="finder-chevron-spacer" />
-              <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
+              <i className="bi bi-folder-fill finder-icon finder-icon--folder" aria-hidden />
               <span className="finder-name">{folder.name}</span>
             </div>
             <div className="finder-row__meta d-none d-sm-block" />
@@ -322,16 +346,27 @@ function OAuthListView({
             provider: 'oauth',
             oauthProvider: selectedProvider ?? undefined,
           };
+          const openEmail = isEmail ? () => onEmailView(selectedProvider ?? '', file.file_id, file.name) : undefined;
 
           return (
             <div
               key={file.file_id}
               className={`finder-row${isSelected ? ' finder-row--selected' : ''}`}
-              style={{
-                gridTemplateColumns: '1fr 100px 120px 80px',
-                cursor: isEmail ? 'pointer' : 'default',
-              }}
-              onClick={isEmail ? () => onEmailView(selectedProvider ?? '', file.file_id, file.name) : undefined}
+              style={{ gridTemplateColumns: '1fr 100px 120px 80px', cursor: openEmail ? 'pointer' : 'default' }}
+              role={openEmail ? 'button' : undefined}
+              tabIndex={openEmail ? 0 : -1}
+              aria-label={openEmail ? file.name : undefined}
+              onClick={openEmail}
+              onKeyDown={
+                openEmail
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEmail();
+                      }
+                    }
+                  : undefined
+              }
             >
               <div className="finder-row__name-content">
                 <input
@@ -343,8 +378,12 @@ function OAuthListView({
                     e.stopPropagation();
                     selection.toggleSelect(remoteId, e.shiftKey);
                   }}
+                  aria-label={t('common:fileBrowser.selectItem', {
+                    type: t('common:fileBrowser.itemType.file', 'file'),
+                    name: file.name,
+                  })}
                 />
-                <i className={`${getFileIcon(file.name)} finder-icon`} />
+                <i className={`${getFileIcon(file.name)} finder-icon`} aria-hidden />
                 <span className="finder-name">{file.name}</span>
               </div>
               <div className="finder-row__meta d-none d-sm-block">{file.size ? formatFileSize(file.size) : ''}</div>
@@ -354,8 +393,16 @@ function OAuthListView({
                 )}
               </div>
               <div className="finder-row__actions">
-                <button onClick={() => onDownloadFile(remoteItem)} title={t('actions.download', 'Download')}>
-                  <i className="bi bi-download" />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDownloadFile(remoteItem);
+                  }}
+                  title={t('actions.download', 'Download')}
+                  aria-label={t('actions.download', 'Download')}
+                >
+                  <i className="bi bi-download" aria-hidden />
                 </button>
               </div>
             </div>
@@ -382,29 +429,20 @@ function OAuthGridView({
       <div className="row g-3">
         {folders.map((folder) => (
           <div key={folder.folder_id} className="col-6 col-md-4 col-lg-3">
-            <div
+            <FolderGridCard
               ref={(el) => observeFolder(folder.folder_id, el)}
-              className="card h-100"
-              style={{ cursor: 'pointer' }}
+              icon="bi bi-folder-fill"
+              iconClass="remote-folder-card__icon"
+              label={folder.name}
               onClick={() => onFolderClick(folder)}
-            >
-              <div className="card-body text-center p-3">
-                <i
-                  className="bi bi-folder-fill"
-                  style={{ fontSize: '2rem', color: 'var(--finder-folder-color, #79b8ff)' }}
-                />
-                <div className="fw-semibold mt-2 text-truncate" title={folder.name}>
-                  {folder.name}
-                </div>
-              </div>
-            </div>
+            />
           </div>
         ))}
         {files.map((file) => (
           <div key={file.file_id} className="col-6 col-md-4 col-lg-3">
             <div className="card h-100">
               <div className="card-body text-center p-3">
-                <i className={`${getFileIcon(file.name)}`} style={{ fontSize: '2rem' }} />
+                <i className={`${getFileIcon(file.name)} remote-file-card__icon`} aria-hidden />
                 <div className="fw-semibold mt-2 text-truncate" title={file.name}>
                   {file.name}
                 </div>
@@ -417,6 +455,42 @@ function OAuthGridView({
     </div>
   );
 }
+
+const FolderGridCard = React.forwardRef<
+  HTMLDivElement,
+  {
+    icon: string;
+    iconClass?: string;
+    label: string;
+    onClick: () => void;
+    children?: React.ReactNode;
+  }
+>(function FolderGridCard({ icon, iconClass, label, onClick, children }, ref) {
+  return (
+    <div
+      ref={ref}
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      className="card h-100 remote-folder-card"
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <div className="card-body text-center p-3">
+        <i className={`${icon} ${iconClass ?? ''}`.trim()} aria-hidden />
+        <div className="fw-semibold mt-2 text-truncate" title={label}>
+          {label}
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+});
 
 function SynergyJobListView({ jobs, onJobClick }: { jobs: SynergyJob[]; onJobClick: (job: SynergyJob) => void }) {
   const { t } = useTranslation('files');
@@ -433,10 +507,19 @@ function SynergyJobListView({ jobs, onJobClick }: { jobs: SynergyJob[]; onJobCli
             key={job.job_id}
             className="finder-row finder-row--folder"
             style={{ gridTemplateColumns: '1fr 150px', cursor: 'pointer' }}
+            role="button"
+            tabIndex={0}
+            aria-label={job.name}
             onClick={() => onJobClick(job)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onJobClick(job);
+              }
+            }}
           >
             <div className="finder-row__name-content">
-              <i className="bi bi-layers finder-icon finder-icon--folder" />
+              <i className="bi bi-layers finder-icon finder-icon--folder" aria-hidden />
               <span className="finder-name">{job.name}</span>
             </div>
             <div className="finder-row__meta">
@@ -459,20 +542,16 @@ function SynergyJobGridView({ jobs, onJobClick }: { jobs: SynergyJob[]; onJobCli
       <div className="row g-3">
         {jobs.map((job) => (
           <div key={job.job_id} className="col-6 col-md-4 col-lg-3">
-            <div className="card h-100" style={{ cursor: 'pointer' }} onClick={() => onJobClick(job)}>
-              <div className="card-body text-center p-3">
-                <i
-                  className="bi bi-layers"
-                  style={{ fontSize: '2rem', color: 'var(--finder-folder-color, #79b8ff)' }}
-                />
-                <div className="fw-semibold mt-2 text-truncate" title={job.name}>
-                  {job.name}
-                </div>
-                {job.no_of_folders != null && (
-                  <div className="text-muted small">{t('remote.subfolders', { count: job.no_of_folders })}</div>
-                )}
-              </div>
-            </div>
+            <FolderGridCard
+              icon="bi bi-layers"
+              iconClass="remote-folder-card__icon"
+              label={job.name}
+              onClick={() => onJobClick(job)}
+            >
+              {job.no_of_folders != null && (
+                <div className="text-muted small">{t('remote.subfolders', { count: job.no_of_folders })}</div>
+              )}
+            </FolderGridCard>
           </div>
         ))}
       </div>
@@ -527,11 +606,20 @@ function SynergyFolderListView({
             ref={(el) => observeFolder(folder.folder_id, el)}
             className="finder-row finder-row--folder"
             style={{ gridTemplateColumns: '1fr 100px 120px 80px', cursor: 'pointer' }}
+            role="button"
+            tabIndex={0}
+            aria-label={folder.name}
             onClick={() => onFolderClick(folder)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onFolderClick(folder);
+              }
+            }}
           >
             <div className="finder-row__name-content">
               <span className="finder-chevron-spacer" />
-              <i className="bi bi-folder-fill finder-icon finder-icon--folder" />
+              <i className="bi bi-folder-fill finder-icon finder-icon--folder" aria-hidden />
               <span className="finder-name">{folder.name}</span>
             </div>
             <div className="finder-row__meta d-none d-sm-block" />
@@ -571,8 +659,12 @@ function SynergyFolderListView({
                     e.stopPropagation();
                     selection.toggleSelect(remoteId, e.shiftKey);
                   }}
+                  aria-label={t('common:fileBrowser.selectItem', {
+                    type: t('common:fileBrowser.itemType.file', 'file'),
+                    name: file.name,
+                  })}
                 />
-                <i className={`${getFileIcon(file.name)} finder-icon`} />
+                <i className={`${getFileIcon(file.name)} finder-icon`} aria-hidden />
                 <span className="finder-name">{file.name}</span>
               </div>
               <div className="finder-row__meta d-none d-sm-block">
@@ -584,8 +676,13 @@ function SynergyFolderListView({
                 )}
               </div>
               <div className="finder-row__actions">
-                <button onClick={() => onDownloadFile(remoteItem)} title={t('actions.download', 'Download')}>
-                  <i className="bi bi-download" />
+                <button
+                  type="button"
+                  onClick={() => onDownloadFile(remoteItem)}
+                  title={t('actions.download', 'Download')}
+                  aria-label={t('actions.download', 'Download')}
+                >
+                  <i className="bi bi-download" aria-hidden />
                 </button>
               </div>
             </div>
@@ -612,29 +709,20 @@ function SynergyFolderGridView({
       <div className="row g-3">
         {folders.map((folder) => (
           <div key={folder.folder_id} className="col-6 col-md-4 col-lg-3">
-            <div
+            <FolderGridCard
               ref={(el) => observeFolder(folder.folder_id, el)}
-              className="card h-100"
-              style={{ cursor: 'pointer' }}
+              icon="bi bi-folder-fill"
+              iconClass="remote-folder-card__icon"
+              label={folder.name}
               onClick={() => onFolderClick(folder)}
-            >
-              <div className="card-body text-center p-3">
-                <i
-                  className="bi bi-folder-fill"
-                  style={{ fontSize: '2rem', color: 'var(--finder-folder-color, #79b8ff)' }}
-                />
-                <div className="fw-semibold mt-2 text-truncate" title={folder.name}>
-                  {folder.name}
-                </div>
-              </div>
-            </div>
+            />
           </div>
         ))}
         {files.map((file) => (
           <div key={file.file_id} className="col-6 col-md-4 col-lg-3">
             <div className="card h-100">
               <div className="card-body text-center p-3">
-                <i className={`${getFileIcon(file.name)}`} style={{ fontSize: '2rem' }} />
+                <i className={`${getFileIcon(file.name)} remote-file-card__icon`} aria-hidden />
                 <div className="fw-semibold mt-2 text-truncate" title={file.name}>
                   {file.name}
                 </div>

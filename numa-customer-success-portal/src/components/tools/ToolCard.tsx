@@ -88,6 +88,7 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
       management: 'secondary',
       maintenance: 'warning',
       deployment: 'info',
+      platform: 'dark',
     };
 
     return (

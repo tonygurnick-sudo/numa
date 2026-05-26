@@ -7,10 +7,10 @@
 ## Context
 
 - **API:** MYOB Acumatica Contract-Based REST API v24.200.001
-- **Base URL:** `https://{instance}.myob.com/entity/Default/24.200.001/{Entity}`
+- **Base URL:** `https://{instance}.myobadvanced.com/entity/Default/24.200.001/{Entity}`
 - **Auth:** OAuth 2.0 per-instance, Bearer token
 - **Integration path:** Data Connector (OAuth2) + Direct API
-- **Rate limits:** 6 concurrent requests per instance (L-series), queue depth 20
+- **Rate limits:** 6 concurrent requests per instance (L-series) [DOCUMENTED]; queue depth/timeout values commonly cited as 20/60s but only sourced from a single community-forum post [INFERRED]
 
 ## Auth Structure
 
@@ -25,6 +25,8 @@ Content-Type: application/json
 
 - Access token: ~1 hour (instance-configurable), returned as `expires_in` in seconds
 - Refresh token: 30 days default (configurable from 2023 R2). Rotates on each use.
+
+**`client_id` format (critical):** The `client_id` includes a `@CompanyId` suffix, e.g. `{GUID}@Company`. Without the suffix the OAuth server cannot resolve the tenant and the token request fails. [VERIFIED 2026-05-19]
 
 ## Capabilities
 

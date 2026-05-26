@@ -8,13 +8,12 @@ import type { SubHeaderTabItem } from '../Components/SubHeaderTabBar';
 import { UserFilesTab } from '../Components/UnifiedFiles/UserFilesTab';
 import { CompanyFilesTab } from '../Components/UnifiedFiles/CompanyFilesTab';
 import { SharedFoldersTab } from '../Components/UnifiedFiles/SharedFoldersTab';
-import { RemoteTab } from '../Components/UnifiedFiles/RemoteTab';
 import { WebCrawlerTab } from '../Components/UnifiedFiles/WebCrawlerTab';
 import { ChatArtifactsTab } from '../Components/UnifiedFiles/ChatArtifactsTab';
 import { getFlag } from '../utils/featureFlags';
 import { useAuth } from '../Providers/AuthProvider';
 
-type TabKey = 'user' | 'company' | 'shared' | 'remote' | 'crawler' | 'chatArtifacts';
+type TabKey = 'user' | 'company' | 'shared' | 'crawler' | 'chatArtifacts';
 
 export function UnifiedFilesPage(): React.JSX.Element {
   const { t } = useTranslation('unifiedFiles');
@@ -26,7 +25,6 @@ export function UnifiedFilesPage(): React.JSX.Element {
   const [tabActions, setTabActions] = useState<React.ReactNode>(null);
 
   const canViewCompany = Boolean(user?.features?.includes('useCompanyData'));
-  const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
   const sharingEnabled = getFlag('NUMA_SHARING');
   const dropZonesEnabled = getFlag('NUMA_DROP_ZONES');
   const externalShareEnabled = sharingEnabled || dropZonesEnabled;
@@ -50,15 +48,12 @@ export function UnifiedFilesPage(): React.JSX.Element {
       items.push({ key: 'company', label: t('tabs.companyFiles'), iconClassName: 'bi bi-building' });
     }
     items.push({ key: 'chatArtifacts', label: t('tabs.chatArtifacts'), iconClassName: 'bi bi-file-earmark-text' });
-    if (dataConnectorsEnabled) {
-      items.push({ key: 'remote', label: t('tabs.remote'), iconClassName: 'bi bi-cloud' });
-    }
     items.push({ key: 'crawler', label: t('tabs.webCrawler'), iconClassName: 'bi bi-globe2' });
     if (externalShareEnabled) {
       items.push({ key: 'shared', label: t('tabs.shared'), iconClassName: 'bi bi-people' });
     }
     return items;
-  }, [t, canViewCompany, dataConnectorsEnabled, externalShareEnabled]);
+  }, [t, canViewCompany, externalShareEnabled]);
 
   return (
     <div className="dashboard unified-files-page">
@@ -79,7 +74,6 @@ export function UnifiedFilesPage(): React.JSX.Element {
         {activeTab === 'user' && <UserFilesTab onActionChange={handleActionChange} />}
         {activeTab === 'company' && <CompanyFilesTab onActionChange={handleActionChange} />}
         {activeTab === 'shared' && externalShareEnabled && <SharedFoldersTab onActionChange={handleActionChange} />}
-        {activeTab === 'remote' && <RemoteTab onActionChange={handleActionChange} />}
         {activeTab === 'crawler' && <WebCrawlerTab />}
         {activeTab === 'chatArtifacts' && <ChatArtifactsTab onActionChange={handleActionChange} />}
       </LayoutDashboard>

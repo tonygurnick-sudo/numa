@@ -650,6 +650,103 @@ def handle_connect_synergy_download(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# NetSuite MCP Handler
+# ---------------------------------------------------------------------------
+
+
+def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute a JSON-RPC 2.0 MCP method against NetSuite AI Connector Service.
+
+    Connector config (client_id, account_id) is read from the COMPANY vault
+    entry `oauth-client-netsuite` — admin-managed, framework convention. The
+    per-user OAuth tokens live in the user vault as `oauth-netsuite` and are
+    fetched via `get_oauth_token`. NetSuite is a public OAuth client (PKCE),
+    so there is no client_secret to propagate.
+    """
+    import asyncio
+
+    try:
+        user_sub = params.get("user_sub", "")
+        method = params.get("method", "").strip()
+        arguments = params.get("arguments", {})
+
+        if not user_sub:
+            return {"status": "error", "result": None, "error": "Missing user_sub"}
+        if not method:
+            return {"status": "error", "result": None, "error": "Missing method"}
+
+        try:
+            company_secrets = _get_consolidated_company_vault() or {}
+        except Exception:
+            company_secrets = {}
+        entry = company_secrets.get("oauth-client-netsuite")
+        if not entry:
+            return {
+                "status": "error",
+                "result": None,
+                "error": (
+                    "NetSuite connector is not configured. Ask an admin to set it up "
+                    "under Data Connectors in Settings."
+                ),
+            }
+
+        fields = entry.get("fields") or entry
+        if not isinstance(fields, dict):
+            return {
+                "status": "error",
+                "result": None,
+                "error": "NetSuite connector config is malformed. Ask an admin to re-save the connector.",
+            }
+
+        client_id = fields.get("client_id", "")
+        account_id = fields.get("account_id", "")
+        if not client_id or not account_id:
+            return {
+                "status": "error",
+                "result": None,
+                "error": (
+                    "NetSuite connector is missing Client ID or Account ID. Ask an admin "
+                    "to re-save the connector under Data Connectors."
+                ),
+            }
+
+        async def do_call():
+            from oauth_providers import create_provider
+
+            access_token = await get_oauth_token("netsuite", user_sub)
+            if not access_token:
+                return {
+                    "status": "error",
+                    "result": None,
+                    "error": (
+                        "You are not connected to NetSuite. Open Data Connectors in Settings "
+                        "and click Connect on the NetSuite entry to complete the OAuth flow."
+                    ),
+                }
+
+            provider = create_provider(
+                "netsuite",
+                client_id=client_id,
+                client_secret=None,
+                account_id=account_id,
+            )
+
+            try:
+                result = await provider._mcp_call(access_token, method, arguments)  # type: ignore
+                return {"status": "success", "result": result, "error": None}
+            except Exception as e:
+                return {"status": "error", "result": None, "error": str(e)}
+            finally:
+                await provider.close()
+
+        return asyncio.run(do_call())
+
+    except Exception as e:
+        logger.error("Error in connect_netsuite_mcp", error=str(e), exc_info=True)
+        return {"status": "error", "result": None, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # Generic HTTP handler (for ad-hoc OAuth APIs)
 # ---------------------------------------------------------------------------
 
@@ -710,19 +807,38 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
         # This removes the need for the LLM to discover the instance URL —
         # it can just ask for "/api/v1/projects" and the backend expands it.
         if not url.startswith(("http://", "https://")):
-            base = (
-                (_connector_config(connector).get("instance_url") or "")
-                .strip()
-                .rstrip("/")
-            )
+            base = ""
+            # NetSuite is per-account: the account_id lives on the
+            # oauth-client-netsuite vault entry (no separate connector-config),
+            # and the SuiteTalk REST host is `<accountId>.suitetalk.api.netsuite.com`
+            # with the account id lowercased and `_` → `-` (so `5721181_SB1`
+            # becomes `5721181-sb1`).
+            if connector == "netsuite":
+                try:
+                    company_secrets = _get_consolidated_company_vault() or {}
+                except Exception:
+                    company_secrets = {}
+                ns_entry = company_secrets.get("oauth-client-netsuite") or {}
+                ns_fields = ns_entry.get("fields") or ns_entry
+                if isinstance(ns_fields, dict):
+                    account_id = (ns_fields.get("account_id") or "").strip()
+                    if account_id:
+                        host = account_id.lower().replace("_", "-")
+                        base = f"https://{host}.suitetalk.api.netsuite.com"
+            else:
+                base = (
+                    (_connector_config(connector).get("instance_url") or "")
+                    .strip()
+                    .rstrip("/")
+                )
             if not base:
                 return {
                     "status": "error",
                     "result": None,
                     "error": (
-                        f"Relative URL '{url}' given but no instance_url is configured "
+                        f"Relative URL '{url}' given but no base URL is configured "
                         f"for connector '{connector}'. Either pass an absolute URL "
-                        f"(https://…) or ask an admin to set the Instance URL in "
+                        f"(https://…) or ask an admin to set the connector up in "
                         f"Settings -> Data Connectors."
                     ),
                 }

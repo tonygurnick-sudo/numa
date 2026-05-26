@@ -1,6 +1,7 @@
 """OAuth workspace tools package."""
 
 from .connect_tools import (
+    handle_connect_netsuite_mcp,
     handle_connect_request,
     handle_connect_status,
     handle_connect_synergy_download,
@@ -28,4 +29,5 @@ __all__ = [
     "handle_connect_synergy_search",
     "handle_connect_synergy_download",
     "handle_connect_request",
+    "handle_connect_netsuite_mcp",
 ]

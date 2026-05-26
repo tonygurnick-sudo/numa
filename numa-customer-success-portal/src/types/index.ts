@@ -113,13 +113,36 @@ export const clientConfigSchema = z.object({
   agentCoreRegion: z.string().optional(), // default: client region
   useGlobalInferenceProfile: z.boolean().optional(), // default: true (global Bedrock CRI; false routes to regional us./au./apac.* for tight-SCP customers)
   scheduling: z.boolean().optional(), // default: false
+  /**
+   * Sub-flag of `scheduling`. When `scheduling: true` and `eventTriggers: false`,
+   * cron schedules work but event triggers (Gmail-message etc.) are hidden
+   * from the user-facing automation builder, the admin Settings >
+   * Scheduling page, and trigger-quota fields here in the CSP.
+   *
+   * Default `false` — new clients must opt in via the CSP form. Existing
+   * clients that had scheduling on at the time this flag landed were
+   * backfilled to `true` via `tools/backfill-triggers-flag.ts`. Has no effect
+   * when `scheduling: false`.
+   */
+  eventTriggers: z.boolean().optional(),
   schedulingMinIntervalMinutes: z.number().int().min(5).optional(), // per-client min interval override
+  // Per-client quota overrides (Level 2). Unset → fall back to platform-settings (Level 1).
+  // 0 is a valid value for caps — means "0 allowed" (a way to disable a quota target).
+  maxRunsPerCompanyPerMonth: z.number().int().min(0).optional(),
+  maxRunsPerUserPerMonth: z.number().int().min(0).optional(),
+  maxTriggerRunsPerCompanyPerMonth: z.number().int().min(0).optional(),
+  maxTriggerRunsPerUserPerMonth: z.number().int().min(0).optional(),
+  maxConcurrentActiveSchedulesPerCompany: z.number().int().min(0).optional(),
+  maxConcurrentActiveSchedulesPerUser: z.number().int().min(0).optional(),
+  requireApprovalAboveUserCap: z.boolean().optional(),
   workspaceChatModelSelection: z.boolean().optional(), // default: false
   numaOps: z.boolean().optional(), // default: false
   numaDropZones: z.boolean().optional(), // default: false
   numaSharing: z.boolean().optional(), // default: false
   developerMode: z.boolean().optional(), // default: false
-  secretsVaultEnabled: z.boolean().optional(), // default: false
+  // @deprecated TASK-146 — vault now follows `dataConnectorsEnabled`. Kept on
+  // the schema so legacy DynamoDB items with this field still parse.
+  secretsVaultEnabled: z.boolean().optional(),
   oauthIntegrationsEnabled: z.boolean().optional(), // default: false
   oauthProviders: z.record(z.string(), oauthProviderSchema).optional(),
   ssoEnabled: z.boolean().optional(), // default: true
@@ -163,12 +186,23 @@ export type ClientConfig = z.infer<typeof clientConfigSchema>;
 export const CLIENT_STATUS_VALUES = ['trial', 'paying', 'partner', 'internal', 'other', 'unclear'] as const;
 export type ClientStatusValue = (typeof CLIENT_STATUS_VALUES)[number];
 
+// Which AWS Organization the client's account belongs to.
+//   - nextgen: modern Arcanum-owned per-client accounts under the NextGen org (mgmt 282304106064)
+//   - arcanum: Arcanum's internal/dev/HQ/quota-sharing org
+//   - standalone: customer-owned account, not in either Arcanum-controlled org
+export const ACCOUNT_ORG_VALUES = ['nextgen', 'arcanum', 'standalone'] as const;
+export type AccountOrgValue = (typeof ACCOUNT_ORG_VALUES)[number];
+
 export const clientMetadataSchema = z.object({
   clientName: z.string(),
-  status: z.enum(CLIENT_STATUS_VALUES),
+  // Optional so the Configs page can seed a minimal row from the deterministic
+  // account-id classifier (clientName + accountOrg) for clients that have no
+  // metadata yet. Operators fill in status manually from the UI later.
+  status: z.enum(CLIENT_STATUS_VALUES).optional(),
   trialStartDate: z.string().optional(),
   trialEndDate: z.string().optional(),
   notes: z.string().optional(),
+  accountOrg: z.enum(ACCOUNT_ORG_VALUES).optional(),
   updatedAt: z.string().optional(),
   updatedBy: z.string().optional(),
 });
@@ -184,12 +218,22 @@ export const CLIENT_STATUS_DISPLAY: Record<ClientStatusValue, { label: string; v
   unclear: { label: 'Unclear', variant: 'light' },
 };
 
+export const ACCOUNT_ORG_DISPLAY: Record<AccountOrgValue, { label: string; variant: string }> = {
+  nextgen: { label: 'NextGen', variant: 'dark' },
+  arcanum: { label: 'Arcanum', variant: 'info' },
+  standalone: { label: 'Standalone', variant: 'secondary' },
+};
+
 export function getStatusBadgeInfo(metadata?: ClientMetadata): { label: string; variant: string } | null {
-  if (!metadata) return null;
+  if (!metadata || !metadata.status) return null;
   if (metadata.status === 'trial' && metadata.trialEndDate && new Date(metadata.trialEndDate) < new Date()) {
     return { label: 'Trial - Expired', variant: 'danger' };
   }
   return CLIENT_STATUS_DISPLAY[metadata.status];
+}
+
+export function getAccountOrgBadgeInfo(org?: AccountOrgValue | null): { label: string; variant: string } | null {
+  return org ? ACCOUNT_ORG_DISPLAY[org] : null;
 }
 
 // Helper to get default values for display
@@ -215,12 +259,15 @@ export const getDefaultClientConfigValues = () => ({
   numaWorkspaceChat: true,
   useGlobalInferenceProfile: true,
   scheduling: false,
+  // Defaults to false. Existing clients with scheduling already on were
+  // backfilled by tools/backfill-triggers-flag.ts so they keep triggers;
+  // any new client must explicitly opt in via the Agent Automations form.
+  eventTriggers: false,
   workspaceChatModelSelection: false,
   numaOps: false,
   numaDropZones: false,
   numaSharing: false,
   developerMode: false,
-  secretsVaultEnabled: false,
   oauthIntegrationsEnabled: false,
   ssoEnabled: true,
   ssoEnterprise: false,
@@ -252,7 +299,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     allProdApps: 'All Production Apps',
     apps: 'Selected Applications',
     pipedreamIntegrations: 'Pipedream Integrations',
-    dataConnectorsEnabled: 'Data Connectors',
+    dataConnectorsEnabled: 'Native Integrations',
     allowBedrockQuotaSharing: 'Bedrock Quota Sharing',
     preferredKnowledgeBase: 'Numa Files backend',
     qBusinessRegion: 'Q Business Region',
@@ -261,8 +308,16 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     visionModelType: 'Vision Model Type',
     numaChatAgents: 'Numa Chat Agents',
     agents: 'Agents',
-    scheduling: 'Agent Scheduling',
-    schedulingMinIntervalMinutes: 'Scheduling Min Interval (minutes)',
+    scheduling: 'Agent Automations',
+    eventTriggers: 'Event Triggers',
+    schedulingMinIntervalMinutes: 'Minimum Automation Interval (minutes)',
+    maxRunsPerCompanyPerMonth: 'Max Schedule Runs / Company / Month',
+    maxRunsPerUserPerMonth: 'Max Schedule Runs / User / Month',
+    maxTriggerRunsPerCompanyPerMonth: 'Max Trigger Runs / Company / Month',
+    maxTriggerRunsPerUserPerMonth: 'Max Trigger Runs / User / Month',
+    maxConcurrentActiveSchedulesPerCompany: 'Max Concurrent Active Automations / Company',
+    maxConcurrentActiveSchedulesPerUser: 'Max Concurrent Active Automations / User',
+    requireApprovalAboveUserCap: 'Require Admin Approval Above User Cap',
     v2Apps: 'V2 Apps',
     mfa: 'Multi-Factor Authentication (MFA)',
     numaDropZones: 'Drop Zones',
@@ -270,7 +325,6 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     ssoEnabled: 'SSO Self-Service',
     ssoEnterprise: 'SSO Enterprise (SCIM/OIDC)',
     developerMode: 'Developer Mode',
-    secretsVaultEnabled: 'Secrets Vault',
     oauthIntegrationsEnabled: 'OAuth Cloud Storage',
     useGlobalInferenceProfile: 'Use Global Bedrock Inference Profile',
   };

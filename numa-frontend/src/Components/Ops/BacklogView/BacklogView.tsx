@@ -1625,10 +1625,35 @@ const BacklogView = () => {
                         {t('backlogView.workItems', { count: group.tickets.length })}
                       </span>
 
-                      <div className="backlog-status-summary">
-                        <span className="backlog-status-badge backlog-status-badge--backlog">{summary.backlog}</span>
-                        <span className="backlog-status-badge backlog-status-badge--active">{summary.active}</span>
-                        <span className="backlog-status-badge backlog-status-badge--done">{summary.done}</span>
+                      <div
+                        className="backlog-status-summary"
+                        aria-label={[
+                          t('backlogView.statusCounts.backlog', { count: summary.backlog }),
+                          t('backlogView.statusCounts.active', { count: summary.active }),
+                          t('backlogView.statusCounts.done', { count: summary.done }),
+                        ].join(', ')}
+                      >
+                        <span
+                          className="backlog-status-badge backlog-status-badge--backlog"
+                          title={t('backlogView.statusCounts.backlog', { count: summary.backlog })}
+                          aria-hidden="true"
+                        >
+                          {summary.backlog}
+                        </span>
+                        <span
+                          className="backlog-status-badge backlog-status-badge--active"
+                          title={t('backlogView.statusCounts.active', { count: summary.active })}
+                          aria-hidden="true"
+                        >
+                          {summary.active}
+                        </span>
+                        <span
+                          className="backlog-status-badge backlog-status-badge--done"
+                          title={t('backlogView.statusCounts.done', { count: summary.done })}
+                          aria-hidden="true"
+                        >
+                          {summary.done}
+                        </span>
                       </div>
 
                       <button

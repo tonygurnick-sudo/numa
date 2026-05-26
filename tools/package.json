@@ -68,6 +68,7 @@
     "nolia-assessments": "node --import tsx nolia-assessments.ts",
     "nolia-rules-gen": "node --import tsx nolia-rules-gen.ts",
     "assign-bedrock-quota-sharing": "node --import tsx assign-bedrock-quota-sharing.ts",
+    "backfill-triggers-flag": "node --import tsx backfill-triggers-flag.ts",
     "backup-portal-image-metadata": "node --import tsx backup-portal-image-metadata.ts",
     "migrate-portal-image-metadata": "node --import tsx migrate-portal-image-metadata.ts",
     "cleanup-portal-image-metadata-old-rows": "node --import tsx cleanup-portal-image-metadata-old-rows.ts",

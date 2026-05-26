@@ -30,7 +30,9 @@ vi.mock('../../Providers/NumaRequestContext', () => ({
 vi.mock('../../Services/AdminIntegrationsService', () => ({
   AdminIntegrationsService: {
     getCached: vi.fn().mockReturnValue(null),
+    getCachedCatalog: vi.fn().mockReturnValue(null),
     listWithNuma: vi.fn().mockResolvedValue({}),
+    catalogWithNuma: vi.fn().mockResolvedValue([]),
     updateWithNuma: vi.fn(),
   },
 }));
@@ -88,6 +90,9 @@ describe('SettingsPage', () => {
     });
   });
 
+  // SettingsPage pulls in a large dependency graph; under `yarn test --coverage`
+  // parallelism the render can brush past the default 5s timeout. Give these
+  // two tests a 15s window so they don't flake in CI.
   it('shows the Branding tab for admin users when branding is enabled', async () => {
     sessionStorage.setItem('BRANDING_PROVIDER_ENABLED', 'true');
     render(
@@ -96,8 +101,8 @@ describe('SettingsPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByTestId('branding-panel')).toBeInTheDocument();
-  });
+    expect(await screen.findByTestId('branding-panel', undefined, { timeout: 10000 })).toBeInTheDocument();
+  }, 15000);
 
   it('hides the Branding tab when branding feature is disabled', async () => {
     sessionStorage.setItem('BRANDING_PROVIDER_ENABLED', 'false');
@@ -107,8 +112,11 @@ describe('SettingsPage', () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.queryByTestId('branding-panel')).not.toBeInTheDocument();
-    });
-  });
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId('branding-panel')).not.toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+  }, 15000);
 });

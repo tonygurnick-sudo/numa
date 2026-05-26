@@ -10,6 +10,11 @@ import { QuotaCheckCard } from '@/components/tools/QuotaCheckCard';
 import { clientService } from '@/services/clientService';
 import { clientMetadataService } from '@/services/clientMetadataService';
 import {
+  platformSettingsService,
+  PLATFORM_QUOTA_INITIAL_VALUES,
+  PlatformSettings as PlatformSettingsType,
+} from '@/services/platformSettingsService';
+import {
   Client,
   ClientConfig,
   clientConfigSchema,
@@ -108,7 +113,19 @@ export default function UpdateClientConfig() {
   const [brandingProviderEnabled, setBrandingProviderEnabled] = useState<boolean>(false);
   const [numaWorkspaceChat, setNumaWorkspaceChat] = useState<boolean>(false);
   const [scheduling, setScheduling] = useState<boolean>(false);
+  // Sub-flag of `scheduling` — defaults to false (clients must opt in to
+  // event triggers). Setting to true exposes the trigger builder, trigger
+  // quota fields, and trigger admin sections.
+  const [triggers, setTriggers] = useState<boolean>(false);
   const [schedulingMinIntervalMinutes, setSchedulingMinIntervalMinutes] = useState<string>('');
+  // FEAT-105 — per-client (Level 2) automation quota overrides
+  const [maxRunsPerCompanyPerMonth, setMaxRunsPerCompanyPerMonth] = useState<string>('');
+  const [maxRunsPerUserPerMonth, setMaxRunsPerUserPerMonth] = useState<string>('');
+  const [maxTriggerRunsPerCompanyPerMonth, setMaxTriggerRunsPerCompanyPerMonth] = useState<string>('');
+  const [maxTriggerRunsPerUserPerMonth, setMaxTriggerRunsPerUserPerMonth] = useState<string>('');
+  const [maxConcurrentActiveSchedulesPerCompany, setMaxConcurrentActiveSchedulesPerCompany] = useState<string>('');
+  const [maxConcurrentActiveSchedulesPerUser, setMaxConcurrentActiveSchedulesPerUser] = useState<string>('');
+  const [requireApprovalAboveUserCap, setRequireApprovalAboveUserCap] = useState<boolean | null>(null);
   const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState<boolean>(false);
   const [useGlobalInferenceProfile, setUseGlobalInferenceProfile] = useState<boolean>(true);
   const [numaOps, setNumaOps] = useState<boolean>(false);
@@ -117,7 +134,6 @@ export default function UpdateClientConfig() {
   const [ssoEnabled, setSsoEnabled] = useState<boolean>(true);
   const [ssoEnterprise, setSsoEnterprise] = useState<boolean>(false);
   const [developerMode, setDeveloperMode] = useState<boolean>(false);
-  const [secretsVaultEnabled, setSecretsVaultEnabled] = useState<boolean>(false);
   const [oauthIntegrationsEnabled, setOauthIntegrationsEnabled] = useState<boolean>(false);
   const [v2Apps, setV2Apps] = useState<boolean>(false);
   const [agentCoreRegion, setAgentCoreRegion] = useState<string>('');
@@ -137,6 +153,48 @@ export default function UpdateClientConfig() {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [uploadedConfig, setUploadedConfig] = useState<ClientConfig | null>(null);
   const [showReplacePreview, setShowReplacePreview] = useState(false);
+
+  // Live platform-settings (Level 1) so the inheritance placeholders show
+  // what users actually inherit, not a hardcoded guess. Falls back to
+  // PLATFORM_QUOTA_INITIAL_VALUES for fields the record doesn't override.
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettingsType | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await platformSettingsService.get();
+        if (!cancelled) setPlatformSettings(s);
+      } catch {
+        if (!cancelled) setPlatformSettings({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * Effective inherited value for a quota field — what the customer would
+   * actually get if they leave the per-client override empty.
+   */
+  const inherited = <K extends keyof typeof PLATFORM_QUOTA_INITIAL_VALUES>(
+    key: K
+  ): (typeof PLATFORM_QUOTA_INITIAL_VALUES)[K] => {
+    const fromRecord = platformSettings?.[key as keyof PlatformSettingsType];
+    if (typeof fromRecord === typeof PLATFORM_QUOTA_INITIAL_VALUES[key] && fromRecord !== undefined) {
+      return fromRecord as (typeof PLATFORM_QUOTA_INITIAL_VALUES)[K];
+    }
+    return PLATFORM_QUOTA_INITIAL_VALUES[key];
+  };
+
+  /**
+   * Build the placeholder string. While platform-settings is still loading,
+   * show a neutral message so we never display a misleading number.
+   */
+  const inheritPlaceholder = (key: keyof typeof PLATFORM_QUOTA_INITIAL_VALUES, suffix = ''): string => {
+    if (platformSettings === null) return 'Leave empty to inherit (loading…)';
+    return `Leave empty to inherit (Platform Settings → ${inherited(key).toLocaleString()}${suffix})`;
+  };
 
   // Prefill selected client from query params (if present)
   useEffect(() => {
@@ -185,8 +243,42 @@ export default function UpdateClientConfig() {
     setBrandingProviderEnabled(Boolean((cfg as any).brandingProviderEnabled));
     setNumaWorkspaceChat((cfg as any).numaWorkspaceChat ?? defaults.numaWorkspaceChat);
     setScheduling(Boolean((cfg as any).scheduling));
+    // Read from eventTriggers first (authoritative post-rebase), fall back
+    // to the legacy `triggers` key for unmigrated records, then default to
+    // false. Reading only from `triggers` would miss records already on
+    // the new key, and reading only from `eventTriggers` would miss the
+    // pre-migration ones.
+    {
+      const cfgAny = cfg as { eventTriggers?: boolean; triggers?: boolean };
+      setTriggers(cfgAny.eventTriggers ?? cfgAny.triggers ?? false);
+    }
     setSchedulingMinIntervalMinutes(
       (cfg as any).schedulingMinIntervalMinutes != null ? String((cfg as any).schedulingMinIntervalMinutes) : ''
+    );
+    setMaxRunsPerCompanyPerMonth(
+      (cfg as any).maxRunsPerCompanyPerMonth != null ? String((cfg as any).maxRunsPerCompanyPerMonth) : ''
+    );
+    setMaxRunsPerUserPerMonth(
+      (cfg as any).maxRunsPerUserPerMonth != null ? String((cfg as any).maxRunsPerUserPerMonth) : ''
+    );
+    setMaxTriggerRunsPerCompanyPerMonth(
+      (cfg as any).maxTriggerRunsPerCompanyPerMonth != null ? String((cfg as any).maxTriggerRunsPerCompanyPerMonth) : ''
+    );
+    setMaxTriggerRunsPerUserPerMonth(
+      (cfg as any).maxTriggerRunsPerUserPerMonth != null ? String((cfg as any).maxTriggerRunsPerUserPerMonth) : ''
+    );
+    setMaxConcurrentActiveSchedulesPerCompany(
+      (cfg as any).maxConcurrentActiveSchedulesPerCompany != null
+        ? String((cfg as any).maxConcurrentActiveSchedulesPerCompany)
+        : ''
+    );
+    setMaxConcurrentActiveSchedulesPerUser(
+      (cfg as any).maxConcurrentActiveSchedulesPerUser != null
+        ? String((cfg as any).maxConcurrentActiveSchedulesPerUser)
+        : ''
+    );
+    setRequireApprovalAboveUserCap(
+      typeof (cfg as any).requireApprovalAboveUserCap === 'boolean' ? (cfg as any).requireApprovalAboveUserCap : null
     );
     setWorkspaceChatModelSelection(Boolean((cfg as any).workspaceChatModelSelection));
     setUseGlobalInferenceProfile((cfg as any).useGlobalInferenceProfile ?? defaults.useGlobalInferenceProfile);
@@ -196,7 +288,6 @@ export default function UpdateClientConfig() {
     setSsoEnabled((cfg as any).ssoEnabled ?? defaults.ssoEnabled);
     setSsoEnterprise(Boolean((cfg as any).ssoEnterprise));
     setDeveloperMode(Boolean((cfg as any).developerMode));
-    setSecretsVaultEnabled(Boolean((cfg as any).secretsVaultEnabled));
     setOauthIntegrationsEnabled(Boolean((cfg as any).oauthIntegrationsEnabled));
     setV2Apps(Boolean((cfg as any)?.v2Apps));
     setAgentCoreRegion((cfg as any).agentCoreRegion || '');
@@ -212,7 +303,7 @@ export default function UpdateClientConfig() {
     // Load metadata for the selected client
     clientMetadataService.getMetadata(selectedClientName).then((meta) => {
       if (meta) {
-        setMetaStatus(meta.status);
+        setMetaStatus(meta.status ?? 'unclear');
         setTrialStartDate(meta.trialStartDate || '');
         setTrialEndDate(meta.trialEndDate || '');
         setMetaNotes(meta.notes || '');
@@ -240,7 +331,15 @@ export default function UpdateClientConfig() {
       brandingProviderEnabled: (current as any)?.brandingProviderEnabled ?? defaults.brandingProviderEnabled,
       numaWorkspaceChat: (current as any)?.numaWorkspaceChat ?? defaults.numaWorkspaceChat,
       scheduling: (current as any)?.scheduling ?? defaults.scheduling,
+      eventTriggers: (current as any)?.eventTriggers ?? defaults.eventTriggers,
       schedulingMinIntervalMinutes: (current as any)?.schedulingMinIntervalMinutes ?? undefined,
+      maxRunsPerCompanyPerMonth: (current as any)?.maxRunsPerCompanyPerMonth ?? undefined,
+      maxRunsPerUserPerMonth: (current as any)?.maxRunsPerUserPerMonth ?? undefined,
+      maxTriggerRunsPerCompanyPerMonth: (current as any)?.maxTriggerRunsPerCompanyPerMonth ?? undefined,
+      maxTriggerRunsPerUserPerMonth: (current as any)?.maxTriggerRunsPerUserPerMonth ?? undefined,
+      maxConcurrentActiveSchedulesPerCompany: (current as any)?.maxConcurrentActiveSchedulesPerCompany ?? undefined,
+      maxConcurrentActiveSchedulesPerUser: (current as any)?.maxConcurrentActiveSchedulesPerUser ?? undefined,
+      requireApprovalAboveUserCap: (current as any)?.requireApprovalAboveUserCap ?? undefined,
       workspaceChatModelSelection:
         (current as any)?.workspaceChatModelSelection ?? defaults.workspaceChatModelSelection,
       useGlobalInferenceProfile: (current as any)?.useGlobalInferenceProfile ?? defaults.useGlobalInferenceProfile,
@@ -250,7 +349,6 @@ export default function UpdateClientConfig() {
       ssoEnabled: (current as any)?.ssoEnabled ?? defaults.ssoEnabled,
       ssoEnterprise: (current as any)?.ssoEnterprise ?? defaults.ssoEnterprise,
       developerMode: (current as any)?.developerMode ?? defaults.developerMode,
-      secretsVaultEnabled: (current as any)?.secretsVaultEnabled ?? defaults.secretsVaultEnabled,
       oauthIntegrationsEnabled: (current as any)?.oauthIntegrationsEnabled ?? defaults.oauthIntegrationsEnabled,
       v2Apps: (current as any)?.v2Apps ?? defaults.v2Apps,
       agentCoreRegion: (current as any)?.agentCoreRegion ?? '',
@@ -307,10 +405,44 @@ export default function UpdateClientConfig() {
       updates.brandingProviderEnabled = brandingProviderEnabled;
     if (eff.numaWorkspaceChat !== numaWorkspaceChat) updates.numaWorkspaceChat = numaWorkspaceChat;
     if (eff.scheduling !== scheduling) updates.scheduling = scheduling;
+    if ((eff as any).eventTriggers !== triggers) (updates as any).eventTriggers = triggers;
+    // Legacy field cleanup. The boolean was originally named `triggers`; we
+    // renamed it to `eventTriggers` to match the dev-side flag. If a record
+    // still carries the old key, drop it on save (REMOVE expression in
+    // updateClientConfig — `undefined` value is the signal). Idempotent: a
+    // second save where `triggers` is already absent is a no-op.
+    if ((current as Record<string, unknown> | undefined)?.triggers !== undefined) {
+      (updates as Record<string, unknown>).triggers = undefined;
+    }
     const rawMinInterval = schedulingMinIntervalMinutes ? parseInt(schedulingMinIntervalMinutes, 10) : undefined;
     const parsedMinInterval = rawMinInterval != null && !Number.isNaN(rawMinInterval) ? rawMinInterval : undefined;
     if (eff.schedulingMinIntervalMinutes !== parsedMinInterval)
       updates.schedulingMinIntervalMinutes = parsedMinInterval;
+
+    // FEAT-105 — quota overrides
+    const parsePositive = (raw: string): number | undefined => {
+      const n = raw ? parseInt(raw, 10) : undefined;
+      return n != null && !Number.isNaN(n) && n > 0 ? n : undefined;
+    };
+    const parsedMaxCompany = parsePositive(maxRunsPerCompanyPerMonth);
+    const parsedMaxUser = parsePositive(maxRunsPerUserPerMonth);
+    const parsedMaxTriggerCompany = parsePositive(maxTriggerRunsPerCompanyPerMonth);
+    const parsedMaxTriggerUser = parsePositive(maxTriggerRunsPerUserPerMonth);
+    const parsedMaxConcurrentCompany = parsePositive(maxConcurrentActiveSchedulesPerCompany);
+    const parsedMaxConcurrent = parsePositive(maxConcurrentActiveSchedulesPerUser);
+    if ((eff as any).maxRunsPerCompanyPerMonth !== parsedMaxCompany)
+      (updates as any).maxRunsPerCompanyPerMonth = parsedMaxCompany;
+    if ((eff as any).maxRunsPerUserPerMonth !== parsedMaxUser) (updates as any).maxRunsPerUserPerMonth = parsedMaxUser;
+    if ((eff as any).maxTriggerRunsPerCompanyPerMonth !== parsedMaxTriggerCompany)
+      (updates as any).maxTriggerRunsPerCompanyPerMonth = parsedMaxTriggerCompany;
+    if ((eff as any).maxTriggerRunsPerUserPerMonth !== parsedMaxTriggerUser)
+      (updates as any).maxTriggerRunsPerUserPerMonth = parsedMaxTriggerUser;
+    if ((eff as any).maxConcurrentActiveSchedulesPerCompany !== parsedMaxConcurrentCompany)
+      (updates as any).maxConcurrentActiveSchedulesPerCompany = parsedMaxConcurrentCompany;
+    if ((eff as any).maxConcurrentActiveSchedulesPerUser !== parsedMaxConcurrent)
+      (updates as any).maxConcurrentActiveSchedulesPerUser = parsedMaxConcurrent;
+    if ((eff as any).requireApprovalAboveUserCap !== (requireApprovalAboveUserCap ?? undefined))
+      (updates as any).requireApprovalAboveUserCap = requireApprovalAboveUserCap ?? undefined;
     if (eff.workspaceChatModelSelection !== workspaceChatModelSelection)
       updates.workspaceChatModelSelection = workspaceChatModelSelection;
     if (eff.useGlobalInferenceProfile !== useGlobalInferenceProfile)
@@ -321,7 +453,6 @@ export default function UpdateClientConfig() {
     if (eff.ssoEnabled !== ssoEnabled) (updates as any).ssoEnabled = ssoEnabled;
     if (eff.ssoEnterprise !== ssoEnterprise) (updates as any).ssoEnterprise = ssoEnterprise;
     if (eff.developerMode !== developerMode) (updates as any).developerMode = developerMode;
-    if (eff.secretsVaultEnabled !== secretsVaultEnabled) (updates as any).secretsVaultEnabled = secretsVaultEnabled;
     if (eff.oauthIntegrationsEnabled !== oauthIntegrationsEnabled)
       (updates as any).oauthIntegrationsEnabled = oauthIntegrationsEnabled;
     if (eff.v2Apps !== v2Apps) updates.v2Apps = v2Apps;
@@ -376,16 +507,50 @@ export default function UpdateClientConfig() {
     if (schedulingMinIntervalMinutes) {
       const val = parseInt(schedulingMinIntervalMinutes, 10);
       if (isNaN(val) || val < 5 || val > 1440) {
-        setError('Scheduling Min Interval must be a whole number between 5 and 1440 minutes');
+        setError('Minimum Automation Interval must be a whole number between 5 and 1440 minutes');
         return;
       }
+    }
+    // FEAT-105 — validate quota overrides (positive integer or empty)
+    const validatePositive = (raw: string, label: string): string | null => {
+      if (!raw) return null;
+      const n = parseInt(raw, 10);
+      if (isNaN(n) || !Number.isInteger(n) || n <= 0) return `${label} must be a positive integer`;
+      return null;
+    };
+    const quotaErrors = [
+      validatePositive(maxRunsPerCompanyPerMonth, 'Max schedule runs / company / month'),
+      validatePositive(maxRunsPerUserPerMonth, 'Max schedule runs / user / month'),
+      validatePositive(maxTriggerRunsPerCompanyPerMonth, 'Max trigger runs / company / month'),
+      validatePositive(maxTriggerRunsPerUserPerMonth, 'Max trigger runs / user / month'),
+      validatePositive(maxConcurrentActiveSchedulesPerCompany, 'Max concurrent active automations / company'),
+      validatePositive(maxConcurrentActiveSchedulesPerUser, 'Max concurrent active automations / user'),
+    ].filter(Boolean) as string[];
+    if (quotaErrors.length) {
+      setError(quotaErrors.join('; '));
+      return;
     }
 
     const current = clients.find((c) => c.name === selectedClientName)?.config;
     const updates: Partial<ClientConfig> = buildUpdates(current);
     const merged = { ...(current || {}), ...updates };
-    setBeforeJson(JSON.stringify(current, null, 2));
-    setAfterJson(JSON.stringify(merged, null, 2));
+    // Sort keys alphabetically before stringifying so newly-added fields
+    // (e.g. `eventTriggers` replacing legacy `triggers`) land in their
+    // alphabetical slot in the diff preview rather than appended at the
+    // end. JSON.stringify(value, replacerArray) only emits keys in the
+    // replacer order — pass merged|current keys sorted alphabetically.
+    const sortedStringify = (obj: Record<string, unknown> | undefined): string => {
+      if (!obj) return JSON.stringify(obj, null, 2);
+      // `undefined` values are dropped by stringify already; we still want
+      // them excluded from the key list so the diff shows the field as
+      // removed rather than rendered as `null`.
+      const keys = Object.keys(obj)
+        .filter((k) => obj[k] !== undefined)
+        .sort();
+      return JSON.stringify(obj, keys, 2);
+    };
+    setBeforeJson(sortedStringify(current as Record<string, unknown> | undefined));
+    setAfterJson(sortedStringify(merged as Record<string, unknown>));
     setShowPreview(true);
   };
 
@@ -554,12 +719,12 @@ export default function UpdateClientConfig() {
                           helpText="Enable external API integrations"
                         />
                         <ConfigField
-                          label="Data Connectors"
+                          label="Native Integrations"
                           value={dataConnectorsEnabled}
                           defaultValue={defaults.dataConnectorsEnabled}
                           onChange={setDataConnectorsEnabled}
                           type="switch"
-                          helpText="Show data connectors in the frontend"
+                          helpText="Surface Arcanum's native (first-party OAuth/PAT) integrations alongside Pipedream-backed ones in the unified Integrations surface"
                         />
                         <ConfigField
                           label="Agents"
@@ -683,14 +848,6 @@ export default function UpdateClientConfig() {
                           helpText="Show power-user actions: file system drill-down, metadata inspection, debug views"
                         />
                         <ConfigField
-                          label="Secrets Vault"
-                          value={secretsVaultEnabled}
-                          defaultValue={defaults.secretsVaultEnabled}
-                          onChange={setSecretsVaultEnabled}
-                          type="switch"
-                          helpText="Secure credential storage for the workspace"
-                        />
-                        <ConfigField
                           label="OAuth Cloud Storage"
                           value={oauthIntegrationsEnabled}
                           defaultValue={defaults.oauthIntegrationsEnabled}
@@ -735,6 +892,140 @@ export default function UpdateClientConfig() {
                           ]}
                           helpText="Indexing backend that powers Numa Files search for this client"
                         />
+                      </Col>
+                    </Row>
+
+                    {/* FEAT-105 — Agent Automations gets its own full-width section
+                        below the feature-flag grid. The cramped right-column layout
+                        couldn't breathe with the quota sub-options stacked under it.
+                        Sub-options inherit from the platform-settings record (Level 1)
+                        when left empty — that's the sole source of truth, no code-side
+                        fallback default. */}
+                    <Row className="mb-4">
+                      <Col xs={12}>
+                        <h5 className="mb-3">Agent Automations</h5>
+                        <ConfigField
+                          label="Agent Automations"
+                          value={scheduling}
+                          defaultValue={defaults.scheduling}
+                          onChange={setScheduling}
+                          type="switch"
+                          helpText="Enable agent automations (schedules + triggers) and notifications. The sub-options below only apply when this is on."
+                        />
+                        {scheduling && (
+                          <div className="border-start border-3 ps-3 ms-2 mb-3 bg-light bg-opacity-50 rounded-end py-3">
+                            <ConfigField
+                              label="Event Triggers"
+                              value={triggers}
+                              defaultValue={defaults.eventTriggers}
+                              onChange={setTriggers}
+                              type="switch"
+                              helpText="Sub-flag of Agent Automations. When off, hides the event-trigger builder for users, the trigger admin tab, and the trigger quota fields below. Cron schedules continue to work."
+                            />
+                            <Row className="g-3 mt-1">
+                              <Col xs={12}>
+                                <ConfigField
+                                  label="Minimum Automation Interval (minutes)"
+                                  value={schedulingMinIntervalMinutes}
+                                  defaultValue=""
+                                  onChange={setSchedulingMinIntervalMinutes}
+                                  type="text"
+                                  placeholder={inheritPlaceholder('schedulingMinIntervalMinutes', ' min')}
+                                  helpText="Minimum allowed interval between automation runs. Applies to schedules. Leave empty to inherit platform default."
+                                />
+                              </Col>
+                              <Col md={6}>
+                                <div className="text-muted small fw-semibold mb-2 text-uppercase">
+                                  Schedule Run Quotas (cron-based, projected)
+                                </div>
+                                <ConfigField
+                                  label="Max Schedule Runs / Company / Month"
+                                  value={maxRunsPerCompanyPerMonth}
+                                  defaultValue=""
+                                  onChange={setMaxRunsPerCompanyPerMonth}
+                                  type="text"
+                                  placeholder={inheritPlaceholder('maxRunsPerCompanyPerMonth')}
+                                  helpText="Hard cap on tenant-wide schedule runs per month. Always enforced — schedules above this are rejected at creation regardless of admin approval."
+                                />
+                                <ConfigField
+                                  label="Max Schedule Runs / User / Month"
+                                  value={maxRunsPerUserPerMonth}
+                                  defaultValue=""
+                                  onChange={setMaxRunsPerUserPerMonth}
+                                  type="text"
+                                  placeholder={inheritPlaceholder('maxRunsPerUserPerMonth')}
+                                  helpText="Above this triggers admin approval (when enabled) or hard rejection."
+                                />
+                              </Col>
+                              {triggers && (
+                                <Col md={6}>
+                                  <div className="text-muted small fw-semibold mb-2 text-uppercase">
+                                    Trigger Run Quotas (event-based, actuals)
+                                  </div>
+                                  <ConfigField
+                                    label="Max Trigger Runs / Company / Month"
+                                    value={maxTriggerRunsPerCompanyPerMonth}
+                                    defaultValue=""
+                                    onChange={setMaxTriggerRunsPerCompanyPerMonth}
+                                    type="text"
+                                    placeholder={inheritPlaceholder('maxTriggerRunsPerCompanyPerMonth')}
+                                    helpText="Hard cap on tenant-wide trigger fires per month. Counted at fire time."
+                                  />
+                                  <ConfigField
+                                    label="Max Trigger Runs / User / Month"
+                                    value={maxTriggerRunsPerUserPerMonth}
+                                    defaultValue=""
+                                    onChange={setMaxTriggerRunsPerUserPerMonth}
+                                    type="text"
+                                    placeholder={inheritPlaceholder('maxTriggerRunsPerUserPerMonth')}
+                                    helpText="Over-cap fires are dropped silently with a one-shot per-month notification to the owner."
+                                  />
+                                </Col>
+                              )}
+                              <Col xs={12}>
+                                <div className="text-muted small fw-semibold mb-2 text-uppercase mt-2">
+                                  Concurrent Active Automations{triggers ? ' (schedules + triggers combined)' : ''}
+                                </div>
+                              </Col>
+                              <Col md={6}>
+                                <ConfigField
+                                  label="Max Concurrent Active Automations / Company"
+                                  value={maxConcurrentActiveSchedulesPerCompany}
+                                  defaultValue=""
+                                  onChange={setMaxConcurrentActiveSchedulesPerCompany}
+                                  type="text"
+                                  placeholder={inheritPlaceholder('maxConcurrentActiveSchedulesPerCompany')}
+                                  helpText={
+                                    triggers
+                                      ? 'Hard tenant-wide cap on simultaneously active automations (cron schedules + event triggers).'
+                                      : 'Hard tenant-wide cap on simultaneously active cron schedules.'
+                                  }
+                                />
+                              </Col>
+                              <Col md={6}>
+                                <ConfigField
+                                  label="Max Concurrent Active Automations / User"
+                                  value={maxConcurrentActiveSchedulesPerUser}
+                                  defaultValue=""
+                                  onChange={setMaxConcurrentActiveSchedulesPerUser}
+                                  type="text"
+                                  placeholder={inheritPlaceholder('maxConcurrentActiveSchedulesPerUser')}
+                                  helpText="Per-user cap on simultaneously active automations."
+                                />
+                              </Col>
+                              <Col xs={12}>
+                                <ConfigField
+                                  label="Require Admin Approval Above User Cap"
+                                  value={requireApprovalAboveUserCap ?? false}
+                                  defaultValue={true}
+                                  onChange={setRequireApprovalAboveUserCap as any}
+                                  type="switch"
+                                  helpText="When on, a user requesting more than their per-user cap goes to admin approval (admin can authorise up to the company cap, never above). When off, those requests are hard-rejected. The company quota is always a hard ceiling — admin approval cannot breach it. Default on."
+                                />
+                              </Col>
+                            </Row>
+                          </div>
+                        )}
                       </Col>
                     </Row>
 

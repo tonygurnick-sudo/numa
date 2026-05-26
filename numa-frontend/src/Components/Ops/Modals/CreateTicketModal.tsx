@@ -143,6 +143,10 @@ export function CreateTicketModal({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
+  // Attachment dropzone state — files are buffered locally and uploaded
+  // after the ticket is created (presigned URL needs a real ticketId).
+  const [dragOver, setDragOver] = useState(false);
+
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Load CRM lists when modal opens
@@ -325,6 +329,20 @@ export function CreateTicketModal({
   const removePendingAttachment = useCallback((index: number) => {
     setPendingPastedAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  const addPendingFiles = useCallback((fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setPendingPastedAttachments((prev) => [...prev, ...Array.from(fileList)]);
+  }, []);
+
+  const handleAttachmentDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      addPendingFiles(e.dataTransfer.files);
+    },
+    [addPendingFiles]
+  );
 
   // ── Submission ────────────────────────────────────────────────────────────
 
@@ -667,7 +685,16 @@ export function CreateTicketModal({
                   {t('tickets.attachments')}
                 </div>
                 {pendingPastedAttachments.length > 0 ? (
-                  <div className="d-flex flex-wrap gap-2">
+                  <div
+                    className="d-flex flex-wrap gap-2 align-items-center"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleAttachmentDrop}
+                    style={dragOver ? { outline: '2px dashed #6366f1', borderRadius: 8, outlineOffset: 2 } : undefined}
+                  >
                     {pendingPastedAttachments.map((file, i) => (
                       <span
                         key={`${file.name}-${i}`}
@@ -681,7 +708,7 @@ export function CreateTicketModal({
                         }}
                         title={`${file.name} \u2014 ${(file.size / 1024).toFixed(0)} KB`}
                       >
-                        <i className="bi bi-image" />
+                        <i className="bi bi-paperclip" />
                         {file.name}
                         <button
                           type="button"
@@ -699,22 +726,63 @@ export function CreateTicketModal({
                         </button>
                       </span>
                     ))}
+                    <label
+                      htmlFor="ticket-create-attachment-input"
+                      className="d-inline-flex align-items-center gap-1 mb-0"
+                      style={{
+                        background: 'transparent',
+                        border: '1px dashed var(--ops-border)',
+                        borderRadius: 999,
+                        padding: '4px 10px',
+                        fontSize: '0.8rem',
+                        color: '#6b7280',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <i className="bi bi-plus-lg" />
+                      {t('common.add', 'Add')}
+                    </label>
+                    <input
+                      id="ticket-create-attachment-input"
+                      type="file"
+                      multiple
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        addPendingFiles(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
                   </div>
                 ) : (
-                  <div
-                    style={{
-                      border: '2px dashed #e5e7eb',
-                      borderRadius: 8,
-                      padding: '18px',
-                      textAlign: 'center',
-                      color: '#9ca3af',
-                      fontSize: '0.85rem',
-                      cursor: 'default',
+                  <label
+                    htmlFor="ticket-create-attachment-input"
+                    className="ops-attachment-empty-zone d-block mb-0"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
                     }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleAttachmentDrop}
+                    style={dragOver ? { borderColor: '#6366f1', background: '#eef2ff' } : undefined}
                   >
-                    <i className="bi bi-paperclip me-1" />
-                    {t('tickets.attachmentHint', 'Drop files here or use the detail view to attach')}
-                  </div>
+                    <i
+                      className="bi bi-paperclip"
+                      style={{ fontSize: '1.25rem', color: '#9ca3af', display: 'block', marginBottom: 4 }}
+                    />
+                    <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                      {t('tickets.dropOrAttach', 'Drop files here or click to attach')}
+                    </span>
+                    <input
+                      id="ticket-create-attachment-input"
+                      type="file"
+                      multiple
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        addPendingFiles(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
                 )}
               </Form.Group>
 
@@ -1000,13 +1068,15 @@ export function CreateTicketModal({
                         onChange={(val) => setFieldValue('field-work-unit-id', val || null)}
                         options={[
                           { value: '', label: t('common.none') },
-                          ...workUnits.map(
-                            (wu): DropdownOption => ({
-                              value: wu.id,
-                              label: wu.name,
-                              icon: <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />,
-                            })
-                          ),
+                          ...workUnits
+                            .filter((wu) => wu.status !== 'completed')
+                            .map(
+                              (wu): DropdownOption => ({
+                                value: wu.id,
+                                label: wu.name,
+                                icon: <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />,
+                              })
+                            ),
                         ]}
                         renderValue={(opt) =>
                           opt?.value ? (

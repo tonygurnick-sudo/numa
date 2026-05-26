@@ -13,13 +13,12 @@ const NumaWorkspaceChatAgents = lazy(() =>
 const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
 const OpsPage = lazy(() => import('../Pages/OpsPage').then((m) => ({ default: m.OpsPage })));
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
-const NumaIntegrations = lazy(() => import('../Pages/NumaIntegrations').then((m) => ({ default: m.NumaIntegrations })));
+const UnifiedIntegrationsPage = lazy(() =>
+  import('../Pages/UnifiedIntegrationsPage').then((m) => ({ default: m.UnifiedIntegrationsPage }))
+);
 const JobHistoryManager = lazy(() => import('../Pages/JobHistoryManager'));
 // FilesPage removed -- replaced by UnifiedFilesPage
 const SchedulingPage = lazy(() => import('../Pages/SchedulingPage').then((m) => ({ default: m.SchedulingPage })));
-const DataConnectorsPage = lazy(() =>
-  import('../Pages/DataConnectorsPage').then((m) => ({ default: m.DataConnectorsPage }))
-);
 const ScheduleDetailPage = lazy(() =>
   import('../Pages/ScheduleDetailPage').then((m) => ({ default: m.ScheduleDetailPage }))
 );
@@ -34,7 +33,6 @@ const NotificationsPage = lazy(() =>
   import('../Pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage }))
 );
 const SupportPage = lazy(() => import('../Pages/SupportPage').then((m) => ({ default: m.SupportPage })));
-const VaultSecretsPage = lazy(() => import('../Pages/VaultSecretsPage').then((m) => ({ default: m.VaultSecretsPage })));
 const OAuthCallback = lazy(() => import('../Pages/OAuthCallback'));
 const V2AppDetail = lazy(() => import('../Pages/V2AppDetail').then((m) => ({ default: m.V2AppDetail })));
 const ApiContractPage = lazy(() => import('../Pages/ApiContractPage'));
@@ -190,16 +188,15 @@ export const ROUTE_CONFIG = [
     featureFlag: 'KNOWLEDGE_BASES',
   },
 
-  // Integrations
+  // Integrations — unified page covering both Pipedream-backed integrations
+  // and native data connectors.
   {
     path: '/integrations',
-    element: () => <NumaIntegrations />,
-    featureFlag: 'PIPEDREAM_INTEGRATIONS',
+    element: () => <UnifiedIntegrationsPage />,
     nav: {
       label: 'Integrations',
       labelKey: 'nav.items.integrations',
       icon: 'bi bi-link-45deg',
-      featureFlag: 'PIPEDREAM_INTEGRATIONS',
       order: 12,
     },
   },
@@ -230,26 +227,18 @@ export const ROUTE_CONFIG = [
     },
   },
 
-  // Data Connectors — hidden from nav (now a tab in Admin Settings)
+  // Data Connectors — folded into the unified /integrations surface. The
+  // redirect preserves existing bookmarks and any external links.
   {
     path: '/data-connectors',
-    element: () => <DataConnectorsPage />,
-    featureFlag: 'DATA_CONNECTORS_ENABLED',
+    element: () => <Navigate to="/integrations" replace />,
   },
 
-  // Vault Secrets
+  // Vault Secrets — now lives inside Settings (user + admin scope tabs).
+  // Keep the path so existing bookmarks/footer-nav links redirect into Settings.
   {
     path: '/vault-secrets',
-    element: () => <VaultSecretsPage />,
-    nav: {
-      label: 'Secrets Vault',
-      labelKey: 'nav.items.vault',
-      icon: 'bi bi-shield-lock-fill',
-      featureFlag: 'SECRETS_VAULT_ENABLED',
-      footerOnly: true,
-      order: 15,
-    },
-    featureFlag: 'SECRETS_VAULT_ENABLED',
+    element: () => <Navigate to="/settings?scope=user&tab=secrets" replace />,
   },
 
   // Support

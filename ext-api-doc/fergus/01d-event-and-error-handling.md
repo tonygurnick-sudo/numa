@@ -312,7 +312,7 @@ When remaining drops below 5:
 
 7. **Job status is transient after creation:** POST returns `"Draft"`, GET returns `"To Price"`. [CONFIRMED -- live API test 2026-04-04]
 
-8. **POST /jobs/{id}/finalise returns 404:** Despite the HATEOAS link being present in job responses. [NEEDS VERIFICATION]
+8. **/jobs/{id}/finalise is PUT, not POST:** The HATEOAS link's `"type": "POST"` is a server bug — the OpenAPI spec defines `put` only. Calling POST returns 404. [VERIFIED 2026-05-19]
 
 ---
 

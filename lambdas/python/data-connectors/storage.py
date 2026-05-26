@@ -143,6 +143,40 @@ def get_connector_record(
     return response.get("Item")
 
 
+def delete_connector_record(
+    table_name: str, user_id: str, connector_id: str
+) -> Optional[Dict[str, Any]]:
+    """Delete a user's connector row and return what was there (or None).
+
+    The returned record lets the caller clean up the associated Secrets
+    Manager payload — DynamoDB only stores the secret ARN, not the secret
+    itself, so the row delete alone leaves the SM entry orphaned. Caller is
+    responsible for that cleanup.
+    """
+    dynamodb = prm_resource("dynamodb")
+    table = dynamodb.Table(table_name)
+    response = table.delete_item(
+        Key={"user_id": user_id, "connector_id": connector_id},
+        ReturnValues="ALL_OLD",
+    )
+    attrs = response.get("Attributes")
+    return attrs if isinstance(attrs, dict) else None
+
+
+def delete_secret(secret_arn: str) -> None:
+    """Force-delete a Secrets Manager secret. Best-effort — swallows errors so
+    a transient SM failure doesn't leave the DDB row deleted but the user
+    blocked from re-connecting (the next upsert overwrites the ARN anyway).
+    """
+    if not secret_arn:
+        return
+    try:
+        secrets = prm_client("secretsmanager")
+        secrets.delete_secret(SecretId=secret_arn, ForceDeleteWithoutRecovery=True)
+    except Exception:  # pragma: no cover — best-effort cleanup
+        pass
+
+
 def get_secret_payload(secret_arn: str) -> Dict[str, Any]:
     """Return a parsed Secrets Manager payload."""
     secrets = prm_client("secretsmanager")

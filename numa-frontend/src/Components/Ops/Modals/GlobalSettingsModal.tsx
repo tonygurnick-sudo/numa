@@ -1130,6 +1130,18 @@ export function GlobalSettingsModal({
           }}
           allFields={fields}
           t={t}
+          builtinFieldLabels={crmConfig.builtinFieldLabels}
+          onBuiltinLabelChange={(fieldId, newLabel) => {
+            const updated = structuredClone(crmConfig);
+            const next = { ...(updated.builtinFieldLabels ?? {}) };
+            if (newLabel === null) {
+              delete next[fieldId];
+            } else {
+              next[fieldId] = newLabel;
+            }
+            updated.builtinFieldLabels = next;
+            setCrmConfig(updated);
+          }}
           onCreateField={async ({ name, fieldType, options }) => {
             // Persist immediately — using a `crm-` prefix avoids the modal's
             // own Save flow re-creating it (that branch triggers on `custom-`

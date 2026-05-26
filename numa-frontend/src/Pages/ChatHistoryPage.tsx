@@ -1,8 +1,8 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Container, Card, Table, Button, Spinner, Dropdown, Row, Col, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Search, Trash2, Pencil, Bot, Clock } from 'lucide-react';
+import { Search, Trash2, Pencil, Bot, Clock, MoreVertical } from 'lucide-react';
 import { useAuth } from '../Providers/AuthProvider';
 import { useConfirm, usePrompt } from '../Providers/ConfirmContext';
 import { PageHeader } from '../Components/PageHeader';
@@ -40,6 +40,9 @@ const ChatHistoryPage = () => {
   const [filterAgent, setFilterAgent] = useState('all');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const headerCheckboxRef = useRef<HTMLInputElement>(null);
 
   const fetchConversations = useCallback(async () => {
     if (!numaChatDynamoUtils || !user) return;
@@ -151,6 +154,56 @@ const ChatHistoryPage = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (!numaChatDynamoUtils || selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    const ok = await confirm({
+      message: t('history.bulkDeleteConfirm', {
+        count,
+        defaultValue: 'Delete {{count}} selected conversations? This cannot be undone.',
+      }),
+      confirmLabel: tCommon('confirm.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setIsBulkDeleting(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const results = await Promise.allSettled(ids.map((id) => numaChatDynamoUtils.deleteConversation(id, sub)));
+      const failures = results.filter((r) => r.status === 'rejected').length;
+      if (failures > 0) {
+        setLocalError(
+          t('history.bulkDeletePartial', {
+            failures,
+            total: count,
+            defaultValue: 'Failed to delete {{failures}} of {{total}} conversations.',
+          })
+        );
+      } else {
+        setLocalError(null);
+      }
+      setSelectedIds(new Set());
+      fetchConversations();
+    } catch (error) {
+      console.error('Error during bulk delete:', error);
+      setLocalError(t('history.bulkDeleteFailed', 'Failed to delete selected conversations.'));
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const toggleSelected = (conversationId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(conversationId)) {
+        next.delete(conversationId);
+      } else {
+        next.add(conversationId);
+      }
+      return next;
+    });
+  };
+
   const formatDateTime = (timestamp: number) => {
     try {
       return new Date(timestamp).toLocaleString(i18n.language, {
@@ -199,6 +252,29 @@ const ChatHistoryPage = () => {
 
     return matchesSearch && matchesAgent && matchesDate;
   });
+
+  const visibleIds = useMemo(() => filteredConversations.map((c) => c.conversation_id), [filteredConversations]);
+  const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
+
+  useEffect(() => {
+    if (headerCheckboxRef.current) {
+      headerCheckboxRef.current.indeterminate = someVisibleSelected;
+    }
+  }, [someVisibleSelected]);
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="dashboard job-history-page" data-testid="layout-dashboard">
@@ -288,6 +364,40 @@ const ChatHistoryPage = () => {
 
         {localError && <div className="alert alert-danger mx-3 mt-3">{localError}</div>}
 
+        {selectedIds.size > 0 && (
+          <div className="d-flex align-items-center justify-content-between bg-light border rounded px-3 py-2 mt-3 chat-history-bulk-bar">
+            <div className="fw-medium">
+              {t('history.selectedCount', {
+                count: selectedIds.size,
+                defaultValue: '{{count}} selected',
+              })}
+            </div>
+            <div className="d-flex gap-2">
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => setSelectedIds(new Set())}
+                disabled={isBulkDeleting}
+              >
+                {t('history.clearSelection', 'Clear selection')}
+              </Button>
+              <Button variant="danger" size="sm" onClick={handleBulkDelete} disabled={isBulkDeleting}>
+                {isBulkDeleting ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-2" />
+                    {t('history.deleting', 'Deleting...')}
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} className="me-2" aria-hidden="true" />
+                    {t('history.deleteSelected', 'Delete selected')}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
         <Card className="job-history-table-card mt-3">
           <Card.Body className="p-0">
             {isLoading && conversations.length === 0 ? (
@@ -305,17 +415,38 @@ const ChatHistoryPage = () => {
                 <Table hover className="mb-0 file-table auto-layout job-history-table">
                   <thead className="sticky-table-header numa-table-header">
                     <tr>
+                      <th style={{ width: '44px' }} className="text-center">
+                        <Form.Check
+                          type="checkbox"
+                          checked={allVisibleSelected}
+                          ref={headerCheckboxRef}
+                          onChange={toggleSelectAllVisible}
+                          aria-label={t('history.selectAll', 'Select all conversations')}
+                          disabled={visibleIds.length === 0}
+                        />
+                      </th>
                       <th style={{ width: '40%' }}>{t('history.headers.name', 'Conversation')}</th>
                       <th>{t('history.headers.agent', 'Agent')}</th>
                       <th>{t('history.headers.lastUpdated', 'Last Updated')}</th>
-                      <th style={{ width: '150px' }} className="text-end">
+                      <th style={{ width: '160px' }} className="text-end">
                         {t('history.headers.actions', 'Actions')}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredConversations.map((convo) => (
-                      <tr key={convo.conversation_id} className="align-middle">
+                      <tr
+                        key={convo.conversation_id}
+                        className={`align-middle${selectedIds.has(convo.conversation_id) ? ' table-active' : ''}`}
+                      >
+                        <td className="text-center">
+                          <Form.Check
+                            type="checkbox"
+                            checked={selectedIds.has(convo.conversation_id)}
+                            onChange={() => toggleSelected(convo.conversation_id)}
+                            aria-label={t('history.selectConversation', 'Select conversation')}
+                          />
+                        </td>
                         <td>
                           <div className="fw-medium text-break">
                             {convo.conversationName || t('history.untitled', 'Untitled')}
@@ -335,45 +466,52 @@ const ChatHistoryPage = () => {
                           <div className="text-muted small">{formatDateTime(convo.latestTimestamp)}</div>
                         </td>
                         <td className="text-end align-middle pe-3">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            className="me-2"
-                            onClick={() => {
-                              sessionStorage.setItem('currentConversationId-v2', convo.conversation_id);
-                              sessionStorage.setItem(
-                                'isWorkspaceConversation-v2',
-                                convo.isWorkspaceConversation === false ? 'false' : 'true'
-                              );
-                              // Flag this as an explicit selection so useConversationManager
-                              // honors it unconditionally (bypassing inactivity + top-100-meta gates).
-                              sessionStorage.setItem('pendingConversationSelect-v2', '1');
-                              navigate('/chat');
-                            }}
-                          >
-                            {t('history.actions.resume', 'Open')}
-                          </Button>
-                          <Dropdown align="end" className="d-inline-block">
-                            <Dropdown.Toggle variant="light" size="sm" className="btn-icon">
-                              <span className="visually-hidden">{t('history.actions', 'Actions')}</span>
-                            </Dropdown.Toggle>
-                            <Dropdown.Menu>
-                              <Dropdown.Item
-                                onClick={() => handleRename(convo.conversation_id, convo.conversationName)}
+                          <div className="d-flex justify-content-end align-items-center gap-2">
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => {
+                                sessionStorage.setItem('currentConversationId-v2', convo.conversation_id);
+                                sessionStorage.setItem(
+                                  'isWorkspaceConversation-v2',
+                                  convo.isWorkspaceConversation === false ? 'false' : 'true'
+                                );
+                                // Flag this as an explicit selection so useConversationManager
+                                // honors it unconditionally (bypassing inactivity + top-100-meta gates).
+                                sessionStorage.setItem('pendingConversationSelect-v2', '1');
+                                navigate('/chat');
+                              }}
+                            >
+                              {t('history.actions.resume', 'Open')}
+                            </Button>
+                            <Dropdown align="end">
+                              <Dropdown.Toggle
+                                variant="outline-secondary"
+                                size="sm"
+                                className="btn-icon chat-history-action-toggle"
+                                aria-label={t('history.actions', 'Actions')}
                               >
-                                <Pencil size={14} className="me-2" />
-                                {t('history.actions.rename', 'Rename')}
-                              </Dropdown.Item>
-                              <Dropdown.Divider />
-                              <Dropdown.Item
-                                onClick={() => handleDelete(convo.conversation_id)}
-                                className="text-danger"
-                              >
-                                <Trash2 size={14} className="me-2" />
-                                {t('history.actions.delete', 'Delete')}
-                              </Dropdown.Item>
-                            </Dropdown.Menu>
-                          </Dropdown>
+                                <MoreVertical size={16} aria-hidden="true" />
+                                <span className="visually-hidden">{t('history.actions', 'Actions')}</span>
+                              </Dropdown.Toggle>
+                              <Dropdown.Menu>
+                                <Dropdown.Item
+                                  onClick={() => handleRename(convo.conversation_id, convo.conversationName)}
+                                >
+                                  <Pencil size={14} className="me-2" />
+                                  {t('history.actions.rename', 'Rename')}
+                                </Dropdown.Item>
+                                <Dropdown.Divider />
+                                <Dropdown.Item
+                                  onClick={() => handleDelete(convo.conversation_id)}
+                                  className="text-danger"
+                                >
+                                  <Trash2 size={14} className="me-2" />
+                                  {t('history.actions.delete', 'Delete')}
+                                </Dropdown.Item>
+                              </Dropdown.Menu>
+                            </Dropdown>
+                          </div>
                         </td>
                       </tr>
                     ))}

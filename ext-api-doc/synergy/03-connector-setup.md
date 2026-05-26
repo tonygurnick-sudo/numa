@@ -1,490 +1,159 @@
-# 12d Synergy — Connector Setup
+# Connecting to the 12d Synergy API
 
-> Data Connector integration guide for Numa.
-> Auth type: Token (PAT). Per-client instance URLs.
-> Adapt code examples to match current Numa connector patterns.
+> Step-by-step setup for obtaining credentials and getting the first successful API call against a 12d Synergy instance. Pure 12d-side reference — no Numa-specific wiring.
 
----
-
-## Integration Path
-
-| Property          | Value                                         |
-| ----------------- | --------------------------------------------- |
-| Integration type  | **Data Connector** (token auth)               |
-| Auth mechanism    | Personal Access Token (PAT) via Bearer header |
-| Token lifetime    | Max 180 days, no refresh                      |
-| Per-client config | Instance URL + PAT                            |
-| Pipedream?        | **No.** Direct API integration.               |
+12d Synergy is **per-instance** — each customer hosts (or has 12d host) their own Synergy server. URLs are scoped to the instance hostname; there is no central API.
 
 ---
 
-## Connector Configuration
+## 1. Product context
 
-### Required Credentials (Two-Secret Model)
-
-Each client needs two values stored in Numa's connector secret system:
-
-| Secret        | Description                           | Example                       |
-| ------------- | ------------------------------------- | ----------------------------- |
-| `instanceUrl` | The client's 12d Synergy instance URL | `https://acme.12dsynergy.com` |
-| `accessToken` | Personal Access Token (PAT)           | `eyJ0eXAiOiJKV1QiLCJhb...`    |
-
-### Instance URL Format
-
-The instance URL is the base hostname. Do NOT include `/api/v1/` — the connector appends that.
-
-- Correct: `https://acme.12dsynergy.com`
-- Wrong: `https://acme.12dsynergy.com/api/v1/`
-- Wrong: `https://acme.12dsynergy.com/s12d/api/v1/`
-
-### PAT Generation
-
-Users generate PATs in 12d Synergy:
-
-1. Navigate to User Settings > API Access (or similar)
-2. Create new Personal Access Token
-3. Set expiry (max 180 days)
-4. Copy the token immediately (shown only once)
-5. Store in Numa connector configuration
-
-### Token Rotation
-
-PATs expire after a maximum of 180 days. The connector should:
-
-1. Track the token creation date
-2. Warn the user 14 days before expiry
-3. On 401 response, prompt for a new PAT
-4. There is no refresh token mechanism
+|                       |                                                                      |
+| --------------------- | -------------------------------------------------------------------- |
+| Vendor                | 12d Solutions Pty Ltd (Australia)                                    |
+| Product               | 12d Synergy — construction / civil-engineering project collaboration |
+| Website               | https://www.12dsynergy.com                                           |
+| Help portal           | https://help.12dsynergy.com                                          |
+| Public demo instance  | `https://synergy.12dsynergycloud.com`                                |
+| Per-customer instance | `https://{customer-instance-hostname}` (set during deployment)       |
 
 ---
 
-## Test Connection Flow
+## 2. Prerequisites
 
-Two-step verification: first check server reachability (no auth), then verify the PAT.
-
-### Step 1: Health Check (No Auth)
-
-```
-GET https://{instanceUrl}/health
-```
-
-- **No** `Authorization` header
-- **No** `/api/v1/` prefix
-- Verifies the instance URL is correct and the server is reachable
-
-Expected: HTTP 200
-
-If this fails:
-
-- Check the instance URL is correct
-- Check network connectivity / firewall rules
-- The server may be down
-
-### Step 2: Authenticated Endpoint
-
-```
-GET https://{instanceUrl}/api/v1/auth/getPersonalAccessTokens
-Authorization: Bearer {accessToken}
-```
-
-- Uses a lightweight paginated endpoint (attributes, page 1, size 1)
-- Verifies the PAT is valid and has API access
-
-Expected: HTTP 200 with a `PagedResultModel` response
-
-If this fails:
-
-- 401: PAT is invalid or expired
-- 403: PAT lacks API access permissions
-- Other: Check server logs
-
-### Alternative Auth Check
-
-```
-GET https://{instanceUrl}/api/v1/users/current
-Authorization: Bearer {accessToken}
-```
-
-Returns the current authenticated user. Good for confirming identity.
+- A live 12d Synergy instance reachable on HTTPS.
+- The instance must have the system setting **"Creation and Authentication of Personal Access Tokens"** enabled by a Synergy administrator (System Settings). PATs do not work until this is on.
+- A user account on the instance with API-level permissions for the data they want to access. PATs inherit that user's role and permissions.
 
 ---
 
-## Connector Registry Entry
+## 3. Authentication — Personal Access Token (PAT)
 
-```typescript
-// connectorRegistry entry
-{
-  id: '12d-synergy',
-  name: '12d Synergy',
-  description: 'Construction project collaboration platform',
-  category: 'project-management',
-  authType: 'token',
-  iconKey: '12d-synergy', // or appropriate icon
-  fields: [
-    {
-      key: 'instanceUrl',
-      label: 'Instance URL',
-      type: 'url',
-      placeholder: 'https://your-company.12dsynergy.com',
-      required: true,
-      helpText: 'Your 12d Synergy server URL (without /api/v1/)',
-    },
-    {
-      key: 'accessToken',
-      label: 'Personal Access Token',
-      type: 'password',
-      required: true,
-      helpText: 'Generate a PAT in 12d Synergy under User Settings > API Access. Max 180 day lifetime.',
-    },
-  ],
-  testConnection: {
-    // Step 1: health check (no auth)
-    healthEndpoint: '/health',
-    // Step 2: auth check
-    authEndpoint: '/api/v1/auth/getPersonalAccessTokens',
-  },
-}
+12d Synergy uses **PAT bearer auth only**. There is **no OAuth flow**, no refresh-token mechanism, and no API-key issuance outside the PAT flow.
+
+### 3.1 Generating a PAT (in the Synergy UI)
+
+Path (verified against 12d help docs for v5 web/mobile and v6 desktop client):
+
+1. Sign in to the Synergy instance.
+2. Open **My Profile → Personal Access Tokens** (the path is _not_ "User Settings → API Access" as earlier docs claimed — verified against [help.12dsynergy.com/docs/v5profile](https://help.12dsynergy.com/docs/v5profile) and [help.12dsynergy.com/docs/synergyclientgenerateapersonalaccesstokenpatinsynergyclientdoc](https://help.12dsynergy.com/docs/synergyclientgenerateapersonalaccesstokenpatinsynergyclientdoc)).
+3. Click **Generate** (or **New**).
+4. Fill in:
+   - **Client ID** (free-text identifier, e.g. `numa-integration`)
+   - **Name / description**
+   - **Expire in days** (max **180**)
+5. Save. Synergy displays the PAT once — capture it immediately.
+
+### 3.2 PAT lifecycle
+
+|                | Value                                                                            |
+| -------------- | -------------------------------------------------------------------------------- |
+| Max lifetime   | 180 days from creation                                                           |
+| Refresh flow   | None — a new PAT must be generated before the current one expires                |
+| Expiry warning | User receives an email **1 week before expiry**, and another at expiry           |
+| Revocation     | Via `POST /api/v1/auth/delete-pat` (requires body) or via the same My Profile UI |
+
+[VERIFIED — help.12dsynergy.com `v5profile` doc]
+
+### 3.3 Programmatic PAT management (requires an existing PAT)
+
+```http
+# List your PATs
+GET https://{instance}/api/v1/auth/getPersonalAccessTokens
+Authorization: Bearer {EXISTING_PAT}
+
+# Revoke a PAT
+POST https://{instance}/api/v1/auth/delete-pat
+Authorization: Bearer {EXISTING_PAT}
+Content-Type: application/json
+# Body shape unverified — confirm against {instance}/swagger before relying on field names
 ```
 
----
+> ⚠️ **Corrected 2026-05-19:** prior versions of these docs listed `GET /api/v1/auth/tokens` and `DELETE /api/v1/auth/tokens/{id}`. **Both return 404** on the live demo. The real endpoints are `/auth/getPersonalAccessTokens` (GET, returns 401 unauth = exists) and `/auth/delete-pat` (POST, returns 411 = exists, wants body). Verified by live probe against `synergy.12dsynergycloud.com`.
 
-## Backend Provider
-
-```python
-# Provider for 12d Synergy API calls
-# Location: lambdas/python/{connector-lambda}/providers/twelve_d_synergy.py
-
-import httpx
-from typing import Any
-
-class TwelveDSynergyProvider:
-    """12d Synergy API provider for Numa data connector."""
-
-    def __init__(self, instance_url: str, access_token: str):
-        # Strip trailing slash from instance URL
-        self.base_url = instance_url.rstrip('/')
-        self.access_token = access_token
-        self.headers = {
-            'Authorization': f'Bearer {access_token}',
-            'Content-Type': 'application/json',
-        }
-
-    async def health_check(self) -> bool:
-        """Check server health (no auth required)."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/health',
-                timeout=10.0,
-            )
-            return response.status_code == 200
-
-    async def test_connection(self) -> dict[str, Any]:
-        """Two-step connection test."""
-        # Step 1: Health check
-        health_ok = await self.health_check()
-        if not health_ok:
-            return {
-                'success': False,
-                'error': 'Server health check failed. Check instance URL.',
-            }
-
-        # Step 2: Authenticated endpoint
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/auth/getPersonalAccessTokens',
-                headers=self.headers,
-                timeout=10.0,
-            )
-
-            if response.status_code == 200:
-                return {'success': True}
-            elif response.status_code == 401:
-                return {
-                    'success': False,
-                    'error': 'Authentication failed. PAT may be expired or invalid.',
-                }
-            elif response.status_code == 403:
-                return {
-                    'success': False,
-                    'error': 'Access denied. PAT may lack API permissions.',
-                }
-            else:
-                return {
-                    'success': False,
-                    'error': f'Unexpected response: HTTP {response.status_code}',
-                }
-
-    async def list_jobs(self, page: int = 1, page_size: int = 50) -> dict:
-        """List jobs (projects) — pagination goes in the body."""
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f'{self.base_url}/api/v1/jobs/search',
-                headers=self.headers,
-                json={
-                    'Page': page,
-                    'PageSize': page_size,
-                    'QuickSearchTerm': '',
-                    'Name': '',
-                    'Attributes': [{
-                        'Attribute': {'Name': 'TopLevel', 'DisplayName': 'Restrict to top level?'},
-                        'Type': 'SynergyServerWeb.API.Models.SelectableProgrammaticAttribute',
-                        'Value': False,   # False = return all jobs, True = top-level only
-                        'SearchQueryType': 4, 'Operation': 0,
-                        'Name': 'Restrict to top level?', 'OperationName': '=',
-                    }],
-                },
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def search_jobs(self, criteria: dict, page: int = 1, page_size: int = 50) -> dict:
-        """Search jobs — POST with body pagination."""
-        criteria = {**criteria, 'Page': page, 'PageSize': page_size}
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f'{self.base_url}/api/v1/jobs/search',
-                headers=self.headers,
-                json=criteria,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def get_job_attributes(self, job_id: str, retrieve_attributes: bool = True) -> dict:
-        """Get a job's attributes. retrieve_attributes is a required path param."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/jobs/{job_id}/{str(retrieve_attributes).lower()}',
-                headers=self.headers,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def get_job_items(self, job_id: str) -> dict:
-        """Get folders + child jobs inside a job. Returns JobItemsModel."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/jobs/{job_id}/items',
-                headers=self.headers,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def search_files(self, criteria: dict, page: int = 1, page_size: int = 50) -> dict:
-        """Search files — supports content search via the 'Contents' field."""
-        criteria = {**criteria, 'Page': page, 'PageSize': page_size}
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f'{self.base_url}/api/v1/files/search',
-                headers=self.headers,
-                json=criteria,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def get_file_metadata(self, file_id: str, retrieve_attributes: bool = True) -> dict:
-        """Get file metadata. retrieve_attributes is a required path param."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/files/{file_id}/{str(retrieve_attributes).lower()}',
-                headers=self.headers,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def download_file(self, file_id: str, version: int, with_references: bool = False) -> bytes:
-        """Download file content. version and with_references are path params."""
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f'{self.base_url}/api/v1/files/{file_id}/download/{version}/{str(with_references).lower()}',
-                headers={**self.headers, 'Content-Type': 'application/octet-stream'},
-                content=b'',
-                timeout=120.0,
-            )
-            response.raise_for_status()
-            return response.content
-
-    async def get_folder_items(self, folder_id: str) -> dict:
-        """Get a folder's subfolders + first page of files. Returns FolderItemsModel."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/folders/{folder_id}/items',
-                headers=self.headers,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def get_folder_files(self, folder_id: str, page: int = 1, page_size: int = 50,
-                               retrieve_attributes: bool = True, filter: str = '*',
-                               show_deleted: bool = False) -> dict:
-        """Get paginated files in a folder. 6 path params."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/folders/{folder_id}/files/'
-                f'{str(retrieve_attributes).lower()}/{page}/{page_size}/{filter}/{str(show_deleted).lower()}',
-                headers=self.headers,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def list_tasks_for_job(self, job_id: str) -> dict:
-        """List tasks for a specific job. No cross-job list endpoint exists."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/tasks/getTaskList/{job_id}',
-                headers=self.headers,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def create_task(self, task_data: dict) -> dict:
-        """Create task. NOTE: Uses /api/Tasks (no /v1/ prefix)."""
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f'{self.base_url}/api/Tasks',  # NO /v1/ prefix!
-                headers=self.headers,
-                json=task_data,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def get_standard_job_attributes(self) -> list:
-        """Get standard (required + default) attributes for job creation.
-
-        There is no generic /api/v1/attributes/required/{entity_type} endpoint.
-        Use the resource-specific helpers instead.
-        """
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/jobs/getStandardAttributes',
-                headers=self.headers,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def get_default_job_attributes(self) -> list:
-        """Get tenant-specific default attribute values for job creation."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f'{self.base_url}/api/v1/jobs/getDefaultAttributes',
-                headers=self.headers,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def paginate_all(self, path: str, page_size: int = 50) -> list:
-        """
-        Helper: Paginate through all pages and collect all results.
-
-        Args:
-            path: API path WITHOUT page/page_size (e.g., '/api/v1/jobs')
-            page_size: Items per page
-        """
-        all_results = []
-        page = 1
-
-        async with httpx.AsyncClient() as client:
-            while True:
-                response = await client.get(
-                    f'{self.base_url}{path}/{page}/{page_size}',
-                    headers=self.headers,
-                    timeout=30.0,
-                )
-                response.raise_for_status()
-                data = response.json()
-
-                all_results.extend(data.get('Result', []))
-
-                if page >= data.get('TotalPages', 0):
-                    break
-                page += 1
-
-        return all_results
-```
+The first PAT must always be created interactively in the UI — there is no bootstrapping endpoint.
 
 ---
 
-## Workspace Agent Integration
-
-When the workspace agent detects a 12d Synergy connector is configured, it should use these prompt rules:
+## 4. Base URL & required headers
 
 ```
-You have access to a 12d Synergy instance. Key rules:
-- Base URL: {instanceUrl}/api/v1/
-- Pagination is path-based: /{page}/{page_size} (not query params)
-- Job search uses POST, not GET
-- Task create/update: POST /api/Tasks (no /v1/ prefix)
-- Delete task: DELETE /api/v1/tasks/{id}/{description} (description in path, URL-encoded)
-- EntityIDs are composite objects with IDString for URL paths
-- Must fetch required attributes before creating jobs
-- No webhooks — poll for changes
+Base URL:       https://{instance}/api/v1/
+Authorization:  Bearer {PAT}
+Content-Type:   application/json     ← POST/PUT only
+Accept:         application/json
 ```
 
----
-
-## Deployment Checklist
-
-1. **Connector registry** — Add `12d-synergy` entry with token auth fields
-2. **Secrets storage** — Store `instanceUrl` and `accessToken` per client
-3. **Backend provider** — Implement API call methods with path-based pagination
-4. **Test connection** — Two-step: health check (no auth) + authenticated attributes call
-5. **Files Remote** — Wire up folder/file browsing and download
-6. **Workspace agent prompt** — Include 12d Synergy API rules when connector is active
-7. **Token rotation alert** — Track PAT creation date, warn at 166 days (14 before expiry)
+> ⚠️ **Path-versioning quirks.** Almost all endpoints sit under `/api/v1/`, **but two paths skip it:**
+>
+> - `GET /health` — no version prefix. Returns `{"status":"Healthy"}`. [VERIFIED 2026-05-19 against synergy.12dsynergycloud.com]
+> - `POST /api/Tasks` — task create/update uses `/api/Tasks` (no `/v1/`). [Reported in the spec dump in `02-api-spec-investigation.md`; not independently verifiable from public docs]
 
 ---
 
-## Common Integration Scenarios
+## 5. First successful call — smoke test
 
-### Scenario 1: Browse Project Files
+After obtaining a PAT and the instance hostname:
 
-1. `POST /api/v1/jobs/search` with `{Page:1, PageSize:50, TopLevel=false}` — list all projects
-2. User selects a project
-3. `GET /api/v1/jobs/{id}/folders/1/50` — Get project folder tree
-4. User navigates folders — `GET /api/v1/folders/{id}/items` returns subfolders + page 1 of files
-5. More file pages: `GET /api/v1/folders/{id}/files/true/{page}/{page_size}/*/false` (6 path params)
-6. `GET /api/v1/files/{id}/true` — file metadata to discover LatestVersion
-7. `POST /api/v1/files/{id}/download/{version}/false` — download selected version
+```http
+# Step 1 — server reachable + healthy (no auth needed)
+GET https://{instance}/health
+→ 200 {"status":"Healthy"}
 
-### Scenario 2: Sync Tasks
+# Step 2 — PAT valid
+GET https://{instance}/api/v1/auth/getPersonalAccessTokens
+Authorization: Bearer {PAT}
+→ 200 with a list of PATs for the authenticated user
+→ 401 if PAT invalid/expired
+→ 403 if PAT user lacks API permissions
+```
 
-1. For each job the user cares about: `GET /api/v1/tasks/getTaskList/{job_id}` — list tasks in that job. There is no cross-job task list endpoint.
-2. Alternatively: `POST /api/v1/tasks/search` with `{JobId, AssigneeId, IncludeClosedTasks}` body.
-3. Track `due_date_utc` and `is_closed` for status.
-4. Poll periodically (e.g., every 15 minutes).
-5. Detect new/changed/closed tasks by comparing against previous poll.
-
-### Scenario 3: Job Search and Report
-
-1. `POST /api/v1/jobs/search` with `{Page:1, PageSize:50, Name, ...}` body — find matching jobs
-2. For each job: `GET /api/v1/jobs/{id}/true` — get JobModel with attributes (`true` = retrieve_attributes)
-3. `GET /api/v1/jobs/{id}/items` — get subfolders + child jobs
-4. For each folder: `GET /api/v1/folders/{folder_id}/items` — files at page 1, subfolders
-5. Compile results for user
+> ⚠️ Do **not** use `/health` as an auth check — it doesn't require auth, so a 200 there proves nothing about token validity.
 
 ---
 
-## Troubleshooting
+## 6. Swagger / API reference
 
-| Symptom                        | Likely Cause                                  | Fix                                                              |
-| ------------------------------ | --------------------------------------------- | ---------------------------------------------------------------- |
-| Health check fails             | Wrong instance URL or server down             | Verify URL, check with client                                    |
-| 401 on all requests            | PAT expired or invalid                        | Generate new PAT                                                 |
-| 403 on specific endpoints      | Insufficient permissions                      | Check user role in 12d Synergy                                   |
-| Empty results but server works | Pagination params wrong                       | Check path-based pagination format                               |
-| Create task fails              | Using `/api/v1/tasks` instead of `/api/Tasks` | Remove version prefix for task create/update                     |
-| Create job fails               | Missing required attributes                   | Fetch and include required attributes first                      |
-| Mixed casing errors            | Assuming wrong field casing                   | Check model spec — JobModel=PascalCase, TaskItemModel=snake_case |
-| Delete task fails              | Missing description in path                   | Include URL-encoded description as path parameter                |
-| 404 on entity fetch            | Wrong ID format                               | Use `IDString` from EntityID, not raw `_id`                      |
+|              | URL                                  | Verified                                                                                                               |
+| ------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| Swagger UI   | `https://{instance}/swagger`         | ✅ 200 on the public demo (2026-05-19)                                                                                 |
+| Swagger JSON | `https://{instance}/api-docs/api/v1` | Only reachable from inside an authenticated browser session on most instances; **404 from outside** on the public demo |
+
+Earlier drafts of these docs listed `/api-docs/ui/index` as the UI path — that returns 404 on the live demo. The real path is `/swagger`.
+
+The spec dump in `02-api-spec-investigation.md` reports **359 paths / 369 operations**. The "369 endpoints / 274 models" headline you may see in older drafts conflated _operations_ with _endpoints_ and the model count is not independently verifiable — treat counts as `[INFERRED]`.
+
+---
+
+## 7. Rate limits & errors
+
+|                      | Value                                                                                                                                                                  |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rate limit           | **Not publicly documented** — 12d Synergy has not published RPS or daily limits. Most instances are private and lightly trafficked, so customer-perceived limits vary. |
+| Error response shape | The spec dump reports many endpoints return errors as **plain text strings**, not JSON envelopes. Treat error bodies as opaque text and key off the HTTP status.       |
+| Rate-limit response  | Status code if/when enforced is `[UNKNOWN]`                                                                                                                            |
+
+---
+
+## 8. Known integration constraints
+
+1. **Per-instance.** Every customer's URL is different — the instance hostname is part of every API call, every Swagger URL, every PAT generated. You cannot bootstrap a connector without the instance URL.
+2. **PAT is the only auth.** No OAuth, no API-key issuance, no service accounts. The first PAT must be generated by a human in the UI.
+3. **No refresh.** PATs expire at most 180 days from creation; the user must generate a replacement before expiry.
+4. **Composite IDs and mixed casing.** Path parameters mix Pascal- and snake-case across endpoints. The Swagger spec is authoritative — don't infer paths from naming conventions.
+5. **No webhooks.** The spec dump confirms zero webhook/event endpoints. Polling is the only change-detection option.
+6. **Path quirks.** `/health` and `/api/Tasks` skip the `/api/v1/` prefix; everything else uses it.
+
+---
+
+## 9. Quick-reference URLs
+
+| Resource                        | URL                                                                                             |
+| ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Vendor site                     | https://www.12dsynergy.com                                                                      |
+| Help portal                     | https://help.12dsynergy.com                                                                     |
+| PAT generation doc (v5)         | https://help.12dsynergy.com/docs/v5profile                                                      |
+| PAT generation doc (v6 desktop) | https://help.12dsynergy.com/docs/synergyclientgenerateapersonalaccesstokenpatinsynergyclientdoc |
+| Public demo Swagger UI          | https://synergy.12dsynergycloud.com/swagger                                                     |
+| Public demo health endpoint     | https://synergy.12dsynergycloud.com/health                                                      |
+| API examples zip                | https://www.12dsynergy.com/downloads/5.1/api/SynergyWebAPI_Examples.zip                         |

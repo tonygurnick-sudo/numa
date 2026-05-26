@@ -13,6 +13,8 @@ import { getNextRunTimes, describeCronExpression } from '../utils/cronUtils';
 import { listObjectsInFolder, fetchFileFromS3, downloadFileFromS3 } from '../utils/s3Utils';
 import { jwtDecode } from 'jwt-decode';
 import { RunHistoryExpandedRow } from '../Components/Scheduling/RunHistoryExpandedRow';
+import { OpenInChatButton } from '../Components/Scheduling/OpenInChatButton';
+import { ConfirmModal } from '../Components/Ops/Modals/ConfirmModal';
 import { useTranslation } from 'react-i18next';
 
 type LocationState = {
@@ -27,6 +29,8 @@ const getStatusBadgeVariant = (status: string) => {
       return 'warning';
     case 'deleted':
       return 'danger';
+    case 'pending_approval':
+      return 'info';
     default:
       return 'secondary';
   }
@@ -70,14 +74,22 @@ const formatDuration = (startedAt?: string, completedAt?: string): string | null
 };
 
 const getRunSortTime = (run: RunHistoryItem): number => {
+  // Try the structured log timestamps first (newer is better for sort).
+  // Fall back to the placeholder `timestamp` field, which is set either
+  // from the log on load or from `new Date()` for in-progress placeholders.
+  // We never return NaN — non-finite values become 0 (sort to bottom)
+  // because a NaN comparator makes Array.sort produce unstable / undefined
+  // ordering across re-sorts, which manifests as the rendered table
+  // flipping order on each state update.
   const completedAt = run.log?.completedAt;
   const startedAt = run.log?.startedAt;
   const fromLog = completedAt || startedAt;
   if (fromLog) {
     const parsed = Date.parse(fromLog);
-    if (!Number.isNaN(parsed)) return parsed;
+    if (Number.isFinite(parsed)) return parsed;
   }
-  return run.timestamp?.getTime?.() ?? 0;
+  const ts = run.timestamp?.getTime?.();
+  return Number.isFinite(ts) ? (ts as number) : 0;
 };
 
 export const ScheduleDetailPage: React.FC = () => {
@@ -86,7 +98,7 @@ export const ScheduleDetailPage: React.FC = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { numaGet, numaPut, numaDelete, numaPost } = useNumaRequest();
-  const { getCredentials, region: authRegion, getAccessToken } = useAuth();
+  const { getCredentials, region: authRegion, getAccessToken, user } = useAuth();
   const { t } = useTranslation('agents');
 
   // If a ?run=<runId> query param is present (e.g. from a notification deeplink),
@@ -102,6 +114,21 @@ export const ScheduleDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Admin viewing another user's schedule via direct URL (e.g. pasted link
+  // or stale bookmark). The audit panel routes admins through the modal,
+  // not here, but we still need to gate owner-only actions on the page so
+  // admin can't accidentally Run Now / Edit / Delete somebody else's
+  // schedule from the cross-user view. Owner detection is sub-based; admin
+  // detection is via cognito groups (server-side enforces, this is just UI
+  // gating).
+  const currentUserSub = user?.decoded_tokens?.idToken?.sub;
+  const isCurrentUserAdmin = (user?.decoded_tokens?.idToken?.['cognito:groups'] as string[] | undefined)?.includes(
+    'admin'
+  );
+  const isAdminCrossUser = Boolean(
+    schedule && currentUserSub && schedule.userId && schedule.userId !== currentUserSub && isCurrentUserAdmin
+  );
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [runHistory, setRunHistory] = useState<RunHistoryItem[]>([]);
   const [runHistoryLoading, setRunHistoryLoading] = useState(false);
@@ -139,14 +166,11 @@ export const ScheduleDetailPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      // Fetch all schedules and find the one we need (no single-get endpoint exists)
-      const allSchedules = await ScheduleService.getActiveSchedules(numaGet);
-      const found = allSchedules.find((s) => s.scheduleId === scheduleId);
-      if (found) {
-        setSchedule(found);
-      } else {
-        setError(t('scheduling.errors.notFound'));
-      }
+      // GET-by-id — server-side this routes through `getScheduleByIdAcrossUsers`
+      // when the caller is an admin, so admins viewing the audit panel can
+      // open any user's schedule. Owners get owner-scoped lookup.
+      const found = await ScheduleService.get(numaGet, scheduleId);
+      setSchedule(found);
     } catch (err) {
       console.error('Failed to load schedule:', err);
       setError((err as Error)?.message ?? t('scheduling.errors.load'));
@@ -159,11 +183,8 @@ export const ScheduleDetailPage: React.FC = () => {
   const reloadSchedule = useCallback(async () => {
     if (!scheduleId) return;
     try {
-      const allSchedules = await ScheduleService.getActiveSchedules(numaGet);
-      const found = allSchedules.find((s) => s.scheduleId === scheduleId);
-      if (found) {
-        setSchedule(found);
-      }
+      const found = await ScheduleService.get(numaGet, scheduleId);
+      setSchedule(found);
     } catch (err) {
       console.error('Failed to reload schedule:', err);
     }
@@ -313,10 +334,28 @@ export const ScheduleDetailPage: React.FC = () => {
         });
 
       setRunHistory((prev) => {
-        // Keep inProgress runs that aren't yet in the fetched run logs
+        // Build a lookup so we can preserve any already-loaded `log` data
+        // from prior runs of this loader. Without this, React StrictMode's
+        // double-mount in dev (and any subsequent re-invocations of this
+        // effect) would wipe loaded logs and put items back into S3-list
+        // order with `timestamp = Date(0)` — producing a brief "correctly
+        // sorted" view, then a re-sort to a partial-state order once
+        // Run 2's loadRunLogsForRuns lands a few items at a time.
+        const prevById = new Map(prev.map((r) => [r.runId, r]));
         const inProgressRuns = prev.filter((r) => r.inProgress && !runs.some((newRun) => newRun.runId === r.runId));
-        // We know sortRunHistory gets the newest items to the top
-        return [...inProgressRuns, ...runs].sort((a, b) => getRunSortTime(b) - getRunSortTime(a));
+        const merged = runs.map((freshRun) => {
+          const existing = prevById.get(freshRun.runId);
+          if (!existing) return freshRun;
+          // Preserve existing log / timestamp / error / loading state.
+          return {
+            ...freshRun,
+            log: existing.log,
+            loading: existing.loading,
+            error: existing.error,
+            timestamp: existing.log ? existing.timestamp : freshRun.timestamp,
+          };
+        });
+        return [...inProgressRuns, ...merged].sort((a, b) => getRunSortTime(b) - getRunSortTime(a));
       });
       void loadRunLogsForRuns(runs);
     } catch (err) {
@@ -417,6 +456,32 @@ export const ScheduleDetailPage: React.FC = () => {
     }
   }, [schedule, numaPut, reloadSchedule]);
 
+  // Email-link landing: `?action=pause` deep-links from the run-completion
+  // email's "Pause or manage this schedule" CTA. We auto-prompt the user to
+  // confirm the pause and strip the param so a refresh doesn't re-prompt.
+  // Only fires when the schedule is currently active — paused / locked /
+  // pending schedules are no-ops.
+  //
+  // Uses the styled `ConfirmModal` instead of `window.confirm` so it
+  // matches the rest of the app (keyboard nav, screen-reader friendly,
+  // not blocking the JS thread). The promptedPauseActionRef ensures we
+  // only ever show this once per page load — even if the URL param
+  // re-appears (it shouldn't; we strip it on first prompt).
+  const promptedPauseActionRef = React.useRef(false);
+  const [showEmailPauseConfirm, setShowEmailPauseConfirm] = useState(false);
+  useEffect(() => {
+    if (promptedPauseActionRef.current) return;
+    if (!schedule || schedule.status !== 'active') return;
+    if (searchParams.get('action') !== 'pause') return;
+    promptedPauseActionRef.current = true;
+    setShowEmailPauseConfirm(true);
+    // Strip the action param up-front so a refresh while the modal is
+    // open doesn't re-prompt on every render.
+    const next = new URLSearchParams(searchParams);
+    next.delete('action');
+    navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
+  }, [schedule, searchParams, navigate, location.pathname]);
+
   const handleConfirmDelete = useCallback(async () => {
     if (!schedule) return;
     setActionLoading('delete');
@@ -498,13 +563,25 @@ export const ScheduleDetailPage: React.FC = () => {
   }, [schedule, numaPost, loadRunHistory, t]);
 
   const handleUpdateSchedule = useCallback(
-    async (payload: { promptText: string; cronExpression: string; timezone: string; label?: string }) => {
+    async (payload: {
+      promptText: string;
+      cronExpression: string;
+      timezone: string;
+      label?: string;
+      expiresAt?: number | null;
+      runConfig?: AgentSchedule['runConfig'];
+      agentSnapshot?: NonNullable<Parameters<typeof ScheduleService.update>[2]>['agentSnapshot'];
+    }) => {
       if (!schedule) return;
       await ScheduleService.update(numaPut, schedule.scheduleId, {
         promptText: payload.promptText,
         cronExpression: payload.cronExpression,
         timezone: payload.timezone,
         label: payload.label,
+        expiresAt: payload.expiresAt,
+        // FEAT-105 round-2 — forward the freshly-built runConfig + agentSnapshot.
+        runConfig: payload.runConfig,
+        agentSnapshot: payload.agentSnapshot,
       });
       await reloadSchedule();
     },
@@ -607,35 +684,54 @@ export const ScheduleDetailPage: React.FC = () => {
             </Alert>
           )}
 
+          {isAdminCrossUser && (
+            <Alert variant="info" className="mb-4 d-flex align-items-start gap-2">
+              <i className="bi bi-info-circle-fill mt-1" aria-hidden="true" />
+              <div>
+                <div className="fw-semibold">Viewing as admin</div>
+                <div className="small">
+                  This automation is owned by another user. Owner-only actions (Run now, Edit, Delete) are hidden — you
+                  can still pause or resume from here, and the owner will get an email notification.
+                </div>
+              </div>
+            </Alert>
+          )}
+
           {/* Action Buttons */}
           <Row className="mb-4">
             <Col>
               <div className="d-flex gap-2 flex-wrap schedule-detail-actions">
-                <Button
-                  variant="primary"
-                  onClick={handleRunNow}
-                  disabled={schedule.status === 'deleted' || actionLoading !== null}
-                >
-                  {actionLoading === 'run' ? (
-                    <>
-                      <Spinner animation="border" size="sm" className="me-2" />
-                      {t('scheduling.actions.running')}
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-play-fill me-2"></i>
-                      {t('scheduling.actions.runNow')}
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="outline-primary"
-                  onClick={() => setShowEditModal(true)}
-                  disabled={schedule.status === 'deleted' || actionLoading !== null}
-                >
-                  <i className="bi bi-pencil me-2"></i>
-                  {t('scheduling.actions.edit')}
-                </Button>
+                {/* Run Now / Edit / Delete are owner-only — hidden when an
+                    admin lands on someone else's schedule via direct URL. */}
+                {!isAdminCrossUser && (
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={handleRunNow}
+                      disabled={schedule.status === 'deleted' || actionLoading !== null}
+                    >
+                      {actionLoading === 'run' ? (
+                        <>
+                          <Spinner animation="border" size="sm" className="me-2" />
+                          {t('scheduling.actions.running')}
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-play-fill me-2"></i>
+                          {t('scheduling.actions.runNow')}
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline-primary"
+                      onClick={() => setShowEditModal(true)}
+                      disabled={schedule.status === 'deleted' || actionLoading !== null}
+                    >
+                      <i className="bi bi-pencil me-2"></i>
+                      {t('scheduling.actions.edit')}
+                    </Button>
+                  </>
+                )}
                 <Button
                   variant={schedule.status === 'active' ? 'outline-warning' : 'outline-success'}
                   onClick={handleTogglePause}
@@ -652,14 +748,16 @@ export const ScheduleDetailPage: React.FC = () => {
                     </>
                   )}
                 </Button>
-                <Button
-                  variant="outline-danger"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  disabled={schedule.status === 'deleted' || actionLoading !== null}
-                >
-                  <i className="bi bi-trash me-2"></i>
-                  {t('scheduling.actions.delete')}
-                </Button>
+                {!isAdminCrossUser && (
+                  <Button
+                    variant="outline-danger"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={schedule.status === 'deleted' || actionLoading !== null}
+                  >
+                    <i className="bi bi-trash me-2"></i>
+                    {t('scheduling.actions.delete')}
+                  </Button>
+                )}
               </div>
             </Col>
           </Row>
@@ -720,6 +818,36 @@ export const ScheduleDetailPage: React.FC = () => {
                       )}
                       {schedule.lastStatus && <span className="ms-2 text-muted">({schedule.lastStatus})</span>}
                     </dd>
+
+                    {/* Typed last_error — actionable rendering with remediation link if present. */}
+                    {schedule.lastErrorTyped && (
+                      <>
+                        <dt className="col-sm-4">
+                          {t('scheduling.details.fields.lastError', { defaultValue: 'Last error' })}
+                        </dt>
+                        <dd className="col-sm-8">
+                          <Alert variant="warning" className="py-2 px-3 mb-0 small">
+                            <div className="fw-semibold">{schedule.lastErrorTyped.message}</div>
+                            {schedule.lastErrorTyped.resource && (
+                              <div className="text-muted small">
+                                {t('scheduling.details.errorResource', { defaultValue: 'Affected resource' })}:{' '}
+                                <code>{schedule.lastErrorTyped.resource}</code>
+                              </div>
+                            )}
+                            {schedule.lastErrorTyped.remediationPath && (
+                              <Button
+                                size="sm"
+                                variant="outline-warning"
+                                className="mt-2"
+                                onClick={() => navigate(schedule.lastErrorTyped!.remediationPath!)}
+                              >
+                                {t('scheduling.details.fixIt', { defaultValue: 'Fix it →' })}
+                              </Button>
+                            )}
+                          </Alert>
+                        </dd>
+                      </>
+                    )}
 
                     <dt className="col-sm-4">{t('scheduling.details.fields.created')}</dt>
                     <dd className="col-sm-8">
@@ -812,105 +940,131 @@ export const ScheduleDetailPage: React.FC = () => {
                           <th>{t('scheduling.details.runHistory.columns.completed')}</th>
                           <th>{t('scheduling.details.runHistory.columns.duration')}</th>
                           <th>{t('scheduling.details.runHistory.columns.status')}</th>
+                          <th style={{ width: 48 }} aria-label="" />
                         </tr>
                       </thead>
                       <tbody>
-                        {runHistory.map((run) => (
-                          <React.Fragment key={run.runId}>
-                            <tr
-                              id={`run-${run.runId}`}
-                              onClick={() => handleToggleExpand(run)}
-                              className={
-                                expandedRun === run.runId
-                                  ? 'table-active schedule-detail-history-row'
-                                  : 'schedule-detail-history-row'
-                              }
-                            >
-                              <td>
-                                <i
-                                  className={`bi ${expandedRun === run.runId ? 'bi-chevron-down' : 'bi-chevron-right'}`}
-                                ></i>
-                              </td>
-                              {showDebugIds && (
+                        {[...runHistory]
+                          .sort((a, b) => {
+                            // Inline sort — bypasses useMemo + shared
+                            // comparator to rule those out as the cause of
+                            // order-flipping. If this still produces the
+                            // wrong order then the data in `runHistory`
+                            // itself is malformed.
+                            const aTime = a.log?.completedAt
+                              ? Date.parse(a.log.completedAt)
+                              : a.log?.startedAt
+                                ? Date.parse(a.log.startedAt)
+                                : (a.timestamp?.getTime?.() ?? 0);
+                            const bTime = b.log?.completedAt
+                              ? Date.parse(b.log.completedAt)
+                              : b.log?.startedAt
+                                ? Date.parse(b.log.startedAt)
+                                : (b.timestamp?.getTime?.() ?? 0);
+                            const aSafe = Number.isFinite(aTime) ? aTime : 0;
+                            const bSafe = Number.isFinite(bTime) ? bTime : 0;
+                            return bSafe - aSafe;
+                          })
+                          .map((run) => (
+                            <React.Fragment key={run.runId}>
+                              <tr
+                                id={`run-${run.runId}`}
+                                onClick={() => handleToggleExpand(run)}
+                                className={
+                                  expandedRun === run.runId
+                                    ? 'table-active schedule-detail-history-row'
+                                    : 'schedule-detail-history-row'
+                                }
+                              >
                                 <td>
-                                  <code className="small">{run.runId}</code>
+                                  <i
+                                    className={`bi ${expandedRun === run.runId ? 'bi-chevron-down' : 'bi-chevron-right'}`}
+                                  ></i>
                                 </td>
-                              )}
-                              <td>
-                                {run.log?.startedAt
-                                  ? new Date(run.log.startedAt).toLocaleString(
-                                      undefined,
-                                      schedule.timezone ? { timeZone: schedule.timezone } : undefined
-                                    )
-                                  : t('scheduling.details.runHistory.placeholder')}
-                              </td>
-                              <td>
-                                {run.log?.completedAt
-                                  ? new Date(run.log.completedAt).toLocaleString(
-                                      undefined,
-                                      schedule.timezone ? { timeZone: schedule.timezone } : undefined
-                                    )
-                                  : t('scheduling.details.runHistory.placeholder')}
-                              </td>
-                              <td className="text-muted small">
-                                {formatDuration(run.log?.startedAt, run.log?.completedAt) ??
-                                  t('scheduling.details.runHistory.placeholder')}
-                              </td>
-                              <td>
-                                {run.loading ? (
-                                  <Spinner animation="border" size="sm" />
-                                ) : run.error ? (
-                                  <Badge bg="danger">{t('scheduling.details.runHistory.status.error')}</Badge>
-                                ) : run.inProgress ? (
-                                  <Badge bg="primary">{t('scheduling.details.runHistory.status.inProgress')}</Badge>
-                                ) : run.log?.error ? (
-                                  <Badge bg="danger">{t('scheduling.details.runHistory.status.failed')}</Badge>
-                                ) : run.log?.agentStatus ? (
-                                  <Badge
-                                    bg={
-                                      run.log.agentStatus.status === 'success'
-                                        ? 'success'
-                                        : run.log.agentStatus.status === 'partial'
-                                          ? 'warning'
-                                          : 'danger'
-                                    }
-                                  >
-                                    {t(
-                                      `scheduling.details.runHistory.status.${run.log.agentStatus.status}`,
-                                      run.log.agentStatus.status
-                                    )}
-                                  </Badge>
-                                ) : run.log ? (
-                                  <Badge bg="success">{t('scheduling.details.runHistory.status.completed')}</Badge>
-                                ) : (
-                                  <Badge bg="secondary">{t('scheduling.details.runHistory.placeholder')}</Badge>
+                                {showDebugIds && (
+                                  <td>
+                                    <code className="small">{run.runId}</code>
+                                  </td>
                                 )}
-                              </td>
-                            </tr>
-                            {expandedRun === run.runId && (
-                              <tr>
-                                <td
-                                  colSpan={showDebugIds ? 6 : 5}
-                                  className="p-0 border-0"
-                                  style={
-                                    {
-                                      backgroundColor: '#f8f9fa',
-                                      '--bs-table-hover-bg': '#f8f9fa',
-                                    } as React.CSSProperties
-                                  }
-                                >
-                                  <div className="p-3">
-                                    <RunHistoryExpandedRow
-                                      run={run}
-                                      onDownloadArtifact={handleDownloadArtifact}
-                                      defaultMessagesOpen
-                                    />
-                                  </div>
+                                <td>
+                                  {run.log?.startedAt
+                                    ? new Date(run.log.startedAt).toLocaleString(
+                                        undefined,
+                                        schedule.timezone ? { timeZone: schedule.timezone } : undefined
+                                      )
+                                    : t('scheduling.details.runHistory.placeholder')}
+                                </td>
+                                <td>
+                                  {run.log?.completedAt
+                                    ? new Date(run.log.completedAt).toLocaleString(
+                                        undefined,
+                                        schedule.timezone ? { timeZone: schedule.timezone } : undefined
+                                      )
+                                    : t('scheduling.details.runHistory.placeholder')}
+                                </td>
+                                <td className="text-muted small">
+                                  {formatDuration(run.log?.startedAt, run.log?.completedAt) ??
+                                    t('scheduling.details.runHistory.placeholder')}
+                                </td>
+                                <td>
+                                  {run.loading ? (
+                                    <Spinner animation="border" size="sm" />
+                                  ) : run.error ? (
+                                    <Badge bg="danger">{t('scheduling.details.runHistory.status.error')}</Badge>
+                                  ) : run.inProgress ? (
+                                    <Badge bg="primary">{t('scheduling.details.runHistory.status.inProgress')}</Badge>
+                                  ) : run.log?.error ? (
+                                    <Badge bg="danger">{t('scheduling.details.runHistory.status.failed')}</Badge>
+                                  ) : run.log?.agentStatus ? (
+                                    <Badge
+                                      bg={
+                                        run.log.agentStatus.status === 'success'
+                                          ? 'success'
+                                          : run.log.agentStatus.status === 'partial'
+                                            ? 'warning'
+                                            : 'danger'
+                                      }
+                                    >
+                                      {t(
+                                        `scheduling.details.runHistory.status.${run.log.agentStatus.status}`,
+                                        run.log.agentStatus.status
+                                      )}
+                                    </Badge>
+                                  ) : run.log ? (
+                                    <Badge bg="success">{t('scheduling.details.runHistory.status.completed')}</Badge>
+                                  ) : (
+                                    <Badge bg="secondary">{t('scheduling.details.runHistory.placeholder')}</Badge>
+                                  )}
+                                </td>
+                                <td className="align-middle text-end">
+                                  <OpenInChatButton conversationId={run.log?.conversationId} variant="icon" />
                                 </td>
                               </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
+                              {expandedRun === run.runId && (
+                                <tr>
+                                  <td
+                                    colSpan={showDebugIds ? 7 : 6}
+                                    className="p-0 border-0"
+                                    style={
+                                      {
+                                        backgroundColor: '#f8f9fa',
+                                        '--bs-table-hover-bg': '#f8f9fa',
+                                      } as React.CSSProperties
+                                    }
+                                  >
+                                    <div className="p-3">
+                                      <RunHistoryExpandedRow
+                                        run={run}
+                                        onDownloadArtifact={handleDownloadArtifact}
+                                        defaultMessagesOpen
+                                        schedulePrompt={schedule.promptText}
+                                      />
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
                       </tbody>
                     </Table>
                   )}
@@ -929,6 +1083,31 @@ export const ScheduleDetailPage: React.FC = () => {
               onCreate={handleUpdateSchedule}
             />
           )}
+
+          {/* Email-deeplink pause confirm — opens when the page is reached
+              via `?action=pause` (from the run-completion email's "Pause this
+              schedule" link). Was a `window.confirm` previously; replaced
+              with the styled ConfirmModal for consistency with other admin
+              flows. The deep-link param is stripped before the modal opens
+              so a refresh during the prompt doesn't re-fire it. */}
+          <ConfirmModal
+            show={showEmailPauseConfirm}
+            onHide={() => setShowEmailPauseConfirm(false)}
+            onConfirm={() => {
+              setShowEmailPauseConfirm(false);
+              void handleTogglePause();
+            }}
+            title={t('scheduling.actions.pause')}
+            message={
+              <>
+                Pause <strong>{schedule.label || schedule.agentTitle || schedule.agentId}</strong>? You can resume it
+                any time from this page.
+              </>
+            }
+            confirmLabel={t('scheduling.actions.pause')}
+            variant="warning"
+            suppressDeleteWarning
+          />
 
           {/* Delete Confirmation Modal */}
           <Modal show={showDeleteConfirm} onHide={() => setShowDeleteConfirm(false)} centered>

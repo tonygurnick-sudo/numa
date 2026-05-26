@@ -3,6 +3,8 @@ import {
   validateCreatePayload,
   validateScheduleRecord,
   CreateSchedulePayloadSchema,
+  ScheduledRunConfigSchema,
+  IntegrationListItemSchema,
   estimateCronIntervalMinutes,
 } from '../../../lib/scheduling-schemas';
 
@@ -264,6 +266,47 @@ describe('Scheduling Schemas', () => {
         };
         expect(() => CreateSchedulePayloadSchema.parse(payload)).toThrow();
       });
+    });
+  });
+
+  describe('FEAT-143 — unified integrations on ScheduledRunConfig', () => {
+    it('accepts the new method-tagged enabledIntegrations array', () => {
+      const parsed = ScheduledRunConfigSchema.parse({
+        enabledIntegrations: [
+          { slug: 'slack', method: 'pipedream', name: 'Slack' },
+          { slug: 'gmail', method: 'native', name: 'Gmail' },
+        ],
+      });
+      expect(parsed.enabledIntegrations).toHaveLength(2);
+    });
+
+    it('still accepts a legacy enabledConnections slug list (no method tags)', () => {
+      const parsed = ScheduledRunConfigSchema.parse({
+        enabledConnections: ['slack', 'gmail'],
+      });
+      expect(parsed.enabledConnections).toEqual(['slack', 'gmail']);
+      expect(parsed.enabledIntegrations).toBeUndefined();
+    });
+
+    it('accepts both fields populated (Phase A — runner reads new shape first)', () => {
+      const parsed = ScheduledRunConfigSchema.parse({
+        enabledConnections: ['slack'],
+        enabledIntegrations: [{ slug: 'slack', method: 'pipedream', name: 'Slack' }],
+      });
+      expect(parsed.enabledConnections).toEqual(['slack']);
+      expect(parsed.enabledIntegrations).toHaveLength(1);
+    });
+
+    it('rejects integration rows missing method', () => {
+      expect(() =>
+        ScheduledRunConfigSchema.parse({
+          enabledIntegrations: [{ slug: 'slack', name: 'Slack' }],
+        })
+      ).toThrow();
+    });
+
+    it('rejects an unknown method value', () => {
+      expect(() => IntegrationListItemSchema.parse({ slug: 'slack', method: 'webhook', name: 'Slack' })).toThrow();
     });
   });
 });

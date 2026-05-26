@@ -389,7 +389,9 @@
     "settings": {
       "thinkingMode": "Thinking Mode",
       "thinkingModeDesc": "Enable extended thinking for complex tasks",
-      "stopButton": "Stop"
+      "stopButton": "Stop",
+      "sendButton": "Send message",
+      "sendingButton": "Sending message"
     },
     "fileUpload": {
       "title": "Upload to Workspace",
@@ -505,6 +507,8 @@
     "selectAll": "Select All",
     "clear": "Clear",
     "myFilesGroup": "My Files",
+    "remoteFilesGroup": "Remote Files",
+    "remoteFilesTooltip": "Selecting this folder will enable {{name}} for this conversation. Numa will prefer browsing it when you reference files without naming a folder.",
     "expandGroup": "Expand group",
     "collapseGroup": "Collapse group",
     "private": "Private",
@@ -522,7 +526,6 @@
     "agentCreation": "Agent Creation",
     "memoryManagement": "Update Memory",
     "numaOps": "Numa Ops",
-    "dataConnectors": "Data Connectors",
     "model": "Model",
     "integrations": "Integrations",
     "integrationsHelper": "Connect external services",

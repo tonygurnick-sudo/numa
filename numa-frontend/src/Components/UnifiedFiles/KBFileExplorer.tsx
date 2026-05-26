@@ -1286,6 +1286,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                       disabled={selectedItems.size === 0}
                       onClick={handleClearSelection}
                       className="text-nowrap"
+                      aria-label={t('fileExplorer.actions.clear')}
                     >
                       <i className="bi bi-x-circle me-1 d-inline d-sm-none"></i>
                       <i className="bi bi-x-circle me-1 d-none d-sm-inline"></i>
@@ -1297,6 +1298,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                       disabled={selectedItems.size === rows.length}
                       onClick={handleSelectAll}
                       className="text-nowrap"
+                      aria-label={t('fileExplorer.actions.selectAll')}
                     >
                       <i className="bi bi-check-all me-1 d-inline d-sm-none"></i>
                       <i className="bi bi-check-all me-1 d-none d-sm-inline"></i>
@@ -1308,6 +1310,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                       disabled={selectedItems.size === 0}
                       onClick={confirmBulkDelete}
                       className="text-nowrap"
+                      aria-label={t('fileExplorer.actions.delete')}
                     >
                       <i className="bi bi-trash me-1 d-inline d-sm-none"></i>
                       <i className="bi bi-trash me-1 d-none d-sm-inline"></i>
@@ -1325,6 +1328,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                     size="sm"
                     onClick={() => setShowCreateFolderModal(true)}
                     className="text-nowrap"
+                    aria-label={t('fileExplorer.actions.newFolder')}
                   >
                     <i className="bi bi-folder-plus me-1 d-inline d-sm-none"></i>
                     <i className="bi bi-folder-plus me-1 d-none d-sm-inline"></i>
@@ -1337,6 +1341,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                   onClick={handleRefresh}
                   disabled={isUserInitiatedRefresh}
                   className="text-nowrap"
+                  aria-label={t('fileExplorer.actions.refresh')}
                 >
                   <i className="bi bi-arrow-clockwise me-1 d-inline d-sm-none"></i>
                   <i className="bi bi-arrow-clockwise me-1 d-none d-sm-inline"></i>

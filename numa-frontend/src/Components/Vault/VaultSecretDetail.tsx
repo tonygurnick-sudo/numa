@@ -142,6 +142,15 @@ export function VaultSecretDetail({ show, onHide, secret, onEdit, fetchSecret, s
                   </a>
                 </div>
               )}
+              {secret.last_modified_by_email && (
+                <div className="mt-2 small text-muted">
+                  <i className="bi bi-person-badge me-1" />
+                  {t('vault.detail.lastModifiedBy', 'Last modified by {{actor}} on {{at}}', {
+                    actor: secret.last_modified_by_email,
+                    at: new Date(secret.updated_at).toLocaleString(),
+                  })}
+                </div>
+              )}
             </div>
 
             {revealedFields.size > 0 && (

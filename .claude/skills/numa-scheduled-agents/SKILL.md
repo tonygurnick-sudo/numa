@@ -51,6 +51,7 @@ User views results on ScheduleDetailPage or NotificationsPage
 | **agent-schedules**            | `lambdas/node/agent-schedules/index.ts`                          | CRUD API + EventBridge management        |
 | **agent-schedule-runner**      | `lambdas/node/agent-schedule-runner/index.ts`                    | Execution engine                         |
 | **scheduling-schemas**         | `lib/scheduling-schemas.ts`                                      | Zod validation schemas                   |
+| **schedule-load**              | `lib/schedule-load.ts`                                           | Quota projection + enforcement helpers   |
 | **notification-service**       | `lib/notification-service.ts`                                    | Schedule notification helpers            |
 | **workspace-chat-agent-proxy** | `lambdas/python/workspace-chat-agent-proxy/lambda_function.py`   | Auth + routing for runner calls          |
 | **numa_tool.py**               | `services/numa-workspace-agent/.../mcp_tools/numa_tool.py`       | Tool gating (enabledTools enforcement)   |
@@ -67,15 +68,25 @@ User views results on ScheduleDetailPage or NotificationsPage
 
 ### API Endpoints
 
-| Method | Path                            | Handler               | Purpose                                |
-| ------ | ------------------------------- | --------------------- | -------------------------------------- |
-| GET    | `/api/agent-schedules`          | agent-schedules       | List user schedules                    |
-| GET    | `/api/agent-schedules/calendar` | agent-schedules       | Calendar view (filtered by event type) |
-| GET    | `/api/agent-schedules/:id`      | agent-schedules       | Get single schedule                    |
-| POST   | `/api/agent-schedules`          | agent-schedules       | Create schedule + EventBridge rule     |
-| PUT    | `/api/agent-schedules/:id`      | agent-schedules       | Update schedule + sync EventBridge     |
-| DELETE | `/api/agent-schedules/:id`      | agent-schedules       | Soft delete + remove EventBridge       |
-| POST   | `/api/agent-schedules/run`      | agent-schedule-runner | Manual "Run Now"                       |
+| Method | Path                                 | Handler                   | Auth  | Purpose                                                |
+| ------ | ------------------------------------ | ------------------------- | ----- | ------------------------------------------------------ |
+| GET    | `/api/agent-schedules`               | agent-schedules           | User  | List user schedules                                    |
+| GET    | `/api/agent-schedules/calendar`      | agent-schedules           | User  | Calendar view (filtered by event type)                 |
+| GET    | `/api/agent-schedules/tenant`        | agent-schedules           | Admin | List ALL tenant schedules (audit screen)               |
+| GET    | `/api/agent-schedules/quota-summary` | agent-schedules           | User  | `{quotas, user, company}` for dashboard strip          |
+| GET    | `/api/agent-schedules/:id`           | agent-schedules           | User  | Get single schedule                                    |
+| POST   | `/api/agent-schedules`               | agent-schedules           | User  | Create — 201 (active) or 202 (`requiresApproval:true`) |
+| POST   | `/api/agent-schedules/:id/approve`   | agent-schedules           | Admin | Pending → active + create EventBridge entry            |
+| POST   | `/api/agent-schedules/:id/reject`    | agent-schedules           | Admin | Pending → soft-deleted                                 |
+| PUT    | `/api/agent-schedules/:id`           | agent-schedules           | User  | Update schedule + sync EventBridge                     |
+| DELETE | `/api/agent-schedules/:id`           | agent-schedules           | User  | Soft delete + remove EventBridge                       |
+| POST   | `/api/agent-schedules/run`           | agent-schedule-runner     | User  | Manual "Run Now"                                       |
+| GET    | `/api/settings/scheduling`           | admin-scheduling-settings | User  | Admin overrides + ceilings + platform defaults         |
+| PUT    | `/api/settings/scheduling`           | admin-scheduling-settings | Admin | Set Level-3 admin override (full quota partial)        |
+
+Schedule status enum is now `'active' | 'paused' | 'deleted' | 'pending_approval'`.
+
+For full quota model, levels, and defaults see `documentation/scheduled-agents/README.md`.
 
 ### S3 Storage
 

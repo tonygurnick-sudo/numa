@@ -1,16 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Col, Modal, Row } from 'react-bootstrap';
-import {
-  BoxSeam,
-  FileEarmarkText,
-  Rocket,
-  People,
-  BarChart,
-  Globe,
-  Plus,
-  FileText,
-  Download,
-} from 'react-bootstrap-icons';
+import { BoxSeam, FileEarmarkText, Rocket, People, Globe, Plus, FileText, Download } from 'react-bootstrap-icons';
 import { Client, getDefaultClientConfigValues } from '@/types';
 import { clientService } from '@/services/clientService';
 import { listAllRecentDeployments, type DeploymentRecord } from '@/services/deploymentService';
@@ -21,7 +11,7 @@ import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { WorkflowHub } from '@/components/dashboard/WorkflowHub';
 import { WelcomeBanner } from '@/components/dashboard/WelcomeBanner';
 import { ToolsSection } from '@/components/dashboard/ToolsSection';
-import { PublicDemoStats } from '@/components/dashboard/PublicDemoStats';
+import { PublicDemoKpi } from '@/components/dashboard/PublicDemoStats';
 import { fetchPublicDemoStats, type PublicDemoStats as PublicDemoStatsType } from '@/services/publicDemoService';
 import { AVAILABLE_TOOLS } from '@/data/tools';
 
@@ -75,6 +65,10 @@ export default function Dashboard() {
     clients.filter((c) => (c.config.region || '').toLowerCase() === regionCode.toLowerCase()).length;
   const countUSEast1 = countByRegion('us-east-1');
   const countSydney = countByRegion('ap-southeast-2');
+  const countJakarta = countByRegion('ap-southeast-3');
+  // Region count: only regions with ≥1 client. Hardcoded list since the
+  // portal only deploys to these three today; revisit if we add more.
+  const activeRegionCount = [countUSEast1, countSydney, countJakarta].filter((n) => n > 0).length;
 
   // Deployment stats
   const runningDeployments = deployments.filter(
@@ -277,9 +271,13 @@ export default function Dashboard() {
           <StatsCard
             title="Active Deployments"
             value={runningDeployments.length}
-            subtitle={`${last24Hours.length} in last 24h`}
+            subtitle={
+              totalLastWeekDeployments > 0
+                ? `${successRate}% success (7d) · ${last24Hours.length} in last 24h`
+                : `${last24Hours.length} in last 24h · no deploys in 7d`
+            }
             icon={<Rocket />}
-            status={runningDeployments.length > 0 ? 'warning' : 'success'}
+            status={runningDeployments.length > 0 ? 'warning' : successRate >= 90 ? 'success' : 'danger'}
             badge={{
               text: runningDeployments.length > 0 ? 'Running' : 'Idle',
               variant: runningDeployments.length > 0 ? 'warning' : 'success',
@@ -288,38 +286,18 @@ export default function Dashboard() {
         </Col>
         <Col lg={3} md={6}>
           <StatsCard
-            title="Success Rate"
-            value={`${successRate}%`}
-            subtitle={`${successfulDeployments}/${totalLastWeekDeployments} deployments (last 7 days)`}
-            icon={<BarChart />}
-            status={successRate >= 90 ? 'success' : successRate >= 70 ? 'warning' : 'danger'}
-            trend={{
-              value: 5,
-              label: 'vs previous week',
-              isPositive: true,
-            }}
-          />
-        </Col>
-        <Col lg={3} md={6}>
-          <StatsCard
             title="Global Coverage"
-            value={2}
-            subtitle={`US: ${countUSEast1}, AU: ${countSydney}`}
+            value={activeRegionCount}
+            subtitle={`US: ${countUSEast1} · AU: ${countSydney} · ID: ${countJakarta}`}
             icon={<Globe />}
             badge={{ text: 'Regions', variant: 'info' }}
             status="info"
           />
         </Col>
+        <Col lg={3} md={6}>
+          <PublicDemoKpi stats={publicDemoStats} loading={publicDemoLoading} error={publicDemoError} />
+        </Col>
       </Row>
-
-      {/* Public Demo Stats */}
-      {(publicDemoStats.length > 0 || publicDemoLoading || publicDemoError) && (
-        <Row className="g-4 mb-5">
-          <Col lg={10}>
-            <PublicDemoStats stats={publicDemoStats} loading={publicDemoLoading} error={publicDemoError} />
-          </Col>
-        </Row>
-      )}
 
       {/* Activity Feed and Workflow Hubs */}
       <Row className="g-4 mb-5">
@@ -343,24 +321,20 @@ export default function Dashboard() {
                     label: 'New Client',
                     link: '/tools/create-client-config',
                     icon: <Plus />,
-                    variant: 'primary',
+                    variant: 'outline-primary',
                   },
                   {
                     label: 'CSV',
                     onClick: handleExportCSV,
                     icon: <Download />,
-                    variant: 'outline-success',
+                    variant: 'outline-secondary',
                   },
                   {
                     label: 'JSON',
                     onClick: handleExportJSON,
                     icon: <Download />,
-                    variant: 'outline-info',
+                    variant: 'outline-secondary',
                   },
-                ]}
-                stats={[
-                  { label: 'Total Clients', value: total },
-                  { label: 'Production', value: prodClients },
                 ]}
                 color="primary"
               />
@@ -380,13 +354,10 @@ export default function Dashboard() {
                     label: 'View Images',
                     link: '/containers',
                     icon: <BoxSeam />,
+                    variant: 'outline-secondary',
                   },
                 ]}
-                stats={[
-                  { label: 'Running', value: runningDeployments.length },
-                  { label: 'Success Rate', value: `${successRate}%` },
-                ]}
-                color="success"
+                color="primary"
               />
             </Col>
           </Row>

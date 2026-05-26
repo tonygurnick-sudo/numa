@@ -206,7 +206,6 @@ export class NumaClientStack extends TerraformStack {
     const core = new CoreNumaInfra(this, 'numa', {
       ...clientConfig,
       emailDomain,
-      secretsVaultEnabled: clientConfig.secretsVaultEnabled ?? false,
       numaDropZones: clientConfig.numaDropZones ?? false,
       oauthIntegrationsEnabled: clientConfig.oauthIntegrationsEnabled ?? false,
       additionalOrigins: coreAdditionalOrigins,
@@ -438,7 +437,13 @@ export class NumaClientStack extends TerraformStack {
         // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
         fileRedirectSecret: fileRedirectSecret.value,
         fileRedirectBaseUrl: `https://${domainName}/api/workspace-chat-agent`,
-        // Vault secrets integration removed in favor of usage analytics
+        // Vault audit log — name wires the env var so chat-driven Pipedream
+        // and vault-MCP tool calls can write `ai_access` rows; arn grants the
+        // IAM PutItem permission. Without the arn the write silently logs
+        // AccessDenied and chat usage never appears in My Secrets > Activity
+        // (TASK-146 follow-up — was removed in an earlier refactor).
+        vaultAuditLogTableName: core.vaultAuditLogTable.name,
+        vaultAuditLogTableArn: core.vaultAuditLogTable.arn,
         // Numa Ops Lambda ARNs (conditional on numaOps flag)
         opsApiLambdaArn,
         opsConfigApiLambdaArn,
@@ -472,8 +477,6 @@ export class NumaClientStack extends TerraformStack {
         // Chat settings table (for reading user approval mode preferences)
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
-        // Vault secrets feature flag (enables vault system prompt and tools)
-        secretsVaultEnabled: clientConfig.secretsVaultEnabled ?? false,
         // Company bucket (for loading company profile into system prompt)
         companyBucketName: core.companyBucket?.bucket.bucket,
         companyBucketArn: core.companyBucket?.bucket.arn,
@@ -619,15 +622,51 @@ export class NumaClientStack extends TerraformStack {
       agentTeamMembersTableName: core.agentTeamMembersTable.name,
       agentSharingTableName: core.agentSharingTable.name,
       schedulingSettingsTableName: core.schedulingSettingsTable.name,
-      perClientSchedulingMinIntervalMinutes: clientConfig.schedulingMinIntervalMinutes,
+      perClientSchedulingMinIntervalMinutes:
+        clientConfig.schedulingMinIntervalMinutes ?? props.globalSchedulingMinIntervalMinutes,
       globalSchedulingMinIntervalMinutes: props.globalSchedulingMinIntervalMinutes,
+      scheduleQuotas: {
+        // Per-client (Level 2) overrides take precedence over the global
+        // platform-settings (Level 1) values. Platform-settings is the sole
+        // source of truth for unset Level 2 fields — there is no code-side
+        // fallback. Lambdas throw on missing fields at runtime.
+        maxRunsPerCompanyPerMonth:
+          clientConfig.maxRunsPerCompanyPerMonth ?? props.globalScheduleQuotas?.maxRunsPerCompanyPerMonth,
+        maxRunsPerUserPerMonth:
+          clientConfig.maxRunsPerUserPerMonth ?? props.globalScheduleQuotas?.maxRunsPerUserPerMonth,
+        maxTriggerRunsPerCompanyPerMonth:
+          clientConfig.maxTriggerRunsPerCompanyPerMonth ?? props.globalScheduleQuotas?.maxTriggerRunsPerCompanyPerMonth,
+        maxTriggerRunsPerUserPerMonth:
+          clientConfig.maxTriggerRunsPerUserPerMonth ?? props.globalScheduleQuotas?.maxTriggerRunsPerUserPerMonth,
+        maxConcurrentActiveSchedulesPerCompany:
+          clientConfig.maxConcurrentActiveSchedulesPerCompany ??
+          props.globalScheduleQuotas?.maxConcurrentActiveSchedulesPerCompany,
+        maxConcurrentActiveSchedulesPerUser:
+          clientConfig.maxConcurrentActiveSchedulesPerUser ??
+          props.globalScheduleQuotas?.maxConcurrentActiveSchedulesPerUser,
+        requireApprovalAboveUserCap:
+          clientConfig.requireApprovalAboveUserCap ?? props.globalScheduleQuotas?.requireApprovalAboveUserCap,
+      },
       mfaSettingsTableName: core.mfaSettingsTable.name,
       userPoolId: core.userPoolId,
       chatSettingsTableName: core.chatSettingsTable.name,
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
+      extApiDocBucketName: core.extApiDocBucket.bucket.bucket,
+      extApiDocBucketArn: core.extApiDocBucket.bucket.arn,
       capabilitiesTableName: core.capabilitiesTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
+      // Admin-side gate. When false, the unified integrations catalog skips
+      // every native row so users never see them; when true, admins can
+      // manage native connectors and they surface alongside Pipedream.
+      dataConnectorsEnabled: clientConfig.dataConnectorsEnabled ?? false,
+      // Forwarded to scheduled runs as featureFlags on the workspace-agent
+      // request body, so the SDK config registers the `connectors` MCP and
+      // `vault` MCP in unattended runs. Without these the schedule runner
+      // can't use native connectors at all (the MCP server isn't registered).
+      // Vault MCP is gated on the `DATA_CONNECTORS_ENABLED` flag forwarded
+      // from `app-agnostic-api-gateway-lambda-collection` (TASK-146).
+      oauthIntegrationsEnabled: clientConfig.oauthIntegrationsEnabled ?? false,
       connectorEventsTableName: core.connectorEventsTable.name,
       connectorEventConfigsTableName: core.connectorEventConfigsTable.name,
       connectorEventBusName: core.connectorEventBusName,
@@ -709,8 +748,10 @@ export class NumaClientStack extends TerraformStack {
       });
     }
 
-    // Vault Secrets (encrypted secrets management via AWS Secrets Manager)
-    if (clientConfig.secretsVaultEnabled) {
+    // Vault Secrets (encrypted secrets management via AWS Secrets Manager).
+    // Tied to the data-connectors flag — native connectors are the primary
+    // producer of vault secrets (TASK-146).
+    if (clientConfig.dataConnectorsEnabled) {
       new VaultSecretsConstruct(this, safeConstructId + '-vault', {
         apiGatewayAuthorizerId: fe.authorizer.id,
         apiGatewayId: fe.apiGateway.id,
@@ -740,7 +781,11 @@ export class NumaClientStack extends TerraformStack {
       // Data bucket (for S3 data bucket connector)
       dataBucketName: core.dataBucket.bucket.bucket,
       dataBucketArn: core.dataBucket.bucket.arn,
-      // Vault audit log table (for tracking vault access)
+      // Vault audit log — the construct treats this as required (it builds
+      // an IAM resource ARN from it), but it was never being passed. The
+      // policy was being rendered as `table/undefined`, so the lambda had
+      // no permission to write to the real audit table and chat OAuth
+      // fetches silently failed audit (TASK-146 follow-up).
       vaultAuditLogTableName: core.vaultAuditLogTable.name,
     });
 
@@ -866,6 +911,11 @@ export class NumaClientStack extends TerraformStack {
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
+        // Sub-flag of SCHEDULING gating the event-trigger surface (the "When
+        // something happens" wizard tile, the admin trigger audit panel, and
+        // the per-client trigger quota fields in the CSP). Defaults false —
+        // clients must opt in explicitly. Cron schedules work whenever
+        // SCHEDULING is on, regardless of EVENT_TRIGGERS.
         EVENT_TRIGGERS: clientConfig.eventTriggers ?? false,
         SCHEDULING_MIN_INTERVAL_MINUTES: clientConfig.schedulingMinIntervalMinutes ?? null,
         GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: props.globalSchedulingMinIntervalMinutes ?? null,
@@ -874,7 +924,6 @@ export class NumaClientStack extends TerraformStack {
         NUMA_OPS: clientConfig.numaOps ?? false,
         SITE_WIDE_SEARCH: clientConfig.siteWideSearch ?? false,
         MFA_ENABLED: clientConfig.mfa ?? false,
-        SECRETS_VAULT_ENABLED: clientConfig.secretsVaultEnabled ?? false,
         NUMA_DROP_ZONES: clientConfig.numaDropZones ?? false,
         NUMA_SHARING: clientConfig.numaSharing ?? false,
         WORKSPACE_CHAT_MODEL_SELECTION:
@@ -1085,26 +1134,26 @@ export class NumaClientStack extends TerraformStack {
 
     // ── Sync ext-api-doc files to S3 (at END to avoid resource address shifts) ──
     const extApiDocPath = path.join(import.meta.dirname, '..', '..', 'ext-api-doc');
-    try {
-      if (fs.existsSync(extApiDocPath)) {
-        const mdFiles = fs
-          .readdirSync(extApiDocPath, { recursive: true, withFileTypes: true })
-          .filter((f) => f.isFile() && !f.name.startsWith('.'))
-          .map((f) => path.join(f.parentPath, f.name));
+    if (fs.existsSync(extApiDocPath)) {
+      const mdFiles = fs
+        .readdirSync(extApiDocPath, { recursive: true, withFileTypes: true })
+        .filter((f) => f.isFile() && !f.name.startsWith('.'))
+        .map((f) => path.join(f.parentPath, f.name))
+        // _templates/ is dev-only reference material; do not ship to client stacks.
+        // It also produces construct IDs starting with `-` after sanitization, which
+        // throws inside the loop and used to be silently swallowed by a try/catch.
+        .filter((source) => path.relative(extApiDocPath, source).split(path.sep)[0] !== '_templates');
 
-        for (const source of mdFiles) {
-          const key = path.relative(extApiDocPath, source);
-          new S3Object(this, `ext-api-doc-${key.replace(/[^a-zA-Z0-9]/g, '-')}`, {
-            bucket: core.extApiDocBucket.bucket.bucket,
-            key,
-            source,
-            sourceHash: Fn.filemd5(source),
-            contentType: 'text/markdown',
-          });
-        }
+      for (const source of mdFiles) {
+        const key = path.relative(extApiDocPath, source);
+        new S3Object(this, `ext-api-doc-${key.replace(/[^a-zA-Z0-9]/g, '-')}`, {
+          bucket: core.extApiDocBucket.bucket.bucket,
+          key,
+          source,
+          sourceHash: Fn.filemd5(source),
+          contentType: 'text/markdown',
+        });
       }
-    } catch {
-      // ext-api-doc directory may not exist in CI — that's fine
     }
   }
 }
@@ -1298,15 +1347,19 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         scheduling: z.boolean().optional().default(false),
 
         /**
-         * Whether to enable event-triggered automations (the "When something
-         * happens" path of the Automations builder). Independent of `scheduling`
-         * (which gates the route entirely) and `pipedreamIntegrations` (which
-         * gates Pipedream-backed sources within the trigger picker).
+         * Sub-flag of `scheduling`. Gates the event-trigger surface: the
+         * "When something happens" tile in the Automations wizard, the admin
+         * Settings > Scheduling > Triggers tab, the trigger audit panel, and
+         * the per-client trigger quota fields in the CSP. Defaults to `false` —
+         * clients must explicitly opt in. Cron schedules remain functional
+         * regardless. Has no effect when `scheduling: false`. Independent of
+         * `pipedreamIntegrations` (which gates Pipedream-backed sources
+         * within the trigger picker).
          *
-         * Frontend-only gating today — does NOT alter infra (no constructs
-         * are created/skipped based on this flag). The agent-schedules lambda,
-         * pipedream-event-receiver, dispatcher, and runner are always present.
-         * The flag just hides the "When something happens" tile in the wizard.
+         * Existing clients on `scheduling: true` at the time this flag landed
+         * were backfilled to `eventTriggers: true` via
+         * `tools/backfill-triggers-flag.ts` so the default flip didn't
+         * silently disable them.
          *
          * @default false
          */
@@ -1321,6 +1374,46 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @minimum 5
          */
         schedulingMinIntervalMinutes: z.number().int().min(5).optional(),
+
+        /**
+         * Per-client cap on total scheduled runs per month across the tenant.
+         * Hard ceiling — schedules that would push the tenant over this are
+         * rejected at creation. Falls back to the platform-settings record
+         * (Level 1, in numa-client-config) when unset.
+         */
+        maxRunsPerCompanyPerMonth: z.number().int().min(0).optional(),
+
+        /**
+         * Per-client cap on scheduled runs per user per month. Above this,
+         * schedules go to admin approval if `requireApprovalAboveUserCap`
+         * is true (or are hard-rejected if not).
+         */
+        maxRunsPerUserPerMonth: z.number().int().min(0).optional(),
+
+        /**
+         * Per-client cap on simultaneously active schedules across the whole tenant.
+         */
+        maxConcurrentActiveSchedulesPerCompany: z.number().int().min(0).optional(),
+
+        /**
+         * Per-client cap on simultaneously active schedules per user.
+         */
+        maxConcurrentActiveSchedulesPerUser: z.number().int().min(0).optional(),
+
+        /**
+         * If true, schedules above the user cap are routed to admin approval
+         * instead of being hard-rejected. Default true.
+         */
+        requireApprovalAboveUserCap: z.boolean().optional(),
+
+        /**
+         * Per-client cap on event-trigger fires per month across the tenant.
+         * Actuals (counted at fire time), not projected.
+         */
+        maxTriggerRunsPerCompanyPerMonth: z.number().int().min(0).optional(),
+
+        /** Per-client cap on event-trigger fires per user per month. */
+        maxTriggerRunsPerUserPerMonth: z.number().int().min(0).optional(),
 
         /**
          * Whether to enable Drop Zone creation in the Files shared tab.
@@ -1476,6 +1569,20 @@ export interface NumaClientStackProps {
   clientConfig: ClientConfig;
   /** Global scheduling minimum interval (minutes), read from platform-settings record. */
   globalSchedulingMinIntervalMinutes?: number;
+  /**
+   * Global scheduled-run quotas (Level 1), read from platform-settings.
+   * Per-client overrides on `ClientConfig` take precedence — see numa-client-stack
+   * where these flow through to the lambda construct.
+   */
+  globalScheduleQuotas?: {
+    maxRunsPerCompanyPerMonth?: number;
+    maxRunsPerUserPerMonth?: number;
+    maxTriggerRunsPerCompanyPerMonth?: number;
+    maxTriggerRunsPerUserPerMonth?: number;
+    maxConcurrentActiveSchedulesPerCompany?: number;
+    maxConcurrentActiveSchedulesPerUser?: number;
+    requireApprovalAboveUserCap?: boolean;
+  };
 }
 
 export interface AppDefinition {

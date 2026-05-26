@@ -61,7 +61,11 @@ export interface ConfiguredConnectors {
 }
 
 export interface ConnectionStatus {
-  status: 'connected' | 'disconnected' | 'error';
+  /** `error` = backend confirmed the token is bad (expired / revoked).
+   *  `check_failed` = the status fetch itself failed (network, classify miss,
+   *  5xx). These render with different remediation prompts — reconnect vs
+   *  retry — so they must stay distinct in the data layer. */
+  status: 'connected' | 'disconnected' | 'error' | 'check_failed';
   user_email?: string;
   connected_at?: string;
   error_message?: string;
@@ -149,12 +153,17 @@ export const ConnectorsService = {
     return { oauth, pat };
   },
 
-  /** Per-user connection status for a single connector. */
+  /** Per-user connection status for a single connector.
+   *
+   *  Both the "unknown connector" guard and the catch branch return
+   *  `check_failed` (not `error`) — neither is a token-validity signal, so
+   *  prompting the user to reconnect would be misleading. `check_failed`
+   *  surfaces in the UI as "Couldn't verify connection — try again". */
   async getStatus(connectorId: string): Promise<ConnectionStatus> {
     const c = classifyConnector(connectorId);
     if (!c) {
       log('getStatus', connectorId, { result: 'unknown_connector' });
-      return { status: 'error', error_message: 'Unknown connector' };
+      return { status: 'check_failed', error_message: `Unknown connector "${connectorId}"` };
     }
     try {
       if (c.kind === 'oauth') {
@@ -171,7 +180,10 @@ export const ConnectorsService = {
       };
     } catch (err) {
       log('getStatus', connectorId, { error: String(err) });
-      return { status: 'error', error_message: err instanceof Error ? err.message : 'status failed' };
+      return {
+        status: 'check_failed',
+        error_message: err instanceof Error ? err.message : 'Status request failed',
+      };
     }
   },
 
@@ -228,7 +240,9 @@ export const ConnectorsService = {
   },
 
   /** Disconnect / revoke per-user credentials. Routes OAuth -> revoke
-   *  endpoint, PAT -> delete credentials endpoint. */
+   *  endpoint, PAT -> delete credentials endpoint. Throws if the underlying
+   *  call fails so callers can surface the error to the user — silently
+   *  swallowing here would leave stale UI state. */
   async disconnect(connectorId: string): Promise<void> {
     const c = classifyConnector(connectorId);
     if (!c) {
@@ -236,7 +250,11 @@ export const ConnectorsService = {
       return;
     }
     if (c.kind === 'oauth') {
-      await OAuthProvidersService.disconnect(c.id);
+      const result = await OAuthProvidersService.disconnect(c.id);
+      if (!result.success) {
+        log('disconnect', connectorId, { result: 'oauth_failed', error: result.error });
+        throw new Error(result.error || 'Disconnect failed');
+      }
     } else {
       await PATConnectorService.revoke(c.id);
     }

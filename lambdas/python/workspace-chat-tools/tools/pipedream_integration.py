@@ -32,6 +32,14 @@ PIPEDREAM_RELAY_LAMBDA_ARN = os.environ.get("PIPEDREAM_RELAY_LAMBDA_ARN", "")
 OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 FILE_REDIRECT_SECRET = os.environ.get("FILE_REDIRECT_SECRET", "")
 FILE_REDIRECT_BASE_URL = os.environ.get("FILE_REDIRECT_BASE_URL", "")
+VAULT_AUDIT_LOG_TABLE_NAME = os.environ.get("VAULT_AUDIT_LOG_TABLE_NAME", "")
+
+# Audit dedup for chat-driven Pipedream calls. Module-level so it survives
+# across calls within a warm Lambda container. Tied to (user, app_slug) so
+# repeated use of the same integration in one conversation logs once per
+# minute, not once per tool call.
+_LAST_PIPEDREAM_AUDIT_TS: Dict[tuple, float] = {}
+_PIPEDREAM_AUDIT_DEDUP_SECONDS = 60
 
 # Workspace file path constants
 WORKSPACE_ROOT = "/workdir"
@@ -396,6 +404,72 @@ def handle_batch_get_schemas(params: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _audit_pipedream_action(
+    user_sub: str,
+    action_key: str,
+    description: str,
+    auto_approved: bool,
+) -> None:
+    """Log a chat-driven Pipedream integration call to the vault audit table.
+
+    Pipedream credentials live in Pipedream Connect, not the user's vault, so
+    they wouldn't normally surface in "My Secrets > Activity". But users
+    reasonably expect "what credentials did chat use" to include integration
+    accounts — this row makes that visible. Deduped per (user, app_slug) to
+    avoid spamming when the agent calls the same integration repeatedly.
+
+    Secret name is the app slug (e.g. "google_drive", "gmail") so audit rows
+    sort alongside any vault entries for the same provider.
+    """
+    if not VAULT_AUDIT_LOG_TABLE_NAME or not user_sub or not action_key:
+        return
+
+    dash_index = action_key.find("-")
+    app_slug = action_key[:dash_index] if dash_index > 0 else action_key
+
+    key = (user_sub, app_slug)
+    now = time.time()
+    last = _LAST_PIPEDREAM_AUDIT_TS.get(key, 0.0)
+    if now - last < _PIPEDREAM_AUDIT_DEDUP_SECONDS:
+        return
+    _LAST_PIPEDREAM_AUDIT_TS[key] = now
+
+    try:
+        dynamodb = prm_client("dynamodb")
+        audit_id = str(uuid.uuid4())
+        ttl = int(now) + (90 * 86400)
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now))
+        purpose = description or action_key
+        item: Dict[str, Any] = {
+            "user_id": user_sub,
+            "timestamp_audit_id": f"{timestamp}#{audit_id}",
+            "secret_id": f"integration-{app_slug}",
+            "secret_name": f"integration-{app_slug}",
+            "action": "ai_access",
+            "accessor": "workspace_agent",
+            "actor_email": "",
+            "purpose": f"Pipedream {action_key}: {purpose}"[:200],
+            "conversation_id": "",
+            "approved_by": "auto" if auto_approved else "user",
+            "created_at": timestamp,
+            "ttl": ttl,
+        }
+        dynamodb.put_item(
+            TableName=VAULT_AUDIT_LOG_TABLE_NAME,
+            Item={
+                k: {"S": str(v)} if not isinstance(v, int) else {"N": str(v)}
+                for k, v in item.items()
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to write Pipedream audit log",
+            user_sub=user_sub,
+            action_key=action_key,
+            error=str(e),
+        )
+
+
 def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a Pipedream integration action with human-in-the-loop approval.
 
@@ -488,6 +562,7 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
             external_user_id=external_user_id,
             parameters=relay_params,
         )
+        _audit_pipedream_action(user_sub, action_key, description, is_auto_approved)
         return {
             "status": "success",
             "approval_id": approval_id,
@@ -648,6 +723,12 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
             operation="proxy_request",
             external_user_id=external_user_id,
             parameters=relay_params,
+        )
+        _audit_pipedream_action(
+            user_sub,
+            f"{integration_slug}-proxy-{method.lower()}",
+            description,
+            is_auto_approved,
         )
         return {
             "status": "success",

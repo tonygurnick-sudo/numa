@@ -18,7 +18,8 @@ interface Props {
 
 export function VaultElevationModal({ show, onCancel, onSuccess }: Props) {
   const { t } = useTranslation('vault');
-  const { verifyPassword } = useAuth();
+  const { verifyPassword, user } = useAuth();
+  const currentUserEmail = (user?.decoded_tokens?.idToken?.email as string | undefined) || '';
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +77,10 @@ export function VaultElevationModal({ show, onCancel, onSuccess }: Props) {
             handleSubmit();
           }}
         >
+          {/* Hidden username for password managers — pairs the password
+              entry with the current user's account so credential managers
+              can autofill correctly. */}
+          <input type="text" name="username" value={currentUserEmail} autoComplete="username" readOnly hidden />
           <Form.Group>
             <Form.Label>{t('vault.elevation.passwordLabel')}</Form.Label>
             <Form.Control
