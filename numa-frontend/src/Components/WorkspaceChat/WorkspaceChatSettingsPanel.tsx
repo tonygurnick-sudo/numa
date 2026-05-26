@@ -21,7 +21,6 @@ import {
   Kanban,
   LifeBuoy,
   Lightbulb,
-  Link,
   Plug,
   RefreshCw,
   Upload,

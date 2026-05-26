@@ -458,11 +458,14 @@
     // Group visual: children of an expanded folder share a subtle tinted
     // background and an inset brand-coloured guide line on the left edge,
     // so the eye reads them as one group under the parent folder.
-    &.finder-row--depth-1,
-    &.finder-row--depth-2,
-    &.finder-row--depth-3,
-    &.finder-row--depth-4,
-    &.finder-row--depth-5 {
+    // `:not(.finder-row--selected)` keeps the brand-primary fill on a
+    // selected child row — otherwise the depth tint overrides the
+    // selected background and we land on white-text-on-white-bg.
+    &.finder-row--depth-1:not(.finder-row--selected),
+    &.finder-row--depth-2:not(.finder-row--selected),
+    &.finder-row--depth-3:not(.finder-row--selected),
+    &.finder-row--depth-4:not(.finder-row--selected),
+    &.finder-row--depth-5:not(.finder-row--selected) {
       background: color-mix(in srgb, var(--brand-primary, #8e50a7) 3%, white 97%);
       box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--brand-primary, #8e50a7) 28%, transparent 72%);
 
@@ -495,6 +498,37 @@
     outline: 2px solid var(--brand-primary, #8e50a7);
     outline-offset: -2px;
     border-radius: 6px;
+  }
+
+  // Row + header "select" checkbox. Small, neutral-styled — the bulk bar
+  // surfaces the actual action affordances. We accent the input on hover so
+  // it's discoverable without becoming visually loud at rest.
+  .finder-row__checkbox,
+  .finder-col__checkbox {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin: 0 0.375rem 0 0;
+    cursor: pointer;
+    accent-color: var(--brand-primary, var(--color-primary));
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.4;
+    }
+  }
+
+  .finder-col__checkbox {
+    margin-right: 0.5rem;
+  }
+
+  .finder-col--name {
+    display: flex;
+    align-items: center;
+  }
+
+  .finder-row--selected .finder-row__checkbox {
+    accent-color: rgba(255, 255, 255, 0.95);
   }
 
   .finder-row__name-content {
@@ -1559,5 +1593,326 @@
     background: #fef2f2;
     border: 1px solid #fecaca;
     border-radius: 6px;
+  }
+}
+
+// ── Bulk action bar (floating bottom-of-finder) ────────────────────────
+// Fixed at the bottom of the .finder-files container. Pill-shaped, brand
+// primary, designed to be unmistakable when a multi-selection is active.
+.finder-bulk-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.875rem 0.5rem 1rem;
+  background: #18181b;
+  color: #fafafa;
+  border-radius: 999px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+  font-family: 'Metropolis Regular', sans-serif;
+  font-size: 0.8125rem;
+  z-index: 1000;
+  animation: finder-bulk-bar-in 0.18s ease-out;
+
+  &__count {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding-right: 0.625rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.18);
+    white-space: nowrap;
+
+    i {
+      color: rgba(255, 255, 255, 0.85);
+    }
+  }
+
+  &__count-text {
+    font-weight: 600;
+  }
+
+  &__count-detail {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+  }
+
+  &__warning {
+    margin-left: 0.5rem;
+    color: #fbbf24;
+    font-size: 0.875rem;
+    line-height: 1;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  &__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fafafa;
+    padding: 0.32rem 0.7rem;
+    border-radius: 999px;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition:
+      background 0.12s,
+      color 0.12s,
+      opacity 0.12s;
+
+    i {
+      font-size: 0.875rem;
+    }
+
+    &:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    &--danger {
+      background: rgba(239, 68, 68, 0.18);
+      color: #fca5a5;
+
+      &:hover:not(:disabled) {
+        background: rgba(239, 68, 68, 0.32);
+        color: #fee2e2;
+      }
+    }
+
+    &--ghost {
+      background: transparent;
+      padding: 0.32rem 0.5rem;
+      color: rgba(255, 255, 255, 0.7);
+
+      &:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.12);
+        color: #fafafa;
+      }
+    }
+  }
+
+  &__btn-label {
+    @media (max-width: 575.98px) {
+      display: none;
+    }
+  }
+
+  &__sep {
+    width: 1px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.18);
+    margin: 0 0.125rem;
+  }
+}
+
+@keyframes finder-bulk-bar-in {
+  from {
+    transform: translate(-50%, 12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%);
+    opacity: 1;
+  }
+}
+
+// ── Destination folder picker ─────────────────────────────────────────
+// Tree-navigation picker used in the upload modal and the bulk Move
+// modal. Mirrors the finder visual language so users feel oriented.
+.destination-folder-picker {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+
+  &__label {
+    display: block;
+    font-family: 'Metropolis Medium', sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #18181b;
+    padding: 0.625rem 0.875rem;
+    border-bottom: 1px solid #f0f0f3;
+  }
+
+  &__breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.5rem 0.75rem;
+    background: #fafafa;
+    border-bottom: 1px solid #f0f0f3;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.8125rem;
+    min-height: 36px;
+  }
+
+  &__crumb {
+    display: inline-flex;
+    align-items: center;
+    border: none;
+    background: transparent;
+    color: #71717a;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font: inherit;
+    cursor: pointer;
+    transition:
+      background 0.1s,
+      color 0.1s;
+
+    &--button:hover {
+      background: color-mix(in srgb, var(--brand-primary, #8e50a7) 8%, white 92%);
+      color: var(--brand-primary, var(--color-primary));
+    }
+
+    &--current {
+      color: #18181b;
+      font-weight: 500;
+      cursor: default;
+    }
+  }
+
+  &__sep {
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    margin: 0 0.05rem;
+  }
+
+  &__create-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border: 1px solid #e4e4e7;
+    background: #fff;
+    color: var(--brand-primary, var(--color-primary));
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.1s;
+
+    &:hover {
+      background: color-mix(in srgb, var(--brand-primary, #8e50a7) 6%, white 94%);
+    }
+  }
+
+  &__list {
+    max-height: 260px;
+    overflow-y: auto;
+    background: #fff;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    border: none;
+    background: none;
+    padding: 0.45rem 0.875rem;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.8125rem;
+    color: #18181b;
+    cursor: pointer;
+    border-bottom: 1px solid #f4f4f5;
+    text-align: left;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--brand-primary, #8e50a7) 5%, white 95%);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  &__row-icon {
+    color: var(--brand-primary, var(--color-primary));
+    font-size: 0.95rem;
+    flex-shrink: 0;
+  }
+
+  &__row-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  &__row-badge {
+    color: #71717a;
+    font-size: 0.7rem;
+  }
+
+  &__row-chev {
+    color: #a1a1aa;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+  }
+
+  &__loading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem 0.875rem;
+    color: #71717a;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.8125rem;
+  }
+
+  &__empty {
+    padding: 1rem 0.875rem;
+    color: #a1a1aa;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.8125rem;
+
+    &--error {
+      color: #b91c1c;
+    }
+  }
+
+  &__footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.5rem 0.875rem;
+    background: #fafafa;
+    border-top: 1px solid #f0f0f3;
+    font-family: 'Metropolis Regular', sans-serif;
+    font-size: 0.75rem;
+  }
+
+  &__hint {
+    color: var(--brand-primary, var(--color-primary));
+  }
+
+  &__help {
+    color: #71717a;
   }
 }

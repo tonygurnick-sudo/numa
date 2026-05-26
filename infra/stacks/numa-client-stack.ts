@@ -500,6 +500,10 @@ export class NumaClientStack extends TerraformStack {
         numaOpsEnabled: clientConfig.numaOps,
         // Frontend URL for constructing links (e.g. ticket URLs in chat)
         frontendUrl: `https://${domainName}`,
+        // Global vs regional Bedrock inference profile selection.
+        // Defaults to true (global, no 10% CRI premium); set false for
+        // customers whose parent-org SCPs deny the `global.*` route.
+        useGlobalInferenceProfile: clientConfig.useGlobalInferenceProfile,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -1316,6 +1320,17 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * Defaults to the client's own region.
          */
         agentCoreRegion: z.string().optional(),
+
+        /**
+         * Whether to route Sonnet/Opus 4.5+ traffic via the `global.*` Bedrock
+         * inference profile (true) vs the regional `us.*`/`au.*`/`apac.*`
+         * profiles (false). Global avoids the 10% per-token CRI premium AWS
+         * charges on regional profiles. Set false for customers whose
+         * parent-org SCPs deny the `global.*` route (e.g. Suez).
+         *
+         * @default true
+         */
+        useGlobalInferenceProfile: z.boolean().optional().default(true),
 
         /**
          * Whether to enable Data Connectors functionality in the frontend.

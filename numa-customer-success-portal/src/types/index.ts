@@ -111,6 +111,7 @@ export const clientConfigSchema = z.object({
   brandingProviderEnabled: z.boolean().optional(), // default: false
   numaWorkspaceChat: z.boolean().optional(), // default: true
   agentCoreRegion: z.string().optional(), // default: client region
+  useGlobalInferenceProfile: z.boolean().optional(), // default: true (global Bedrock CRI; false routes to regional us./au./apac.* for tight-SCP customers)
   scheduling: z.boolean().optional(), // default: false
   /**
    * Sub-flag of `scheduling`. When `scheduling: true` and `eventTriggers: false`,
@@ -256,6 +257,7 @@ export const getDefaultClientConfigValues = () => ({
   agents: false,
   brandingProviderEnabled: false,
   numaWorkspaceChat: true,
+  useGlobalInferenceProfile: true,
   scheduling: false,
   // Defaults to false. Existing clients with scheduling already on were
   // backfilled by tools/backfill-triggers-flag.ts so they keep triggers;
@@ -324,6 +326,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     ssoEnterprise: 'SSO Enterprise (SCIM/OIDC)',
     developerMode: 'Developer Mode',
     oauthIntegrationsEnabled: 'OAuth Cloud Storage',
+    useGlobalInferenceProfile: 'Use Global Bedrock Inference Profile',
   };
 
   return fieldNames[key] || key;

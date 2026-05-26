@@ -16,7 +16,9 @@ import {
 import type { S3Object, TableRow, SortColumn, SortDirection } from './KBFileExplorer';
 import { FileUploader } from '../FileUploader';
 import { NotificationModal } from '../NotificationModal';
-import FolderSelector from './FolderSelector';
+import DestinationFolderPicker, { type DestinationFolderPickerValue } from './DestinationFolderPicker';
+import DestinationFolderPickerModal from './DestinationFolderPickerModal';
+import FilesBulkActionBar from './FilesBulkActionBar';
 import {
   shouldShowLargeDataFileWarning,
   formatFileSize,
@@ -25,7 +27,8 @@ import {
   getFileIconColorClass,
 } from '../../utils/fileUtils';
 import type { FileTypeCategory } from '../../utils/fileUtils';
-import { listFoldersInKB, downloadFileFromS3 } from '../../utils/s3Utils';
+import { listFoldersInKB, downloadFileFromS3, downloadMultipleFilesAsZip } from '../../utils/s3Utils';
+import type { UserKB } from '../../Services/knowledgeBaseService';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useToast } from '../../Providers/ToastContext';
 import { useFilePreviewProcessor } from '../../hooks/useFilePreviewProcessor';
@@ -131,12 +134,20 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const [pendingLargeFiles, setPendingLargeFiles] = useState<File[]>([]);
   const [clearFileUploader, setClearFileUploader] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState('');
   const [uploadInitialFolder, setUploadInitialFolder] = useState('');
   const [droppedUploadBatch, setDroppedUploadBatch] = useState<DroppedUploadBatch | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
-  const [folderOptions, setFolderOptions] = useState<string[]>([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [uploadDestination, setUploadDestination] = useState<DestinationFolderPickerValue | null>(null);
+
+  // Bulk actions
+  const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState<{
+    fileKeys: string[];
+    folderPaths: string[];
+    label: string;
+  } | null>(null);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Delete
   type DeleteConfirmState =
@@ -377,6 +388,7 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
 
   const handleFileClick = useCallback((originalKey: string, e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
+    if ((e.target as HTMLElement).closest('input[type="checkbox"]')) return;
     if (e.metaKey || e.ctrlKey || e.shiftKey) {
       setSelectedKeys((prev) => {
         const next = new Set(prev);
@@ -387,6 +399,29 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     } else {
       setSelectedKeys((prev) => (prev.size === 1 && prev.has(originalKey) ? new Set() : new Set([originalKey])));
     }
+  }, []);
+
+  const handleFolderModifierClick = useCallback((folderId: string, e: React.MouseEvent): boolean => {
+    if ((e.target as HTMLElement).closest('button')) return false;
+    if ((e.target as HTMLElement).closest('input[type="checkbox"]')) return false;
+    if (!(e.metaKey || e.ctrlKey || e.shiftKey)) return false;
+    const folderKey = folderId.endsWith('/') ? folderId : `${folderId}/`;
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderKey)) next.delete(folderKey);
+      else next.add(folderKey);
+      return next;
+    });
+    return true;
+  }, []);
+
+  const toggleRowSelection = useCallback((key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }, []);
 
   const onFileDragStart = useCallback(
@@ -619,23 +654,18 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
 
   // ── Upload handlers ────────────────────────────────────────
 
+  // Lazy folder loader handed to the destination picker. The picker caches
+  // results internally so we don't pre-fetch on modal open anymore.
+  const loadFoldersForKB = useCallback(
+    () => listFoldersInKB('company', dataBucket, region, getCredentials),
+    [dataBucket, region, getCredentials]
+  );
+
   useEffect(() => {
     if (showUploadModal) {
-      const fetchFoldersForUpload = async () => {
-        try {
-          setLoadingFolders(true);
-          const folders = await listFoldersInKB('company', dataBucket, region, getCredentials);
-          setFolderOptions(folders);
-        } catch {
-          setFolderOptions([]);
-        } finally {
-          setLoadingFolders(false);
-        }
-      };
-      fetchFoldersForUpload();
-      setSelectedFolder(uploadInitialFolder);
+      setUploadDestination({ kbId: 'company', folderPath: uploadInitialFolder });
     }
-  }, [showUploadModal, uploadInitialFolder, dataBucket, region, getCredentials]);
+  }, [showUploadModal, uploadInitialFolder]);
 
   useEffect(() => {
     if (clearFileUploader) {
@@ -747,6 +777,168 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     }
   }, [deleteConfirm, showToast, t, fetchFiles]);
 
+  // ── Bulk selection helpers ─────────────────────────────────
+
+  const selectionStats = useMemo(() => {
+    const fileKeys: string[] = [];
+    const folderKeys: string[] = [];
+    for (const key of selectedKeys) {
+      if (key.endsWith('/')) folderKeys.push(key);
+      else fileKeys.push(key);
+    }
+    return { fileKeys, folderKeys };
+  }, [selectedKeys]);
+
+  // ── Bulk actions ────────────────────────────────────────────
+
+  const openBulkMove = useCallback(() => {
+    if (!canAdd) return;
+    setShowBulkMoveModal(true);
+  }, [canAdd]);
+
+  const executeBulkMove = useCallback(
+    async (target: DestinationFolderPickerValue) => {
+      const keys = Array.from(selectedKeys);
+      if (keys.length === 0) return;
+      setShowBulkMoveModal(false);
+      await executeMove(keys, target.folderPath);
+    },
+    [executeMove, selectedKeys]
+  );
+
+  const executeBulkDownload = useCallback(async () => {
+    if (selectionStats.fileKeys.length === 0) {
+      showToast({
+        message: t('bulk.downloadFilesOnly', { defaultValue: 'Only files can be downloaded — folders were skipped.' }),
+        variant: 'warning',
+      });
+      return;
+    }
+    setIsBulkDownloading(true);
+    try {
+      if (selectionStats.fileKeys.length === 1) {
+        const onlyKey = selectionStats.fileKeys[0];
+        const filename = onlyKey.split('/').pop() || onlyKey;
+        await downloadFileFromS3(onlyKey, dataBucket, region, getCredentials, filename);
+      } else {
+        await downloadMultipleFilesAsZip(selectionStats.fileKeys, dataBucket, region, getCredentials, 'numa-files.zip');
+      }
+      if (selectionStats.folderKeys.length > 0) {
+        showToast({
+          message: t('bulk.downloadSkippedFolders', {
+            defaultValue: '{{count}} folder(s) were skipped — bulk download supports files only.',
+            count: selectionStats.folderKeys.length,
+          }),
+          variant: 'info',
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({
+        message: t('bulk.downloadError', { defaultValue: 'Download failed: {{error}}', error: msg }),
+        variant: 'error',
+      });
+    } finally {
+      setIsBulkDownloading(false);
+    }
+  }, [dataBucket, region, getCredentials, selectionStats, showToast, t]);
+
+  const openBulkDeleteConfirm = useCallback(() => {
+    if (!canDelete) return;
+    const folderPaths = selectionStats.folderKeys
+      .map((k) => (k.startsWith(COMPANY_KB_PREFIX) ? k.slice(COMPANY_KB_PREFIX.length).replace(/\/$/, '') : ''))
+      .filter((p) => p.length > 0);
+    const fileKeys = selectionStats.fileKeys;
+    if (fileKeys.length === 0 && folderPaths.length === 0) return;
+    const labelKey =
+      fileKeys.length > 0 && folderPaths.length > 0
+        ? 'bulk.confirmDeleteMixed'
+        : folderPaths.length > 0
+          ? 'bulk.confirmDeleteFolders'
+          : 'bulk.confirmDeleteFiles';
+    setBulkConfirm({
+      fileKeys,
+      folderPaths,
+      label: t(labelKey, {
+        defaultValue:
+          fileKeys.length > 0 && folderPaths.length > 0
+            ? 'Delete {{files}} file(s) and {{folders}} folder(s)?'
+            : folderPaths.length > 0
+              ? 'Delete {{folders}} folder(s) and everything inside?'
+              : 'Delete {{files}} file(s)?',
+        files: fileKeys.length,
+        folders: folderPaths.length,
+      }),
+    });
+  }, [canDelete, selectionStats, t]);
+
+  const executeBulkDelete = useCallback(async () => {
+    if (!bulkConfirm) return;
+    setIsBulkDeleting(true);
+    const { fileKeys, folderPaths } = bulkConfirm;
+    let succeededFiles = 0;
+    let failedFiles = 0;
+    let succeededFolders = 0;
+    let failedFolders = 0;
+    try {
+      if (fileKeys.length > 0) {
+        const withMeta = fileKeys.flatMap((k) => [k, `${k}.metadata.json`]);
+        const result = await knowledgeBaseService.deleteKBFiles('company', withMeta);
+        succeededFiles = result.successful.filter((k) => !k.endsWith('.metadata.json')).length;
+        failedFiles = result.failed.filter((f) => !f.key.endsWith('.metadata.json')).length;
+        const deletedSet = new Set(result.successful);
+        setFileState((prev) => ({
+          ...prev,
+          files: prev.files.filter((f) => !deletedSet.has(f.Key)),
+        }));
+      }
+      for (const path of folderPaths) {
+        try {
+          await knowledgeBaseService.deleteSubfolder('company', path, true);
+          succeededFolders += 1;
+          const folderPrefix = `${COMPANY_KB_PREFIX}${path}/`;
+          setFileState((prev) => ({
+            ...prev,
+            files: prev.files.filter((f) => !f.Key.startsWith(folderPrefix)),
+            expandedFolders: new Set([...prev.expandedFolders].filter((id) => !id.startsWith(folderPrefix))),
+            loadedFolders: new Set([...prev.loadedFolders].filter((id) => !id.startsWith(folderPrefix))),
+          }));
+        } catch (folderErr) {
+          failedFolders += 1;
+          console.error('Bulk subfolder delete failed for', path, folderErr);
+        }
+      }
+      const totalFailed = failedFiles + failedFolders;
+      const totalSucceeded = succeededFiles + succeededFolders;
+      if (totalFailed > 0) {
+        showToast({
+          message: t('bulk.deletePartial', {
+            defaultValue: 'Deleted {{succeeded}} item(s); {{failed}} failed',
+            succeeded: totalSucceeded,
+            failed: totalFailed,
+          }),
+          variant: 'warning',
+        });
+      } else {
+        showToast({
+          message: t('bulk.deleteSuccess', {
+            defaultValue: 'Deleted {{count}} item(s)',
+            count: totalSucceeded,
+          }),
+          variant: 'success',
+        });
+      }
+      setSelectedKeys(new Set());
+      fetchFiles();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({ message: t('delete.error', { error: msg }), variant: 'error' });
+    } finally {
+      setIsBulkDeleting(false);
+      setBulkConfirm(null);
+    }
+  }, [bulkConfirm, fetchFiles, showToast, t]);
+
   // ── Subfolder + context menu ─────────────────────────────────
 
   const subfolderRelativePath = useCallback((folderId: string): string => {
@@ -770,7 +962,7 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
       if (!batch.files.length && !batch.folderRejection) return;
 
       setUploadInitialFolder(folderPath);
-      setSelectedFolder(folderPath);
+      setUploadDestination({ kbId: 'company', folderPath });
       setDroppedUploadBatch({ id: Date.now(), ...batch });
       setShowUploadModal(true);
     },
@@ -926,6 +1118,45 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
   const isInitialLoad = fileState.isLoading && fileState.files.length === 0;
 
   const rows = isInitialLoad ? [] : buildRows();
+
+  // Selectable rows in the current visible row set — used by the header
+  // "select all" checkbox.
+  const selectableRowKeys: string[] = [];
+  for (const row of rows) {
+    const isFolderRow = row.type === 'folder';
+    if (isFolderRow) {
+      const folderKey = row.id.endsWith('/') ? row.id : `${row.id}/`;
+      selectableRowKeys.push(folderKey);
+    } else if (row.originalKey) {
+      selectableRowKeys.push(row.originalKey);
+    }
+  }
+  const selectedVisibleCount = selectableRowKeys.reduce((count, k) => (selectedKeys.has(k) ? count + 1 : count), 0);
+  const allVisibleSelected = selectableRowKeys.length > 0 && selectedVisibleCount === selectableRowKeys.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
+
+  const toggleSelectAllVisible = () => {
+    setSelectedKeys((prev) => {
+      if (selectableRowKeys.length === 0) return prev;
+      const fullyContained = selectableRowKeys.every((k) => prev.has(k));
+      const next = new Set(prev);
+      if (fullyContained) {
+        for (const k of selectableRowKeys) next.delete(k);
+      } else {
+        for (const k of selectableRowKeys) next.add(k);
+      }
+      return next;
+    });
+  };
+
+  // Virtual UserKB used by the destination picker for the single Company KB.
+  // It only needs the fields the picker reads (kb_id, kb_name, role).
+  const companyVirtualKb: UserKB = {
+    kb_id: 'company',
+    kb_name: t('tabs.companyFiles'),
+    role: canAdd ? 'EDITOR' : 'VIEWER',
+    is_shared: true,
+  };
 
   // ── Render ─────────────────────────────────────────────────
 
@@ -1120,9 +1351,24 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
       {/* Column headers */}
       <div className="finder-columns finder-grid-6">
         <div
-          className={`finder-col ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
-          onClick={() => handleSortToggle('name')}
+          className={`finder-col finder-col--name ${sortColumn === 'name' ? 'finder-col--active' : ''}`}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('input[type="checkbox"]')) return;
+            handleSortToggle('name');
+          }}
         >
+          <input
+            type="checkbox"
+            className="finder-col__checkbox"
+            checked={allVisibleSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = someVisibleSelected;
+            }}
+            onChange={toggleSelectAllVisible}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={t('bulk.selectAllVisible', { defaultValue: 'Select all visible items' })}
+            disabled={selectableRowKeys.length === 0}
+          />
           {tKb('fileExplorer.table.name')}
           {sortColumn === 'name' && <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} />}
         </div>
@@ -1182,7 +1428,11 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
             const isFolder = row.type === 'folder';
             const isExpanded = isFolder && fileState.expandedFolders.has(row.id);
             const isLoading = isFolder && fileState.loadingFolders.has(row.id);
+            const folderSelectionKey = isFolder ? (row.id.endsWith('/') ? row.id : `${row.id}/`) : null;
             const isFileSelected = !isFolder && !!row.originalKey && selectedKeys.has(row.originalKey);
+            const isFolderSelected = isFolder && !!folderSelectionKey && selectedKeys.has(folderSelectionKey);
+            const isRowSelected = isFileSelected || isFolderSelected;
+            const selectionKey = isFolder ? folderSelectionKey : (row.originalKey ?? null);
             const isRowDropTarget = isFolder && dragOverTarget === row.id;
 
             return (
@@ -1194,7 +1444,7 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                   isFolder ? 'finder-row--folder' : '',
                   isExpanded ? 'finder-row--expanded' : '',
                   `finder-row--depth-${row.depth}`,
-                  isFileSelected ? 'finder-row--selected' : '',
+                  isRowSelected ? 'finder-row--selected' : '',
                   isRowDropTarget ? 'finder-row--drop-over' : '',
                   !isFolder ? 'finder-row--file-selectable' : '',
                 ]
@@ -1233,7 +1483,11 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                   }
                 }}
                 onClick={(e) => {
-                  if (!isFolder && row.originalKey) handleFileClick(row.originalKey, e);
+                  if (isFolder) {
+                    handleFolderModifierClick(row.id, e);
+                  } else if (row.originalKey) {
+                    handleFileClick(row.originalKey, e);
+                  }
                 }}
                 onDoubleClick={() => {
                   if (isFolder) {
@@ -1254,6 +1508,20 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                 style={{ cursor: 'pointer' }}
               >
                 <div className="finder-row__name-content">
+                  {selectionKey && (
+                    <input
+                      type="checkbox"
+                      className="finder-row__checkbox"
+                      checked={isRowSelected}
+                      onChange={() => toggleRowSelection(selectionKey)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={
+                        isFolder
+                          ? t('bulk.selectFolder', { defaultValue: 'Select folder' })
+                          : t('bulk.selectFile', { defaultValue: 'Select file' })
+                      }
+                    />
+                  )}
                   {isFolder ? (
                     isLoading ? (
                       <Spinner
@@ -1381,11 +1649,12 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                   <br />
                   <strong>{t('upload.noteLabel')}</strong> {t('upload.note')}
                 </p>
-                <FolderSelector
-                  selectedFolder={selectedFolder}
-                  onFolderChange={setSelectedFolder}
-                  folderOptions={folderOptions}
-                  disabled={loadingFolders}
+                <DestinationFolderPicker
+                  kbOptions={[{ kb: companyVirtualKb, displayName: companyVirtualKb.kb_name }]}
+                  value={uploadDestination}
+                  onChange={setUploadDestination}
+                  loadFoldersForKB={loadFoldersForKB}
+                  lockedKbId="company"
                   label={t('upload.folderLabel')}
                 />
                 <FileUploader
@@ -1393,7 +1662,7 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
                   onFileSelect={handleFileSelect}
                   clearFiles={clearFileUploader}
                   kb_id="company"
-                  selectedFolder={selectedFolder}
+                  selectedFolder={uploadDestination?.folderPath ?? ''}
                   enableFolderUpload
                   preloadedFiles={droppedUploadBatch}
                   autoUploadPreloaded
@@ -1573,6 +1842,65 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
         onUpdated={() => {
           /* taxonomy-only update; nothing to refresh in the file list */
         }}
+      />
+
+      {/* Bulk move destination picker */}
+      <DestinationFolderPickerModal
+        show={showBulkMoveModal}
+        onHide={() => setShowBulkMoveModal(false)}
+        title={t('bulk.moveTitle', { defaultValue: 'Move {{count}} item(s)', count: selectedKeys.size })}
+        description={t('bulk.moveDescription', {
+          defaultValue: 'Pick a destination folder. Items keep their filenames and folder structure.',
+        })}
+        confirmLabel={t('bulk.moveConfirm', { defaultValue: 'Move here' })}
+        onConfirm={(target) => void executeBulkMove(target)}
+        inProgress={isMoving}
+        kbOptions={[{ kb: companyVirtualKb, displayName: companyVirtualKb.kb_name }]}
+        loadFoldersForKB={loadFoldersForKB}
+        lockedKbId="company"
+        initialValue={{ kbId: 'company', folderPath: '' }}
+      />
+
+      {/* Bulk delete confirmation */}
+      <Modal show={!!bulkConfirm} onHide={() => setBulkConfirm(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{bulkConfirm?.label}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-0">{t('delete.confirmMessage')}</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <button className="btn btn-secondary btn-sm" onClick={() => setBulkConfirm(null)} disabled={isBulkDeleting}>
+            {t('rename.cancel')}
+          </button>
+          <button className="btn btn-danger btn-sm" onClick={executeBulkDelete} disabled={isBulkDeleting}>
+            {isBulkDeleting ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-1" />
+                {t('delete.inProgress')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-trash me-1" />
+                {t('bulk.deleteConfirmCta', { defaultValue: 'Delete' })}
+              </>
+            )}
+          </button>
+        </Modal.Footer>
+      </Modal>
+
+      <FilesBulkActionBar
+        selectedCount={selectedKeys.size}
+        fileCount={selectionStats.fileKeys.length}
+        folderCount={selectionStats.folderKeys.length}
+        canMove={canAdd && !isMoving && !isBulkDeleting}
+        canDownload={selectionStats.fileKeys.length > 0 && !isBulkDownloading}
+        canDelete={canDelete && !isBulkDeleting}
+        inProgress={isMoving || isBulkDeleting || isBulkDownloading}
+        onMove={openBulkMove}
+        onDownload={() => void executeBulkDownload()}
+        onDelete={openBulkDeleteConfirm}
+        onClear={() => setSelectedKeys(new Set())}
       />
     </div>
   );

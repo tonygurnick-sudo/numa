@@ -85,6 +85,13 @@ export interface WorkspaceChatAgentConstructProps {
   numaOpsEnabled?: boolean;
   /** Frontend base URL (e.g. https://nd-labs.numa.arcanum.ai) for constructing links */
   frontendUrl?: string;
+  /**
+   * Whether to route Sonnet/Opus 4.5+ traffic via the `global.*` Bedrock
+   * inference profile (true) vs the regional `us.*`/`au.*`/`apac.*` profiles
+   * (false). Defaults to true — global avoids the 10% per-token CRI premium.
+   * Set false for customers whose parent-org SCPs deny the `global.*` route.
+   */
+  useGlobalInferenceProfile?: boolean;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -109,16 +116,38 @@ export class WorkspaceChatAgentConstruct extends Construct {
   constructor(scope: Construct, id: string, props: WorkspaceChatAgentConstructProps) {
     super(scope, id);
 
-    // Region-aware model configuration
-    // us-east-1 uses us.* prefix, ap-southeast-2 uses au.* for 4.5+ models, apac.* for older
-    const REGIONAL_MODEL_MAP: Record<
-      string,
-      {
-        default: { model_id: string; max_tokens: number };
-        fallback: { model_id: string; max_tokens: number };
-        haiku: { model_id: string; max_tokens: number };
-      }
-    > = {
+    // Region-aware model configuration. Two maps below; pick by
+    // useGlobalInferenceProfile (default true, see prop docs).
+    //   - GLOBAL: Sonnet/Opus 4.5+ via `global.*` (no 10% CRI premium).
+    //   - REGIONAL_ONLY: stays on `us.*`/`au.*`/`apac.*` for customers whose
+    //     parent-org SCPs deny the `global.*` route.
+    // Haiku 4.5 has no global profile published — stays on us./au. in both
+    // maps. Legacy Sonnet 4 stays on apac.* in ap-southeast-2 (no global
+    // profile from that source region). ap-southeast-3 (Jakarta) has no local
+    // Bedrock for Claude — both maps fall back to global there.
+    type RegionModel = {
+      default: { model_id: string; max_tokens: number };
+      fallback: { model_id: string; max_tokens: number };
+      haiku: { model_id: string; max_tokens: number };
+    };
+    const GLOBAL_MODEL_MAP: Record<string, RegionModel> = {
+      'us-east-1': {
+        default: { model_id: 'global.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
+        fallback: { model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+        haiku: { model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+      },
+      'ap-southeast-2': {
+        default: { model_id: 'global.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
+        fallback: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+        haiku: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+      },
+      'ap-southeast-3': {
+        default: { model_id: 'global.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
+        fallback: { model_id: 'global.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+        haiku: { model_id: 'global.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+      },
+    };
+    const REGIONAL_ONLY_MODEL_MAP: Record<string, RegionModel> = {
       'us-east-1': {
         default: { model_id: 'us.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
         fallback: { model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
@@ -129,17 +158,16 @@ export class WorkspaceChatAgentConstruct extends Construct {
         fallback: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
         haiku: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
       },
-      'ap-southeast-3': {
-        default: { model_id: 'global.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
-        fallback: { model_id: 'global.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
-        haiku: { model_id: 'global.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
-      },
+      // ap-southeast-3 (Jakarta) has no local Bedrock — global is the only option.
+      'ap-southeast-3': GLOBAL_MODEL_MAP['ap-southeast-3'],
     };
+    const useGlobalInferenceProfile = props.useGlobalInferenceProfile !== false;
+    const regionalModelMap = useGlobalInferenceProfile ? GLOBAL_MODEL_MAP : REGIONAL_ONLY_MODEL_MAP;
     // AgentCore region — where compute runs (may differ from data region)
     const acRegion = props.agentCoreRegion ?? props.region;
     // Model IDs must match the Bedrock endpoint region the container calls (AWS_REGION = data region).
     // Task 01 (Jakarta region support) will add a separate BEDROCK_REGION config to decouple this.
-    const regionModel = REGIONAL_MODEL_MAP[props.region] ?? REGIONAL_MODEL_MAP['us-east-1'];
+    const regionModel = regionalModelMap[props.region] ?? regionalModelMap['us-east-1'];
 
     // Get current account ID
     const callerIdentity = new DataAwsCallerIdentity(this, 'caller-identity', {});
@@ -677,6 +705,9 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         ANTHROPIC_MODEL: regionModel.default.model_id,
         ANTHROPIC_SMALL_FAST_MODEL: regionModel.haiku.model_id,
         CLAUDE_CODE_SUBAGENT_MODEL: regionModel.default.model_id,
+        // Selects regional vs global Bedrock inference profiles in the
+        // container's sdk_config.py. Mirrors the regionalModelMap chosen above.
+        USE_GLOBAL_INFERENCE_PROFILE: useGlobalInferenceProfile ? 'true' : 'false',
         // Workspace tools Lambda for KB queries etc. (used by tool wrappers)
         ...(props.workspaceToolsLambdaName && {
           WORKSPACE_TOOLS_LAMBDA_NAME: props.workspaceToolsLambdaName,

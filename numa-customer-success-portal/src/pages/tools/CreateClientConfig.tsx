@@ -120,6 +120,7 @@ export default function CreateClientConfig() {
   const [agents, setAgents] = useState(defaults.agents);
   const [brandingProviderEnabled, setBrandingProviderEnabled] = useState(defaults.brandingProviderEnabled);
   const [numaWorkspaceChat, setNumaWorkspaceChat] = useState(defaults.numaWorkspaceChat);
+  const [useGlobalInferenceProfile, setUseGlobalInferenceProfile] = useState(defaults.useGlobalInferenceProfile);
   const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState(defaults.workspaceChatModelSelection);
   const [numaOps, setNumaOps] = useState(defaults.numaOps);
   const [numaDropZones, setNumaDropZones] = useState(defaults.numaDropZones);
@@ -294,6 +295,8 @@ export default function CreateClientConfig() {
     if (brandingProviderEnabled !== defaults.brandingProviderEnabled)
       minimal['brandingProviderEnabled'] = brandingProviderEnabled;
     if (!numaWorkspaceChat) minimal['numaWorkspaceChat'] = false;
+    if (useGlobalInferenceProfile !== defaults.useGlobalInferenceProfile)
+      minimal['useGlobalInferenceProfile'] = useGlobalInferenceProfile;
     if (workspaceChatModelSelection) minimal['workspaceChatModelSelection'] = true;
     if (numaOps) minimal['numaOps'] = true;
     if (numaDropZones !== defaults.numaDropZones) minimal['numaDropZones'] = numaDropZones;
@@ -557,6 +560,31 @@ export default function CreateClientConfig() {
                         onChange={setNumaWorkspaceChat}
                         type="switch"
                         helpText="Enable Numa Workspace Chat (V2). On by default."
+                      />
+                      <ConfigField
+                        label="Use Global Bedrock Inference Profile"
+                        value={useGlobalInferenceProfile}
+                        defaultValue={defaults.useGlobalInferenceProfile}
+                        onChange={setUseGlobalInferenceProfile}
+                        type="switch"
+                        helpText="On (default): route Sonnet/Opus 4.5+ via the global.* Bedrock inference profile, avoiding the 10% per-token regional CRI premium. Off: stay on us./au./apac.* — required for customers whose parent-org SCPs deny the global route."
+                      />
+                      <ConfigField
+                        label="Agent Scheduling"
+                        value={scheduling}
+                        defaultValue={defaults.scheduling}
+                        onChange={setScheduling}
+                        type="switch"
+                        helpText="Enable agent scheduling and notifications features"
+                      />
+                      <ConfigField
+                        label="Scheduling Min Interval (minutes)"
+                        value={schedulingMinIntervalMinutes}
+                        defaultValue=""
+                        onChange={setSchedulingMinIntervalMinutes}
+                        type="text"
+                        placeholder="Leave empty to use global default"
+                        helpText="Override minimum scheduling interval for this client (minutes, min 5). Leave empty to inherit global default."
                       />
                       <ConfigField
                         label="Workspace Chat Model Selection"

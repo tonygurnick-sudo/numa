@@ -77,6 +77,13 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     description: 'Enable Numa Workspace Chat (V2). On by default.',
   },
   {
+    key: 'useGlobalInferenceProfile',
+    label: 'Use Global Bedrock Inference Profile',
+    type: 'boolean',
+    description:
+      'On (default): route Sonnet/Opus 4.5+ via the global.* profile (no 10% CRI premium). Off: use regional us./au./apac.* — for customers with parent-org SCPs that deny the global route.',
+  },
+  {
     key: 'scheduling',
     label: 'Agent Automations',
     type: 'boolean',
