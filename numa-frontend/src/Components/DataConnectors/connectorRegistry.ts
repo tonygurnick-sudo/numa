@@ -496,6 +496,51 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     ],
   },
 
+  // ─── Tier 2: OAuth2 (Legal) ─────────────────────────────────────────────
+  {
+    id: 'actionstep',
+    displayName: 'Actionstep',
+    icon: 'bi-briefcase',
+    description: 'Legal practice management — matters, contacts, time recording, billing, and documents',
+    category: 'Legal',
+    authType: 'oauth2',
+    surfaces: ['chat'],
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Global OAuth endpoints (production). Authorize is on go.actionstep.com;
+    // the token exchange POSTs to api.actionstep.com. Scopes are space-separated
+    // resource names — the scope picker (oauthScopeDefinitions.ts:actionstep)
+    // overrides this default. Staging uses *.actionstepstaging.com.
+    //
+    // Actionstep returns an `api_endpoint` in the token response — the
+    // region-specific REST base URL — because each geographic region has a
+    // different host. Until the backend captures that automatically from the
+    // token exchange, the admin records the region base URL in the
+    // `api_endpoint` field below (workspace-wide, like Synergy's instance URL),
+    // so the workspace agent addresses the correct region.
+    oauth: {
+      authUrl: 'https://go.actionstep.com/api/oauth/authorize',
+      tokenUrl: 'https://api.actionstep.com/api/oauth/token',
+      scopes: 'actions participants timerecords',
+    },
+    credentialFields: [
+      {
+        key: 'api_endpoint',
+        label: 'Actionstep API endpoint',
+        type: 'url',
+        placeholder: 'https://ap-southeast-2.actionstep.com',
+        required: true,
+        helpText:
+          'The region-specific REST base URL returned as api_endpoint in your Actionstep token response. All users in this workspace share one region.',
+      },
+    ],
+    oauthSetupSteps: [
+      'Email api@actionstep.com (or your Actionstep account manager) to request API credentials for your firm',
+      'Provide them the redirect URI shown below; they issue a Client ID and Client Secret',
+      'Copy the Client ID and Client Secret into this wizard',
+      'After your first connection, paste your region API endpoint (e.g. https://ap-southeast-2.actionstep.com) into the API endpoint field above',
+    ],
+  },
+
   // ─── Tier 2: API Key ──────────────────────────────────────────────────
   {
     id: 'hirehop',

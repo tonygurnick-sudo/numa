@@ -28,6 +28,7 @@ export const NATIVE_CONNECTORS = [
   'netsuite',
   'zoho-crm',
   'quickbooks',
+  'actionstep',
 
   // API key
   'hirehop',

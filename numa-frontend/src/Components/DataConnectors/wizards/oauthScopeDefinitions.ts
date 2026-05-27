@@ -357,6 +357,64 @@ export const PROVIDER_SCOPES: Record<string, ScopeOption[]> = {
       default: false,
     },
   ],
+  actionstep: [
+    {
+      id: 'actions',
+      label: 'Matters (Actions)',
+      scope: 'actions',
+      description: 'Read matters/actions — the core case records',
+      default: true,
+    },
+    {
+      id: 'participants',
+      label: 'Contacts (Participants)',
+      scope: 'participants',
+      description: 'Read contacts and participants linked to matters',
+      default: true,
+    },
+    {
+      id: 'timerecords',
+      label: 'Time records',
+      scope: 'timerecords',
+      description: 'Read recorded time entries and units',
+      default: true,
+    },
+    {
+      id: 'filenotes',
+      label: 'File notes',
+      scope: 'filenotes',
+      description: 'Read file notes attached to matters',
+      default: false,
+    },
+    {
+      id: 'tasks',
+      label: 'Tasks',
+      scope: 'tasks',
+      description: 'Read tasks and assignments',
+      default: false,
+    },
+    {
+      id: 'bills',
+      label: 'Billing',
+      scope: 'bills',
+      description: 'Read bills and billing data',
+      default: false,
+    },
+    {
+      id: 'actiondocuments',
+      label: 'Documents',
+      scope: 'actiondocuments',
+      description: 'Read documents stored against matters',
+      default: false,
+    },
+    {
+      id: 'all',
+      label: 'Full access (all data)',
+      scope: 'all',
+      description: 'Access to all data in your Actionstep system — use only if scoped access is insufficient',
+      default: false,
+    },
+  ],
 };
 
 // Providers that expect a comma-separated scope string instead of the

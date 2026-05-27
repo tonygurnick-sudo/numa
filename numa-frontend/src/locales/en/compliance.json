@@ -8,10 +8,11 @@
     "effectiveDate": "Effective date",
     "lastUpdated": "Last updated",
     "documentVersion": "Document version",
-    "version": "1.1",
+    "version": "1.2",
     "date": "20 May 2026",
+    "dateUpdated": "27 May 2026",
     "intro": {
-      "body": "Numa is an enterprise AI platform operated by Arcanum AI Limited. This page summarises the security and compliance posture of the production Numa SaaS platform for prospective customers, existing customers, partners, and auditors. Specific evidence — reports, attestations, subprocessor lists — is available to qualified parties under non-disclosure terms on request."
+      "body": "Numa is an enterprise AI platform operated by Arcanum AI Limited. This page summarises the security and compliance posture of the production Numa SaaS platform for prospective customers, existing customers, partners, and auditors. Specific evidence — documentation, control summaries, and subprocessor lists — is available to qualified parties under non-disclosure terms on request."
     },
     "sections": {
       "strategicIntent": {
@@ -23,14 +24,14 @@
           { "name": "NZ Government Cyber Security Framework", "description": "NZ public sector alignment." },
           {
             "name": "NZISM",
-            "description": "NZ public sector, targeting IN-CONFIDENCE and SENSITIVE classifications."
+            "description": "New Zealand public sector information security alignment."
           },
           { "name": "NIST AI Risk Management Framework and ISO/IEC 42001", "description": "AI governance." }
         ]
       },
       "cloudFoundation": {
         "title": "2. Cloud foundation",
-        "body": "Numa runs on Amazon Web Services. The platform inherits the physical, environmental, and infrastructure controls covered by AWS's certifications, including SOC 1/2/3, ISO 27001, and PCI DSS. The AWS region is selected per customer at onboarding and customer data does not leave the selected region."
+        "body": "Numa runs on Amazon Web Services. The platform inherits the physical, environmental, and infrastructure controls covered by AWS's certifications, including SOC 1/2/3, ISO 27001, and PCI DSS. The AWS region is selected per customer at onboarding, and customer data is stored in the selected region."
       },
       "tenantIsolation": {
         "title": "3. Tenant isolation",
@@ -38,67 +39,136 @@
       },
       "authentication": {
         "title": "4. Authentication & access",
-        "body": "User access is gated by managed identity. Multi-factor authentication is enforced for administrative access and available for all users. Role-based access controls and configurable session lifetimes apply throughout. Administrative access by Arcanum AI personnel is authenticated, role-scoped, and logged."
+        "body": "User access is gated by managed identity. Multi-factor authentication is available to all users and applied to administrative access. Role-based access controls and configurable session lifetimes apply throughout. Administrative access by Arcanum AI personnel is authenticated and role-scoped."
       },
       "dataProtection": {
         "title": "5. Data protection",
-        "body": "Customer data is encrypted in transit using TLS 1.2 or higher and at rest using AWS-managed encryption keys. Customer-managed keys are available on request. AI processing is performed via Amazon Bedrock under enterprise terms; customer data is not used to train foundation models."
+        "body": "Customer data is encrypted in transit using TLS 1.2 or higher and at rest using AWS-managed encryption keys. Customer-managed key arrangements can be discussed for specific deployments. AI processing is performed via Amazon Bedrock under enterprise terms; customer data is not used to train foundation models."
       },
       "network": {
         "title": "6. Network",
         "body": "Public traffic is served exclusively over HTTPS behind a managed CDN with DDoS mitigation. APIs are fronted by an authenticated gateway that validates every request before it reaches application logic."
       },
+      "aiInference": {
+        "title": "7. AI processing & inference",
+        "body": "Numa's AI features run on foundation models hosted by Amazon Bedrock, a managed AWS service. Numa does not host, fine-tune, or operate its own copies of the foundation models.",
+        "points": [
+          {
+            "name": "No training on customer data",
+            "description": "Under AWS's enterprise terms and published service documentation, Amazon Bedrock does not retain prompts or completions after a request is served, and does not use customer inputs or outputs to train, retrain, or fine-tune any foundation model."
+          },
+          {
+            "name": "Encrypted in transit",
+            "description": "Every inference request is an authenticated (AWS Signature Version 4), TLS 1.2+ call to the Amazon Bedrock service endpoint. These are service-to-service calls within AWS to the managed Bedrock service; Numa does not claim that inference is confined to a customer-operated VPC or PrivateLink endpoint."
+          },
+          {
+            "name": "Inference routing",
+            "description": "To maintain capacity and availability, Bedrock may serve a request from one of several AWS regions within a defined geography using cross-region inference profiles. For customers with data-sovereignty requirements, Numa can be configured to use a region-restricted inference profile so that model inference is confined to a chosen geography, such as Australia."
+          }
+        ],
+        "nzLinkLabel": "How this applies to New Zealand customers →"
+      },
       "integrationSecurity": {
-        "title": "7. Integration security",
-        "body": "External SaaS integrations are mediated through an isolated, Arcanum-operated proxy. Credentials are scoped per user, never shared across tenants, and never stored in customer environments. The current subprocessor list is available to qualified parties under NDA."
+        "title": "8. Integration security",
+        "body": "External SaaS integrations are mediated through an isolated, Arcanum-operated proxy. Credentials are scoped per user, never shared across tenants, and never stored in customer environments. The current subprocessor list is available to qualified parties under NDA.",
+        "body2": "Numa's SaaS integrations — email, calendar, chat, ticketing, and similar connectors — are powered by Pipedream Connect, used as a subprocessor. OAuth credentials are held centrally in Arcanum's isolated proxy account and are never placed in a customer's environment; the underlying user access tokens are stored and refreshed by Pipedream and are never exposed to Numa. Each user is cryptographically bound to their own tenant, so one tenant cannot act on behalf of another. Because Pipedream operates from the United States (AWS US East), data exchanged with a connected application through an integration is processed in the United States, independent of the AWS region chosen for the customer's Numa environment. Integrations are optional and administrator-controlled; where they are not enabled, no customer data is sent to Pipedream. Pipedream maintains SOC 2 Type II and GDPR alignment and can support HIPAA workloads under a Business Associate Agreement; its reports are available from Pipedream under NDA."
       },
       "aiGovernance": {
-        "title": "8. AI governance",
-        "body": "Foundation models are accessed via Amazon Bedrock under enterprise terms that prohibit customer data being used to train foundation models. Model selection, prompt design, and tool access for each Numa capability are version-controlled and reviewed before release. Prompts, tool invocations, and responses produced within authenticated user sessions are recorded in audit logs available to the customer."
+        "title": "9. AI governance",
+        "body": "Foundation models are accessed via Amazon Bedrock under enterprise terms that prohibit customer data being used to train foundation models. Model selection, prompt design, and tool access for each Numa capability are version-controlled and reviewed before release. Prompts, tool invocations, and responses produced within authenticated user sessions are recorded and retained, and can be made available to the customer."
       },
       "operationalSecurity": {
-        "title": "9. Operational security",
-        "body": "All infrastructure changes flow through automated, peer-reviewed deployment pipelines. Production access follows least-privilege principles with audit logging. Numa undergoes continuous automated security assessment and periodic third-party penetration testing.",
+        "title": "10. Operational security",
+        "body": "All infrastructure changes flow through automated, peer-reviewed deployment pipelines, and production access follows least-privilege principles. Numa uses automated tooling to assess its security posture and engages independent security testing as its assurance programme matures.",
         "penTesting": {
           "tableHeaders": {
-            "date": "Assessment",
-            "type": "Cadence"
+            "date": "Assurance activity",
+            "type": "Approach"
           },
           "engagements": [
-            { "date": "Automated security assessment", "type": "Continuous" },
-            { "date": "Third-party penetration testing", "type": "Annual" },
-            { "date": "CIS Benchmark review", "type": "Annual" },
-            { "date": "AWS Well-Architected Review", "type": "Annual" }
+            { "date": "Automated security assessment", "type": "Ongoing" },
+            { "date": "Independent penetration testing", "type": "Engaged as the assurance programme matures" },
+            { "date": "Cloud security benchmark review", "type": "Used to guide platform hardening" },
+            { "date": "AWS Well-Architected review", "type": "Applied to platform design" }
           ],
-          "footnote": "Full reports are available to qualified parties under NDA."
+          "footnote": "Reports and supporting evidence are available to qualified parties under NDA, where applicable."
         }
       },
       "dataResidency": {
-        "title": "10. Data residency",
-        "body": "Numa is deployed in customer-selected AWS regions. Current production deployments use US East (N. Virginia), Asia Pacific (Sydney), and Asia Pacific (Jakarta). Customer data remains in the selected region. Other regions, including AWS Auckland, are available on request."
+        "title": "11. Data residency",
+        "body": "Numa is deployed in customer-selected AWS regions. Current production deployments use US East (N. Virginia), Asia Pacific (Sydney), and Asia Pacific (Jakarta). Customer data is stored in the selected region. Other regions, including AWS Auckland, may be available on request, subject to AWS service availability in that region."
       },
       "roadmap": {
-        "title": "11. The order we are progressing in",
+        "title": "12. The order we are progressing in",
         "body": "Numa's certification programme advances in the following order. Each stage is initiated when customer demand justifies it and completed before the next is opened.",
         "stages": [
           {
             "name": "Stage 1 — Operational assurance",
-            "description": "SOC 2 Type II certification and alignment to the NZ Government Cyber Security Framework."
+            "description": "SOC 2 and alignment to the NZ Government Cyber Security Framework."
           },
           {
             "name": "Stage 2 — Public sector readiness",
-            "description": "NZISM at IN-CONFIDENCE, followed by SENSITIVE. Engagement is driven by NZ Government agency commitments and the Certification & Accreditation process each agency runs."
+            "description": "Alignment to NZISM for New Zealand public sector engagements, pursued in step with the Certification & Accreditation process each agency runs."
           },
           {
             "name": "Stage 3 — AI governance certification",
             "description": "ISO/IEC 42001. NIST AI Risk Management Framework alignment underpins this stage."
+          }
+        ],
+        "detailLinksIntro": "Detailed roadmaps:",
+        "soc2LinkLabel": "SOC 2 roadmap →",
+        "iso27001LinkLabel": "ISO/IEC 27001 roadmap →"
+      },
+      "definitions": {
+        "title": "13. Definitions",
+        "body": "Security and compliance discussions often use the same words to mean different things. To avoid ambiguity, this section states precisely what Numa means by the terms used on this page. These definitions are descriptive, not contractual.",
+        "items": [
+          {
+            "term": "Customer data",
+            "definition": "Content a customer or its users put into Numa — uploaded files, chat messages, prompts, knowledge-base documents — and the outputs Numa generates from them. It does not include operational metadata such as audit logs, billing records, or aggregate usage telemetry."
+          },
+          {
+            "term": "At rest",
+            "definition": "Data stored on persistent media — object storage, databases, and knowledge-base stores. 'Encrypted at rest' means that stored data is encrypted using AWS-managed keys, or customer-managed keys on request."
+          },
+          {
+            "term": "In transit",
+            "definition": "Data moving over a network between two systems. 'Encrypted in transit' means the connection is protected with TLS 1.2 or higher."
+          },
+          {
+            "term": "Data residency",
+            "definition": "The AWS region in which customer data is stored at rest. Where this page states that data 'remains in the selected region', it refers to data at rest. Where AI inference is routed is described separately under 'cross-region inference'."
+          },
+          {
+            "term": "Processing / inference",
+            "definition": "The act of a foundation model reading an input and producing an output. Inference is performed inside Amazon Bedrock, AWS's managed model service — not on infrastructure Numa operates directly."
+          },
+          {
+            "term": "Cross-region inference",
+            "definition": "A Bedrock capability in which a single inference request may be served from any one of several AWS regions within a defined geography to maintain capacity and availability. The geography can be restricted — for example, to Australia — for customers with data-sovereignty requirements."
+          },
+          {
+            "term": "Does not train on your data",
+            "definition": "Amazon Bedrock does not retain a customer's prompts or the model's completions after a request is served, and does not use them to train, retrain, or fine-tune any foundation model. This is AWS's documented behaviour and enterprise contractual commitment, inherited by Numa."
+          },
+          {
+            "term": "Tenant isolation",
+            "definition": "Each customer is provisioned into its own dedicated AWS account. Compute, storage, identity, and data are separated at the AWS account boundary; there is no shared-database multi-tenancy between customers."
+          },
+          {
+            "term": "Subprocessor",
+            "definition": "A third party that processes customer data on Numa's behalf to deliver the service — for example AWS for hosting and inference, and Pipedream for SaaS integrations. The current subprocessor list is available under NDA."
+          },
+          {
+            "term": "VPC and PrivateLink",
+            "definition": "A Virtual Private Cloud is a logically isolated AWS network; AWS PrivateLink provides private connectivity to AWS services from within a VPC. Numa uses these where applicable but does not claim that foundation-model inference runs inside a customer's VPC: Amazon Bedrock is a managed AWS service reached over authenticated, encrypted service endpoints."
           }
         ]
       }
     },
     "cta": {
       "title": "Request the full security pack",
-      "body": "Detailed documentation — including the subprocessor list, penetration testing reports, and architecture briefings — is available to qualified parties under NDA.",
+      "body": "Detailed documentation — including the subprocessor list, security assessment summaries, and architecture briefings — is available to qualified parties under NDA.",
       "buttonLabel": "Request security pack",
       "email": "customersuccess@arcanum.ai"
     },
@@ -110,6 +180,146 @@
     "footer": {
       "disclaimer": "This document is provided for informational purposes only and does not modify any contractual rights or obligations between Arcanum AI Limited and its customers. The contents are subject to change without notice.",
       "copyright": "© {{year}} Arcanum AI Limited. All rights reserved."
+    }
+  },
+  "secureNz": {
+    "documentLabel": "Security & Compliance Posture — New Zealand",
+    "product": "Numa",
+    "title": "Security & Compliance Posture — New Zealand",
+    "subtitle": "How Numa stores, processes, and protects data for New Zealand customers, including public sector and health.",
+    "backLabel": "← Back to global security posture",
+    "version": "1.0",
+    "date": "27 May 2026",
+    "intro": {
+      "body": "Numa is operated by Arcanum AI Limited, a New Zealand company. This page describes how the production Numa platform is configured and operated for New Zealand customers — where data is stored, where AI inference runs, and how Numa aligns with New Zealand regulatory expectations. It supplements, and should be read alongside, the global Security & Compliance Posture."
+    },
+    "sections": {
+      "residency": {
+        "title": "1. Where New Zealand data is stored",
+        "body": "Every New Zealand customer is provisioned into its own dedicated AWS account. For New Zealand deployments, customer data at rest — uploaded files, chat history, knowledge-base content, and generated outputs — is stored in an Australasian AWS region. Numa is deployed in AWS Asia Pacific (Sydney), with AWS Asia Pacific (Auckland) available on request subject to AWS service availability, so that data at rest remains in Australasia. Data is encrypted at rest using AWS-managed keys, and customer-managed key arrangements can be discussed for specific deployments."
+      },
+      "inference": {
+        "title": "2. Where AI inference runs",
+        "body": "Numa's AI features run on foundation models hosted by Amazon Bedrock. Where Amazon Bedrock is not available in a customer's storage region, inference for New Zealand customers is served from Australian AWS regions. For data-sovereignty-sensitive deployments, Numa can be configured to use a region-restricted (Australia) inference profile, which confines model inference to Australian AWS data centres rather than routing across a wider geography. In all cases, Amazon Bedrock does not retain prompts or outputs and does not use them to train foundation models.",
+        "points": [
+          {
+            "name": "Storage and inference are distinct",
+            "description": "Data residency describes where data is stored at rest; inference describes where a model processes a request. For region-restricted New Zealand deployments, both are kept within Australasia."
+          },
+          {
+            "name": "No model training",
+            "description": "Customer prompts and outputs are never used to train or fine-tune foundation models."
+          }
+        ]
+      },
+      "integrations": {
+        "title": "3. Third-party integrations and cross-border data",
+        "body": "The main circumstance in which New Zealand customer data may be processed outside Australasia is optional SaaS integrations. Numa's integrations — email, calendar, chat, ticketing, and similar connectors — are powered by Pipedream Connect, which operates from the United States. When a user invokes an integration, the data exchanged with that connected application is processed in the United States. Integrations are optional and administrator-controlled: a New Zealand customer with strict data-sovereignty requirements can run Numa with integrations disabled, in which case no customer data is sent to the United States. Where integrations are required, each connector can be assessed individually. Pipedream maintains SOC 2 Type II and GDPR alignment, and can support HIPAA workloads under a Business Associate Agreement."
+      },
+      "regulatory": {
+        "title": "4. New Zealand regulatory alignment",
+        "body": "Numa's design and operations are aligned to the New Zealand frameworks most relevant to public sector, health, and regulated customers:",
+        "frameworks": [
+          {
+            "name": "NZ Privacy Act 2020",
+            "description": "and the Information Privacy Principles governing the collection, use, storage, and disclosure of personal information."
+          },
+          {
+            "name": "NZ Government Cyber Security Framework",
+            "description": "alignment for public sector engagements."
+          },
+          {
+            "name": "NZISM",
+            "description": "the New Zealand Information Security Manual — on the roadmap for public sector engagements, pursued in step with each agency's Certification & Accreditation process."
+          },
+          {
+            "name": "Health sector",
+            "description": "for health customers, deployments are assessed against the relevant New Zealand health information security expectations (HISO 10029) in addition to the Privacy Act."
+          }
+        ]
+      },
+      "assurance": {
+        "title": "5. Operational assurance",
+        "body": "Numa's full certification roadmap is described on the global posture page. SOC 2 is the current operational-assurance priority, alongside alignment to the New Zealand Government Cyber Security Framework. Infrastructure changes flow through automated, peer-reviewed pipelines with least-privilege production access and audit logging. Penetration-testing and security-assessment reports are available to qualified parties under NDA."
+      }
+    }
+  },
+  "secureRoadmap": {
+    "soc2": {
+      "documentLabel": "Security & Compliance Posture — SOC 2",
+      "product": "Numa",
+      "title": "SOC 2 — Our roadmap",
+      "subtitle": "What SOC 2 covers and the direction of Numa's operational-assurance programme.",
+      "backLabel": "← Back to security posture",
+      "version": "1.0",
+      "date": "27 May 2026",
+      "intro": {
+        "body": "SOC 2 is the operational-assurance milestone most often requested by Numa's enterprise and public sector customers. This page explains what SOC 2 covers and the direction of Numa's programme. It is a summary; detailed control documentation is available to qualified parties under non-disclosure terms."
+      },
+      "sections": {
+        "about": {
+          "title": "What SOC 2 is",
+          "body": "SOC 2 is an independent attestation performed by a licensed auditor against the AICPA Trust Services Criteria — Security, Availability, Processing Integrity, Confidentiality, and Privacy. A SOC 2 report provides independent assurance over how those controls are designed and how they operate."
+        },
+        "position": {
+          "title": "Where Numa is",
+          "body": "SOC 2 is Numa's primary operational-assurance priority. We are building, documenting, and operating the control set required for examination, and engage a formal audit in step with customer demand. Numa's underlying infrastructure already runs on AWS, whose own SOC 1/2/3 reports cover the physical and platform layer that Numa inherits."
+        },
+        "controls": {
+          "title": "Controls already in operation",
+          "body": "Numa already operates a range of controls that map to the Trust Services Criteria, including:",
+          "items": [
+            "A dedicated AWS account per customer, isolating data at the account boundary.",
+            "Encryption of data in transit (TLS 1.2 or higher) and at rest.",
+            "Managed identity with multi-factor authentication and role-based access control.",
+            "Audit logging of administrative and in-session activity.",
+            "Peer-reviewed, automated deployment pipelines with least-privilege production access.",
+            "Continuous automated security assessment and periodic third-party penetration testing."
+          ]
+        },
+        "evidence": {
+          "title": "Requesting evidence",
+          "body": "Current control documentation and supporting reports are available to qualified parties under NDA. Use the button below to request the security pack."
+        }
+      }
+    },
+    "iso27001": {
+      "documentLabel": "Security & Compliance Posture — ISO/IEC 27001",
+      "product": "Numa",
+      "title": "ISO/IEC 27001 — Our roadmap",
+      "subtitle": "What ISO/IEC 27001 covers and how Numa is aligning its own information security management system to the standard.",
+      "backLabel": "← Back to security posture",
+      "version": "1.0",
+      "date": "27 May 2026",
+      "intro": {
+        "body": "ISO/IEC 27001 is the international standard for information security management. This page explains what it covers and the direction of Numa's programme. It is a summary; detailed documentation is available to qualified parties under non-disclosure terms."
+      },
+      "sections": {
+        "about": {
+          "title": "What ISO/IEC 27001 is",
+          "body": "ISO/IEC 27001 specifies the requirements for an Information Security Management System (ISMS) — a risk-based framework for selecting, operating, and continually improving security controls, drawing on the control set in Annex A. Certification is granted by an accredited body following an external audit."
+        },
+        "position": {
+          "title": "Where Numa is",
+          "body": "Numa's infrastructure runs on AWS, which is itself ISO/IEC 27001 certified; this covers the physical and platform layer. Numa's own ISMS — its organisational policies, risk-management process, and operational controls — is being aligned to ISO/IEC 27001, drawing on the same control set that underpins our SOC 2 work."
+        },
+        "controls": {
+          "title": "Controls already in operation",
+          "body": "Many of the controls that an ISMS formalises are already in operation at Numa, including:",
+          "items": [
+            "Asset and data isolation through a dedicated AWS account per customer.",
+            "Access control built on managed identity, multi-factor authentication, and least privilege.",
+            "Cryptographic protection of data in transit and at rest.",
+            "Operations security through automated, peer-reviewed change pipelines and logging.",
+            "Supplier and subprocessor management, with the current subprocessor list available under NDA.",
+            "Vulnerability management through continuous assessment and periodic penetration testing."
+          ]
+        },
+        "evidence": {
+          "title": "Requesting evidence",
+          "body": "Our ISMS documentation and progress are available to qualified parties under NDA. Use the button below to request the security pack."
+        }
+      }
     }
   }
 }
