@@ -140,9 +140,9 @@ ext-api-doc/
 
 ## Completed Packages
 
-| API          | Slug | Status | Integration Path | Date |
-| ------------ | ---- | ------ | ---------------- | ---- |
-| _(none yet)_ |      |        |                  |      |
+| API        | Slug         | Status                                                     | Integration Path                    | Date       |
+| ---------- | ------------ | ---------------------------------------------------------- | ----------------------------------- | ---------- |
+| Actionstep | `actionstep` | Docs complete; doc-based (Phase 2 live smoke test pending) | Direct API (spec-driven, chat-only) | 2026-05-27 |
 
 > Update this table as packages are completed.
 

@@ -751,6 +751,41 @@ def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_connector_base_url(connector_id: str) -> str:
+    """Resolve a native connector's API base URL from the company vault.
+
+    The base URL is whatever was stored at connector setup — an admin-entered
+    instance URL, an OAuth ``api_endpoint``, etc. This is intentionally generic:
+    there is NO per-connector branching. We check both the
+    ``connector-config-{id}`` and ``oauth-client-{id}`` vault entries for the
+    common base-URL field names and return the first non-empty value (trailing
+    slash trimmed), or "" if none is configured.
+    """
+    sources: list[Dict[str, Any]] = []
+
+    cfg = _connector_config(connector_id)
+    if isinstance(cfg, dict):
+        sources.append(cfg)
+
+    try:
+        company_secrets = _get_consolidated_company_vault() or {}
+    except Exception:
+        company_secrets = {}
+    oauth_entry = company_secrets.get(f"oauth-client-{connector_id}") or {}
+    if isinstance(oauth_entry, dict):
+        oauth_fields = oauth_entry.get("fields")
+        sources.append(oauth_fields if isinstance(oauth_fields, dict) else oauth_entry)
+
+    for fields in sources:
+        if not isinstance(fields, dict):
+            continue
+        for key in ("base_url", "api_endpoint", "instance_url"):
+            value = str(fields.get(key) or "").strip()
+            if value:
+                return value.rstrip("/")
+    return ""
+
+
 def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
     """Make an authenticated HTTP request to any connected API.
 
@@ -803,43 +838,26 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
                 "error": "connect_request is not supported for synergy. Use the dedicated list/search/download tools.",
             }
 
-        # Resolve relative URL against the connector's admin-configured base.
-        # This removes the need for the LLM to discover the instance URL —
-        # it can just ask for "/api/v1/projects" and the backend expands it.
+        # Resolve a relative path ("/api/rest/actions") against the connector's
+        # base URL. The base URL is sourced entirely from the company vault —
+        # whatever was stored when the connector was set up (admin-entered
+        # instance URL, OAuth api_endpoint, etc.). There is deliberately NO
+        # per-connector branching here: every native connector stores its base
+        # URL the same way, so one generic lookup serves all of them.
         if not url.startswith(("http://", "https://")):
-            base = ""
-            # NetSuite is per-account: the account_id lives on the
-            # oauth-client-netsuite vault entry (no separate connector-config),
-            # and the SuiteTalk REST host is `<accountId>.suitetalk.api.netsuite.com`
-            # with the account id lowercased and `_` → `-` (so `5721181_SB1`
-            # becomes `5721181-sb1`).
-            if connector == "netsuite":
-                try:
-                    company_secrets = _get_consolidated_company_vault() or {}
-                except Exception:
-                    company_secrets = {}
-                ns_entry = company_secrets.get("oauth-client-netsuite") or {}
-                ns_fields = ns_entry.get("fields") or ns_entry
-                if isinstance(ns_fields, dict):
-                    account_id = (ns_fields.get("account_id") or "").strip()
-                    if account_id:
-                        host = account_id.lower().replace("_", "-")
-                        base = f"https://{host}.suitetalk.api.netsuite.com"
-            else:
-                base = (
-                    (_connector_config(connector).get("instance_url") or "")
-                    .strip()
-                    .rstrip("/")
-                )
+            base = _resolve_connector_base_url(connector)
             if not base:
                 return {
                     "status": "error",
                     "result": None,
                     "error": (
-                        f"Relative URL '{url}' given but no base URL is configured "
-                        f"for connector '{connector}'. Either pass an absolute URL "
-                        f"(https://…) or ask an admin to set the connector up in "
-                        f"Settings -> Data Connectors."
+                        f"No base URL is configured for connector '{connector}'. "
+                        f"To recover: read the Base URL from this connector's API docs "
+                        f"and retry this call with an absolute URL "
+                        f"(https://<host>{url if url.startswith('/') else '/' + url}). "
+                        f"If the docs only give a region/placeholder host rather than a "
+                        f"fixed URL, the connector is misconfigured — ask an admin to set "
+                        f"its base URL in Settings -> Data Connectors."
                     ),
                 }
             url = base + (url if url.startswith("/") else "/" + url)
