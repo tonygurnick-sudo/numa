@@ -53,10 +53,6 @@ type ServiceRow = {
   effectiveMethod: IntegrationMethod | null; // null when user must choose
   display: { name: string; description: string; iconUrl?: string; iconClass?: string };
   isConnected: boolean;
-  /** Pipedream-side health signal: false → token rotted / refresh failing;
-   *  surfaced on the card so users can reconnect before chat errors. Only
-   *  meaningful for Pipedream connections. */
-  healthy?: boolean | null;
   /** Pipedream-side dead signal: account inactive on Pipedream's end. */
   dead?: boolean | null;
 };
@@ -331,11 +327,16 @@ export const UnifiedIntegrationsPage = () => {
         const effectiveMethod = adminEffective ?? connectedVia;
         const isConnected = connectedVia !== null && availableMethods.includes(connectedVia);
         const display = resolveDisplay(entry);
-        // Surface Pipedream health/dead signals on the card so users see
-        // "Reconnect required" / "Account inactive" before chat fails.
-        // Only meaningful for Pipedream — native OAuth has its own
-        // error surface via the OAuth status endpoint, and PAT connectors
-        // surface auth_error via the credential-request flow at tool-call time.
+        // Surface Pipedream dead signal on the card so users see
+        // "Account inactive" before chat fails. Only meaningful for
+        // Pipedream — native OAuth has its own error surface via the
+        // OAuth status endpoint, and PAT connectors surface auth_error
+        // via the credential-request flow at tool-call time.
+        // Note: the `healthy` field from Pipedream's accounts endpoint
+        // is background-computed metadata and can be stale, so it is
+        // intentionally NOT used as a connection-status signal here —
+        // `connected_apps` is the source of truth for connection, and
+        // `dead` is the source of truth for "needs reconnect".
         const pdConn =
           entry.pipedreamSlug && connectedVia === 'pipedream'
             ? pipedreamConnections.find((c) => c.app_name === entry.pipedreamSlug)
@@ -346,7 +347,6 @@ export const UnifiedIntegrationsPage = () => {
           effectiveMethod,
           display,
           isConnected,
-          healthy: pdConn?.healthy ?? null,
           dead: pdConn?.dead ?? null,
         };
       })
@@ -941,7 +941,7 @@ const IntegrationCard = ({
   onConfigureTools?: () => void;
 }) => {
   const { t } = useTranslation('integrations');
-  const { display, effectiveMethod, availableMethods, isConnected, healthy, dead } = svc;
+  const { display, effectiveMethod, availableMethods, isConnected, dead } = svc;
   // No admin-enabled methods → card is purely informational. Render it muted,
   // swap the status pill for "Not enabled", and replace the action with a
   // hint pointing the user at their admin.
@@ -968,11 +968,6 @@ const IntegrationCard = ({
     <span className="integrations-row-status integrations-row-status--error">
       <AlertTriangle size={12} className="integrations-row-status__icon" aria-hidden />
       {t('status.dead', { defaultValue: 'Account inactive' })}
-    </span>
-  ) : healthy === false ? (
-    <span className="integrations-row-status is-warning">
-      <AlertTriangle size={12} className="integrations-row-status__icon" aria-hidden />
-      {t('status.reconnectRequired', { defaultValue: 'Reconnect required' })}
     </span>
   ) : (
     <span className="integrations-row-status">
