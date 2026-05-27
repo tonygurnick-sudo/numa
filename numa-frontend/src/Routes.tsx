@@ -29,6 +29,13 @@ const PublicDemoFilePreview = lazy(() =>
   import('./Pages/PublicDemoFilePreview').then((m) => ({ default: m.PublicDemoFilePreview }))
 );
 const SecurePosture = lazy(() => import('./Pages/SecurePosture').then((m) => ({ default: m.SecurePosture })));
+const SecurePostureNZ = lazy(() => import('./Pages/SecurePostureNZ').then((m) => ({ default: m.SecurePostureNZ })));
+const SecureRoadmapSoc2 = lazy(() =>
+  import('./Pages/SecureRoadmapDetail').then((m) => ({ default: m.SecureRoadmapSoc2 }))
+);
+const SecureRoadmapIso27001 = lazy(() =>
+  import('./Pages/SecureRoadmapDetail').then((m) => ({ default: m.SecureRoadmapIso27001 }))
+);
 
 // Component to wrap authenticated routes with AppLayout
 const AuthenticatedLayout = ({ children, requiredFeature }: { children: ReactNode; requiredFeature?: string }) => {
@@ -97,6 +104,9 @@ const AppRoutes = () => {
           <Route path="/ian" element={<Ian />} />
           {/* Public security & compliance posture pages - no authentication required */}
           <Route path="/secure" element={<SecurePosture />} />
+          <Route path="/secure/nz" element={<SecurePostureNZ />} />
+          <Route path="/secure/roadmap/soc2" element={<SecureRoadmapSoc2 />} />
+          <Route path="/secure/roadmap/iso27001" element={<SecureRoadmapIso27001 />} />
           {/* Public shared document Q&A page - no authentication required */}
           <Route path="/shared/:uuid" element={<SharedDocumentChat />} />
           {/* Public drop zone upload page - no authentication required */}
