@@ -16,8 +16,11 @@ aiofiles = "^24.1.0"
 watchtower = "^3.0.0"  # CloudWatch Logs handler for direct log delivery
 
 # Claude Agent SDK (replaces CLI subprocess invocation)
-# Pinned to specific version to avoid unexpected behavior changes
-claude-agent-sdk = "==0.1.59"
+# Pinned to specific version to avoid unexpected behavior changes.
+# 0.2.82 is the SDK release that officially bundles native CLI 2.1.142
+# (matching our Dockerfile pin) and bumps `mcp` >=1.23.0 to patch
+# CVE-2025-66416 (DNS rebinding protection in older MCP clients).
+claude-agent-sdk = "==0.2.82"
 
 # OpenTelemetry for AgentCore observability
 aws-opentelemetry-distro = ">=0.10.0"
