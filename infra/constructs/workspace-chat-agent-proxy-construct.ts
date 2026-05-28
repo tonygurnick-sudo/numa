@@ -125,14 +125,19 @@ export class WorkspaceChatAgentProxy extends Construct {
       // LWA layer for HTTP streaming
       additionalLayers: [`arn:aws:lambda:${props.region}:753240598075:layer:LambdaAdapterLayerX86:25`],
       additionalPolicyStatements: [
-        // Permission to invoke the AgentCore runtime
-        // Uses account-scoped wildcard to include runtime, sessions, and workload identity resources
+        // Permission to invoke + stop the AgentCore runtime session.
+        // StopRuntimeSession is used by the proxy to recover from the ap-southeast-2
+        // "stuck-session 403" condition: after a microVM is terminated by
+        // idleRuntimeSessionTimeout, the next invoke returns "(403) from runtime"
+        // until the session is explicitly stopped. Proxy calls Stop then retries.
+        // Uses account-scoped wildcard to include runtime, sessions, and workload identity resources.
         {
           effect: 'Allow',
           actions: [
             'bedrock-agentcore:InvokeAgentRuntime',
             'bedrock-agentcore:InvokeAgentRuntimeStreaming',
             'bedrock-agentcore:InvokeAgentRuntimeForUser',
+            'bedrock-agentcore:StopRuntimeSession',
           ],
           resources: [
             `arn:aws:bedrock-agentcore:${props.agentCoreRegion ?? props.region}:${callerIdentity.accountId}:*`,

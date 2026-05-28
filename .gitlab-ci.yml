@@ -55,6 +55,7 @@ default:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
     - if: $CI_COMMIT_BRANCH =~ /^dev-image\//
+    - if: $CI_COMMIT_BRANCH =~ /^prod-hotfix\//
   if-dev-image-buildable:
     - if: $CI_COMMIT_BRANCH == "dev"
       when: manual
@@ -569,8 +570,14 @@ browser-lambda-package:
     expire_in: 7 days
 
 # Build + push the deployment container image. Two jobs share this base:
-# - build-deployment-container (auto on main, pushes to numa-deploy)
+# - build-deployment-container (auto on main, manual on prod-hotfix/*, pushes to numa-deploy)
 # - build-deployment-container-dev (manual on dev / dev-image/* branches, pushes to numa-deploy-dev)
+#
+# Use prod-hotfix/<name> when shipping a fix straight to customers without taking
+# everything that's landed on main since the last customer deploy. Push to a
+# prod-hotfix/* branch and a manual "build-deployment-container" job appears in
+# the pipeline. Clicking it pushes the prod image, which the Customer Success
+# Portal can then deploy.
 #
 # Only :${SHA} is pushed. We do NOT push :latest — the portal lists images by
 # pushedAt and surfaces them by SHA, and a moving :latest tag breaks renamed
@@ -622,6 +629,10 @@ build-deployment-container:
     ECR_REPO: ${ECR_BASE}/numa-deploy
   rules:
     - !reference [.rules, if-main]
+    # Manual prod-image build for explicit hotfixes that shouldn't pull in
+    # all of main. Requires clicking the job in the pipeline.
+    - if: $CI_COMMIT_BRANCH =~ /^prod-hotfix\//
+      when: manual
 
 # Manual dev image build. Pushes to numa-deploy-dev so the portal can deploy
 # either prod or dev images independently. Two ways to trigger:
