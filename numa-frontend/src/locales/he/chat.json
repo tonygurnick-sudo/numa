@@ -341,7 +341,9 @@
       "uploadCount_other": "ופלואד {{count}} פילהס",
       "uploadMore": "ופלואד מורה",
       "done": "דונה",
-      "cancel": "כאנכהל"
+      "cancel": "כאנכהל",
+      "skippedHidden_one": "סקיפפהד {{count}} חידדהנ ור סיסטהמ פילה (ה.ג. .גיט/, נודה_מודולהס/).",
+      "skippedHidden_other": "סקיפפהד {{count}} חידדהנ ור סיסטהמ פילהס (ה.ג. .גיט/, נודה_מודולהס/)."
     },
     "segments": {
       "uploaded": "ופלואדהד: {{filename}}",

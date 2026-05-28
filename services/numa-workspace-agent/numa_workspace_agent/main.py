@@ -2775,6 +2775,21 @@ async def _handle_stop(body: dict[str, Any], user_sub: str) -> dict[str, Any]:
     }
 
 
+def _path_has_hidden_segment(raw_path: str) -> bool:
+    """True if any path segment starts with `.` (e.g. `.git/objects/abc`).
+
+    Used by `_handle_upload_complete` to silently skip hidden files from
+    folder uploads instead of surfacing them as 400 errors. Folder uploads
+    routinely include `.git/`, `.cache/`, `.DS_Store`, etc.; the frontend
+    filters these out, but this is a defence in depth so a slipped-through
+    item doesn't break the user's upload flow.
+    """
+    if not raw_path:
+        return False
+    normalized = raw_path.replace("\\", "/")
+    return any(seg.startswith(".") for seg in normalized.split("/") if seg)
+
+
 def _sanitize_upload_path(raw_path: str) -> str | None:
     """
     Validate and sanitize a relative upload path for security.
@@ -2931,6 +2946,20 @@ async def _handle_upload_complete(
         raise HTTPException(status_code=400, detail="Missing filename")
     if not s3_key:
         raise HTTPException(status_code=400, detail="Missing s3Key")
+
+    # Silently skip hidden segments (e.g. .git/, .DS_Store) instead of 400ing.
+    # Folder uploads can surface dozens of these per drop; erroring back to the
+    # browser turns into a chat-wide failure message. The FE filters these out,
+    # but treat this path as defence in depth.
+    if _path_has_hidden_segment(filename):
+        logger.info(
+            "Skipping hidden-path upload",
+            _name="UPLOAD_SKIPPED_HIDDEN",
+            phase="upload",
+            conversation_id=conversation_id,
+            filename=filename,
+        )
+        return {"status": "skipped", "reason": "hidden", "path": filename}
 
     # Validate S3 key matches expected pattern (security check)
     expected_prefix = (
