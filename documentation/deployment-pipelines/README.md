@@ -10,6 +10,7 @@ If you're trying to do one specific thing (deploy main, build a dev image, debug
 
 - **Two ECR image channels** — prod (`numa-deploy`) and dev (`numa-deploy-dev`), both in the `arcanum-prod-images` AWS account (`826326270637`), region `ap-southeast-2`.
 - **Prod images** are built **automatically** from every push to `main`. Tag = `:${SHA}`. No `:latest` tag is pushed.
+- **Prod hotfix images** can also be built **manually** from `prod-hotfix/*` branches. Use this when you need to ship a fix straight to customers without pulling in everything that's landed on `main` since the last customer deploy. Push to `prod-hotfix/<name>`, then click the manual `build-deployment-container` job on the pipeline. Image lands in `numa-deploy` (same prod channel as main).
 - **Dev images** are built **manually** by clicking a button on the `dev` branch pipeline, or on any `dev-image/*` branch pipeline. Tag = `:${SHA}`. They never get to `main`.
 - **The Customer Success Portal** lists both repos as separate tabs and lets you deploy any image to any client. A foot-gun guard requires typing the client name when deploying a Dev image to a non-`devInstance` client.
 - **A "deploy"** is a Step Functions execution that runs an ECS Fargate task using the chosen image. The container's job is to run `cdktf deploy numa-<client>`.
@@ -21,9 +22,10 @@ If you're trying to do one specific thing (deploy main, build a dev image, debug
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  GitLab repo: arcanumai/numa                                         │
-│  - main         → auto build → numa-deploy:${SHA}                    │
-│  - dev          → manual button → numa-deploy-dev:${SHA}             │
-│  - dev-image/*  → manual button → numa-deploy-dev:${SHA}             │
+│  - main             → auto build → numa-deploy:${SHA}                │
+│  - prod-hotfix/*    → manual button → numa-deploy:${SHA}             │
+│  - dev              → manual button → numa-deploy-dev:${SHA}         │
+│  - dev-image/*      → manual button → numa-deploy-dev:${SHA}         │
 └────────────────────────────┬─────────────────────────────────────────┘
                              │ docker push (assumes arcanum-ci role)
                              ▼
@@ -64,7 +66,7 @@ If you're trying to do one specific thing (deploy main, build a dev image, debug
 |                  | Prod                                                   | Dev                                                                                            |
 | ---------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | ECR repo         | `numa-deploy`                                          | `numa-deploy-dev`                                                                              |
-| Built from       | `main` (auto)                                          | `dev` and `dev-image/*` (manual button)                                                        |
+| Built from       | `main` (auto) and `prod-hotfix/*` (manual button)      | `dev` and `dev-image/*` (manual button)                                                        |
 | Tag scheme       | `:${SHA}` (and the legacy `:latest`, being phased out) | `:${SHA}` only — never `:latest`                                                               |
 | Mutability       | `IMMUTABLE_WITH_EXCLUSION{latest}`                     | `IMMUTABLE` (every tag is locked)                                                              |
 | Used to deploy   | Customer stacks                                        | Test stacks (typically `arcanum-demo`, `nd-labs`, etc.)                                        |
@@ -99,13 +101,14 @@ Source: [.gitlab-ci.yml](../../.gitlab-ci.yml). Includes templates from `arcanum
 
 ### Branch behavior matrix
 
-| Branch        | Checks                                                       | Package | Image build                | Auto deploy demo        |
-| ------------- | ------------------------------------------------------------ | ------- | -------------------------- | ----------------------- |
-| `main`        | auto                                                         | auto    | auto → `numa-deploy`       | yes (after image-build) |
-| `dev`         | auto¹                                                        | auto¹   | manual → `numa-deploy-dev` | manual                  |
-| `dev-image/*` | auto                                                         | auto    | manual → `numa-deploy-dev` | n/a                     |
-| anything else | auto (lint+test only)                                        | skip    | skip                       | n/a                     |
-| MR pipeline   | auto (lint+test only, plus `mr-sanity` to keep GitLab happy) | skip    | skip                       | n/a                     |
+| Branch          | Checks                                                       | Package | Image build                | Auto deploy demo        |
+| --------------- | ------------------------------------------------------------ | ------- | -------------------------- | ----------------------- |
+| `main`          | auto                                                         | auto    | auto → `numa-deploy`       | yes (after image-build) |
+| `prod-hotfix/*` | auto                                                         | auto    | manual → `numa-deploy`     | n/a                     |
+| `dev`           | auto¹                                                        | auto¹   | manual → `numa-deploy-dev` | manual                  |
+| `dev-image/*`   | auto                                                         | auto    | manual → `numa-deploy-dev` | n/a                     |
+| anything else   | auto (lint+test only)                                        | skip    | skip                       | n/a                     |
+| MR pipeline     | auto (lint+test only, plus `mr-sanity` to keep GitLab happy) | skip    | skip                       | n/a                     |
 
 ¹ The `dev` branch pipeline is gated by the `deploy-dev-gate` manual button at `.pre` stage. Until clicked, nothing else runs. This is to prevent every dev push from burning a full pipeline.
 

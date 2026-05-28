@@ -891,7 +891,14 @@ async def _invoke_agentcore(
         # AgentCore returns 502 when the MicroVM container isn't ready yet (~5% of cold starts).
         # The container just needs a few more seconds to boot, so we retry with backoff.
         # See: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-invoke-agent.html
+        #
+        # Also handle the ap-southeast-2 "stuck-session 403" condition observed 2026-05-28:
+        # after a session's microVM is terminated by idleRuntimeSessionTimeout, the next
+        # invoke returns "(403) from runtime" instead of provisioning a new microVM.
+        # Calling StopRuntimeSession explicitly clears the state and the next invoke works.
+        # We do this recovery at most once per request to avoid loops.
         last_exception = None
+        attempted_403_recovery = False
         for attempt in range(AGENTCORE_502_MAX_RETRIES + 1):
             try:
                 response = agentcore_client.invoke_agent_runtime(
@@ -910,7 +917,8 @@ async def _invoke_agentcore(
                     return await _collect_response(response)
 
             except agentcore_client.exceptions.RuntimeClientError as e:
-                if "502" in str(e) and attempt < AGENTCORE_502_MAX_RETRIES:
+                err_str = str(e)
+                if "502" in err_str and attempt < AGENTCORE_502_MAX_RETRIES:
                     delay = AGENTCORE_502_BASE_DELAY * (2**attempt)
                     logger.warning(
                         "AgentCore 502 on cold start, retrying in %.1fs "
@@ -921,6 +929,29 @@ async def _invoke_agentcore(
                         session_id,
                     )
                     await asyncio.sleep(delay)
+                    last_exception = e
+                    continue
+                if "403" in err_str and not attempted_403_recovery:
+                    logger.warning(
+                        "AgentCore (403) from runtime — calling StopRuntimeSession "
+                        "and retrying once (session=%s)",
+                        session_id,
+                    )
+                    try:
+                        agentcore_client.stop_runtime_session(
+                            agentRuntimeArn=AGENT_RUNTIME_ARN,
+                            runtimeSessionId=session_id,
+                        )
+                    except agentcore_client.exceptions.ResourceNotFoundException:
+                        # Session already gone (e.g. maxLifetime expired) — fine.
+                        pass
+                    except Exception as stop_err:
+                        logger.warning(
+                            "StopRuntimeSession failed for session=%s: %s",
+                            session_id,
+                            stop_err,
+                        )
+                    attempted_403_recovery = True
                     last_exception = e
                     continue
                 raise

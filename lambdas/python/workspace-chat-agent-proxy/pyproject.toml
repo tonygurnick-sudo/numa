@@ -29,3 +29,10 @@ types-requests = "^2.32.4.20260107"
 typeCheckingMode = "basic"
 reportMissingImports = "none"
 exclude = ["tests"]
+
+[tool.numa.package]
+# Bundle boto3/botocore into the deployment zip instead of relying on the
+# Lambda runtime's built-in version. Needed because this proxy uses
+# bedrock-agentcore.stop_runtime_session (added to boto3 in 2026) which is not
+# yet in Lambda Python 3.13's bundled boto3. Adds ~10MB to the zip.
+bundle_boto = true

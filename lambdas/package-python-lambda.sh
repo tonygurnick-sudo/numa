@@ -138,9 +138,31 @@ fi
 find "${BUILD_DIR}" -exec touch -t "${LAST_MODIFIED_ISO}" {} +
 
 pushd "${BUILD_DIR}";
+    # By default we exclude boto3/botocore from the zip because the Lambda Python
+    # runtime ships a recent enough version for most lambdas. Opt-in with
+    # BUNDLE_BOTO=1 (env var) OR a "bundle_boto = true" line under
+    # [tool.numa.package] in the lambda's pyproject.toml when a newer boto3 API
+    # is required (e.g. bedrock-agentcore.stop_runtime_session, added 2026).
+    BUNDLE_BOTO_FROM_PYPROJECT=""
+    if test -f "${LAMBDA_DIRECTORY}/pyproject.toml"; then
+        BUNDLE_BOTO_FROM_PYPROJECT=$(awk '
+            $0 == "[tool.numa.package]" { intable=1; next }
+            /^\[/ { intable=0 }
+            intable && $1 == "bundle_boto" && $3 == "true" { print "1"; exit }
+        ' "${LAMBDA_DIRECTORY}/pyproject.toml")
+    fi
+    BUNDLE_BOTO="${BUNDLE_BOTO:-${BUNDLE_BOTO_FROM_PYPROJECT:-}}"
+
+    if test -n "${BUNDLE_BOTO}"; then
+        echo "[package] BUNDLE_BOTO=${BUNDLE_BOTO} — including boto3/botocore in zip"
+        FIND_EXPR=(.)
+    else
+        FIND_EXPR=(. -not -path './boto*')
+    fi
+
     # use -X (--no-extra, which isn't supported on Mac) to not save attributes
     # that would make the zip file non-deterministic
     # use find with sort to ensure order
     # shellcheck disable=SC2046
-    zip --quiet -X ../lambda_function.zip $(find . -not -path './boto*' | sort)
+    zip --quiet -X ../lambda_function.zip $(find "${FIND_EXPR[@]}" | sort)
 popd
