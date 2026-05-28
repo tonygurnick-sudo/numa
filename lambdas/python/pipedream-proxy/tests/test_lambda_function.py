@@ -992,6 +992,14 @@ class TestGetUserConnectionsPagination(unittest.TestCase):
             "SUPPORTED_INTEGRATIONS": '["slack", "gmail"]',
             "ENVIRONMENT": "test",
         }
+        # FEAT-019: clear the module-level user-connections cache between
+        # tests. The cache is keyed by external_user_id and all three tests
+        # in this class use "user123"; without this, whichever test runs
+        # first populates the cache and the others read its data instead of
+        # the mocked requests.get response.
+        from pipedream_operations import _USER_CONNECTIONS_CACHE
+
+        _USER_CONNECTIONS_CACHE.clear()
 
     @patch.object(PipedreamOperations, "get_access_token", return_value="test-token")
     @patch.object(

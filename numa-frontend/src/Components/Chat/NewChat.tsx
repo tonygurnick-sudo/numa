@@ -20,11 +20,23 @@ import { useAgentById } from '../../hooks/useAgentById';
 /** NewChat variant - 'v1' shows inline settings, 'v2' relies on external settings panel */
 export type NewChatVariant = 'v1' | 'v2';
 
+type ConnectionAccount = {
+  account_id: string;
+  name?: string | null;
+  healthy?: boolean | null;
+  dead?: boolean | null;
+};
+
 type ConnectionOption = {
   id: string;
   name: string;
   isConnected: boolean;
   mcpServerUrl?: string;
+  // FEAT-019: empty/length-1 for single-account integrations; only length >1
+  // when the admin has opted multi-account in AND the user has connected a
+  // second account. `allowMultipleAccounts` reflects the admin setting.
+  allowMultipleAccounts?: boolean;
+  accounts?: ConnectionAccount[];
 };
 
 type AgentSummary = {
@@ -57,6 +69,11 @@ type NewChatProps = {
   availableConnections: ConnectionOption[];
   enabledConnections: string[];
   setEnabledConnections: Dispatch<SetStateAction<string[]>>;
+  // FEAT-019: per-conversation account scope (Pipedream multi-account).
+  // Optional so call sites that don't care (e.g. settings panel previews)
+  // can omit it. Absent or empty array per slug → all accounts active.
+  selectedAccountsByApp?: Record<string, string[]>;
+  setSelectedAccountsByApp?: Dispatch<SetStateAction<Record<string, string[]>>>;
   connectionsLoading: boolean;
   hasPipedreamFeature: boolean;
   uploadsInProgress: boolean;
@@ -191,6 +208,8 @@ const NewChat = ({
   availableConnections,
   enabledConnections,
   setEnabledConnections,
+  selectedAccountsByApp,
+  setSelectedAccountsByApp,
   connectionsLoading,
   hasPipedreamFeature,
   uploadsInProgress,
@@ -474,6 +493,8 @@ const NewChat = ({
         availableConnections={availableConnections}
         enabledConnections={enabledConnections}
         setEnabledConnections={setEnabledConnections}
+        selectedAccountsByApp={selectedAccountsByApp}
+        setSelectedAccountsByApp={setSelectedAccountsByApp}
         connectionsLoading={connectionsLoading}
         hasPipedreamFeature={hasPipedreamFeature}
         uploadsInProgress={uploadsInProgress}
@@ -571,6 +592,8 @@ const NewChat = ({
               availableConnections={availableConnections}
               connectionsLoading={connectionsLoading}
               hasPipedreamFeature={hasPipedreamFeature}
+              selectedAccountsByApp={selectedAccountsByApp}
+              setSelectedAccountsByApp={setSelectedAccountsByApp}
               isDisabled={isDisabled}
             />
           ) : null;

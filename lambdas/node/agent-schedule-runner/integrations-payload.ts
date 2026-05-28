@@ -36,6 +36,18 @@ export interface IntegrationListItem {
   slug: string;
   method: IntegrationMethod;
   name: string;
+  /** FEAT-019: optional per-schedule account scope (Pipedream multi-account).
+   *  When set, the agent passes these to the proxy so authProvisionId:"auto"
+   *  resolves within this subset. Empty / undefined → all of the user's
+   *  connected accounts for this app are eligible (legacy). */
+  accountIds?: string[];
+  /** FEAT-019: display labels keyed by accountId, used by the prompt builder. */
+  accountNames?: Record<string, string>;
+  /** FEAT-019: full per-app account roster (informational, NOT an allow-list).
+   *  Populated at schedule fire time from the live `get_integration_status`
+   *  response so the agent's prompt builder can render the multi-account
+   *  block. Distinct from `accountIds` which is the proxy filter. */
+  availableAccounts?: Array<{ account_id: string; name?: string | null }>;
 }
 
 export interface AgentSnapshotLike {
@@ -136,15 +148,36 @@ export const loadGlobalPreferredMethods = async ({
 // Per-user auth state lookups
 // ---------------------------------------------------------------------------
 
+/** FEAT-019: per-app account roster captured from the relay's
+ *  `get_integration_status` response, so scheduled runs can populate the
+ *  same `availableAccounts` field the chat FE sends. */
+export interface PipedreamAccount {
+  account_id: string;
+  name?: string | null;
+}
+export interface PipedreamConnectionState {
+  /** Set of healthy connected slugs — drop-in replacement for the legacy
+   *  Set<string> return shape; consumers that only need slug presence keep
+   *  using this. */
+  connectedSlugs: Set<string>;
+  /** Per-slug account roster. Only populated when the app has ≥1 connected
+   *  account; absent entries mean "no info". A row with >1 entries is the
+   *  trigger for the agent's multi-account prompt block at fire time. */
+  accountsBySlug: Map<string, PipedreamAccount[]>;
+}
+
 /**
  * Live Pipedream-side connection state for the user. Calls the relay's
  * `get_integration_status` op (the same one used at trigger-deploy time —
  * see `lambdas/node/agent-schedules/pipedream-trigger-lifecycle.ts`).
  *
- * Returns the set of Pipedream slugs the user has currently authed AND that
- * Pipedream reports as healthy. Pipedream's `healthy: false` signal means an
- * OAuth grant has been revoked / expired — we don't want to register tools
- * the agent can't actually use.
+ * Returns both the set of healthy connected slugs AND the per-slug account
+ * roster so callers can populate `availableAccounts` on each integration
+ * row. Pipedream's `healthy: false` signal means an OAuth grant has been
+ * revoked / expired — we don't want to register tools the agent can't
+ * actually use, so unhealthy apps stay out of `connectedSlugs`. The account
+ * roster, however, includes every account the proxy returned (even unhealthy
+ * ones) so the prompt can warn the model about them.
  */
 export const listUserPipedreamConnectedApps = async ({
   lambdaClient,
@@ -154,13 +187,20 @@ export const listUserPipedreamConnectedApps = async ({
   lambdaClient: LambdaClient;
   relayArn: string;
   externalUserId: string;
-}): Promise<Set<string>> => {
-  if (!relayArn) return new Set();
+}): Promise<PipedreamConnectionState> => {
+  const empty: PipedreamConnectionState = {
+    connectedSlugs: new Set(),
+    accountsBySlug: new Map(),
+  };
+  if (!relayArn) return empty;
 
   type IntegrationStatus = {
     app_name: string;
     status: 'connected' | 'not_connected';
     healthy?: boolean | null;
+    pipedream_account_id?: string | null;
+    connection_name?: string | null;
+    accounts?: Array<{ account_id?: string; name?: string | null }>;
   };
 
   try {
@@ -177,31 +217,46 @@ export const listUserPipedreamConnectedApps = async ({
       console.warn('[SCHEDULE_RUNNER] pipedream relay returned function error', {
         functionError: response.FunctionError,
       });
-      return new Set();
+      return empty;
     }
     const body = response.Payload ? Buffer.from(response.Payload).toString('utf-8') : '';
-    if (!body) return new Set();
+    if (!body) return empty;
     const parsed = JSON.parse(body) as { statusCode?: number; body?: unknown };
     const inner =
       typeof parsed.body === 'string'
         ? JSON.parse(parsed.body)
         : (parsed.body as { success?: boolean; data?: unknown });
-    if (parsed.statusCode !== 200 || !inner?.success) return new Set();
+    if (parsed.statusCode !== 200 || !inner?.success) return empty;
 
     const data = inner.data as { connections?: IntegrationStatus[] } | IntegrationStatus[] | undefined;
     const connections: IntegrationStatus[] = Array.isArray(data) ? data : (data?.connections ?? []);
-    const out = new Set<string>();
+    const connectedSlugs = new Set<string>();
+    const accountsBySlug = new Map<string, PipedreamAccount[]>();
     for (const conn of connections) {
-      if (conn.status === 'connected' && conn.healthy !== false) {
-        out.add(conn.app_name);
+      if (conn.status !== 'connected') continue;
+      if (conn.healthy !== false) connectedSlugs.add(conn.app_name);
+
+      // FEAT-019: capture account roster. Prefer the new `accounts[]` array
+      // from the proxy; fall back to legacy single-account fields for pre-
+      // FEAT-019 proxy responses (defensive — should never trip post-deploy).
+      const accounts: PipedreamAccount[] = [];
+      if (Array.isArray(conn.accounts) && conn.accounts.length > 0) {
+        for (const a of conn.accounts) {
+          if (a && typeof a.account_id === 'string' && a.account_id) {
+            accounts.push({ account_id: a.account_id, name: a.name ?? null });
+          }
+        }
+      } else if (conn.pipedream_account_id) {
+        accounts.push({ account_id: conn.pipedream_account_id, name: conn.connection_name ?? null });
       }
+      if (accounts.length > 0) accountsBySlug.set(conn.app_name, accounts);
     }
-    return out;
+    return { connectedSlugs, accountsBySlug };
   } catch (err) {
     console.warn('[SCHEDULE_RUNNER] failed to list pipedream connections', {
       error: (err as Error).message,
     });
-    return new Set();
+    return empty;
   }
 };
 
@@ -390,7 +445,13 @@ export const buildUnifiedIntegrationsPayload = async ({
   runConfig,
 }: BuildUnifiedIntegrationsPayloadParams): Promise<UnifiedIntegrationsPayload> => {
   // ── Step 1: assemble the input row list ────────────────────────────────
-  type InputRow = { slug: string; method?: IntegrationMethod; name?: string };
+  type InputRow = {
+    slug: string;
+    method?: IntegrationMethod;
+    name?: string;
+    accountIds?: string[];
+    accountNames?: Record<string, string>;
+  };
   let rows: InputRow[] = [];
 
   const tc = agentSnapshot?.toolsConfig;
@@ -408,13 +469,14 @@ export const buildUnifiedIntegrationsPayload = async ({
 
   // ── Step 2: load admin pref + per-user auth state in parallel ──────────
   const externalUserId = `${clientName}_${userSub}`;
-  const [preferred, pipedreamConnected, nativeConnected] = await Promise.all([
+  const [preferred, pipedreamState, nativeConnected] = await Promise.all([
     loadGlobalPreferredMethods({ dynamo, tableName: globalIntegrationSettingsTableName }),
     listUserPipedreamConnectedApps({ lambdaClient, relayArn: pipedreamRelayLambdaArn, externalUserId }),
     dataConnectorsEnabled
       ? listUserConnectedNativeConnectors({ dynamo, tableName: dataConnectorsTableName, userSub })
       : Promise.resolve(new Set<string>()),
   ]);
+  const pipedreamConnected = pipedreamState.connectedSlugs;
 
   // ── Step 3: resolve each row's method ──────────────────────────────────
   const resolved: IntegrationListItem[] = [];
@@ -431,11 +493,23 @@ export const buildUnifiedIntegrationsPayload = async ({
       droppedRows.push(row.slug);
       continue;
     }
-    resolved.push({
+    const item: IntegrationListItem = {
       slug: decision.canonicalSlug,
       method: decision.method,
       name: row.name ?? decision.canonicalSlug,
-    });
+    };
+    // FEAT-019: preserve any narrowed-scope account selection from the
+    // schedule's saved runConfig + attach the live `availableAccounts`
+    // roster fetched above so the agent's prompt builder can render the
+    // multi-account block at fire time. Pipedream-method rows only —
+    // native connectors don't have account-scope semantics.
+    if (decision.method === 'pipedream') {
+      if (row.accountIds && row.accountIds.length > 0) item.accountIds = row.accountIds;
+      if (row.accountNames && Object.keys(row.accountNames).length > 0) item.accountNames = row.accountNames;
+      const roster = pipedreamState.accountsBySlug.get(decision.canonicalSlug);
+      if (roster && roster.length > 1) item.availableAccounts = roster;
+    }
+    resolved.push(item);
   }
 
   if (droppedRows.length > 0) {
@@ -449,7 +523,10 @@ export const buildUnifiedIntegrationsPayload = async ({
   // ── Step 4: build the "available" union ────────────────────────────────
   const available: IntegrationListItem[] = [];
   for (const slug of pipedreamConnected) {
-    available.push({ slug, method: 'pipedream', name: slug });
+    const item: IntegrationListItem = { slug, method: 'pipedream', name: slug };
+    const roster = pipedreamState.accountsBySlug.get(slug);
+    if (roster && roster.length > 1) item.availableAccounts = roster;
+    available.push(item);
   }
   for (const slug of nativeConnected) {
     available.push({ slug, method: 'native', name: slug });

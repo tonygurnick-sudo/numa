@@ -1,7 +1,7 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
-import { DynamoDBDocumentClient, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { SUPPORTED_INTEGRATIONS } from '../../../infra/config/integrations';
 import { NATIVE_CONNECTORS, PIPEDREAM_TO_CONNECTOR, CONNECTOR_TO_PIPEDREAM } from '../../../infra/config/connectors';
 
@@ -23,6 +23,10 @@ type IntegrationItem = {
   status: 'enabled' | 'disabled';
   denyTools: string[];
   preferred_method?: Method | null;
+  // FEAT-019: when true, users may connect more than one account for this
+  // integration. Defaults to false so behaviour is unchanged for existing
+  // tenants until an admin opts in per integration.
+  allowMultipleAccounts?: boolean;
   updatedAt?: string;
   updatedBy?: string;
 };
@@ -40,6 +44,10 @@ type CatalogEntry = {
   preferred_method: Method | null; // admin's chosen method when both exist
   pipedreamEnabled: boolean | null; // null when no Pipedream registry entry
   connectorEnabled: boolean | null; // null when no native connector registry entry
+  // FEAT-019: false (or absent) means single-account; users only see the
+  // legacy single-account UI. True unlocks the "Manage connected accounts"
+  // section in the user-facing manage modal.
+  allowMultipleAccounts: boolean;
 };
 
 type JwtClaims = { [key: string]: unknown; 'cognito:groups'?: string[] };
@@ -76,6 +84,7 @@ async function scanIntegrationSettings(): Promise<Map<string, IntegrationItem>> 
       status: ((i.status as string) === 'enabled' ? 'enabled' : 'disabled') as 'enabled' | 'disabled',
       denyTools: (i.denyTools as string[]) || [],
       preferred_method: normalizePreferredMethod(i.preferred_method),
+      allowMultipleAccounts: i.allowMultipleAccounts === true,
     };
     out.set(item.integration, item);
   }
@@ -134,6 +143,7 @@ async function buildCatalog(): Promise<CatalogEntry[]> {
       preferred_method: integrationRow?.preferred_method ?? null,
       pipedreamEnabled: integrationRow ? integrationRow.status === 'enabled' : null,
       connectorEnabled: connectorRow ? connectorRow.status === 'enabled' : null,
+      allowMultipleAccounts: integrationRow?.allowMultipleAccounts === true,
     });
   }
 
@@ -155,6 +165,8 @@ async function buildCatalog(): Promise<CatalogEntry[]> {
       preferred_method: null,
       pipedreamEnabled: null,
       connectorEnabled: connectorRow ? connectorRow.status === 'enabled' : null,
+      // Native-only entries cannot opt in; FEAT-019 is Pipedream-scope only.
+      allowMultipleAccounts: false,
     });
   }
 
@@ -194,6 +206,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         status: (i.status as string) || 'disabled',
         denyTools: (i.denyTools as string[]) || [],
         preferred_method: normalizePreferredMethod(i.preferred_method),
+        allowMultipleAccounts: i.allowMultipleAccounts === true,
       }));
       return { statusCode: 200, headers, body: JSON.stringify(items) };
     }
@@ -211,11 +224,25 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       const denyTools = Array.isArray(body.denyTools) ? (body.denyTools as string[]) : [];
       const preferred_method = normalizePreferredMethod(body.preferred_method);
 
+      // Partial-update semantics for allowMultipleAccounts: when the field is
+      // omitted from the body, keep whatever's already stored. This means the
+      // status/denyTools/preferred_method toggles don't accidentally wipe the
+      // multi-account opt-in every time they save. Only the dedicated toggle
+      // sends this field explicitly.
+      let allowMultipleAccounts: boolean;
+      if (typeof body.allowMultipleAccounts === 'boolean') {
+        allowMultipleAccounts = body.allowMultipleAccounts;
+      } else {
+        const existing = await ddbDoc.send(new GetCommand({ TableName: TABLE_NAME, Key: { integration } }));
+        allowMultipleAccounts = existing.Item?.allowMultipleAccounts === true;
+      }
+
       const updated: IntegrationItem = {
         integration,
         status,
         denyTools,
         preferred_method,
+        allowMultipleAccounts,
         updatedAt: new Date().toISOString(),
         updatedBy: 'admin',
       };

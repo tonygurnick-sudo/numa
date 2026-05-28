@@ -33,6 +33,18 @@ _TOOL_LIST_TTL_SECONDS = 600.0  # 10 minutes
 _ACTION_SCHEMA_CACHE: Dict[str, Tuple[Dict[str, Any], float]] = {}
 _ACTION_SCHEMA_TTL_SECONDS = 600.0  # 10 minutes
 
+# FEAT-019: in-memory TTL cache for the user-connections list returned by
+# Pipedream's `/connect/{project}/accounts` API. Before this cache every
+# `get_integration_status` call hit Pipedream's API + paginated, adding
+# 1-3s per call (and per cold-start, multi-second). The list changes
+# rarely from the user's perspective (only on connect/disconnect), so a
+# short TTL with explicit invalidation on `disconnect_integration` covers
+# nearly all cases. FE passes `force_refresh: true` after OAuth completes
+# to bypass the cache for the immediate after-connect status read.
+# Key: external_user_id  Value: (connections, expires_epoch)
+_USER_CONNECTIONS_CACHE: Dict[str, Tuple[List[Dict[str, Any]], float]] = {}
+_USER_CONNECTIONS_TTL_SECONDS = 300.0  # 5 minutes
+
 # AWS Lambda hard limit for synchronous invoke response payloads.
 # Source: error logs show "Exceeded maximum allowed payload size (6291556 bytes)".
 LAMBDA_RESPONSE_LIMIT_BYTES = 6_291_556
@@ -311,19 +323,27 @@ class PipedreamOperations:
             )
             raise Exception(f"Pipedream connect token error: {str(e)}") from e
 
-    def get_integration_status(self, external_user_id: str) -> Dict[str, Any]:
+    def get_integration_status(
+        self, external_user_id: str, force_refresh: bool = False
+    ) -> Dict[str, Any]:
         """
         Get user's connected integrations status.
 
         Args:
             external_user_id: The external user ID for Pipedream
+            force_refresh: FEAT-019 — when true, bypass the
+                `_USER_CONNECTIONS_CACHE` and fetch fresh from Pipedream.
+                Used by the FE immediately after a connect / disconnect so
+                the just-changed state surfaces without waiting for the TTL.
 
         Returns:
             Dict containing integration status data
         """
         try:
             # Get user's connected accounts from Pipedream
-            pipedream_connections = self._get_user_connections(external_user_id)
+            pipedream_connections = self._get_user_connections(
+                external_user_id, force_refresh=force_refresh
+            )
 
             # Transform to frontend format
             connection_status = self._build_connection_status(pipedream_connections)
@@ -460,6 +480,9 @@ class PipedreamOperations:
                     account_id=account_id,
                     status=status,
                 )
+                # FEAT-019: invalidate the per-user connections cache so the
+                # next status read returns fresh data.
+                _USER_CONNECTIONS_CACHE.pop(external_user_id, None)
                 return {
                     "external_user_id": external_user_id,
                     "account_id": account_id,
@@ -532,6 +555,8 @@ class PipedreamOperations:
                 app_name=app_name,
                 deleted_count=len(deleted),
             )
+            # FEAT-019: invalidate the per-user connections cache.
+            _USER_CONNECTIONS_CACHE.pop(external_user_id, None)
             return {
                 "external_user_id": external_user_id,
                 "app_name": app_name,
@@ -608,11 +633,30 @@ class PipedreamOperations:
         )
         return tools
 
-    def _get_user_connections(self, external_user_id: str) -> List[Dict[str, Any]]:
+    def _get_user_connections(
+        self, external_user_id: str, force_refresh: bool = False
+    ) -> List[Dict[str, Any]]:
         """Get user's connected accounts from Pipedream API.
 
         Paginates through results since the API defaults to 10 per page.
+
+        FEAT-019: cached for 5 minutes by `external_user_id`. The list changes
+        only on connect/disconnect, both of which we observe in this lambda
+        (`disconnect_integration` invalidates explicitly; after-connect status
+        reads from the FE pass `force_refresh=True`). When `force_refresh` is
+        true the cache is bypassed and the fresh result repopulates it.
         """
+        now = time.time()
+        if not force_refresh:
+            cached = _USER_CONNECTIONS_CACHE.get(external_user_id)
+            if cached and cached[1] > now:
+                logger.debug(
+                    "Returning cached user connections",
+                    external_user_id=external_user_id,
+                    count=len(cached[0]),
+                )
+                return cached[0]
+
         credentials = self.get_credentials()
         access_token = self.get_access_token()
         project_id = credentials["project_id"]
@@ -669,12 +713,27 @@ class PipedreamOperations:
             connection_count=len(all_connections),
         )
 
+        # FEAT-019: populate the cache so subsequent calls within the TTL
+        # window skip the Pipedream round-trip + pagination.
+        _USER_CONNECTIONS_CACHE[external_user_id] = (
+            all_connections,
+            time.time() + _USER_CONNECTIONS_TTL_SECONDS,
+        )
+
         return all_connections
 
     def _build_connection_status(
         self, pipedream_connections: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Build connection status from Pipedream API data."""
+        """Build connection status from Pipedream API data.
+
+        FEAT-019: returns one row per supported app, but each row now carries
+        an `accounts` array listing every connected account for that app
+        (previously the tail was discarded by `next(...)`). Legacy fields
+        (`pipedream_account_id`, `connection_name`, `connected_at`, `healthy`,
+        `dead`) still describe the first account so existing single-account
+        callers keep working without code changes.
+        """
         # Get supported integrations from environment variable (required)
         env_integrations = os.environ.get("SUPPORTED_INTEGRATIONS")
         if not env_integrations:
@@ -689,30 +748,52 @@ class PipedreamOperations:
                 f"Failed to parse SUPPORTED_INTEGRATIONS as JSON: {str(e)}"
             ) from e
 
-        connection_status = []
+        # Index all connections by app for O(N) total work.
+        connections_by_app: Dict[str, List[Dict[str, Any]]] = {}
+        for conn in pipedream_connections:
+            slug = self._get_app_name_from_pipedream(conn)
+            if not slug:
+                continue
+            connections_by_app.setdefault(slug, []).append(conn)
+
+        connection_status: List[Dict[str, Any]] = []
 
         for app_name in supported_integrations:
-            # Check if connected in Pipedream
-            pipedream_connection = next(
-                (
-                    conn
-                    for conn in pipedream_connections
-                    if self._get_app_name_from_pipedream(conn) == app_name
-                ),
-                None,
-            )
+            app_connections = connections_by_app.get(app_name, [])
 
-            if pipedream_connection:
+            if app_connections:
+                # Order accounts by creation time (oldest first) so the
+                # "primary" / first-listed account is stable across refreshes.
+                app_connections.sort(key=lambda c: c.get("created_at") or "")
+                accounts = [
+                    {
+                        "account_id": c.get("id"),
+                        "name": c.get("name"),
+                        "healthy": c.get("healthy"),
+                        "dead": c.get("dead"),
+                        "connected_at": c.get("created_at"),
+                    }
+                    for c in app_connections
+                ]
+                first = app_connections[0]
                 connection_status.append(
                     {
                         "app_name": app_name,
                         "status": "connected",
-                        "pipedream_account_id": pipedream_connection.get("id"),
-                        "last_auth_check": pipedream_connection.get("created_at"),
-                        "healthy": pipedream_connection.get("healthy"),
-                        "dead": pipedream_connection.get("dead"),
-                        "connection_name": pipedream_connection.get("name"),
-                        "connected_at": pipedream_connection.get("created_at"),
+                        # Legacy single-account fields: describe the first
+                        # account. Kept so legacy frontend code paths (and the
+                        # admin "connected/disconnected" badge) keep working
+                        # unchanged while the new accounts[] is rolled out.
+                        "pipedream_account_id": first.get("id"),
+                        "last_auth_check": first.get("created_at"),
+                        "healthy": first.get("healthy"),
+                        "dead": first.get("dead"),
+                        "connection_name": first.get("name"),
+                        "connected_at": first.get("created_at"),
+                        # New: full list. Length 1 for single-account apps;
+                        # length >1 only when the admin has enabled multi-
+                        # account support for the integration.
+                        "accounts": accounts,
                     }
                 )
             else:
@@ -726,6 +807,7 @@ class PipedreamOperations:
                         "dead": None,
                         "connection_name": None,
                         "connected_at": None,
+                        "accounts": [],
                     }
                 )
 
@@ -1183,6 +1265,7 @@ class PipedreamOperations:
         action_key: str,
         configured_props: Dict[str, Any],
         stash_id: Optional[str] = None,
+        allowed_account_ids: Optional[list[str]] = None,
     ) -> Dict[str, Any]:
         """Execute a Pipedream Connect action.
 
@@ -1191,6 +1274,11 @@ class PipedreamOperations:
             action_key: The action key (e.g., "google_drive-find-file")
             configured_props: Props for the action including auth
             stash_id: Optional stash ID for file operations
+            allowed_account_ids: FEAT-019 — if provided, restrict authProvisionId
+                resolution to this subset of the user's connected accounts.
+                Used to honour per-conversation / per-schedule / per-app-run
+                account scoping when an admin has enabled multi-account for
+                this integration. Empty / None → legacy "first matching" rule.
 
         Returns:
             Action result with ret, exports, and optional stash data
@@ -1202,7 +1290,10 @@ class PipedreamOperations:
 
         # Auto-inject authProvisionId if set to "auto"
         configured_props = self._inject_auth_provision_id(
-            external_user_id, action_key, configured_props
+            external_user_id,
+            action_key,
+            configured_props,
+            allowed_account_ids=allowed_account_ids,
         )
 
         body: Dict[str, Any] = {
@@ -1260,6 +1351,7 @@ class PipedreamOperations:
         action_key: str,
         prop_name: str,
         configured_props: Dict[str, Any],
+        allowed_account_ids: Optional[list[str]] = None,
     ) -> Dict[str, Any]:
         """Get dynamic dropdown options for an action prop.
 
@@ -1268,6 +1360,7 @@ class PipedreamOperations:
             action_key: The action key
             prop_name: The prop to configure (e.g., "drive")
             configured_props: Currently configured props
+            allowed_account_ids: FEAT-019 — see run_action.
 
         Returns:
             Options list for the prop
@@ -1279,7 +1372,10 @@ class PipedreamOperations:
 
         # Auto-inject authProvisionId if set to "auto"
         configured_props = self._inject_auth_provision_id(
-            external_user_id, action_key, configured_props
+            external_user_id,
+            action_key,
+            configured_props,
+            allowed_account_ids=allowed_account_ids,
         )
 
         body = {
@@ -1734,6 +1830,7 @@ class PipedreamOperations:
         external_user_id: str,
         action_key: str,
         configured_props: Dict[str, Any],
+        allowed_account_ids: Optional[list[str]] = None,
     ) -> Dict[str, Any]:
         """Replace "auto" authProvisionId with the user's actual account ID.
 
@@ -1745,6 +1842,12 @@ class PipedreamOperations:
             external_user_id: The external user ID
             action_key: The action key (used to derive app slug)
             configured_props: Props that may contain "auto" auth
+            allowed_account_ids: FEAT-019 — if provided, narrow the candidate
+                account list to this subset before picking the first match.
+                When the caller passes an explicit `authProvisionId` (not the
+                "auto" sentinel) this list is ignored — the caller has already
+                picked. Used by chat / scheduled / app-run paths to honour
+                per-context account scoping.
 
         Returns:
             Updated configured_props with real authProvisionId
@@ -1752,17 +1855,55 @@ class PipedreamOperations:
         # Make a shallow copy to avoid mutating input
         props = dict(configured_props)
 
-        # Find the auth prop with "auto" value
+        # Find the auth prop. If "auto", we resolve it below; if explicit
+        # `apn_xxx`, we enforce the allow-list against it.
         auth_key = None
         auth_value = None
+        explicit_provision_id: Optional[str] = None
         for key, value in list(props.items()):
-            if isinstance(value, dict) and value.get("authProvisionId") == "auto":
+            if isinstance(value, dict) and "authProvisionId" in value:
                 auth_key = key
                 auth_value = value
+                provision = value.get("authProvisionId")
+                if isinstance(provision, str) and provision and provision != "auto":
+                    explicit_provision_id = provision
                 break
 
-        if auth_key is None:
+        # FEAT-019: when a chat/schedule/app-run has narrowed the account
+        # selection (allowed_account_ids non-empty) and the agent supplies an
+        # explicit `apn_xxx` for the auth prop, that id MUST be in the
+        # allow-list. Otherwise the agent can bypass the user's per-context
+        # account scope just by picking the apn it knows from the prompt.
+        # The agent currently sees every available account so it can iterate
+        # for "each mailbox" requests; the narrowed-scope block tells it to
+        # ignore the others, but enforcement belongs here.
+        if (
+            explicit_provision_id is not None
+            and allowed_account_ids
+            and explicit_provision_id not in allowed_account_ids
+        ):
+            logger.warning(
+                "Rejected run_action with disallowed authProvisionId",
+                _name="ACCOUNT_SCOPE_VIOLATION",
+                external_user_id=external_user_id,
+                action_key=action_key,
+                requested=explicit_provision_id[:8] + "...",
+                allowed=[a[:8] + "..." for a in allowed_account_ids],
+            )
+            raise ValueError(
+                f"Account '{explicit_provision_id}' is not enabled in this "
+                f"session. Allowed accounts: {allowed_account_ids}. "
+                "Use one of the allowed apn ids, or call the action without "
+                'authProvisionId (or with "auto") to let the proxy pick.'
+            )
+
+        if auth_key is None or auth_value is None:
             # No auth prop to process
+            return props
+
+        # Explicit (non-auto) authProvisionId — already allow-list-checked
+        # above; let it pass through unchanged.
+        if explicit_provision_id is not None:
             return props
 
         # Normalize auth key to match schema expectation
@@ -1779,8 +1920,31 @@ class PipedreamOperations:
             auth_key = expected_key
             props[auth_key] = auth_value
 
-        # Look up user's connected accounts
-        connections = self._get_user_connections(external_user_id)
+        # Look up user's connected accounts. FEAT-019: filter to the allow-
+        # list before picking so single / multi-account selection paths share
+        # the same code. The filter applies to the candidate set, not to the
+        # connection-listing API call itself, so an empty allow-list = legacy
+        # behaviour (all accounts considered).
+        all_connections = self._get_user_connections(external_user_id)
+        allow_set: Optional[set[str]] = None
+        if allowed_account_ids:
+            allow_set = {x for x in allowed_account_ids if x}
+        if allow_set:
+            connections = [c for c in all_connections if c.get("id") in allow_set]
+            if not connections:
+                # Caller asked for accounts the user no longer has — fall back
+                # to the full list rather than failing, so a stale picker
+                # doesn't break tool calls.
+                logger.warning(
+                    "Allow-list excluded every connected account; falling back to full list",
+                    _name="ACCOUNT_ALLOWLIST_EMPTY_AFTER_FILTER",
+                    requested=list(allow_set),
+                    available=[c.get("id") for c in all_connections],
+                    external_user_id=external_user_id,
+                )
+                connections = all_connections
+        else:
+            connections = all_connections
         account_id = None
         app_slug = None
 
@@ -1800,6 +1964,7 @@ class PipedreamOperations:
                         prop_key=auth_key,
                         resolved_slug=conn_slug,
                         action_key=action_key,
+                        scoped=bool(allow_set),
                     )
                     break
 
@@ -1815,6 +1980,7 @@ class PipedreamOperations:
                         "Resolved auth via prop name",
                         prop_key=auth_key,
                         resolved_slug=app_slug,
+                        scoped=bool(allow_set),
                     )
                     break
 

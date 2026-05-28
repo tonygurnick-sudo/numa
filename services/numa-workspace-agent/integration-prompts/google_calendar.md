@@ -1,5 +1,13 @@
 # Google Calendar Integration
 
+## Multiple Connected Calendars (FEAT-019)
+
+If the **Connected Integrations** section above lists more than one account under `google_calendar`, each one is a separate Google account with its own calendars.
+
+- `"authProvisionId": "auto"` resolves to ONE account (the oldest). Fine for "what's on my calendar?" when context implies a single account.
+- When the user references multiple accounts ("both calendars", "my work + personal calendar", "from each account"), iterate by calling `run_action` once per account with the explicit `apn_xxx` from the multi-account list.
+- Note: within a single Google account, `list-calendars` returns multiple calendars (primary, shared, etc.). This is separate from the multi-account roster — both layers may apply.
+
 ## Essential First Step
 
 Always call `get-current-user` first to obtain primary calendar ID, timezone, accessible calendars, and color palettes. This saves time and prevents timezone issues.

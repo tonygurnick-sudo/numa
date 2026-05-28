@@ -127,15 +127,35 @@ export interface ApiResponse<T = unknown> {
   error?: string;
 }
 
+/**
+ * FEAT-019: one connected Pipedream account. A `ConnectionStatus` row for an
+ * integration may carry multiple of these when the admin has enabled
+ * multi-account support; otherwise the array is length 0 or 1.
+ */
+export interface ConnectedAccount {
+  account_id: string;
+  name?: string | null;
+  healthy?: boolean | null;
+  dead?: boolean | null;
+  connected_at?: string | null;
+}
+
 export interface ConnectionStatus {
   app_name: string;
   status: 'connected' | 'not_connected';
+  // Legacy single-account view: describes the first connected account for
+  // this app, or null when not connected. Retained for backwards compat;
+  // multi-account callers should consume `accounts` instead.
   pipedream_account_id: string | null;
   last_auth_check: string | null;
   healthy?: boolean | null;
   dead?: boolean | null;
   connection_name?: string | null;
   connected_at?: string | null;
+  // Full account list. Empty when not connected. Always populated by the
+  // proxy as of FEAT-019; older cached responses may lack it, so consumers
+  // should fall back to the legacy fields above when accounts is missing.
+  accounts?: ConnectedAccount[];
 }
 
 export interface IntegrationStatusData {

@@ -37,6 +37,7 @@ import { getConnectorById, surfacesInFiles } from '../DataConnectors/connectorRe
 import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations';
 import { connectorSlugForPipedream, pipedreamSlugForConnector } from '../Integrations/integrationCatalogHelpers';
 import { WorkspaceChatFilesExpandedModal } from './WorkspaceChatFilesExpandedModal';
+import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
 import { getFileIconClass, getFileIconColorClass, formatFileSize } from '../../utils/fileUtils';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
@@ -56,6 +57,11 @@ type ConnectionOption = {
   id: string;
   name: string;
   isConnected: boolean;
+  // FEAT-019: optional multi-account metadata. Empty / undefined for legacy
+  // payloads; ignored by the settings panel today (the account picker lives
+  // in the ChatInput modal), kept here so the type matches the parent.
+  allowMultipleAccounts?: boolean;
+  accounts?: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
 };
 
 export interface WorkspaceChatSettingsPanelProps {
@@ -124,6 +130,11 @@ export interface WorkspaceChatSettingsPanelProps {
   enabledNativeConnectorIds: string[];
   setEnabledNativeConnectorIds: Dispatch<SetStateAction<string[]>>;
 
+  // FEAT-019: per-conversation account scope (Pipedream multi-account).
+  // Optional so non-chat call sites can omit it; absence → no submenu renders.
+  selectedAccountsByApp?: Record<string, string[]>;
+  setSelectedAccountsByApp?: Dispatch<SetStateAction<Record<string, string[]>>>;
+
   // Control disabled state (during streaming)
   isDisabled: boolean;
 
@@ -177,6 +188,8 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   userConnectedConnectorIds,
   enabledNativeConnectorIds,
   setEnabledNativeConnectorIds,
+  selectedAccountsByApp,
+  setSelectedAccountsByApp,
   isDisabled,
   showModelSelector = false,
   selectedModelId,
@@ -363,6 +376,10 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     iconClass?: string;
     pipedreamSlug?: string;
     nativeSlug?: string;
+    // FEAT-019: only populated for Pipedream rows (multi-account is
+    // Pipedream-scope only). Used to drive the per-row account submenu.
+    allowMultipleAccounts?: boolean;
+    accounts?: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
   };
   const unifiedIntegrationItems = useMemo<UnifiedItem[]>(() => {
     const items: UnifiedItem[] = [];
@@ -386,6 +403,8 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
           // authed the native counterpart — otherwise the toggle would
           // try to enable a connector the user hasn't set up.
           nativeSlug: nativeSlug && userConnectedConnectorIds.includes(nativeSlug) ? nativeSlug : undefined,
+          allowMultipleAccounts: conn.allowMultipleAccounts,
+          accounts: conn.accounts,
         });
       }
     }
@@ -969,39 +988,57 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                           }
                         };
                         return (
-                          <div key={item.key} className="workspace-settings-integration-item">
-                            <div className="workspace-settings-integration-main">
-                              <span className="workspace-settings-integration-label d-inline-flex align-items-center gap-2">
-                                {item.iconSrc ? (
-                                  <img
-                                    src={item.iconSrc}
-                                    alt={item.name}
-                                    style={{ width: 18, height: 18, objectFit: 'contain' }}
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                    }}
-                                  />
+                          <div key={item.key} className="workspace-settings-integration-row">
+                            <div className="workspace-settings-integration-item">
+                              <div className="workspace-settings-integration-main">
+                                <span className="workspace-settings-integration-label d-inline-flex align-items-center gap-2">
+                                  {item.iconSrc ? (
+                                    <img
+                                      src={item.iconSrc}
+                                      alt={item.name}
+                                      style={{ width: 18, height: 18, objectFit: 'contain' }}
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  ) : (
+                                    <i className={item.iconClass} />
+                                  )}
+                                  <span>{item.name}</span>
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className={`workspace-settings-integration-state ${isActive ? 'is-connected' : 'is-connect'}`}
+                                onClick={onToggle}
+                                disabled={isDisabled}
+                              >
+                                {isActive ? (
+                                  <>
+                                    <Check size={12} />
+                                    {t('workspaceSettings.enabledInChat', { defaultValue: 'Enabled' })}
+                                  </>
                                 ) : (
-                                  <i className={item.iconClass} />
+                                  t('workspaceSettings.enableInChat', { defaultValue: 'Enable' })
                                 )}
-                                <span>{item.name}</span>
-                              </span>
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              className={`workspace-settings-integration-state ${isActive ? 'is-connected' : 'is-connect'}`}
-                              onClick={onToggle}
-                              disabled={isDisabled}
-                            >
-                              {isActive ? (
-                                <>
-                                  <Check size={12} />
-                                  {t('workspaceSettings.enabledInChat', { defaultValue: 'Enabled' })}
-                                </>
-                              ) : (
-                                t('workspaceSettings.enableInChat', { defaultValue: 'Enable' })
-                              )}
-                            </button>
+                            {item.pipedreamSlug && (
+                              <IntegrationAccountSubmenu
+                                connectionId={item.pipedreamSlug}
+                                accounts={item.accounts ?? []}
+                                allowMultipleAccounts={item.allowMultipleAccounts === true}
+                                isEnabled={pdActive}
+                                selectedAccountIds={selectedAccountsByApp?.[item.pipedreamSlug]}
+                                disabled={isDisabled}
+                                onChange={(next) =>
+                                  setSelectedAccountsByApp?.((prev) => ({
+                                    ...prev,
+                                    [item.pipedreamSlug!]: next,
+                                  }))
+                                }
+                              />
+                            )}
                           </div>
                         );
                       })}

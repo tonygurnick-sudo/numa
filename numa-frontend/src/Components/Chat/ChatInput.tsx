@@ -17,6 +17,7 @@ import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { useDrawerBackClose } from '../../hooks/useDrawerBackClose';
 import type { WorkspaceChatModelId } from '../../types/workspaceChatTypes';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
+import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
 
 // WebSocket message size limit (AWS API Gateway limit is 32KB)
 const MAX_MESSAGE_LENGTH = 20000; // Conservative limit accounting for JSON overhead
@@ -39,6 +40,13 @@ const ChatInput = ({
   availableConnections = [],
   enabledConnections = [],
   setEnabledConnections,
+  // FEAT-019: optional per-conversation account scope. When the connection
+  // allows multiple accounts AND the user has narrowed the selection, only
+  // those accountIds are exposed to the agent for this chat.
+  selectedAccountsByApp = {} as Record<string, string[]>,
+  setSelectedAccountsByApp = undefined as
+    | ((updater: (prev: Record<string, string[]>) => Record<string, string[]>) => void)
+    | undefined,
   connectionsLoading = false,
   hasPipedreamFeature = false,
   disabled = false,
@@ -1005,39 +1013,46 @@ const ChatInput = ({
                   const canToggle = !isEnabled || enabledConnections.length > 1;
 
                   return (
-                    <div
-                      key={connection.id}
-                      className="d-flex align-items-center justify-content-between p-3 border rounded"
-                    >
-                      <div className="d-flex align-items-center gap-3">
-                        <img
-                          src={getConnectionIcon(connection.id)}
-                          alt={connection.name}
-                          style={{ width: '24px', height: '24px' }}
-                          onError={(e) => {
-                            const img = e.currentTarget as HTMLImageElement;
-                            img.style.display = 'none';
-                            const fallback = img.nextElementSibling as HTMLElement | null;
-                            if (fallback) fallback.style.display = 'inline-block';
-                          }}
-                        />
-                        <i
-                          className={`${getConnectionFallbackIcon(connection.id)} text-${getConnectionFallbackColor(connection.id)}`}
-                          style={{ fontSize: '24px', display: 'none' }}
-                        />
-                        <div>
-                          <div className="fw-bold">{getConnectionDisplayName(connection.id)}</div>
-                          <div className="text-muted small">{t('input.integrations.connected')}</div>
+                    <div key={connection.id} className="border rounded" style={{ background: '#fff' }}>
+                      <div className="d-flex align-items-center justify-content-between p-3">
+                        <div className="d-flex align-items-center gap-3">
+                          <img
+                            src={getConnectionIcon(connection.id)}
+                            alt={connection.name}
+                            style={{ width: '24px', height: '24px' }}
+                            onError={(e) => {
+                              const img = e.currentTarget as HTMLImageElement;
+                              img.style.display = 'none';
+                              const fallback = img.nextElementSibling as HTMLElement | null;
+                              if (fallback) fallback.style.display = 'inline-block';
+                            }}
+                          />
+                          <i
+                            className={`${getConnectionFallbackIcon(connection.id)} text-${getConnectionFallbackColor(connection.id)}`}
+                            style={{ fontSize: '24px', display: 'none' }}
+                          />
+                          <div>
+                            <div className="fw-bold">{getConnectionDisplayName(connection.id)}</div>
+                            <div className="text-muted small">{t('input.integrations.connected')}</div>
+                          </div>
                         </div>
+                        <Button
+                          variant={isEnabled ? 'success' : 'outline-primary'}
+                          size="sm"
+                          disabled={!canToggle && !isEnabled}
+                          onClick={() => handleToggleConnection(connection.id)}
+                        >
+                          {isEnabled ? t('input.integrations.enabled') : t('input.integrations.enable')}
+                        </Button>
                       </div>
-                      <Button
-                        variant={isEnabled ? 'success' : 'outline-primary'}
-                        size="sm"
-                        disabled={!canToggle && !isEnabled}
-                        onClick={() => handleToggleConnection(connection.id)}
-                      >
-                        {isEnabled ? t('input.integrations.enabled') : t('input.integrations.enable')}
-                      </Button>
+                      <IntegrationAccountSubmenu
+                        connectionId={connection.id}
+                        accounts={connection.accounts ?? []}
+                        allowMultipleAccounts={connection.allowMultipleAccounts === true}
+                        isEnabled={isEnabled}
+                        selectedAccountIds={selectedAccountsByApp[connection.id]}
+                        onChange={(next) => setSelectedAccountsByApp?.((prev) => ({ ...prev, [connection.id]: next }))}
+                      />
                     </div>
                   );
                 })}

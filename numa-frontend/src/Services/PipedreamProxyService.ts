@@ -99,6 +99,11 @@ export class PipedreamProxyService {
     const payload: PipedreamProxyRequest = {
       operation: 'get_integration_status',
       external_user_id: externalUserId,
+      // FEAT-019: forward FE's forceRefresh intent to the proxy so it
+      // bypasses its own per-user connections cache. Without this the proxy
+      // could serve a 5-min-stale list immediately after the user connects
+      // or disconnects an account.
+      ...(forceRefresh ? { parameters: { force_refresh: true } } : {}),
     };
 
     try {

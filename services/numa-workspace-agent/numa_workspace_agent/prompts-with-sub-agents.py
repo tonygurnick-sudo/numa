@@ -805,10 +805,81 @@ def _build_integrations_context(
     """
     apps_list = ", ".join(enabled_integrations)
 
+    # FEAT-019: build two blocks read from env vars set by sdk_config —
+    # the available-accounts roster (informational, always emitted when
+    # multi-account exists) and the narrowed-scope block (only when the
+    # user explicitly picked a subset).
+    available_lines: list[str] = []
+    narrowed_lines: list[str] = []
+    try:
+        available_env = os.environ.get("NUMA_AVAILABLE_ACCOUNTS_BY_APP", "")
+        names_env = os.environ.get("NUMA_ACCOUNT_NAMES_BY_APP", "")
+        allowed_env = os.environ.get("NUMA_ALLOWED_ACCOUNTS_BY_APP", "")
+        available_map: dict[str, list[dict]] = (
+            json.loads(available_env) if available_env else {}
+        )
+        names_map: dict[str, dict[str, str]] = (
+            json.loads(names_env) if names_env else {}
+        )
+        allowed_map: dict[str, list[str]] = (
+            json.loads(allowed_env) if allowed_env else {}
+        )
+        for slug in enabled_integrations:
+            roster = (
+                available_map.get(slug) if isinstance(available_map, dict) else None
+            )
+            if isinstance(roster, list) and len(roster) > 1:
+                entries: list[str] = []
+                for r in roster:
+                    if not isinstance(r, dict):
+                        continue
+                    acc_id = r.get("account_id")
+                    name = r.get("name") or acc_id
+                    if isinstance(acc_id, str) and acc_id:
+                        entries.append(f'  - "{name}" → authProvisionId="{acc_id}"')
+                if entries:
+                    available_lines.append(f"- {slug} ({len(entries)} accounts):")
+                    available_lines.extend(entries)
+
+            allowed = allowed_map.get(slug) if isinstance(allowed_map, dict) else None
+            if isinstance(allowed, list) and allowed:
+                name_lookup = (
+                    names_map.get(slug) if isinstance(names_map, dict) else None
+                )
+                if not isinstance(name_lookup, dict):
+                    name_lookup = {}
+                labelled = ", ".join(
+                    name_lookup.get(acc_id, acc_id) for acc_id in allowed
+                )
+                narrowed_lines.append(f"- {slug}: {labelled}")
+    except (json.JSONDecodeError, TypeError):
+        available_lines = []
+        narrowed_lines = []
+
+    available_block = ""
+    if available_lines:
+        available_block = (
+            "\n\n**Multi-account integrations** — these integrations have "
+            'more than one account connected. `authProvisionId: "auto"` '
+            "always picks ONE account (the oldest by created_at), so if the "
+            "user references multiple mailboxes / inboxes / workspaces, you "
+            "must call `run_action` once per account with the explicit "
+            "`authProvisionId` set to the apn_xxx below:\n" + "\n".join(available_lines)
+        )
+
+    narrowed_block = ""
+    if narrowed_lines:
+        narrowed_block = (
+            "\n\n**Active accounts for this run** (the user has narrowed "
+            "multi-account integrations to a subset — only these accounts "
+            "are available; do not attempt to access others):\n"
+            + "\n".join(narrowed_lines)
+        )
+
     context = f"""## Connected Integrations
 You have access to external integrations via Pipedream Connect.
 
-Connected: {apps_list}
+Connected: {apps_list}{available_block}{narrowed_block}
 
 Action schemas are in /workdir/tools/integrations/{{app_slug}}/.
 
@@ -838,7 +909,7 @@ Important notes:
 - Results are saved to files in /workdir/outputs/integrations-results/ to avoid flooding context
 - Files returned via file stash (e.g., downloaded files) are automatically saved to /workdir/outputs/integrations-results/
 - Use the annotations (readOnlyHint, destructiveHint) from schemas to gauge risk
-- The "authProvisionId":"auto" value is injected automatically — do not look up account IDs
+- "authProvisionId":"auto" picks ONE account (oldest). For multi-account integrations listed above, use the explicit `apn_xxx` to target a specific account, and iterate when the user wants "each" / "all" mailboxes/workspaces.
 - Always read the action schema first to understand required and optional props
 """
 

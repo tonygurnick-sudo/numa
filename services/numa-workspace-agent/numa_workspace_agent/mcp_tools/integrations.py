@@ -262,6 +262,23 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
 
             sync_to_s3(user_sub, conversation_id)
 
+    # FEAT-019: derive the per-conversation account scope for this app slug
+    # and forward to the tools Lambda. The Lambda includes the list in its
+    # proxy call so the proxy can narrow `_get_user_connections` before
+    # resolving authProvisionId:"auto". Absent / empty list → legacy "first
+    # matching account" resolution.
+    allowed_account_ids: list[str] = []
+    try:
+        accounts_env = os.environ.get("NUMA_ALLOWED_ACCOUNTS_BY_APP", "")
+        if accounts_env and integration_slug:
+            accounts_map = json.loads(accounts_env)
+            if isinstance(accounts_map, dict):
+                raw = accounts_map.get(integration_slug)
+                if isinstance(raw, list):
+                    allowed_account_ids = [x for x in raw if isinstance(x, str) and x]
+    except (json.JSONDecodeError, TypeError):
+        allowed_account_ids = []
+
     try:
         result = invoke_workspace_tool(
             "pipedream_run_action",
@@ -272,6 +289,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                 "stash_id": stash_id,
                 "request_id": pop_approval_id(action_key),
                 "auto_approved": os.environ.get("NUMA_APPROVAL_MODE") == "auto",
+                "allowed_account_ids": allowed_account_ids,
             },
         )
 
@@ -464,6 +482,24 @@ async def configure_props(args: dict[str, Any]) -> dict[str, Any]:
             "isError": True,
         }
 
+    # FEAT-019: same per-conversation account scope as run_action so dynamic
+    # dropdown options come from the scoped account (e.g. only show calendars
+    # for the user's "work" Google Calendar account when the picker narrows
+    # to that account).
+    allowed_account_ids_cp: list[str] = []
+    try:
+        accounts_env = os.environ.get("NUMA_ALLOWED_ACCOUNTS_BY_APP", "")
+        if accounts_env and integration_slug:
+            accounts_map = json.loads(accounts_env)
+            if isinstance(accounts_map, dict):
+                raw = accounts_map.get(integration_slug)
+                if isinstance(raw, list):
+                    allowed_account_ids_cp = [
+                        x for x in raw if isinstance(x, str) and x
+                    ]
+    except (json.JSONDecodeError, TypeError):
+        allowed_account_ids_cp = []
+
     try:
         result = invoke_workspace_tool(
             "pipedream_configure_props",
@@ -471,6 +507,7 @@ async def configure_props(args: dict[str, Any]) -> dict[str, Any]:
                 "action_key": action_key,
                 "prop_name": prop_name,
                 "configured_props": configured_props,
+                "allowed_account_ids": allowed_account_ids_cp,
             },
         )
 
