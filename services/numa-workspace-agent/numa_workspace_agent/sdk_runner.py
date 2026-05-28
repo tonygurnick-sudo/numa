@@ -222,6 +222,30 @@ def reclassify_interrupt_result(serialized: dict[str, Any]) -> dict[str, Any]:
     return serialized
 
 
+def override_result_cost(serialized: dict[str, Any], stream_log: Any) -> dict[str, Any]:
+    """Replace the SDK's `total_cost_usd` on a serialized ResultMessage with our
+    recomputed value, preserving the SDK's original under `sdk_reported_cost_usd`.
+
+    The bundled Claude CLI's pricing table only carries 5-minute cache-write
+    rates; Numa runs the 1-hour tier (2× base input vs 1.25× for 5m), so the
+    SDK's `total_cost_usd` under-reports cache_creation by ~18% on Haiku 1h
+    cache hits, more on Sonnet. AWS bills correctly; this aligns the trace
+    file and the frontend cost badge with what AWS actually charges.
+
+    Must be called AFTER `stream_log.finalize(message)` so the recomputed
+    values are available.
+    """
+    if serialized.get("type") != "result":
+        return serialized
+    sdk_value = serialized.get("total_cost_usd")
+    recomputed = getattr(stream_log, "total_cost_usd", None)
+    if recomputed is None:
+        return serialized
+    serialized["sdk_reported_cost_usd"] = sdk_value
+    serialized["total_cost_usd"] = recomputed
+    return serialized
+
+
 def serialize_message(message: Any) -> dict[str, Any]:
     """Serialize an SDK message to a JSON-compatible dict for trace storage."""
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -866,6 +890,7 @@ async def stream_claude_sdk(
                         captured_session_id = message.session_id
                         serialized["session_id"] = captured_session_id
                         stream_log.finalize(message)
+                        serialized = override_result_cost(serialized, stream_log)
                         # Reclassify the SDK's error_during_execution result
                         # as a clean interrupt so the frontend doesn't render
                         # red error styling on a user-initiated stop.
@@ -995,6 +1020,7 @@ async def stream_claude_sdk(
                     serialized["session_id"] = captured_session_id
                     # Finalize stream log with result data
                     stream_log.finalize(message)
+                    serialized = override_result_cost(serialized, stream_log)
                     logger.info(
                         "SDK result summary",
                         _name="SDK_RESULT",
@@ -1541,6 +1567,7 @@ async def stream_claude_sdk(
                         captured_session_id = message.session_id
                         serialized["session_id"] = captured_session_id
                         stream_log.finalize(message)
+                        serialized = override_result_cost(serialized, stream_log)
                         logger.info(
                             "Fallback SDK result summary",
                             _name="SDK_RESULT_FALLBACK",
@@ -2181,6 +2208,7 @@ async def run_claude_sdk(
                     captured_session_id = message.session_id
                     serialized["session_id"] = captured_session_id
                     stream_log.finalize(message)
+                    serialized = override_result_cost(serialized, stream_log)
                     usage = getattr(message, "usage", {}) or {}
                     result_meta = {
                         "num_turns": message.num_turns,
@@ -2296,6 +2324,7 @@ async def run_claude_sdk(
                         captured_session_id = message.session_id
                         serialized["session_id"] = captured_session_id
                         stream_log.finalize(message)
+                        serialized = override_result_cost(serialized, stream_log)
                         usage = getattr(message, "usage", {}) or {}
                         result_meta = {
                             "num_turns": message.num_turns,
