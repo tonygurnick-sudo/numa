@@ -738,21 +738,59 @@ async def get_trace(
         None, alias="x-arcanum-cloudfront-secret"
     ),
 ):
-    """Forward trace request to AgentCore.
+    """Stream the conversation trace.jsonl directly from S3.
 
-    Returns filtered NDJSON with thinking blocks and assistant_advice stripped.
+    Previously forwarded to the container via AgentCore (which provisioned a
+    microVM just to run a single s3.get_object). Now reads from S3 in the
+    proxy and runs each NDJSON line through the existing _filter_ndjson_line
+    to strip thinking blocks / assistant_advice.
+
+    Returns 200 with empty body when no trace exists yet (matching the
+    container's behaviour) so the frontend doesn't show a load error for
+    brand-new conversations.
     """
     validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
     user_sub = extract_user_sub(authorization)
 
-    return await _invoke_agentcore(
-        user_sub=user_sub,
-        http_method="GET",
-        http_path=f"/trace/{conversation_id}",
-        authorization=authorization,
-        stream=False,
-        raw=True,
-        conversation_id=conversation_id,
+    if not s3_client or not OUTPUTS_BUCKET_NAME:
+        raise HTTPException(status_code=500, detail="Outputs bucket not configured")
+
+    trace_key = (
+        f"numa-chat/workspace/{user_sub}/conversations/{conversation_id}"
+        f"/_system/trace.jsonl"
+    )
+
+    try:
+        obj = s3_client.get_object(Bucket=OUTPUTS_BUCKET_NAME, Key=trace_key)
+        trace_content = obj["Body"].read().decode("utf-8")
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code in ("NoSuchKey", "404"):
+            return Response(
+                content="",
+                media_type="application/x-ndjson",
+                status_code=200,
+            )
+        logger.error(
+            "Failed to fetch trace from S3: %s",
+            e,
+            extra={"key": trace_key},
+        )
+        raise HTTPException(status_code=500, detail="Failed to fetch trace") from e
+
+    filtered_lines: list[str] = []
+    for line in trace_content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        out = _filter_ndjson_line(stripped)
+        if out is not None:
+            filtered_lines.append(out)
+
+    return Response(
+        content="\n".join(filtered_lines),
+        media_type="application/x-ndjson",
+        status_code=200,
     )
 
 
