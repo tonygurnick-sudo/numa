@@ -197,6 +197,10 @@ export default function SettingsPage() {
   const [capabilities, setCapabilities] = useState<CapabilityItem[]>([]);
   const [loadingSettings, setLoadingSettings] = useState<boolean>(() => !AdminIntegrationsService.getCached());
   const [error, setError] = useState<string | null>(null);
+  // Holds the pipedreamSlug currently being saved by the multi-account toggle,
+  // so the switch can disable + show a busy state without leaking into other
+  // rows. Null when no save is in flight.
+  const [savingMultiAccount, setSavingMultiAccount] = useState<string | null>(null);
 
   // Agents (admin) settings
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
@@ -312,6 +316,7 @@ export default function SettingsPage() {
         status: prev[pipedreamSlug]?.status ?? 'disabled',
         denyTools: prev[pipedreamSlug]?.denyTools ?? [],
         preferred_method: nextMethod,
+        allowMultipleAccounts: prev[pipedreamSlug]?.allowMultipleAccounts ?? false,
       },
     }));
     setIntegrationsCatalog((prev) =>
@@ -1181,6 +1186,34 @@ export default function SettingsPage() {
                   </span>
                 ) : (
                   <MethodBadge method={displayMethod} size="xs" />
+                )}
+                {/* FEAT-019: multi-account opt-in indicator. Pipedream-scope
+                    only; shown whenever Pipedream is enabled for this row and
+                    admin has flipped the toggle, so admins can see at a glance
+                    which integrations are multi-account without opening the
+                    manage modal. */}
+                {pdEnabled && pdSettings?.allowMultipleAccounts && (
+                  <span
+                    className="badge d-inline-flex align-items-center"
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '0.15rem 0.5rem',
+                      gap: '0.3rem',
+                      fontWeight: 500,
+                      letterSpacing: '0.01em',
+                      lineHeight: 1.2,
+                      verticalAlign: 'middle',
+                      background: '#ede9fe',
+                      color: '#5b21b6',
+                      border: '1px solid #ddd6fe',
+                    }}
+                    title={t('manage.multipleAccountsBadgeTooltip', {
+                      defaultValue: 'Users can connect multiple Pipedream accounts for this integration',
+                    })}
+                  >
+                    <i className="bi bi-people-fill" style={{ fontSize: '0.7rem' }} />
+                    {t('manage.multipleAccountsBadge', { defaultValue: 'Multi-account' })}
+                  </span>
                 )}
               </div>
               {svc.description && (
@@ -2868,6 +2901,88 @@ export default function SettingsPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Multiple accounts section — visible whenever Pipedream
+                      is enabled for this integration. Renders in user-choice
+                      mode too, because users on user-choice may still pick
+                      Pipedream and the multi-account opt-in governs Pipedream
+                      behaviour. Hidden when Pipedream is unavailable or admin
+                      has forced native as the active method (FEAT-019). */}
+                    {mfPdEnabled && mfActiveMethod !== 'native' && mf.pipedreamSlug && (
+                      <div className="mb-4">
+                        <h6 className="text-uppercase small text-muted fw-semibold mb-2">
+                          {t('manage.multipleAccountsHeading', { defaultValue: 'Multiple Pipedream accounts' })}
+                        </h6>
+                        <div
+                          className="d-flex align-items-start justify-content-between p-3 rounded"
+                          style={{ background: '#f8f9fa', border: '1px solid #dee2e6' }}
+                        >
+                          <div className="me-3">
+                            <div className="fw-semibold small mb-1 d-flex align-items-center gap-2">
+                              <span
+                                className="badge"
+                                style={{ background: '#ede9fe', color: '#5b21b6', fontWeight: 600 }}
+                              >
+                                <i className="bi bi-lightning-charge-fill me-1" />
+                                {t('manage.method.pipedreamHeading', { defaultValue: 'Pipedream' })}
+                              </span>
+                              <span>
+                                {t('manage.multipleAccountsLabel', {
+                                  defaultValue: 'Allow users to connect multiple Pipedream accounts',
+                                })}
+                              </span>
+                            </div>
+                            <div className="small text-muted">
+                              {t('manage.multipleAccountsHelp', {
+                                defaultValue:
+                                  "When enabled, users can connect more than one Pipedream account for this integration (e.g. two Gmail inboxes) and pick which to use in chat. Doesn't affect the native connector.",
+                              })}
+                            </div>
+                          </div>
+                          <Form.Check
+                            type="switch"
+                            id={`allow-multi-${mf.pipedreamSlug}`}
+                            checked={mfSettings?.allowMultipleAccounts === true}
+                            disabled={savingMultiAccount === mf.pipedreamSlug}
+                            onChange={async (e) => {
+                              if (!mf.pipedreamSlug) return;
+                              const next = e.target.checked;
+                              const slug = mf.pipedreamSlug;
+                              const cur = globalSettings[slug];
+                              // Optimistic flip so the switch feels instant.
+                              setGlobalSettings((prev) => ({
+                                ...prev,
+                                [slug]: {
+                                  status: prev[slug]?.status ?? 'disabled',
+                                  denyTools: prev[slug]?.denyTools ?? [],
+                                  preferred_method: prev[slug]?.preferred_method ?? null,
+                                  allowMultipleAccounts: next,
+                                },
+                              }));
+                              setSavingMultiAccount(slug);
+                              try {
+                                await AdminIntegrationsService.updateWithNuma(
+                                  slug,
+                                  {
+                                    status: cur?.status ?? 'enabled',
+                                    denyTools: cur?.denyTools ?? [],
+                                    preferred_method: cur?.preferred_method ?? null,
+                                    allowMultipleAccounts: next,
+                                  },
+                                  numaPut
+                                );
+                                await loadGlobal();
+                              } catch (err) {
+                                await loadGlobal();
+                                setError((err as Error).message || t('errors.updateIntegration'));
+                              } finally {
+                                setSavingMultiAccount(null);
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Tools section — only relevant when Pipedream is the active
                       method. The deny list applies to Pipedream's MCP tools. */}

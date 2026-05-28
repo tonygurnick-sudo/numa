@@ -1,5 +1,13 @@
 # Microsoft Outlook Integration Tips
 
+## Multiple Connected Mailboxes (FEAT-019)
+
+If the **Connected Integrations** section above lists more than one account under `microsoft_outlook`, each one is a separate Outlook mailbox.
+
+- `"authProvisionId": "auto"` resolves to ONE account only (the oldest). Use it only when context implies "any" / "my Outlook".
+- When the user references multiple mailboxes ("each", "all", "from work and personal", etc.) or names a specific one, iterate by calling `run_action` once per account with the explicit `apn_xxx` from the multi-account list. Don't claim "only one mailbox is connected" without checking.
+- Use the account display name (e.g. "tom@arcanum.ai") when reporting results back, not the apn_xxx.
+
 ## Establishing Context
 
 Before performing Outlook operations, establish context:

@@ -116,6 +116,10 @@ export interface V2AppWorkspaceSettings {
   enabledConnections: string[];
   workspaceAccess: boolean;
   contextInstructions: string;
+  /** FEAT-019: optional per-app account scope for Pipedream multi-account.
+   *  Map of `{appSlug: [accountId, ...]}`. Empty / undefined → all of the
+   *  user's connected accounts are eligible (legacy). */
+  selectedAccountsByApp?: Record<string, string[]>;
 }
 
 export interface RunConfiguration {
@@ -130,6 +134,9 @@ export interface RunConfiguration {
   metadata?: Record<string, string>;
   /** Explicit workspace agent type_id override (from V2AppAgent.agentType). */
   agentType?: string;
+  /** FEAT-019: per-run account scope (Pipedream multi-account). See
+   *  V2AppWorkspaceSettings.selectedAccountsByApp. */
+  selectedAccountsByApp?: Record<string, string[]>;
 }
 
 /**

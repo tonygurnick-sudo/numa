@@ -10,6 +10,7 @@ import {
 } from '../../config/integrationsConfig';
 import { useAuth } from '../../Providers/AuthProvider';
 import type { V2AppAgent, V2AppWorkspaceSettings, RunConfiguration } from '../../types/apps';
+import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
 import type { V2AppRunState } from '../../hooks/useV2AppRun';
 import type { RunRecord, ProgressEvent } from '../../Services/v2AppsService';
 
@@ -22,6 +23,9 @@ type ConnectionOption = {
   id: string;
   name: string;
   isConnected: boolean;
+  // FEAT-019: optional multi-account metadata.
+  allowMultipleAccounts?: boolean;
+  accounts?: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
 };
 
 interface AgentRunPanelProps {
@@ -117,6 +121,11 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
   const [enabledTools, setEnabledTools] = useState<string[]>(workspaceSettings.enabledTools);
   const [enabledConnections, setEnabledConnections] = useState<string[]>(workspaceSettings.enabledConnections);
   const [workspaceAccess, setWorkspaceAccess] = useState(workspaceSettings.workspaceAccess);
+  // FEAT-019: per-run account scope. Initialized from workspace defaults so
+  // an app-level default can be set in WorkspaceTab and inherited at run time.
+  const [selectedAccountsByApp, setSelectedAccountsByApp] = useState<Record<string, string[]>>(
+    workspaceSettings.selectedAccountsByApp ?? {}
+  );
 
   // Re-sync when workspace settings change
   useEffect(() => {
@@ -124,6 +133,7 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
     setEnabledTools(workspaceSettings.enabledTools);
     setEnabledConnections(workspaceSettings.enabledConnections);
     setWorkspaceAccess(workspaceSettings.workspaceAccess);
+    setSelectedAccountsByApp(workspaceSettings.selectedAccountsByApp ?? {});
   }, [workspaceSettings]);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
@@ -160,6 +170,10 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
         enabledConnections,
         workspaceAccess,
         contextInstructions: workspaceSettings.contextInstructions,
+        // FEAT-019: only forward narrowed account selections — omit slugs
+        // where no narrowing happened so the proxy falls through to the
+        // "all accounts" legacy path for those.
+        selectedAccountsByApp: Object.keys(selectedAccountsByApp).length > 0 ? selectedAccountsByApp : undefined,
       };
       await onSubmit(prompt.trim(), files, config, runName.trim() || undefined);
     },
@@ -174,6 +188,7 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
       enabledConnections,
       workspaceAccess,
       workspaceSettings.contextInstructions,
+      selectedAccountsByApp,
       onSubmit,
     ]
   );
@@ -361,21 +376,31 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
                             const icon = getConnectionIcon(conn.id);
                             const fallbackIcon = getConnectionFallbackIcon(conn.id);
                             const displayName = getConnectionDisplayName(conn.id);
+                            const isEnabled = enabledConnections.includes(conn.id);
                             return (
-                              <Form.Check key={conn.id} type="checkbox" className="mb-1">
-                                <Form.Check.Input
-                                  checked={enabledConnections.includes(conn.id)}
-                                  onChange={() => toggleConnection(conn.id)}
+                              <div key={conn.id}>
+                                <Form.Check type="checkbox" className="mb-1">
+                                  <Form.Check.Input checked={isEnabled} onChange={() => toggleConnection(conn.id)} />
+                                  <Form.Check.Label className="d-flex align-items-center gap-2">
+                                    {icon ? (
+                                      <img src={icon} alt="" style={{ width: 16, height: 16 }} />
+                                    ) : (
+                                      <i className={fallbackIcon} />
+                                    )}
+                                    {displayName}
+                                  </Form.Check.Label>
+                                </Form.Check>
+                                <IntegrationAccountSubmenu
+                                  connectionId={conn.id}
+                                  accounts={conn.accounts ?? []}
+                                  allowMultipleAccounts={conn.allowMultipleAccounts === true}
+                                  isEnabled={isEnabled}
+                                  selectedAccountIds={selectedAccountsByApp[conn.id]}
+                                  onChange={(next) =>
+                                    setSelectedAccountsByApp((prev) => ({ ...prev, [conn.id]: next }))
+                                  }
                                 />
-                                <Form.Check.Label className="d-flex align-items-center gap-2">
-                                  {icon ? (
-                                    <img src={icon} alt="" style={{ width: 16, height: 16 }} />
-                                  ) : (
-                                    <i className={fallbackIcon} />
-                                  )}
-                                  {displayName}
-                                </Form.Check.Label>
-                              </Form.Check>
+                              </div>
                             );
                           })
                         )}

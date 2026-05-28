@@ -750,6 +750,10 @@ const handleStartRun = async (runId: string, auth: AuthContext, event: APIGatewa
   const enabledConnections = (options.enabledConnections as string[]) || [];
   const contextInstructions = (options.contextInstructions as string) || '';
   const metadata = (options.metadata as Record<string, string>) || {};
+  // FEAT-019: per-app account scope. Forwarded as-is to the workspace agent
+  // where `_normalise_integrations_payload` merges it onto the enabled rows
+  // and `sdk_config` writes NUMA_ALLOWED_ACCOUNTS_BY_APP for the proxy.
+  const selectedAccountsByApp = (options.selectedAccountsByApp as Record<string, string[]>) || {};
 
   // Build availableKBs in {id, name} format expected by workspace agent
   const availableKBs = enabledKBs.length > 0 ? enabledKBs : enabledKBIds.map((id: string) => ({ id, name: id }));
@@ -783,6 +787,8 @@ const handleStartRun = async (runId: string, auth: AuthContext, event: APIGatewa
     userEmail: run.userEmail || auth.email || '',
     // Custom metadata for orchestrators (e.g., Nolia assessment_type, output_language, KB names)
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    // FEAT-019: forward multi-account selection
+    ...(Object.keys(selectedAccountsByApp).length > 0 ? { selectedAccountsByApp } : {}),
     // App workspace file prefixes for the agent to download into /workdir/app-workspace/
     workspacePrefixes: [`v2-apps/${run.appId}/data/`, `v2-apps/${run.appId}/user/${auth.sub}/data/`],
     // Upload file prefixes for the agent to download into /workdir/uploads/
@@ -932,6 +938,8 @@ const handleFollowUp = async (
   const enabledConnections = (options.enabledConnections as string[]) || [];
   const contextInstructions = (options.contextInstructions as string) || '';
   const metadata = (options.metadata as Record<string, string>) || {};
+  // FEAT-019: follow-up runs inherit the parent's account scope.
+  const selectedAccountsByApp = (options.selectedAccountsByApp as Record<string, string[]>) || {};
 
   const availableKBs = enabledKBs.length > 0 ? enabledKBs : enabledKBIds.map((id: string) => ({ id, name: id }));
 
@@ -957,6 +965,8 @@ const handleFollowUp = async (
     userEmail: record.userEmail || auth.email || '',
     // Forward custom metadata for orchestrators (inherited from parent run)
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    // FEAT-019: forward inherited multi-account scope
+    ...(Object.keys(selectedAccountsByApp).length > 0 ? { selectedAccountsByApp } : {}),
     workspacePrefixes: [`v2-apps/${parent.appId}/data/`, `v2-apps/${parent.appId}/user/${auth.sub}/data/`],
     // Upload file prefixes for the agent to download into /workdir/uploads/
     uploadPrefixes: [`v2-apps/${parent.appId}/${auth.sub}/${conversationId}/uploads/`],

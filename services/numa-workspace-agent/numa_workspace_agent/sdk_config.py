@@ -823,6 +823,81 @@ def create_agent_options(
     if _enabled_pipedream_slugs:
         env["NUMA_ENABLED_INTEGRATIONS"] = json.dumps(_enabled_pipedream_slugs)
 
+    # FEAT-019: per-conversation account scope. JSON dict of
+    #   { "<app_slug>": ["apn_xxx", "apn_yyy", ...] }
+    # When set, run_action / proxy_request narrow the candidate account list
+    # to this subset before resolving authProvisionId:"auto". Absent or empty
+    # → all of the user's connected accounts are eligible (legacy). Only
+    # populated when the admin has enabled multi-account for the app AND the
+    # user actually narrowed the selection in the chat picker.
+    _allowed_accounts_by_app: dict[str, list[str]] = {}
+    _account_names_by_app: dict[str, dict[str, str]] = {}
+    for it in enabled_integrations or []:
+        if not isinstance(it, dict):
+            continue
+        if it.get("method") != "pipedream":
+            continue
+        slug = it.get("slug")
+        ids = it.get("account_ids")
+        if isinstance(slug, str) and slug and isinstance(ids, list) and ids:
+            _allowed_accounts_by_app[slug] = [
+                x for x in ids if isinstance(x, str) and x
+            ]
+        names = it.get("account_names")
+        if isinstance(slug, str) and slug and isinstance(names, dict) and names:
+            _account_names_by_app[slug] = {
+                str(k): str(v)
+                for k, v in names.items()
+                if isinstance(k, str) and isinstance(v, str)
+            }
+    if _allowed_accounts_by_app:
+        env["NUMA_ALLOWED_ACCOUNTS_BY_APP"] = json.dumps(_allowed_accounts_by_app)
+    if _account_names_by_app:
+        env["NUMA_ACCOUNT_NAMES_BY_APP"] = json.dumps(_account_names_by_app)
+
+    # FEAT-019: informational full per-app account roster — always emitted
+    # when the FE / V2-app / schedule producer attaches `available_accounts`
+    # to an integration row. The prompt builder reads this to list every
+    # connected account (with its apn_xxx) so the model can target specific
+    # accounts via explicit `authProvisionId` instead of relying on the
+    # proxy's first-match `auto` resolution. Distinct from
+    # NUMA_ALLOWED_ACCOUNTS_BY_APP (a proxy filter applied only when the
+    # user has narrowed the selection).
+    _available_accounts_by_app: dict[str, list[dict]] = {}
+    for it in enabled_integrations or []:
+        if not isinstance(it, dict) or it.get("method") != "pipedream":
+            continue
+        slug = it.get("slug")
+        avail = it.get("available_accounts")
+        if (
+            not isinstance(slug, str)
+            or not slug
+            or not isinstance(avail, list)
+            or not avail
+        ):
+            continue
+        cleaned: list[dict] = []
+        for entry in avail:
+            if not isinstance(entry, dict):
+                continue
+            acc_id = entry.get("account_id")
+            if not isinstance(acc_id, str) or not acc_id:
+                continue
+            cleaned.append(
+                {
+                    "account_id": acc_id,
+                    "name": (
+                        entry.get("name")
+                        if isinstance(entry.get("name"), str)
+                        else None
+                    ),
+                }
+            )
+        if cleaned:
+            _available_accounts_by_app[slug] = cleaned
+    if _available_accounts_by_app:
+        env["NUMA_AVAILABLE_ACCOUNTS_BY_APP"] = json.dumps(_available_accounts_by_app)
+
     # Pass enabled native connector slugs (filtered from the unified list).
     # The `connectors` MCP tool enforces per-call which connectors are
     # callable so a stale agent can't reach a service the user disabled
@@ -858,6 +933,14 @@ def create_agent_options(
         "NUMA_ENABLED_INTEGRATIONS",
         "NUMA_ENABLED_NATIVE_CONNECTORS",
         "NUMA_EXTERNAL_USER_ID",
+        # FEAT-019: multi-account state. integrations.py reads
+        # NUMA_ALLOWED_ACCOUNTS_BY_APP at run_action time to forward the
+        # per-conversation account scope to the proxy. WITHOUT this propagation
+        # the in-process MCP tool always sees an empty allow-list and the
+        # proxy can't filter — silently using the wrong account.
+        "NUMA_ALLOWED_ACCOUNTS_BY_APP",
+        "NUMA_AVAILABLE_ACCOUNTS_BY_APP",
+        "NUMA_ACCOUNT_NAMES_BY_APP",
         # Numa tool needs these for Lambda invocation, KB operations, S3 file sync
         "WORKSPACE_TOOLS_LAMBDA_NAME",
         "NUMA_ALLOWED_KBS",

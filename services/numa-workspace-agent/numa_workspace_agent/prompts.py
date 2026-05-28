@@ -1002,6 +1002,89 @@ def _build_integrations_context(
 
     status_block = "\n".join(status_lines)
 
+    # FEAT-019: multi-account roster + active-scope info. Read DIRECTLY from
+    # the normalised items rather than env vars — sdk_config sets the env
+    # vars AFTER the system prompt is built, so reading from os.environ here
+    # would always see empty. The items carry the same data (the normaliser
+    # in main.py captures `available_accounts`, `account_ids`, and
+    # `account_names` from the wire payload).
+    block_lines: list[str] = []
+    has_any_narrowing = False
+    # `enabled_integrations` here is the raw arg, not the normalised local
+    # `enabled` (which strips fields). Re-iterate the source rows directly
+    # so we see every Pipedream item with its account metadata.
+    for raw in enabled_integrations or []:
+        if not isinstance(raw, dict):
+            continue
+        if raw.get("method") != "pipedream":
+            continue
+        slug = raw.get("slug")
+        if not isinstance(slug, str) or not slug:
+            continue
+
+        full_roster = raw.get("available_accounts") or raw.get("availableAccounts")
+        if not isinstance(full_roster, list):
+            full_roster = []
+
+        # FEAT-019 security: when narrowing is active, the model must NOT see
+        # the disallowed accounts — otherwise it'll happily call them when
+        # the user asks for "each / all", bypassing per-conversation scope.
+        # Enforcement also happens at the proxy (`_inject_auth_provision_id`
+        # rejects explicit `apn_xxx` not in the allow-list), but hiding from
+        # the prompt is the primary defence: the model can't call something
+        # it doesn't know exists.
+        narrowed = raw.get("account_ids") or raw.get("accountIds")
+        narrowed_set: Optional[set] = None
+        if isinstance(narrowed, list) and narrowed:
+            narrowed_set = {a for a in narrowed if isinstance(a, str) and a}
+            has_any_narrowing = True
+
+        # Determine which accounts the model is allowed to know about.
+        visible_roster: list[dict] = []
+        for r in full_roster:
+            if not isinstance(r, dict):
+                continue
+            acc_id = r.get("account_id") or r.get("accountId")
+            if not isinstance(acc_id, str) or not acc_id:
+                continue
+            if narrowed_set is not None and acc_id not in narrowed_set:
+                continue
+            visible_roster.append(r)
+
+        # Only render the block when there's more than one visible account
+        # for this slug. A single account (either because there's only one
+        # connected, or narrowing reduced to one) is the legacy case — no
+        # iteration guidance needed.
+        if len(visible_roster) > 1:
+            entries: list[str] = []
+            for r in visible_roster:
+                acc_id = r.get("account_id") or r.get("accountId")
+                name = r.get("name") or acc_id
+                entries.append(f'  - "{name}" → authProvisionId="{acc_id}"')
+            block_lines.append(f"- {slug} ({len(entries)} accounts):")
+            block_lines.extend(entries)
+
+    multi_account_block = ""
+    if block_lines:
+        scope_note = (
+            " The user has narrowed the active accounts for this conversation "
+            "— only the apn_xxx values listed below exist for you. Do NOT "
+            "invent or use any other apn id; the proxy will reject it."
+            if has_any_narrowing
+            else ""
+        )
+        multi_account_block = (
+            "\n\n**Multi-account integrations** — these have more than one "
+            "account active for this conversation." + scope_note + " "
+            '`authProvisionId: "auto"` picks ONE account (the oldest of the '
+            "active set). If the user references multiple mailboxes / "
+            'inboxes / workspaces, or asks for results from "each" / "all" / '
+            '"both" accounts, you MUST iterate: call `run_action` once per '
+            "account, setting the explicit `authProvisionId` to the apn_xxx "
+            "below. Label results by account name, not by apn_xxx.\n"
+            + "\n".join(block_lines)
+        )
+
     context = f"""## Integrations
 
 The user's integrations are listed below. Each row is tagged with its method:
@@ -1011,7 +1094,7 @@ The user's integrations are listed below. Each row is tagged with its method:
 Only rows marked **Enabled for this conversation** can be called by tools right now. Rows marked Available are connected but toggled off for this session — when relevant, suggest the user enable them from the chat sidebar's Integrations panel.
 
 **Available integrations:**
-{status_block}
+{status_block}{multi_account_block}
 
 **Method routing:** Follow the per-row method tag and any "admin set this service to ..." hint. When a service appears on both a Pipedream and a Native row, the admin hint is the source of truth — there is no global "prefer one or the other" rule. If you call the wrong family, the runtime rejects the call and tells you which to switch to.
 
@@ -1052,7 +1135,7 @@ Important notes:
 - /workdir/tmp/ is scratch — synced for your continuity but invisible to the user. /workdir/outputs/ is what the user sees in their Files page
 - If the user asks for a file (download/save/give me X), `cp` or `mv` it from /workdir/tmp/integrations-results/ into /workdir/outputs/ before reporting done. Otherwise leave it in tmp and reference it inline
 - Use the annotations (readOnlyHint, destructiveHint) from schemas to gauge risk
-- The "authProvisionId":"auto" value is injected automatically — do not look up account IDs
+- `"authProvisionId":"auto"` resolves to ONE account (the oldest by created_at). For multi-account integrations listed above, use the explicit `apn_xxx` to target a specific account, and iterate when the user wants "each" / "all" / "both" mailboxes/workspaces. Do NOT claim "only one account is connected" without checking the multi-account roster.
 - Always read the action schema first to understand required and optional props
 - **Bulk / paginated fetches:** Use `proxy_request` directly and follow the API's pagination token (`@odata.nextLink` for Microsoft Graph, `nextPageToken` for Google APIs, `next` URLs for most REST APIs). NEVER iterate `$skip` / `offset` / `pageNumber` manually — that's a linear scan that costs one round-trip + one approval per page. Pipedream's built-in actions strip pagination tokens before returning, so you cannot paginate past page 1 via `run_action` — only `proxy_request` preserves them. Decide your full field selection (`$select` etc.) up front so you don't have to re-walk the same window with different params.
 """
