@@ -222,6 +222,30 @@ def reclassify_interrupt_result(serialized: dict[str, Any]) -> dict[str, Any]:
     return serialized
 
 
+def override_result_cost(serialized: dict[str, Any], stream_log: Any) -> dict[str, Any]:
+    """Replace the SDK's `total_cost_usd` on a serialized ResultMessage with our
+    recomputed value, preserving the SDK's original under `sdk_reported_cost_usd`.
+
+    The bundled Claude CLI's pricing table only carries 5-minute cache-write
+    rates; Numa runs the 1-hour tier (2× base input vs 1.25× for 5m), so the
+    SDK's `total_cost_usd` under-reports cache_creation by ~18% on Haiku 1h
+    cache hits, more on Sonnet. AWS bills correctly; this aligns the trace
+    file and the frontend cost badge with what AWS actually charges.
+
+    Must be called AFTER `stream_log.finalize(message)` so the recomputed
+    values are available.
+    """
+    if serialized.get("type") != "result":
+        return serialized
+    sdk_value = serialized.get("total_cost_usd")
+    recomputed = getattr(stream_log, "total_cost_usd", None)
+    if recomputed is None:
+        return serialized
+    serialized["sdk_reported_cost_usd"] = sdk_value
+    serialized["total_cost_usd"] = recomputed
+    return serialized
+
+
 def serialize_message(message: Any) -> dict[str, Any]:
     """Serialize an SDK message to a JSON-compatible dict for trace storage."""
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -558,11 +582,17 @@ async def stream_claude_sdk(
     polled_shell_ids: set[str] = set()
     killed_shell_ids: set[str] = set()
 
-    # Initialize stream log for verbose debugging
+    # Initialize stream log for verbose debugging. Streaming chats use the
+    # 1-hour Bedrock cache TTL (see ENABLE_PROMPT_CACHING_1H_BEDROCK in
+    # sdk_config.create_agent_options); the StreamLog uses this to recompute
+    # total_cost_usd correctly because the bundled CLI's pricing table only
+    # carries the 5-minute cache-write rate.
     stream_log = StreamLog(
         conversation_id=conversation_id,
         user_sub=user_sub,
         prompt=prompt,
+        model_id=model_id,
+        cache_ttl="1h",
     )
 
     # 1. Determine session_id and download files
@@ -860,6 +890,7 @@ async def stream_claude_sdk(
                         captured_session_id = message.session_id
                         serialized["session_id"] = captured_session_id
                         stream_log.finalize(message)
+                        serialized = override_result_cost(serialized, stream_log)
                         # Reclassify the SDK's error_during_execution result
                         # as a clean interrupt so the frontend doesn't render
                         # red error styling on a user-initiated stop.
@@ -989,6 +1020,7 @@ async def stream_claude_sdk(
                     serialized["session_id"] = captured_session_id
                     # Finalize stream log with result data
                     stream_log.finalize(message)
+                    serialized = override_result_cost(serialized, stream_log)
                     logger.info(
                         "SDK result summary",
                         _name="SDK_RESULT",
@@ -1535,6 +1567,7 @@ async def stream_claude_sdk(
                         captured_session_id = message.session_id
                         serialized["session_id"] = captured_session_id
                         stream_log.finalize(message)
+                        serialized = override_result_cost(serialized, stream_log)
                         logger.info(
                             "Fallback SDK result summary",
                             _name="SDK_RESULT_FALLBACK",
@@ -1769,11 +1802,16 @@ async def run_claude_sdk(
     session_id: Optional[str] = None
     captured_session_id: Optional[str] = None
 
-    # Initialize stream log for debugging
+    # Initialize stream log for debugging. Non-streaming runs (scheduled
+    # agents, V2 apps, Nolia phases, sync pipelines) keep the default 5-minute
+    # Bedrock cache TTL — the CLI's pricing table matches reality here, but
+    # we still pass cache_ttl explicitly for clarity and forward-compatibility.
     stream_log = StreamLog(
         conversation_id=conversation_id,
         user_sub=user_sub,
         prompt=prompt,
+        model_id=model_id,
+        cache_ttl="5m",
     )
 
     # 1. Restore session on cold start (same as streaming)
@@ -2170,6 +2208,7 @@ async def run_claude_sdk(
                     captured_session_id = message.session_id
                     serialized["session_id"] = captured_session_id
                     stream_log.finalize(message)
+                    serialized = override_result_cost(serialized, stream_log)
                     usage = getattr(message, "usage", {}) or {}
                     result_meta = {
                         "num_turns": message.num_turns,
@@ -2285,6 +2324,7 @@ async def run_claude_sdk(
                         captured_session_id = message.session_id
                         serialized["session_id"] = captured_session_id
                         stream_log.finalize(message)
+                        serialized = override_result_cost(serialized, stream_log)
                         usage = getattr(message, "usage", {}) or {}
                         result_meta = {
                             "num_turns": message.num_turns,

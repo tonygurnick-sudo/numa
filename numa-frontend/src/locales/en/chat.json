@@ -413,7 +413,9 @@
       "uploadMore": "Upload More",
       "done": "Done",
       "cancel": "Cancel",
-      "dropOverlay": "Drop files to upload"
+      "dropOverlay": "Drop files to upload",
+      "skippedHidden_one": "Skipped {{count}} hidden or system file (e.g. .git/, node_modules/).",
+      "skippedHidden_other": "Skipped {{count}} hidden or system files (e.g. .git/, node_modules/)."
     },
     "segments": {
       "uploaded": "Uploaded: {{filename}}",

@@ -164,6 +164,98 @@ BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
 MAX_OUTPUT_TOKENS = int(os.environ.get("NUMA_MAX_OUTPUT_TOKENS", "32000"))
 
 
+# ── Cost-recompute table for Anthropic models on Bedrock ──────────────────────
+# The bundled Claude Code CLI's pricing table only carries 5-minute cache-write
+# rates. Numa interactive chat uses the 1-hour cache tier
+# (ENABLE_PROMPT_CACHING_1H_BEDROCK=1, see env build below), which AWS bills at
+# 2× the base input rate instead of 1.25×. Result: every interactive turn's
+# `total_cost_usd` from the SDK under-reports cache_creation cost by 0.75× the
+# base input rate. AWS still bills correctly; only our telemetry is wrong.
+#
+# `recalculate_anthropic_cost` below recomputes total_cost_usd from raw token
+# counts using these rates, applied selectively when 1h caching is on. Rates
+# are per million tokens (USD).
+#
+# Sources:
+#   https://platform.claude.com/docs/en/about-claude/pricing
+#   https://aws.amazon.com/bedrock/pricing/
+#
+# Keep keys in sync with REGIONAL_MODEL_MAP keys (bare ids, no regional prefix).
+ANTHROPIC_MODEL_PRICING: dict[str, dict[str, float]] = {
+    "anthropic.claude-sonnet-4-6": {
+        "input": 3.00,
+        "output": 15.00,
+        "cache_write_5m": 3.75,
+        "cache_write_1h": 6.00,
+        "cache_read": 0.30,
+    },
+    "anthropic.claude-opus-4-6-v1": {
+        "input": 15.00,
+        "output": 75.00,
+        "cache_write_5m": 18.75,
+        "cache_write_1h": 30.00,
+        "cache_read": 1.50,
+    },
+    "anthropic.claude-haiku-4-5-20251001-v1:0": {
+        "input": 1.00,
+        "output": 5.00,
+        "cache_write_5m": 1.25,
+        "cache_write_1h": 2.00,
+        "cache_read": 0.10,
+    },
+    "anthropic.claude-sonnet-4-5-20250929-v1:0": {
+        "input": 3.00,
+        "output": 15.00,
+        "cache_write_5m": 3.75,
+        "cache_write_1h": 6.00,
+        "cache_read": 0.30,
+    },
+    "anthropic.claude-sonnet-4-20250514-v1:0": {
+        "input": 3.00,
+        "output": 15.00,
+        "cache_write_5m": 3.75,
+        "cache_write_1h": 6.00,
+        "cache_read": 0.30,
+    },
+}
+
+
+def recalculate_anthropic_cost(
+    model_id: Optional[str],
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int,
+    cache_creation_tokens: int,
+    cache_ttl: str = "5m",
+) -> Optional[float]:
+    """Recompute total_cost_usd from raw token counts using AWS-billed rates.
+
+    Returns None when the model id can't be mapped to a known entry — callers
+    should keep the SDK's reported value as a fallback in that case.
+
+    `cache_ttl` is "5m" (default Bedrock) or "1h" (Numa interactive chats —
+    selected via ENABLE_PROMPT_CACHING_1H_BEDROCK=1). Only `cache_write` rate
+    varies between the two; cache_read is identical.
+    """
+    if not model_id:
+        return None
+    bare = _strip_prefix(model_id)
+    bare = _normalise_anthropic_bare_id(bare)
+    rates = ANTHROPIC_MODEL_PRICING.get(bare)
+    if rates is None:
+        return None
+    write_rate = (
+        rates["cache_write_1h"] if cache_ttl == "1h" else rates["cache_write_5m"]
+    )
+    return (
+        input_tokens * rates["input"]
+        + output_tokens * rates["output"]
+        + cache_read_tokens * rates["cache_read"]
+        + cache_creation_tokens * write_rate
+    ) / 1_000_000
+
+
 # Thinking-config presets selectable via the "@<suffix>" form on modelId.
 # Throwaway plumbing for comparison testing — productionised path will configure
 # thinking per-model server-side. See plan: thinking-config model variants.
@@ -205,6 +297,36 @@ def parse_model_id_with_thinking(
     return bare, suffix if suffix in THINKING_PRESETS else None
 
 
+def _normalise_anthropic_bare_id(bare: str) -> str:
+    """Best-effort normalisation of a bare model id to the canonical Bedrock form
+    used as keys in REGIONAL_MODEL_MAP.
+
+    The frontend always sends canonical forms (`anthropic.<name>[-v1:0]`), but
+    bench tools, scheduled-run authors, and direct API consumers sometimes pass
+    short forms like `claude-haiku-4-5-20251001` or `claude-haiku-4-5-20251001-v1:0`.
+    Without normalisation those silently fall through to DEFAULT_MODEL (Sonnet),
+    masking the fact that the requested model never ran. This function tries the
+    common variants before we give up; it never reaches outside the
+    REGIONAL_MODEL_MAP keys for the current region, so we can't accidentally
+    invent a wrong model id.
+    """
+    region_keys = set(
+        REGIONAL_MODEL_MAP.get(REGION, REGIONAL_MODEL_MAP["us-east-1"]).keys()
+    )
+    candidates = [bare]
+    if not bare.startswith("anthropic."):
+        candidates.append(f"anthropic.{bare}")
+        if not bare.endswith("-v1:0"):
+            candidates.append(f"anthropic.{bare}-v1:0")
+    elif not bare.endswith("-v1:0"):
+        # Already prefixed, just try the -v1:0 form
+        candidates.append(f"{bare}-v1:0")
+    for c in candidates:
+        if c in region_keys:
+            return c
+    return bare
+
+
 def validate_model_id(model_id: Optional[str]) -> Optional[str]:
     """
     Validate and return a region-appropriate model ID for use with Bedrock.
@@ -217,18 +339,39 @@ def validate_model_id(model_id: Optional[str]) -> Optional[str]:
     (e.g. build_claude_options) can fall back to the agent type's
     default_model before using the global DEFAULT_MODEL.
 
+    When the supplied id is non-empty but unrecognised, logs a warning and
+    falls back to DEFAULT_MODEL. The pre-warning behaviour silently dropped
+    these inputs onto Sonnet, which made Haiku-as-eval-only invisible — the
+    eval was bogus because Haiku was never actually invoked.
+
     Args:
         model_id: Optional model ID from frontend request (may have any prefix or none)
 
     Returns:
         Validated model ID string with correct regional prefix, or None
     """
-    if model_id:
-        regionalized = _regionalize(_strip_prefix(model_id))
-        if regionalized in ALLOWED_MODELS:
-            return regionalized
-        return DEFAULT_MODEL
-    return None
+    if model_id is None:
+        return None
+    if not model_id:
+        return None
+    bare = _normalise_anthropic_bare_id(_strip_prefix(model_id))
+    regionalized = _regionalize(bare)
+    if regionalized in ALLOWED_MODELS:
+        return regionalized
+    # Unrecognised: surface the silent fallback so eval/bench callers can
+    # spot mistyped or short-form ids that previously got routed to Sonnet.
+    import structlog
+
+    structlog.get_logger().warning(
+        "Unrecognised model id, falling back to DEFAULT_MODEL",
+        _name="MODEL_ID_FALLBACK",
+        requested_model=model_id,
+        normalised_bare=bare,
+        regionalized_attempt=regionalized,
+        fallback_model=DEFAULT_MODEL,
+        region=REGION,
+    )
+    return DEFAULT_MODEL
 
 
 def _get_local_credentials() -> dict[str, str]:
@@ -916,6 +1059,25 @@ def create_agent_options(
         preset = THINKING_PRESETS[thinking_override]
         effective_thinking = preset["thinking"]
         effective_effort = preset["effort"]
+
+    # Haiku 4.5 does not support the new adaptive thinking form on Bedrock.
+    # When the request would have used {"type": "adaptive"} + effort (the
+    # Sonnet/Opus path), translate it to the legacy {"type": "enabled",
+    # "budget_tokens": N} form Haiku accepts, and drop `effort` (Haiku
+    # ignores it). Without this, the kwargs are sent to Bedrock and silently
+    # produce no thinking blocks for Haiku — verified empirically.
+    is_haiku_4_5 = effective_model and "haiku-4-5" in effective_model
+    if (
+        is_haiku_4_5
+        and isinstance(effective_thinking, dict)
+        and effective_thinking.get("type") == "adaptive"
+    ):
+        # Map effort to a fixed budget. Minimum is 1024 (Bedrock requirement).
+        # "max" mirrors high since Haiku has no separate ceiling preset.
+        effort_to_budget = {"low": 1024, "medium": 4000, "high": 10000, "max": 10000}
+        budget = effort_to_budget.get(effective_effort or "low", 1024)
+        effective_thinking = {"type": "enabled", "budget_tokens": budget}
+        effective_effort = None  # Haiku 4.5 does not accept the `effort` field.
 
     if effective_thinking:
         options_kwargs["thinking"] = effective_thinking

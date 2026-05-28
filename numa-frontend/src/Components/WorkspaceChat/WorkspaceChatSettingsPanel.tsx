@@ -288,15 +288,25 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   // the hook is hydrating from cache so a brief empty state doesn't wipe
   // valid selections; skipped when the feature flag is off so we don't
   // touch state the user can't see.
+  // Compare BEFORE calling the setter — the setter prop is wired to the
+  // parent's user-modified handler, which flips `userSettingsModified=true`
+  // even when the functional updater returns the same `prev` reference. A
+  // spurious flip here permanently blocks the user's chat-defaults from
+  // applying once connector status finishes loading on initial page mount.
   useEffect(() => {
     if (!dataConnectorsFeatureEnabled) return;
     if (connectedIntegrationsList.length === 0) return;
     const connectedFileStoreIds = new Set(connectedIntegrationsList.filter((i) => i.isFileStore).map((i) => i.id));
-    setEnabledNativeConnectorIds((prev) => {
-      const next = prev.filter((id) => !surfacesInFiles(id) || connectedFileStoreIds.has(id));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [connectedIntegrationsList, dataConnectorsFeatureEnabled, setEnabledNativeConnectorIds]);
+    const next = enabledNativeConnectorIds.filter((id) => !surfacesInFiles(id) || connectedFileStoreIds.has(id));
+    if (next.length !== enabledNativeConnectorIds.length) {
+      setEnabledNativeConnectorIds(next);
+    }
+  }, [
+    connectedIntegrationsList,
+    dataConnectorsFeatureEnabled,
+    enabledNativeConnectorIds,
+    setEnabledNativeConnectorIds,
+  ]);
   const remoteFilesGroupSlugs = useMemo(
     () => remoteFilesGroupConnectors.map((c) => c.id),
     [remoteFilesGroupConnectors]

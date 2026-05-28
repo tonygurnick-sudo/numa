@@ -60,6 +60,40 @@ function formatFileSize(bytes: number): string {
 }
 
 /**
+ * Path segments excluded from folder uploads.
+ *
+ * Anything beginning with `.` is skipped (e.g. `.git`, `.cache`, `.DS_Store`,
+ * `.venv`). Container also rejects hidden paths in `_sanitize_upload_path`, so
+ * letting these through wastes bandwidth and surfaces as a chat error.
+ *
+ * Names listed here are skipped even though they don't start with `.`, because
+ * they're typically huge and regeneratable.
+ */
+const SKIP_NAMED_SEGMENTS: ReadonlySet<string> = new Set([
+  'node_modules',
+  '__pycache__',
+  'dist',
+  'build',
+  '.next',
+  '.nuxt',
+  '.svelte-kit',
+  '.turbo',
+  '.parcel-cache',
+]);
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function isUploadSkippedSegment(segment: string): boolean {
+  if (!segment) return false;
+  if (segment.startsWith('.')) return true;
+  return SKIP_NAMED_SEGMENTS.has(segment);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function pathHasSkippedSegment(path: string): boolean {
+  return path.split('/').some(isUploadSkippedSegment);
+}
+
+/**
  * Get file icon based on extension.
  */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -110,6 +144,7 @@ export function WorkspaceChatFileUpload({
   const [files, setFiles] = useState<FileUploadItem[]>([]);
   const [overallStatus, setOverallStatus] = useState<OverallStatus>('idle');
   const [isDragging, setIsDragging] = useState(false);
+  const [skippedCount, setSkippedCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -119,6 +154,7 @@ export function WorkspaceChatFileUpload({
   const resetState = useCallback(() => {
     setFiles([]);
     setOverallStatus('idle');
+    setSkippedCount(0);
     // Reset file inputs
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (folderInputRef.current) folderInputRef.current.value = '';
@@ -156,14 +192,26 @@ export function WorkspaceChatFileUpload({
     (newFiles: File[], relativePaths?: string[]) => {
       const maxSize = 500 * 1024 * 1024; // 500MB (direct S3 upload bypasses CloudFront 10MB limit)
 
-      // Filter out folder entries that browsers sometimes include
+      // Filter out folder entries that browsers sometimes include, plus
+      // hidden/skip-listed paths (.git/, node_modules/, etc.) which the
+      // container rejects and would surface as chat errors.
       const filteredFiles: Array<{ file: File; relativePath?: string }> = [];
+      let skipped = 0;
       for (let i = 0; i < newFiles.length; i++) {
         const file = newFiles[i];
         if (isFolderEntry(file)) {
           continue;
         }
+        const relPath = relativePaths?.[i] ?? file.name;
+        if (pathHasSkippedSegment(relPath)) {
+          skipped += 1;
+          continue;
+        }
         filteredFiles.push({ file, relativePath: relativePaths?.[i] });
+      }
+
+      if (skipped > 0) {
+        setSkippedCount((prev) => prev + skipped);
       }
 
       if (filteredFiles.length === 0) {
@@ -337,6 +385,13 @@ export function WorkspaceChatFileUpload({
     } while (batch.length > 0);
 
     for (const entry of entries) {
+      // Skip hidden/noise segments at the source so we don't enumerate huge
+      // .git/ or node_modules/ trees (can be 10k+ files) just to filter them
+      // out later. Mirrors pathHasSkippedSegment used in addFiles().
+      if (isUploadSkippedSegment(entry.name)) {
+        continue;
+      }
+
       const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
 
       if (entry.isFile) {
@@ -552,6 +607,14 @@ export function WorkspaceChatFileUpload({
               </div>
             ))}
           </div>
+        )}
+
+        {/* Skipped paths notice (hidden segments and noise dirs filtered before upload) */}
+        {skippedCount > 0 && (
+          <Alert variant="info" className="mt-3 mb-0 small">
+            <i className="bi bi-info-circle me-1" />
+            {t('workspace.fileUpload.skippedHidden', { count: skippedCount })}
+          </Alert>
         )}
 
         {/* Status Summary */}

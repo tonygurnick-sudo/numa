@@ -26,6 +26,7 @@ import boto3
 import jwt
 import requests
 from botocore.config import Config
+from botocore.exceptions import ClientError
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import (
     JSONResponse,
@@ -522,18 +523,70 @@ async def list_conversation_files(
         None, alias="x-arcanum-cloudfront-secret"
     ),
 ):
-    """Forward per-conversation files list request to AgentCore."""
+    """List a conversation's uploads/ and outputs/ files directly from S3.
+
+    Previously this forwarded to the container via AgentCore, which provisioned
+    a microVM (and ~30min of idle billing) just to do a single ListObjectsV2
+    against the same S3 bucket the proxy already has read access to.
+    Same response shape as the container handler.
+    """
     validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
     user_sub = extract_user_sub(authorization)
 
-    return await _invoke_agentcore(
-        user_sub=user_sub,
-        http_method="GET",
-        http_path=f"/files/{conversation_id}",
-        authorization=authorization,
-        stream=False,
-        conversation_id=conversation_id,
-    )
+    if not s3_client or not OUTPUTS_BUCKET_NAME:
+        raise HTTPException(status_code=500, detail="Outputs bucket not configured")
+
+    prefix = f"numa-chat/workspace/{user_sub}/conversations/{conversation_id}/"
+    files: list[dict] = []
+    # Backward compat: legacy `session/` keys are normalised to `outputs/`.
+    # If both already exist for the same name, prefer the canonical `outputs/`.
+    seen_output_names: set[str] = set()
+
+    try:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=OUTPUTS_BUCKET_NAME, Prefix=prefix):
+            for obj in page.get("Contents") or []:
+                rel_path = obj["Key"][len(prefix) :]
+
+                if not (
+                    rel_path.startswith("uploads/")
+                    or rel_path.startswith("outputs/")
+                    or rel_path.startswith("session/")
+                ):
+                    continue
+
+                if rel_path.startswith("_system/"):
+                    continue
+
+                if rel_path.startswith("session/"):
+                    normalized = "outputs/" + rel_path[len("session/") :]
+                    if normalized in seen_output_names:
+                        continue
+                    rel_path = normalized
+
+                if rel_path.startswith("outputs/"):
+                    seen_output_names.add(rel_path)
+
+                last_modified = obj.get("LastModified")
+                files.append(
+                    {
+                        "path": rel_path,
+                        "name": rel_path.split("/")[-1],
+                        "size": int(obj.get("Size", 0)),
+                        "modifiedAt": (
+                            last_modified.isoformat() if last_modified else None
+                        ),
+                    }
+                )
+    except ClientError as e:
+        logger.error(
+            "Failed to list conversation files from S3: %s",
+            e,
+            extra={"prefix": prefix},
+        )
+        raise HTTPException(status_code=500, detail="Failed to list files") from e
+
+    return {"status": "success", "files": files}
 
 
 # Cap on artifacts returned in a single /artifacts response — protects the
@@ -685,21 +738,59 @@ async def get_trace(
         None, alias="x-arcanum-cloudfront-secret"
     ),
 ):
-    """Forward trace request to AgentCore.
+    """Stream the conversation trace.jsonl directly from S3.
 
-    Returns filtered NDJSON with thinking blocks and assistant_advice stripped.
+    Previously forwarded to the container via AgentCore (which provisioned a
+    microVM just to run a single s3.get_object). Now reads from S3 in the
+    proxy and runs each NDJSON line through the existing _filter_ndjson_line
+    to strip thinking blocks / assistant_advice.
+
+    Returns 200 with empty body when no trace exists yet (matching the
+    container's behaviour) so the frontend doesn't show a load error for
+    brand-new conversations.
     """
     validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
     user_sub = extract_user_sub(authorization)
 
-    return await _invoke_agentcore(
-        user_sub=user_sub,
-        http_method="GET",
-        http_path=f"/trace/{conversation_id}",
-        authorization=authorization,
-        stream=False,
-        raw=True,
-        conversation_id=conversation_id,
+    if not s3_client or not OUTPUTS_BUCKET_NAME:
+        raise HTTPException(status_code=500, detail="Outputs bucket not configured")
+
+    trace_key = (
+        f"numa-chat/workspace/{user_sub}/conversations/{conversation_id}"
+        f"/_system/trace.jsonl"
+    )
+
+    try:
+        obj = s3_client.get_object(Bucket=OUTPUTS_BUCKET_NAME, Key=trace_key)
+        trace_content = obj["Body"].read().decode("utf-8")
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code in ("NoSuchKey", "404"):
+            return Response(
+                content="",
+                media_type="application/x-ndjson",
+                status_code=200,
+            )
+        logger.error(
+            "Failed to fetch trace from S3: %s",
+            e,
+            extra={"key": trace_key},
+        )
+        raise HTTPException(status_code=500, detail="Failed to fetch trace") from e
+
+    filtered_lines: list[str] = []
+    for line in trace_content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        out = _filter_ndjson_line(stripped)
+        if out is not None:
+            filtered_lines.append(out)
+
+    return Response(
+        content="\n".join(filtered_lines),
+        media_type="application/x-ndjson",
+        status_code=200,
     )
 
 
