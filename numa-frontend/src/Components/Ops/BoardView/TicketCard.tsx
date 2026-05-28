@@ -257,9 +257,30 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
       </div>
 
       {/* ── Top: meta counts ──────────────────────────────────────── */}
-      {(ticket.linkCount > 0 || ticket.commentCount > 0 || ticket.hasUnresolvedDependencies || ticket.isBlocking) && (
+      {(ticket.linkCount > 0 ||
+        ticket.commentCount > 0 ||
+        ticket.hasUnresolvedDependencies ||
+        ticket.isBlocking ||
+        ticket.hasRecurrence) && (
         <div className="ticket-card-top">
           <div className="d-flex align-items-center gap-2 ms-auto">
+            {ticket.hasRecurrence && (
+              <OverlayTrigger placement="top" overlay={<Tooltip>{t('recurrence.rowLabel')}</Tooltip>}>
+                <span
+                  style={{
+                    backgroundColor: '#ede9fe',
+                    color: '#6d28d9',
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <i className="bi bi-arrow-repeat" style={{ fontSize: '0.7rem' }} />
+                </span>
+              </OverlayTrigger>
+            )}
             {ticket.linkCount > 0 && (
               <OverlayTrigger
                 placement="top"

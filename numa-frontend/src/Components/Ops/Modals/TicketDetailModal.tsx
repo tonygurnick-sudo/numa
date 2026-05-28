@@ -21,6 +21,8 @@ import type {
   AuditAction,
   WorkZone,
   WorkStage,
+  RecurrenceConfig,
+  RecurrenceRule,
 } from '../../../types/ops';
 import { CommentSection } from '../Shared/CommentSection';
 import { LinkedTicketsSection } from '../Shared/LinkedTicketsSection';
@@ -31,6 +33,8 @@ import { uploadAttachmentToTicket } from '../Shared/attachmentUploader';
 import { DynamicField } from '../Shared/DynamicField';
 import { ConfirmModal } from './ConfirmModal';
 import { MoveTicketModal } from './MoveTicketModal';
+import { RecurrencePicker } from './RecurrencePicker';
+import { summarizeRecurrence } from './recurrenceHelpers';
 import { useToast } from '../../../Providers/ToastContext';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 import { StaffAvatar } from '../Shared/StaffAvatar';
@@ -166,6 +170,10 @@ export function TicketDetailModal({
   const [archiving, setArchiving] = useState(false);
   const { config, boardData, boards, workUnits, refreshTickets, refreshCrmData } = useOps();
 
+  // ── Recurrence state ────────────────────────────────────────────────────
+  const [recurrence, setRecurrence] = useState<RecurrenceRule | null>(null);
+  const [showRecurrencePicker, setShowRecurrencePicker] = useState(false);
+
   // ── Core state ──────────────────────────────────────────────────────────
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [links, setLinks] = useState<TicketLink[]>([]);
@@ -236,6 +244,27 @@ export function TicketDetailModal({
     ticketRef.current = ticket;
   }, [ticket]);
 
+  // ── Recurrence handlers ─────────────────────────────────────────────────
+  const handleRecurrenceSave = useCallback(
+    async (config: RecurrenceConfig): Promise<void> => {
+      if (!ticket) return;
+      const updated = recurrence
+        ? await OpsService.updateTicketRecurrence(numaPut, ticket.id, { config })
+        : await OpsService.createTicketRecurrence(numaPost, ticket.id, { config });
+      setRecurrence(updated);
+      // Refresh tickets so the kanban/backlog badges pick up hasRecurrence.
+      void refreshTickets?.();
+    },
+    [ticket, recurrence, numaPost, numaPut, refreshTickets]
+  );
+
+  const handleRecurrenceRemove = useCallback(async (): Promise<void> => {
+    if (!ticket) return;
+    await OpsService.deleteTicketRecurrence(numaDelete, ticket.id);
+    setRecurrence(null);
+    void refreshTickets?.();
+  }, [ticket, numaDelete, refreshTickets]);
+
   // ── Close handler — always flush description before closing ─────────────
   const handleClose = useCallback(() => {
     descriptionEditorRef.current?.flush();
@@ -261,6 +290,7 @@ export function TicketDetailModal({
       setTicket(response.ticket);
       setTitleDraft(response.ticket.title);
       setLinks(response.links ?? []);
+      setRecurrence(response.recurrence ?? null);
 
       // Load the ticket's actual team data so the stage dropdown is always accurate
       const ticketTeam = response.ticket.boardId;
@@ -306,6 +336,8 @@ export function TicketDetailModal({
       setSuppliers([]);
       setShowHistory(false);
       setAuditEntries([]);
+      setRecurrence(null);
+      setShowRecurrencePicker(false);
     }
   }, [show, ticketId, loadTicket, numaGet]);
 
@@ -961,6 +993,31 @@ export function TicketDetailModal({
               </div>
             )}
 
+            {/* Repeats — opens RecurrencePicker. Inline summary or "Doesn't repeat". */}
+            <div className="ticket-sidebar-field">
+              <div className="ticket-sidebar-field-label">{t('recurrence.rowLabel')}</div>
+              <button
+                type="button"
+                className="btn btn-sm btn-link text-decoration-none p-0 text-start"
+                style={{ fontSize: '0.85rem' }}
+                onClick={() => setShowRecurrencePicker(true)}
+              >
+                {recurrence ? (
+                  <span>
+                    <i className="bi bi-arrow-repeat me-1" />
+                    {summarizeRecurrence(recurrence.config, t)}
+                    {!recurrence.enabled && (
+                      <Badge bg="secondary" className="ms-2">
+                        {t('recurrence.rowDisabled')}
+                      </Badge>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-muted">{t('recurrence.rowDoesNotRepeat')}</span>
+                )}
+              </button>
+            </div>
+
             {/* Due Date */}
             <div className="ticket-sidebar-field">
               <div className="ticket-sidebar-field-label">{t('tickets.dueDate')}</div>
@@ -1503,6 +1560,17 @@ export function TicketDetailModal({
           confirmLabel={t('confirm.delete')}
           variant="danger"
           typeToConfirm={ticket.displayId}
+        />
+      )}
+
+      {/* Recurrence picker */}
+      {ticket && (
+        <RecurrencePicker
+          show={showRecurrencePicker}
+          onHide={() => setShowRecurrencePicker(false)}
+          initial={recurrence}
+          onSave={handleRecurrenceSave}
+          onRemove={recurrence ? handleRecurrenceRemove : undefined}
         />
       )}
 

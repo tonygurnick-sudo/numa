@@ -35,7 +35,9 @@ export const fieldTypeSchema = z.enum([
 
 export const fieldCategorySchema = z.enum(['Common', 'Development', 'Call Centre', 'CRM', 'Operations']);
 
-export const ticketSourceTypeSchema = z.enum(['app', 'chat', 'agent', 'manual']);
+export const ticketSourceTypeSchema = z.enum(['app', 'chat', 'agent', 'manual', 'recurrence']);
+
+export const recurrencePatternSchema = z.enum(['daily', 'weekly', 'monthly', 'yearly']);
 
 export const activityTypeSchema = z.enum(['call', 'email', 'meeting', 'note', 'demo', 'slack']);
 
@@ -62,6 +64,7 @@ const RESERVED_PREFIXES = new Set([
   'TENANT',
   'TID',
   'PREF',
+  'RECURRENCE',
 ]);
 
 export const ticketTypePrefixSchema = z
@@ -420,6 +423,108 @@ export const auditEntrySchema = z.object({
 export const filterConfigSchema = z.object({
   name: z.string(),
   config: z.record(z.string(), z.unknown()),
+});
+
+// ─── Recurrence Rule ────────────────────────────────────────────────────────────
+// A recurring ticket — attached to a "template" ticket. Each fire spawns a
+// fresh ticket from the template's current state, placed in the board's
+// default backlog/queued column (or an explicit override).
+//
+// Fired by EventBridge Scheduler (one rule per recurrence). State is tracked
+// in DynamoDB and re-evaluated on each fire so endDate / maxOccurrences /
+// `enabled` are honoured without relying on schedule deletion timing.
+
+const HHMM_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export const recurrenceConfigSchema = z
+  .object({
+    pattern: recurrencePatternSchema,
+    interval: z.number().int().min(1).max(365).default(1),
+    /** Required for weekly: 0=Sunday … 6=Saturday. */
+    daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
+    /** Required for monthly: 1-31. Values past month-end clamp to last day. */
+    dayOfMonth: z.number().int().min(1).max(31).optional(),
+    /** Required for yearly: 1-12. */
+    monthOfYear: z.number().int().min(1).max(12).optional(),
+    /** Local HH:MM (24h). Interpreted in `timezone`. */
+    timeOfDay: z.string().regex(HHMM_PATTERN, 'timeOfDay must be HH:MM (24h)'),
+    /** IANA timezone (e.g. "Pacific/Auckland"). */
+    timezone: z.string().min(1),
+    /** ISO date (YYYY-MM-DD). First valid occurrence is on/after this date. */
+    startDate: z.string().regex(ISO_DATE_PATTERN, 'startDate must be YYYY-MM-DD'),
+    /** ISO date (YYYY-MM-DD). Last valid occurrence is on/before this date. */
+    endDate: z.string().regex(ISO_DATE_PATTERN, 'endDate must be YYYY-MM-DD').nullable().optional(),
+    /** Stop after this many spawned tickets. */
+    maxOccurrences: z.number().int().min(1).nullable().optional(),
+  })
+  .superRefine((cfg, ctx) => {
+    if (cfg.pattern === 'weekly' && (!cfg.daysOfWeek || cfg.daysOfWeek.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'weekly recurrence requires at least one daysOfWeek entry',
+        path: ['daysOfWeek'],
+      });
+    }
+    if (cfg.pattern === 'monthly' && cfg.dayOfMonth == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'monthly recurrence requires dayOfMonth',
+        path: ['dayOfMonth'],
+      });
+    }
+    if (cfg.pattern === 'yearly' && (cfg.monthOfYear == null || cfg.dayOfMonth == null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'yearly recurrence requires monthOfYear and dayOfMonth',
+        path: ['monthOfYear'],
+      });
+    }
+    if (cfg.endDate && cfg.endDate < cfg.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDate must be on or after startDate',
+        path: ['endDate'],
+      });
+    }
+  });
+
+export const recurrenceRuleSchema = z.object({
+  entityType: z.literal('RECURRENCE'),
+  id: z.string(),
+  /** Ticket that defines the template — its current state is snapshotted on each fire. */
+  templateTicketId: z.string(),
+  boardId: z.string(),
+  ticketTypeId: z.string(),
+  /** Where spawned tickets land. Defaults to board.defaultZoneId/defaultStageId on create. */
+  targetZoneId: z.string(),
+  targetStageId: z.string(),
+  config: z.object({
+    pattern: recurrencePatternSchema,
+    interval: z.number().int().min(1),
+    daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
+    dayOfMonth: z.number().int().min(1).max(31).optional(),
+    monthOfYear: z.number().int().min(1).max(12).optional(),
+    timeOfDay: z.string().regex(HHMM_PATTERN),
+    timezone: z.string().min(1),
+    startDate: z.string().regex(ISO_DATE_PATTERN),
+    endDate: z.string().regex(ISO_DATE_PATTERN).nullable().optional(),
+    maxOccurrences: z.number().int().min(1).nullable().optional(),
+  }),
+  /** Derived AWS Scheduler cron expression (without the wrapping `cron(...)`). */
+  cronExpression: z.string(),
+  /** EventBridge Scheduler resource name (== recurrence id). */
+  scheduleName: z.string(),
+  scheduleGroup: z.string(),
+  enabled: z.boolean().default(true),
+  lastRunAt: z.string().nullable().optional(),
+  nextRunAt: z.string().nullable().optional(),
+  runCount: z.number().int().min(0).default(0),
+  lastError: z.string().nullable().optional(),
+  createdBy: z.string(),
+  createdByName: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 export const userPrefSchema = z.object({
@@ -853,6 +958,21 @@ export const createDocumentRequestSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const createRecurrenceRequestSchema = z.object({
+  config: recurrenceConfigSchema,
+  /** Optional override — defaults to board's defaultZoneId. */
+  targetZoneId: z.string().optional(),
+  /** Optional override — defaults to board's defaultStageId (or first stage of target zone). */
+  targetStageId: z.string().optional(),
+});
+
+export const updateRecurrenceRequestSchema = z.object({
+  config: recurrenceConfigSchema.optional(),
+  targetZoneId: z.string().optional(),
+  targetStageId: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
+
 export const updateUserPrefRequestSchema = z.object({
   savedFilters: z.array(filterConfigSchema).nullable().optional(),
   columnOrder: z.array(z.string()).nullable().optional(),
@@ -897,6 +1017,9 @@ export type ActivityType = z.infer<typeof activityTypeSchema>;
 export type ActivityDirection = z.infer<typeof activityDirectionSchema>;
 export type ActivityOutcome = z.infer<typeof activityOutcomeSchema>;
 export type AuditAction = z.infer<typeof auditActionSchema>;
+export type RecurrencePattern = z.infer<typeof recurrencePatternSchema>;
+export type RecurrenceConfig = z.infer<typeof recurrenceConfigSchema>;
+export type RecurrenceRule = z.infer<typeof recurrenceRuleSchema>;
 
 export type TicketTypeConfig = z.infer<typeof ticketTypeSchema>;
 export type Status = z.infer<typeof statusSchema>;
@@ -970,6 +1093,8 @@ export type CreateActivityRequest = z.infer<typeof createActivityRequestSchema>;
 export type UpdateActivityRequest = z.infer<typeof updateActivityRequestSchema>;
 export type CreateDocumentRequest = z.infer<typeof createDocumentRequestSchema>;
 export type UpdateUserPrefRequest = z.infer<typeof updateUserPrefRequestSchema>;
+export type CreateRecurrenceRequest = z.infer<typeof createRecurrenceRequestSchema>;
+export type UpdateRecurrenceRequest = z.infer<typeof updateRecurrenceRequestSchema>;
 
 // ─── Aggregated Config Response ─────────────────────────────────────────────────
 

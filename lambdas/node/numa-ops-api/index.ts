@@ -12,8 +12,18 @@ import {
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
+import { SchedulerClient } from '@aws-sdk/client-scheduler';
 import { randomUUID } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
+import {
+  deleteRecurrenceForTicket,
+  findRecurrenceByTemplate,
+  handleListRecurrences,
+  handleTicketRecurrence,
+  listRecurringTemplateIdsForBoard,
+  recurrenceToApiShape,
+  type RecurrenceDeps,
+} from './recurrence';
 import {
   ZONE_STATUS_TYPES,
   STATUS_TYPE_TO_ZONES,
@@ -30,6 +40,8 @@ const client = withPRM(DynamoDBClient, {});
 const dynamo = DynamoDBDocumentClient.from(client, {
   marshallOptions: { removeUndefinedValues: true, convertClassInstanceToMap: true },
 });
+
+const scheduler = withPRM(SchedulerClient, {});
 
 const HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -1612,6 +1624,12 @@ const handleTickets = async (
   const qp = event.queryStringParameters ?? {};
   const requestOrigin = getRequestOrigin(event);
 
+  // ── Recurrence sub-route ────────────────────────────────────────────────────
+  // GET/POST/PUT/DELETE /ops/tickets/{ticketId}/recurrence
+  if (segments.length >= 2 && segments[1] === 'recurrence') {
+    return await handleTicketRecurrence(recurrenceDeps, method, segments, body, auth);
+  }
+
   // ── Audit sub-routes ─────────────────────────────────────────────────────────
   // GET /ops/tickets/{ticketId}/audit
   if (method === 'GET' && segments.length === 2 && segments[1] === 'audit') {
@@ -2309,31 +2327,47 @@ const handleTickets = async (
     const excludeDeleted = (tickets: Record<string, unknown>[]): Record<string, unknown>[] =>
       tickets.filter((t) => t.statusType !== 'deleted');
 
+    // Mark hasRecurrence on tickets in a single board scope. One GSI1 query
+    // per distinct board — cheap because each board has few recurrences.
+    const enrichRecurrence = async (tickets: Record<string, unknown>[]): Promise<Record<string, unknown>[]> => {
+      const boardIds = new Set(tickets.map((t) => String(t.teamId ?? '')).filter(Boolean));
+      const sets = await Promise.all(
+        Array.from(boardIds).map(
+          async (bid) => [bid, await listRecurringTemplateIdsForBoard(recurrenceDeps, bid)] as const
+        )
+      );
+      const byBoard = new Map(sets);
+      return tickets.map((t) => {
+        const set = byBoard.get(String(t.teamId ?? ''));
+        return set?.has(String(t.id ?? '')) ? { ...t, hasRecurrence: true } : t;
+      });
+    };
+
     if (qp.assigneeId) {
       const { items, lastKey } = await queryGSI2(`ASSIGNEE#${qp.assigneeId}`, 'TICKET#', limit, cursor);
       return jsonResponse(200, {
-        tickets: excludeDeleted(items),
+        tickets: await enrichRecurrence(excludeDeleted(items)),
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
       });
     }
     if (qp.customerId) {
       const { items, lastKey } = await queryGSI2(`CUSTOMER#${qp.customerId}`, 'TICKET#', limit, cursor);
       return jsonResponse(200, {
-        tickets: excludeDeleted(items),
+        tickets: await enrichRecurrence(excludeDeleted(items)),
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
       });
     }
     if (qp.workUnitId) {
       const { items, lastKey } = await queryGSI2(`WORKUNIT#${qp.workUnitId}`, 'TICKET#', limit, cursor);
       return jsonResponse(200, {
-        tickets: excludeDeleted(items),
+        tickets: await enrichRecurrence(excludeDeleted(items)),
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
       });
     }
     if (qp.projectId) {
       const { items, lastKey } = await queryGSI2(`PROJECT#${qp.projectId}`, 'TICKET#', limit, cursor);
       return jsonResponse(200, {
-        tickets: excludeDeleted(items),
+        tickets: await enrichRecurrence(excludeDeleted(items)),
         cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
       });
     }
@@ -2378,8 +2412,12 @@ const handleTickets = async (
       }
     }
 
+    const recurrenceIds = await listRecurringTemplateIdsForBoard(recurrenceDeps, teamId);
     return jsonResponse(200, {
-      tickets: filtered.map((t) => withTicketUrl(t as Record<string, unknown>, requestOrigin)),
+      tickets: filtered.map((t) => {
+        const decorated = withTicketUrl(t as Record<string, unknown>, requestOrigin);
+        return recurrenceIds.has(String(t.id ?? '')) ? { ...decorated, hasRecurrence: true } : decorated;
+      }),
       cursor: lastKey ? encodeURIComponent(JSON.stringify(lastKey)) : undefined,
     });
   }
@@ -2401,16 +2439,21 @@ const handleTickets = async (
 
     if (!ticket) return errorResponse(404, 'Ticket not found');
 
-    // Fetch links and recent comments
-    const [links, comments] = await Promise.all([
+    // Fetch links, recent comments, and the recurrence (if any) in parallel
+    const [links, comments, recurrence] = await Promise.all([
       queryByPK(`TICKET#${ticketId}`, 'LINK#'),
       queryByPK(`TICKET#${ticketId}`, 'COMMENT#'),
+      findRecurrenceByTemplate(recurrenceDeps, ticketId),
     ]);
 
+    const ticketWithUrl = withTicketUrl(ticket as Record<string, unknown>, requestOrigin);
+    const ticketWithRecurrence = recurrence?.enabled ? { ...ticketWithUrl, hasRecurrence: true } : ticketWithUrl;
+
     return jsonResponse(200, {
-      ticket: withTicketUrl(ticket as Record<string, unknown>, requestOrigin),
+      ticket: ticketWithRecurrence,
       links,
       comments: comments.slice(-20),
+      ...(recurrence ? { recurrence: recurrenceToApiShape(recurrence) } : {}),
     });
   }
 
@@ -3075,6 +3118,15 @@ const handleTickets = async (
     await putItem(buildAuditItem(ticketId, auth, 'deleted'));
     await bumpBoardVersion(teamId, ts);
 
+    // Cascade: drop any active recurrence keyed off this ticket so we don't
+    // leave a scheduler firing into a tombstone. Best-effort — the runner
+    // already no-ops on a missing template.
+    try {
+      await deleteRecurrenceForTicket(recurrenceDeps, ticketId);
+    } catch (err) {
+      console.warn('[OPS-API] recurrence cascade-delete failed', { ticketId, error: (err as Error).message });
+    }
+
     return jsonResponse(200, { deleted: true });
   }
 
@@ -3249,6 +3301,19 @@ const handleUserPreferences = async (
   return errorResponse(404, 'Route not found');
 };
 
+// ─── Recurrence Deps ────────────────────────────────────────────────────────────
+
+const recurrenceDeps: RecurrenceDeps<ReturnType<typeof jsonResponse>> = {
+  dynamo,
+  scheduler,
+  opsTable: OPS_TABLE,
+  getItem,
+  findTicketByUuid,
+  hasTeamAccess,
+  jsonResponse,
+  errorResponse,
+};
+
 // ─── Main Handler ───────────────────────────────────────────────────────────────
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
@@ -3288,6 +3353,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }
         return await handleTickets(method, rest, body, auth, event);
       }
+
+      case 'recurrences':
+        return await handleListRecurrences(recurrenceDeps, auth, event.queryStringParameters?.boardId);
 
       case 'metrics':
         return await handleMetrics(auth, event);

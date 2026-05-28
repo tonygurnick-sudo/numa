@@ -273,7 +273,77 @@ export type WorkStage = {
 
 export type TicketPriority = 'highest' | 'high' | 'medium' | 'low' | 'lowest';
 
-export type TicketSourceType = 'app' | 'chat' | 'agent' | 'manual';
+export type TicketSourceType = 'app' | 'chat' | 'agent' | 'manual' | 'recurrence';
+
+export type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+/**
+ * User-facing recurrence configuration. The backend derives the AWS cron
+ * expression from these fields, so the picker never has to surface cron
+ * syntax to the user.
+ */
+export type RecurrenceConfig = {
+  pattern: RecurrencePattern;
+  /** Every N units (default 1). */
+  interval: number;
+  /** Required for weekly: 0=Sunday … 6=Saturday. */
+  daysOfWeek?: number[];
+  /** Required for monthly: 1-31. */
+  dayOfMonth?: number;
+  /** Required for yearly: 1-12. */
+  monthOfYear?: number;
+  /** Local HH:MM (24h) in the chosen timezone. */
+  timeOfDay: string;
+  /** IANA timezone (e.g. "Pacific/Auckland"). */
+  timezone: string;
+  /** ISO date (YYYY-MM-DD). */
+  startDate: string;
+  /** ISO date (YYYY-MM-DD). */
+  endDate?: string | null;
+  /** Stop after this many spawned tickets. */
+  maxOccurrences?: number | null;
+};
+
+export type RecurrenceRule = {
+  id: string;
+  templateTicketId: string;
+  boardId: string;
+  ticketTypeId: string;
+  targetZoneId: string;
+  targetStageId: string;
+  config: RecurrenceConfig;
+  cronExpression: string;
+  enabled: boolean;
+  lastRunAt?: string | null;
+  nextRunAt?: string | null;
+  runCount: number;
+  lastError?: string | null;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateRecurrencePayload = {
+  config: RecurrenceConfig;
+  targetZoneId?: string;
+  targetStageId?: string;
+};
+
+export type UpdateRecurrencePayload = {
+  config?: RecurrenceConfig;
+  targetZoneId?: string;
+  targetStageId?: string;
+  enabled?: boolean;
+};
+
+export type RecurrenceResponse = {
+  recurrence: RecurrenceRule;
+};
+
+export type RecurrenceListResponse = {
+  recurrences: RecurrenceRule[];
+};
 
 export type Ticket = {
   id: string;
@@ -309,6 +379,8 @@ export type Ticket = {
   hasUnresolvedDependencies?: boolean;
   /** True when the ticket blocks at least one incomplete ticket. Set by backend enrichment. */
   isBlocking?: boolean;
+  /** True when the ticket is the template for an active recurrence rule. Set by backend enrichment. */
+  hasRecurrence?: boolean;
   archived: boolean;
   version: number;
   order: number;
@@ -739,6 +811,8 @@ export type TicketResponse = {
   ticket: Ticket;
   comments?: Comment[];
   links?: TicketLink[];
+  /** Present when the ticket is a recurrence template (any state). */
+  recurrence?: RecurrenceRule;
 };
 
 export type BoardResponse = {
