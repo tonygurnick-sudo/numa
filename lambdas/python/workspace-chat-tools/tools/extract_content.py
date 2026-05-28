@@ -555,8 +555,27 @@ def handle_extract_content(params: Dict[str, Any]) -> Dict[str, Any]:
         # The extract lambda returns: {"name": "...", "num_pages": N, "pages": [...]}
         text_parts = []
 
-        if "pages" in extracted_json:
+        # BUG-146: the extract Lambda's model occasionally returns plain text
+        # instead of the schema-conformant dict. Guard both the top-level shape
+        # and each page element so a malformed response degrades to "use the
+        # text as-is" rather than a TypeError that the agent narrates past.
+        if not isinstance(extracted_json, dict):
+            logger.warning(
+                "extract Lambda returned non-dict — falling back to raw text",
+                extracted_type=type(extracted_json).__name__,
+                output_key=extract_output_key,
+            )
+            text_parts.append(str(extracted_json))
+        elif "pages" in extracted_json:
             for page in extracted_json["pages"]:
+                if isinstance(page, str):
+                    # Model returned a bare string in place of a {page_number, text} dict.
+                    # Keep the content rather than dropping it.
+                    if page.strip():
+                        text_parts.append(page)
+                    continue
+                if not isinstance(page, dict):
+                    continue
                 page_num = page.get("page_number", "?")
                 page_text = page.get("text", "")
                 if page_text:

@@ -53,6 +53,11 @@ import type {
   StaffSyncResponse,
   FieldDefinition,
   Project,
+  RecurrenceRule,
+  RecurrenceResponse,
+  RecurrenceListResponse,
+  CreateRecurrencePayload,
+  UpdateRecurrencePayload,
 } from '../types/ops';
 
 type NumaGet = (url: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -341,6 +346,57 @@ export const unarchiveTicket = async (
 
 export const bulkUpdateTickets = async (numaPost: NumaPost, payload: BulkUpdateTicketsPayload): Promise<void> => {
   await numaPost(`${BASE_URL}/tickets/bulk`, payload);
+};
+
+// ─── Recurrence ────────────────────────────────────────────────────────────
+
+export const getTicketRecurrence = async (numaGet: NumaGet, ticketId: string): Promise<RecurrenceRule | null> => {
+  try {
+    const response = (await numaGet(
+      `${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/recurrence`
+    )) as RecurrenceResponse;
+    return response.recurrence;
+  } catch (err) {
+    // 404 means "no recurrence" — surface as null so callers don't need to
+    // special-case the error shape.
+    if (err instanceof Error && /404|not found/i.test(err.message)) return null;
+    throw err;
+  }
+};
+
+export const createTicketRecurrence = async (
+  numaPost: NumaPost,
+  ticketId: string,
+  payload: CreateRecurrencePayload
+): Promise<RecurrenceRule> => {
+  const response = (await numaPost(
+    `${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/recurrence`,
+    payload
+  )) as RecurrenceResponse;
+  return response.recurrence;
+};
+
+export const updateTicketRecurrence = async (
+  numaPut: NumaPut,
+  ticketId: string,
+  payload: UpdateRecurrencePayload
+): Promise<RecurrenceRule> => {
+  const response = (await numaPut(
+    `${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/recurrence`,
+    payload
+  )) as RecurrenceResponse;
+  return response.recurrence;
+};
+
+export const deleteTicketRecurrence = async (numaDelete: NumaDelete, ticketId: string): Promise<void> => {
+  await numaDelete(`${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/recurrence`);
+};
+
+export const listBoardRecurrences = async (numaGet: NumaGet, boardId: string): Promise<RecurrenceRule[]> => {
+  const response = (await numaGet(
+    `${BASE_URL}/recurrences?boardId=${encodeURIComponent(boardId)}`
+  )) as RecurrenceListResponse;
+  return response.recurrences ?? [];
 };
 
 // ─── Comments ──────────────────────────────────────────────────────────────
