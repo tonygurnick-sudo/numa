@@ -1,5 +1,20 @@
 # Gmail Integration Tips
 
+## Multiple Connected Mailboxes (FEAT-019)
+
+If the **Connected Integrations** section above lists more than one account under `gmail` (e.g. work + personal mailbox), each one is a separate Gmail account with its own inbox.
+
+- `"authProvisionId": "auto"` resolves to ONE account only (the oldest). Useful when the user implicitly means "any" / "my Gmail" — pick this when context doesn't disambiguate.
+- When the user says "each mailbox", "all my inboxes", "from both accounts", or names a specific account (e.g. "from my work email"), **iterate**: call `run_action` once per account with the explicit `apn_xxx`. Don't claim "only one account is connected" — check the multi-account list first.
+- When labelling results back to the user, use the account name (e.g. "tom@wiltshireland.com") from the multi-account list rather than the apn_xxx.
+
+Example (list 5 emails from each of two Gmail accounts):
+
+```json
+{ "gmail": { "authProvisionId": "apn_AAAA" }, "maxResults": 5 }
+{ "gmail": { "authProvisionId": "apn_BBBB" }, "maxResults": 5 }
+```
+
 ## Searching for Emails with Attachments
 
 Before searching for emails with attachments, understand that attachment metadata (`attachmentId`) requires specific settings:

@@ -306,6 +306,11 @@
       "name": "Fathom",
       "description": "Access AI-generated meeting recordings, transcripts, summaries, and action items from Fathom.",
       "example_query": "Summarize the key points and action items from my last call."
+    },
+    "elevenlabs": {
+      "name": "ElevenLabs",
+      "description": "Generate lifelike speech, manage voices, and place automated outbound phone calls with ElevenLabs voice AI.",
+      "example_query": "Turn this paragraph into natural-sounding speech and save it as an audio file."
     }
   },
   "tabs": {
@@ -401,12 +406,20 @@
   },
   "badges": {
     "fileStore": "Files",
-    "fileStoreTooltip": "Files from this integration appear under Files → Remote Files"
+    "fileStoreTooltip": "Files from this integration appear under Files → Remote Files",
+    "multipleAccounts": "Multi-account",
+    "multipleAccountsCount": "{{count}} accounts",
+    "multipleAccountsTooltip": "Multiple Pipedream accounts are available for this integration"
   },
   "manage": {
     "title": "Manage {{name}}",
     "methodHeading": "Connection method",
     "toolsHeading": "Tools",
+    "multipleAccountsHeading": "Multiple Pipedream accounts",
+    "multipleAccountsLabel": "Allow users to connect multiple Pipedream accounts",
+    "multipleAccountsHelp": "When enabled, users can connect more than one Pipedream account for this integration (e.g. two Gmail inboxes) and pick which to use in chat. Doesn't affect the native connector.",
+    "multipleAccountsBadge": "Multi-account",
+    "multipleAccountsBadgeTooltip": "Users can connect multiple Pipedream accounts for this integration",
     "method": {
       "pipedreamHeading": "Pipedream",
       "pipedreamBody": "Routed through Pipedream. Credentials and calls flow through a third-party service.",
@@ -439,7 +452,11 @@
   },
   "toolPolicy": {
     "applying": "Applying default tool policy...",
-    "tooltip": "For better security and performance, review each integration's Settings to enable only the tools you need. Fewer enabled tools means more focused AI responses and enhanced data protection."
+    "tooltip": "For better security and performance, review each integration's Settings to enable only the tools you need. Fewer enabled tools means more focused AI responses and enhanced data protection.",
+    "accountsHeading": "Connected accounts",
+    "addAccount": "Add account",
+    "noAccountsConnected": "No accounts connected yet — click Add account to connect one.",
+    "intro": "Pick which actions this integration can use in your chats. Disabled here only affects you — the workspace admin controls what is available to everyone."
   },
   "connection": {
     "successTitle": "Integration Connected Successfully!",

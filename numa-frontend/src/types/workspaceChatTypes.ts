@@ -23,6 +23,22 @@ export interface IntegrationListItem {
    *  user references files without naming a folder. Optional for back-compat
    *  with payloads built before this field existed. */
   isFileStore?: boolean;
+  /** FEAT-019: optional per-conversation account scope. When present, the
+   *  agent + proxy filter `_get_user_connections` to this set before resolving
+   *  `authProvisionId: "auto"`. Absent or empty array → all of the user's
+   *  connected accounts for this integration are eligible (legacy behaviour).
+   *  Only meaningful for `method: "pipedream"` rows; ignored for native. */
+  accountIds?: string[];
+  /** FEAT-019: optional per-account display labels keyed by accountId. Used by
+   *  the workspace agent prompt to name accounts when multiple are selected
+   *  (e.g. "work@…", "personal@…"). Same Pipedream-only restriction. */
+  accountNames?: Record<string, string>;
+  /** FEAT-019: ALWAYS sent for Pipedream integrations with multiple connected
+   *  accounts — informational, NOT an allow-list. The agent uses this to know
+   *  what accounts exist and target them via explicit `authProvisionId` in
+   *  `run_action` calls. Distinct from `accountIds` which is the proxy
+   *  filter for `auto` resolution. */
+  availableAccounts?: Array<{ account_id: string; name?: string | null }>;
 }
 
 // ============================================================

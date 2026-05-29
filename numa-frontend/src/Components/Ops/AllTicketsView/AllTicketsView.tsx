@@ -417,6 +417,14 @@ export function AllTicketsView(): React.JSX.Element {
         sortable: true,
         filterType: 'text',
         accessor: (tk) => tk.title,
+        render: (tk) => (
+          <span>
+            {tk.hasRecurrence && (
+              <i className="bi bi-arrow-repeat me-1" title={t('recurrence.rowLabel')} style={{ color: '#6d28d9' }} />
+            )}
+            {tk.title}
+          </span>
+        ),
       },
       {
         key: 'ticketTypeId',

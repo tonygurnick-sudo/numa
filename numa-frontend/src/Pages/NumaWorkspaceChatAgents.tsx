@@ -156,9 +156,25 @@ const NumaWorkspaceChatAgents = () => {
   const [numaOpsEnabled, setNumaOpsEnabled] = useState(false);
   const [numaOpsFeatureEnabled] = useState(() => getFlag('NUMA_OPS'));
   const [availableConnections, setAvailableConnections] = useState<
-    Array<{ id: string; name: string; isConnected: boolean; mcpServerUrl?: string }>
+    Array<{
+      id: string;
+      name: string;
+      isConnected: boolean;
+      mcpServerUrl?: string;
+      // FEAT-019: per-app multi-account metadata. allowMultipleAccounts mirrors
+      // the admin global setting; accounts is the full list from the proxy
+      // (empty for not-connected apps, length 1 for single-account apps,
+      // length >1 only when admin opted in AND user added a second account).
+      allowMultipleAccounts: boolean;
+      accounts: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
+    }>
   >([]);
   const [enabledConnections, setEnabledConnections] = useState<string[]>([]);
+  // FEAT-019: per-conversation account scope. Map slug → ordered list of
+  // accountIds the user has selected for this chat. Absence means "all of the
+  // user's connected accounts are eligible" (legacy behaviour). Reset on
+  // conversation switch; not persisted across chats.
+  const [selectedAccountsByApp, setSelectedAccountsByApp] = useState<Record<string, string[]>>({});
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false);
   const [connectedDataConnectors, setConnectedDataConnectors] = useState<Array<{ id: string; name: string }>>([]);
   // IDs of data connectors the CURRENT user has personal credentials for.
@@ -507,12 +523,47 @@ const NumaWorkspaceChatAgents = () => {
   const enabledIntegrationsUnified = useMemo<IntegrationListItem[]>(() => {
     const rows: IntegrationListItem[] = [];
     const pipedreamByName = new Map(availableConnections.map((c) => [c.id, c.name || c.id]));
+    const connectionsById = new Map(availableConnections.map((c) => [c.id, c]));
     for (const slug of enabledConnections) {
+      const conn = connectionsById.get(slug);
+      // FEAT-019: only attach accountIds when the admin has opted this
+      // integration in AND the user has narrowed the selection (i.e. it
+      // does not cover every connected account). The "all connected" case
+      // is conveyed by omitting accountIds, which keeps payloads small and
+      // preserves legacy behaviour at the proxy layer.
+      let accountIds: string[] | undefined;
+      let accountNames: Record<string, string> | undefined;
+      // FEAT-019: informational full list — sent ALWAYS for multi-account
+      // integrations so the agent prompt can list them with their apn_xxx
+      // ids, enabling explicit per-account run_action calls (the proxy's
+      // `auto` resolution only picks one account at a time).
+      let availableAccounts: Array<{ account_id: string; name?: string | null }> | undefined;
+      if (conn?.allowMultipleAccounts && conn.accounts.length > 1) {
+        availableAccounts = conn.accounts.map((a) => ({
+          account_id: a.account_id,
+          name: a.name ?? null,
+        }));
+        const selected = selectedAccountsByApp[slug];
+        const allIds = conn.accounts.map((a) => a.account_id);
+        const isSubset = Array.isArray(selected) && selected.length > 0 && selected.length < allIds.length;
+        if (isSubset) {
+          accountIds = selected.filter((id) => allIds.includes(id));
+          accountNames = {};
+          for (const acc of conn.accounts) {
+            if (accountIds.includes(acc.account_id) && acc.name) {
+              accountNames[acc.account_id] = acc.name;
+            }
+          }
+        }
+      }
       rows.push({
         slug,
         method: 'pipedream',
         name: pipedreamByName.get(slug) || slug,
         isFileStore: false,
+        ...(accountIds ? { accountIds } : {}),
+        ...(accountNames && Object.keys(accountNames).length > 0 ? { accountNames } : {}),
+        ...(availableAccounts ? { availableAccounts } : {}),
       });
     }
     if (dataConnectorsFeatureEnabled) {
@@ -533,6 +584,7 @@ const NumaWorkspaceChatAgents = () => {
     availableConnections,
     connectedDataConnectors,
     dataConnectorsFeatureEnabled,
+    selectedAccountsByApp,
   ]);
 
   const applyConversationChatConfig = useCallback(
@@ -1389,13 +1441,33 @@ const NumaWorkspaceChatAgents = () => {
             }
         ),
         numaGet('/api/settings/integrations').catch(
-          () => [] as Array<{ integration: string; status: 'enabled' | 'disabled'; denyTools: string[] }>
-        ) as Promise<Array<{ integration: string; status: 'enabled' | 'disabled'; denyTools: string[] }>>,
+          () =>
+            [] as Array<{
+              integration: string;
+              status: 'enabled' | 'disabled';
+              denyTools: string[];
+              allowMultipleAccounts?: boolean;
+            }>
+        ) as Promise<
+          Array<{
+            integration: string;
+            status: 'enabled' | 'disabled';
+            denyTools: string[];
+            allowMultipleAccounts?: boolean;
+          }>
+        >,
       ]);
 
-      const adminSettingsMap: Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }> = {};
+      const adminSettingsMap: Record<
+        string,
+        { status: 'enabled' | 'disabled'; denyTools: string[]; allowMultipleAccounts: boolean }
+      > = {};
       for (const item of adminSettings || []) {
-        adminSettingsMap[item.integration] = { status: item.status, denyTools: item.denyTools || [] };
+        adminSettingsMap[item.integration] = {
+          status: item.status,
+          denyTools: item.denyTools || [],
+          allowMultipleAccounts: item.allowMultipleAccounts === true,
+        };
       }
 
       // Build Pipedream "available connections" — only ones the user
@@ -1407,6 +1479,21 @@ const NumaWorkspaceChatAgents = () => {
               name: conn.app_name,
               isConnected: conn.status === 'connected',
               mcpServerUrl: undefined as string | undefined,
+              allowMultipleAccounts: adminSettingsMap[conn.app_name]?.allowMultipleAccounts === true,
+              // Falls back to the legacy single-account fields when an older
+              // cached proxy response lacks the `accounts` array.
+              accounts:
+                conn.accounts ??
+                (conn.pipedream_account_id
+                  ? [
+                      {
+                        account_id: conn.pipedream_account_id,
+                        name: conn.connection_name ?? null,
+                        healthy: conn.healthy ?? null,
+                        dead: conn.dead ?? null,
+                      },
+                    ]
+                  : []),
             }))
             .filter((c) => c.isConnected)
             .filter((c) => adminSettingsMap[c.id]?.status !== 'disabled')
@@ -1446,7 +1533,30 @@ const NumaWorkspaceChatAgents = () => {
       // Single state commit — sidebar renders ONCE with the complete,
       // correct picture for both Pipedream and native.
       setGlobalIntegrationSettings(adminSettingsMap);
-      setAvailableConnections(pipedreamConnections);
+      // FEAT-019 defensive: if the proxy returned 0 connected Pipedream apps
+      // but we previously had some, keep the previous state. Transient empty
+      // responses (proxy cold-start timeout, Pipedream API blip) shouldn't
+      // wipe the visible list — the user keeps seeing their integrations and
+      // the next reload corrects any drift. `pipedreamStatus === null` means
+      // the call hard-failed (the `.catch(() => null)` upstream); in that
+      // case we also keep prev rather than clearing.
+      setAvailableConnections((prev) => {
+        if (pipedreamStatus === null && prev.length > 0) {
+          console.warn(
+            '[loadAllConnectorStatuses] getIntegrationStatus returned null; keeping previous Pipedream connections to avoid wiping the sidebar'
+          );
+          return prev;
+        }
+        if (pipedreamConnections.length === 0 && prev.length > 0) {
+          console.warn(
+            '[loadAllConnectorStatuses] proxy returned 0 connected Pipedream apps but had',
+            prev.length,
+            'cached — keeping previous to avoid flicker'
+          );
+          return prev;
+        }
+        return pipedreamConnections;
+      });
       setConnectedDataConnectors(nativeList);
       setUserConnectedConnectorIds(userConnected);
       // Drop stale enabled-native ids the user has since disconnected.
@@ -3216,6 +3326,8 @@ const NumaWorkspaceChatAgents = () => {
                           availableConnections={availableConnections}
                           enabledConnections={enabledConnections}
                           setEnabledConnections={handleUserSetEnabledConnections}
+                          selectedAccountsByApp={selectedAccountsByApp}
+                          setSelectedAccountsByApp={setSelectedAccountsByApp}
                           connectionsLoading={connectionsLoading}
                           hasPipedreamFeature={hasPipedreamFeature}
                           uploadsInProgress={isFileProcessing || hasUploadsInProgress}
@@ -3431,6 +3543,8 @@ const NumaWorkspaceChatAgents = () => {
                           availableConnections={availableConnections}
                           enabledConnections={enabledConnections}
                           setEnabledConnections={handleUserSetEnabledConnections}
+                          selectedAccountsByApp={selectedAccountsByApp}
+                          setSelectedAccountsByApp={setSelectedAccountsByApp}
                           connectionsLoading={connectionsLoading}
                           hasPipedreamFeature={hasPipedreamFeature}
                           uploadsInProgress={isFileProcessing || hasUploadsInProgress}
@@ -3566,6 +3680,8 @@ const NumaWorkspaceChatAgents = () => {
             userConnectedConnectorIds={userConnectedConnectorIds}
             enabledNativeConnectorIds={enabledNativeConnectorIds}
             setEnabledNativeConnectorIds={handleUserSetEnabledNativeConnectorIds}
+            selectedAccountsByApp={selectedAccountsByApp}
+            setSelectedAccountsByApp={setSelectedAccountsByApp}
             isDisabled={buttonStatus === 'streaming' || isFileProcessing || hasUploadsInProgress}
             showModelSelector={workspaceModelSelectionEnabled}
             selectedModelId={selectedModelId}

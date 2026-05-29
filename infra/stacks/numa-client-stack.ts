@@ -1133,27 +1133,42 @@ export class NumaClientStack extends TerraformStack {
     }
 
     // ── Sync ext-api-doc files to S3 (at END to avoid resource address shifts) ──
+    // ext-api-doc/ holds the per-connector knowledge packs the workspace agent loads at
+    // runtime. It is a repo-root sibling of infra/ and MUST be present in EVERY deploy
+    // context — host `make deploy` AND the CI/portal deploy container (see
+    // infra/container/Dockerfile, which must `COPY ext-api-doc ext-api-doc`). When the
+    // dir was missing inside the container this block silently no-op'd and Terraform
+    // pruned every client's docs — the "docs deploy inconsistently" bug. Fail loudly
+    // instead so that gap can never ship unnoticed again.
     const extApiDocPath = path.join(import.meta.dirname, '..', '..', 'ext-api-doc');
-    if (fs.existsSync(extApiDocPath)) {
-      const mdFiles = fs
-        .readdirSync(extApiDocPath, { recursive: true, withFileTypes: true })
-        .filter((f) => f.isFile() && !f.name.startsWith('.'))
-        .map((f) => path.join(f.parentPath, f.name))
-        // _templates/ is dev-only reference material; do not ship to client stacks.
-        // It also produces construct IDs starting with `-` after sanitization, which
-        // throws inside the loop and used to be silently swallowed by a try/catch.
-        .filter((source) => path.relative(extApiDocPath, source).split(path.sep)[0] !== '_templates');
+    if (!fs.existsSync(extApiDocPath)) {
+      throw new Error(
+        `ext-api-doc directory not found at ${extApiDocPath}. It must be present in the deploy ` +
+          'context for both `make deploy` (host) and the CI/portal deploy image — check that ' +
+          'infra/container/Dockerfile copies it (`COPY ext-api-doc ext-api-doc`).'
+      );
+    }
+    const mdFiles = fs
+      .readdirSync(extApiDocPath, { recursive: true, withFileTypes: true })
+      .filter((f) => f.isFile() && !f.name.startsWith('.'))
+      .map((f) => path.join(f.parentPath, f.name))
+      // _templates/ is dev-only reference material; do not ship to client stacks.
+      // It also produces construct IDs starting with `-` after sanitization, which
+      // throws inside the loop and used to be silently swallowed by a try/catch.
+      .filter((source) => path.relative(extApiDocPath, source).split(path.sep)[0] !== '_templates')
+      // Deterministic order across platforms (readdir order is filesystem-dependent),
+      // for stable synth diffs.
+      .sort();
 
-      for (const source of mdFiles) {
-        const key = path.relative(extApiDocPath, source);
-        new S3Object(this, `ext-api-doc-${key.replace(/[^a-zA-Z0-9]/g, '-')}`, {
-          bucket: core.extApiDocBucket.bucket.bucket,
-          key,
-          source,
-          sourceHash: Fn.filemd5(source),
-          contentType: 'text/markdown',
-        });
-      }
+    for (const source of mdFiles) {
+      const key = path.relative(extApiDocPath, source);
+      new S3Object(this, `ext-api-doc-${key.replace(/[^a-zA-Z0-9]/g, '-')}`, {
+        bucket: core.extApiDocBucket.bucket.bucket,
+        key,
+        source,
+        sourceHash: Fn.filemd5(source),
+        contentType: 'text/markdown',
+      });
     }
   }
 }

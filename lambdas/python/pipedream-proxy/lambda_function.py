@@ -147,7 +147,18 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             result = pipedream_ops.generate_connect_token(external_user_id)
 
         elif operation == "get_integration_status":
-            result = pipedream_ops.get_integration_status(external_user_id)
+            # FEAT-019: optional `force_refresh` flag bypasses the proxy's
+            # per-user connections cache. FE sets this on the post-connect /
+            # post-disconnect status read so the just-changed account list
+            # surfaces immediately.
+            force_refresh = (
+                parameters.get("force_refresh", False)
+                if isinstance(parameters, dict)
+                else False
+            )
+            result = pipedream_ops.get_integration_status(
+                external_user_id, force_refresh=bool(force_refresh)
+            )
 
         elif operation == "create_mcp_client":
             app_name = parameters.get("app_name")
@@ -194,25 +205,49 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             action_key = parameters.get("action_key")
             configured_props = parameters.get("configured_props", {})
             stash_id = parameters.get("stash_id")
+            # FEAT-019: per-conversation / per-schedule / per-app-run account
+            # scope. The proxy filters connected accounts down to this subset
+            # before resolving authProvisionId:"auto". Optional — absent or
+            # empty list means legacy "first matching" behaviour.
+            raw_allowed = parameters.get("allowed_account_ids")
+            allowed_account_ids = (
+                [x for x in raw_allowed if isinstance(x, str) and x]
+                if isinstance(raw_allowed, list)
+                else None
+            )
             if not action_key:
                 return _error_response(
                     400, "run_action operation requires action_key parameter"
                 )
             result = pipedream_ops.run_action(
-                external_user_id, action_key, configured_props, stash_id
+                external_user_id,
+                action_key,
+                configured_props,
+                stash_id,
+                allowed_account_ids=allowed_account_ids,
             )
 
         elif operation == "configure_props":
             action_key = parameters.get("action_key")
             prop_name = parameters.get("prop_name")
             configured_props = parameters.get("configured_props", {})
+            raw_allowed = parameters.get("allowed_account_ids")
+            allowed_account_ids = (
+                [x for x in raw_allowed if isinstance(x, str) and x]
+                if isinstance(raw_allowed, list)
+                else None
+            )
             if not action_key or not prop_name:
                 return _error_response(
                     400,
                     "configure_props requires action_key and prop_name parameters",
                 )
             result = pipedream_ops.configure_props(
-                external_user_id, action_key, prop_name, configured_props
+                external_user_id,
+                action_key,
+                prop_name,
+                configured_props,
+                allowed_account_ids=allowed_account_ids,
             )
 
         elif operation == "proxy_request":

@@ -10,12 +10,14 @@ export interface GlobalIntegrationSetting {
   status: IntegrationStatus;
   denyTools: string[];
   preferred_method?: IntegrationMethod | null;
+  allowMultipleAccounts?: boolean;
 }
 
 export type GlobalIntegrationSettingValue = {
   status: IntegrationStatus;
   denyTools: string[];
   preferred_method: IntegrationMethod | null;
+  allowMultipleAccounts: boolean;
 };
 
 export type GlobalIntegrationSettingsMap = Record<string, GlobalIntegrationSettingValue>;
@@ -29,6 +31,7 @@ export interface CatalogEntry {
   preferred_method: IntegrationMethod | null;
   pipedreamEnabled: boolean | null;
   connectorEnabled: boolean | null;
+  allowMultipleAccounts: boolean;
 }
 
 export interface CatalogResponse {
@@ -46,12 +49,21 @@ async function getAuthHeader(getAccessToken?: () => Promise<string | null>): Pro
 
 function toMap(items: GlobalIntegrationSetting[]): GlobalIntegrationSettingsMap {
   const map: GlobalIntegrationSettingsMap = {};
-  getAllConnections().forEach((c) => (map[c.id] = { status: 'disabled', denyTools: [], preferred_method: null }));
+  getAllConnections().forEach(
+    (c) =>
+      (map[c.id] = {
+        status: 'disabled',
+        denyTools: [],
+        preferred_method: null,
+        allowMultipleAccounts: false,
+      })
+  );
   for (const item of items) {
     map[item.integration] = {
       status: item.status,
       denyTools: item.denyTools || [],
       preferred_method: item.preferred_method ?? null,
+      allowMultipleAccounts: item.allowMultipleAccounts === true,
     };
   }
   return map;
@@ -110,7 +122,12 @@ export const AdminIntegrationsService = {
 
   async update(
     integration: string,
-    payload: { status: IntegrationStatus; denyTools: string[]; preferred_method?: IntegrationMethod | null },
+    payload: {
+      status: IntegrationStatus;
+      denyTools: string[];
+      preferred_method?: IntegrationMethod | null;
+      allowMultipleAccounts?: boolean;
+    },
     getAccessToken?: () => Promise<string | null>
   ): Promise<void> {
     const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
@@ -131,7 +148,12 @@ export const AdminIntegrationsService = {
 
   async updateWithNuma(
     integration: string,
-    payload: { status: IntegrationStatus; denyTools: string[]; preferred_method?: IntegrationMethod | null },
+    payload: {
+      status: IntegrationStatus;
+      denyTools: string[];
+      preferred_method?: IntegrationMethod | null;
+      allowMultipleAccounts?: boolean;
+    },
     numaPut: (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>
   ): Promise<void> {
     await numaPut(`/api/settings/integrations/${encodeURIComponent(integration)}`, payload);

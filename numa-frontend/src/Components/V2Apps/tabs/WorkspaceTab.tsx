@@ -8,6 +8,7 @@ import {
 } from '../../../config/integrationsConfig';
 import * as v2AppsService from '../../../Services/v2AppsService';
 import type { UseV2AppWorkspaceSettingsReturn } from '../../../hooks/useV2AppWorkspaceSettings';
+import { IntegrationAccountSubmenu } from '../../Integrations/IntegrationAccountSubmenu';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -18,6 +19,9 @@ type ConnectionOption = {
   id: string;
   name: string;
   isConnected: boolean;
+  // FEAT-019: optional multi-account metadata.
+  allowMultipleAccounts?: boolean;
+  accounts?: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
 };
 
 interface DataFile {
@@ -232,6 +236,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
     setEnabledConnections,
     setWorkspaceAccess,
     setContextInstructions,
+    setSelectedAccountsByApp,
   } = workspaceSettings;
 
   const companyPrefix = `v2-apps/${appId}/data/`;
@@ -445,21 +450,34 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
                           const connIcon = getConnectionIcon(conn.id);
                           const fallbackIcon = getConnectionFallbackIcon(conn.id);
                           const displayName = getConnectionDisplayName(conn.id);
+                          const isEnabled = settings.enabledConnections.includes(conn.id);
                           return (
-                            <Form.Check key={conn.id} type="checkbox" className="mb-1">
-                              <Form.Check.Input
-                                checked={settings.enabledConnections.includes(conn.id)}
-                                onChange={() => toggleConnection(conn.id)}
+                            <div key={conn.id}>
+                              <Form.Check type="checkbox" className="mb-1">
+                                <Form.Check.Input checked={isEnabled} onChange={() => toggleConnection(conn.id)} />
+                                <Form.Check.Label className="d-flex align-items-center gap-2">
+                                  {connIcon ? (
+                                    <img src={connIcon} alt="" style={{ width: 16, height: 16 }} />
+                                  ) : (
+                                    <i className={fallbackIcon} />
+                                  )}
+                                  {displayName}
+                                </Form.Check.Label>
+                              </Form.Check>
+                              <IntegrationAccountSubmenu
+                                connectionId={conn.id}
+                                accounts={conn.accounts ?? []}
+                                allowMultipleAccounts={conn.allowMultipleAccounts === true}
+                                isEnabled={isEnabled}
+                                selectedAccountIds={settings.selectedAccountsByApp?.[conn.id]}
+                                onChange={(next) =>
+                                  setSelectedAccountsByApp({
+                                    ...(settings.selectedAccountsByApp ?? {}),
+                                    [conn.id]: next,
+                                  })
+                                }
                               />
-                              <Form.Check.Label className="d-flex align-items-center gap-2">
-                                {connIcon ? (
-                                  <img src={connIcon} alt="" style={{ width: 16, height: 16 }} />
-                                ) : (
-                                  <i className={fallbackIcon} />
-                                )}
-                                {displayName}
-                              </Form.Check.Label>
-                            </Form.Check>
+                            </div>
                           );
                         })
                       )}

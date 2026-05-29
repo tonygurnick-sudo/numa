@@ -498,6 +498,12 @@ export const AgentScheduleModal = ({
       runConfig: {
         enabledTools,
         enabledConnections: tc?.enabledConnections,
+        // FEAT-019: forward the unified integrations rows (including any
+        // accountIds set on the agent) so the schedule inherits the agent's
+        // account scope when it runs. The runner reads
+        // `runConfig.enabledIntegrations` in priority over
+        // agentSnapshot.toolsConfig.enabledIntegrations.
+        enabledIntegrations: tc?.enabledIntegrations,
         enabledKBIds: Array.isArray(allowed) ? allowed.filter(Boolean) : undefined,
         autoToolsEnabled: tc?.autoToolsEnabled,
         webSearchEnabled: tc?.webSearchEnabled,

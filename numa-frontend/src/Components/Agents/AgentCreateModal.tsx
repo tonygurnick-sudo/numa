@@ -9,6 +9,7 @@ import { useAlert, useConfirm } from '../../Providers/ConfirmContext';
 import { useBranding } from '../../Providers/BrandingContext';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { ChipsInput } from '../Inputs/ChipsInput';
+import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
 import { TaxonomyMultiSelect } from '../Inputs/TaxonomyMultiSelect';
 import { INDUSTRIES, PERSONAS } from '../../utils/resourceTaxonomy';
 import { AgentFileUpload } from './AgentFileUpload';
@@ -63,11 +64,18 @@ type ConnectionInfo = {
   connectorSlug?: string;
   /** Whether the user is authed on the Pipedream side. */
   pipedreamConnected?: boolean;
+  /** FEAT-019: admin opt-in for multi-account on the Pipedream side. */
+  allowMultipleAccounts?: boolean;
+  /** FEAT-019: full list of connected Pipedream accounts for this app. */
+  accounts?: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
   /** Whether the user is authed on the native side. */
   nativeConnected?: boolean;
 };
 
-type IntegrationSettings = Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }>;
+type IntegrationSettings = Record<
+  string,
+  { status: 'enabled' | 'disabled'; denyTools: string[]; allowMultipleAccounts?: boolean }
+>;
 
 const DEFAULT_PAYLOAD: AgentPayload = {
   visibility: 'personal',
@@ -210,13 +218,21 @@ export const AgentCreateModal = ({
         if (cancelled) return;
         const map: IntegrationSettings = {};
         if (Array.isArray(response)) {
-          response.forEach((item: { integration?: string; status?: 'enabled' | 'disabled'; denyTools?: string[] }) => {
-            if (!item?.integration) return;
-            map[item.integration] = {
-              status: item.status ?? 'enabled',
-              denyTools: item.denyTools ?? [],
-            };
-          });
+          response.forEach(
+            (item: {
+              integration?: string;
+              status?: 'enabled' | 'disabled';
+              denyTools?: string[];
+              allowMultipleAccounts?: boolean;
+            }) => {
+              if (!item?.integration) return;
+              map[item.integration] = {
+                status: item.status ?? 'enabled',
+                denyTools: item.denyTools ?? [],
+                allowMultipleAccounts: item.allowMultipleAccounts === true,
+              };
+            }
+          );
         }
         setIntegrationSettings(map);
       } catch (err) {
@@ -247,6 +263,13 @@ export const AgentCreateModal = ({
         const { getAllConnections } = await import('../../config/integrationsConfig');
         const allKnownIntegrations = getAllConnections();
         const connectedSet = new Set<string>();
+        // FEAT-019: map of pipedream slug → accounts array, captured from the
+        // same status response so the agent builder can show per-account
+        // checkboxes for multi-account integrations without a second fetch.
+        const accountsByApp = new Map<
+          string,
+          Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>
+        >();
 
         // Try to get connected integrations from Pipedream
         if (relayLambdaArn && user && lambdaClient) {
@@ -258,10 +281,16 @@ export const AgentCreateModal = ({
             });
 
             const connectedAppNames = new Set(status.connected_apps || []);
-            const rawConnections = Array.isArray(status.connections) ? status.connections : [];
+            // Cast to loose shape to keep the existing fallback-key probing
+            // (`conn.app` / `conn.integration` / `conn.id`) working — those
+            // legacy keys aren't on the typed ConnectionStatus but old proxy
+            // responses may still surface them.
+            const rawConnections = Array.isArray(status.connections)
+              ? (status.connections as unknown as Array<Record<string, unknown>>)
+              : [];
 
             // Parse connected apps
-            rawConnections.forEach((conn: Record<string, unknown>) => {
+            rawConnections.forEach((conn) => {
               const appId =
                 (conn.app_name as string) ||
                 (conn.integration as string) ||
@@ -281,6 +310,30 @@ export const AgentCreateModal = ({
                 Boolean(conn.isConnected) || statusValue === 'connected' || connectedAppNames.has(appId);
               if (isConnected) {
                 connectedSet.add(appId);
+              }
+              // Capture accounts even when the row isn't flagged connected —
+              // we still want the picker to surface stale accounts so users
+              // can disconnect them.
+              const rawAccounts = conn.accounts;
+              if (Array.isArray(rawAccounts) && rawAccounts.length > 0) {
+                accountsByApp.set(
+                  appId,
+                  rawAccounts.map((a) => ({
+                    account_id: (a as Record<string, unknown>).account_id as string,
+                    name: ((a as Record<string, unknown>).name as string) ?? null,
+                    healthy: (a as Record<string, unknown>).healthy as boolean | null,
+                    dead: (a as Record<string, unknown>).dead as boolean | null,
+                  }))
+                );
+              } else if (conn.pipedream_account_id) {
+                accountsByApp.set(appId, [
+                  {
+                    account_id: conn.pipedream_account_id as string,
+                    name: (conn.connection_name as string) ?? null,
+                    healthy: (conn.healthy as boolean | null) ?? null,
+                    dead: (conn.dead as boolean | null) ?? null,
+                  },
+                ]);
               }
             });
 
@@ -361,6 +414,9 @@ export const AgentCreateModal = ({
           .map((s, i) => {
             const pipedreamConnected = s.pipedreamSlug ? connectedSet.has(s.pipedreamSlug) : false;
             const nativeConnected = nativeStatusResults[i] ?? false;
+            const accounts = s.pipedreamSlug ? (accountsByApp.get(s.pipedreamSlug) ?? []) : [];
+            const allowMultipleAccounts =
+              s.pipedreamSlug && integrationSettings[s.pipedreamSlug]?.allowMultipleAccounts === true;
             return {
               id: s.slug,
               name: s.name,
@@ -370,6 +426,8 @@ export const AgentCreateModal = ({
               connectorSlug: s.connectorSlug,
               pipedreamConnected,
               nativeConnected,
+              allowMultipleAccounts: allowMultipleAccounts === true,
+              accounts,
             };
           })
           .sort((a, b) => a.name.localeCompare(b.name));
@@ -659,6 +717,26 @@ export const AgentCreateModal = ({
       newAllowed = current.filter((id) => id !== kbId);
     }
     handleToolsChange('allowedKnowledgeBases', newAllowed);
+  };
+
+  // FEAT-019: update the per-agent account scope for one enabled integration.
+  // Writes `accountIds` onto the matching row in toolsConfig.enabledIntegrations
+  // so the schedule runner / chat / V2 app inherit the agent's account
+  // selection without further wiring.
+  const handleAgentAccountSelection = (canonicalSlug: string, nextAccountIds: string[]) => {
+    setFormState((prev) => {
+      const existing = prev.toolsConfig?.enabledIntegrations ?? [];
+      const updated = existing.map((row) =>
+        row.slug === canonicalSlug ? { ...row, accountIds: nextAccountIds } : row
+      );
+      return {
+        ...prev,
+        toolsConfig: {
+          ...prev.toolsConfig,
+          enabledIntegrations: updated,
+        },
+      };
+    });
   };
 
   const handleIntegrationToggle = (integrationId: string) => {
@@ -1798,51 +1876,100 @@ export const AgentCreateModal = ({
                           {t('createModal.integrations.none')}
                         </div>
                       ) : (
-                        <div className="d-flex flex-wrap gap-2">
-                          {connections.map((conn) => {
-                            const isEnabled = formState.toolsConfig?.enabledConnections?.includes(conn.id);
-                            const config = getConnectionConfig(conn.id);
-                            return (
-                              <div
-                                key={conn.id}
-                                role="button"
-                                onClick={() => !saving && handleIntegrationToggle(conn.id)}
-                                className={`d-flex align-items-center gap-2 p-2 px-3 border rounded-2 position-relative ${
-                                  isEnabled ? 'border-primary bg-white border-2' : 'bg-white'
-                                }`}
-                                style={{
-                                  cursor: saving ? 'not-allowed' : 'pointer',
-                                  opacity: saving ? 0.6 : conn.isConnected ? 1 : 0.7,
-                                  transition: 'all 0.2s ease',
-                                }}
-                              >
-                                {config?.img_src ? (
-                                  <img
-                                    src={config.img_src}
-                                    alt={config.name}
-                                    style={{ width: 20, height: 20, borderRadius: '4px' }}
-                                  />
-                                ) : (
-                                  <i className={`bi bi-link`} style={{ fontSize: '20px' }}></i>
-                                )}
-                                <span className="fw-medium" style={{ fontSize: '0.9rem' }}>
-                                  {config?.name || conn.name}
-                                </span>
-                                {!conn.isConnected && (
-                                  <span
-                                    className="badge bg-warning text-dark"
-                                    style={{ fontSize: '0.65rem', padding: '2px 6px' }}
-                                  >
-                                    {t('createModal.integrations.notConnected')}
+                        <>
+                          <div className="d-flex flex-wrap gap-2">
+                            {connections.map((conn) => {
+                              const isEnabled = formState.toolsConfig?.enabledConnections?.includes(conn.id);
+                              const config = getConnectionConfig(conn.id);
+                              return (
+                                <div
+                                  key={conn.id}
+                                  role="button"
+                                  onClick={() => !saving && handleIntegrationToggle(conn.id)}
+                                  className={`d-flex align-items-center gap-2 p-2 px-3 border rounded-2 position-relative ${
+                                    isEnabled ? 'border-primary bg-white border-2' : 'bg-white'
+                                  }`}
+                                  style={{
+                                    cursor: saving ? 'not-allowed' : 'pointer',
+                                    opacity: saving ? 0.6 : conn.isConnected ? 1 : 0.7,
+                                    transition: 'all 0.2s ease',
+                                  }}
+                                >
+                                  {config?.img_src ? (
+                                    <img
+                                      src={config.img_src}
+                                      alt={config.name}
+                                      style={{ width: 20, height: 20, borderRadius: '4px' }}
+                                    />
+                                  ) : (
+                                    <i className={`bi bi-link`} style={{ fontSize: '20px' }}></i>
+                                  )}
+                                  <span className="fw-medium" style={{ fontSize: '0.9rem' }}>
+                                    {config?.name || conn.name}
                                   </span>
-                                )}
-                                {isEnabled && (
-                                  <i className="bi bi-check-circle-fill ms-1" style={{ color: brandPrimaryColor }}></i>
-                                )}
+                                  {!conn.isConnected && (
+                                    <span
+                                      className="badge bg-warning text-dark"
+                                      style={{ fontSize: '0.65rem', padding: '2px 6px' }}
+                                    >
+                                      {t('createModal.integrations.notConnected')}
+                                    </span>
+                                  )}
+                                  {isEnabled && (
+                                    <i
+                                      className="bi bi-check-circle-fill ms-1"
+                                      style={{ color: brandPrimaryColor }}
+                                    ></i>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {/* FEAT-019: per-account scope for each enabled multi-account
+                              integration. Lives below the tile grid so the compact wrap
+                              layout of the picker stays intact. Only renders when at
+                              least one enabled integration meets the criteria
+                              (allowMultipleAccounts + >1 connected account). */}
+                          {(() => {
+                            const enabledIds = formState.toolsConfig?.enabledConnections ?? [];
+                            const enabledRows = formState.toolsConfig?.enabledIntegrations ?? [];
+                            const rowsToShow = connections.filter(
+                              (c) =>
+                                enabledIds.includes(c.id) &&
+                                c.pipedreamSlug &&
+                                c.allowMultipleAccounts === true &&
+                                (c.accounts?.length ?? 0) > 1
+                            );
+                            if (rowsToShow.length === 0) return null;
+                            return (
+                              <div className="mt-3 border rounded-2 p-2 bg-white">
+                                <div className="text-uppercase small text-muted fw-semibold mb-2 px-1">
+                                  {t('createModal.integrations.accountScopeHeading', {
+                                    defaultValue: 'Account scope for this agent',
+                                  })}
+                                </div>
+                                {rowsToShow.map((conn) => {
+                                  const canonical = conn.pipedreamSlug!;
+                                  const row = enabledRows.find((r) => r.slug === canonical || r.slug === conn.id);
+                                  return (
+                                    <div key={conn.id} className="mb-2">
+                                      <div className="small fw-semibold mb-1">{conn.name}</div>
+                                      <IntegrationAccountSubmenu
+                                        connectionId={canonical}
+                                        accounts={conn.accounts ?? []}
+                                        allowMultipleAccounts={true}
+                                        isEnabled={true}
+                                        selectedAccountIds={row?.accountIds}
+                                        disabled={saving}
+                                        onChange={(next) => handleAgentAccountSelection(canonical, next)}
+                                      />
+                                    </div>
+                                  );
+                                })}
                               </div>
                             );
-                          })}
-                        </div>
+                          })()}
+                        </>
                       )}
                     </div>
                   </Col>

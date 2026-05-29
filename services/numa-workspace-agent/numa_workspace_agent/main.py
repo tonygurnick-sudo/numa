@@ -171,16 +171,95 @@ def _normalise_integrations_payload(
         is_file_store = it.get("isFileStore")
         if is_file_store is None:
             is_file_store = it.get("is_file_store")
+        # FEAT-019: per-conversation account scope for Pipedream integrations.
+        # account_ids is a strict subset of the user's connected accounts for
+        # this app. Absent / empty list means "all of the user's connected
+        # accounts are eligible" — legacy behaviour. account_names is a
+        # display-name map keyed by account id, used by the prompt builder so
+        # the model can name the active accounts in responses.
+        raw_account_ids = it.get("accountIds")
+        if raw_account_ids is None:
+            raw_account_ids = it.get("account_ids")
+        account_ids: Optional[list[str]] = None
+        if isinstance(raw_account_ids, list):
+            account_ids = [x for x in raw_account_ids if isinstance(x, str) and x]
+        raw_account_names = it.get("accountNames")
+        if raw_account_names is None:
+            raw_account_names = it.get("account_names")
+        account_names: Optional[dict[str, str]] = None
+        if isinstance(raw_account_names, dict):
+            account_names = {
+                str(k): str(v)
+                for k, v in raw_account_names.items()
+                if isinstance(k, str) and isinstance(v, str)
+            }
+        # FEAT-019: informational full account list (NOT an allow-list). Sent
+        # by the FE for every multi-account Pipedream integration so the agent
+        # prompt can list them with their apn_xxx ids — the model needs the
+        # ids to target a specific account via explicit `authProvisionId`
+        # rather than relying on the proxy's first-match `auto` resolution.
+        raw_available = it.get("availableAccounts")
+        if raw_available is None:
+            raw_available = it.get("available_accounts")
+        available_accounts: Optional[list[dict]] = None
+        if isinstance(raw_available, list):
+            available_accounts = []
+            for entry in raw_available:
+                if not isinstance(entry, dict):
+                    continue
+                acc_id = entry.get("account_id") or entry.get("accountId")
+                if not isinstance(acc_id, str) or not acc_id:
+                    continue
+                name = entry.get("name")
+                available_accounts.append(
+                    {
+                        "account_id": acc_id,
+                        "name": str(name) if isinstance(name, str) else None,
+                    }
+                )
         return {
             "slug": slug,
             "method": method,
             "name": it.get("name") or slug,
             "is_file_store": bool(is_file_store) if is_file_store is not None else None,
+            "account_ids": account_ids,
+            "account_names": account_names,
+            "available_accounts": available_accounts,
         }
+
+    # FEAT-019: per-app account scope can also arrive as a top-level
+    # `selectedAccountsByApp` dict (Pipedream slug → list of accountIds).
+    # The V2 apps run config sends this shape because the chat-picker state
+    # is naturally keyed by app, not per-integration row. Merge it onto the
+    # normalised rows so the env-var plumbing in sdk_config sees a uniform
+    # shape regardless of producer.
+    raw_selected_map = body.get("selectedAccountsByApp")
+    selected_map: dict[str, list[str]] = {}
+    if isinstance(raw_selected_map, dict):
+        for k, v in raw_selected_map.items():
+            if not isinstance(k, str) or not isinstance(v, list):
+                continue
+            selected_map[k] = [x for x in v if isinstance(x, str) and x]
+
+    def _apply_selected_map(rows: list[dict]) -> list[dict]:
+        if not selected_map:
+            return rows
+        for r in rows:
+            if r.get("method") != "pipedream":
+                continue
+            slug = r.get("slug")
+            if (
+                isinstance(slug, str)
+                and slug in selected_map
+                and not r.get("account_ids")
+            ):
+                r["account_ids"] = list(selected_map[slug])
+        return rows
 
     if new_shape:
         enabled = [x for x in (_normalise_item(it) for it in enabled_new) if x]
         available = [x for x in (_normalise_item(it) for it in available_new) if x]
+        _apply_selected_map(enabled)
         return enabled, available
 
     # Legacy: stitch four separate fields back into the unified shape.
@@ -223,6 +302,8 @@ def _normalise_integrations_payload(
                 }
             )
 
+    # FEAT-019: same selectedAccountsByApp merge for legacy-shape payloads.
+    _apply_selected_map(enabled)
     return enabled, available
 
 

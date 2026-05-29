@@ -251,6 +251,13 @@ export function useV2AppRun({ appId, numaGet, numaPost, numaDelete, pollInterval
                 workspaceAccess: config.workspaceAccess,
                 contextInstructions: config.contextInstructions,
                 ...(config.metadata ? { metadata: config.metadata } : {}),
+                // FEAT-019: forward per-run account scope so the workspace
+                // agent narrows authProvisionId resolution to this subset.
+                // Omitted when the user hasn't narrowed — preserves legacy
+                // behaviour for V2 apps that don't expose a picker yet.
+                ...(config.selectedAccountsByApp && Object.keys(config.selectedAccountsByApp).length > 0
+                  ? { selectedAccountsByApp: config.selectedAccountsByApp }
+                  : {}),
               }
             : undefined,
           // Pass explicit agent type if set (e.g., 'nolia-compliance')

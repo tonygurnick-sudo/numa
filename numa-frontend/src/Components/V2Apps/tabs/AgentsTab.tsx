@@ -17,6 +17,7 @@ import type {
 } from '../../../types/apps';
 import type { V2AppRunState } from '../../../hooks/useV2AppRun';
 import type { RunRecord, ProgressEvent } from '../../../Services/v2AppsService';
+import { IntegrationAccountSubmenu } from '../../Integrations/IntegrationAccountSubmenu';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -27,6 +28,9 @@ type ConnectionOption = {
   id: string;
   name: string;
   isConnected: boolean;
+  // FEAT-019: optional multi-account metadata.
+  allowMultipleAccounts?: boolean;
+  accounts?: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
 };
 
 interface AgentsTabProps {
@@ -116,6 +120,10 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
   const [enabledTools, setEnabledTools] = useState<string[]>(workspaceSettings.enabledTools);
   const [enabledConnections, setEnabledConnections] = useState<string[]>(workspaceSettings.enabledConnections);
   const [workspaceAccess, setWorkspaceAccess] = useState(workspaceSettings.workspaceAccess);
+  // FEAT-019: per-agent-run account scope, inherited from workspace defaults.
+  const [selectedAccountsByApp, setSelectedAccountsByApp] = useState<Record<string, string[]>>(
+    workspaceSettings.selectedAccountsByApp ?? {}
+  );
 
   // Re-sync when workspace settings change
   useEffect(() => {
@@ -123,6 +131,7 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
     setEnabledTools(workspaceSettings.enabledTools);
     setEnabledConnections(workspaceSettings.enabledConnections);
     setWorkspaceAccess(workspaceSettings.workspaceAccess);
+    setSelectedAccountsByApp(workspaceSettings.selectedAccountsByApp ?? {});
   }, [workspaceSettings]);
 
   const handleAgentClick = useCallback(
@@ -169,6 +178,8 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
         ...(selectedAgent.customFields?.length ? { metadata: customFieldValues } : {}),
         // Explicit agent type override (maps to workspace agent type_id)
         ...(selectedAgent.agentType ? { agentType: selectedAgent.agentType } : {}),
+        // FEAT-019: per-run account scope
+        selectedAccountsByApp: Object.keys(selectedAccountsByApp).length > 0 ? selectedAccountsByApp : undefined,
       };
       await startAnalysis(prompt.trim(), files, config, runName.trim() || undefined);
     },
@@ -184,6 +195,7 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
       workspaceAccess,
       workspaceSettings.contextInstructions,
       customFieldValues,
+      selectedAccountsByApp,
       startAnalysis,
     ]
   );
@@ -378,21 +390,29 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
                           const icon = getConnectionIcon(conn.id);
                           const fallbackIcon = getConnectionFallbackIcon(conn.id);
                           const displayName = getConnectionDisplayName(conn.id);
+                          const isEnabled = enabledConnections.includes(conn.id);
                           return (
-                            <Form.Check key={conn.id} type="checkbox" className="mb-1">
-                              <Form.Check.Input
-                                checked={enabledConnections.includes(conn.id)}
-                                onChange={() => toggleConnection(conn.id)}
+                            <div key={conn.id}>
+                              <Form.Check type="checkbox" className="mb-1">
+                                <Form.Check.Input checked={isEnabled} onChange={() => toggleConnection(conn.id)} />
+                                <Form.Check.Label className="d-flex align-items-center gap-2">
+                                  {icon ? (
+                                    <img src={icon} alt="" style={{ width: 16, height: 16 }} />
+                                  ) : (
+                                    <i className={fallbackIcon} />
+                                  )}
+                                  {displayName}
+                                </Form.Check.Label>
+                              </Form.Check>
+                              <IntegrationAccountSubmenu
+                                connectionId={conn.id}
+                                accounts={conn.accounts ?? []}
+                                allowMultipleAccounts={conn.allowMultipleAccounts === true}
+                                isEnabled={isEnabled}
+                                selectedAccountIds={selectedAccountsByApp[conn.id]}
+                                onChange={(next) => setSelectedAccountsByApp((prev) => ({ ...prev, [conn.id]: next }))}
                               />
-                              <Form.Check.Label className="d-flex align-items-center gap-2">
-                                {icon ? (
-                                  <img src={icon} alt="" style={{ width: 16, height: 16 }} />
-                                ) : (
-                                  <i className={fallbackIcon} />
-                                )}
-                                {displayName}
-                              </Form.Check.Label>
-                            </Form.Check>
+                            </div>
                           );
                         })
                       )}

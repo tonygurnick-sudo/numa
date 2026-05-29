@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: V2AppWorkspaceSettings = {
   enabledConnections: [],
   workspaceAccess: true,
   contextInstructions: '',
+  selectedAccountsByApp: {},
 };
 
 function loadFromStorage(appId: string): V2AppWorkspaceSettings {
@@ -36,6 +37,9 @@ export interface UseV2AppWorkspaceSettingsReturn {
   setEnabledConnections: (connections: string[]) => void;
   setWorkspaceAccess: (access: boolean) => void;
   setContextInstructions: (text: string) => void;
+  // FEAT-019: workspace-level default account scope. Inherited by per-run
+  // configs in AgentRunPanel; users can still override per run.
+  setSelectedAccountsByApp: (selection: Record<string, string[]>) => void;
 }
 
 export function useV2AppWorkspaceSettings(appId: string): UseV2AppWorkspaceSettingsReturn {
@@ -153,6 +157,17 @@ export function useV2AppWorkspaceSettings(appId: string): UseV2AppWorkspaceSetti
     [persistSettings]
   );
 
+  const setSelectedAccountsByApp = useCallback(
+    (selection: Record<string, string[]>) => {
+      setSettings((prev) => {
+        const next = { ...prev, selectedAccountsByApp: selection };
+        persistSettings(next);
+        return next;
+      });
+    },
+    [persistSettings]
+  );
+
   // Cleanup debounce timer on unmount
   useEffect(() => {
     return () => {
@@ -168,5 +183,6 @@ export function useV2AppWorkspaceSettings(appId: string): UseV2AppWorkspaceSetti
     setEnabledConnections,
     setWorkspaceAccess,
     setContextInstructions,
+    setSelectedAccountsByApp,
   };
 }

@@ -43,7 +43,7 @@ import {
 import { getConnectorById, surfacesInFiles } from '../Components/DataConnectors/connectorRegistry';
 import { connectorSlugForPipedream } from '../Components/Integrations/integrationCatalogHelpers';
 import type { DataConnectorStatus } from '../types/dataConnectors';
-import type { ConnectionStatus } from '../types/pipedream';
+import type { ConnectionStatus, ConnectedAccount } from '../types/pipedream';
 
 import { createFrontendClient } from '@pipedream/sdk/browser';
 
@@ -55,6 +55,10 @@ type ServiceRow = {
   isConnected: boolean;
   /** Pipedream-side dead signal: account inactive on Pipedream's end. */
   dead?: boolean | null;
+  /** FEAT-019: full list of connected Pipedream accounts for this app.
+   *  Empty when not connected. Multi-account UI keys off this list when the
+   *  admin has opted the integration in via `entry.allowMultipleAccounts`. */
+  accounts: ConnectedAccount[];
 };
 
 /** Resolve display info for a service from whichever registry has it. */
@@ -247,8 +251,29 @@ export const UnifiedIntegrationsPage = () => {
                 dead: c.dead,
                 connection_name: c.connection_name,
                 connected_at: c.connected_at,
+                // FEAT-019: full accounts list. Without this passthrough the
+                // services memo's `pdConn.accounts` is undefined and the modal
+                // falls back to the legacy single-account derivation, showing
+                // only whichever account Pipedream's list-accounts returned
+                // first (non-deterministic order).
+                accounts: c.accounts,
               })) as ConnectionStatus[];
-              setPipedreamConnections(connections);
+              // FEAT-019 defensive: if proxy returned 0 connections but we
+              // had data, keep prev. Transient empty responses (cold-start
+              // timeout, Pipedream API blip) shouldn't wipe the list.
+              setPipedreamConnections((prev) => {
+                const newlyConnected = connections.filter((c) => c.status === 'connected').length;
+                const prevConnected = prev.filter((c) => c.status === 'connected').length;
+                if (newlyConnected === 0 && prevConnected > 0) {
+                  console.warn(
+                    '[reload] getIntegrationStatus returned 0 connected apps but had',
+                    prevConnected,
+                    'cached — keeping previous'
+                  );
+                  return prev;
+                }
+                return connections;
+              });
             })
           );
         }
@@ -348,6 +373,21 @@ export const UnifiedIntegrationsPage = () => {
           display,
           isConnected,
           dead: pdConn?.dead ?? null,
+          // Older cached responses may not carry `accounts`. Fall back to the
+          // legacy single-account fields so the UI still renders something.
+          accounts:
+            pdConn?.accounts ??
+            (pdConn?.pipedream_account_id
+              ? [
+                  {
+                    account_id: pdConn.pipedream_account_id,
+                    name: pdConn.connection_name ?? null,
+                    healthy: pdConn.healthy ?? null,
+                    dead: pdConn.dead ?? null,
+                    connected_at: pdConn.connected_at ?? null,
+                  },
+                ]
+              : []),
         };
       })
       .filter((s) => {
@@ -384,6 +424,26 @@ export const UnifiedIntegrationsPage = () => {
     async (pipedreamSlug: string) => {
       if (!lambdaClient || !user) return;
       const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+
+      // FEAT-019: snapshot existing account display names (typically the
+      // upstream email/identity) before the OAuth flow. After connect we
+      // compare the new account's name against this set to detect duplicate
+      // upstream identities — Pipedream creates a fresh `apn_xxx` for every
+      // OAuth completion, even when the user signs in as the same Google /
+      // Slack / etc. account, so the dedupe must live in our layer.
+      const existingNamesByApp = new Set(
+        pipedreamConnections
+          .filter((c) => c.app_name === pipedreamSlug && c.status === 'connected')
+          .flatMap<string>((c) => {
+            if (c.accounts && c.accounts.length > 0) {
+              return c.accounts.map((a) => (a.name || '').trim().toLowerCase());
+            }
+            // Legacy single-account fallback for cached responses pre-FEAT-019
+            return c.connection_name ? [c.connection_name.trim().toLowerCase()] : [];
+          })
+          .filter((n) => n.length > 0)
+      );
+
       const tokenResponse = await PipedreamProxyService.generateConnectToken(lambdaClient, externalUserId);
       const { connectToken } = tokenResponse;
       const pd = createFrontendClient({
@@ -395,11 +455,15 @@ export const UnifiedIntegrationsPage = () => {
         externalUserId,
         token: connectToken,
       });
+      let newAccountId: string | null = null;
       await new Promise<void>((resolve, reject) => {
         pd.connectAccount({
           app: pipedreamSlug,
           token: connectToken,
-          onSuccess: () => resolve(),
+          onSuccess: (res) => {
+            newAccountId = res?.id ?? null;
+            resolve();
+          },
           onError: (err) => reject(err),
         });
       });
@@ -433,9 +497,49 @@ export const UnifiedIntegrationsPage = () => {
         ];
       });
       await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
+
+      // FEAT-019: duplicate-account guard. Fetch fresh status so we can see
+      // the new account's display name, compare to the pre-OAuth snapshot,
+      // and silently undo if the user re-added the same upstream identity.
+      // We hit getIntegrationStatus directly here rather than relying on
+      // `reload` because `reload` doesn't return data and the modal's render
+      // happens before any state-based check could fire.
+      if (newAccountId && existingNamesByApp.size > 0) {
+        try {
+          const fresh = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
+            forceRefresh: true,
+          });
+          const slot = (fresh.connections || []).find((c) => c.app_name === pipedreamSlug);
+          const newAccount = (slot?.accounts ?? []).find((a) => a.account_id === newAccountId);
+          const newName = (newAccount?.name || '').trim().toLowerCase();
+          if (newName && existingNamesByApp.has(newName)) {
+            // Same upstream identity as an account already on file — roll
+            // back so the user doesn't end up with five "tom@…" entries.
+            await PipedreamProxyService.disconnectIntegration(lambdaClient, externalUserId, {
+              accountId: newAccountId,
+            });
+            await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
+            await reload({ forceRefresh: true });
+            setError(
+              t('errors.duplicateAccount', {
+                defaultValue:
+                  'That account ({{name}}) is already connected — Pipedream would have added it as a duplicate, so we kept your existing connection. To add a different account, sign in with another identity at the provider sign-in screen.',
+                name: newAccount?.name || newName,
+              })
+            );
+            return;
+          }
+        } catch (e) {
+          // Don't block the connect flow on a dedupe-check failure; the
+          // worst case is a duplicate slips through and the user can
+          // disconnect it from the modal.
+          console.warn('[connectPipedream] duplicate-account check failed', e);
+        }
+      }
+
       await reload({ forceRefresh: true });
     },
-    [lambdaClient, user, reload]
+    [lambdaClient, user, pipedreamConnections, reload, t]
   );
 
   const connectNative = useCallback(async (connectorSlug: string) => {
@@ -488,6 +592,12 @@ export const UnifiedIntegrationsPage = () => {
       try {
         if (method === 'pipedream' && svc.entry.pipedreamSlug) {
           await connectPipedream(svc.entry.pipedreamSlug);
+          // FEAT-019: surface the per-user manage modal immediately after a
+          // successful Pipedream connect. This is where users find tool
+          // policies and (for multi-account integrations) the accounts list +
+          // Add account button. Saves them from having to find the cog icon
+          // on the just-connected row.
+          setToolsModalSvc(svc);
         } else if (method === 'native' && svc.entry.connectorSlug) {
           await connectNative(svc.entry.connectorSlug);
         }
@@ -916,7 +1026,30 @@ export const UnifiedIntegrationsPage = () => {
         onError={(msg) => setError(msg)}
       />
 
-      <UserToolPolicyModal svc={toolsModalSvc} onHide={() => setToolsModalSvc(null)} onError={(msg) => setError(msg)} />
+      <UserToolPolicyModal
+        // Re-resolve against the live `services` list so the modal sees the
+        // latest accounts (FEAT-019) — e.g. immediately after a Pipedream
+        // connect where the snapshot captured at click time has no accounts.
+        svc={(() => {
+          if (!toolsModalSvc) return null;
+          return services.find((s) => s.entry.slug === toolsModalSvc.entry.slug) ?? toolsModalSvc;
+        })()}
+        onHide={() => setToolsModalSvc(null)}
+        onError={(msg) => setError(msg)}
+        onAddAccount={async (pipedreamSlug) => {
+          // Re-use the standard connect-token flow; Pipedream's default
+          // behaviour on a second call is to add another account, not
+          // replace the existing one.
+          await connectPipedream(pipedreamSlug);
+        }}
+        onDisconnectAccount={async (accountId) => {
+          if (!user || !lambdaClient) return;
+          const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+          await PipedreamProxyService.disconnectIntegration(lambdaClient, externalUserId, { accountId });
+          await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
+          await reload({ forceRefresh: true });
+        }}
+      />
     </div>
   );
 };
@@ -1093,6 +1226,42 @@ const IntegrationCard = ({
                   </span>
                 );
               })()}
+              {/* FEAT-019: multi-account badge. Visible whenever the admin
+                  has opted the integration in AND Pipedream is an available
+                  method for this row — independent of whether the current
+                  user has connected yet, so the capability is discoverable
+                  before connecting. Once the user has >1 accounts, the badge
+                  upgrades to show the count. */}
+              {svc.entry.allowMultipleAccounts && svc.availableMethods.includes('pipedream') && (
+                <span
+                  className="badge"
+                  title={t('badges.multipleAccountsTooltip', {
+                    defaultValue: 'Multiple Pipedream accounts are available for this integration',
+                  })}
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '0.15rem 0.5rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                    fontWeight: 500,
+                    letterSpacing: '0.01em',
+                    lineHeight: 1.2,
+                    verticalAlign: 'middle',
+                    background: '#ede9fe',
+                    color: '#5b21b6',
+                    border: '1px solid #ddd6fe',
+                  }}
+                >
+                  <i className="bi bi-people-fill" />
+                  {svc.accounts.length > 1
+                    ? t('badges.multipleAccountsCount', {
+                        defaultValue: '{{count}} accounts',
+                        count: svc.accounts.length,
+                      })
+                    : t('badges.multipleAccounts', { defaultValue: 'Multi-account' })}
+                </span>
+              )}
             </div>
             <p className="integrations-row-card__description">{display.description}</p>
           </div>
@@ -1281,10 +1450,17 @@ const UserToolPolicyModal = ({
   svc,
   onHide,
   onError,
+  onAddAccount,
+  onDisconnectAccount,
 }: {
   svc: ServiceRow | null;
   onHide: () => void;
   onError: (msg: string) => void;
+  /** FEAT-019: invoked when the user clicks "Add account" in the multi-account
+   *  section. Parent runs the standard Pipedream connect-token flow. */
+  onAddAccount: (pipedreamSlug: string) => Promise<void>;
+  /** FEAT-019: invoked when the user disconnects a single account by id. */
+  onDisconnectAccount: (accountId: string) => Promise<void>;
 }) => {
   const { t } = useTranslation('integrations');
   const { user, lambdaClient } = useAuth();
@@ -1293,9 +1469,15 @@ const UserToolPolicyModal = ({
   const [initialToggles, setInitialToggles] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Single-flight guards for the multi-account section so the buttons can
+  // show a busy state without leaking across rows.
+  const [addingAccount, setAddingAccount] = useState(false);
+  const [disconnectingAccountId, setDisconnectingAccountId] = useState<string | null>(null);
 
   const pdSlug = svc?.entry.pipedreamSlug ?? null;
   const displayName = svc?.display.name ?? '';
+  const allowMultiple = svc?.entry.allowMultipleAccounts === true;
+  const accounts = svc?.accounts ?? [];
 
   useEffect(() => {
     if (!svc || !pdSlug || !user || !lambdaClient) return;
@@ -1339,7 +1521,13 @@ const UserToolPolicyModal = ({
     return () => {
       cancelled = true;
     };
-  }, [svc, pdSlug, user, lambdaClient, onError]);
+    // Deps intentionally use `pdSlug` (string) and not `svc` (object) — the
+    // parent re-resolves `svc` against the live `services` memo on every
+    // render so its identity changes whenever ANY connection state updates.
+    // Depending on `svc` here would refetch the (slow) MCP tool list on
+    // every parent render. The fetch is only meaningful when the user picks
+    // a different integration, which `pdSlug` covers.
+  }, [pdSlug, user, lambdaClient, onError]);
 
   if (!svc || !pdSlug) return null;
 
@@ -1376,6 +1564,101 @@ const UserToolPolicyModal = ({
         </Modal.Title>
       </Modal.Header>
       <Modal.Body style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+        {/* Multi-account section (FEAT-019): only renders when the admin has
+            opted this integration in. When off, the modal looks identical to
+            the legacy single-account flow — there is no "Add account" button
+            and no list of accounts visible to the user. */}
+        {allowMultiple && pdSlug && (
+          <div className="mb-4">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <h6 className="text-uppercase small text-muted fw-semibold mb-0">
+                {t('toolPolicy.accountsHeading', { defaultValue: 'Connected accounts' })}
+              </h6>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                disabled={addingAccount}
+                onClick={async () => {
+                  setAddingAccount(true);
+                  try {
+                    await onAddAccount(pdSlug);
+                  } catch (e) {
+                    onError((e as Error).message || 'Failed to add account');
+                  } finally {
+                    setAddingAccount(false);
+                  }
+                }}
+              >
+                {addingAccount ? (
+                  <Spinner animation="border" size="sm" />
+                ) : (
+                  <>
+                    <i className="bi bi-plus-lg me-1" />
+                    {t('toolPolicy.addAccount', { defaultValue: 'Add account' })}
+                  </>
+                )}
+              </Button>
+            </div>
+            {accounts.length === 0 ? (
+              <div className="small text-muted fst-italic">
+                {t('toolPolicy.noAccountsConnected', {
+                  defaultValue: 'No accounts connected yet — click Add account to connect one.',
+                })}
+              </div>
+            ) : (
+              <div className="d-flex flex-column gap-2">
+                {accounts.map((acc) => {
+                  const accountBusy = disconnectingAccountId === acc.account_id;
+                  return (
+                    <div
+                      key={acc.account_id}
+                      className="d-flex align-items-center justify-content-between p-2 border rounded-3 bg-white"
+                    >
+                      <div className="d-flex align-items-center gap-2 min-w-0">
+                        <div className="text-truncate">
+                          <div className="fw-semibold small text-truncate">{acc.name || acc.account_id}</div>
+                          {acc.dead === true ? (
+                            <div className="small text-danger">
+                              <AlertTriangle size={12} className="me-1" aria-hidden />
+                              {t('status.dead', { defaultValue: 'Account inactive' })}
+                            </div>
+                          ) : acc.healthy === false ? (
+                            <div className="small text-warning">
+                              <AlertTriangle size={12} className="me-1" aria-hidden />
+                              {t('status.reconnectRequired', { defaultValue: 'Reconnect required' })}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        disabled={accountBusy}
+                        onClick={async () => {
+                          setDisconnectingAccountId(acc.account_id);
+                          try {
+                            await onDisconnectAccount(acc.account_id);
+                          } catch (e) {
+                            onError((e as Error).message || 'Failed to disconnect account');
+                          } finally {
+                            setDisconnectingAccountId(null);
+                          }
+                        }}
+                      >
+                        {accountBusy ? (
+                          <Spinner animation="border" size="sm" />
+                        ) : (
+                          t('actions.disconnect', { defaultValue: 'Disconnect' })
+                        )}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <hr className="my-3" />
+          </div>
+        )}
         <p className="text-muted small">
           {t('toolPolicy.intro', {
             defaultValue:

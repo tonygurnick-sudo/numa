@@ -1794,18 +1794,26 @@
   padding-bottom: 0.72rem;
 }
 
+/* FEAT-019: wrapper for the integration row + its account submenu so hover
+   spans the whole group (parent integration + indented accounts under it).
+   The parent row + submenu live inside this wrapper; padding / border-radius /
+   hover moved here from `.workspace-settings-integration-item`. */
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-integration-row {
+  padding: 0.48rem 0.62rem;
+  border-radius: 8px;
+  transition: background-color 0.15s ease;
+  margin-bottom: 0.25rem;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-integration-row:hover {
+  background: #f9fafb;
+}
+
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-integration-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.48rem 0.62rem;
-  border-radius: 8px;
-  transition: background-color 0.15s ease;
-}
-
-.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-integration-item:hover {
-  background: #f9fafb;
 }
 
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-integration-main {

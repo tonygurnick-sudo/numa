@@ -6,6 +6,7 @@ import {
   getConnectionDisplayName,
   getConnectionFallbackIcon,
 } from '../../config/integrationsConfig';
+import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -17,6 +18,10 @@ type ConnectionOption = {
   id: string;
   name: string;
   isConnected: boolean;
+  // FEAT-019: optional multi-account metadata. Length 0 / 1 or
+  // `allowMultipleAccounts: false` → submenu hides; legacy single-account UX.
+  allowMultipleAccounts?: boolean;
+  accounts?: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
 };
 
 export type ChatSettingsPanelProps = {
@@ -41,6 +46,11 @@ export type ChatSettingsPanelProps = {
   availableConnections: ConnectionOption[];
   connectionsLoading: boolean;
   hasPipedreamFeature: boolean;
+  // FEAT-019: per-conversation account scope. Optional so callers that don't
+  // need the picker (e.g. previews) can omit it; when omitted, no submenu
+  // renders even for multi-account integrations.
+  selectedAccountsByApp?: Record<string, string[]>;
+  setSelectedAccountsByApp?: Dispatch<SetStateAction<Record<string, string[]>>>;
 
   // Control disabled state
   isDisabled: boolean;
@@ -63,6 +73,8 @@ export const ChatSettingsPanel = ({
   availableConnections,
   connectionsLoading,
   hasPipedreamFeature,
+  selectedAccountsByApp,
+  setSelectedAccountsByApp,
   isDisabled,
 }: ChatSettingsPanelProps) => {
   const { t } = useTranslation('chat');
@@ -295,41 +307,52 @@ export const ChatSettingsPanel = ({
               {t('settingsPanel.noIntegrations')}
             </div>
           ) : (
-            <div className="border rounded-3 p-2 bg-white" style={{ maxHeight: 180, overflowY: 'auto' }}>
+            <div className="border rounded-3 p-2 bg-white" style={{ maxHeight: 300, overflowY: 'auto' }}>
               {connectedIntegrations
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((conn) => {
                   const iconSrc = getConnectionIcon(conn.id);
                   const fallbackIcon = getConnectionFallbackIcon(conn.id);
                   const displayName = getConnectionDisplayName(conn.id);
+                  const isEnabled = enabledConnections.includes(conn.id);
 
                   return (
-                    <Form.Check
-                      key={conn.id}
-                      type="checkbox"
-                      id={`settings-integration-${conn.id}`}
-                      label={
-                        <span className="d-flex align-items-center gap-2">
-                          {iconSrc ? (
-                            <img
-                              src={iconSrc}
-                              alt={displayName}
-                              style={{ width: 18, height: 18, objectFit: 'contain' }}
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            <i className={fallbackIcon} />
-                          )}
-                          {displayName}
-                        </span>
-                      }
-                      checked={enabledConnections.includes(conn.id)}
-                      onChange={(e) => handleIntegrationToggle(conn.id, e.target.checked)}
-                      disabled={isDisabled}
-                      className="py-1"
-                    />
+                    <div key={conn.id}>
+                      <Form.Check
+                        type="checkbox"
+                        id={`settings-integration-${conn.id}`}
+                        label={
+                          <span className="d-flex align-items-center gap-2">
+                            {iconSrc ? (
+                              <img
+                                src={iconSrc}
+                                alt={displayName}
+                                style={{ width: 18, height: 18, objectFit: 'contain' }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <i className={fallbackIcon} />
+                            )}
+                            {displayName}
+                          </span>
+                        }
+                        checked={isEnabled}
+                        onChange={(e) => handleIntegrationToggle(conn.id, e.target.checked)}
+                        disabled={isDisabled}
+                        className="py-1"
+                      />
+                      <IntegrationAccountSubmenu
+                        connectionId={conn.id}
+                        accounts={conn.accounts ?? []}
+                        allowMultipleAccounts={conn.allowMultipleAccounts === true}
+                        isEnabled={isEnabled}
+                        selectedAccountIds={selectedAccountsByApp?.[conn.id]}
+                        disabled={isDisabled}
+                        onChange={(next) => setSelectedAccountsByApp?.((prev) => ({ ...prev, [conn.id]: next }))}
+                      />
+                    </div>
                   );
                 })}
             </div>

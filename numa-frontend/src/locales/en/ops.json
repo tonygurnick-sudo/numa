@@ -1032,5 +1032,90 @@
     "error": "Failed to move ticket. Please try again.",
     "versionConflict": "This ticket was modified by someone else. Please close and reopen the ticket to try again.",
     "loadingStages": "Loading stages..."
+  },
+  "recurrence": {
+    "titleCreate": "Repeat ticket",
+    "titleEdit": "Edit recurrence",
+    "rowLabel": "Repeats",
+    "rowDoesNotRepeat": "Doesn't repeat",
+    "rowDisabled": "Recurrence paused",
+    "field": {
+      "pattern": "Pattern",
+      "interval": "Every",
+      "daysOfWeek": "Days of week",
+      "dayOfMonth": "Day of month",
+      "monthOfYear": "Month",
+      "timeOfDay": "Time",
+      "timezone": "Timezone",
+      "startDate": "Start date",
+      "endDate": "End date",
+      "maxOccurrences": "Stop after N occurrences"
+    },
+    "help": {
+      "dayOfMonth": "Months with fewer days will skip — pick 28 or earlier for guaranteed monthly fires.",
+      "optional": "Optional"
+    },
+    "pattern": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "unit": {
+      "day": "day",
+      "dayPlural": "days",
+      "week": "week",
+      "weekPlural": "weeks",
+      "month": "month",
+      "monthPlural": "months",
+      "year": "year",
+      "yearPlural": "years"
+    },
+    "dow": {
+      "sun": "Sun",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat"
+    },
+    "month": {
+      "1": "January",
+      "2": "February",
+      "3": "March",
+      "4": "April",
+      "5": "May",
+      "6": "June",
+      "7": "July",
+      "8": "August",
+      "9": "September",
+      "10": "October",
+      "11": "November",
+      "12": "December"
+    },
+    "summary": {
+      "every": "Every {{unit}}",
+      "everyN": "Every {{n}} {{unit}}",
+      "onDays": "on {{days}}",
+      "onDayOfMonth": "on day {{day}}",
+      "onMonthDay": "on {{month}} {{day}}",
+      "atTime": "at {{time}} ({{tz}})",
+      "until": "until {{date}}",
+      "forN": "for {{n}} occurrences"
+    },
+    "preview": "Preview",
+    "button": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "remove": "Remove recurrence",
+      "setUp": "Set up recurrence",
+      "edit": "Edit"
+    },
+    "error": {
+      "weeklyNoDays": "Pick at least one day of the week.",
+      "endBeforeStart": "End date must be on or after the start date.",
+      "generic": "Could not save the recurrence — please try again."
+    }
   }
 }

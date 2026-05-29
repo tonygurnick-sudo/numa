@@ -60,6 +60,7 @@ import microsoftDynamics365SalesIcon from '../assets/icons/microsoft_dynamics_36
 import dynamics365BusinessCentralApiIcon from '../assets/icons/dynamics_365_business_central_api.svg';
 import microsoftTodoIcon from '../assets/icons/microsofttodo.svg';
 import fathomIcon from '../assets/icons/fathom.png';
+import elevenlabsIcon from '../assets/icons/elevenlabs.svg';
 import i18n from '../i18n';
 
 export type BootstrapColor =
@@ -630,6 +631,16 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     fallback_icon: 'bi bi-mic',
     fallback_color: 'primary',
     example_query: connectionText('fathom', 'example_query'),
+  },
+  elevenlabs: {
+    id: 'elevenlabs',
+    name: connectionText('elevenlabs', 'name'),
+    description: connectionText('elevenlabs', 'description'),
+    auth_type: 'api_key',
+    img_src: elevenlabsIcon,
+    fallback_icon: 'bi bi-soundwave',
+    fallback_color: 'dark',
+    example_query: connectionText('elevenlabs', 'example_query'),
   },
 });
 

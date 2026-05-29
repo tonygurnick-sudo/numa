@@ -488,6 +488,14 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
     stash_id = params.get("stash_id")
     annotations = params.get("annotations", {})
     request_id = params.get("request_id")
+    # FEAT-019: optional per-conversation account scope. When non-empty, the
+    # proxy narrows the candidate account list to this subset before resolving
+    # authProvisionId:"auto". Forwarded as-is — the proxy is the authority on
+    # which accounts the user actually has connected.
+    allowed_account_ids = params.get("allowed_account_ids") or []
+    if not isinstance(allowed_account_ids, list):
+        allowed_account_ids = []
+    allowed_account_ids = [x for x in allowed_account_ids if isinstance(x, str) and x]
 
     if not action_key:
         raise ValueError("action_key is required")
@@ -555,6 +563,8 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
     }
     if stash_id:
         relay_params["stash_id"] = stash_id
+    if allowed_account_ids:
+        relay_params["allowed_account_ids"] = allowed_account_ids
 
     def _do_run_action() -> Dict[str, Any]:
         result = _invoke_relay(
@@ -588,6 +598,13 @@ def handle_configure_props(params: Dict[str, Any]) -> Dict[str, Any]:
     prop_name = params.get("prop_name")
     configured_props = params.get("configured_props", {})
     external_user_id = params.get("external_user_id")
+    # FEAT-019: optional per-conversation account scope (mirrors run_action).
+    raw_allowed = params.get("allowed_account_ids") or []
+    allowed_account_ids = (
+        [x for x in raw_allowed if isinstance(x, str) and x]
+        if isinstance(raw_allowed, list)
+        else []
+    )
 
     if not action_key:
         raise ValueError("action_key is required")
@@ -600,14 +617,18 @@ def handle_configure_props(params: Dict[str, Any]) -> Dict[str, Any]:
             "(integrations toggle in the chat sidebar) and try again."
         )
 
+    relay_params: Dict[str, Any] = {
+        "action_key": action_key,
+        "prop_name": prop_name,
+        "configured_props": configured_props,
+    }
+    if allowed_account_ids:
+        relay_params["allowed_account_ids"] = allowed_account_ids
+
     result = _invoke_relay(
         operation="configure_props",
         external_user_id=external_user_id,
-        parameters={
-            "action_key": action_key,
-            "prop_name": prop_name,
-            "configured_props": configured_props,
-        },
+        parameters=relay_params,
     )
 
     return result
