@@ -1,0 +1,85 @@
+{
+  "page": {
+    "title": "Numa Voice",
+    "comingSoon": "Outbound calling and AI call intelligence are being set up for your workspace.",
+    "subtitle": "Outbound calling for your SDR team",
+    "loading": "Loading your call list…",
+    "error": "Something went wrong loading Numa Voice. Please try again.",
+    "retry": "Retry"
+  },
+  "prospectTable": {
+    "title": "Today's calls",
+    "caption": "Prospects queued for outbound calls today.",
+    "columns": {
+      "company": "Company",
+      "contact": "Contact",
+      "title": "Title",
+      "industry": "Industry",
+      "pain": "Pain hypothesis",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "dial": "Dial",
+    "dialing": "Dialing…",
+    "calling": "On call",
+    "loading": "Loading prospects…",
+    "empty": "No calls queued for today.",
+    "error": "Couldn't load the call list.",
+    "statusUnknown": "—"
+  },
+  "ccp": {
+    "title": "Softphone",
+    "show": "Show softphone",
+    "hide": "Hide softphone",
+    "connecting": "Connecting to Amazon Connect…",
+    "micPrompt": "Allow microphone access in the softphone window to take calls.",
+    "loginPrompt": "Sign in to Amazon Connect in the popup window to start calling.",
+    "notConfigured": "Amazon Connect is not configured for this workspace.",
+    "error": "Couldn't load the softphone. Please refresh and try again."
+  },
+  "wrapUp": {
+    "title": "Call wrap-up",
+    "subtitle": "Log the outcome of your call with {{name}}.",
+    "duration": "Call duration",
+    "outcomeLabel": "Outcome",
+    "outcome": {
+      "interested": "Interested",
+      "callback": "Callback",
+      "noAnswer": "No answer",
+      "notInterested": "Not interested"
+    },
+    "notesLabel": "Call notes",
+    "notesPlaceholder": "What happened on the call? Key points, next steps…",
+    "qualifyPrompt": "Is this prospect qualified?",
+    "qualifyYes": "Qualified",
+    "qualifyNo": "Not qualified",
+    "submit": "Save outcome",
+    "submitting": "Saving…",
+    "saved": "Outcome saved.",
+    "error": "Couldn't save the outcome. Please try again.",
+    "dismiss": "Dismiss without logging"
+  },
+  "assist": {
+    "title": "Live assist",
+    "companyContext": "Company context",
+    "discoveryQuestions": "Discovery questions",
+    "objections": "Objections",
+    "hooks": "Hook lines",
+    "next": "Next",
+    "noPanel": "No playbook available for this industry yet.",
+    "loading": "Loading assist panel…",
+    "idle": "Assist will appear here when a call connects."
+  },
+  "adminPhones": {
+    "title": "Phone numbers",
+    "caption": "Outbound numbers available to your SDR team.",
+    "number": "Number",
+    "status": "Status",
+    "active": "Active",
+    "inactive": "Inactive",
+    "claim": "Claim",
+    "release": "Release",
+    "usageMinutes": "Usage (minutes)",
+    "empty": "No phone numbers provisioned yet."
+  }
+}
