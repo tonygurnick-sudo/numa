@@ -56,6 +56,12 @@ COPY --chown=node:node .yarn/install-state.gz .yarn/
 
 # Copy in code
 COPY infra infra
+# ext-api-doc/ holds the per-connector knowledge packs that numa-client-stack.ts syncs
+# to each client's S3 bucket (and the workspace agent loads at runtime). It is a
+# repo-root SIBLING of infra/, so it must be copied explicitly — without this line,
+# container deploys (CI build-deployment-container + Customer Success Portal) shipped
+# zero docs while host `make deploy` worked, which read as "docs deploy inconsistently".
+COPY ext-api-doc ext-api-doc
 COPY clientConfigProd.json .
 
 # Install yarn.
