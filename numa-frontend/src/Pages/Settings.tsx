@@ -1347,6 +1347,22 @@ export default function SettingsPage() {
                     </span>
                   </OverlayTrigger>
                 )}
+                {cap.tier === 'gold' && (
+                  <OverlayTrigger placement="top" overlay={<Tooltip>{t('capabilities.goldTierTooltip')}</Tooltip>}>
+                    <span
+                      className="badge d-inline-flex align-items-center gap-1"
+                      style={{
+                        backgroundColor: '#fffbeb',
+                        color: '#92400e',
+                        border: '1px solid #fcd34d',
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      <i className="bi bi-gem" />
+                      {t('capabilities.goldTier')}
+                    </span>
+                  </OverlayTrigger>
+                )}
               </div>
               <div
                 className="text-muted small settings-item-description"
