@@ -647,6 +647,87 @@ const handlePipedreamEvent = async (
   return { success: true, dispatched: 1 };
 };
 
+/**
+ * Numa Voice runner invocation. The voice processor emits
+ * numa.connector.connect events with the transcript reference in
+ * payload_summary; we hand them to the runner as
+ *   { type: 'EVENT', scheduleId, event: { source: 'connect', ...payload } }
+ * so the runner's `connect` branch interpolates `{{ event.transcript_kb_file }}`,
+ * `{{ event.contact_id }}`, etc. into the Post-Call agent prompt.
+ */
+const invokeRunnerConnect = async (scheduleId: string, payload: Record<string, unknown>): Promise<void> => {
+  if (!RUNNER_FUNCTION_NAME) {
+    console.error(`${LOG_PREFIX} AGENT_SCHEDULE_RUNNER_FUNCTION_NAME not configured`);
+    return;
+  }
+  await lambdaClient.send(
+    new InvokeCommand({
+      FunctionName: RUNNER_FUNCTION_NAME,
+      InvocationType: 'Event',
+      Payload: Buffer.from(
+        JSON.stringify({
+          type: 'EVENT',
+          scheduleId,
+          tenantId: CLIENT_NAME,
+          event: { source: 'connect', ...payload },
+        })
+      ),
+    })
+  );
+};
+
+/**
+ * Numa Voice branch. Triggered by EventBridge events with
+ * Source=numa.connector.connect from numa-voice-processor (a call transcript is
+ * ready). The processor doesn't know schedule ids, so we resolve every active
+ * connect-bound schedule for the tenant via the tenant-id-index GSI and fire
+ * each. Generic by design — supports the seeded Post-Call schedule today and
+ * user-configured Voice automations later.
+ */
+const handleConnectEvent = async (
+  detail: ConnectorEventDetail
+): Promise<{ success: boolean; dispatched?: number; error?: string }> => {
+  const tenantId = detail.client_name || CLIENT_NAME;
+  const eventType = detail.event_type; // e.g. 'call.completed' | 'prospects.uploaded'
+  const payload = (detail.payload_summary ?? {}) as Record<string, unknown>;
+
+  const res = await ddbDoc.send(
+    new QueryCommand({
+      TableName: SCHEDULES_TABLE,
+      IndexName: 'tenant-id-index',
+      KeyConditionExpression: 'tenant_id = :t',
+      ExpressionAttributeValues: { ':t': tenantId },
+    })
+  );
+  // Match on source AND sub-event so distinct Voice triggers (post-call vs
+  // prospect ingest) don't cross-fire. Legacy connect schedules without an
+  // explicit trigger.event default to 'call.completed'.
+  const schedules = (res.Items ?? []).filter((s) => {
+    const trigger = s.trigger as { source?: string; event?: string } | undefined;
+    return s.status === 'active' && trigger?.source === 'connect' && (trigger.event ?? 'call.completed') === eventType;
+  });
+
+  if (schedules.length === 0) {
+    console.info(`${LOG_PREFIX} No active connect schedules for tenant ${tenantId} / ${eventType}`);
+    return { success: true, dispatched: 0 };
+  }
+
+  let dispatched = 0;
+  for (const s of schedules) {
+    try {
+      await invokeRunnerConnect(String(s.schedule_id), payload);
+      dispatched++;
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Failed to invoke runner for connect schedule`, s.schedule_id, err);
+    }
+  }
+  console.log(
+    `${LOG_PREFIX} Dispatched connect event`,
+    JSON.stringify({ _name: 'CONNECT_EVENT_DISPATCHED', tenant: tenantId, dispatched, dedup_key: payload.dedup_key })
+  );
+  return { success: true, dispatched };
+};
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -672,6 +753,11 @@ export const handler: Handler = async (event: EventBridgeEvent) => {
   // per-app extractor and invoke the runner.
   if (detail?.connector_id === 'pipedream') {
     return handlePipedreamEvent(detail);
+  }
+
+  // Numa Voice branch: short-circuit before the Gmail-specific path.
+  if (detail?.connector_id === 'connect') {
+    return handleConnectEvent(detail);
   }
 
   if (detail?.connector_id !== 'gmail' || detail?.event_type !== 'new_email') {
