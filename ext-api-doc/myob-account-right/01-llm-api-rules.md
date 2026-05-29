@@ -137,7 +137,7 @@ GET https://secure.myob.com/oauth2/account/authorize
 
 Redirect carries `code` + `businessId` + `businessName`. Exchange code at `POST https://secure.myob.com/oauth2/v1/authorize` (form-encoded, `grant_type=authorization_code`). Refresh at the same URL with `grant_type=refresh_token`. **Persist the rotated `refresh_token`.**
 
-OAuth scopes use `sme-*` prefix — `sme-company-file` (always), plus the granular ones for the data areas you touch (`sme-sales`, `sme-purchases`, `sme-contacts-customer`, `sme-general-ledger`, `sme-banking`, `sme-inventory`, `sme-payroll`, …). Full list in `00-api-investigation.md` Phase 4.
+OAuth scopes use `sme-*` prefix — `sme-company-file` (always), plus the granular ones for the data areas you touch (`sme-sales`, `sme-purchases`, `sme-contacts-customer`, `sme-general-ledger`, `sme-banking`, `sme-inventory`, `sme-payroll`, …). Full list in `00-api-investigation-questionnaire.md` Phase 4.
 
 **Only Administrator users can authorise.** Non-admins fail at the consent screen.
 
