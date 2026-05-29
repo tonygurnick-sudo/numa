@@ -69,6 +69,14 @@ const createFeatureSets = (props: {
         actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
         resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
       },
+      // Numa Voice: SDRs write the post-call wrap-up outcome to a shared,
+      // non-user-scoped prefix (voice/outcomes/{contactId}.json) so the voice
+      // processor can read it back by contactId (it has no username context).
+      {
+        effect: 'Allow',
+        actions: ['s3:PutObject'],
+        resources: [`${props.outputsBucket.bucket.arn}/voice/outcomes/*`],
+      },
       // Outputs bucket ListBucket permission with user-scoped prefix
       {
         effect: 'Allow',
@@ -175,6 +183,14 @@ const createFeatureSets = (props: {
         effect: 'Allow',
         actions: ['s3:PutObject', 's3:GetObject', 's3:GetObjectTagging'],
         resources: [`${props.outputsBucket.bucket.arn}/*/$\${aws:PrincipalTag/username}/**`],
+      },
+      // Numa Voice: SDRs write the post-call wrap-up outcome to a shared,
+      // non-user-scoped prefix (voice/outcomes/{contactId}.json) so the voice
+      // processor can read it back by contactId (it has no username context).
+      {
+        effect: 'Allow',
+        actions: ['s3:PutObject'],
+        resources: [`${props.outputsBucket.bucket.arn}/voice/outcomes/*`],
       },
       // Outputs bucket ListBucket permission with user-scoped prefix
       {

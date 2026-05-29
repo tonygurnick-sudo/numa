@@ -87,6 +87,19 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: [],
   },
   {
+    flag: 'NUMA_VOICE',
+    title: 'Numa Voice',
+    description:
+      'Amazon Connect outbound calling for SDRs with AI call prep, live assist, and post-call analysis (transcription, summary, CRM write-back).',
+    icon: 'bi-telephone',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    // Qualification Promoter writes qualified prospects into the Numa Ops CRM,
+    // so Ops must be enabled for the full pipeline (degrades gracefully if off).
+    dependencies: ['NUMA_OPS'],
+  },
+  {
     flag: 'KNOWLEDGE_BASES',
     title: 'Knowledge Bases',
     description: 'Enterprise search and retrieval from uploaded documents.',
