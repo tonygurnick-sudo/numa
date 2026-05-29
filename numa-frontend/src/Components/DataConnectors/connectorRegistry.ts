@@ -541,6 +541,58 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     ],
   },
 
+  // ─── Tier 2: OAuth2 (Microsoft Dataverse — PPM) ─────────────────────────
+  {
+    id: 'pmo365',
+    displayName: 'PMO365',
+    icon: 'bi-diagram-3',
+    description:
+      'PMO365 project portfolio management — projects, risks, benefits, and financials, served from Microsoft Dataverse',
+    category: 'Project Management',
+    authType: 'oauth2',
+    surfaces: ['chat'],
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // PMO365 is a Microsoft Power Platform solution — it has no API of its
+    // own; its data lives in the customer's Microsoft Dataverse environment
+    // and is reached via the Dataverse Web API (OData v4, JSON) at
+    // {environment_url}/api/data/v9.2/. Auth is standard Entra ID OAuth using
+    // the `organizations` authority (Dataverse is work/school accounts only —
+    // no personal MSA). Bearer scheme (default). offline_access yields a
+    // refresh token.
+    //
+    // The Dataverse scope is environment-specific ({env}/.default), and the
+    // wizard only interpolates credential fields into authUrl/tokenUrl, not
+    // scopes — so the admin pastes their environment host into
+    // `environment_url` below AND edits the scope host in the wizard's
+    // Advanced section to match (see oauthSetupSteps). Auto-deriving the scope
+    // from environment_url is a worthwhile follow-up — see 03-connector-setup.
+    oauth: {
+      authUrl: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize',
+      tokenUrl: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token',
+      scopes: 'https://YOUR-ENV.crm.dynamics.com/.default offline_access',
+      extraAuthParams: '{"response_mode":"query"}',
+    },
+    credentialFields: [
+      {
+        key: 'environment_url',
+        label: 'Dataverse environment URL',
+        type: 'url',
+        placeholder: 'https://yourorg.crm.dynamics.com',
+        required: true,
+        helpText:
+          'Your PMO365 environment Dataverse URL (Power Platform admin center → Environments → your environment → Environment URL). All users in this workspace share it; the Web API is served from {environment_url}/api/data/v9.2/.',
+      },
+    ],
+    oauthSetupSteps: [
+      'In the Microsoft Entra admin center → App registrations → New registration; choose "Accounts in any organizational directory".',
+      'Under Redirect URIs add the redirect URI shown below as type "Web".',
+      'API permissions → Add a permission → Dynamics CRM → Delegated → user_impersonation, then Grant admin consent.',
+      'Certificates & secrets → New client secret → copy the Value; copy the Application (client) ID from the Overview page.',
+      'In the Power Platform admin center, add an Application User for this app registration and give it a security role with read/write on the PMO365 tables.',
+      'Paste your environment URL above, then open Advanced and replace YOUR-ENV.crm.dynamics.com in the scope with your environment host.',
+    ],
+  },
+
   // ─── Tier 2: API Key ──────────────────────────────────────────────────
   {
     id: 'hirehop',
