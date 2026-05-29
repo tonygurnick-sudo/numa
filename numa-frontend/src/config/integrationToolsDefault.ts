@@ -189,6 +189,9 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Fathom
   fathom: [],
+
+  // ElevenLabs
+  elevenlabs: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {
