@@ -306,6 +306,11 @@
       "name": "Fathom",
       "description": "Access AI-generated meeting recordings, transcripts, summaries, and action items from Fathom.",
       "example_query": "Summarize the key points and action items from my last call."
+    },
+    "elevenlabs": {
+      "name": "ElevenLabs",
+      "description": "Generate lifelike speech, manage voices, and place automated outbound phone calls with ElevenLabs voice AI.",
+      "example_query": "Turn this paragraph into natural-sounding speech and save it as an audio file."
     }
   },
   "tabs": {
