@@ -126,6 +126,7 @@ pre-commit:
         - lambdas/node/document-converter
         - lambdas/node/gmail-watch-manager
         - lambdas/node/google-cloud-setup
+        - lambdas/node/nolia-cognito-email-handler
         - lambdas/node/notifications-api
         - lambdas/node/notifications-stream
         - lambdas/node/numa-quota-report-daily
@@ -133,6 +134,8 @@ pre-commit:
         - lambdas/node/numa-ops-api
         - lambdas/node/numa-ops-config-api
         - lambdas/node/numa-ops-crm-api
+        - lambdas/node/numa-ops-recurrence-runner
+        - lambdas/node/numa-search-api
         - lambdas/node/numa-users-api
         - lambdas/node/openapi-docs-server
         - lambdas/node/pipedream-event-receiver
