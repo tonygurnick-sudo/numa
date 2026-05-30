@@ -664,15 +664,18 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         // Assume the federation role (RoleSessionName = Connect username) for SSO.
         { effect: 'Allow', actions: ['sts:AssumeRole'], resources: [voiceFederationRole.arn] },
       ],
+      // NOTE: addLambdaFunction names routes by array INDEX (voice-admin_route_N).
+      // Only ever APPEND — inserting/reordering shifts indices and makes Terraform
+      // try to re-key existing routes onto keys that already exist (409 conflict).
       route: [
         { verb: 'GET', path: 'voice/admin/status' },
-        { verb: 'GET', path: 'voice/federation-token' },
         { verb: 'POST', path: 'voice/phone-numbers' },
         { verb: 'DELETE', path: 'voice/phone-numbers/{id}' },
         { verb: 'POST', path: 'voice/phone-numbers/{id}/caller-id' },
         { verb: 'POST', path: 'voice/approved-origins' },
         { verb: 'DELETE', path: 'voice/approved-origins' },
         { verb: 'POST', path: 'voice/outbound-country-request' },
+        { verb: 'GET', path: 'voice/federation-token' },
       ],
     });
 
