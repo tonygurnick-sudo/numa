@@ -25,10 +25,11 @@
  * without a live Amazon Connect instance whose Approved Origins allow this
  * domain. See useConnectCcp for the initCCP details.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { getFlag } from '../../utils/featureFlags';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useConnectCcp, VOICE_DIAL_EVENT } from '../../hooks/useConnectCcp';
 
 /** Minimum CCP iframe footprint required by amazon-connect-streams ccp-v2. */
@@ -38,15 +39,28 @@ const PANEL_BODY_HEIGHT = 465;
 export const CcpSoftphoneWidget = () => {
   const { t } = useTranslation('voice');
   const flagEnabled = getFlag('NUMA_VOICE');
+  const { numaGet } = useNumaRequest();
 
   // `open` controls panel visibility only — the iframe host stays mounted while
   // the flag is on so the agent session persists across collapse/navigation.
   const [open, setOpen] = useState(false);
 
+  // Passwordless SSO: mint a federation SignInUrl (GetFederationToken) for the
+  // authenticated Numa user so the CCP iframe logs in without a Connect password.
+  // Returns null on failure → the hook falls back to the static login popup.
+  const getSignInUrl = useCallback(async (): Promise<string | null> => {
+    try {
+      const res = (await numaGet('/api/voice/federation-token')) as { signInUrl?: string } | null;
+      return res?.signInUrl ?? null;
+    } catch {
+      return null;
+    }
+  }, [numaGet]);
+
   // Initialise the CCP eagerly when Voice is enabled (NOT only after the SDR
   // opens the panel) — otherwise a click-to-dial from the prospect table before
   // the panel was ever opened has no live CCP and silently no-ops.
-  const { containerRef, status } = useConnectCcp(flagEnabled);
+  const { containerRef, status } = useConnectCcp(flagEnabled, getSignInUrl);
 
   // Auto-open the panel when a dial is requested so the SDR sees the call and
   // the iframe is visible for the softphone UI.

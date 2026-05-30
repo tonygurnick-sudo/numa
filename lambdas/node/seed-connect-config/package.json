@@ -22,7 +22,6 @@
     "test": "echo 'no tests'"
   },
   "dependencies": {
-    "@aws-sdk/client-connect": "^3.699.0",
-    "@aws-sdk/client-secrets-manager": "^3.699.0"
+    "@aws-sdk/client-connect": "^3.699.0"
   }
 }

@@ -5,6 +5,12 @@ import { CloudwatchEventTarget } from '@cdktf/provider-aws/lib/cloudwatch-event-
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { ConnectInstance } from '@cdktf/provider-aws/lib/connect-instance';
 import { ConnectInstanceStorageConfig } from '@cdktf/provider-aws/lib/connect-instance-storage-config';
+import { ConnectUser } from '@cdktf/provider-aws/lib/connect-user';
+import { ConnectQueue } from '@cdktf/provider-aws/lib/connect-queue';
+import { ConnectHoursOfOperation } from '@cdktf/provider-aws/lib/connect-hours-of-operation';
+import { ConnectPhoneNumber } from '@cdktf/provider-aws/lib/connect-phone-number';
+import { DataAwsConnectSecurityProfile } from '@cdktf/provider-aws/lib/data-aws-connect-security-profile';
+import { DataAwsConnectRoutingProfile } from '@cdktf/provider-aws/lib/data-aws-connect-routing-profile';
 import { KmsKey } from '@cdktf/provider-aws/lib/kms-key';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
@@ -595,6 +601,33 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
     // (addLambdaFunction); admin-group checks live in the handler. Resolves the
     // Connect instance at runtime by alias, so it works for both the autoProvision
     // and a manually-created (FEAT-158) instance.
+    //
+    // Federation role for password-free agent SSO: the voice-admin Lambda assumes
+    // this role with RoleSessionName = the Connect username, then calls
+    // GetFederationToken (SAML-mode instances only) to mint a SignInUrl. Account-root
+    // trust + the Lambda's scoped sts:AssumeRole grant below = only that Lambda can.
+    const voiceFederationRole = new IamRole(this, 'voice-federation-role', {
+      name: awsNameWithHashedPrefix(clientName, '_voice-federation', 64),
+      assumeRolePolicy: new DataAwsIamPolicyDocument(this, 'voice-federation-assume', {
+        statement: [
+          {
+            effect: 'Allow',
+            actions: ['sts:AssumeRole'],
+            principals: [{ type: 'AWS', identifiers: [`arn:aws:iam::${props.clientAccountId}:root`] }],
+          },
+        ],
+      }).json,
+    });
+    const voiceFederationPolicy = new IamPolicy(this, 'voice-federation-policy', {
+      policy: new DataAwsIamPolicyDocument(this, 'voice-federation-policy-doc', {
+        statement: [{ effect: 'Allow', actions: ['connect:GetFederationToken'], resources: ['*'] }],
+      }).json,
+    });
+    new IamRolePolicyAttachment(this, 'voice-federation-attach', {
+      role: voiceFederationRole.name,
+      policyArn: voiceFederationPolicy.arn,
+    });
+
     this.addLambdaFunction(this, 'voice-admin', {
       lambdaDirectory: 'node/numa-voice-admin',
       runtime: 'nodejs22.x',
@@ -605,6 +638,9 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         CLIENT_NAME: clientName,
         ENV_SUFFIX: envSuffix,
         APPROVED_ORIGIN: `https://${clientName}.numa.arcanum.ai`,
+        // Password-free agent SSO (GetFederationToken via the assumed role).
+        FEDERATION_ROLE_ARN: voiceFederationRole.arn,
+        AGENT_USERNAME: 'numa-voice-agent',
       },
       additionalPolicyStatements: [
         {
@@ -625,9 +661,12 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
           resources: ['*'],
         },
         { effect: 'Allow', actions: ['support:CreateCase'], resources: ['*'] },
+        // Assume the federation role (RoleSessionName = Connect username) for SSO.
+        { effect: 'Allow', actions: ['sts:AssumeRole'], resources: [voiceFederationRole.arn] },
       ],
       route: [
         { verb: 'GET', path: 'voice/admin/status' },
+        { verb: 'GET', path: 'voice/federation-token' },
         { verb: 'POST', path: 'voice/phone-numbers' },
         { verb: 'DELETE', path: 'voice/phone-numbers/{id}' },
         { verb: 'POST', path: 'voice/phone-numbers/{id}/caller-id' },
@@ -724,7 +763,10 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         ...pin,
       });
       const connectInstance = new ConnectInstance(this, 'connect-instance', {
-        identityManagementType: 'CONNECT_MANAGED',
+        // SAML so agents federate in from their Numa session (no Connect password).
+        // The numa-voice-admin federation endpoint mints a SignInUrl via
+        // GetFederationToken (RoleSessionName = the Connect username).
+        identityManagementType: 'SAML',
         inboundCallsEnabled: true,
         outboundCallsEnabled: true,
         instanceAlias: `numa-${clientName}${envSuffix}`,
@@ -748,12 +790,64 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         ...pin,
       });
 
-      // ── Deploy-time Connect configuration (region-pinned to voiceRegion) ──────
-      // aws_connect_instance has NO resource for Approved Origins (only the
-      // AssociateApprovedOrigin API), and the agent user + DID + queue caller-id
-      // are wired imperatively against the instance's auto-created defaults. This
-      // Lambda does it post-creation — idempotent + best-effort (a DID-quota issue
-      // can't fail the apply). Same LambdaInvocation pattern as seed-voice-agents.
+      // ── Declarative agent + queue + DID (native CDKTF, no seed Lambda) ────────
+      // The instance auto-creates default 'Agent' security + 'Basic Routing
+      // Profile'; read their ids via data sources to wire the federated agent user.
+      const agentSecurityProfile = new DataAwsConnectSecurityProfile(this, 'voice-agent-sec-profile', {
+        instanceId: connectInstance.id,
+        name: 'Agent',
+        ...pin,
+      });
+      const basicRoutingProfile = new DataAwsConnectRoutingProfile(this, 'voice-basic-routing-profile', {
+        instanceId: connectInstance.id,
+        name: 'Basic Routing Profile',
+        ...pin,
+      });
+      // 24/7 hours for the outbound queue (Connect has no default hours resource).
+      const voiceHours = new ConnectHoursOfOperation(this, 'voice-hours', {
+        instanceId: connectInstance.id,
+        name: 'numa-voice-24x7',
+        timeZone: 'UTC',
+        config: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day) => ({
+          day,
+          startTime: { hours: 0, minutes: 0 },
+          endTime: { hours: 23, minutes: 59 },
+        })),
+        ...pin,
+      });
+      // DID claim — Terraform owns it (no double-claim on re-apply). Gated by
+      // connectClaimDid so no client is surprise-billed.
+      const voicePhoneNumber = props.connectClaimDid
+        ? new ConnectPhoneNumber(this, 'voice-did', {
+            targetArn: connectInstance.arn,
+            countryCode: 'US',
+            type: 'DID',
+            ...pin,
+          })
+        : undefined;
+      // Outbound queue with the DID as caller-ID (declared, not the auto-created one).
+      new ConnectQueue(this, 'voice-outbound-queue', {
+        instanceId: connectInstance.id,
+        name: 'numa-voice-outbound',
+        hoursOfOperationId: voiceHours.hoursOfOperationId,
+        ...(voicePhoneNumber ? { outboundCallerConfig: { outboundCallerIdNumberId: voicePhoneNumber.id } } : {}),
+        ...pin,
+      });
+      // Federated agent user (SAML → no password). numa-voice-admin's
+      // /voice/federation-token mints a SignInUrl for this username.
+      new ConnectUser(this, 'voice-agent-user', {
+        instanceId: connectInstance.id,
+        name: 'numa-voice-agent',
+        routingProfileId: basicRoutingProfile.routingProfileId,
+        securityProfileIds: [agentSecurityProfile.securityProfileId],
+        identityInfo: { firstName: 'Numa', lastName: 'Voice' },
+        phoneConfig: { phoneType: 'SOFT_PHONE', autoAccept: false, afterContactWorkTimeLimit: 0 },
+        ...pin,
+      });
+
+      // ── Approved Origin (the ONE Connect item with no Terraform resource) ─────
+      // AssociateApprovedOrigin is SDK-only — a tiny idempotent deploy-time
+      // LambdaInvocation associates the Numa domain so the embedded CCP loads.
       const connectSeedZip = path.resolve(
         import.meta.dirname,
         '..',
@@ -762,7 +856,6 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         'node/seed-connect-config',
         'lambda_function.zip'
       );
-      const agentSecretName = `${clientName}-voice-agent-credentials`;
       const connectSeedRole = new IamRole(this, 'seed-connect-role', {
         assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
         ...pin,
@@ -774,33 +867,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
       });
       const connectSeedPolicy = new IamPolicy(this, 'seed-connect-policy', {
         policy: new DataAwsIamPolicyDocument(this, 'seed-connect-policy-doc', {
-          statement: [
-            {
-              // Connect actions on this account's own instance. Several phone-number
-              // actions don't accept a resource scope, so '*' (deploy-time, gated).
-              effect: 'Allow',
-              actions: [
-                'connect:AssociateApprovedOrigin',
-                'connect:ListSecurityProfiles',
-                'connect:ListRoutingProfiles',
-                'connect:ListUsers',
-                'connect:CreateUser',
-                'connect:ListPhoneNumbersV2',
-                'connect:SearchAvailablePhoneNumbers',
-                'connect:ClaimPhoneNumber',
-                'connect:ListQueues',
-                'connect:UpdateQueueOutboundCallerConfig',
-              ],
-              resources: ['*'],
-            },
-            {
-              effect: 'Allow',
-              actions: ['secretsmanager:CreateSecret', 'secretsmanager:PutSecretValue'],
-              resources: [
-                `arn:aws:secretsmanager:${props.voiceRegion}:${props.clientAccountId}:secret:${agentSecretName}*`,
-              ],
-            },
-          ],
+          statement: [{ effect: 'Allow', actions: ['connect:AssociateApprovedOrigin'], resources: ['*'] }],
         }).json,
         ...pin,
       });
@@ -820,12 +887,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         environment: {
           variables: {
             INSTANCE_ID: connectInstance.id,
-            INSTANCE_ARN: connectInstance.arn,
             APPROVED_ORIGIN: `https://${clientName}.numa.arcanum.ai`,
-            AGENT_USERNAME: 'numa-voice-agent',
-            AGENT_SECRET_NAME: agentSecretName,
-            CLAIM_DID: props.connectClaimDid ? 'true' : 'false',
-            DID_COUNTRY: 'US',
           },
         },
         dependsOn: [connectSeedAttach],
@@ -834,11 +896,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
       new LambdaInvocation(this, 'seed-connect-invocation', {
         functionName: connectSeedLambda.functionName,
         input: JSON.stringify({ action: 'configure' }),
-        triggers: {
-          seedSourceHash: connectSeedLambda.sourceCodeHash,
-          instanceId: connectInstance.id,
-          claimDid: props.connectClaimDid ? 'true' : 'false',
-        },
+        triggers: { seedSourceHash: connectSeedLambda.sourceCodeHash, instanceId: connectInstance.id },
         dependsOn: [connectSeedLambda, connectSeedBasic, connectInstance],
         ...pin,
       });

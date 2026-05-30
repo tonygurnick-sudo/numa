@@ -3795,6 +3795,25 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@aws-sdk/client-sts@npm:^3.699.0":
+  version: 3.1057.0
+  resolution: "@aws-sdk/client-sts@npm:3.1057.0"
+  dependencies:
+    "@aws-crypto/sha256-browser": "npm:5.2.0"
+    "@aws-crypto/sha256-js": "npm:5.2.0"
+    "@aws-sdk/core": "npm:^3.974.15"
+    "@aws-sdk/credential-provider-node": "npm:^3.972.47"
+    "@aws-sdk/signature-v4-multi-region": "npm:^3.996.30"
+    "@aws-sdk/types": "npm:^3.973.9"
+    "@smithy/core": "npm:^3.24.5"
+    "@smithy/fetch-http-handler": "npm:^5.4.5"
+    "@smithy/node-http-handler": "npm:^4.7.5"
+    "@smithy/types": "npm:^4.14.2"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/d0694ccb5f544d68d8ba150e2f78d716e510d2016c9fe539d356c9ae1b99be39880e34d7b437891472b690e610a8bd288e028f2a3065768d0b43e5b64d3b761d
+  languageName: node
+  linkType: hard
+
 "@aws-sdk/client-sts@npm:^3.799.0":
   version: 3.1030.0
   resolution: "@aws-sdk/client-sts@npm:3.1030.0"
@@ -30952,6 +30971,7 @@ __metadata:
   dependencies:
     "@arcanumai/style": "workspace:*"
     "@aws-sdk/client-connect": "npm:^3.699.0"
+    "@aws-sdk/client-sts": "npm:^3.699.0"
     "@aws-sdk/client-support": "npm:^3.699.0"
     "@types/aws-lambda": "npm:^8.10.146"
     "@types/node": "npm:^22.10.1"
@@ -33335,7 +33355,6 @@ __metadata:
   dependencies:
     "@arcanumai/style": "workspace:*"
     "@aws-sdk/client-connect": "npm:^3.699.0"
-    "@aws-sdk/client-secrets-manager": "npm:^3.699.0"
     "@types/node": "npm:^22.10.1"
     "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
     "@typescript-eslint/parser": "npm:^8.17.0"

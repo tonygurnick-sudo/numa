@@ -204,7 +204,7 @@ interface UseConnectCcpResult {
  * created when the widget is mounted/open (initCCP must run exactly once per
  * container element).
  */
-export function useConnectCcp(active: boolean): UseConnectCcpResult {
+export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<string | null>): UseConnectCcpResult {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const initialisedRef = useRef(false);
   // The just-dialled prospect, before a contactId exists; consumed when the
@@ -286,12 +286,6 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
   useEffect(() => {
     if (!active) return undefined;
 
-    const ccpUrl = getCcpUrl();
-    if (!ccpUrl) {
-      setStatus('not_configured');
-      return undefined;
-    }
-
     const container = containerRef.current;
     if (!container) return undefined;
 
@@ -304,6 +298,29 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
 
     const init = async () => {
       try {
+        // Prefer a federated SignInUrl (passwordless SSO via GetFederationToken):
+        // loaded as the CCP url it establishes the agent session with no login
+        // popup. Fall back to the static instance CCP url + popup if unavailable.
+        let ccpUrl: string | null = null;
+        let federated = false;
+        if (getSignInUrl) {
+          try {
+            const signInUrl = await getSignInUrl();
+            if (!cancelled && signInUrl) {
+              ccpUrl = signInUrl;
+              federated = true;
+            }
+          } catch {
+            /* fall back to the static login below */
+          }
+        }
+        if (cancelled) return;
+        if (!ccpUrl) ccpUrl = getCcpUrl();
+        if (!ccpUrl) {
+          setStatus('not_configured');
+          return;
+        }
+
         // Dynamic import: amazon-connect-streams is a heavy iframe-bootstrapping
         // bundle; load it lazily so it doesn't bloat the app-shell chunk and is
         // only fetched when Voice is actually used.
@@ -323,7 +340,7 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
         connect.core.initCCP(container, {
           ccpUrl,
           region: getConnectRegion(),
-          loginPopup: true,
+          loginPopup: !federated,
           loginPopupAutoClose: true,
           softphone: {
             allowFramedSoftphone: true,
@@ -431,7 +448,7 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
         dialTimeoutRef.current = undefined;
       }
     };
-  }, [active]);
+  }, [active, getSignInUrl]);
 
   return { containerRef, status, initialised, dialNumber };
 }

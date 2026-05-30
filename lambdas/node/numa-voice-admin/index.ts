@@ -12,8 +12,10 @@ import {
   ListUsersCommand,
   ListQueuesCommand,
   UpdateQueueOutboundCallerConfigCommand,
+  GetFederationTokenCommand,
 } from '@aws-sdk/client-connect';
 import { SupportClient, CreateCaseCommand } from '@aws-sdk/client-support';
+import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { withPRM } from '../../../lib/prm-node/prm';
 
 /**
@@ -32,9 +34,12 @@ const CONNECT_REGION = process.env.CONNECT_REGION || 'ap-southeast-2';
 const CLIENT_NAME = process.env.CLIENT_NAME || '';
 const ENV_SUFFIX = process.env.ENV_SUFFIX || '';
 const APPROVED_ORIGIN = process.env.APPROVED_ORIGIN || '';
+const FEDERATION_ROLE_ARN = process.env.FEDERATION_ROLE_ARN || '';
+const AGENT_USERNAME = process.env.AGENT_USERNAME || 'numa-voice-agent';
 
 const connect = withPRM(ConnectClient, { region: CONNECT_REGION });
 const support = withPRM(SupportClient, { region: 'us-east-1' }); // Support API is us-east-1 only
+const sts = withPRM(STSClient, { region: CONNECT_REGION });
 
 const INSTANCE_ALIAS = `numa-${CLIENT_NAME}${ENV_SUFFIX}`;
 
@@ -197,6 +202,25 @@ async function requestOutboundCountry(country: string): Promise<APIGatewayProxyS
   }
 }
 
+async function getFederationToken(): Promise<APIGatewayProxyStructuredResultV2> {
+  const instance = await resolveInstance();
+  if (!instance) return json(409, { error: 'No Connect instance for this workspace' });
+  if (!FEDERATION_ROLE_ARN) return json(500, { error: 'FEDERATION_ROLE_ARN not configured' });
+  // Assume the federation role with RoleSessionName = the Connect username, so
+  // GetFederationToken maps the session to that agent (SAML-mode instances only).
+  const assumed = await sts.send(
+    new AssumeRoleCommand({ RoleArn: FEDERATION_ROLE_ARN, RoleSessionName: AGENT_USERNAME, DurationSeconds: 3600 })
+  );
+  const c = assumed.Credentials;
+  if (!c?.AccessKeyId || !c.SecretAccessKey) return json(500, { error: 'Federation assume-role failed' });
+  const fedConnect = withPRM(ConnectClient, {
+    region: CONNECT_REGION,
+    credentials: { accessKeyId: c.AccessKeyId, secretAccessKey: c.SecretAccessKey, sessionToken: c.SessionToken },
+  });
+  const tok = await fedConnect.send(new GetFederationTokenCommand({ InstanceId: instance.id }));
+  return json(200, { signInUrl: tok.SignInUrl, userId: tok.UserId });
+}
+
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const method = event.requestContext.http.method;
   const path = event.requestContext.http.path || '';
@@ -215,6 +239,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     // ── Reads (any authenticated user) ──────────────────────────────────────
     if (method === 'GET' && /\/voice\/admin\/status\/?$/.test(path)) return await getStatus();
+    // Federation token = password-free softphone login; any authenticated user.
+    if (method === 'GET' && /\/voice\/federation-token\/?$/.test(path)) return await getFederationToken();
 
     // ── Mutations (admin only) ──────────────────────────────────────────────
     const phoneIdMatch = path.match(/\/voice\/phone-numbers\/([^/]+?)(\/caller-id)?\/?$/);
