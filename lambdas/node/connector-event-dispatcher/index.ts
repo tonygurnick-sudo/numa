@@ -685,7 +685,23 @@ const invokeRunnerConnect = async (scheduleId: string, payload: Record<string, u
  * user-configured Voice automations later.
  */
 /** Known Numa Voice connect sub-events. Anything else is ignored, not dispatched. */
-const CONNECT_EVENT_TYPES = new Set(['call.completed', 'prospects.uploaded']);
+export const CONNECT_EVENT_TYPES = new Set(['call.completed', 'prospects.uploaded']);
+
+/** Type-guard: is this an event_type we route? Exported for tests. */
+export const isKnownConnectEventType = (eventType?: string): eventType is string =>
+  !!eventType && CONNECT_EVENT_TYPES.has(eventType);
+
+/** Pure match predicate — does this schedule fire for this connect event_type?
+ *  Active + source 'connect' + (explicit trigger.event OR the legacy
+ *  'call.completed' default) === eventType. Exported for tests. */
+export const matchesConnectSchedule = (
+  schedule: { status?: string; trigger?: { source?: string; event?: string } | undefined },
+  eventType: string
+): boolean => {
+  const trigger = schedule.trigger;
+  if (schedule.status !== 'active' || trigger?.source !== 'connect') return false;
+  return (trigger.event ?? 'call.completed') === eventType;
+};
 
 const handleConnectEvent = async (
   detail: ConnectorEventDetail
@@ -698,7 +714,7 @@ const handleConnectEvent = async (
   const eventType = detail.event_type; // 'call.completed' | 'prospects.uploaded'
   const payload = (detail.payload_summary ?? {}) as Record<string, unknown>;
 
-  if (!eventType || !CONNECT_EVENT_TYPES.has(eventType)) {
+  if (!isKnownConnectEventType(eventType)) {
     console.warn(
       `${LOG_PREFIX} Unknown connect event_type; ignoring`,
       JSON.stringify({ _name: 'CONNECT_EVENT_UNKNOWN_TYPE', eventType, dedup_key: payload.dedup_key })
@@ -729,14 +745,13 @@ const handleConnectEvent = async (
   // explicit trigger.event default to 'call.completed' (logged so drift is visible).
   const schedules = items.filter((s) => {
     const trigger = s.trigger as { source?: string; event?: string } | undefined;
-    if (s.status !== 'active' || trigger?.source !== 'connect') return false;
-    if (!trigger.event) {
+    if (trigger?.source === 'connect' && !trigger.event) {
       console.warn(
         `${LOG_PREFIX} connect schedule has no explicit trigger.event; defaulting to call.completed`,
         JSON.stringify({ _name: 'CONNECT_SCHEDULE_NO_EVENT', schedule_id: s.schedule_id })
       );
     }
-    return (trigger.event ?? 'call.completed') === eventType;
+    return matchesConnectSchedule({ status: s.status as string | undefined, trigger }, eventType);
   });
 
   if (schedules.length === 0) {
