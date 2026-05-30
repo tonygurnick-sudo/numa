@@ -25,9 +25,11 @@ const VOICE_DATA_PREFIX = 'documents/company';
 /** S3 key prefix for SDR wrap-up outcomes inside the OUTPUTS bucket. */
 const VOICE_OUTCOMES_PREFIX = 'voice/outcomes';
 
-const TODAY_CALLS_KEY = `${VOICE_DATA_PREFIX}/today_calls.json`;
-const MASTER_PROSPECTS_KEY = `${VOICE_DATA_PREFIX}/master_prospects.json`;
-const PLAYBOOK_KEY = `${VOICE_DATA_PREFIX}/sdr_playbook.json`;
+// Exported so tests can assert the producer/consumer S3 contract (these keys are
+// shared with the voice lambdas + scheduled agents — drift = silent no-op).
+export const TODAY_CALLS_KEY = `${VOICE_DATA_PREFIX}/today_calls.json`;
+export const MASTER_PROSPECTS_KEY = `${VOICE_DATA_PREFIX}/master_prospects.json`;
+export const PLAYBOOK_KEY = `${VOICE_DATA_PREFIX}/sdr_playbook.json`;
 
 function getRegion(): string {
   const region = window.sessionStorage.getItem('REGION');
@@ -148,7 +150,7 @@ export async function saveCallOutcome(credentials: AwsCredentialIdentity, outcom
  *  empty call list. (S3 returns AccessDenied for a missing key when the caller
  *  lacks s3:ListBucket, but for the Voice role that grants ListBucket so genuine
  *  not-found surfaces as NoSuchKey/NotFound.) */
-function isNoSuchKey(error: unknown): boolean {
+export function isNoSuchKey(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const e = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
   const name = e.name ?? e.Code;
