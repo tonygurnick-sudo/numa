@@ -103,13 +103,19 @@ export function ProspectListTable({ prospects }: ProspectListTableProps): React.
   }, []);
 
   const handleDial = useCallback((prospect: Prospect) => {
-    if (!prospect.phone) return;
+    const phone = prospect.phone;
+    // E.164 only (leading + and 2-15 digits). A malformed number would optimistically
+    // flip the row to 'dialing' for a dial the CCP will reject, sticking the button.
+    if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+      console.warn('Numa Voice: invalid E.164 phone, not dialing', phone);
+      return;
+    }
     // Optimistically reflect the dialing state until the CCP widget confirms.
-    setActivePhone(prospect.phone);
+    setActivePhone(phone);
     setActiveState('dialing');
     window.dispatchEvent(
       new CustomEvent<NumaVoiceDialDetail>(NUMA_VOICE_DIAL_EVENT, {
-        detail: { phone: prospect.phone, prospect },
+        detail: { phone, prospect },
       })
     );
   }, []);

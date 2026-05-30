@@ -54,6 +54,12 @@ function getOutputsBucket(): string {
 }
 
 function makeClient(credentials: AwsCredentialIdentity, region: string): S3Client {
+  // getCredentials() can return null (expired/not-ready session). Fail with a
+  // clear message rather than passing undefined creds into the SDK and getting
+  // an opaque signing error.
+  if (!credentials) {
+    throw new Error('Voice: AWS credentials not available');
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return withPRM(S3Client as any, { region, credentials }) as S3Client;
 }
@@ -144,6 +150,8 @@ export async function saveCallOutcome(credentials: AwsCredentialIdentity, outcom
  *  not-found surfaces as NoSuchKey/NotFound.) */
 function isNoSuchKey(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  const name = (error as { name?: string; Code?: string }).name ?? (error as { Code?: string }).Code;
-  return name === 'NoSuchKey' || name === 'NotFound';
+  const e = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  const name = e.name ?? e.Code;
+  // Cover the SDK v3 error-shape variance: name/Code, or a 404 status on $metadata.
+  return name === 'NoSuchKey' || name === 'NotFound' || e.$metadata?.httpStatusCode === 404;
 }

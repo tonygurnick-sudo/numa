@@ -159,9 +159,16 @@ function publishCallState(detail: VoiceCallStateEventDetail): void {
 function getCcpUrl(): string | null {
   if (typeof window === 'undefined') return null;
   const instanceUrl = window.sessionStorage.getItem('CONNECT_INSTANCE_URL');
-  if (!instanceUrl) return null;
+  // Treat empty/whitespace as not-configured — config.json emits '' when unset.
+  if (!instanceUrl || instanceUrl.trim() === '') return null;
   // Tolerate a trailing slash on the stored instance URL.
-  return `${instanceUrl.replace(/\/+$/, '')}/connect/ccp-v2/`;
+  return `${instanceUrl.trim().replace(/\/+$/, '')}/connect/ccp-v2/`;
+}
+
+/** Connect region for initCCP — configurable via sessionStorage, defaults to Sydney. */
+function getConnectRegion(): string {
+  if (typeof window === 'undefined') return 'ap-southeast-2';
+  return window.sessionStorage.getItem('CONNECT_REGION') || 'ap-southeast-2';
 }
 
 /** Best-effort extraction of the connected endpoint phone number from a contact. */
@@ -203,6 +210,9 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
   const currentProspectRef = useRef<Prospect | undefined>(undefined);
   // Wall-clock start of the connected call, to compute duration at ACW.
   const callStartedAtRef = useRef<number | undefined>(undefined);
+  // Resets a stuck optimistic 'dialing' state if neither onConnected nor onEnded
+  // fires (dial accepted by the API but silently never progresses).
+  const dialTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [status, setStatus] = useState<CcpStatus>('initialising');
   const [initialised, setInitialised] = useState(false);
 
@@ -212,28 +222,40 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
   const dialNumber = useCallback((e164: string) => {
     const connect = (window as unknown as { connect?: ConnectGlobal }).connect;
     // Reset the table's optimistic "Dialing…" state whenever the dial can't
-    // proceed or fails — otherwise the button is stuck on dialing forever (the
-    // only other reset is contact.onEnded, which never fires for a failed dial).
-    if (!connect || !initialisedRef.current) {
-      console.warn('Numa Voice: CCP not ready, cannot dial', e164);
+    // proceed, fails, or stalls — otherwise the button is stuck on dialing forever
+    // (the only other reset is contact.onEnded, which never fires for a failed dial).
+    const resetDial = (): void => {
       publishCallState({ phone: null, state: 'idle' });
       currentProspectRef.current = undefined;
+      if (dialTimeoutRef.current) {
+        clearTimeout(dialTimeoutRef.current);
+        dialTimeoutRef.current = undefined;
+      }
+    };
+    if (!connect || !initialisedRef.current) {
+      console.warn('Numa Voice: CCP not ready, cannot dial', e164);
+      resetDial();
       return;
     }
+    // Safety net: if neither onConnected nor onEnded fires within 60s, reset the
+    // stuck 'dialing' state. Cleared in onConnected / onEnded.
+    if (dialTimeoutRef.current) clearTimeout(dialTimeoutRef.current);
+    dialTimeoutRef.current = setTimeout(() => {
+      console.warn('Numa Voice: dial timed out with no connect/end event', e164);
+      resetDial();
+    }, 60_000);
     try {
       connect.agent((agent) => {
         agent.connect(connect.Endpoint.byPhoneNumber(e164), {
           failure: (err) => {
             console.error('Numa Voice: dial failed', err);
-            publishCallState({ phone: null, state: 'idle' });
-            currentProspectRef.current = undefined;
+            resetDial();
           },
         });
       });
     } catch (err) {
       console.error('Numa Voice: dial error', err);
-      publishCallState({ phone: null, state: 'idle' });
-      currentProspectRef.current = undefined;
+      resetDial();
     }
   }, []);
 
@@ -295,7 +317,7 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
 
         connect.core.initCCP(container, {
           ccpUrl,
-          region: 'ap-southeast-2',
+          region: getConnectRegion(),
           loginPopup: true,
           loginPopupAutoClose: true,
           softphone: {
@@ -329,6 +351,10 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
           publishVoiceContact({ phase: 'connecting', contactId, prospect });
 
           contact.onConnected((c) => {
+            if (dialTimeoutRef.current) {
+              clearTimeout(dialTimeoutRef.current);
+              dialTimeoutRef.current = undefined;
+            }
             callStartedAtRef.current = Date.now();
             const phoneNumber = getContactPhoneNumber(c);
             publishVoiceContact({
@@ -355,6 +381,10 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
           });
 
           contact.onEnded((c) => {
+            if (dialTimeoutRef.current) {
+              clearTimeout(dialTimeoutRef.current);
+              dialTimeoutRef.current = undefined;
+            }
             publishVoiceContact({
               phase: 'ended',
               contactId: safeContactId(c) ?? contactId,
@@ -376,6 +406,20 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
 
     return () => {
       cancelled = true;
+      // Tear down the CCP iframe + handlers so a remount re-inits cleanly and we
+      // don't leak handlers / stack iframes. terminate is optional in the streams
+      // API; guard for the not-yet-initialised case.
+      try {
+        const connect = (window as unknown as { connect?: ConnectGlobal }).connect;
+        connect?.core?.terminate?.();
+      } catch (err) {
+        console.warn('Numa Voice: CCP terminate failed', err);
+      }
+      initialisedRef.current = false;
+      if (dialTimeoutRef.current) {
+        clearTimeout(dialTimeoutRef.current);
+        dialTimeoutRef.current = undefined;
+      }
     };
   }, [active]);
 
