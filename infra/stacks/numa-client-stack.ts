@@ -1006,7 +1006,9 @@ export class NumaClientStack extends TerraformStack {
         CONNECT_INSTANCE_URL:
           clientConfig.connectInstanceUrl ??
           (clientConfig.connectAutoProvision
-            ? `https://numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}.awsapps.com`
+            ? // The instance lives on the modern *.my.connect.aws domain; the legacy
+              // *.awsapps.com host does NOT resolve for instances created via CreateInstance.
+              `https://numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}.my.connect.aws`
             : ''),
         V2_APPS: clientConfig.v2Apps ?? false,
         NUMA_APPS: clientConfig.allApps ?? false,

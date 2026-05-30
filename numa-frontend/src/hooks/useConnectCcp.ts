@@ -162,8 +162,9 @@ export function getCcpUrl(): string | null {
   const instanceUrl = window.sessionStorage.getItem('CONNECT_INSTANCE_URL');
   // Treat empty/whitespace as not-configured — config.json emits '' when unset.
   if (!instanceUrl || instanceUrl.trim() === '') return null;
-  // Tolerate a trailing slash on the stored instance URL.
-  return `${instanceUrl.trim().replace(/\/+$/, '')}/connect/ccp-v2/`;
+  // Tolerate a trailing slash on the stored instance URL. The modern Connect
+  // domain serves CCP at /ccp-v2/ (the legacy /connect/ccp-v2/ 301-redirects here).
+  return `${instanceUrl.trim().replace(/\/+$/, '')}/ccp-v2/`;
 }
 
 /** Connect region for initCCP — configurable via sessionStorage, defaults to Sydney.
@@ -298,28 +299,32 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
 
     const init = async () => {
       try {
-        // Prefer a federated SignInUrl (passwordless SSO via GetFederationToken):
-        // loaded as the CCP url it establishes the agent session with no login
-        // popup. Fall back to the static instance CCP url + popup if unavailable.
-        let ccpUrl: string | null = null;
-        let federated = false;
-        if (getSignInUrl) {
-          try {
-            const signInUrl = await getSignInUrl();
-            if (!cancelled && signInUrl) {
-              ccpUrl = signInUrl;
-              federated = true;
-            }
-          } catch {
-            /* fall back to the static login below */
-          }
-        }
-        if (cancelled) return;
-        if (!ccpUrl) ccpUrl = getCcpUrl();
+        // The iframe ALWAYS loads the static ccp-v2 URL — it is the only frameable
+        // Connect page (Connect widens its frame-ancestors CSP to include the
+        // Approved Origin once the agent is authenticated). The login is a SEPARATE
+        // step: amazon-connect-streams opens `loginUrl` in a popup (loginPopup:true).
+        //
+        // For passwordless SSO we hand it the GetFederationToken SignInUrl as the
+        // loginUrl: the popup auto-authenticates the SAML agent (no password field)
+        // and auto-closes, after which the framed ccp-v2 picks up the session.
+        // The SignInUrl points at /auth/sign-in, which sends frame-ancestors:'none'
+        // and can NEVER be framed — so it must be the loginUrl (popup), never ccpUrl.
+        const ccpUrl = getCcpUrl();
         if (!ccpUrl) {
           setStatus('not_configured');
           return;
         }
+
+        let loginUrl: string | undefined;
+        if (getSignInUrl) {
+          try {
+            const signInUrl = await getSignInUrl();
+            if (signInUrl) loginUrl = signInUrl;
+          } catch {
+            /* fall through: streams uses its default (interactive) login popup */
+          }
+        }
+        if (cancelled) return;
 
         // Dynamic import: amazon-connect-streams is a heavy iframe-bootstrapping
         // bundle; load it lazily so it doesn't bloat the app-shell chunk and is
@@ -339,8 +344,9 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
 
         connect.core.initCCP(container, {
           ccpUrl,
+          ...(loginUrl ? { loginUrl } : {}),
           region: getConnectRegion(),
-          loginPopup: !federated,
+          loginPopup: true,
           loginPopupAutoClose: true,
           softphone: {
             allowFramedSoftphone: true,
