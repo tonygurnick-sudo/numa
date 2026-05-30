@@ -12,7 +12,6 @@ import {
   ListUsersCommand,
   ListQueuesCommand,
   UpdateQueueOutboundCallerConfigCommand,
-  GetFederationTokenCommand,
 } from '@aws-sdk/client-connect';
 import { SupportClient, CreateCaseCommand } from '@aws-sdk/client-support';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
@@ -206,19 +205,38 @@ async function getFederationToken(): Promise<APIGatewayProxyStructuredResultV2> 
   const instance = await resolveInstance();
   if (!instance) return json(409, { error: 'No Connect instance for this workspace' });
   if (!FEDERATION_ROLE_ARN) return json(500, { error: 'FEDERATION_ROLE_ARN not configured' });
-  // Assume the federation role with RoleSessionName = the Connect username, so
-  // GetFederationToken maps the session to that agent (SAML-mode instances only).
+  // Passwordless softphone login via AWS console federation:
+  //   assume the federation role (RoleSessionName = the Connect username) -> get
+  //   temp creds -> exchange them for a console SigninToken -> build a console
+  //   login URL whose Destination is the Connect /connect/federate endpoint.
+  // When the softphone login popup loads that URL, AWS federates a console session
+  // and hands it to connect/federate, which establishes the agent's CCP session and
+  // redirects to /ccp-v2 — no password. (The bare GetFederationToken SignInUrl does
+  // NOT work: on a SAML instance it returns /auth/sign-in which 404s.)
   const assumed = await sts.send(
     new AssumeRoleCommand({ RoleArn: FEDERATION_ROLE_ARN, RoleSessionName: AGENT_USERNAME, DurationSeconds: 3600 })
   );
   const c = assumed.Credentials;
-  if (!c?.AccessKeyId || !c.SecretAccessKey) return json(500, { error: 'Federation assume-role failed' });
-  const fedConnect = withPRM(ConnectClient, {
-    region: CONNECT_REGION,
-    credentials: { accessKeyId: c.AccessKeyId, secretAccessKey: c.SecretAccessKey, sessionToken: c.SessionToken },
+  if (!c?.AccessKeyId || !c.SecretAccessKey || !c.SessionToken) {
+    return json(500, { error: 'Federation assume-role failed' });
+  }
+  const session = JSON.stringify({
+    sessionId: c.AccessKeyId,
+    sessionKey: c.SecretAccessKey,
+    sessionToken: c.SessionToken,
   });
-  const tok = await fedConnect.send(new GetFederationTokenCommand({ InstanceId: instance.id }));
-  return json(200, { signInUrl: tok.SignInUrl, userId: tok.UserId });
+  const tokenRes = await fetch(
+    `https://signin.aws.amazon.com/federation?Action=getSigninToken&Session=${encodeURIComponent(session)}`
+  );
+  if (!tokenRes.ok) return json(502, { error: 'getSigninToken failed', status: tokenRes.status });
+  const { SigninToken } = (await tokenRes.json()) as { SigninToken: string };
+  const destination = `https://${CONNECT_REGION}.console.aws.amazon.com/connect/federate/${instance.id}?destination=${encodeURIComponent('/ccp-v2')}&new_domain=true`;
+  const signInUrl =
+    `https://signin.aws.amazon.com/federation?Action=login` +
+    `&Issuer=${encodeURIComponent(APPROVED_ORIGIN || 'https://numa.arcanum.ai')}` +
+    `&Destination=${encodeURIComponent(destination)}` +
+    `&SigninToken=${SigninToken}`;
+  return json(200, { signInUrl, userId: AGENT_USERNAME });
 }
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {

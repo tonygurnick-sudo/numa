@@ -309,34 +309,27 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
         // and auto-closes, after which the framed ccp-v2 picks up the session.
         // The SignInUrl points at /auth/sign-in, which sends frame-ancestors:'none'
         // and can NEVER be framed — so it must be the loginUrl (popup), never ccpUrl.
-        // The federation SignInUrl is authoritative for BOTH the login popup AND
-        // the instance domain: we derive the framed ccp-v2 URL from its origin, so
-        // the softphone always targets the exact domain Connect minted the token on,
-        // independent of any (possibly stale) CONNECT_INSTANCE_URL config value.
-        let loginUrl: string | undefined;
-        let ccpUrl: string | null = null;
-        if (getSignInUrl) {
-          try {
-            const signInUrl = await getSignInUrl();
-            if (signInUrl) {
-              loginUrl = signInUrl;
-              try {
-                ccpUrl = `${new URL(signInUrl).origin}/ccp-v2/`;
-              } catch {
-                /* malformed SignInUrl — fall back to the configured instance URL */
-              }
-            }
-          } catch {
-            /* federation unavailable — fall back to config + streams default login */
-          }
-        }
-        if (cancelled) return;
-        // Fallback to the configured instance CCP URL (CONNECT_INSTANCE_URL).
-        if (!ccpUrl) ccpUrl = getCcpUrl();
+        // ccpUrl = the Connect instance ccp-v2 URL (CONNECT_INSTANCE_URL, the
+        // *.my.connect.aws domain). loginUrl = an AWS console-federation login URL
+        // minted server-side (GET /api/voice/federation-token): the popup loads it,
+        // AWS federates a console session and hands it to connect/federate, which
+        // establishes the agent's CCP session passwordlessly and lands on ccp-v2.
+        // That login URL lives on signin.aws.amazon.com — so it is NOT the ccpUrl.
+        const ccpUrl = getCcpUrl();
         if (!ccpUrl) {
           setStatus('not_configured');
           return;
         }
+        let loginUrl: string | undefined;
+        if (getSignInUrl) {
+          try {
+            const signInUrl = await getSignInUrl();
+            if (signInUrl) loginUrl = signInUrl;
+          } catch {
+            /* federation unavailable — streams falls back to its default login */
+          }
+        }
+        if (cancelled) return;
 
         // Dynamic import: amazon-connect-streams is a heavy iframe-bootstrapping
         // bundle; load it lazily so it doesn't bloat the app-shell chunk and is
