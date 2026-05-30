@@ -155,8 +155,9 @@ function publishCallState(detail: VoiceCallStateEventDetail): void {
  * Helpers
  * ------------------------------------------------------------------ */
 
-/** Build the CCP URL from the configured Connect instance URL in sessionStorage. */
-function getCcpUrl(): string | null {
+/** Build the CCP URL from the configured Connect instance URL in sessionStorage.
+ *  Exported for tests. */
+export function getCcpUrl(): string | null {
   if (typeof window === 'undefined') return null;
   const instanceUrl = window.sessionStorage.getItem('CONNECT_INSTANCE_URL');
   // Treat empty/whitespace as not-configured — config.json emits '' when unset.
@@ -165,8 +166,9 @@ function getCcpUrl(): string | null {
   return `${instanceUrl.trim().replace(/\/+$/, '')}/connect/ccp-v2/`;
 }
 
-/** Connect region for initCCP — configurable via sessionStorage, defaults to Sydney. */
-function getConnectRegion(): string {
+/** Connect region for initCCP — configurable via sessionStorage, defaults to Sydney.
+ *  Exported for tests. */
+export function getConnectRegion(): string {
   if (typeof window === 'undefined') return 'ap-southeast-2';
   return window.sessionStorage.getItem('CONNECT_REGION') || 'ap-southeast-2';
 }
