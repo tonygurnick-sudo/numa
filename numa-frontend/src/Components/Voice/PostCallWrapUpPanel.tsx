@@ -124,14 +124,18 @@ export const PostCallWrapUpPanel: React.FC = () => {
 
   // ── Derived ─────────────────────────────────────────────────────────────────
   const prospectName = prospect?.contact_name?.trim() || prospect?.company_name?.trim() || '';
+  // prospect.phone is the join key the post-call processor matches on — without
+  // it the outcome is unmatchable, so block submit rather than silently save a
+  // record that can never be reconciled to a prospect.
   const canSubmit = useMemo(
-    () => !!contactId && outcome !== null && qualified !== null && !submitting,
-    [contactId, outcome, qualified, submitting]
+    () => !!contactId && !!prospect?.phone && outcome !== null && qualified !== null && !submitting,
+    [contactId, prospect, outcome, qualified, submitting]
   );
 
   // ── Submit handler ────────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
-    if (!contactId || outcome === null || qualified === null || submitting) return;
+    const prospectPhone = prospect?.phone;
+    if (!contactId || !prospectPhone || outcome === null || qualified === null || submitting) return;
 
     setSubmitting(true);
     setError(false);
@@ -149,7 +153,7 @@ export const PostCallWrapUpPanel: React.FC = () => {
         outcome,
         notes: notes.trim(),
         qualified,
-        prospect_phone: prospect?.phone,
+        prospect_phone: prospectPhone,
         submitted_at: new Date().toISOString(),
       };
 
@@ -279,6 +283,16 @@ export const PostCallWrapUpPanel: React.FC = () => {
               <Alert variant="danger" className="py-2 mb-2">
                 <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
                 {t('wrapUp.error')}
+              </Alert>
+            )}
+
+            {!prospect?.phone && (
+              <Alert variant="warning" className="py-2 mb-2">
+                <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+                {t('wrapUp.noProspectPhone', {
+                  defaultValue:
+                    'This call has no prospect phone number, so the outcome cannot be matched to a prospect and will not be saved.',
+                })}
               </Alert>
             )}
 

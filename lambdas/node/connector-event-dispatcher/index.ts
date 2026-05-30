@@ -684,27 +684,59 @@ const invokeRunnerConnect = async (scheduleId: string, payload: Record<string, u
  * each. Generic by design — supports the seeded Post-Call schedule today and
  * user-configured Voice automations later.
  */
+/** Known Numa Voice connect sub-events. Anything else is ignored, not dispatched. */
+const CONNECT_EVENT_TYPES = new Set(['call.completed', 'prospects.uploaded']);
+
 const handleConnectEvent = async (
   detail: ConnectorEventDetail
 ): Promise<{ success: boolean; dispatched?: number; error?: string }> => {
-  const tenantId = detail.client_name || CLIENT_NAME;
-  const eventType = detail.event_type; // e.g. 'call.completed' | 'prospects.uploaded'
+  // SECURITY: this Lambda is single-tenant per client account, so the tenant is
+  // ALWAYS the configured CLIENT_NAME. detail.client_name is attacker-controllable
+  // on the bus — trusting it would let a crafted event enumerate another tenant's
+  // schedules. Never use it to choose which tenant to query.
+  const tenantId = CLIENT_NAME;
+  const eventType = detail.event_type; // 'call.completed' | 'prospects.uploaded'
   const payload = (detail.payload_summary ?? {}) as Record<string, unknown>;
 
-  const res = await ddbDoc.send(
-    new QueryCommand({
-      TableName: SCHEDULES_TABLE,
-      IndexName: 'tenant-id-index',
-      KeyConditionExpression: 'tenant_id = :t',
-      ExpressionAttributeValues: { ':t': tenantId },
-    })
-  );
+  if (!eventType || !CONNECT_EVENT_TYPES.has(eventType)) {
+    console.warn(
+      `${LOG_PREFIX} Unknown connect event_type; ignoring`,
+      JSON.stringify({ _name: 'CONNECT_EVENT_UNKNOWN_TYPE', eventType, dedup_key: payload.dedup_key })
+    );
+    return { success: true, dispatched: 0 };
+  }
+
+  // Paginate the GSI: a tenant can accumulate enough connect schedules to exceed
+  // DynamoDB's 1MB page, which would silently drop fires for the truncated tail.
+  const items: Record<string, unknown>[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const res = await ddbDoc.send(
+      new QueryCommand({
+        TableName: SCHEDULES_TABLE,
+        IndexName: 'tenant-id-index',
+        KeyConditionExpression: 'tenant_id = :t',
+        ExpressionAttributeValues: { ':t': tenantId },
+        ExclusiveStartKey: lastKey,
+      })
+    );
+    for (const it of res.Items ?? []) items.push(it);
+    lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
+
   // Match on source AND sub-event so distinct Voice triggers (post-call vs
   // prospect ingest) don't cross-fire. Legacy connect schedules without an
-  // explicit trigger.event default to 'call.completed'.
-  const schedules = (res.Items ?? []).filter((s) => {
+  // explicit trigger.event default to 'call.completed' (logged so drift is visible).
+  const schedules = items.filter((s) => {
     const trigger = s.trigger as { source?: string; event?: string } | undefined;
-    return s.status === 'active' && trigger?.source === 'connect' && (trigger.event ?? 'call.completed') === eventType;
+    if (s.status !== 'active' || trigger?.source !== 'connect') return false;
+    if (!trigger.event) {
+      console.warn(
+        `${LOG_PREFIX} connect schedule has no explicit trigger.event; defaulting to call.completed`,
+        JSON.stringify({ _name: 'CONNECT_SCHEDULE_NO_EVENT', schedule_id: s.schedule_id })
+      );
+    }
+    return (trigger.event ?? 'call.completed') === eventType;
   });
 
   if (schedules.length === 0) {

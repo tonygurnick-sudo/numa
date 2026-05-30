@@ -332,10 +332,15 @@ def _emit_post_call_event(
             "contact_id": contact_id,
             # Prospects join by phone (E.164) — the FE wrap-up never writes a
             # prospect_id, so we don't emit a perpetually-empty one.
-            "prospect_phone": str(sdr_outcome.get("prospect_phone", "")),
-            "sdr_outcome": str(sdr_outcome.get("outcome", "")),
-            "sdr_notes": str(sdr_outcome.get("notes", "")),
-            "qualified": bool(sdr_outcome.get("qualified", False)),
+            "prospect_phone": str(sdr_outcome.get("prospect_phone") or ""),
+            "sdr_outcome": str(sdr_outcome.get("outcome") or ""),
+            "sdr_notes": str(sdr_outcome.get("notes") or ""),
+            # Preserve the three-state distinction: True / False / None. When the
+            # SDR wrap-up never landed, sdr_outcome is {} and qualified is None
+            # (serialised as JSON null) — the post-call agent must treat that as
+            # "not captured" (do NOT promote, note the gap), NOT as an explicit
+            # "No". Collapsing to False here silently dropped qualified prospects.
+            "qualified": sdr_outcome.get("qualified"),
             "transcription_failed": transcription_failed,
             "language_code": language_code,
             "dedup_key": contact_id or transcript_kb_file,

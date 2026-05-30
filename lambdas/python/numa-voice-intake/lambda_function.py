@@ -186,16 +186,13 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
                 key=source_key,
             )
             continue
-        try:
-            result = _handle_record(source_bucket, source_key, etag)
-            if result is not None:
-                processed.append(result)
-        except Exception as exc:  # noqa: BLE001 — re-delivery must not poison the batch
-            logger.exception(
-                "Failed to process prospect intake object",
-                _name="VOICE_INTAKE_ERROR",
-                bucket=source_bucket,
-                key=source_key,
-                error=str(exc),
-            )
+        # Copy-to-KB failures must NOT be swallowed: the ingest agent reads the
+        # file from the KB, so a dropped copy means the prospects are silently
+        # lost. Re-raise so S3's built-in async retry re-delivers — the copy is an
+        # idempotent overwrite and the emit is deduped (dedup_key), so re-processing
+        # is safe. (A copied-but-unemitted PutEvents failure is the only swallowed
+        # case — see _emit_prospect_event — because the file is already in the KB.)
+        result = _handle_record(source_bucket, source_key, etag)
+        if result is not None:
+            processed.append(result)
     return {"processed": len(processed), "files": processed}

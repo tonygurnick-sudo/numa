@@ -342,6 +342,13 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
     // the client region — so the seed Lambda uses the stack DEFAULT provider
     // (no voiceProvider pin). Idempotent, modeled on seed-ops-config: it resolves
     // the system user's sub via AdminGetUser and conditional-puts each record.
+    //
+    // SINGLE SOURCE OF TRUTH for the call-prep schedule id: computed here once and
+    // passed to the seed Lambda via env (CALL_PREP_SCHEDULE_ID). The SchedulerSchedule
+    // (below) targets this same value, so the seeded schedule record and the cron
+    // target can never drift to different UUIDs — a divergence would compile and
+    // deploy fine but silently no-op at 7:30am (getSchedule miss).
+    const callPrepScheduleId = uuidv5(`callprep-${clientName}`, VOICE_UUID_NAMESPACE);
     const seedZip = path.resolve(
       import.meta.dirname,
       '..',
@@ -370,6 +377,16 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             actions: ['cognito-idp:AdminGetUser'],
             resources: [props.userPoolArn],
           },
+          {
+            // Read-only: the seed validates the company KB record exists before
+            // creating the cron schedule (else the 7:30am call-prep run has no KB
+            // access — see fetchAccessibleKBIds in agent-schedule-runner).
+            effect: 'Allow',
+            actions: ['dynamodb:GetItem'],
+            resources: [
+              `arn:aws:dynamodb:${props.region}:${props.clientAccountId}:table/numa-${clientName}-knowledge-bases`,
+            ],
+          },
         ],
       }).json,
     });
@@ -392,6 +409,10 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
           USER_POOL_ID: props.userPoolId,
           CLIENT_NAME: clientName,
           SYSTEM_USER_EMAIL: props.systemUserEmail,
+          // Authoritative call-prep schedule id (matches the SchedulerSchedule).
+          CALL_PREP_SCHEDULE_ID: callPrepScheduleId,
+          // For the deploy-time company-KB existence check.
+          KNOWLEDGE_BASES_TABLE: `numa-${clientName}-knowledge-bases`,
         },
       },
     });
@@ -412,7 +433,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
     // pinned). Targets the runner with {type:'SCHEDULE', scheduleId} where the
     // id is the same deterministic UUIDv5 the seed Lambda wrote for the callprep
     // cron schedule record.
-    const callPrepScheduleId = uuidv5(`callprep-${clientName}`, VOICE_UUID_NAMESPACE);
+    // callPrepScheduleId is computed once near the seed Lambda (single source of truth).
     const callPrepScheduleName = `${clientName}-voice-callprep`;
     const schedulerRole = new IamRole(this, 'voice-callprep-scheduler-role', {
       name: `${clientName}-voice-callprep-scheduler`,
@@ -553,13 +574,12 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
     new S3BucketNotification(this, 'intake-notification', {
       bucket: intakeBucket.bucket,
       dependsOn: [intakeS3Permission],
-      // Two rules (non-overlapping suffixes) so both .xlsx and .xls trigger the
-      // emitter — matches the lambda's INTAKE_EXTENSIONS. One S3BucketNotification
-      // resource only (Terraform replaces the whole config; never add a second).
-      lambdaFunction: [
-        { events: ['s3:ObjectCreated:*'], filterSuffix: '.xlsx', lambdaFunctionArn: intakeLambda.arn },
-        { events: ['s3:ObjectCreated:*'], filterSuffix: '.xls', lambdaFunctionArn: intakeLambda.arn },
-      ],
+      // No filterSuffix: S3 suffix matching is CASE-SENSITIVE, so a '.xlsx' filter
+      // silently drops 'prospects.XLSX' before the Lambda ever sees it. Use a single
+      // ObjectCreated rule and let the Lambda's case-insensitive INTAKE_EXTENSIONS
+      // check (.lower().endswith(...)) decide — it already skips non-spreadsheets.
+      // One S3BucketNotification resource only (Terraform replaces the whole config).
+      lambdaFunction: [{ events: ['s3:ObjectCreated:*'], lambdaFunctionArn: intakeLambda.arn }],
     });
 
     // ── Phase 2 (FEAT-169) Amazon Connect provisioning — OFF by default ───────
@@ -589,6 +609,19 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
               effect: 'Allow',
               principals: [{ type: 'Service', identifiers: ['connect.amazonaws.com'] }],
               actions: ['kms:GenerateDataKey*', 'kms:Decrypt', 'kms:DescribeKey'],
+              resources: ['*'],
+              condition: [{ test: 'StringEquals', variable: 'aws:SourceAccount', values: [props.clientAccountId] }],
+            },
+            {
+              // Transcribe reads the KMS-encrypted .wav and writes its encrypted
+              // output AS THE SERVICE PRINCIPAL — start_transcription_job passes no
+              // DataAccessRole, so the processor role's KMS grant does NOT cover it.
+              // Without this statement the job fails with AccessDenied and NO
+              // transcript is ever produced (post-call agent never fires).
+              sid: 'AllowTranscribeUseOfKey',
+              effect: 'Allow',
+              principals: [{ type: 'Service', identifiers: ['transcribe.amazonaws.com'] }],
+              actions: ['kms:Decrypt', 'kms:GenerateDataKey*', 'kms:DescribeKey'],
               resources: ['*'],
               condition: [{ test: 'StringEquals', variable: 'aws:SourceAccount', values: [props.clientAccountId] }],
             },

@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { CognitoIdentityProviderClient, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { v5 as uuidv5 } from 'uuid';
 import { withPRM } from '../../../lib/prm-node/prm';
@@ -131,6 +131,28 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
   const systemSub = await resolveSystemUserSub();
   console.log(`Seeding Numa Voice agents for ${CLIENT_NAME} as system user ${systemSub.slice(0, 8)}…`);
 
+  // Validate the company KB record exists. fetchAccessibleKBIds in the runner only
+  // grants 'company' (a system KB) when its row is present, so without it the
+  // 7:30am Call List Preparer runs with ZERO KB access — a silent failure. Fail the
+  // deploy loudly now instead. A query ERROR is non-fatal (don't self-break the
+  // deploy on a transient/permission issue) — only a CONFIRMED-absent row fails.
+  const kbTable = process.env.KNOWLEDGE_BASES_TABLE;
+  if (kbTable) {
+    try {
+      const kb = await dynamo.send(
+        new GetCommand({ TableName: kbTable, Key: { PK: `TENANT#${CLIENT_NAME}`, SK: 'KB#company' } })
+      );
+      if (!kb.Item) {
+        result.errors.push(
+          `Company KB record (PK=TENANT#${CLIENT_NAME}, SK=KB#company) missing in ${kbTable}; ` +
+            `the Call List Preparer would run with no KB access. Ensure the default-KB seed runs before the voice seed.`
+        );
+      }
+    } catch (err: unknown) {
+      console.warn(`Could not verify company KB record (non-fatal): ${String(err)}`);
+    }
+  }
+
   // ── Agents → {client}-agents ──────────────────────────────────────────────
   for (const def of VOICE_AGENTS) {
     const item = {
@@ -189,7 +211,11 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
   // the runner with {type:'SCHEDULE', scheduleId}); cron_expression/timezone here
   // satisfy validateScheduleRecord and document the cadence. Same deterministic
   // UUIDv5 the construct computes, so the SchedulerSchedule targets this record.
-  const callPrepScheduleId = uuidv5(`callprep-${CLIENT_NAME}`, VOICE_UUID_NAMESPACE);
+  // Prefer the construct-passed id (single source of truth — it is also the
+  // SchedulerSchedule target, so they cannot drift). Fall back to the local
+  // computation only if the env is absent (older deploys / unit tests).
+  const callPrepScheduleId =
+    process.env.CALL_PREP_SCHEDULE_ID || uuidv5(`callprep-${CLIENT_NAME}`, VOICE_UUID_NAMESPACE);
   const callPrepRecord = validateScheduleRecord({
     user_id: systemSub,
     schedule_id: callPrepScheduleId,

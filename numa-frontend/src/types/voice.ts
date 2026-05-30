@@ -123,8 +123,9 @@ export interface WrapUpOutcome {
   notes: string;
   /** Whether the SDR marked the prospect as qualified. */
   qualified: boolean;
-  /** The dialled E.164 number, so the processor can match back to a prospect. */
-  prospect_phone?: string;
+  /** The dialled E.164 number — REQUIRED: it is the join key the post-call
+   *  processor uses to match the outcome back to a prospect record. */
+  prospect_phone: string;
   /** ISO timestamp the outcome was submitted. */
   submitted_at: string;
 }
