@@ -808,7 +808,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         instanceId: connectInstance.id,
         name: 'numa-voice-24x7',
         timeZone: 'UTC',
-        config: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day) => ({
+        config: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].map((day) => ({
           day,
           startTime: { hours: 0, minutes: 0 },
           endTime: { hours: 23, minutes: 59 },
