@@ -31,6 +31,7 @@ import { useTranslation } from 'react-i18next';
 import { getFlag } from '../../utils/featureFlags';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useConnectCcp, VOICE_DIAL_EVENT } from '../../hooks/useConnectCcp';
+import { getVoiceBrowserSupport } from '../../utils/voiceBrowserSupport';
 
 /** Minimum CCP iframe footprint required by amazon-connect-streams ccp-v2. */
 const PANEL_WIDTH = 320;
@@ -40,6 +41,12 @@ export const CcpSoftphoneWidget = () => {
   const { t } = useTranslation('voice');
   const flagEnabled = getFlag('NUMA_VOICE');
   const { numaGet } = useNumaRequest();
+
+  // Embedded CCP needs third-party cookies on the Connect origin. Safari/iOS block
+  // them outright (no path), so we don't even initialise the iframe there — we show
+  // a "use Chrome/Edge" message instead of letting the agent hit a silent login loop.
+  // Firefox is best-effort (warned, but attempted). See voiceBrowserSupport.ts.
+  const [browserSupport] = useState(getVoiceBrowserSupport);
 
   // `open` controls panel visibility only — the iframe host stays mounted while
   // the flag is on so the agent session persists across collapse/navigation.
@@ -60,7 +67,7 @@ export const CcpSoftphoneWidget = () => {
   // Initialise the CCP eagerly when Voice is enabled (NOT only after the SDR
   // opens the panel) — otherwise a click-to-dial from the prospect table before
   // the panel was ever opened has no live CCP and silently no-ops.
-  const { containerRef, status } = useConnectCcp(flagEnabled, getSignInUrl);
+  const { containerRef, status } = useConnectCcp(flagEnabled && browserSupport !== 'unsupported', getSignInUrl);
 
   // Auto-open the panel when a dial is requested so the SDR sees the call and
   // the iframe is visible for the softphone UI.
@@ -177,22 +184,41 @@ export const CcpSoftphoneWidget = () => {
           </Button>
         </div>
 
-        {/* Status notice (login prompt / mic prompt / errors) */}
-        {renderStatusNotice()}
+        {browserSupport === 'unsupported' ? (
+          /* Safari/iOS: 3p cookies are hard-blocked, so the embedded CCP can never
+             authenticate. Show clear guidance instead of a broken login loop. */
+          <div className="p-3 text-center text-muted small" style={{ minHeight: PANEL_BODY_HEIGHT / 2 }}>
+            <i className="bi bi-browser-chrome d-block fs-3 mb-2" aria-hidden="true"></i>
+            {t('ccp.unsupportedBrowser')}
+          </div>
+        ) : (
+          <>
+            {/* Firefox best-effort heads-up (still attempted below). */}
+            {browserSupport === 'best_effort' && (
+              <div className="px-3 pt-2 text-center text-warning small">
+                <i className="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                {t('ccp.bestEffortBrowser')}
+              </div>
+            )}
 
-        {/*
-          CCP iframe host. amazon-connect-streams renders its iframe inside this
-          div. Kept mounted once created so the agent session/call survives the
-          panel being collapsed. We only render it when configured.
-        */}
-        {showIframeHost && (
-          <div
-            ref={containerRef}
-            style={{
-              width: '100%',
-              height: PANEL_BODY_HEIGHT,
-            }}
-          />
+            {/* Status notice (login prompt / mic prompt / errors) */}
+            {renderStatusNotice()}
+
+            {/*
+              CCP iframe host. amazon-connect-streams renders its iframe inside this
+              div. Kept mounted once created so the agent session/call survives the
+              panel being collapsed. We only render it when configured.
+            */}
+            {showIframeHost && (
+              <div
+                ref={containerRef}
+                style={{
+                  width: '100%',
+                  height: PANEL_BODY_HEIGHT,
+                }}
+              />
+            )}
+          </>
         )}
       </div>
     </>
