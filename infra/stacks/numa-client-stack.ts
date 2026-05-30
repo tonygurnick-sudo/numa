@@ -756,6 +756,10 @@ export class NumaClientStack extends TerraformStack {
         clientName: props.clientName,
         environmentName: props.environmentName,
         region: clientConfig.region,
+        // Connect + Transcribe + recordings are PINNED to ap-southeast-2
+        // (NUMA_VOICE_REGION) regardless of the client's primary region — the
+        // region-mismatch guard above handles cross-region clients via voiceProvider.
+        // Changing this region is a deliberate, support-assisted operation.
         voiceRegion: NUMA_VOICE_REGION,
         voiceProvider,
         clientAccountId: clientConfig.clientAccountId,

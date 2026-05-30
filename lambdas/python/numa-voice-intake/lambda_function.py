@@ -47,6 +47,9 @@ KB_INTAKE_S3_PREFIX = os.environ.get(
 KB_INTAKE_FILE_PREFIX = os.environ.get("KB_INTAKE_FILE_PREFIX", "voice/intake/")
 CONNECTOR_EVENT_BUS_NAME = os.environ.get("CONNECTOR_EVENT_BUS_NAME", "")
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "unknown")
+# Expected intake bucket — objects from any other bucket are ignored (defence in
+# depth; the S3 notification should only ever fire from this bucket).
+INTAKE_BUCKET = os.environ.get("INTAKE_BUCKET", "")
 
 # Knowledge base the company prospect lists live under.
 KB_ID = "company"
@@ -108,6 +111,12 @@ def _emit_prospect_event(filename: str, timestamp: str, etag: str) -> None:
         )
         return
 
+    if not etag:
+        logger.warning(
+            "Intake object has no ETag; dedup falls back to filename only",
+            _name="VOICE_INTAKE_NO_ETAG",
+            filename=filename,
+        )
     intake_file = _intake_file(filename)
     # dedup_key combines the file path + the S3 ETag (content hash) so a true S3
     # re-delivery of the SAME object is deduped, but re-uploading an UPDATED
@@ -160,6 +169,15 @@ def _handle_record(
 ) -> dict[str, Any] | None:
     """Copy one spreadsheet into the KB and emit its ingest event."""
     filename = _filename(source_key)
+    # _filename already strips path segments; reject empty / dot / null-byte names
+    # so a crafted key can't produce a degenerate KB destination key.
+    if not filename or filename in (".", "..") or "\x00" in filename:
+        logger.warning(
+            "Skipping object with unsafe filename",
+            _name="VOICE_INTAKE_BAD_NAME",
+            key=source_key,
+        )
+        return None
     timestamp = datetime.now(timezone.utc).isoformat()
     dest_key = _copy_to_kb(source_bucket, source_key, filename)
     _emit_prospect_event(filename, timestamp, etag)
@@ -179,6 +197,14 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         source_bucket = s3.get("bucket", {}).get("name", "")
         source_key = unquote_plus(s3.get("object", {}).get("key", ""))
         etag = s3.get("object", {}).get("eTag", "")
+        if INTAKE_BUCKET and source_bucket != INTAKE_BUCKET:
+            logger.warning(
+                "Ignoring object from unexpected bucket",
+                _name="VOICE_INTAKE_WRONG_BUCKET",
+                bucket=source_bucket,
+                expected=INTAKE_BUCKET,
+            )
+            continue
         if not source_key.lower().endswith(INTAKE_EXTENSIONS):
             logger.info(
                 "Skipping non-spreadsheet object",

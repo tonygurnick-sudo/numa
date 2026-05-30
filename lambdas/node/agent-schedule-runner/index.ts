@@ -836,6 +836,11 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
     // Skipping the call entirely also avoids incrementing the company + user
     // counters (the company conditional trips first). Only affects 'connect'
     // events; gmail/pipedream fires still enforce quota as before.
+    //
+    // NOTE: only the tenant trigger QUOTA is exempted — the per-schedule run
+    // counters (total_runs / recent_runs) are still bumped by markScheduleStatus
+    // for connect fires. Seeded voice schedules set no max_runs, so the monthly
+    // maxRuns cap below is a no-op for them; this is intentional, not an oversight.
     const triggerSource = (schedule as ScheduleRecord & { trigger?: { source?: string } }).trigger?.source;
     if (triggerSource !== 'connect') {
       const allowed = await enforceTriggerQuotaOrBail(schedule);

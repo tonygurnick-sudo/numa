@@ -205,11 +205,14 @@ interface UseConnectCcpResult {
 export function useConnectCcp(active: boolean): UseConnectCcpResult {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const initialisedRef = useRef(false);
-  // The prospect from the most recent dial request, threaded into the contact
-  // lifecycle events (the CCP contact alone doesn't carry it).
-  const currentProspectRef = useRef<Prospect | undefined>(undefined);
-  // Wall-clock start of the connected call, to compute duration at ACW.
-  const callStartedAtRef = useRef<number | undefined>(undefined);
+  // The just-dialled prospect, before a contactId exists; consumed when the
+  // contact appears and moved into the per-contact map below.
+  const pendingProspectRef = useRef<Prospect | undefined>(undefined);
+  // Prospect + call-start keyed BY contactId, so overlapping contacts never
+  // cross-thread each other's prospect context / duration (the CCP contact alone
+  // doesn't carry the prospect).
+  const prospectByContactRef = useRef<Map<string, Prospect>>(new Map());
+  const startedAtByContactRef = useRef<Map<string, number>>(new Map());
   // Resets a stuck optimistic 'dialing' state if neither onConnected nor onEnded
   // fires (dial accepted by the API but silently never progresses).
   const dialTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -226,7 +229,7 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
     // (the only other reset is contact.onEnded, which never fires for a failed dial).
     const resetDial = (): void => {
       publishCallState({ phone: null, state: 'idle' });
-      currentProspectRef.current = undefined;
+      pendingProspectRef.current = undefined;
       if (dialTimeoutRef.current) {
         clearTimeout(dialTimeoutRef.current);
         dialTimeoutRef.current = undefined;
@@ -269,7 +272,7 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
       // Accept `phone` (table contract) and tolerate a legacy `phoneNumber`.
       const phone = custom.detail?.phone ?? custom.detail?.phoneNumber;
       if (!phone) return;
-      currentProspectRef.current = custom.detail?.prospect;
+      pendingProspectRef.current = custom.detail?.prospect;
       publishCallState({ phone, state: 'dialing' });
       dialNumber(phone);
     };
@@ -347,7 +350,15 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
             }
           })();
 
-          const prospect = currentProspectRef.current;
+          // Move the just-dialled prospect under this contactId so concurrent
+          // contacts don't cross-thread. All reads below are keyed by contactId.
+          const prospect = pendingProspectRef.current;
+          if (contactId && prospect) prospectByContactRef.current.set(contactId, prospect);
+          pendingProspectRef.current = undefined;
+          const prospectFor = (c: ConnectContact): Prospect | undefined => {
+            const id = safeContactId(c) ?? contactId;
+            return id ? prospectByContactRef.current.get(id) : undefined;
+          };
           publishVoiceContact({ phase: 'connecting', contactId, prospect });
 
           contact.onConnected((c) => {
@@ -355,27 +366,25 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
               clearTimeout(dialTimeoutRef.current);
               dialTimeoutRef.current = undefined;
             }
-            callStartedAtRef.current = Date.now();
+            const id = safeContactId(c) ?? contactId;
+            if (id) startedAtByContactRef.current.set(id, Date.now());
             const phoneNumber = getContactPhoneNumber(c);
-            publishVoiceContact({
-              phase: 'connected',
-              contactId: safeContactId(c) ?? contactId,
-              phoneNumber,
-              prospect: currentProspectRef.current,
-            });
+            const p = prospectFor(c);
+            publishVoiceContact({ phase: 'connected', contactId: id, phoneNumber, prospect: p });
             // Prefer the dialled prospect's E.164 (the table's row key) over the
             // Connect-resolved endpoint string so the table's on-call state matches.
-            publishCallState({ phone: currentProspectRef.current?.phone ?? phoneNumber ?? null, state: 'connected' });
+            publishCallState({ phone: p?.phone ?? phoneNumber ?? null, state: 'connected' });
           });
 
           // After Call Work → wrap-up panel should open (phase 'acw').
           contact.onACW((c) => {
-            const startedAt = callStartedAtRef.current;
+            const id = safeContactId(c) ?? contactId;
+            const startedAt = id ? startedAtByContactRef.current.get(id) : undefined;
             publishVoiceContact({
               phase: 'acw',
-              contactId: safeContactId(c) ?? contactId,
+              contactId: id,
               phoneNumber: getContactPhoneNumber(c),
-              prospect: currentProspectRef.current,
+              prospect: prospectFor(c),
               durationSeconds: startedAt ? Math.round((Date.now() - startedAt) / 1000) : undefined,
             });
           });
@@ -385,14 +394,13 @@ export function useConnectCcp(active: boolean): UseConnectCcpResult {
               clearTimeout(dialTimeoutRef.current);
               dialTimeoutRef.current = undefined;
             }
-            publishVoiceContact({
-              phase: 'ended',
-              contactId: safeContactId(c) ?? contactId,
-              prospect: currentProspectRef.current,
-            });
+            const id = safeContactId(c) ?? contactId;
+            publishVoiceContact({ phase: 'ended', contactId: id, prospect: prospectFor(c) });
             publishCallState({ phone: null, state: 'idle' });
-            currentProspectRef.current = undefined;
-            callStartedAtRef.current = undefined;
+            if (id) {
+              prospectByContactRef.current.delete(id);
+              startedAtByContactRef.current.delete(id);
+            }
           });
         });
       } catch (err) {

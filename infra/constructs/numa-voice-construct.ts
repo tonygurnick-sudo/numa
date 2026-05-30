@@ -559,6 +559,8 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
           KB_INTAKE_FILE_PREFIX: 'voice/intake/',
           CONNECTOR_EVENT_BUS_NAME: props.connectorEventBusName,
           CLIENT_NAME: clientName,
+          // Expected source bucket — the handler ignores events from anything else.
+          INTAKE_BUCKET: intakeBucketName,
         },
       },
       tracingConfig: { mode: 'Active' },
