@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Spinner from 'react-bootstrap/Spinner';
 import Button from 'react-bootstrap/Button';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
 import { getFlag } from '../utils/featureFlags';
 import { loadTodayCalls } from '../Services/voiceData';
@@ -27,7 +28,8 @@ import type { Prospect } from '../types/voice';
  */
 export const VoicePage: React.FC = () => {
   const { t } = useTranslation('voice');
-  const { getCredentials } = useAuth();
+  const { getCredentials, user } = useAuth();
+  const isAdmin = ((user?.decoded_tokens?.idToken?.['cognito:groups'] as string[] | undefined) ?? []).includes('admin');
 
   const voiceEnabled = getFlag('NUMA_VOICE');
 
@@ -93,12 +95,20 @@ export const VoicePage: React.FC = () => {
 
   return (
     <div className="container-fluid py-4">
-      <header className="mb-4">
-        <h1 className="h3 d-flex align-items-center gap-2 mb-1">
-          <i className="bi bi-telephone-fill text-primary" aria-hidden="true"></i>
-          {t('page.title')}
-        </h1>
-        <p className="text-muted mb-0">{t('page.subtitle')}</p>
+      <header className="mb-4 d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <h1 className="h3 d-flex align-items-center gap-2 mb-1">
+            <i className="bi bi-telephone-fill text-primary" aria-hidden="true"></i>
+            {t('page.title')}
+          </h1>
+          <p className="text-muted mb-0">{t('page.subtitle')}</p>
+        </div>
+        {isAdmin && (
+          <Link to="/voice/admin" className="btn btn-outline-secondary btn-sm text-nowrap">
+            <i className="bi bi-sliders me-1" aria-hidden="true"></i>
+            {t('admin.title', { defaultValue: 'Voice Admin' })}
+          </Link>
+        )}
       </header>
 
       {/* Inline post-call wrap-up — renders only while a call is in ACW. */}
