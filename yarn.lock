@@ -3889,6 +3889,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@aws-sdk/client-support@npm:^3.699.0":
+  version: 3.1057.0
+  resolution: "@aws-sdk/client-support@npm:3.1057.0"
+  dependencies:
+    "@aws-crypto/sha256-browser": "npm:5.2.0"
+    "@aws-crypto/sha256-js": "npm:5.2.0"
+    "@aws-sdk/core": "npm:^3.974.15"
+    "@aws-sdk/credential-provider-node": "npm:^3.972.47"
+    "@aws-sdk/types": "npm:^3.973.9"
+    "@smithy/core": "npm:^3.24.5"
+    "@smithy/fetch-http-handler": "npm:^5.4.5"
+    "@smithy/node-http-handler": "npm:^4.7.5"
+    "@smithy/types": "npm:^4.14.2"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/9f2be9c97159e36ba18483aa2c5dedbcbf0724985bb6afebdf8925bf63cbd848728750e7e24cc1795134a932f55b3cc8fd4286e8c515ff5920c7679602a34466
+  languageName: node
+  linkType: hard
+
 "@aws-sdk/client-support@npm:^3.738.0":
   version: 3.879.0
   resolution: "@aws-sdk/client-support@npm:3.879.0"
@@ -30916,6 +30934,25 @@ __metadata:
     "@aws-sdk/client-s3": "npm:^3.1020.0"
     "@aws-sdk/lib-dynamodb": "npm:^3.1020.0"
     "@aws-sdk/s3-request-presigner": "npm:^3.1020.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
+"numa-voice-admin@workspace:lambdas/node/numa-voice-admin":
+  version: 0.0.0-use.local
+  resolution: "numa-voice-admin@workspace:lambdas/node/numa-voice-admin"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-connect": "npm:^3.699.0"
+    "@aws-sdk/client-support": "npm:^3.699.0"
     "@types/aws-lambda": "npm:^8.10.146"
     "@types/node": "npm:^22.10.1"
     "@typescript-eslint/eslint-plugin": "npm:^8.17.0"

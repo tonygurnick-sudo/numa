@@ -588,6 +588,55 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
       lambdaFunction: [{ events: ['s3:ObjectCreated:*'], lambdaFunctionArn: intakeLambda.arn }],
     });
 
+    // ── Voice Admin API (client region; created whenever numaVoice is on) ─────
+    // Backs the Voice Admin panel: phone numbers (list/claim/release + caller-id),
+    // agent/origins, instance status, and the outbound-country support-case
+    // request. Routes go through the shared API Gateway + custom authorizer
+    // (addLambdaFunction); admin-group checks live in the handler. Resolves the
+    // Connect instance at runtime by alias, so it works for both the autoProvision
+    // and a manually-created (FEAT-158) instance.
+    this.addLambdaFunction(this, 'voice-admin', {
+      lambdaDirectory: 'node/numa-voice-admin',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      timeout: 29,
+      environment: {
+        CONNECT_REGION: props.voiceRegion,
+        CLIENT_NAME: clientName,
+        ENV_SUFFIX: envSuffix,
+        APPROVED_ORIGIN: `https://${clientName}.numa.arcanum.ai`,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: [
+            'connect:ListInstances',
+            'connect:ListPhoneNumbersV2',
+            'connect:SearchAvailablePhoneNumbers',
+            'connect:ClaimPhoneNumber',
+            'connect:ReleasePhoneNumber',
+            'connect:ListApprovedOrigins',
+            'connect:AssociateApprovedOrigin',
+            'connect:DisassociateApprovedOrigin',
+            'connect:ListUsers',
+            'connect:ListQueues',
+            'connect:UpdateQueueOutboundCallerConfig',
+          ],
+          resources: ['*'],
+        },
+        { effect: 'Allow', actions: ['support:CreateCase'], resources: ['*'] },
+      ],
+      route: [
+        { verb: 'GET', path: 'voice/admin/status' },
+        { verb: 'POST', path: 'voice/phone-numbers' },
+        { verb: 'DELETE', path: 'voice/phone-numbers/{id}' },
+        { verb: 'POST', path: 'voice/phone-numbers/{id}/caller-id' },
+        { verb: 'POST', path: 'voice/approved-origins' },
+        { verb: 'DELETE', path: 'voice/approved-origins' },
+        { verb: 'POST', path: 'voice/outbound-country-request' },
+      ],
+    });
+
     // ── Phase 2 (FEAT-169) Amazon Connect provisioning — OFF by default ───────
     // Real, billable Connect resources, region-pinned to voiceRegion. Gated by
     // connectAutoProvision so Phase-1 clients keep a MANUALLY-provisioned instance
