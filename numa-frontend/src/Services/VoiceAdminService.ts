@@ -29,8 +29,9 @@ export interface OutboundCountryResult {
   manual?: { subject: string; communicationBody: string; supportConsole: string; connectConsole: string };
 }
 
-type NumaGet = (url: string, params?: Record<string, unknown>) => Promise<unknown>;
-type NumaPost = (url: string, data?: unknown) => Promise<unknown>;
+// Match the useNumaRequest() signatures (NumaRequestContext): post requires data.
+type NumaGet = (url: string, params?: unknown) => Promise<unknown>;
+type NumaPost = (url: string, data: unknown) => Promise<unknown>;
 type NumaDelete = (url: string) => Promise<unknown>;
 
 const BASE = '/api/voice';

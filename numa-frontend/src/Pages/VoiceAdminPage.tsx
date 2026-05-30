@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, ButtonGroup, Card, Spinner, Table } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../Providers/AuthProvider';
-import { useNumaRequest } from '../Providers/RequestProvider';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { getFlag } from '../utils/featureFlags';
 import { VoiceAdminService, type VoiceAdminStatus, type OutboundCountryResult } from '../Services/VoiceAdminService';
 
