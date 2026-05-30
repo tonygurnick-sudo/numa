@@ -781,6 +781,7 @@ export class NumaClientStack extends TerraformStack {
         // Morning Call List Preparer scheduler fires the runner (client region).
         runnerArn: coreApis.agentScheduleRunnerLambda.arn,
         connectAutoProvision: clientConfig.connectAutoProvision,
+        connectClaimDid: clientConfig.connectClaimDid,
         // Seed (AdminGetUser) must run after the system user is created.
         systemUserDependsOn: core.systemUserCreator.dependsOn,
       });
@@ -997,7 +998,16 @@ export class NumaClientStack extends TerraformStack {
         // Numa Voice (Amazon Connect + AI call intelligence). Emitted explicitly
         // so getFlag('NUMA_VOICE') does NOT default-true on older deployments.
         NUMA_VOICE: clientConfig.numaVoice ?? false,
-        CONNECT_INSTANCE_URL: clientConfig.connectInstanceUrl ?? '',
+        // When autoProvision creates the instance, derive its access URL from the
+        // deterministic instance alias (numa-{client}{envSuffix}, matching the
+        // construct) so the softphone is wired in ONE deploy — no manual
+        // connectInstanceUrl, no second deploy. An explicit connectInstanceUrl
+        // (a manually-created Connect instance) still takes precedence.
+        CONNECT_INSTANCE_URL:
+          clientConfig.connectInstanceUrl ??
+          (clientConfig.connectAutoProvision
+            ? `https://numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}.my.connect.aws`
+            : ''),
         V2_APPS: clientConfig.v2Apps ?? false,
         NUMA_APPS: clientConfig.allApps ?? false,
         JOB_HISTORY: (clientConfig.allApps ?? false) ? (clientConfig.jobHistory ?? true) : false,
@@ -1589,6 +1599,7 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         connectAutoProvision: z.boolean().optional().default(false),
+        connectClaimDid: z.boolean().optional().default(false),
 
         /**
          * Per-tenant Amazon Connect instance URL (e.g. https://<alias>.my.connect.aws).

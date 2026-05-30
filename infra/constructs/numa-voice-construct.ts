@@ -98,6 +98,10 @@ export interface NumaVoiceConstructProps extends ApiGatewayLambdaCollectionProps
   /** Phase 2 (FEAT-169): auto-provision the Amazon Connect instance via IaC.
    *  OFF by default — Phase 1 uses a manually-created instance (FEAT-158). */
   connectAutoProvision?: boolean;
+  /** Claim a BILLABLE DID via the deploy-time Connect config Lambda and set it as
+   *  the queue's outbound caller-id. Only takes effect when connectAutoProvision
+   *  is also on. OFF by default so no client is surprise-charged. */
+  connectClaimDid?: boolean;
   /** Deploy-time dependency on the system-user-creator invocation, so the seed
    *  (which resolves the system user via AdminGetUser) runs AFTER it exists. */
   systemUserDependsOn: ITerraformDependable[];
@@ -692,6 +696,101 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         // its Connect-PutObject policy exist first (the plain bucketName string
         // creates no implicit edge).
         dependsOn: [this.recordingsBucket, connectRecordingsBucketPolicy],
+        ...pin,
+      });
+
+      // ── Deploy-time Connect configuration (region-pinned to voiceRegion) ──────
+      // aws_connect_instance has NO resource for Approved Origins (only the
+      // AssociateApprovedOrigin API), and the agent user + DID + queue caller-id
+      // are wired imperatively against the instance's auto-created defaults. This
+      // Lambda does it post-creation — idempotent + best-effort (a DID-quota issue
+      // can't fail the apply). Same LambdaInvocation pattern as seed-voice-agents.
+      const connectSeedZip = path.resolve(
+        import.meta.dirname,
+        '..',
+        '..',
+        'lambdas',
+        'node/seed-connect-config',
+        'lambda_function.zip'
+      );
+      const agentSecretName = `${clientName}-voice-agent-credentials`;
+      const connectSeedRole = new IamRole(this, 'seed-connect-role', {
+        assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
+        ...pin,
+      });
+      const connectSeedBasic = new IamRolePolicyAttachment(this, 'seed-connect-basic', {
+        role: connectSeedRole.name,
+        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+        ...pin,
+      });
+      const connectSeedPolicy = new IamPolicy(this, 'seed-connect-policy', {
+        policy: new DataAwsIamPolicyDocument(this, 'seed-connect-policy-doc', {
+          statement: [
+            {
+              // Connect actions on this account's own instance. Several phone-number
+              // actions don't accept a resource scope, so '*' (deploy-time, gated).
+              effect: 'Allow',
+              actions: [
+                'connect:AssociateApprovedOrigin',
+                'connect:ListSecurityProfiles',
+                'connect:ListRoutingProfiles',
+                'connect:ListUsers',
+                'connect:CreateUser',
+                'connect:ListPhoneNumbersV2',
+                'connect:SearchAvailablePhoneNumbers',
+                'connect:ClaimPhoneNumber',
+                'connect:ListQueues',
+                'connect:UpdateQueueOutboundCallerConfig',
+              ],
+              resources: ['*'],
+            },
+            {
+              effect: 'Allow',
+              actions: ['secretsmanager:CreateSecret', 'secretsmanager:PutSecretValue'],
+              resources: [
+                `arn:aws:secretsmanager:${props.voiceRegion}:${props.clientAccountId}:secret:${agentSecretName}*`,
+              ],
+            },
+          ],
+        }).json,
+        ...pin,
+      });
+      const connectSeedAttach = new IamRolePolicyAttachment(this, 'seed-connect-policy-attach', {
+        role: connectSeedRole.name,
+        policyArn: connectSeedPolicy.arn,
+        ...pin,
+      });
+      const connectSeedLambda = new LambdaFunction(this, 'seed-connect-lambda', {
+        functionName: `${clientName}-seed-connect-config`,
+        role: connectSeedRole.arn,
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        filename: connectSeedZip,
+        sourceCodeHash: Fn.filebase64sha256(connectSeedZip),
+        timeout: 120,
+        environment: {
+          variables: {
+            INSTANCE_ID: connectInstance.id,
+            INSTANCE_ARN: connectInstance.arn,
+            APPROVED_ORIGIN: `https://${clientName}.numa.arcanum.ai`,
+            AGENT_USERNAME: 'numa-voice-agent',
+            AGENT_SECRET_NAME: agentSecretName,
+            CLAIM_DID: props.connectClaimDid ? 'true' : 'false',
+            DID_COUNTRY: 'US',
+          },
+        },
+        dependsOn: [connectSeedAttach],
+        ...pin,
+      });
+      new LambdaInvocation(this, 'seed-connect-invocation', {
+        functionName: connectSeedLambda.functionName,
+        input: JSON.stringify({ action: 'configure' }),
+        triggers: {
+          seedSourceHash: connectSeedLambda.sourceCodeHash,
+          instanceId: connectInstance.id,
+          claimDid: props.connectClaimDid ? 'true' : 'false',
+        },
+        dependsOn: [connectSeedLambda, connectSeedBasic, connectInstance],
         ...pin,
       });
     }
