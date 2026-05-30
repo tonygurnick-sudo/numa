@@ -232,7 +232,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return requireAdmin() ?? (await addOrigin(String(body.origin ?? APPROVED_ORIGIN)));
     }
     if (method === 'DELETE' && /\/voice\/approved-origins\/?$/.test(path)) {
-      return requireAdmin() ?? (await removeOrigin(String(body.origin ?? '')));
+      // DELETE carries no body via the FE client — read origin from the query string.
+      const origin = String(event.queryStringParameters?.origin ?? body.origin ?? '');
+      return requireAdmin() ?? (await removeOrigin(origin));
     }
     if (method === 'POST' && /\/voice\/outbound-country-request\/?$/.test(path)) {
       return requireAdmin() ?? (await requestOutboundCountry(String(body.country ?? 'New Zealand')));
