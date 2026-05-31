@@ -149,9 +149,12 @@ export const CcpSoftphoneWidget = () => {
         <i className={`bi ${open ? 'bi-chevron-down' : 'bi-telephone-fill'} fs-5`} aria-hidden="true"></i>
       </Button>
 
-      {/* Softphone panel. */}
+      {/* Softphone panel. NOTE: no `d-flex` class — Bootstrap's `.d-flex` is
+          `display:flex !important`, which would override the inline `display:none`
+          and make the panel impossible to hide. We drive display inline instead
+          (flex when open, none when collapsed) and keep `flex-column` for direction. */}
       <div
-        className="bg-white border rounded-3 shadow-lg overflow-hidden d-flex flex-column"
+        className="bg-white border rounded-3 shadow-lg overflow-hidden flex-column"
         style={{
           position: 'fixed',
           right: 20,

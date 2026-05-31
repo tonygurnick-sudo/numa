@@ -10,7 +10,7 @@ import { ConnectQueue } from '@cdktf/provider-aws/lib/connect-queue';
 import { ConnectHoursOfOperation } from '@cdktf/provider-aws/lib/connect-hours-of-operation';
 import { ConnectPhoneNumber } from '@cdktf/provider-aws/lib/connect-phone-number';
 import { DataAwsConnectSecurityProfile } from '@cdktf/provider-aws/lib/data-aws-connect-security-profile';
-import { DataAwsConnectRoutingProfile } from '@cdktf/provider-aws/lib/data-aws-connect-routing-profile';
+import { ConnectRoutingProfile } from '@cdktf/provider-aws/lib/connect-routing-profile';
 import { KmsKey } from '@cdktf/provider-aws/lib/kms-key';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
@@ -801,11 +801,6 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         name: 'Agent',
         ...pin,
       });
-      const basicRoutingProfile = new DataAwsConnectRoutingProfile(this, 'voice-basic-routing-profile', {
-        instanceId: connectInstance.id,
-        name: 'Basic Routing Profile',
-        ...pin,
-      });
       // 24/7 hours for the outbound queue (Connect has no default hours resource).
       const voiceHours = new ConnectHoursOfOperation(this, 'voice-hours', {
         instanceId: connectInstance.id,
@@ -829,19 +824,33 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
           })
         : undefined;
       // Outbound queue with the DID as caller-ID (declared, not the auto-created one).
-      new ConnectQueue(this, 'voice-outbound-queue', {
+      const voiceOutboundQueue = new ConnectQueue(this, 'voice-outbound-queue', {
         instanceId: connectInstance.id,
         name: 'numa-voice-outbound',
         hoursOfOperationId: voiceHours.hoursOfOperationId,
         ...(voicePhoneNumber ? { outboundCallerConfig: { outboundCallerIdNumberId: voicePhoneNumber.id } } : {}),
         ...pin,
       });
+      // Routing profile whose DEFAULT OUTBOUND queue is numa-voice-outbound (the one
+      // carrying the caller-ID DID). The default "Basic Routing Profile" routes outbound
+      // through BasicQueue, which has no caller-ID -> Connect rejects the dial with
+      // "Cannot dial third party destination: The outbound queue is misconfigured".
+      // The agent must use THIS profile so its default outbound queue has a caller-ID.
+      const voiceRoutingProfile = new ConnectRoutingProfile(this, 'voice-routing-profile', {
+        instanceId: connectInstance.id,
+        name: 'numa-voice-routing',
+        description: 'Numa Voice outbound SDR routing (default outbound queue carries the caller-ID DID)',
+        defaultOutboundQueueId: voiceOutboundQueue.queueId,
+        mediaConcurrencies: [{ channel: 'VOICE', concurrency: 1 }],
+        queueConfigs: [{ channel: 'VOICE', delay: 0, priority: 1, queueId: voiceOutboundQueue.queueId }],
+        ...pin,
+      });
       // Federated agent user (SAML → no password). numa-voice-admin's
-      // /voice/federation-token mints a SignInUrl for this username.
+      // /voice/federation-token mints a console-federation login URL for this username.
       new ConnectUser(this, 'voice-agent-user', {
         instanceId: connectInstance.id,
         name: 'numa-voice-agent',
-        routingProfileId: basicRoutingProfile.routingProfileId,
+        routingProfileId: voiceRoutingProfile.routingProfileId,
         securityProfileIds: [agentSecurityProfile.securityProfileId],
         identityInfo: { firstName: 'Numa', lastName: 'Voice' },
         phoneConfig: { phoneType: 'SOFT_PHONE', autoAccept: false, afterContactWorkTimeLimit: 0 },
