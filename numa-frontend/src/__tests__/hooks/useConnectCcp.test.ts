@@ -19,9 +19,9 @@ describe('getCcpUrl', () => {
 
   it('builds the ccp-v2 URL, tolerating a trailing slash', () => {
     window.sessionStorage.setItem('CONNECT_INSTANCE_URL', 'https://numa-x.my.connect.aws');
-    expect(getCcpUrl()).toBe('https://numa-x.my.connect.aws/connect/ccp-v2/');
+    expect(getCcpUrl()).toBe('https://numa-x.my.connect.aws/ccp-v2/');
     window.sessionStorage.setItem('CONNECT_INSTANCE_URL', 'https://numa-x.my.connect.aws///');
-    expect(getCcpUrl()).toBe('https://numa-x.my.connect.aws/connect/ccp-v2/');
+    expect(getCcpUrl()).toBe('https://numa-x.my.connect.aws/ccp-v2/');
   });
 });
 

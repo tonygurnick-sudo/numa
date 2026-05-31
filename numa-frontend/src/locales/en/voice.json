@@ -5,7 +5,35 @@
     "subtitle": "Outbound calling for your SDR team",
     "loading": "Loading your call list…",
     "error": "Something went wrong loading Numa Voice. Please try again.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "progress": "{{done}} of {{total}} done",
+    "tally": {
+      "interested": "Interested",
+      "callback": "Callback",
+      "qualified": "Qualified"
+    }
+  },
+  "focus": {
+    "upNext": "Up next",
+    "position": "{{n}} of {{total}}",
+    "dialing": "Dialing…",
+    "live": "Live",
+    "callCta": "Call {{name}}",
+    "onAnotherCall": "Finish the current call before dialing the next prospect.",
+    "noPhone": "This prospect has no phone number on file.",
+    "softphoneReady": "Softphone is ready — the call opens in the floating panel.",
+    "muteHint": "Use the softphone panel to mute or hang up.",
+    "allDone": "All calls done for today. Nice work."
+  },
+  "queue": {
+    "next": "Next",
+    "onCall": "On call",
+    "done": "Done ({{count}})",
+    "filterAll": "All",
+    "filterTodo": "To call",
+    "filterDone": "Done",
+    "locked": "Finish the current call first.",
+    "heading": "Queue"
   },
   "prospectTable": {
     "title": "Today's calls",
@@ -57,10 +85,12 @@
     "qualifyYes": "Qualified",
     "qualifyNo": "Not qualified",
     "submit": "Save outcome",
+    "saveAndNext": "Save & next",
     "submitting": "Saving…",
     "saved": "Outcome saved.",
     "error": "Couldn't save the outcome. Please try again.",
-    "dismiss": "Dismiss without logging"
+    "dismiss": "Dismiss without logging",
+    "subtitleGeneric": "Log the outcome of this call."
   },
   "assist": {
     "title": "Live assist",
@@ -69,6 +99,8 @@
     "objections": "Objections",
     "hooks": "Hook lines",
     "next": "Next",
+    "prev": "Previous",
+    "prepTitle": "Prep for next call",
     "noPanel": "No playbook available for this industry yet.",
     "loading": "Loading assist panel…",
     "idle": "Assist will appear here when a call connects."

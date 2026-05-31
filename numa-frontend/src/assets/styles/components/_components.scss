@@ -2772,3 +2772,22 @@ fieldset:disabled .btn {
     font-weight: 400;
   }
 }
+
+// Numa Voice — the floating softphone FAB pulses while a call is connected, so
+// the rep always knows a call is live even when the panel is collapsed / they're
+// on another page. Cosmetic only; the green `variant="success"` is applied in JSX.
+@keyframes pulse-on-call {
+  0% {
+    box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(25, 135, 84, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(25, 135, 84, 0);
+  }
+}
+
+.pulse-on-call {
+  animation: pulse-on-call 1.6s ease-out infinite;
+}

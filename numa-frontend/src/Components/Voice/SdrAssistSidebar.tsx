@@ -60,6 +60,19 @@ export interface SdrAssistSidebarProps {
    * connected event always wins over this once a call is on the wire.
    */
   initialProspect?: Prospect;
+  /**
+   * Display variant:
+   *  - 'live'  → the full live-assist panel (default behaviour).
+   *  - 'brief' → a calmer "Prep for next call" view when seeded but no live call:
+   *              hooks expanded, discovery + objections shown as collapsed peeks.
+   * The live `numa-voice-contact` connected prospect always overrides 'brief'.
+   */
+  variant?: 'brief' | 'live';
+  /**
+   * When true, drop the outer Card/Card.Header chrome and render the body
+   * directly (used when the sidebar is hosted inside another panel/column).
+   */
+  embedded?: boolean;
   /** Optional extra class names for the outer card. */
   className?: string;
 }
@@ -75,6 +88,8 @@ function resolvePanel(playbook: SdrPlaybook, prospect: Prospect | null): Industr
 export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
   enableLiveMatch = false,
   initialProspect,
+  variant = 'live',
+  embedded = false,
   className,
 }) => {
   const { t } = useTranslation('voice');
@@ -84,7 +99,11 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<boolean>(false);
 
-  const [prospect, setProspect] = useState<Prospect | null>(initialProspect ?? null);
+  // Live prospect on the wire (set on `numa-voice-contact` connected). null until
+  // a call connects; the brief/prep view falls back to `initialProspect`.
+  const [liveProspect, setLiveProspect] = useState<Prospect | null>(null);
+  // The connected prospect always wins; otherwise show the seeded next prospect.
+  const prospect = liveProspect ?? initialProspect ?? null;
 
   // STAGE 0 stepper: index of the currently-highlighted discovery question.
   const [questionIndex, setQuestionIndex] = useState<number>(0);
@@ -134,7 +153,7 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
   // `numa-voice-contact` on contact.onConnected / onACW / onEnded.
   // ---------------------------------------------------------------------------
   const resetForProspect = useCallback((next: Prospect | null) => {
-    setProspect(next);
+    setLiveProspect(next);
     setQuestionIndex(0);
     setOpenObjections(new Set());
   }, []);
@@ -156,11 +175,24 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
     return () => window.removeEventListener(VOICE_CONTACT_EVENT, onContact);
   }, [resetForProspect]);
 
+  // When prepping (no live call) and the seeded next prospect changes — e.g. the
+  // rep saves a wrap-up and focus moves to the next prospect — reset the stepper
+  // so the brief view starts fresh. Keyed off the prospect's phone (stable id).
+  const prepProspectKey = liveProspect ? null : (initialProspect?.phone ?? null);
+  useEffect(() => {
+    if (prepProspectKey === null) return;
+    setQuestionIndex(0);
+    setOpenObjections(new Set());
+  }, [prepProspectKey]);
+
   const panel = useMemo(() => (playbook ? resolvePanel(playbook, prospect) : null), [playbook, prospect]);
 
   const discoveryQuestions = panel?.discovery_questions ?? [];
   const objections = panel?.objections ?? [];
   const hookLines = panel?.hook_lines ?? [];
+
+  // 'brief' prep view applies only when seeded but no call is on the wire.
+  const isPrep = variant === 'brief' && !liveProspect && !!prospect;
 
   const toggleObjection = useCallback((index: number) => {
     setOpenObjections((prev) => {
@@ -174,12 +206,15 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
     });
   }, []);
 
+  // Stepper clamps at both ends — it does NOT wrap (a rep stepping through
+  // discovery questions live should not silently loop back to question 1).
   const advanceQuestion = useCallback(() => {
-    setQuestionIndex((prev) => {
-      if (discoveryQuestions.length === 0) return 0;
-      return (prev + 1) % discoveryQuestions.length;
-    });
+    setQuestionIndex((prev) => Math.min(prev + 1, Math.max(0, discoveryQuestions.length - 1)));
   }, [discoveryQuestions.length]);
+
+  const retreatQuestion = useCallback(() => {
+    setQuestionIndex((prev) => Math.max(prev - 1, 0));
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -222,6 +257,24 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
             <i className="bi bi-info-circle me-2" aria-hidden="true" />
             {t('assist.noPanel')}
           </div>
+        </>
+      );
+    }
+
+    // 'brief' prep view (seeded next prospect, no live call): lead with the
+    // hooks (the opener the rep needs first), then discovery + objections as
+    // reference peeks below.
+    if (isPrep) {
+      return (
+        <>
+          <div className="d-flex align-items-center gap-2 text-uppercase small fw-semibold text-primary mb-2">
+            <i className="bi bi-lightbulb" aria-hidden="true" />
+            {t('assist.prepTitle')}
+          </div>
+          {renderCompanyContext()}
+          {renderHooks()}
+          {renderDiscoveryQuestions()}
+          {renderObjections()}
         </>
       );
     }
@@ -299,18 +352,36 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
           <div className="flex-grow-1">{current}</div>
         </div>
         <div className="d-flex align-items-center justify-content-between mt-2">
-          <span className="small text-muted" aria-hidden="true">
-            {`${questionIndex + 1} / ${discoveryQuestions.length}`}
-          </span>
-          <Button
-            variant="outline-primary"
-            size="sm"
-            onClick={advanceQuestion}
-            disabled={discoveryQuestions.length <= 1}
-          >
-            {t('assist.next')}
-            <i className="bi bi-arrow-right ms-1" aria-hidden="true" />
-          </Button>
+          {/* Dot indicator — one dot per question, filled at the current index. */}
+          <div className="d-flex align-items-center gap-1" aria-hidden="true">
+            {discoveryQuestions.map((_, index) => (
+              <span
+                key={index}
+                className={`d-inline-block rounded-circle ${index === questionIndex ? 'bg-primary' : 'bg-secondary-subtle'}`}
+                style={{ width: 6, height: 6 }}
+              />
+            ))}
+          </div>
+          <div className="d-flex align-items-center gap-1">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={retreatQuestion}
+              disabled={questionIndex <= 0}
+              aria-label={t('assist.prev')}
+            >
+              <i className="bi bi-arrow-left" aria-hidden="true" />
+            </Button>
+            <Button
+              variant="outline-primary"
+              size="sm"
+              onClick={advanceQuestion}
+              disabled={questionIndex >= discoveryQuestions.length - 1}
+            >
+              {t('assist.next')}
+              <i className="bi bi-arrow-right ms-1" aria-hidden="true" />
+            </Button>
+          </div>
         </div>
       </section>
     );
@@ -372,6 +443,10 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
       </section>
     );
   };
+
+  if (embedded) {
+    return <div className={className}>{renderBody()}</div>;
+  }
 
   return (
     <Card className={className}>

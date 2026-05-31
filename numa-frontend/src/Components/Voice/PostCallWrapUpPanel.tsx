@@ -3,6 +3,7 @@ import { Button, Card, Form, Alert, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { saveCallOutcome } from '../../Services/voiceData';
+import { formatDuration } from '../../utils/voiceFormat';
 import type { CallOutcome, Prospect, WrapUpOutcome } from '../../types/voice';
 
 /**
@@ -49,15 +50,16 @@ const OUTCOME_OPTIONS: { value: CallOutcome; labelKey: string }[] = [
   { value: 'not_interested', labelKey: 'wrapUp.outcome.notInterested' },
 ];
 
-/** Format a duration in seconds as mm:ss (e.g. 95 → "1:35"). */
-function formatDuration(totalSeconds: number): string {
-  const safe = Math.max(0, Math.floor(totalSeconds));
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+interface PostCallWrapUpPanelProps {
+  /** When true, drop the outer Card chrome and render the body directly (used
+   *  when embedded inside the FocusCallCard's ACW slot). */
+  embedded?: boolean;
+  /** Called once after a successful save with the chosen disposition, so the page
+   *  can optimistically bump the prospect with the REAL outcome (not a placeholder). */
+  onSaved?: (result: { outcome: CallOutcome; qualified: boolean }) => void;
 }
 
-export const PostCallWrapUpPanel: React.FC = () => {
+export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedded = false, onSaved }) => {
   const { t } = useTranslation('voice');
   const { t: tCommon } = useTranslation('common');
   const { getCredentials } = useAuth();
@@ -122,6 +124,25 @@ export const PostCallWrapUpPanel: React.FC = () => {
     return () => window.removeEventListener(VOICE_CONTACT_EVENT, handleVoiceContact);
   }, []);
 
+  // ── Number-key hotkeys (1–4 → outcome options) ──────────────────────────────
+  // Active only while the panel is mounted with an open wrap-up and not saved,
+  // and ignored while the SDR is typing in a field (notes textarea, etc.).
+  useEffect(() => {
+    if (!contactId || saved) return undefined;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
+      const index = Number(event.key) - 1;
+      if (Number.isInteger(index) && index >= 0 && index < OUTCOME_OPTIONS.length) {
+        event.preventDefault();
+        setOutcome(OUTCOME_OPTIONS[index].value);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [contactId, saved]);
+
   // ── Derived ─────────────────────────────────────────────────────────────────
   const prospectName = prospect?.contact_name?.trim() || prospect?.company_name?.trim() || '';
   // prospect.phone is the join key the post-call processor matches on — without
@@ -160,156 +181,177 @@ export const PostCallWrapUpPanel: React.FC = () => {
       await saveCallOutcome(credentials, payload);
       setSaved(true);
       setSubmitting(false);
+      // outcome/qualified are non-null here (guarded above) — hand the REAL
+      // disposition to the page for an accurate optimistic bump.
+      onSaved?.({ outcome, qualified });
     } catch {
       setError(true);
       setSubmitting(false);
     }
-  }, [contactId, outcome, qualified, notes, prospect, submitting, getCredentials]);
+  }, [contactId, outcome, qualified, notes, prospect, submitting, getCredentials, onSaved]);
 
   // Nothing to show until a call enters ACW.
   if (!contactId) {
     return null;
   }
 
+  const body = (
+    <>
+      {/* ── Header ── */}
+      <div className="d-flex justify-content-between align-items-start mb-2">
+        <div>
+          <h2 className="h5 mb-1">
+            <i className="bi bi-clipboard-check me-2" aria-hidden="true"></i>
+            {t('wrapUp.title')}
+          </h2>
+          <p className="text-muted small mb-0">
+            {prospectName ? t('wrapUp.subtitle', { name: prospectName }) : t('wrapUp.subtitleGeneric')}
+          </p>
+        </div>
+        <div className="d-flex align-items-center gap-2">
+          {durationSeconds !== null && (
+            <span className="text-muted small text-nowrap">
+              <i className="bi bi-stopwatch me-1" aria-hidden="true"></i>
+              {t('wrapUp.duration')}: {formatDuration(durationSeconds)}
+            </span>
+          )}
+          {/* Dismiss without logging — the only other exit is submit→Done. */}
+          <button
+            type="button"
+            className="btn-close"
+            aria-label={t('wrapUp.dismiss')}
+            title={t('wrapUp.dismiss')}
+            onClick={reset}
+          ></button>
+        </div>
+      </div>
+
+      {saved ? (
+        <Alert variant="success" className="mb-2 d-flex justify-content-between align-items-center">
+          <span>
+            <i className="bi bi-check-circle-fill me-2" aria-hidden="true"></i>
+            {t('wrapUp.saved')}
+          </span>
+          <Button variant="outline-success" size="sm" onClick={reset}>
+            {tCommon('common.done')}
+            <i className="bi bi-x-lg ms-2" aria-hidden="true"></i>
+          </Button>
+        </Alert>
+      ) : (
+        <>
+          {/* ── Outcome ── */}
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-semibold small mb-1">{t('wrapUp.outcomeLabel')}</Form.Label>
+            <div className="d-flex flex-wrap gap-2" role="group" aria-label={t('wrapUp.outcomeLabel')}>
+              {OUTCOME_OPTIONS.map((option) => (
+                <Button
+                  key={option.value}
+                  type="button"
+                  size="sm"
+                  variant={outcome === option.value ? 'primary' : 'outline-primary'}
+                  active={outcome === option.value}
+                  aria-pressed={outcome === option.value}
+                  disabled={submitting}
+                  onClick={() => setOutcome(option.value)}
+                >
+                  {t(option.labelKey)}
+                </Button>
+              ))}
+            </div>
+          </Form.Group>
+
+          {/* ── Notes (optional) ── */}
+          <Form.Group className="mb-3" controlId="voice-wrapup-notes">
+            <Form.Label className="fw-semibold small mb-1">{t('wrapUp.notesLabel')}</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={2}
+              value={notes}
+              placeholder={t('wrapUp.notesPlaceholder')}
+              disabled={submitting}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </Form.Group>
+
+          {/* ── Qualify for CRM ── */}
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-semibold small mb-1">{t('wrapUp.qualifyPrompt')}</Form.Label>
+            <div className="d-flex flex-wrap gap-2" role="group" aria-label={t('wrapUp.qualifyPrompt')}>
+              <Button
+                type="button"
+                size="sm"
+                variant={qualified === true ? 'success' : 'outline-success'}
+                active={qualified === true}
+                aria-pressed={qualified === true}
+                disabled={submitting}
+                onClick={() => setQualified(true)}
+              >
+                <i className="bi bi-check-lg me-1" aria-hidden="true"></i>
+                {t('wrapUp.qualifyYes')}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={qualified === false ? 'secondary' : 'outline-secondary'}
+                active={qualified === false}
+                aria-pressed={qualified === false}
+                disabled={submitting}
+                onClick={() => setQualified(false)}
+              >
+                <i className="bi bi-x-lg me-1" aria-hidden="true"></i>
+                {t('wrapUp.qualifyNo')}
+              </Button>
+            </div>
+          </Form.Group>
+
+          {error && (
+            <Alert variant="danger" className="py-2 mb-2">
+              <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+              {t('wrapUp.error')}
+            </Alert>
+          )}
+
+          {/* Soft no-phone note: only meaningful once an outcome is chosen (the
+              SDR is about to try to save). Rendered as a calm inline note rather
+              than a loud yellow Alert. The outcome can never be matched without a
+              prospect phone, so we keep it advisory and block submit via canSubmit. */}
+          {!prospect?.phone && outcome !== null && (
+            <p className="text-warning-emphasis small mb-2">
+              <i className="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+              {t('wrapUp.noProspectPhone', {
+                defaultValue:
+                  'This call has no prospect phone number, so the outcome cannot be matched to a prospect and will not be saved.',
+              })}
+            </p>
+          )}
+
+          {/* ── Submit ── */}
+          <Button variant="primary" disabled={!canSubmit} onClick={handleSubmit}>
+            {submitting ? (
+              <>
+                <Spinner as="span" animation="border" size="sm" className="me-2" aria-hidden="true" />
+                {t('wrapUp.submitting')}
+              </>
+            ) : (
+              t('wrapUp.saveAndNext')
+            )}
+          </Button>
+        </>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="mb-3" role="region" aria-label={t('wrapUp.title')}>
+        {body}
+      </div>
+    );
+  }
+
   return (
     <Card className="border-primary shadow-sm mb-3" role="region" aria-label={t('wrapUp.title')}>
-      <Card.Body>
-        {/* ── Header ── */}
-        <div className="d-flex justify-content-between align-items-start mb-2">
-          <div>
-            <Card.Title as="h2" className="h5 mb-1">
-              <i className="bi bi-clipboard-check me-2" aria-hidden="true"></i>
-              {t('wrapUp.title')}
-            </Card.Title>
-            <p className="text-muted small mb-0">{t('wrapUp.subtitle', { name: prospectName })}</p>
-          </div>
-          <div className="d-flex align-items-center gap-2">
-            {durationSeconds !== null && (
-              <span className="text-muted small text-nowrap">
-                <i className="bi bi-stopwatch me-1" aria-hidden="true"></i>
-                {t('wrapUp.duration')}: {formatDuration(durationSeconds)}
-              </span>
-            )}
-            {/* Dismiss without logging — the only other exit is submit→Done. */}
-            <button
-              type="button"
-              className="btn-close"
-              aria-label={t('wrapUp.dismiss')}
-              title={t('wrapUp.dismiss')}
-              onClick={reset}
-            ></button>
-          </div>
-        </div>
-
-        {saved ? (
-          <Alert variant="success" className="mb-2 d-flex justify-content-between align-items-center">
-            <span>
-              <i className="bi bi-check-circle-fill me-2" aria-hidden="true"></i>
-              {t('wrapUp.saved')}
-            </span>
-            <Button variant="outline-success" size="sm" onClick={reset}>
-              {tCommon('common.done')}
-              <i className="bi bi-x-lg ms-2" aria-hidden="true"></i>
-            </Button>
-          </Alert>
-        ) : (
-          <>
-            {/* ── Outcome ── */}
-            <Form.Group className="mb-3">
-              <Form.Label className="fw-semibold small mb-1">{t('wrapUp.outcomeLabel')}</Form.Label>
-              <div className="d-flex flex-wrap gap-2" role="group" aria-label={t('wrapUp.outcomeLabel')}>
-                {OUTCOME_OPTIONS.map((option) => (
-                  <Button
-                    key={option.value}
-                    type="button"
-                    size="sm"
-                    variant={outcome === option.value ? 'primary' : 'outline-primary'}
-                    active={outcome === option.value}
-                    aria-pressed={outcome === option.value}
-                    disabled={submitting}
-                    onClick={() => setOutcome(option.value)}
-                  >
-                    {t(option.labelKey)}
-                  </Button>
-                ))}
-              </div>
-            </Form.Group>
-
-            {/* ── Notes (optional) ── */}
-            <Form.Group className="mb-3" controlId="voice-wrapup-notes">
-              <Form.Label className="fw-semibold small mb-1">{t('wrapUp.notesLabel')}</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={2}
-                value={notes}
-                placeholder={t('wrapUp.notesPlaceholder')}
-                disabled={submitting}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </Form.Group>
-
-            {/* ── Qualify for CRM ── */}
-            <Form.Group className="mb-3">
-              <Form.Label className="fw-semibold small mb-1">{t('wrapUp.qualifyPrompt')}</Form.Label>
-              <div className="d-flex flex-wrap gap-2" role="group" aria-label={t('wrapUp.qualifyPrompt')}>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={qualified === true ? 'success' : 'outline-success'}
-                  active={qualified === true}
-                  aria-pressed={qualified === true}
-                  disabled={submitting}
-                  onClick={() => setQualified(true)}
-                >
-                  <i className="bi bi-check-lg me-1" aria-hidden="true"></i>
-                  {t('wrapUp.qualifyYes')}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={qualified === false ? 'secondary' : 'outline-secondary'}
-                  active={qualified === false}
-                  aria-pressed={qualified === false}
-                  disabled={submitting}
-                  onClick={() => setQualified(false)}
-                >
-                  <i className="bi bi-x-lg me-1" aria-hidden="true"></i>
-                  {t('wrapUp.qualifyNo')}
-                </Button>
-              </div>
-            </Form.Group>
-
-            {error && (
-              <Alert variant="danger" className="py-2 mb-2">
-                <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
-                {t('wrapUp.error')}
-              </Alert>
-            )}
-
-            {!prospect?.phone && (
-              <Alert variant="warning" className="py-2 mb-2">
-                <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
-                {t('wrapUp.noProspectPhone', {
-                  defaultValue:
-                    'This call has no prospect phone number, so the outcome cannot be matched to a prospect and will not be saved.',
-                })}
-              </Alert>
-            )}
-
-            {/* ── Submit ── */}
-            <Button variant="primary" disabled={!canSubmit} onClick={handleSubmit}>
-              {submitting ? (
-                <>
-                  <Spinner as="span" animation="border" size="sm" className="me-2" aria-hidden="true" />
-                  {t('wrapUp.submitting')}
-                </>
-              ) : (
-                t('wrapUp.submit')
-              )}
-            </Button>
-          </>
-        )}
-      </Card.Body>
+      <Card.Body>{body}</Card.Body>
     </Card>
   );
 };

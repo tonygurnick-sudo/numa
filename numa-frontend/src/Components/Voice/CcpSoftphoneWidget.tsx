@@ -30,7 +30,8 @@ import { Button } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { getFlag } from '../../utils/featureFlags';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
-import { useConnectCcp, VOICE_DIAL_EVENT } from '../../hooks/useConnectCcp';
+import { useConnectCcp, VOICE_DIAL_EVENT, VOICE_CALL_STATE_EVENT } from '../../hooks/useConnectCcp';
+import type { VoiceCallStateEventDetail } from '../../hooks/useConnectCcp';
 import { getVoiceBrowserSupport } from '../../utils/voiceBrowserSupport';
 
 /** Minimum CCP iframe footprint required by amazon-connect-streams ccp-v2. */
@@ -76,6 +77,19 @@ export const CcpSoftphoneWidget = () => {
     const onDial = (): void => setOpen(true);
     window.addEventListener(VOICE_DIAL_EVENT, onDial);
     return () => window.removeEventListener(VOICE_DIAL_EVENT, onDial);
+  }, []);
+
+  // Mirror live call state so the floating toggle turns green + pulses while a
+  // call is connected. Purely cosmetic — does not touch the iframe / CCP lifecycle.
+  const [onCall, setOnCall] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onState = (event: Event): void => {
+      const detail = (event as CustomEvent<VoiceCallStateEventDetail>).detail;
+      setOnCall(detail?.state === 'connected');
+    };
+    window.addEventListener(VOICE_CALL_STATE_EVENT, onState);
+    return () => window.removeEventListener(VOICE_CALL_STATE_EVENT, onState);
   }, []);
 
   if (!flagEnabled) return null;
@@ -128,11 +142,11 @@ export const CcpSoftphoneWidget = () => {
 
   return (
     <>
-      {/* Floating toggle button (bottom-right). */}
+      {/* Floating toggle button (bottom-right). Turns green + pulses on a live call. */}
       <Button
-        variant={open ? 'secondary' : 'primary'}
+        variant={onCall ? 'success' : open ? 'secondary' : 'primary'}
         onClick={() => setOpen((prev) => !prev)}
-        className="rounded-circle d-flex align-items-center justify-content-center shadow"
+        className={`rounded-circle d-flex align-items-center justify-content-center shadow${onCall ? ' pulse-on-call' : ''}`}
         aria-expanded={open}
         aria-label={open ? t('ccp.hide') : t('ccp.show')}
         title={open ? t('ccp.hide') : t('ccp.show')}
