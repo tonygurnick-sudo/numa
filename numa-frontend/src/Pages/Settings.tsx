@@ -80,6 +80,7 @@ import { ROUTE_CONFIG } from '../utils/routeConfig';
 import type { CapabilityItem } from '../utils/capabilityRegistry';
 import { getFlagRegistry } from '../utils/featureFlags';
 import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
+import { VoiceAdminPanel } from '../Components/Voice/VoiceAdminPanel';
 import { loadAdminCapabilityGating, DEFAULT_DISABLED_FLAGS } from '../utils/adminCapabilityGating';
 import { CHAT_SUGGESTIONS_DISABLED } from '../hooks/useChatSuggestions';
 
@@ -170,6 +171,7 @@ export default function SettingsPage() {
   const mfaEnabled = getFlag('MFA_ENABLED');
   const hasOps = getFlag('NUMA_OPS');
   const ssoEnabled = getFlag('SSO_ENABLED');
+  const voiceEnabled = getFlag('NUMA_VOICE');
   // Hidden by default — only shown when explicitly set to true in numa-client-config
   const usageReportingEnabled = window.sessionStorage.getItem('DEPLOY_USAGE_REPORTING') === 'true';
   const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
@@ -1418,6 +1420,7 @@ export default function SettingsPage() {
           ]
         : []),
       { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
+      ...(voiceEnabled ? [{ key: 'voice', label: t('tabs.voice'), iconClassName: 'bi bi-telephone' }] : []),
       ...(usageReportingEnabled
         ? [{ key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' }]
         : []),
@@ -1434,6 +1437,7 @@ export default function SettingsPage() {
       dataConnectorsEnabled,
       usageReportingEnabled,
       disasterRecoveryEnabled,
+      voiceEnabled,
       t,
     ]
   );
@@ -2618,6 +2622,19 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </Tab>
+              {voiceEnabled && (
+                <Tab
+                  eventKey="voice"
+                  title={
+                    <span>
+                      <i className="bi bi-telephone me-2"></i>
+                      {t('tabs.voice')}
+                    </span>
+                  }
+                >
+                  <VoiceAdminPanel />
+                </Tab>
+              )}
               {isAdmin && usageReportingEnabled && (
                 <Tab
                   eventKey="usage"

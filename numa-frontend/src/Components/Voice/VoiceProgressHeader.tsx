@@ -62,7 +62,7 @@ export const VoiceProgressHeader: React.FC<VoiceProgressHeaderProps> = ({
             <p className="text-body-secondary small mb-0">{t('page.subtitle')}</p>
           </div>
           {isAdmin && (
-            <Link to="/voice/admin" className="btn btn-outline-secondary btn-sm text-nowrap">
+            <Link to="/settings/admin/voice" className="btn btn-outline-secondary btn-sm text-nowrap">
               <i className="bi bi-sliders me-1" aria-hidden="true"></i>
               {t('admin.title', { defaultValue: 'Voice Admin' })}
             </Link>

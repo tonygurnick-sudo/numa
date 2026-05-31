@@ -13,7 +13,6 @@ const NumaWorkspaceChatAgents = lazy(() =>
 const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
 const OpsPage = lazy(() => import('../Pages/OpsPage').then((m) => ({ default: m.OpsPage })));
 const VoicePage = lazy(() => import('../Pages/VoicePage').then((m) => ({ default: m.VoicePage })));
-const VoiceAdminPage = lazy(() => import('../Pages/VoiceAdminPage').then((m) => ({ default: m.VoiceAdminPage })));
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const UnifiedIntegrationsPage = lazy(() =>
   import('../Pages/UnifiedIntegrationsPage').then((m) => ({ default: m.UnifiedIntegrationsPage }))
@@ -156,10 +155,10 @@ export const ROUTE_CONFIG = [
     },
   },
   {
-    // Admin config for the Connect setup. No nav entry — admins reach it from the
-    // Voice page header. Read-only for non-admins; mutations are admin-gated.
+    // Admin config for the Connect setup now lives inside Settings (Admin scope >
+    // Voice tab). Keep this path so existing bookmarks/header links redirect there.
     path: '/voice/admin',
-    element: () => <VoiceAdminPage />,
+    element: () => <Navigate to="/settings/admin/voice" replace />,
     featureFlag: 'NUMA_VOICE',
   },
 

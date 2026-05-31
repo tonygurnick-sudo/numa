@@ -1,21 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, ButtonGroup, Card, Spinner, Table } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../Providers/AuthProvider';
-import { useNumaRequest } from '../Providers/NumaRequestContext';
-import { getFlag } from '../utils/featureFlags';
-import { VoiceAdminService, type VoiceAdminStatus, type OutboundCountryResult } from '../Services/VoiceAdminService';
+import { useAuth } from '../../Providers/AuthProvider';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { getFlag } from '../../utils/featureFlags';
+import { VoiceAdminService, type VoiceAdminStatus, type OutboundCountryResult } from '../../Services/VoiceAdminService';
 
 /**
- * Voice Admin — manage the tenant's Amazon Connect setup: instance status,
+ * VoiceAdminPanel — manage the tenant's Amazon Connect setup: instance status,
  * phone numbers (claim/release + outbound caller-ID), Approved Origins + agent,
  * and an outbound-country enablement request (the one thing with no Connect API).
  * Reads render for any user; mutations are admin-only (enforced server-side too).
+ *
+ * This is the reusable body — it carries no page header chrome so it can be
+ * dropped into the admin Settings panel (Settings supplies its own header).
+ * Lives under Settings → Admin → Voice; the old /voice/admin route redirects here.
  */
 
 const CLAIM_COUNTRIES = ['US', 'AU', 'NZ'];
 
-export const VoiceAdminPage: React.FC = () => {
+export const VoiceAdminPanel: React.FC = () => {
   const { t } = useTranslation('voice');
   const { user } = useAuth();
   const { numaGet, numaPost, numaDelete } = useNumaRequest();
@@ -92,17 +96,7 @@ export const VoiceAdminPage: React.FC = () => {
     : '';
 
   return (
-    <div className="container-fluid py-4">
-      <header className="mb-4">
-        <h1 className="h3 d-flex align-items-center gap-2 mb-1">
-          <i className="bi bi-sliders text-primary" aria-hidden="true" />
-          {t('admin.title', { defaultValue: 'Voice Admin' })}
-        </h1>
-        <p className="text-muted mb-0">
-          {t('admin.subtitle', { defaultValue: 'Manage the Amazon Connect setup for your SDR team.' })}
-        </p>
-      </header>
-
+    <>
       {error && (
         <Alert variant="danger" dismissible onClose={() => setError(null)}>
           {error}
@@ -335,8 +329,8 @@ export const VoiceAdminPage: React.FC = () => {
           )}
         </>
       )}
-    </div>
+    </>
   );
 };
 
-export default VoiceAdminPage;
+export default VoiceAdminPanel;
