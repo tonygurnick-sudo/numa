@@ -10,6 +10,7 @@
   "prospectTable": {
     "title": "Today's calls",
     "caption": "Prospects queued for outbound calls today.",
+    "refresh": "Refresh call list",
     "columns": {
       "company": "Company",
       "contact": "Contact",

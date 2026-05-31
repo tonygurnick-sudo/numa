@@ -82,6 +82,34 @@ export const VoicePage: React.FC = () => {
     setReloadToken((prev) => prev + 1);
   }, []);
 
+  // Quiet re-fetch (no full-page spinner) for the manual refresh button and for
+  // tab-focus — so a prospect added/edited via chat shows up without a hard reload.
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = useCallback(async () => {
+    if (!voiceEnabled) return;
+    try {
+      const credentials = await getCredentials();
+      if (!credentials) return;
+      setRefreshing(true);
+      const todayCalls = await loadTodayCalls(credentials);
+      setProspects(todayCalls.calls);
+    } catch (err) {
+      console.error('[VoicePage] refresh failed:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [voiceEnabled, getCredentials]);
+
+  // Re-fetch when the tab regains focus (e.g. after editing the call list in chat).
+  useEffect(() => {
+    if (!voiceEnabled) return undefined;
+    const onFocus = () => {
+      void refresh();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [voiceEnabled, refresh]);
+
   // ── Flag-off guard (defensive — route is also gated) ──────────────────────
   if (!voiceEnabled) {
     return (
@@ -117,8 +145,23 @@ export const VoicePage: React.FC = () => {
       <div className="row g-3">
         <div className="col-lg-8">
           <section className="bg-white border rounded-3 overflow-hidden" aria-label={t('prospectTable.title')}>
-            <div className="px-3 py-2 border-bottom">
+            <div className="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
               <h2 className="h6 mb-0">{t('prospectTable.title')}</h2>
+              <Button
+                variant="link"
+                size="sm"
+                className="p-0 text-secondary"
+                onClick={() => void refresh()}
+                disabled={loading || refreshing}
+                aria-label={t('prospectTable.refresh')}
+                title={t('prospectTable.refresh')}
+              >
+                {refreshing ? (
+                  <Spinner animation="border" size="sm" />
+                ) : (
+                  <i className="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                )}
+              </Button>
             </div>
 
             {loading ? (

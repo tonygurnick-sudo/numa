@@ -70,7 +70,12 @@ function makeClient(credentials: AwsCredentialIdentity, region: string): S3Clien
 async function readJson<T>(credentials: AwsCredentialIdentity, bucket: string, key: string): Promise<T | null> {
   const region = getRegion();
   const client = makeClient(credentials, region);
-  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  // ResponseCacheControl forces a fresh fetch — the data bucket sets no
+  // Cache-Control, so without this the browser can serve a stale copy and the
+  // call list looks like it "didn't update" after a chat/KB edit.
+  const response = await client.send(
+    new GetObjectCommand({ Bucket: bucket, Key: key, ResponseCacheControl: 'no-cache' })
+  );
   const text = await response.Body?.transformToString();
   if (!text) return null;
   return JSON.parse(text) as T;
