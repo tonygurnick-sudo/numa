@@ -33,6 +33,7 @@ i18n
       'automations',
       'unifiedFiles',
       'compliance',
+      'voice',
     ],
     interpolation: { escapeValue: false },
     detection: {

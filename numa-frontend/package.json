@@ -42,6 +42,7 @@
     "@testing-library/react": "^16.0.1",
     "@types/papaparse": "^5.5.0",
     "amazon-cognito-identity-js": "^6.3.12",
+    "amazon-connect-streams": "^2.18.0",
     "aws-jwt-verify": "^5.0.0",
     "aws-sdk": "^2.1691.0",
     "axios": "^1.7.7",

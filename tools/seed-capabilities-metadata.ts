@@ -10,8 +10,15 @@
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
-import { withPRM } from '../lib/prm-node/prm';
+import { createRequire } from 'module';
 import { CAPABILITIES_METADATA } from '../infra/capabilities-metadata';
+
+// withPRM is loaded from the CJS build via createRequire (same pattern as
+// tools/audit-company-profiles.ts). A plain ESM `import { withPRM }` resolves to
+// the compiled prm.js under tsx and fails with "no export named 'withPRM'".
+const req = createRequire(import.meta.url);
+const prmBundle = req('../lib/prm-node/prm.js');
+const withPRM = prmBundle.withPRM || prmBundle.default?.withPRM;
 
 const TABLE_NAME = 'numa-capabilities-metadata';
 const REGION = 'us-east-1';
@@ -41,6 +48,9 @@ async function seed(): Promise<void> {
                 system_only: cap.system_only,
                 dev_only: cap.dev_only,
                 dependencies: cap.dependencies,
+                // Only write tier when set — lib-dynamodb rejects undefined
+                // attribute values (this client has no removeUndefinedValues).
+                ...(cap.tier ? { tier: cap.tier } : {}),
               },
             },
           })),

@@ -80,6 +80,9 @@ export class CoreNumaInfra extends Construct {
   readonly schedulingSettingsTable: DynamodbTable;
   readonly agentSchedulesTable: DynamodbTable;
   readonly notificationsTable: DynamodbTable;
+  /** Idempotent system-user creator — exposed so feature constructs (e.g. Numa
+   *  Voice's seed) can depend on the system user existing before they run. */
+  readonly systemUserCreator: SystemUserCreator;
   readonly chatSettingsTable: DynamodbTable;
   readonly dataConnectorsTable: DynamodbTable;
   readonly dataConnectorsSettingsTable: DynamodbTable;
@@ -268,7 +271,7 @@ export class CoreNumaInfra extends Construct {
     const systemUserEmail = 'numa-system-user@arcanum.ai';
     // Use SystemUserCreator for idempotent user creation and admin group membership
     // This won't fail if user already exists and ensures they're always in the admin group
-    new SystemUserCreator(this, 'system-user', {
+    this.systemUserCreator = new SystemUserCreator(this, 'system-user', {
       clientName: props.clientName,
       userPoolId: userPool.id,
       userPoolArn: userPool.arn,
