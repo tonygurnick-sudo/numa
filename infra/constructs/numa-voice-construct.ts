@@ -11,6 +11,7 @@ import { ConnectHoursOfOperation } from '@cdktf/provider-aws/lib/connect-hours-o
 import { ConnectPhoneNumber } from '@cdktf/provider-aws/lib/connect-phone-number';
 import { DataAwsConnectSecurityProfile } from '@cdktf/provider-aws/lib/data-aws-connect-security-profile';
 import { ConnectRoutingProfile } from '@cdktf/provider-aws/lib/connect-routing-profile';
+import { ConnectContactFlow } from '@cdktf/provider-aws/lib/connect-contact-flow';
 import { KmsKey } from '@cdktf/provider-aws/lib/kms-key';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
@@ -269,7 +270,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         variables: {
           TRANSCRIPTS_PREFIX: 'transcripts/',
           // SPK-010 Q6 default; override per-tenant once the en-AU vs en-NZ A/B closes.
-          NUMA_VOICE_LANGUAGE: 'en-NZ',
+          NUMA_VOICE_LANGUAGE: 'en-AU',
           CLIENT_NAME: clientName,
           // Post-call dispatch targets the connector-events bus in the CLIENT region.
           CONNECTOR_EVENT_BUS_NAME: props.connectorEventBusName,
@@ -823,12 +824,47 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             ...pin,
           })
         : undefined;
-      // Outbound queue with the DID as caller-ID (declared, not the auto-created one).
+      // Outbound whisper flow that turns call recording ON (Agent + Customer) for
+      // agent-initiated outbound dials. Without this the queue falls back to the
+      // default outbound whisper (RecordedParticipants []), Connect announces "this
+      // call is not being recorded", and no .wav is written — so the FEAT-159
+      // S3 -> Transcribe -> diarise -> post-call pipeline never triggers. The content
+      // is the minimal Connect flow: UpdateContactRecordingBehavior -> EndFlowExecution.
+      const voiceOutboundWhisper = new ConnectContactFlow(this, 'voice-outbound-whisper', {
+        instanceId: connectInstance.id,
+        name: 'numa-voice-outbound-whisper',
+        type: 'OUTBOUND_WHISPER',
+        description: 'Numa Voice: record Agent + Customer on agent-initiated outbound dials (FEAT-159).',
+        content: JSON.stringify({
+          Version: '2019-10-30',
+          StartAction: 'rec',
+          Metadata: {
+            entryPointPosition: { x: 20, y: 20 },
+            snapToGrid: false,
+            ActionMetadata: { rec: { position: { x: 224, y: 56 } }, end: { position: { x: 658, y: 131 } } },
+          },
+          Actions: [
+            {
+              Identifier: 'rec',
+              Type: 'UpdateContactRecordingBehavior',
+              Parameters: { RecordingBehavior: { RecordedParticipants: ['Agent', 'Customer'] } },
+              Transitions: { NextAction: 'end', Errors: [], Conditions: [] },
+            },
+            { Identifier: 'end', Type: 'EndFlowExecution', Parameters: {}, Transitions: {} },
+          ],
+        }),
+        ...pin,
+      });
+      // Outbound queue: DID as caller-ID + the recording whisper flow so outbound
+      // calls are recorded (the missing FEAT-159 link).
       const voiceOutboundQueue = new ConnectQueue(this, 'voice-outbound-queue', {
         instanceId: connectInstance.id,
         name: 'numa-voice-outbound',
         hoursOfOperationId: voiceHours.hoursOfOperationId,
-        ...(voicePhoneNumber ? { outboundCallerConfig: { outboundCallerIdNumberId: voicePhoneNumber.id } } : {}),
+        outboundCallerConfig: {
+          ...(voicePhoneNumber ? { outboundCallerIdNumberId: voicePhoneNumber.id } : {}),
+          outboundFlowId: voiceOutboundWhisper.contactFlowId,
+        },
         ...pin,
       });
       // Routing profile whose DEFAULT OUTBOUND queue is numa-voice-outbound (the one
