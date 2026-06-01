@@ -38,6 +38,7 @@ import { summarizeRecurrence } from './recurrenceHelpers';
 import { useToast } from '../../../Providers/ToastContext';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 import { StaffAvatar } from '../Shared/StaffAvatar';
+import { resolveBoardMembers } from '../Shared/boardMembers';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { SidebarDropdown } from '../Shared/SidebarDropdown';
 import type { DropdownOption } from '../Shared/SidebarDropdown';
@@ -660,6 +661,15 @@ export function TicketDetailModal({
 
     const staff = config.staff;
     const ticketTeamId = ticket.boardId;
+    // Scope the Assignee picker to the ticket's board membership. Look up the
+    // ticket's own board from the summaries list — `team` (boardData?.board) may
+    // be a different board when the modal is opened from cross-team views like
+    // All Tickets.
+    const ticketBoard = boards.find((b) => b.id === ticketTeamId) ?? team;
+    const boardMembers = resolveBoardMembers(ticketBoard, staff);
+    const assigneeInBoard = !ticket.assigneeId || boardMembers.some((m) => m.id === ticket.assigneeId);
+    const orphanAssignee =
+      !assigneeInBoard && ticket.assigneeId ? (staff.find((s) => s.id === ticket.assigneeId) ?? null) : null;
     const projects = config.projects.filter(
       (p) => !p.boardIds?.length || p.boardIds.includes(ticketTeamId) || p.id === ticket.projectId
     );
@@ -843,7 +853,16 @@ export function TicketDetailModal({
                       onChange={(val) => void handleUpdate({ assigneeId: val || null })}
                       options={[
                         { value: '', label: t('fields.unassigned') },
-                        ...staff
+                        ...(orphanAssignee
+                          ? [
+                              {
+                                value: orphanAssignee.id,
+                                label: `* ${orphanAssignee.name || orphanAssignee.email}`,
+                                icon: <StaffAvatar staff={orphanAssignee} size={22} />,
+                              } as DropdownOption,
+                            ]
+                          : []),
+                        ...boardMembers
                           .filter((s) => s.isActive)
                           .map(
                             (s): DropdownOption => ({

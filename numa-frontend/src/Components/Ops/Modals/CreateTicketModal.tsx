@@ -29,6 +29,7 @@ import type {
 } from '../../../types/ops';
 import { getTicketTypeIconClass, getPreset } from '../../../constants/opsConstants';
 import { StaffAvatar } from '../Shared/StaffAvatar';
+import { resolveBoardMembers } from '../Shared/boardMembers';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -228,6 +229,12 @@ export function CreateTicketModal({
    * Filtered by team field overrides.
    */
   const hasWorkUnits = boardData?.board?.workUnitSeries?.enabled === true;
+
+  // Staff scoped to the current board's membership — used for the Assignee picker.
+  const boardMembers = useMemo(
+    () => resolveBoardMembers(boardData?.board, config?.staff),
+    [boardData?.board, config?.staff]
+  );
 
   const dynamicFields: FieldDefinition[] = useMemo(() => {
     if (!selectedType || !config) return [];
@@ -920,7 +927,7 @@ export function CreateTicketModal({
                               onChange={(val) => setFieldValue('field-assignee', val || null)}
                               options={[
                                 { value: '', label: t('fields.unassigned') },
-                                ...(config?.staff ?? [])
+                                ...boardMembers
                                   .filter((s) => s.isActive)
                                   .map(
                                     (s): DropdownOption => ({
