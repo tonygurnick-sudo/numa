@@ -58,6 +58,7 @@ import { SearchConstruct } from '../constructs/search-construct';
 import { RacetechDataFeedConstruct } from '../constructs/racetech-data-feed-construct';
 import { VaultSecretsConstruct } from '../constructs/vault-secrets-construct';
 import { DisasterRecoveryConstruct } from '../constructs/disaster-recovery-construct';
+import { NumaVoiceConstruct } from '../constructs/numa-voice-construct';
 import { V2AppsConstruct } from '../constructs/v2-apps-construct';
 import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
 import { WorkspaceChatAgentProxy } from '../constructs/workspace-chat-agent-proxy-construct';
@@ -173,6 +174,22 @@ export class NumaClientStack extends TerraformStack {
       alias: 'qbusiness-provider',
       defaultTags: defaultProvider.defaultTags,
     });
+
+    // Numa Voice provider - Amazon Connect + Transcribe + the call-recordings
+    // bucket must live in a Connect/Transcribe region (ap-southeast-2). When the
+    // client stack isn't already there, create an alias provider so the voice
+    // resources pin to it. Undefined ⇒ the stack is already in-region and voice
+    // resources use the default provider. Only created when numaVoice is on.
+    const NUMA_VOICE_REGION = 'ap-southeast-2';
+    const voiceProvider =
+      clientConfig.numaVoice && clientConfig.region !== NUMA_VOICE_REGION
+        ? new AwsProvider(this, 'voice-provider', {
+            region: NUMA_VOICE_REGION,
+            assumeRole: [{ roleArn: deployerRole }, { roleArn: clientRole }],
+            alias: 'voice-provider',
+            defaultTags: defaultProvider.defaultTags,
+          })
+        : undefined;
 
     // Conditionally create either RDS-based or S3 Vectors-based knowledge base
     // When preferredKnowledgeBase is 'none', skip KB creation entirely (e.g. for regions without Bedrock KB support)
@@ -504,6 +521,12 @@ export class NumaClientStack extends TerraformStack {
         // Defaults to true (global, no 10% CRI premium); set false for
         // customers whose parent-org SCPs deny the `global.*` route.
         useGlobalInferenceProfile: clientConfig.useGlobalInferenceProfile,
+        // Live credit metering (Numa Credit System / SPK-015) — ON. Agent emits a usage event
+        // after each turn -> credit-debit Lambda. NOTE: this enables it for ANY client deployed
+        // with this code; gate via clientConfig before a production client deploy.
+        creditDebitLambdaName: core.creditDebitLambda.lambda.functionName,
+        creditDebitLambdaArn: core.creditDebitLambda.lambda.arn,
+        creditMeteringEnabled: true,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -655,6 +678,7 @@ export class NumaClientStack extends TerraformStack {
       extApiDocBucketName: core.extApiDocBucket.bucket.bucket,
       extApiDocBucketArn: core.extApiDocBucket.bucket.arn,
       capabilitiesTableName: core.capabilitiesTable.name,
+      creditLedgerTableName: core.creditLedgerTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
       // Admin-side gate. When false, the unified integrations catalog skips
       // every native row so users never see them; when true, admins can
@@ -724,6 +748,49 @@ export class NumaClientStack extends TerraformStack {
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
         emailSenderLambdaArn,
+      });
+    }
+
+    // Numa Voice (Amazon Connect outbound calling + AI call intelligence for SDRs).
+    // Single gated construct: when numaVoice is false this `new` never runs, so ZERO
+    // voice resources (recordings bucket, voice-processor Lambda, Transcribe IAM,
+    // EventBridge, Connect, routes) enter the synthesized Terraform — the same
+    // own-everything-in-one-construct pattern as OpsConstruct above.
+    if (clientConfig.numaVoice) {
+      new NumaVoiceConstruct(this, safeConstructId + '-voice', {
+        apiGatewayAuthorizerId: fe.authorizer.id,
+        apiGatewayId: fe.apiGateway.id,
+        clientName: props.clientName,
+        environmentName: props.environmentName,
+        region: clientConfig.region,
+        // Connect + Transcribe + recordings are PINNED to ap-southeast-2
+        // (NUMA_VOICE_REGION) regardless of the client's primary region — the
+        // region-mismatch guard above handles cross-region clients via voiceProvider.
+        // Changing this region is a deliberate, support-assisted operation.
+        voiceRegion: NUMA_VOICE_REGION,
+        voiceProvider,
+        clientAccountId: clientConfig.clientAccountId,
+        connectInstanceUrl: clientConfig.connectInstanceUrl,
+        outputsBucketArn: core.outputsBucket.bucket.arn,
+        outputsBucketName: core.outputsBucket.bucket.bucket,
+        dataBucketName: core.dataBucket.bucket.bucket,
+        // Connector-events bus (client region) the processor fires the Post-Call agent on.
+        connectorEventBusName: core.connectorEventBusName,
+        // Client-region tables/pool the seed Lambda writes to (system-user-owned).
+        agentsTableName: core.workspaceAgentsTable.name,
+        agentsTableArn: core.workspaceAgentsTable.arn,
+        schedulesTableName: core.agentSchedulesTable.name,
+        schedulesTableArn: core.agentSchedulesTable.arn,
+        userPoolId: core.userPoolId,
+        userPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
+        // Single source of truth for the system-user email (the seed's AdminGetUser).
+        systemUserEmail: core.systemUserCreator.username,
+        // Morning Call List Preparer scheduler fires the runner (client region).
+        runnerArn: coreApis.agentScheduleRunnerLambda.arn,
+        connectAutoProvision: clientConfig.connectAutoProvision,
+        connectClaimDid: clientConfig.connectClaimDid,
+        // Seed (AdminGetUser) must run after the system user is created.
+        systemUserDependsOn: core.systemUserCreator.dependsOn,
       });
     }
 
@@ -935,6 +1002,21 @@ export class NumaClientStack extends TerraformStack {
         // OAUTH_GOOGLE_DRIVE, OAUTH_ONEDRIVE, OAUTH_DROPBOX are no longer needed in config.json.
         RACETECH_DATA_FEED: clientConfig.racetechDataFeed ?? false,
         DISASTER_RECOVERY: clientConfig.disasterRecovery ?? false,
+        // Numa Voice (Amazon Connect + AI call intelligence). Emitted explicitly
+        // so getFlag('NUMA_VOICE') does NOT default-true on older deployments.
+        NUMA_VOICE: clientConfig.numaVoice ?? false,
+        // When autoProvision creates the instance, derive its access URL from the
+        // deterministic instance alias (numa-{client}{envSuffix}, matching the
+        // construct) so the softphone is wired in ONE deploy — no manual
+        // connectInstanceUrl, no second deploy. An explicit connectInstanceUrl
+        // (a manually-created Connect instance) still takes precedence.
+        CONNECT_INSTANCE_URL:
+          clientConfig.connectInstanceUrl ??
+          (clientConfig.connectAutoProvision
+            ? // The instance lives on the modern *.my.connect.aws domain; the legacy
+              // *.awsapps.com host does NOT resolve for instances created via CreateInstance.
+              `https://numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}.my.connect.aws`
+            : ''),
         V2_APPS: clientConfig.v2Apps ?? false,
         NUMA_APPS: clientConfig.allApps ?? false,
         JOB_HISTORY: (clientConfig.allApps ?? false) ? (clientConfig.jobHistory ?? true) : false,
@@ -1505,6 +1587,36 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         disasterRecovery: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable Numa Voice (Amazon Connect outbound calling + AI call
+         * intelligence for SDRs). When false, the NumaVoiceConstruct is never
+         * instantiated, so ZERO voice resources (recordings bucket, voice-processor
+         * Lambda, Transcribe IAM, EventBridge, Connect) are synthesized. Soft-depends
+         * on numaOps for the Qualification Promoter's CRM write-back.
+         *
+         * @default false
+         */
+        numaVoice: z.boolean().optional().default(false),
+
+        /**
+         * Phase 2 (FEAT-169): auto-provision the Amazon Connect instance + call-
+         * recording storage config via IaC. OFF by default — Phase 1 uses a
+         * manually-created instance (FEAT-158). Only takes effect when numaVoice
+         * is also true.
+         *
+         * @default false
+         */
+        connectAutoProvision: z.boolean().optional().default(false),
+        connectClaimDid: z.boolean().optional().default(false),
+
+        /**
+         * Per-tenant Amazon Connect instance URL (e.g. https://<alias>.my.connect.aws).
+         * External, non-derivable — surfaced to the frontend CCP widget via config.json
+         * (CONNECT_INSTANCE_URL). Phase 1 set manually after the Connect instance is
+         * provisioned; Phase 2 (FEAT-169) writes it from the provisioning pipeline.
+         */
+        connectInstanceUrl: z.string().optional(),
 
         /**
          * Feature flags from other branches (not yet implemented in this branch)

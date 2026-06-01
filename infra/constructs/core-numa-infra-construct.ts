@@ -64,6 +64,8 @@ export class CoreNumaInfra extends Construct {
   readonly dataBucket: NumaCorsEnabledBucket;
   readonly companyBucket?: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
+  readonly creditLedgerTable: DynamodbTable;
+  readonly creditDebitLambda: NumaLambda;
   readonly brandingTable: DynamodbTable;
   readonly brandingAssetsBucket: PublicS3Bucket;
   readonly brandingAssetsBucketArn: string;
@@ -80,6 +82,9 @@ export class CoreNumaInfra extends Construct {
   readonly schedulingSettingsTable: DynamodbTable;
   readonly agentSchedulesTable: DynamodbTable;
   readonly notificationsTable: DynamodbTable;
+  /** Idempotent system-user creator — exposed so feature constructs (e.g. Numa
+   *  Voice's seed) can depend on the system user existing before they run. */
+  readonly systemUserCreator: SystemUserCreator;
   readonly chatSettingsTable: DynamodbTable;
   readonly dataConnectorsTable: DynamodbTable;
   readonly dataConnectorsSettingsTable: DynamodbTable;
@@ -268,7 +273,7 @@ export class CoreNumaInfra extends Construct {
     const systemUserEmail = 'numa-system-user@arcanum.ai';
     // Use SystemUserCreator for idempotent user creation and admin group membership
     // This won't fail if user already exists and ensures they're always in the admin group
-    new SystemUserCreator(this, 'system-user', {
+    this.systemUserCreator = new SystemUserCreator(this, 'system-user', {
       clientName: props.clientName,
       userPoolId: userPool.id,
       userPoolArn: userPool.arn,
@@ -495,6 +500,67 @@ export class CoreNumaInfra extends Construct {
       },
     });
 
+    // Create per-client credit ledger (Numa Credit System / SPK-015).
+    // Single-table design:
+    //   PK=CONV#<id>      SK=META | MSG#<ts>            per-conversation cost + credit rows
+    //   PK=CLIENT#<name>  SK=BALANCE | MONTH#<YYYY-MM>  balance + monthly reconciliation rows
+    // GSI1 (USER#<sub> / TS#<ts>): list a user's conversations, newest first (sparse: META rows only)
+    // GSI2 (MONTH#<YYYY-MM> / CONV#<id>): per-client monthly billing rollup (sparse: META rows only)
+    this.creditLedgerTable = new DynamodbTable(this, 'numa-credit-ledger-table', {
+      name: `${numaClient}-credit-ledger`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'PK',
+      rangeKey: 'SK',
+      attribute: [
+        {
+          name: 'PK',
+          type: 'S',
+        },
+        {
+          name: 'SK',
+          type: 'S',
+        },
+        {
+          name: 'GSI1PK',
+          type: 'S',
+        },
+        {
+          name: 'GSI1SK',
+          type: 'S',
+        },
+        {
+          name: 'GSI2PK',
+          type: 'S',
+        },
+        {
+          name: 'GSI2SK',
+          type: 'S',
+        },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'GSI1',
+          hashKey: 'GSI1PK',
+          rangeKey: 'GSI1SK',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'GSI2',
+          hashKey: 'GSI2PK',
+          rangeKey: 'GSI2SK',
+          projectionType: 'ALL',
+        },
+      ],
+      pointInTimeRecovery: {
+        enabled: true,
+      },
+      tags: {
+        Name: `${numaClient}-credit-ledger`,
+        Environment: props.environmentName,
+        Purpose: 'credit-ledger',
+      },
+    });
+
     // Create log group for core resources (needs to be before lambdas)
     this.logGroup = new NumaLogGroup(this, 'core-log-group', {
       logGroupName: `${props.clientName}-core`,
@@ -573,6 +639,42 @@ export class CoreNumaInfra extends Construct {
         backfillMetadataLambda.lambda,
         ...backfillMetadataLambda.additionalPolicies,
         ...backfillMetadataLambda.policyAttachments,
+      ],
+    });
+
+    // Credit-debit Lambda — live credit metering (Numa Credit System / SPK-015). The workspace
+    // agent async-invokes this after each turn (when CREDIT_METERING_ENABLED); it reads the
+    // conversation trace from the outputs bucket, recomputes cost, classifies + titles via Nova,
+    // and writes the credit-ledger rows. Shares all billing logic with the backfill (lib/credit-pricing).
+    this.creditDebitLambda = new NumaLambda(this, 'credit-debit', {
+      clientName: props.clientName,
+      lambdaDirectory: 'python/credit-debit/',
+      logGroup: this.logGroup,
+      resourceNameSuffix: '_credit-debit',
+      environment: {
+        CLIENT_NAME: props.clientName,
+        CREDITS_TABLE_NAME: this.creditLedgerTable.name,
+        OUTPUTS_BUCKET_NAME: this.outputsBucket.bucket.bucket,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          // Query: orphan-MSG cleanup (table) + monthly reconciliation rollup (GSI2 index).
+          actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:BatchWriteItem', 'dynamodb:Query'],
+          resources: [this.creditLedgerTable.arn, `${this.creditLedgerTable.arn}/index/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`${this.outputsBucket.bucket.arn}/*`],
+        },
+        {
+          // Nova 2 Lite for title + tier classification. Broad InvokeModel; scope to the Nova
+          // foundation-model / inference-profile ARNs later if desired.
+          effect: 'Allow',
+          actions: ['bedrock:InvokeModel'],
+          resources: ['*'],
+        },
       ],
     });
 

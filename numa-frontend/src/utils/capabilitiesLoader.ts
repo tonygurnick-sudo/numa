@@ -35,6 +35,8 @@ export interface CapabilityItem {
   dependencies: string[];
   /** If true, admin cannot toggle — always on when deployed */
   systemOnly: boolean;
+  /** Commercial tier: 'gold' = premium (shows a Gold badge). Absent/'standard' = standard. Label only. */
+  tier?: 'standard' | 'gold';
 }
 
 export interface CapabilityGroup {
@@ -69,6 +71,7 @@ export async function loadCapabilities(): Promise<CapabilityItem[]> {
       devOnly: item.devOnly ?? item.dev_only ?? false,
       dependencies: (item.dependencies ?? []).map(camelToUpperSnake),
       systemOnly: item.systemOnly ?? item.system_only ?? false,
+      tier: item.tier,
     }));
     return cachedCapabilities;
   } catch {

@@ -12,6 +12,7 @@ const NumaWorkspaceChatAgents = lazy(() =>
 );
 const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
 const OpsPage = lazy(() => import('../Pages/OpsPage').then((m) => ({ default: m.OpsPage })));
+const VoicePage = lazy(() => import('../Pages/VoicePage').then((m) => ({ default: m.VoicePage })));
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const UnifiedIntegrationsPage = lazy(() =>
   import('../Pages/UnifiedIntegrationsPage').then((m) => ({ default: m.UnifiedIntegrationsPage }))
@@ -133,6 +134,32 @@ export const ROUTE_CONFIG = [
       featureFlag: 'NUMA_OPS',
       order: 6,
     },
+  },
+
+  // Numa Voice (Amazon Connect calling + AI call intelligence). Gated by
+  // NUMA_VOICE on both the route and the nav entry (Routes.tsx redirects to
+  // /dash and Nav.tsx hides the item when the flag is off). config.json now
+  // emits NUMA_VOICE explicitly, so it resolves false for tenants without it.
+  {
+    path: '/voice',
+    element: () => <VoicePage />,
+    featureFlag: 'NUMA_VOICE',
+    nav: {
+      label: 'Voice',
+      labelKey: 'nav.items.voice',
+      icon: 'bi bi-telephone-fill',
+      section: 'workflows',
+      sectionKey: 'nav.sections.workflows',
+      featureFlag: 'NUMA_VOICE',
+      order: 6.5,
+    },
+  },
+  {
+    // Admin config for the Connect setup now lives inside Settings (Admin scope >
+    // Voice tab). Keep this path so existing bookmarks/header links redirect there.
+    path: '/voice/admin',
+    element: () => <Navigate to="/settings/admin/voice" replace />,
+    featureFlag: 'NUMA_VOICE',
   },
 
   // Timeline section items

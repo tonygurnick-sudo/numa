@@ -647,6 +647,134 @@ const handlePipedreamEvent = async (
   return { success: true, dispatched: 1 };
 };
 
+/**
+ * Numa Voice runner invocation. The voice processor emits
+ * numa.connector.connect events with the transcript reference in
+ * payload_summary; we hand them to the runner as
+ *   { type: 'EVENT', scheduleId, event: { source: 'connect', ...payload } }
+ * so the runner's `connect` branch interpolates `{{ event.transcript_kb_file }}`,
+ * `{{ event.contact_id }}`, etc. into the Post-Call agent prompt.
+ */
+const invokeRunnerConnect = async (scheduleId: string, payload: Record<string, unknown>): Promise<void> => {
+  if (!RUNNER_FUNCTION_NAME) {
+    console.error(`${LOG_PREFIX} AGENT_SCHEDULE_RUNNER_FUNCTION_NAME not configured`);
+    return;
+  }
+  await lambdaClient.send(
+    new InvokeCommand({
+      FunctionName: RUNNER_FUNCTION_NAME,
+      InvocationType: 'Event',
+      Payload: Buffer.from(
+        JSON.stringify({
+          type: 'EVENT',
+          scheduleId,
+          tenantId: CLIENT_NAME,
+          event: { source: 'connect', ...payload },
+        })
+      ),
+    })
+  );
+};
+
+/**
+ * Numa Voice branch. Triggered by EventBridge events with
+ * Source=numa.connector.connect from numa-voice-processor (a call transcript is
+ * ready). The processor doesn't know schedule ids, so we resolve every active
+ * connect-bound schedule for the tenant via the tenant-id-index GSI and fire
+ * each. Generic by design — supports the seeded Post-Call schedule today and
+ * user-configured Voice automations later.
+ */
+/** Known Numa Voice connect sub-events. Anything else is ignored, not dispatched. */
+export const CONNECT_EVENT_TYPES = new Set(['call.completed', 'prospects.uploaded']);
+
+/** Type-guard: is this an event_type we route? Exported for tests. */
+export const isKnownConnectEventType = (eventType?: string): eventType is string =>
+  !!eventType && CONNECT_EVENT_TYPES.has(eventType);
+
+/** Pure match predicate — does this schedule fire for this connect event_type?
+ *  Active + source 'connect' + (explicit trigger.event OR the legacy
+ *  'call.completed' default) === eventType. Exported for tests. */
+export const matchesConnectSchedule = (
+  schedule: { status?: string; trigger?: { source?: string; event?: string } | undefined },
+  eventType: string
+): boolean => {
+  const trigger = schedule.trigger;
+  if (schedule.status !== 'active' || trigger?.source !== 'connect') return false;
+  return (trigger.event ?? 'call.completed') === eventType;
+};
+
+const handleConnectEvent = async (
+  detail: ConnectorEventDetail
+): Promise<{ success: boolean; dispatched?: number; error?: string }> => {
+  // SECURITY: this Lambda is single-tenant per client account, so the tenant is
+  // ALWAYS the configured CLIENT_NAME. detail.client_name is attacker-controllable
+  // on the bus — trusting it would let a crafted event enumerate another tenant's
+  // schedules. Never use it to choose which tenant to query.
+  const tenantId = CLIENT_NAME;
+  const eventType = detail.event_type; // 'call.completed' | 'prospects.uploaded'
+  const payload = (detail.payload_summary ?? {}) as Record<string, unknown>;
+
+  if (!isKnownConnectEventType(eventType)) {
+    console.warn(
+      `${LOG_PREFIX} Unknown connect event_type; ignoring`,
+      JSON.stringify({ _name: 'CONNECT_EVENT_UNKNOWN_TYPE', eventType, dedup_key: payload.dedup_key })
+    );
+    return { success: true, dispatched: 0 };
+  }
+
+  // Paginate the GSI: a tenant can accumulate enough connect schedules to exceed
+  // DynamoDB's 1MB page, which would silently drop fires for the truncated tail.
+  const items: Record<string, unknown>[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const res = await ddbDoc.send(
+      new QueryCommand({
+        TableName: SCHEDULES_TABLE,
+        IndexName: 'tenant-id-index',
+        KeyConditionExpression: 'tenant_id = :t',
+        ExpressionAttributeValues: { ':t': tenantId },
+        ExclusiveStartKey: lastKey,
+      })
+    );
+    for (const it of res.Items ?? []) items.push(it);
+    lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
+
+  // Match on source AND sub-event so distinct Voice triggers (post-call vs
+  // prospect ingest) don't cross-fire. Legacy connect schedules without an
+  // explicit trigger.event default to 'call.completed' (logged so drift is visible).
+  const schedules = items.filter((s) => {
+    const trigger = s.trigger as { source?: string; event?: string } | undefined;
+    if (trigger?.source === 'connect' && !trigger.event) {
+      console.warn(
+        `${LOG_PREFIX} connect schedule has no explicit trigger.event; defaulting to call.completed`,
+        JSON.stringify({ _name: 'CONNECT_SCHEDULE_NO_EVENT', schedule_id: s.schedule_id })
+      );
+    }
+    return matchesConnectSchedule({ status: s.status as string | undefined, trigger }, eventType);
+  });
+
+  if (schedules.length === 0) {
+    console.info(`${LOG_PREFIX} No active connect schedules for tenant ${tenantId} / ${eventType}`);
+    return { success: true, dispatched: 0 };
+  }
+
+  let dispatched = 0;
+  for (const s of schedules) {
+    try {
+      await invokeRunnerConnect(String(s.schedule_id), payload);
+      dispatched++;
+    } catch (err) {
+      console.error(`${LOG_PREFIX} Failed to invoke runner for connect schedule`, s.schedule_id, err);
+    }
+  }
+  console.log(
+    `${LOG_PREFIX} Dispatched connect event`,
+    JSON.stringify({ _name: 'CONNECT_EVENT_DISPATCHED', tenant: tenantId, dispatched, dedup_key: payload.dedup_key })
+  );
+  return { success: true, dispatched };
+};
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -672,6 +800,11 @@ export const handler: Handler = async (event: EventBridgeEvent) => {
   // per-app extractor and invoke the runner.
   if (detail?.connector_id === 'pipedream') {
     return handlePipedreamEvent(detail);
+  }
+
+  // Numa Voice branch: short-circuit before the Gmail-specific path.
+  if (detail?.connector_id === 'connect') {
+    return handleConnectEvent(detail);
   }
 
   if (detail?.connector_id !== 'gmail' || detail?.event_type !== 'new_email') {

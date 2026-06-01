@@ -14,6 +14,15 @@
  *   5. Deploy
  */
 
+/**
+ * Commercial tier a capability belongs to. 'standard' (default, omittable) is
+ * included in every plan; 'gold' marks a premium capability. Classification /
+ * display only today — there is no entitlement enforcement yet (the platform
+ * has no plan/subscription model), so this drives the Capabilities-tab badge,
+ * not access. Add tiers here when the commercial model needs them.
+ */
+export type CapabilityTier = 'standard' | 'gold';
+
 export interface CapabilityMetadata {
   /** UPPER_SNAKE_CASE flag name matching sessionStorage / config.json keys */
   flag: string;
@@ -31,6 +40,12 @@ export interface CapabilityMetadata {
   dependencies: string[];
   /** Default enabled state — used when config.json doesn't explicitly set this flag */
   enabled: boolean;
+  /**
+   * Commercial tier. Omitted/'standard' = in every plan; 'gold' = premium,
+   * surfaced with a "Gold" badge in the Capabilities tab. LABEL ONLY — no
+   * entitlement enforcement is attached (no plan/subscription model exists yet).
+   */
+  tier?: CapabilityTier;
 }
 
 export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
@@ -85,6 +100,22 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dev_only: false,
     enabled: true,
     dependencies: [],
+  },
+  {
+    flag: 'NUMA_VOICE',
+    title: 'Numa Voice',
+    description:
+      'Amazon Connect outbound calling for SDRs with AI call prep, live assist, and post-call analysis (transcription, summary, CRM write-back).',
+    icon: 'bi-telephone',
+    // System-managed (admin cannot toggle; always on when deployed) and a
+    // premium Gold-tier capability. 'gold' is a display label only — see CapabilityTier.
+    system_only: true,
+    dev_only: false,
+    enabled: false,
+    tier: 'gold',
+    // Qualification Promoter writes qualified prospects into the Numa Ops CRM,
+    // so Ops must be enabled for the full pipeline (degrades gracefully if off).
+    dependencies: ['NUMA_OPS'],
   },
   {
     flag: 'KNOWLEDGE_BASES',

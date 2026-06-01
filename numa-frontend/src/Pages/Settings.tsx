@@ -80,6 +80,9 @@ import { ROUTE_CONFIG } from '../utils/routeConfig';
 import type { CapabilityItem } from '../utils/capabilityRegistry';
 import { getFlagRegistry } from '../utils/featureFlags';
 import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
+import { VoiceAdminPanel } from '../Components/Voice/VoiceAdminPanel';
+import { CreditsAdminPanel } from '../Components/Settings/CreditsAdminPanel';
+import { CreditAdminPanel } from '../Components/Settings/CreditAdminPanel';
 import { loadAdminCapabilityGating, DEFAULT_DISABLED_FLAGS } from '../utils/adminCapabilityGating';
 import { CHAT_SUGGESTIONS_DISABLED } from '../hooks/useChatSuggestions';
 
@@ -170,6 +173,11 @@ export default function SettingsPage() {
   const mfaEnabled = getFlag('MFA_ENABLED');
   const hasOps = getFlag('NUMA_OPS');
   const ssoEnabled = getFlag('SSO_ENABLED');
+  const voiceEnabled = getFlag('NUMA_VOICE');
+  // Credits admin panel (Numa Credit System / SPK-015). getFlag defaults true when the flag is
+  // absent, so this shows until a proper CREDITS deploy flag is added to capabilities-metadata
+  // + numa-client-stack. Gate it there before broad rollout.
+  const creditsEnabled = getFlag('CREDITS');
   // Hidden by default — only shown when explicitly set to true in numa-client-config
   const usageReportingEnabled = window.sessionStorage.getItem('DEPLOY_USAGE_REPORTING') === 'true';
   const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
@@ -1347,6 +1355,22 @@ export default function SettingsPage() {
                     </span>
                   </OverlayTrigger>
                 )}
+                {cap.tier === 'gold' && (
+                  <OverlayTrigger placement="top" overlay={<Tooltip>{t('capabilities.goldTierTooltip')}</Tooltip>}>
+                    <span
+                      className="badge d-inline-flex align-items-center gap-1"
+                      style={{
+                        backgroundColor: '#fffbeb',
+                        color: '#92400e',
+                        border: '1px solid #fcd34d',
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      <i className="bi bi-gem" />
+                      {t('capabilities.goldTier')}
+                    </span>
+                  </OverlayTrigger>
+                )}
               </div>
               <div
                 className="text-muted small settings-item-description"
@@ -1402,6 +1426,19 @@ export default function SettingsPage() {
           ]
         : []),
       { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
+      ...(creditsEnabled
+        ? [{ key: 'credits', label: t('tabs.credits', { defaultValue: 'Credits' }), iconClassName: 'bi bi-coin' }]
+        : []),
+      ...(creditsEnabled
+        ? [
+            {
+              key: 'credit-admin',
+              label: t('tabs.creditAdmin', { defaultValue: 'Credit Admin' }),
+              iconClassName: 'bi bi-sliders',
+            },
+          ]
+        : []),
+      ...(voiceEnabled ? [{ key: 'voice', label: t('tabs.voice'), iconClassName: 'bi bi-telephone' }] : []),
       ...(usageReportingEnabled
         ? [{ key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' }]
         : []),
@@ -1418,6 +1455,8 @@ export default function SettingsPage() {
       dataConnectorsEnabled,
       usageReportingEnabled,
       disasterRecoveryEnabled,
+      voiceEnabled,
+      creditsEnabled,
       t,
     ]
   );
@@ -2602,6 +2641,45 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </Tab>
+              {creditsEnabled && (
+                <Tab
+                  eventKey="credits"
+                  title={
+                    <span>
+                      <i className="bi bi-coin me-2"></i>
+                      {t('tabs.credits', { defaultValue: 'Credits' })}
+                    </span>
+                  }
+                >
+                  {activeKey === 'credits' && <CreditsAdminPanel />}
+                </Tab>
+              )}
+              {creditsEnabled && (
+                <Tab
+                  eventKey="credit-admin"
+                  title={
+                    <span>
+                      <i className="bi bi-sliders me-2"></i>
+                      {t('tabs.creditAdmin', { defaultValue: 'Credit Admin' })}
+                    </span>
+                  }
+                >
+                  {activeKey === 'credit-admin' && <CreditAdminPanel />}
+                </Tab>
+              )}
+              {voiceEnabled && (
+                <Tab
+                  eventKey="voice"
+                  title={
+                    <span>
+                      <i className="bi bi-telephone me-2"></i>
+                      {t('tabs.voice')}
+                    </span>
+                  }
+                >
+                  <VoiceAdminPanel />
+                </Tab>
+              )}
               {isAdmin && usageReportingEnabled && (
                 <Tab
                   eventKey="usage"

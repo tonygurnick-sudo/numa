@@ -27,6 +27,7 @@
     "companyProfile": "Company Profile",
     "mfa": "MFA & Devices",
     "scheduling": "Automations",
+    "voice": "Voice",
     "usageAnalytics": "Usage Analytics",
     "developer": "Developer",
     "audit": "Audit",
@@ -310,7 +311,9 @@
     "toggleDisabled": "Disabled",
     "disableConfirm": "Disabling {{name}} will prevent users from accessing it. Continue?",
     "systemManaged": "System Managed",
-    "systemManagedTooltip": "This capability is managed by the system and cannot be toggled by an admin."
+    "systemManagedTooltip": "This capability is managed by the system and cannot be toggled by an admin.",
+    "goldTier": "Gold",
+    "goldTierTooltip": "Premium Gold-tier capability."
   },
   "brandingAdmin": {
     "title": "Branding Controls",

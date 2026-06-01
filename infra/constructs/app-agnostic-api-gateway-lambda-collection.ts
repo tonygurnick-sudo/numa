@@ -506,6 +506,56 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'PUT', path: 'capabilities/{flag}' },
     });
 
+    // Admin Credits API (balance, ledger, manual top-up) — Numa Credit System / SPK-015
+    const adminCreditsEnv = {
+      CLIENT_NAME: props.clientName,
+      CREDITS_TABLE_NAME: props.creditLedgerTableName,
+    } as Record<string, string>;
+    const adminCreditsPolicy = [
+      {
+        effect: 'Allow',
+        // PutItem/DeleteItem: save + reset the pricing-config row (Credit Admin tab).
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:UpdateItem',
+          'dynamodb:PutItem',
+          'dynamodb:DeleteItem',
+        ],
+        resources: [
+          `arn:aws:dynamodb:*:*:table/${props.creditLedgerTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.creditLedgerTableName}/index/*`,
+        ],
+      },
+    ];
+    this.addLambdaFunction(this, 'admin-credits-balance', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-credits',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminCreditsEnv,
+      additionalPolicyStatements: adminCreditsPolicy,
+      route: { verb: 'GET', path: 'credits/balance' },
+    });
+    this.addLambdaFunction(this, 'admin-credits-ledger', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-credits',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminCreditsEnv,
+      additionalPolicyStatements: adminCreditsPolicy,
+      route: { verb: 'GET', path: 'credits/ledger' },
+    });
+    this.addLambdaFunction(this, 'admin-credits-topup', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-credits',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminCreditsEnv,
+      additionalPolicyStatements: adminCreditsPolicy,
+      route: { verb: 'POST', path: 'credits/topup' },
+    });
+
     // Admin Agents Settings API (GET/PUT policy)
     const adminAgentsEnv = {
       CLIENT_NAME: props.clientName,
@@ -2724,6 +2774,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   'apiGatewayId' | 'apiGatewayAuthorizerId'
 > {
   chatHistoryTableName: string;
+  /** Per-client credit ledger table name (Numa Credit System / SPK-015). */
+  creditLedgerTableName: string;
   agentSchedulesTableName: string;
   notificationsTableName: string;
   clientName: string;

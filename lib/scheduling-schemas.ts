@@ -167,9 +167,24 @@ export const PipedreamEventTriggerSchema = z.object({
   include_event_context: z.boolean().optional().default(true),
 });
 
+// Numa Voice native event trigger. Fires the bound agent (e.g. the Post-Call
+// Processor) when a call recording has been transcribed. numa-voice-processor
+// emits a `numa.connector.connect` EventBridge event; the connector-event
+// dispatcher's `connect` branch resolves the schedule(s) bound to this source
+// and invokes the runner with the transcript in the event payload.
+export const ConnectEventTriggerSchema = z.object({
+  source: z.literal('connect'),
+  // Sub-event discriminator so multiple Voice triggers (post-call vs prospect
+  // ingest) bind to the same `connect` source without cross-firing. The
+  // dispatcher matches trigger.event against the connector event_type.
+  event: z.enum(['call.completed', 'prospects.uploaded']).optional().default('call.completed'),
+  include_event_context: z.boolean().optional().default(true),
+});
+
 export const EventTriggerSchema = z.discriminatedUnion('source', [
   GmailEventTriggerSchema,
   PipedreamEventTriggerSchema,
+  ConnectEventTriggerSchema,
 ]);
 
 /**

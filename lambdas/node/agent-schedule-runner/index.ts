@@ -830,8 +830,22 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
   // quota checked at create-time so they don't go through this path;
   // event-trigger fires do.
   if (event.type === 'EVENT') {
-    const allowed = await enforceTriggerQuotaOrBail(schedule);
-    if (!allowed) return;
+    // Numa Voice system schedules (trigger.source 'connect', system-user-owned)
+    // are EXEMPT from the tenant trigger quota — call processing must not be
+    // silently throttled by unrelated user automations exhausting the budget.
+    // Skipping the call entirely also avoids incrementing the company + user
+    // counters (the company conditional trips first). Only affects 'connect'
+    // events; gmail/pipedream fires still enforce quota as before.
+    //
+    // NOTE: only the tenant trigger QUOTA is exempted — the per-schedule run
+    // counters (total_runs / recent_runs) are still bumped by markScheduleStatus
+    // for connect fires. Seeded voice schedules set no max_runs, so the monthly
+    // maxRuns cap below is a no-op for them; this is intentional, not an oversight.
+    const triggerSource = (schedule as ScheduleRecord & { trigger?: { source?: string } }).trigger?.source;
+    if (triggerSource !== 'connect') {
+      const allowed = await enforceTriggerQuotaOrBail(schedule);
+      if (!allowed) return;
+    }
   }
 
   // Per-month maxRuns enforcement. `max_runs` is the monthly cap. When
@@ -904,6 +918,25 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
         `Trigger: ${evt.component_id ?? ''}\n` +
         (lines.length ? `\n${lines.join('\n')}\n` : '') +
         `</event_context>\n\n`;
+      interpolatedPrompt = contextBlock + interpolatedPrompt;
+    }
+  } else if (event.type === 'EVENT' && event.event?.source === 'connect') {
+    // Numa Voice trigger: substitute {{ event.<dotted.path> }} from the event
+    // (transcript_kb_file, kb_id, contact_id, prospect_phone, qualified, …) that
+    // numa-voice-processor / numa-voice-intake put on the numa.connector.connect event.
+    interpolatedPrompt = interpolateEventVars(schedule.prompt_text, event.event);
+
+    const trigger = (schedule as ScheduleRecord & { trigger?: { include_event_context?: boolean } }).trigger;
+    const includeContext = trigger?.include_event_context !== false;
+    if (includeContext) {
+      const evt = event.event;
+      const HIDDEN = new Set(['source', 'dedup_key']);
+      const lines: string[] = [];
+      for (const [k, v] of Object.entries(evt)) {
+        if (HIDDEN.has(k) || v == null) continue;
+        lines.push(`${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`);
+      }
+      const contextBlock = `<call_context>\n` + (lines.length ? `${lines.join('\n')}\n` : '') + `</call_context>\n\n`;
       interpolatedPrompt = contextBlock + interpolatedPrompt;
     }
   }

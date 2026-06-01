@@ -24,7 +24,7 @@ class TranscriptionResponse:
     metadata: dict
 
 
-def __start_transcription_job(
+def start_transcription_job(
     job_name: str,
     media_uri: str,
     max_speakers: int,
@@ -32,6 +32,12 @@ def __start_transcription_job(
     output_bucket: str,
     output_key: str,
 ) -> None:
+    """Start a diarised batch transcription job and return immediately.
+
+    Use this (rather than ``transcribe()``) for event-driven, scale-to-zero
+    pipelines: start the job here, then react to the Amazon Transcribe
+    "Transcribe Job State Change" EventBridge event and call ``fetch_transcript``.
+    """
     try:
         logger.info(f"Starting transcription job: {job_name}")
 
@@ -114,9 +120,10 @@ def _format_transcript(items: list, speaker_segments: dict) -> str:
     return "".join(transcript).strip()
 
 
-def __get_transcript(bucket: str, key: str) -> str:
+def fetch_transcript(bucket: str, key: str) -> str:
     """
-    Gets the transcript from S3 using the job info.
+    Read a completed Transcribe output JSON from S3 and format it into a
+    speaker-labelled transcript string. Safe to call from a completion handler.
     """
     try:
         logger.info(f"Getting transcript from bucket: {bucket}, key: {key}")
@@ -160,7 +167,7 @@ def transcribe(
     if name_for_logging:
         logger.info(f"Starting transcription for {name_for_logging}")
 
-    __start_transcription_job(
+    start_transcription_job(
         job_name=job_name,
         media_uri=f"s3://{input_bucket}/{input_key}",
         max_speakers=max_speakers,
@@ -172,7 +179,7 @@ def transcribe(
     job_info = __wait_for_completion(job_name)
     logger.info("Job completed, getting transcript")
 
-    transcript_data = __get_transcript(output_bucket, output_key)
+    transcript_data = fetch_transcript(output_bucket, output_key)
 
     metadata = {
         "job_name": job_name,
