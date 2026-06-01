@@ -1,0 +1,22 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "credit-pricing"
+version = "0.1.0"
+description = "Canonical Anthropic-on-Bedrock cost recompute + credit math for the Numa Credit System"
+authors = ["Arcanum AI"]
+readme = "README.md"
+include = ["credit_pricing/py.typed"]
+packages = [
+    { include = "credit_pricing" },
+]
+
+[tool.poetry.dependencies]
+# Pure stdlib — no boto3/network deps, so any consumer (backfill tool, debit Lambda)
+# can import it cheaply.
+python = "^3.13"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"

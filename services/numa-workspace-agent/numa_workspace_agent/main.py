@@ -2129,6 +2129,11 @@ async def _handle_chat(
                 user_sub, conversation_id, _checksums_cache, s3_prefix=resolved_prefix
             )
 
+            # Live credit metering — no-op unless CREDIT_METERING_ENABLED. Best-effort.
+            from .credit_metering import maybe_emit_credit_event
+
+            maybe_emit_credit_event(user_sub, conversation_id)
+
     return StreamingResponse(
         stream_with_sync(),
         media_type="text/event-stream",
@@ -2430,6 +2435,11 @@ async def _handle_sync(
     # Sync workspace to S3
     resolved_prefix = _resolve_s3_prefix(agent_type_config, user_sub, conversation_id)
     sync_to_s3(user_sub, conversation_id, _checksums_cache, s3_prefix=resolved_prefix)
+
+    # Live credit metering — no-op unless CREDIT_METERING_ENABLED. Best-effort.
+    from .credit_metering import maybe_emit_credit_event
+
+    maybe_emit_credit_event(user_sub, conversation_id)
 
     # Also persist result to S3 for retrieval via /runs endpoint
     s3_prefix = agent_type_config.s3_prefix_template if agent_type_config else None
