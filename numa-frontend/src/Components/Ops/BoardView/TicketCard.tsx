@@ -253,14 +253,14 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
           <i className="bi bi-pencil" />
         </button>
         <button
-          className="ticket-card-action-btn ticket-card-action-danger"
-          title={t('common.delete')}
+          className="ticket-card-action-btn"
+          title={t('common.actions')}
           onClick={(e) => {
             e.stopPropagation();
             onContextMenu(e, ticket);
           }}
         >
-          <i className="bi bi-trash" />
+          <i className="bi bi-three-dots-vertical" />
         </button>
       </div>
 

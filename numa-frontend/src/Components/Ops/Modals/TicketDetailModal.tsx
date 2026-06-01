@@ -562,9 +562,7 @@ export function TicketDetailModal({
         if (override?.visible === false) return null;
         return { field, override };
       })
-      .filter(
-        (item): item is { field: FieldDefinition; override: FieldOverride | undefined } => item !== null
-      );
+      .filter((item): item is { field: FieldDefinition; override: FieldOverride | undefined } => item !== null);
   }, [ticketType, config, team]);
 
   // ── Pasted-image-too-large -> auto-attach ─────────────────────────────
