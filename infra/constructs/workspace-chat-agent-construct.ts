@@ -92,6 +92,12 @@ export interface WorkspaceChatAgentConstructProps {
    * Set false for customers whose parent-org SCPs deny the `global.*` route.
    */
   useGlobalInferenceProfile?: boolean;
+  /** Credit-debit Lambda name — live credit metering (Numa Credit System / SPK-015). */
+  creditDebitLambdaName?: string;
+  /** Credit-debit Lambda ARN (for IAM invoke permission). */
+  creditDebitLambdaArn?: string;
+  /** Whether live credit metering is enabled (agent emits usage events). Default OFF. */
+  creditMeteringEnabled?: boolean;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -439,6 +445,17 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                 },
               ]
             : []),
+          // Credit-debit Lambda invoke permission (live credit metering)
+          ...(props.creditDebitLambdaArn
+            ? [
+                {
+                  sid: 'LambdaInvokeCreditDebit',
+                  effect: 'Allow',
+                  actions: ['lambda:InvokeFunction'],
+                  resources: [props.creditDebitLambdaArn],
+                },
+              ]
+            : []),
           // Data bucket read access (for downloading attached files from My Files / Company Files)
           // and write access to KB prefixes (for rules generation upload)
           ...(props.dataBucketArn
@@ -715,6 +732,11 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Workspace tools Lambda ARN for KB file listings (used by main.py)
         ...(props.workspaceToolsLambdaArn && {
           WORKSPACE_TOOLS_LAMBDA_ARN: props.workspaceToolsLambdaArn,
+        }),
+        // Live credit metering (Numa Credit System / SPK-015) — OFF by default.
+        CREDIT_METERING_ENABLED: props.creditMeteringEnabled ? 'true' : 'false',
+        ...(props.creditDebitLambdaName && {
+          CREDIT_DEBIT_LAMBDA_NAME: props.creditDebitLambdaName,
         }),
         // OAuth workspace tools Lambda for connect tools (OAuth, Synergy, S3 data bucket)
         ...(props.oauthWorkspaceToolsLambdaName && {

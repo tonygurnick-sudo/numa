@@ -521,6 +521,12 @@ export class NumaClientStack extends TerraformStack {
         // Defaults to true (global, no 10% CRI premium); set false for
         // customers whose parent-org SCPs deny the `global.*` route.
         useGlobalInferenceProfile: clientConfig.useGlobalInferenceProfile,
+        // Live credit metering (Numa Credit System / SPK-015) — ON. Agent emits a usage event
+        // after each turn -> credit-debit Lambda. NOTE: this enables it for ANY client deployed
+        // with this code; gate via clientConfig before a production client deploy.
+        creditDebitLambdaName: core.creditDebitLambda.lambda.functionName,
+        creditDebitLambdaArn: core.creditDebitLambda.lambda.arn,
+        creditMeteringEnabled: true,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -672,6 +678,7 @@ export class NumaClientStack extends TerraformStack {
       extApiDocBucketName: core.extApiDocBucket.bucket.bucket,
       extApiDocBucketArn: core.extApiDocBucket.bucket.arn,
       capabilitiesTableName: core.capabilitiesTable.name,
+      creditLedgerTableName: core.creditLedgerTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
       // Admin-side gate. When false, the unified integrations catalog skips
       // every native row so users never see them; when true, admins can
