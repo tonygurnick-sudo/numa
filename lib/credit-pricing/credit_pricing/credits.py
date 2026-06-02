@@ -17,6 +17,12 @@ from typing import Optional
 CREDIT_USD: float = 0.50  # 1 credit = US$0.50
 MARGIN_TARGET: float = 2.0  # default floor margin over (measured) consumption cost
 
+# AgentCore uplift: the cost-recovery floor is enforced over tokens + AgentCore, NOT tokens alone.
+# floor basis = token_cost x AGENTCORE_MULT. 1.234 = the Step-01 fleet average (tokens -> tokens +
+# AgentCore). The default base cost; configurable per client. Replace later with measured per-conv
+# AgentCore-seconds (and add Transcribe / heavy-Lambda lines). Confirm with Asa.
+AGENTCORE_MULT: float = 1.234
+
 # Per-tier cost-recovery margin. The floor binds on token-heavy conversations; a higher multiple
 # for premium tiers stops their margin collapsing to a flat 2x when cost catches up to the value
 # price. Defaults to MARGIN_TARGET for every tier (no change until tuned). Confirm with Asa.

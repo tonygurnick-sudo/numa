@@ -88,7 +88,9 @@ def meta_item(
         "creditsValue": credits_value,
         "creditsFloor": credits_floor,
         "flooredMsgs": floored_msgs,
-        "marginVsConsumption": margin_actual(credits_charged, consumption_cost_usd),
+        "marginVsConsumption": margin_actual(
+            credits_charged, consumption_cost_usd + agentcore_cost_usd
+        ),
         "agentCoreCostUsd": agentcore_cost_usd,
         "totalTokens": total_tokens,
         "costIncomplete": cost_incomplete,

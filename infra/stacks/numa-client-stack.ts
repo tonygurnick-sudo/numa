@@ -523,9 +523,9 @@ export class NumaClientStack extends TerraformStack {
         // Defaults to true (global, no 10% CRI premium); set false for
         // customers whose parent-org SCPs deny the `global.*` route.
         useGlobalInferenceProfile: clientConfig.useGlobalInferenceProfile,
-        // Live credit metering (Numa Credit System / SPK-015) — ON. Agent emits a usage event
-        // after each turn -> credit-debit Lambda. NOTE: this enables it for ANY client deployed
-        // with this code; gate via clientConfig before a production client deploy.
+        // Live credit metering (Numa Credit System / SPK-015) — intentionally ON for ALL clients so
+        // usage data accrues fleet-wide (cheap, client-side, invisible). The admin VIEW is gated
+        // separately by the SHOW_CREDITS flag; metering itself is not gated.
         creditDebitLambdaName: core.creditDebitLambda.lambda.functionName,
         creditDebitLambdaArn: core.creditDebitLambda.lambda.arn,
         creditMeteringEnabled: true,
@@ -977,6 +977,9 @@ export class NumaClientStack extends TerraformStack {
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
+        // Credit metering runs for ALL clients; SHOW_CREDITS only gates the in-app admin view.
+        // Emitted explicitly (default false) because getFlag() treats an absent key as true.
+        SHOW_CREDITS: clientConfig.showCredits ?? false,
         // Parent flags
         DATA_CONNECTORS_ENABLED: clientConfig.dataConnectorsEnabled ?? false,
         AGENTS: clientConfig.agents ?? false,
@@ -1404,6 +1407,29 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         pipedreamIntegrations: z.boolean().optional().default(false),
+        /**
+         * Whether to show the in-app Credits admin view (Settings -> Credits).
+         * Credit metering runs for ALL clients regardless — this only gates UI visibility.
+         *
+         * @default false
+         */
+        showCredits: z.boolean().optional().default(false),
+        /**
+         * Central pricing config for the Numa Credit System (SPK-015). Authored in the Customer
+         * Success Portal ("Numa Credits" page) and pushed into the client's credit-ledger CONFIG
+         * row; the client never authors it. Omitted -> lib/credit-pricing defaults apply.
+         */
+        creditConfig: z
+          .object({
+            creditUsd: z.number().positive().optional(),
+            margin: z.number().min(1).optional(),
+            agentcoreMult: z.number().min(1).optional(),
+            trivialConsumptionUsd: z.number().min(0).optional(),
+            valueTiers: z.record(z.string(), z.record(z.string(), z.number())).optional(),
+            marginsByTier: z.record(z.string(), z.number()).optional(),
+            monthlyAllocations: z.array(z.number().min(0)).optional(),
+          })
+          .optional(),
         /**
          * Whether to show branding UI and attempt runtime fetch on the FE
          * (Backend still enforces runtime owner switch via numa-client-config)

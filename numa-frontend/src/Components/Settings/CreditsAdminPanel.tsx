@@ -152,7 +152,22 @@ export const CreditsAdminPanel: React.FC = () => {
                 {ledger.items.map((row) => (
                   <tr key={row.conversationId}>
                     <td>
-                      <div>{row.title}</div>
+                      {/* Title + deliverables are filled by the nightly summariser (anonymised).
+                          Until then we still show live tier/credits/duration with a placeholder. */}
+                      {row.title ? (
+                        <div>{row.title}</div>
+                      ) : (
+                        <div className="text-muted fst-italic">
+                          {t('credits.summaryPending', { defaultValue: 'Summary coming overnight' })}
+                        </div>
+                      )}
+                      {row.deliverables && row.deliverables.length > 0 && (
+                        <ul className="small text-muted mb-0 ps-3">
+                          {row.deliverables.map((d, i) => (
+                            <li key={i}>{d}</li>
+                          ))}
+                        </ul>
+                      )}
                       <div className="small text-muted">
                         {t('credits.rowMeta', {
                           defaultValue: '{{label}} · {{count}} msgs',

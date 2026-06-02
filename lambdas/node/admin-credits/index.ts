@@ -1,14 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
-import {
-  DeleteCommand,
-  DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-  UpdateCommand,
-} from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 
 // Per-client credit ledger (Numa Credit System / SPK-015).
 const TABLE_NAME = process.env.CREDITS_TABLE_NAME as string;
@@ -108,67 +101,8 @@ function effectiveConfig(stored?: Record<string, unknown>): CreditConfig {
   };
 }
 
-// Validate + pick only known fields. Returns null on any invalid value.
-function validateConfig(body: Record<string, unknown>): Record<string, unknown> | null {
-  const out: Record<string, unknown> = {};
-  const pos = (v: unknown): number | null => {
-    const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  };
-  if (body.creditUsd !== undefined) {
-    const n = pos(body.creditUsd);
-    if (n === null) return null;
-    out.creditUsd = n;
-  }
-  if (body.margin !== undefined) {
-    const n = pos(body.margin);
-    if (n === null || n < 1) return null; // margin < 1x would let credits fall below cost
-    out.margin = n;
-  }
-  if (body.trivialConsumptionUsd !== undefined) {
-    const n = Number(body.trivialConsumptionUsd);
-    if (!Number.isFinite(n) || n < 0) return null;
-    out.trivialConsumptionUsd = n;
-  }
-  if (body.valueTiers !== undefined) {
-    const src = body.valueTiers as ValueTiers;
-    const vt: ValueTiers = {};
-    for (const ctx of CONTEXTS) {
-      if (!src?.[ctx]) continue;
-      vt[ctx] = {};
-      for (const tier of TIERS) {
-        if (src[ctx][tier] === undefined) continue;
-        const n = pos(src[ctx][tier]);
-        if (n === null) return null;
-        vt[ctx][tier] = Math.round(n);
-      }
-    }
-    out.valueTiers = vt;
-  }
-  if (body.marginsByTier !== undefined) {
-    const src = body.marginsByTier as Record<string, number>;
-    const mt: Record<string, number> = {};
-    for (const tier of TIERS) {
-      if (src?.[tier] === undefined) continue;
-      const n = Number(src[tier]);
-      if (!Number.isFinite(n) || n < 1) return null; // margin < 1x would let credits fall below cost
-      mt[tier] = n;
-    }
-    out.marginsByTier = mt;
-  }
-  if (body.monthlyAllocations !== undefined) {
-    const src = body.monthlyAllocations;
-    if (!Array.isArray(src)) return null;
-    const arr: number[] = [];
-    for (let i = 0; i < 12; i++) {
-      const n = Number(src[i] ?? 0);
-      if (!Number.isFinite(n) || n < 0) return null; // a month's allocation can't be negative
-      arr.push(Math.round(n));
-    }
-    out.monthlyAllocations = arr;
-  }
-  return out;
-}
+// Config validation/write now lives in the Customer Success Portal (the central authoring surface);
+// this Lambda is read-only for pricing config (validateConfig retired with the POST write path).
 
 // UTC YYYY-MM. (Monthly expiry is Asa's default — the ledger is keyed by month.)
 const currentMonth = (): string => new Date().toISOString().slice(0, 7);
@@ -180,7 +114,10 @@ const currentMonth = (): string => new Date().toISOString().slice(0, 7);
 function toAdminRow(item: Record<string, unknown>): Record<string, unknown> {
   return {
     conversationId: String(item.PK || '').replace(/^CONV#/, ''),
+    // title + deliverables are the anonymised, admin-safe labels written by the nightly summariser;
+    // empty until it runs (frontend shows a "summary coming overnight" placeholder).
     title: item.title ?? '',
+    deliverables: Array.isArray(item.deliverables) ? item.deliverables : [],
     dominantTier: item.dominantTier ?? 'unclassified',
     category: item.category ?? null,
     creditsCharged: item.creditsCharged ?? 0,
@@ -291,78 +228,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ month, totalCredits, items }) };
     }
 
-    // POST /credits/topup -> admin-only. Discriminated by `action` so config save/reset can ride
-    // this route (no new API-GW route needed -> hotfix-deployable):
-    //   { credits: N }                 -> manual balance top-up
-    //   { action: 'saveConfig', config } -> persist pricing-policy overrides (Credit Admin tab)
-    //   { action: 'resetConfig' }       -> delete overrides, revert to lib defaults
+    // POST /credits/topup -> RETIRED. Pricing config, allocations, and top-ups are now authored in
+    // the Customer Success Portal ("Numa Credits" page) and pushed into this account's CONFIG/BALANCE
+    // rows. The in-client view is READ-ONLY; clients no longer self-configure credits.
     if (method === 'POST' && /\/credits\/topup\/?$/.test(path)) {
       if (!isAdmin(event)) {
         return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };
       }
-      const body = JSON.parse(event.body || '{}') as {
-        credits?: unknown;
-        action?: string;
-        config?: Record<string, unknown>;
-      };
-
-      if (body.action === 'resetConfig') {
-        await ddb.send(new DeleteCommand({ TableName: TABLE_NAME, Key: configKey() }));
-        return {
-          statusCode: 200,
-          headers: HEADERS,
-          body: JSON.stringify({
-            ok: true,
-            config: { defaults: DEFAULT_CONFIG, current: DEFAULT_CONFIG, isCustom: false },
-          }),
-        };
-      }
-      if (body.action === 'saveConfig') {
-        const clean = validateConfig(body.config || {});
-        if (!clean) {
-          return {
-            statusCode: 400,
-            headers: HEADERS,
-            body: JSON.stringify({ error: 'Invalid config: all values must be positive (margin >= 1).' }),
-          };
-        }
-        await ddb.send(
-          new PutCommand({
-            TableName: TABLE_NAME,
-            Item: { ...configKey(), ...clean, updatedAt: new Date().toISOString(), updatedBy: 'admin' },
-          })
-        );
-        return {
-          statusCode: 200,
-          headers: HEADERS,
-          body: JSON.stringify({
-            ok: true,
-            config: { defaults: DEFAULT_CONFIG, current: effectiveConfig(clean), isCustom: true },
-          }),
-        };
-      }
-
-      const credits = Number(body.credits);
-      if (!Number.isFinite(credits) || credits <= 0) {
-        return {
-          statusCode: 400,
-          headers: HEADERS,
-          body: JSON.stringify({ error: 'credits must be a positive number' }),
-        };
-      }
-      const res = await ddb.send(
-        new UpdateCommand({
-          TableName: TABLE_NAME,
-          Key: balanceKey(),
-          UpdateExpression: 'ADD balance :c SET updatedAt = :t, updatedBy = :u',
-          ExpressionAttributeValues: { ':c': credits, ':t': new Date().toISOString(), ':u': 'admin' },
-          ReturnValues: 'UPDATED_NEW',
-        })
-      );
       return {
-        statusCode: 200,
+        statusCode: 410,
         headers: HEADERS,
-        body: JSON.stringify({ ok: true, balance: res.Attributes?.balance ?? credits }),
+        body: JSON.stringify({
+          error: 'Credit config and top-ups are managed centrally in the Customer Success Portal.',
+        }),
       };
     }
 

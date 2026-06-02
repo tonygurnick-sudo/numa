@@ -27,9 +27,14 @@ import structlog
 from boto3.dynamodb.conditions import Key
 
 from credit_pricing import processing
-from credit_pricing.credits import CREDIT_USD, MARGIN_TARGET, TRIVIAL_CONSUMPTION_USD
+from credit_pricing.credits import (
+    AGENTCORE_MULT,
+    CREDIT_USD,
+    MARGIN_TARGET,
+    TRIVIAL_CONSUMPTION_USD,
+)
 from credit_pricing.ledger import month_aggregate_item
-from credit_pricing.tiers import VALID_TIERS, classify, generate_title, max_tier
+from credit_pricing.tiers import VALID_TIERS, classify, max_tier
 from prm import client as prm_client
 from prm import resource as prm_resource
 
@@ -41,6 +46,7 @@ OUTPUTS_BUCKET = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "")
 MARGIN = float(os.environ.get("CREDIT_MARGIN", str(MARGIN_TARGET)))
 CREDIT_UNIT = float(os.environ.get("CREDIT_UNIT_USD", str(CREDIT_USD)))
+AGENTCORE_MULT_ENV = float(os.environ.get("CREDIT_AGENTCORE_MULT", str(AGENTCORE_MULT)))
 CACHE_TTL = os.environ.get("CREDIT_CACHE_TTL", "1h")
 S3_PREFIX = "numa-chat/workspace"
 
@@ -170,6 +176,11 @@ def handler(event: dict, context: Any) -> dict:
     eff_margins = {tier: eff_margin for tier in ("low", "medium", "high", "very_high")}
     if isinstance(cfg.get("marginsByTier"), dict):
         eff_margins.update({k: float(v) for k, v in cfg["marginsByTier"].items()})
+    eff_agentcore = (
+        float(cfg["agentcoreMult"])
+        if cfg.get("agentcoreMult") is not None
+        else AGENTCORE_MULT_ENV
+    )
 
     # 2. Reuse an already-set title/tier (bounds Nova to ~once per conversation).
     existing = (
@@ -180,14 +191,16 @@ def handler(event: dict, context: Any) -> dict:
     context_kind = "agent" if is_scheduled else "chat"
     source = "scheduled" if is_scheduled else "chat"
 
-    title = existing.get("title")
+    # Title + deliverables are produced by the nightly summariser (anonymised, admin-safe), NOT live
+    # — so the admin view never shows non-anonymised content, and live metering does one fewer Nova
+    # call. Preserve any title the nightly already wrote; otherwise leave it empty (UI shows a
+    # "summary coming overnight" placeholder).
+    title = existing.get("title") or ""
     prior_tier = existing.get("dominantTier")
     prior_tier = prior_tier if prior_tier in VALID_TIERS else None  # ratchet floor
     category = existing.get("category")
 
     bedrock = prm_client("bedrock-runtime", region=REGION)
-    if not title:
-        title = generate_title(user_texts, bedrock=bedrock, region=REGION)
 
     # Ratcheting substantive-window complexity (replaces the old lock-on-first-turn). Each metering
     # pass re-classifies a BOUNDED window — opening intent + recent turns + an actions/volume
@@ -228,6 +241,7 @@ def handler(event: dict, context: Any) -> dict:
         value_tier_credits=eff_tiers,
         trivial_consumption_usd=eff_trivial,
         margins=eff_margins,
+        agentcore_mult=eff_agentcore,
     )
     conv_key = f"CONV#{conversation_id}"
 

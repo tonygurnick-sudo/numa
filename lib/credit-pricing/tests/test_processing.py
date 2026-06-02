@@ -126,6 +126,7 @@ def test_floor_is_single_ceil_on_total_not_per_message_sum() -> None:
         credit_usd=0.5,
         value_tier="low",
         context="chat",
+        agentcore_mult=1.0,  # isolate the single-ceil property from the AgentCore uplift
     )
     assert meta["creditsFloor"] == floor_credits(meta["consumptionCostUsd"])
     assert meta["creditsFloor"] < 10  # not the per-message sum of 10 ceils
@@ -255,6 +256,7 @@ def test_per_tier_margin_lifts_floor() -> None:
         credit_usd=0.5,
         value_tier="very_high",
         context="chat",
+        agentcore_mult=1.0,
     )
     hi, _ = processing.build_conversation_rows(
         conversation_id="c",
@@ -268,9 +270,48 @@ def test_per_tier_margin_lifts_floor() -> None:
         value_tier="very_high",
         context="chat",
         margins={"very_high": 4.0},
+        agentcore_mult=1.0,
     )
     assert base["creditsFloor"] == 4  # ceil($1.00 * 2 / $0.50)
     assert hi["creditsFloor"] == 8  # ceil($1.00 * 4 / $0.50) — per-tier 4x
+
+
+def test_agentcore_uplift_in_floor_is_default() -> None:
+    """The floor is enforced over tokens + AgentCore (default 1.234x), and the recorded margin
+    reflects tokens + AgentCore — not tokens alone."""
+    from credit_pricing.credits import AGENTCORE_MULT, floor_credits
+    from credit_pricing.processing import TurnCost
+
+    turns = [
+        TurnCost(0, "m0", "anthropic.claude-sonnet-4-6", 0, 0, 0, 0, 1.0)
+    ]  # $1.00 token cost
+    meta, _ = processing.build_conversation_rows(
+        conversation_id="c",
+        user_sub="u",
+        month="2026-06",
+        last_ts=None,
+        turns=turns,
+        title="x",
+        margin=2.0,
+        credit_usd=0.5,
+        value_tier="low",
+        context="chat",
+    )
+    # floor basis = $1.00 x 1.234; floor = ceil(1.234 * 2 / 0.5) = ceil(4.936) = 5
+    assert (
+        meta["creditsFloor"]
+        == floor_credits(1.0 * AGENTCORE_MULT, margin=2.0, credit_usd=0.5)
+        == 5
+    )
+    assert abs(meta["agentCoreCostUsd"] - 0.234) < 1e-6  # recorded uplift
+    charged = meta["creditsCharged"]  # max(value low=2, floor 5) = 5
+    assert charged == 5
+    # margin measured against tokens + AgentCore, and >= the 2x target (ceil rounds it slightly up)
+    assert (
+        abs(meta["marginVsConsumption"] - (charged * 0.5) / (1.0 * AGENTCORE_MULT))
+        < 1e-6
+    )
+    assert meta["marginVsConsumption"] >= 2.0
 
 
 if __name__ == "__main__":
@@ -282,4 +323,5 @@ if __name__ == "__main__":
     test_cache_creation_split_priced_per_tier()
     test_long_context_tier_premium()
     test_per_tier_margin_lifts_floor()
+    test_agentcore_uplift_in_floor_is_default()
     print("processing tests OK")

@@ -14,7 +14,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
-from credit_pricing.credits import TRIVIAL_CONSUMPTION_USD, floor_credits
+from credit_pricing.credits import (
+    AGENTCORE_MULT,
+    TRIVIAL_CONSUMPTION_USD,
+    floor_credits,
+)
 from credit_pricing.ledger import meta_item, msg_item
 from credit_pricing.pricing import recalculate_anthropic_cost
 from credit_pricing.tiers import tier_to_credits
@@ -137,6 +141,7 @@ def build_conversation_rows(
     value_tier_credits: Optional[dict[str, dict[str, int]]] = None,
     trivial_consumption_usd: float = TRIVIAL_CONSUMPTION_USD,
     margins: Optional[dict[str, float]] = None,
+    agentcore_mult: float = AGENTCORE_MULT,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Assemble the ledger META row + per-message rows for one conversation.
 
@@ -186,8 +191,12 @@ def build_conversation_rows(
     # per-tier `margins` map lets premium tiers recover at a higher multiple, so token-heavy work
     # doesn't collapse to a flat 2x; unclassified / missing -> the scalar `margin` default.
     eff_margin = (margins or {}).get(value_tier or "", margin)
+    # Floor basis = tokens + AgentCore (token cost x agentcore_mult), so the margin is enforced over
+    # real consumption, not tokens alone. agentcore_cost is the recorded uplift (estimate today).
+    floor_basis_usd = total_consumption_usd * agentcore_mult
+    agentcore_cost_usd = round(total_consumption_usd * (agentcore_mult - 1.0), 6)
     total_floor = floor_credits(
-        total_consumption_usd, margin=eff_margin, credit_usd=credit_usd
+        floor_basis_usd, margin=eff_margin, credit_usd=credit_usd
     )
     if value_tier:
         credits_value = tier_to_credits(
@@ -214,6 +223,7 @@ def build_conversation_rows(
         floored_msgs=sum(1 for tn in turns if (tn.recomputed_usd or 0) > 0),
         consumption_cost_usd=round(total_consumption_usd, 6),
         token_cost_usd=round(total_consumption_usd, 6),
+        agentcore_cost_usd=agentcore_cost_usd,
         total_tokens=sum(
             tn.input_tokens
             + tn.output_tokens

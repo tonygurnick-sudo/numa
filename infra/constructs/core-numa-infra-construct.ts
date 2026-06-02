@@ -10,6 +10,8 @@ import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
+import { CloudwatchEventRule } from '@cdktf/provider-aws/lib/cloudwatch-event-rule';
+import { CloudwatchEventTarget } from '@cdktf/provider-aws/lib/cloudwatch-event-target';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { S3BucketCorsConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-cors-configuration';
@@ -676,6 +678,57 @@ export class CoreNumaInfra extends Construct {
           resources: ['*'],
         },
       ],
+    });
+
+    // Credit-nightly Lambda — runs at midnight UTC and, for conversations updated that day, writes an
+    // ADMIN-SAFE anonymised title + deliverables onto the ledger META rows (Nova 2 Lite via the shared
+    // lib). The admin view shows live credits/tier immediately; the human-readable labels lag ~1 day.
+    const creditNightlyLambda = new NumaLambda(this, 'credit-nightly', {
+      clientName: props.clientName,
+      lambdaDirectory: 'python/credit-nightly/',
+      logGroup: this.logGroup,
+      resourceNameSuffix: '_credit-nightly',
+      timeout: 600,
+      environment: {
+        CLIENT_NAME: props.clientName,
+        CREDITS_TABLE_NAME: this.creditLedgerTable.name,
+        OUTPUTS_BUCKET_NAME: this.outputsBucket.bucket.bucket,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          // Query GSI2 (month rollup) + UpdateItem the META rows with title/deliverables/summarisedAt.
+          actions: ['dynamodb:Query', 'dynamodb:UpdateItem'],
+          resources: [this.creditLedgerTable.arn, `${this.creditLedgerTable.arn}/index/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`${this.outputsBucket.bucket.arn}/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['bedrock:InvokeModel'],
+          resources: ['*'],
+        },
+      ],
+    });
+
+    const creditNightlyRule = new CloudwatchEventRule(this, 'credit-nightly-schedule-rule', {
+      name: `${props.clientName}-credit-nightly`,
+      description: 'Nightly anonymised receipt summariser for the Numa Credit System (midnight UTC)',
+      scheduleExpression: 'cron(0 0 * * ? *)',
+    });
+    new CloudwatchEventTarget(this, 'credit-nightly-schedule-target', {
+      rule: creditNightlyRule.name,
+      arn: creditNightlyLambda.lambda.arn,
+    });
+    new LambdaPermission(this, 'credit-nightly-invoke-permission', {
+      statementId: 'AllowEventBridgeCreditNightly',
+      action: 'lambda:InvokeFunction',
+      functionName: creditNightlyLambda.lambda.functionName,
+      principal: 'events.amazonaws.com',
+      sourceArn: creditNightlyRule.arn,
     });
 
     // Agents tables

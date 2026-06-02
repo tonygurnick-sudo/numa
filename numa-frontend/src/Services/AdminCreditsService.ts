@@ -38,7 +38,9 @@ export type CreditBalance = {
 
 export type CreditLedgerRow = {
   conversationId: string;
+  /** Anonymised title + deliverables, written by the nightly summariser. Empty until it runs. */
   title: string;
+  deliverables?: string[];
   dominantTier: string;
   category: string | null;
   creditsCharged: number;

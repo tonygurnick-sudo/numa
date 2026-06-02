@@ -65,8 +65,31 @@ def test_max_tier_ratchet() -> None:
     assert tiers.max_tier("bogus", "bogus") == "low"
 
 
+def test_parse_receipt() -> None:
+    out = tiers._parse_receipt(
+        '{"title":"Monthly revenue summary","deliverables":["pulled sales data","built summary table"]}',
+        "fallback",
+    )
+    assert out["title"] == "Monthly revenue summary"
+    assert out["deliverables"] == ["pulled sales data", "built summary table"]
+    # prose tolerated, deliverables capped at 6, whitespace/newlines collapsed
+    many = tiers._parse_receipt(
+        'noise {"title":"A\\n B","deliverables":["d1","d2","d3","d4","d5","d6","d7"]} tail',
+        "fallback",
+    )
+    assert many["title"] == "A B" and len(many["deliverables"]) == 6
+    # garbage / missing -> fallback title, empty deliverables
+    assert tiers._parse_receipt("no json", "fallback") == {
+        "title": "fallback",
+        "deliverables": [],
+    }
+    bad = tiers._parse_receipt('{"deliverables":"not-a-list"}', "fallback")
+    assert bad["title"] == "fallback" and bad["deliverables"] == []
+
+
 if __name__ == "__main__":
     test_tier_to_credits()
     test_parse_classification()
     test_max_tier_ratchet()
-    print("tier mapping + parser + ratchet tests OK")
+    test_parse_receipt()
+    print("tier mapping + parser + ratchet + receipt tests OK")
