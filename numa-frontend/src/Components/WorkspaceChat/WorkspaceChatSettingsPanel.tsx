@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback, Dispatch, SetStateAction } from 'react';
-import { Button, Form, Spinner } from 'react-bootstrap';
+import { Button, Dropdown, Form, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
@@ -41,6 +41,7 @@ import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSub
 import { getFileIconClass, getFileIconColorClass, formatFileSize } from '../../utils/fileUtils';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
+import { getVariantExtension, type OutputFileGroup } from '../../utils/outputFileGroups';
 import { getFlag } from '../../utils/featureFlags';
 import { useShowChatCost } from '../../hooks/useShowChatCost';
 import { sortKnowledgeBases } from '../../constants/knowledgeBase';
@@ -75,6 +76,8 @@ export interface WorkspaceChatSettingsPanelProps {
   uploadsFiles: WorkspaceChatFileInfo[];
   /** Files in the outputs folder */
   outputFiles: WorkspaceChatFileInfo[];
+  /** Outputs grouped by basename so multi-format artifacts collapse to one row. */
+  outputFileGroups: OutputFileGroup[];
   /** Whether files are loading */
   filesLoading: boolean;
   /** Error loading files */
@@ -157,6 +160,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   isNewChat = false,
   uploadsFiles,
   outputFiles,
+  outputFileGroups,
   filesLoading,
   filesError,
   onRefreshFiles,
@@ -1242,7 +1246,9 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
               <div className="workspace-settings-card-title">
                 <FileText size={16} />
                 <span>{t('workspaceSettings.outputFiles')}</span>
-                {outputFiles.length > 0 && <span className="workspace-settings-count-badge">{outputFiles.length}</span>}
+                {outputFileGroups.length > 0 && (
+                  <span className="workspace-settings-count-badge">{outputFileGroups.length}</span>
+                )}
               </div>
               <div className="workspace-settings-card-header-right">
                 {collapsedSections.outputFiles && outputFiles.length === 0 && (
@@ -1304,8 +1310,8 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 ) : outputFiles.length === 0 ? (
                   <div className="text-muted small fst-italic py-2">{t('workspaceSettings.noOutputFiles')}</div>
                 ) : (
-                  <WorkspaceSettingsFileList
-                    files={outputFiles}
+                  <WorkspaceSettingsOutputGroupList
+                    groups={outputFileGroups}
                     rootPrefix="outputs/"
                     onOpen={onOpenFile}
                     onDownload={onDownloadFile}
@@ -1325,6 +1331,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
             : t('workspaceSettings.expandedTitleChatUploads')
         }
         files={expandedFilesModal === 'outputs' ? outputFiles : uploadsFiles}
+        groups={expandedFilesModal === 'outputs' ? outputFileGroups : undefined}
         rootPrefix={expandedFilesModal === 'outputs' ? 'outputs/' : 'uploads/'}
         onOpen={onOpenFile}
         onDownload={onDownloadFile}
@@ -1424,6 +1431,110 @@ const WorkspaceSettingsFileList: React.FC<WorkspaceSettingsFileListProps> = ({
                       <Download size={14} />
                     </Button>
                   )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+interface WorkspaceSettingsOutputGroupListProps {
+  groups: OutputFileGroup[];
+  rootPrefix: string;
+  onOpen?: (file: WorkspaceChatFileInfo) => void;
+  onDownload?: (file: WorkspaceChatFileInfo) => void;
+}
+
+const WorkspaceSettingsOutputGroupList: React.FC<WorkspaceSettingsOutputGroupListProps> = ({
+  groups,
+  rootPrefix,
+  onOpen,
+  onDownload,
+}) => {
+  const { t } = useTranslation('chat');
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="workspace-settings-file-list">
+      {groups.map((group) => {
+        const primary = group.variants[0];
+        const relativePath = primary.path.startsWith(rootPrefix) ? primary.path.slice(rootPrefix.length) : primary.path;
+        const iconClass = getFileIconClass(primary.name);
+        const colorClass = getFileIconColorClass(primary.name);
+        const modifiedLabel = formatFileModifiedDate(primary.modifiedAt);
+        const isMultiVariant = group.variants.length > 1;
+
+        return (
+          <div key={group.key} className="workspace-settings-file-row">
+            <i className={`${iconClass} workspace-settings-file-icon ${colorClass}`} />
+            <div className="workspace-settings-file-main" title={relativePath}>
+              <span className="workspace-settings-file-name">{group.displayName}</span>
+              <div className="workspace-settings-file-bottom-row">
+                <span className="workspace-settings-file-meta">
+                  {isMultiVariant ? (
+                    <span className="workspace-settings-file-formats">
+                      {group.variants.map((v) => getVariantExtension(v).toUpperCase()).join(' · ')}
+                    </span>
+                  ) : (
+                    <span className="workspace-settings-file-size">{formatFileSize(primary.size)}</span>
+                  )}
+                  {modifiedLabel && <span className="workspace-settings-file-modified">{modifiedLabel}</span>}
+                </span>
+                <div className="workspace-settings-file-actions">
+                  {onOpen && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="workspace-settings-file-action-btn"
+                      onClick={() => onOpen(primary)}
+                      title={t('workspaceSettings.preview')}
+                    >
+                      <Eye size={14} />
+                    </Button>
+                  )}
+                  {onDownload &&
+                    (isMultiVariant ? (
+                      <Dropdown align="end">
+                        <Dropdown.Toggle
+                          as={Button}
+                          variant="link"
+                          size="sm"
+                          className="workspace-settings-file-action-btn workspace-settings-file-action-btn--dropdown"
+                          title={t('workspaceSettings.chooseFormat')}
+                          aria-label={t('workspaceSettings.chooseFormat')}
+                        >
+                          <Download size={14} />
+                        </Dropdown.Toggle>
+                        <Dropdown.Menu>
+                          {group.variants.map((variant) => {
+                            const ext = getVariantExtension(variant).toUpperCase();
+                            return (
+                              <Dropdown.Item
+                                key={variant.path}
+                                onClick={() => onDownload(variant)}
+                                title={variant.name}
+                              >
+                                {t('workspaceSettings.downloadAs', { format: ext || variant.name })}
+                              </Dropdown.Item>
+                            );
+                          })}
+                        </Dropdown.Menu>
+                      </Dropdown>
+                    ) : (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="workspace-settings-file-action-btn"
+                        onClick={() => onDownload(primary)}
+                        title={t('workspaceSettings.download')}
+                      >
+                        <Download size={14} />
+                      </Button>
+                    ))}
                 </div>
               </div>
             </div>

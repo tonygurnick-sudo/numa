@@ -16,6 +16,7 @@ import {
   buildKBSourceReference,
   type KBSourceReference,
 } from '../WorkspaceChat/WorkspaceChatInlineKBSource';
+import { downloadFileFromS3 } from '../../utils/s3Utils';
 
 // Hoisted outside component to prevent ReactMarkdown re-parsing on every render
 const REMARK_PLUGINS = [remarkBreaks, remarkGfm];
@@ -212,7 +213,7 @@ const parseTextWithReferences = (text: string, userSub: string, conversationId: 
  * File/folder references are rendered as subtle inline pills with an open button
  */
 export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React.memo(
-  ({ content, conversationId, userSub, region, onOpenFilePreview, onOpenFolderPreview, getCredentials }) => {
+  ({ content, conversationId, userSub, bucket, region, onOpenFilePreview, onOpenFolderPreview, getCredentials }) => {
     // Default handlers that do nothing if not provided
     const handleOpenFile = useCallback(
       (ref: FileReference) => {
@@ -231,6 +232,20 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
       },
       [onOpenFolderPreview]
     );
+
+    const handleDownloadFile = useCallback(
+      async (ref: FileReference) => {
+        if (!getCredentials || !bucket) return;
+        try {
+          await downloadFileFromS3(ref.fullPath, bucket, region, getCredentials, ref.filename);
+        } catch (err) {
+          console.error('[WorkspaceChatMarkdown] Failed to download inline file:', err);
+        }
+      },
+      [bucket, region, getCredentials]
+    );
+
+    const downloadCallback = getCredentials && bucket ? handleDownloadFile : undefined;
 
     // Custom component to render text nodes with inline file/folder/kb-source references
     const TextWithReferences = useCallback(
@@ -263,7 +278,14 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
               if (part.type === 'text') {
                 return <React.Fragment key={idx}>{part.content}</React.Fragment>;
               } else if (part.type === 'file') {
-                return <WorkspaceChatInlineFileReference key={idx} fileRef={part.ref} onOpenPreview={handleOpenFile} />;
+                return (
+                  <WorkspaceChatInlineFileReference
+                    key={idx}
+                    fileRef={part.ref}
+                    onOpenPreview={handleOpenFile}
+                    onDownload={downloadCallback}
+                  />
+                );
               } else if (part.type === 'folder') {
                 return (
                   <WorkspaceChatInlineFolderReference key={idx} folderRef={part.ref} onOpenPreview={handleOpenFolder} />
@@ -283,7 +305,7 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
           </>
         );
       },
-      [userSub, conversationId, region, handleOpenFile, handleOpenFolder, getCredentials]
+      [userSub, conversationId, region, handleOpenFile, handleOpenFolder, getCredentials, downloadCallback]
     );
 
     // Custom components for ReactMarkdown that handle inline file/folder references
@@ -421,6 +443,7 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
                 <WorkspaceChatInlineFileReference
                   fileRef={{ filename: lastSegment, fullPath, relativePath: cleanRel, extension }}
                   onOpenPreview={handleOpenFile}
+                  onDownload={downloadCallback}
                 />
               );
             } else {
@@ -489,6 +512,7 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
                 <WorkspaceChatInlineFileReference
                   fileRef={{ filename, fullPath, relativePath: cleanRel, extension }}
                   onOpenPreview={handleOpenFile}
+                  onDownload={downloadCallback}
                 />
               );
             }
@@ -501,7 +525,16 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
           );
         },
       }),
-      [TextWithReferences, userSub, conversationId, region, handleOpenFile, handleOpenFolder, getCredentials]
+      [
+        TextWithReferences,
+        userSub,
+        conversationId,
+        region,
+        handleOpenFile,
+        handleOpenFolder,
+        getCredentials,
+        downloadCallback,
+      ]
     );
 
     return (

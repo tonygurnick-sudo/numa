@@ -537,6 +537,8 @@
     "connected": "Connected",
     "preview": "Preview",
     "download": "Download",
+    "downloadAs": "Download as {{format}}",
+    "chooseFormat": "Choose format",
     "kbSelected": "{{count}} selected",
     "noneSelected": "None",
     "allToolsEnabledSummary": "All enabled",

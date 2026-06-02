@@ -102,6 +102,7 @@ import type {
 } from '../types/workspaceChatTypes';
 import { DEFAULT_WORKSPACE_MODEL } from '../types/workspaceChatTypes';
 import { expandMyFilesSentinel } from '../constants/knowledgeBase';
+import { downloadFileFromS3 } from '../utils/s3Utils';
 
 type ConversationChatConfig = {
   autoToolsEnabled?: boolean;
@@ -3659,6 +3660,7 @@ const NumaWorkspaceChatAgents = () => {
             isNewChat={shouldShowNewChatView}
             uploadsFiles={settingsPanel.uploadsFiles}
             outputFiles={settingsPanel.outputFiles}
+            outputFileGroups={settingsPanel.outputFileGroups}
             filesLoading={settingsPanel.filesLoading}
             filesError={settingsPanel.filesError}
             onRefreshFiles={settingsPanel.refreshFiles}
@@ -3676,19 +3678,13 @@ const NumaWorkspaceChatAgents = () => {
               setIsHistoryPanelOpen(false);
               setIsAgentsPanelOpen(false);
             }}
-            onDownloadFile={(file) => {
-              // Download will be handled by opening preview with download action
-              // Build full S3 key from relative path
+            onDownloadFile={async (file) => {
               const fullS3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${file.path}`;
-              openFilePreview({
-                filename: file.name,
-                fullPath: fullS3Key,
-                relativePath: file.path,
-                extension: file.name.split('.').pop() || '',
-              });
-              settingsPanel.closePanel();
-              setIsHistoryPanelOpen(false);
-              setIsAgentsPanelOpen(false);
+              try {
+                await downloadFileFromS3(fullS3Key, OUTPUTS_BUCKET || '', REGION || '', getCredentials, file.name);
+              } catch (err) {
+                console.error('[NumaWorkspaceChatAgents] Failed to download output file:', err);
+              }
             }}
             autoToolsEnabled={autoToolsEnabled}
             setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
