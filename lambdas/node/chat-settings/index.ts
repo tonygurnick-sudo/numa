@@ -25,6 +25,14 @@ const DEFAULT_NUMA_TOOL_APPROVAL_MODE: NumaToolApprovalMode = {
   ops: 'never',
 };
 
+/** Per-integration approval-mode overrides (TASK-127). Keyed by integration
+ *  slug (Pipedream slugs like `gmail`, `slack` and native connector slugs
+ *  like `fergus`, `synergy` share the same namespace). When a slug is set
+ *  here, that mode is used for tool calls against that integration —
+ *  overriding the user's global integrations approval mode. Missing
+ *  slugs fall back to the global setting. */
+export type IntegrationApprovalModes = Record<string, ApprovalMode>;
+
 export type ChatScrollMode = 'auto' | 'manual';
 
 const VALID_SCROLL_MODES: ChatScrollMode[] = ['auto', 'manual'];
@@ -43,6 +51,9 @@ export type ChatSettings = {
   language: string | null;
   approvalMode: ApprovalMode;
   numaToolApprovalMode: NumaToolApprovalMode;
+  /** Per-integration override of the global integrations approval mode.
+   *  Missing/empty = no overrides; each entry applies to its slug only. */
+  integrationApprovalModes: IntegrationApprovalModes;
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
   chatScrollMode: ChatScrollMode;
@@ -121,6 +132,23 @@ function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
   const v = (val: unknown): ApprovalMode =>
     typeof val === 'string' && VALID_APPROVAL_MODES.includes(val as ApprovalMode) ? (val as ApprovalMode) : 'never';
   return { agents: v(obj.agents), memories: v(obj.memories), knowledgeBases: v(obj.knowledgeBases), ops: v(obj.ops) };
+}
+
+// Validate an integrationApprovalModes record (slug → ApprovalMode).
+// Drops invalid entries; never returns null. Slugs are trimmed and length-
+// capped to keep DDB items bounded.
+function validateIntegrationApprovalModes(data: unknown): IntegrationApprovalModes {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return {};
+  const obj = data as Record<string, unknown>;
+  const out: IntegrationApprovalModes = {};
+  for (const [rawSlug, rawMode] of Object.entries(obj)) {
+    const slug = typeof rawSlug === 'string' ? rawSlug.trim().slice(0, 128) : '';
+    if (!slug) continue;
+    if (typeof rawMode !== 'string') continue;
+    if (!VALID_APPROVAL_MODES.includes(rawMode as ApprovalMode)) continue;
+    out[slug] = rawMode as ApprovalMode;
+  }
+  return out;
 }
 
 // Merge a (possibly partial) incoming NumaToolApprovalMode into the current stored value.
@@ -217,6 +245,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   language: 'browser',
   approvalMode: 'non_destructive',
   numaToolApprovalMode: { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE },
+  integrationApprovalModes: {},
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
   chatScrollMode: 'auto',
@@ -318,6 +347,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       language: DEFAULT_SETTINGS.language,
       approvalMode: DEFAULT_SETTINGS.approvalMode,
       numaToolApprovalMode: DEFAULT_SETTINGS.numaToolApprovalMode,
+      integrationApprovalModes: { ...DEFAULT_SETTINGS.integrationApprovalModes },
       emailSignatureEnabled: DEFAULT_SETTINGS.emailSignatureEnabled,
       emailSignatureText: DEFAULT_SETTINGS.emailSignatureText,
       chatScrollMode: DEFAULT_SETTINGS.chatScrollMode,
@@ -363,6 +393,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
     language: DEFAULT_SETTINGS.language,
     approvalMode,
     numaToolApprovalMode: validateNumaToolApprovalMode(item?.numaToolApprovalMode),
+    integrationApprovalModes: validateIntegrationApprovalModes(item?.integrationApprovalModes),
     emailSignatureEnabled:
       typeof item?.emailSignatureEnabled === 'boolean'
         ? item!.emailSignatureEnabled
@@ -445,6 +476,14 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     userItem?.numaToolApprovalMode && typeof userItem.numaToolApprovalMode === 'object'
       ? validateNumaToolApprovalMode(userItem.numaToolApprovalMode)
       : globalSettings.numaToolApprovalMode;
+  // integrationApprovalModes: user record is authoritative when present.
+  // Empty record on user side means "no overrides" (not "inherit from global").
+  // Admins don't have a per-integration UI today, so global is effectively
+  // always empty — this stays user-only in practice.
+  const integrationApprovalModes =
+    userItem?.integrationApprovalModes && typeof userItem.integrationApprovalModes === 'object'
+      ? validateIntegrationApprovalModes(userItem.integrationApprovalModes)
+      : globalSettings.integrationApprovalModes;
   const emailSignatureEnabled =
     typeof userItem?.emailSignatureEnabled === 'boolean'
       ? (userItem!.emailSignatureEnabled as boolean)
@@ -477,6 +516,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     language,
     approvalMode,
     numaToolApprovalMode,
+    integrationApprovalModes,
     emailSignatureEnabled,
     emailSignatureText,
     chatScrollMode,
@@ -585,6 +625,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           'numaToolApprovalMode' in body
             ? mergeNumaToolApprovalMode(body.numaToolApprovalMode, currentGlobal.numaToolApprovalMode)
             : currentGlobal.numaToolApprovalMode,
+        // Admins don't have a per-integration UI today; preserve whatever
+        // is stored without exposing a write path.
+        integrationApprovalModes: currentGlobal.integrationApprovalModes,
         emailSignatureEnabled: currentGlobal.emailSignatureEnabled,
         emailSignatureText: currentGlobal.emailSignatureText,
         chatScrollMode: currentGlobal.chatScrollMode,
@@ -621,6 +664,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         language: updatedSettings.language,
         approvalMode: updatedSettings.approvalMode,
         numaToolApprovalMode: updatedSettings.numaToolApprovalMode,
+        integrationApprovalModes: updatedSettings.integrationApprovalModes,
         emailSignatureEnabled: updatedSettings.emailSignatureEnabled,
         emailSignatureText: updatedSettings.emailSignatureText,
         chatScrollMode: updatedSettings.chatScrollMode,
@@ -675,6 +719,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         language: merged.language,
         approvalMode: merged.approvalMode,
         numaToolApprovalMode: merged.numaToolApprovalMode,
+        integrationApprovalModes: merged.integrationApprovalModes,
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
         chatScrollMode: merged.chatScrollMode,
@@ -706,6 +751,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         language: merged.language,
         approvalMode: merged.approvalMode,
         numaToolApprovalMode: merged.numaToolApprovalMode,
+        integrationApprovalModes: merged.integrationApprovalModes,
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
         chatScrollMode: merged.chatScrollMode,
@@ -885,6 +931,21 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         next.numaToolApprovalMode = validateNumaToolApprovalMode(current.numaToolApprovalMode);
       }
 
+      // integrationApprovalModes — per-slug override of the global integrations
+      // mode. The Integrations page PUTs the full record each time; explicit
+      // null clears all overrides. The user record is authoritative when
+      // present (no per-slug merge against admin-side state, which today is
+      // always empty).
+      if ('integrationApprovalModes' in body) {
+        if (body.integrationApprovalModes === null) {
+          // clear override
+        } else if (typeof body.integrationApprovalModes === 'object' && body.integrationApprovalModes !== null) {
+          next.integrationApprovalModes = validateIntegrationApprovalModes(body.integrationApprovalModes);
+        }
+      } else if (current.integrationApprovalModes && typeof current.integrationApprovalModes === 'object') {
+        next.integrationApprovalModes = validateIntegrationApprovalModes(current.integrationApprovalModes);
+      }
+
       // emailSignatureEnabled
       if ('emailSignatureEnabled' in body) {
         if (body.emailSignatureEnabled === null) {
@@ -966,6 +1027,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'language' in next ||
         'approvalMode' in next ||
         'numaToolApprovalMode' in next ||
+        'integrationApprovalModes' in next ||
         'emailSignatureEnabled' in next ||
         'emailSignatureText' in next ||
         'chatScrollMode' in next ||

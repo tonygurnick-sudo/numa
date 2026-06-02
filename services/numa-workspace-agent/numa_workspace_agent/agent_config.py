@@ -574,6 +574,29 @@ def fetch_numa_tool_approval_mode(user_sub: str) -> dict[str, str]:
     return result
 
 
+def fetch_integration_approval_modes(user_sub: str) -> dict[str, str]:
+    """
+    Fetch per-integration approval-mode overrides (TASK-127).
+
+    The chat-settings DDB record stores a Map<slug, mode>; this returns the
+    same shape filtered to valid modes only. Missing/empty = no overrides.
+
+    Returns:
+        Dict mapping integration slug -> approval mode string. Empty when
+        the user has set no per-integration overrides.
+    """
+    item = _get_cached_user_settings(user_sub)
+    raw = item.get("integrationApprovalModes", {}).get("M", {})
+    result: dict[str, str] = {}
+    for slug, attr in raw.items():
+        if not isinstance(slug, str) or not slug:
+            continue
+        val = attr.get("S", "") if isinstance(attr, dict) else ""
+        if val in VALID_APPROVAL_MODES:
+            result[slug] = val
+    return result
+
+
 DEFAULT_EMAIL_SIGNATURE_TEXT = "Sent by my AI assistant, Numa (https://www.arcanum.ai)"
 
 
@@ -668,6 +691,21 @@ def resolve_approval_mode(
 
     # Fall back to user setting
     return fetch_user_approval_mode(user_sub)
+
+
+def resolve_per_integration_approval_modes(user_sub: str) -> dict[str, str]:
+    """
+    Resolve the user's per-integration approval-mode overrides (TASK-127).
+
+    Returns the raw map from chat-settings — this is user-only state with
+    no agent-level override. The caller (sdk_runner) consults it per tool
+    call, falling back to the resolved category mode when a slug is absent.
+
+    Returns:
+        Dict mapping integration slug -> approval mode string. Empty when
+        the user has set no per-integration overrides.
+    """
+    return fetch_integration_approval_modes(user_sub)
 
 
 def resolve_all_approval_modes(

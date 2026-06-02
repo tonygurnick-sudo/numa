@@ -497,6 +497,7 @@ async def stream_claude_sdk(
     available_integrations: Optional[list[dict]] = None,
     approval_mode: str = "always",
     numa_tool_approval_mode: Optional[dict[str, str]] = None,
+    integration_approval_modes: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
@@ -1295,9 +1296,20 @@ async def stream_claude_sdk(
                                     )
                                     if _http_method in ("GET", "HEAD"):
                                         _connector_safe = True
-                                _conn_mode = _nt_modes.get(
+                                _category_conn_mode = _nt_modes.get(
                                     "connectors", "non_destructive"
                                 )
+                                # TASK-127: per-integration user override beats
+                                # the category-level setting for this connector
+                                # only. Slug ↔ connector name match (native
+                                # connectors share the same identifier across
+                                # the chat payload and the connector tool).
+                                _per_int_conn_mode = (
+                                    (integration_approval_modes or {}).get(connector)
+                                    if connector
+                                    else None
+                                )
+                                _conn_mode = _per_int_conn_mode or _category_conn_mode
 
                                 if _conn_mode == "never":
                                     auto_approved = True
@@ -1314,6 +1326,8 @@ async def stream_claude_sdk(
                                     connector=connector,
                                     action_key=_approval_key,
                                     connector_mode=_conn_mode,
+                                    category_mode=_category_conn_mode,
+                                    per_integration_override=_per_int_conn_mode,
                                     auto_approved=auto_approved,
                                 )
                             else:
@@ -1344,12 +1358,26 @@ async def stream_claude_sdk(
                                     or f"{integration_slug}-{tool_input.get('method', 'request')}"
                                 )
 
+                                # TASK-127: per-integration user override beats
+                                # the resolved category approval_mode for this
+                                # slug only. Falls through to the regular
+                                # approval_mode (and its schema-driven logic)
+                                # when there's no override for the slug.
+                                _per_int_int_mode = (
+                                    (integration_approval_modes or {}).get(
+                                        integration_slug
+                                    )
+                                    if integration_slug
+                                    else None
+                                )
+                                effective_int_mode = _per_int_int_mode or approval_mode
+
                                 # Determine if this tool call should be auto-approved
-                                # based on the resolved approval_mode.
+                                # based on the effective approval_mode.
                                 schema_found = False
-                                if approval_mode == "never":
+                                if effective_int_mode == "never":
                                     auto_approved = True
-                                elif approval_mode == "non_destructive":
+                                elif effective_int_mode == "non_destructive":
                                     # Read annotations from the action schema file on
                                     # disk (not from tool input — Claude doesn't send
                                     # annotations).  Schema path:
@@ -1413,7 +1441,9 @@ async def stream_claude_sdk(
                                     tool_name=block.name,
                                     action_key=_approval_key,
                                     integration_slug=integration_slug,
-                                    approval_mode=approval_mode,
+                                    approval_mode=effective_int_mode,
+                                    category_mode=approval_mode,
+                                    per_integration_override=_per_int_int_mode,
                                     auto_approved=auto_approved,
                                     schema_found=schema_found,
                                 )
@@ -1754,6 +1784,7 @@ async def run_claude_sdk(
     available_integrations: Optional[list[dict]] = None,
     approval_mode: str = "always",
     numa_tool_approval_mode: Optional[dict[str, str]] = None,
+    integration_approval_modes: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
@@ -2095,8 +2126,17 @@ async def run_claude_sdk(
                                     )
                                     if _http_method in ("GET", "HEAD"):
                                         _connector_safe = True
-                                _conn_mode_sync = _nt_modes_sync.get(
+                                _category_conn_mode_sync = _nt_modes_sync.get(
                                     "connectors", "non_destructive"
+                                )
+                                # TASK-127: per-integration user override.
+                                _per_int_conn_mode_sync = (
+                                    (integration_approval_modes or {}).get(connector)
+                                    if connector
+                                    else None
+                                )
+                                _conn_mode_sync = (
+                                    _per_int_conn_mode_sync or _category_conn_mode_sync
                                 )
 
                                 if _conn_mode_sync == "never":
@@ -2126,10 +2166,23 @@ async def run_claude_sdk(
                                     or f"{integration_slug}-{tool_input.get('method', 'request')}"
                                 )
 
+                                # TASK-127: per-integration override beats the
+                                # resolved category mode for this slug.
+                                _per_int_int_mode_sync = (
+                                    (integration_approval_modes or {}).get(
+                                        integration_slug
+                                    )
+                                    if integration_slug
+                                    else None
+                                )
+                                effective_int_mode_sync = (
+                                    _per_int_int_mode_sync or approval_mode
+                                )
+
                                 schema_found = False
-                                if approval_mode == "never":
+                                if effective_int_mode_sync == "never":
                                     auto_approved = True
-                                elif approval_mode == "non_destructive":
+                                elif effective_int_mode_sync == "non_destructive":
                                     schema_annotations = {}
                                     try:
                                         schema_path = (

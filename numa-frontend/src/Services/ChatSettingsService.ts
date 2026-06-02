@@ -46,6 +46,12 @@ export type ChatSettings = {
   language: string | null;
   approvalMode: ApprovalMode;
   numaToolApprovalMode: NumaToolApprovalMode;
+  /** Per-integration approval-mode override (TASK-127). Keyed by integration
+   *  slug (Pipedream + native share the same namespace). When set, that mode
+   *  is used for tool calls against that integration — overriding the
+   *  user's global integrations approval mode. Missing slugs fall back to
+   *  the global setting. Configured on the Integrations page. */
+  integrationApprovalModes: Record<string, ApprovalMode>;
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
   chatScrollMode: ChatScrollMode;
@@ -125,6 +131,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   language: 'browser',
   approvalMode: 'non_destructive',
   numaToolApprovalMode: { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE },
+  integrationApprovalModes: {},
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
   chatScrollMode: 'auto',
@@ -316,6 +323,23 @@ function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
 }
 
 /**
+ * Validate the per-integration approval-mode map (TASK-127).
+ * Drops invalid slugs/modes; returns an empty record when input is malformed.
+ */
+function validateIntegrationApprovalModes(data: unknown): Record<string, ApprovalMode> {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return {};
+  const obj = data as Record<string, unknown>;
+  const out: Record<string, ApprovalMode> = {};
+  for (const [slug, mode] of Object.entries(obj)) {
+    if (typeof slug !== 'string' || !slug.trim()) continue;
+    if (typeof mode !== 'string') continue;
+    if (!VALID_APPROVAL_MODES.includes(mode as ApprovalMode)) continue;
+    out[slug.trim()] = mode as ApprovalMode;
+  }
+  return out;
+}
+
+/**
  * Validate and sanitize settings from API response.
  * Ensures all fields have correct types, falling back to defaults if invalid.
  */
@@ -362,6 +386,7 @@ function validateSettings(data: unknown): ChatSettings {
         ? (obj.approvalMode as ApprovalMode)
         : DEFAULT_CHAT_SETTINGS.approvalMode,
     numaToolApprovalMode: validateNumaToolApprovalMode(obj.numaToolApprovalMode),
+    integrationApprovalModes: validateIntegrationApprovalModes(obj.integrationApprovalModes),
     emailSignatureEnabled:
       typeof obj.emailSignatureEnabled === 'boolean'
         ? obj.emailSignatureEnabled

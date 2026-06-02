@@ -775,6 +775,7 @@
         "toolType": "Tool",
         "integrations": "Integrations",
         "integrationsHelp": "Google Drive, Slack, Gmail, etc.",
+        "integrationsOverrideNote": "Override this default per integration on the Integrations page.",
         "agents": "Agents",
         "agentsHelp": "Create, update, duplicate agents",
         "memories": "Memories",

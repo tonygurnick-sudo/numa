@@ -411,6 +411,23 @@
     "multipleAccountsCount": "{{count}} accounts",
     "multipleAccountsTooltip": "Multiple Pipedream accounts are available for this integration"
   },
+  "approvalMode": {
+    "label": "Approval mode:",
+    "aria": "Approval mode for {{name}}",
+    "useDefault": "Use default",
+    "always": "Always require approval",
+    "nonDestructive": "Auto-approve safe actions",
+    "never": "Auto-approve all actions",
+    "sectionTitle": "Approval mode",
+    "sectionHelp": "Override your default Tool Approvals setting for this integration only.",
+    "pillAlways": "Always ask",
+    "pillNonDestructive": "Safe-only",
+    "pillNever": "Auto-approve"
+  },
+  "nativeSettings": {
+    "title": "Settings for {{name}}",
+    "intro": "Per-user settings for this integration. Only affects you."
+  },
   "manage": {
     "title": "Manage {{name}}",
     "methodHeading": "Connection method",
