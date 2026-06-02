@@ -2122,6 +2122,55 @@ export function createStreamEventHandler(config: StreamEventHandlerConfig): (eve
         }
       }
 
+      // --- LIVE SNAPSHOT USAGE (drives the chat-health donut) ---
+      // Writes to snapshot* fields, not the cumulative inputTokens/etc. that
+      // the SDK ResultMessage overwrites at end of loop. The donut wants the
+      // per-API-call view; cumulative billing stays separate.
+      if (streamEvent?.type === 'message_start') {
+        const usage = (
+          streamEvent as {
+            message?: {
+              usage?: {
+                input_tokens?: number;
+                output_tokens?: number;
+                cache_read_input_tokens?: number;
+                cache_creation_input_tokens?: number;
+              };
+            };
+          }
+        ).message?.usage;
+        if (usage) {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx < 0 || updated[lastIdx].role !== 'assistant') return prev;
+            const lastMsg = { ...updated[lastIdx] };
+            if (typeof usage.input_tokens === 'number') lastMsg.snapshotInputTokens = usage.input_tokens;
+            if (typeof usage.output_tokens === 'number') lastMsg.snapshotOutputTokens = usage.output_tokens;
+            if (typeof usage.cache_read_input_tokens === 'number')
+              lastMsg.snapshotCacheReadTokens = usage.cache_read_input_tokens;
+            if (typeof usage.cache_creation_input_tokens === 'number')
+              lastMsg.snapshotCacheCreationTokens = usage.cache_creation_input_tokens;
+            updated[lastIdx] = lastMsg;
+            return updated;
+          });
+        }
+      }
+
+      if (streamEvent?.type === 'message_delta') {
+        const usage = (streamEvent as { usage?: { output_tokens?: number } }).usage;
+        if (usage && typeof usage.output_tokens === 'number') {
+          const snapshotOutputTokens = usage.output_tokens;
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx < 0 || updated[lastIdx].role !== 'assistant') return prev;
+            updated[lastIdx] = { ...updated[lastIdx], snapshotOutputTokens };
+            return updated;
+          });
+        }
+      }
+
       return;
     }
 
@@ -2716,6 +2765,15 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
   let streamEventThinking = '';
   let hasStreamEventsForCurrentTurn = false;
 
+  // Track per-API-call snapshot tokens from message_start / message_delta
+  // StreamEvents. Last sub-turn wins. Flushed onto currentAssistantMessage at
+  // result-event time so historical messages have the right snapshot for the
+  // chat-health donut (cumulative fields stay for billing display).
+  let pendingSnapshotInputTokens: number | undefined;
+  let pendingSnapshotOutputTokens: number | undefined;
+  let pendingSnapshotCacheReadTokens: number | undefined;
+  let pendingSnapshotCacheCreationTokens: number | undefined;
+
   // Helper: flush accumulated StreamEvent deltas into an assistant message
   // Called at turn boundaries when we have deltas but no full assistant message
   const flushStreamEventDeltas = () => {
@@ -2761,9 +2819,24 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
     }
 
     // Accumulate text from StreamEvent deltas (for stopped/interrupted turns)
+    // and capture per-API-call snapshot tokens from message_start/message_delta.
     if (event.type === 'StreamEvent') {
       const streamEvent = (
-        event as { event?: { type?: string; delta?: { type?: string; text?: string; thinking?: string } } }
+        event as {
+          event?: {
+            type?: string;
+            delta?: { type?: string; text?: string; thinking?: string };
+            message?: {
+              usage?: {
+                input_tokens?: number;
+                output_tokens?: number;
+                cache_read_input_tokens?: number;
+                cache_creation_input_tokens?: number;
+              };
+            };
+            usage?: { output_tokens?: number };
+          };
+        }
       ).event;
       if (streamEvent?.type === 'content_block_delta' && streamEvent.delta) {
         if (streamEvent.delta.type === 'text_delta' && streamEvent.delta.text) {
@@ -2772,6 +2845,20 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
         } else if (streamEvent.delta.type === 'thinking_delta' && streamEvent.delta.thinking) {
           streamEventThinking += streamEvent.delta.thinking;
           hasStreamEventsForCurrentTurn = true;
+        }
+      } else if (streamEvent?.type === 'message_start') {
+        const usage = streamEvent.message?.usage;
+        if (usage) {
+          if (typeof usage.input_tokens === 'number') pendingSnapshotInputTokens = usage.input_tokens;
+          if (typeof usage.output_tokens === 'number') pendingSnapshotOutputTokens = usage.output_tokens;
+          if (typeof usage.cache_read_input_tokens === 'number')
+            pendingSnapshotCacheReadTokens = usage.cache_read_input_tokens;
+          if (typeof usage.cache_creation_input_tokens === 'number')
+            pendingSnapshotCacheCreationTokens = usage.cache_creation_input_tokens;
+        }
+      } else if (streamEvent?.type === 'message_delta') {
+        if (typeof streamEvent.usage?.output_tokens === 'number') {
+          pendingSnapshotOutputTokens = streamEvent.usage.output_tokens;
         }
       }
       continue;
@@ -2913,6 +3000,21 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
           if (resultEvent.usage.cache_creation_input_tokens != null)
             currentAssistantMessage.cacheCreationTokens = resultEvent.usage.cache_creation_input_tokens;
         }
+        // Flush per-API-call snapshot tokens (from the last message_start /
+        // message_delta in this turn) onto the message for the chat-health
+        // donut. Cumulative fields above remain for billing display.
+        if (pendingSnapshotInputTokens !== undefined)
+          currentAssistantMessage.snapshotInputTokens = pendingSnapshotInputTokens;
+        if (pendingSnapshotOutputTokens !== undefined)
+          currentAssistantMessage.snapshotOutputTokens = pendingSnapshotOutputTokens;
+        if (pendingSnapshotCacheReadTokens !== undefined)
+          currentAssistantMessage.snapshotCacheReadTokens = pendingSnapshotCacheReadTokens;
+        if (pendingSnapshotCacheCreationTokens !== undefined)
+          currentAssistantMessage.snapshotCacheCreationTokens = pendingSnapshotCacheCreationTokens;
+        pendingSnapshotInputTokens = undefined;
+        pendingSnapshotOutputTokens = undefined;
+        pendingSnapshotCacheReadTokens = undefined;
+        pendingSnapshotCacheCreationTokens = undefined;
         if (currentAssistantMessage.segments) {
           currentAssistantMessage.segments = currentAssistantMessage.segments.map((seg) => {
             if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {

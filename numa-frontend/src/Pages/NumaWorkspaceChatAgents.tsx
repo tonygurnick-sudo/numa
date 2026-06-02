@@ -71,6 +71,10 @@ import {
 } from '../Components/WorkspaceChat/WorkspaceChatHistoryPanel';
 import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/WorkspaceChatSettingsPanel';
 import { WorkspaceChatAgentsPanel } from '../Components/WorkspaceChat/WorkspaceChatAgentsPanel';
+import { ChatHealthIndicators } from '../Components/WorkspaceChat/ChatHealth/ChatHealthIndicators';
+import { ChatHealthBanner } from '../Components/WorkspaceChat/ChatHealth/ChatHealthBanner';
+import { ChatHealthTopBar } from '../Components/WorkspaceChat/ChatHealth/ChatHealthTopBar';
+import { useChatHealth } from '../Components/WorkspaceChat/ChatHealth/useChatHealth';
 import { useWorkspaceChatSettingsPanel } from '../hooks/useWorkspaceChatSettingsPanel';
 import { PendingFilesBar } from '../Components/Chat/PendingFilesBar';
 import { QueuedSubmitBanner } from '../Components/Chat/QueuedSubmitBanner';
@@ -233,6 +237,9 @@ const NumaWorkspaceChatAgents = () => {
   const [selectedModelId, setSelectedModelId] = useState<WorkspaceChatModelId>(DEFAULT_WORKSPACE_MODEL);
   /** Whether model selection is enabled for workspace chat (from runtime config) */
   const [workspaceModelSelectionEnabled] = useState(() => getFlag('WORKSPACE_CHAT_MODEL_SELECTION'));
+  /** In-session dismissal of the red chat-health banner. Resets on conversation
+   *  change so users see the warning again when they re-open the conversation. */
+  const [chatHealthBannerDismissed, setChatHealthBannerDismissed] = useState(false);
   /** Tracks when a conversation was pre-minted via file upload but user hasn't sent a message yet */
   const [isPreMintedConversation, setIsPreMintedConversation] = useState(false);
   /** Tracks when a V1 conversation needs to be migrated to V2 on first message */
@@ -2600,7 +2607,9 @@ const NumaWorkspaceChatAgents = () => {
         sub
       );
 
-      // Show "processing…" spinner while waiting for any response from backend
+      // Show "processing…" spinner while waiting for any response from backend.
+      // The chat-health donut keeps showing the previous turn's authoritative
+      // value until message_start arrives with real usage data.
       const processingMessage = { role: 'assistant', segments: [], status: 'processing' };
       setMessages((prev) => [...prev, processingMessage]);
 
@@ -2641,6 +2650,17 @@ const NumaWorkspaceChatAgents = () => {
       setButtonStatus('idle');
     }
   };
+
+  // Chat-health derivation at page level so we can drive the red-state banner
+  // (the indicators next to the input get their own copy via the slot prop).
+  const chatHealthForBanner = useChatHealth(messages, selectedModelId);
+
+  // Reset the banner dismissal whenever the user opens a different conversation
+  // so the warning re-surfaces on revisit (per spec: "if a user opens the
+  // conversation again in future").
+  useEffect(() => {
+    setChatHealthBannerDismissed(false);
+  }, [conversationId]);
 
   // Stable ref to the latest handleSubmit so the queued-submit watcher doesn't need
   // it as a dependency (handleSubmit is recreated on every render and would loop).
@@ -3285,6 +3305,8 @@ const NumaWorkspaceChatAgents = () => {
                       </div>
                     )}
 
+                    {!shouldShowNewChatView && <ChatHealthTopBar state={chatHealthForBanner} />}
+
                     {isFirstMessagePending && (
                       <div className="workspace-chat-first-message-banner" role="status">
                         <div className="spinner-border spinner-border-sm" role="status">
@@ -3469,6 +3491,13 @@ const NumaWorkspaceChatAgents = () => {
                     {showJumpButton && !shouldShowNewChatView && <JumpToLatestButton onClick={handleJumpToLatest} />}
 
                     {!shouldShowNewChatView && (
+                      <ChatHealthBanner
+                        show={chatHealthForBanner.alarmBand === 'red' && !chatHealthBannerDismissed}
+                        onDismiss={() => setChatHealthBannerDismissed(true)}
+                      />
+                    )}
+
+                    {!shouldShowNewChatView && (
                       <div className="chat-input-wrapper">
                         {pendingSubmitDisplay !== null && (
                           <QueuedSubmitBanner
@@ -3563,6 +3592,13 @@ const NumaWorkspaceChatAgents = () => {
                           voiceInputEnabled={voiceInputEnabled}
                           voiceRecordingState={voiceRecordingState}
                           onVoiceRecordingComplete={handleVoiceRecordingComplete}
+                          chatHealthSlot={
+                            <ChatHealthIndicators
+                              messages={messages}
+                              modelId={selectedModelId}
+                              debugMode={showCostTotal}
+                            />
+                          }
                         />
                       </div>
                     )}
