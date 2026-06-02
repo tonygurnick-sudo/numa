@@ -78,6 +78,24 @@ export const ticketTypePrefixSchema = z
 
 // ─── Config Entity Schemas ──────────────────────────────────────────────────────
 
+/**
+ * Field condition rule — drives FEAT-171 Phase 4.1 conditional fields.
+ * Evaluated client-side today; server-side enforcement is a follow-up. Kept
+ * generic so future operators (e.g. `gt`, `lt`) can extend the `op` union
+ * without a migration.
+ */
+export const fieldConditionRuleSchema = z.object({
+  when: z.object({
+    fieldId: z.string(),
+    op: z.enum(['eq', 'in', 'present']),
+    value: z.unknown().optional(),
+  }),
+  then: z.object({
+    visible: z.boolean().optional(),
+    required: z.boolean().optional(),
+  }),
+});
+
 export const ticketTypeSchema = z.object({
   entityType: z.literal('TICKET_TYPE'),
   id: z.string(),
@@ -116,6 +134,11 @@ export const fieldDefinitionSchema = z.object({
   options: z.array(z.string()).optional(),
   isSystem: z.boolean().optional().default(false),
   order: z.number(),
+  // Default visibility/required rules. A board's fieldOverrideSchema.conditions
+  // takes precedence when set. Forward declaration — the schema reference is
+  // defined below boardSchema, so we declare conditions as z.unknown() and
+  // narrow at the type level. Concrete shape: FieldConditionRule[].
+  conditions: z.array(fieldConditionRuleSchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -254,6 +277,15 @@ export const mirrorConfigSchema = z.object({
 export const fieldOverrideSchema = z.object({
   visible: z.boolean(),
   required: z.boolean().optional().default(false),
+  // Display label override (board can rename "Priority" to "Severity").
+  label: z.string().optional(),
+  // Select-field option override (board can add custom options like "Tom").
+  options: z.array(z.string()).optional(),
+  // Position override — densely assigned across all fields on a ticket type
+  // when a drag-reorder happens so order is deterministic on re-render.
+  order: z.number().optional(),
+  // Per-field conditional rules (Phase 4.1).
+  conditions: z.array(fieldConditionRuleSchema).optional(),
 });
 
 export const boardSchema = z.object({
@@ -263,6 +295,10 @@ export const boardSchema = z.object({
   color: z.string().optional(),
   allowedTicketTypes: z.array(z.string()),
   fieldOverrides: z.record(z.string(), fieldOverrideSchema).optional(),
+  // Board-level "added" fields beyond a ticket type's defaultFields. Keyed by
+  // ticket type ID. Persisted by numa-ops-api today; declared here so future
+  // schema validation cannot silently drop the data (FEAT-171).
+  addedFields: z.record(z.string(), z.array(z.string())).optional(),
   workUnitSeries: workUnitSeriesSchema.nullable().optional(),
   accessControl: accessControlSchema,
   defaultZoneId: z.string().optional(),
@@ -272,6 +308,9 @@ export const boardSchema = z.object({
   // here so read-time parsing tolerates legacy/future taxonomy values.
   personas: z.array(z.string()).optional().default([]),
   industries: z.array(z.string()).optional().default([]),
+  // Optional rich-text announcement shown at the top of the board. Persisted
+  // by numa-ops-api; declared here so updates round-trip cleanly.
+  announcement: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   order: z.number(),
@@ -669,6 +708,7 @@ export const createBoardRequestSchema = z.object({
     .optional(),
   allowedTicketTypes: z.array(z.string()).min(1, 'At least one ticket type is required'),
   fieldOverrides: z.record(z.string(), fieldOverrideSchema).optional(),
+  addedFields: z.record(z.string(), z.array(z.string())).optional(),
   workUnitSeries: workUnitSeriesSchema.nullable().optional(),
   accessControl: accessControlSchema.optional().default({ mode: 'all', users: [] }),
   zones: z.array(createBoardZoneSchema).optional(),
@@ -682,8 +722,12 @@ export const updateBoardRequestSchema = z.object({
   color: z.string().optional(),
   allowedTicketTypes: z.array(z.string()).optional(),
   fieldOverrides: z.record(z.string(), fieldOverrideSchema).optional(),
+  addedFields: z.record(z.string(), z.array(z.string())).optional(),
   workUnitSeries: workUnitSeriesSchema.nullable().optional(),
   accessControl: accessControlSchema.optional(),
+  announcement: z.string().nullable().optional(),
+  defaultZoneId: z.string().optional(),
+  defaultStageId: z.string().optional(),
   order: z.number().optional(),
 });
 
@@ -1044,6 +1088,7 @@ export type Team = Board;
 export type WorkUnitSeries = z.infer<typeof workUnitSeriesSchema>;
 export type MirrorConfig = z.infer<typeof mirrorConfigSchema>;
 export type FieldOverride = z.infer<typeof fieldOverrideSchema>;
+export type FieldConditionRule = z.infer<typeof fieldConditionRuleSchema>;
 /** @deprecated Use Board instead. */
 export type ProcessBoard = Board;
 export type WorkZone = z.infer<typeof workZoneSchema>;

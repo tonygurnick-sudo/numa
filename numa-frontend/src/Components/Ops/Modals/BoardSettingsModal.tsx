@@ -4,16 +4,27 @@ import { StaffAvatar } from '../Shared/StaffAvatar';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useConfirm } from '../../../Providers/ConfirmContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import { BOARD_COLORS } from '../Shared/colorUtils';
+import { resolveBoardFieldList } from '../Shared/fieldResolution';
 import { GeneralTab } from './tabs/GeneralTab';
 import { WorkUnitsTab } from './tabs/WorkUnitsTab';
 import { TicketsFieldsTab } from './tabs/TicketsFieldsTab';
 import { WorkflowTab } from './tabs/WorkflowTab';
 import { ConfirmModal } from './ConfirmModal';
 import { UserPicker } from '../../Inputs/UserPicker';
-import type { WorkZone, WorkStage, FieldOverride, WorkUnitSeriesConfig, AccessControlMode } from '../../../types/ops';
+import type {
+  WorkZone,
+  WorkStage,
+  FieldOverride,
+  FieldDefinition,
+  FieldCategory,
+  FieldType,
+  WorkUnitSeriesConfig,
+  AccessControlMode,
+} from '../../../types/ops';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -29,8 +40,9 @@ interface BoardSettingsModalProps {
 export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSettingsModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { user } = useAuth();
-  const { numaPut, numaDelete } = useNumaRequest();
-  const { config, boardData, tickets, refreshStaff } = useOps();
+  const { numaPut, numaDelete, numaPost } = useNumaRequest();
+  const { config, boardData, tickets, refreshStaff, refreshConfig } = useOps();
+  const showConfirm = useConfirm();
 
   const team = boardData?.board ?? null;
   const existingZones = boardData?.zones ?? [];
@@ -297,54 +309,159 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
     });
   };
 
+  /**
+   * Materialise the board's current effective list for `ticketTypeId` before
+   * the user mutates it. Returns the complete, ordered list — drawing from
+   * any pre-FEAT-171 legacy "extras only" entry, the template's defaults,
+   * and the new "complete snapshot" shape transparently via
+   * resolveBoardFieldList.
+   *
+   * The first write on a legacy entry therefore upgrades it to a complete
+   * board-owned snapshot in one step. After that the board owns the list
+   * and template edits no longer flow through; "Sync to template" is the
+   * only path back.
+   */
+  const snapshotIfNeeded = (ticketTypeId: string, prev: Record<string, string[]>): string[] => {
+    const tt = config.ticketTypes.find((t) => t.id === ticketTypeId);
+    return resolveBoardFieldList(tt, prev);
+  };
+
   const handleAddField = (ticketTypeId: string, fieldId: string) => {
     markDirty();
     setAddedFields((prev) => {
-      const current = prev[ticketTypeId] ?? [];
-      if (current.includes(fieldId)) return prev;
+      const current = snapshotIfNeeded(ticketTypeId, prev);
+      if (current.includes(fieldId)) return { ...prev, [ticketTypeId]: current };
       return { ...prev, [ticketTypeId]: [...current, fieldId] };
-    });
-    // Ensure the field is visible by default when added
-    setFieldOverrides((prev) => {
-      const current = prev[fieldId];
-      if (current) return prev;
-      return { ...prev, [fieldId]: { visible: true, required: false } };
     });
   };
 
   const handleRemoveAddedField = (ticketTypeId: string, fieldId: string) => {
     markDirty();
     setAddedFields((prev) => {
-      const current = prev[ticketTypeId] ?? [];
+      const current = snapshotIfNeeded(ticketTypeId, prev);
       return { ...prev, [ticketTypeId]: current.filter((id) => id !== fieldId) };
     });
   };
 
-  const handleReorderField = (ticketTypeId: string, fieldId: string, direction: 'up' | 'down') => {
+  /**
+   * Reorder the board's per-type field list. The list itself IS the order —
+   * no separate `order` overrides needed since the board now owns its own
+   * snapshot. Hidden fields (title, description, watchers) keep their data
+   * positions; only the visible fields are reshuffled.
+   */
+  const handleMoveField = (ticketTypeId: string, fromIdx: number, toIdx: number) => {
     markDirty();
-    // Get the ticket type to find its default fields
+    const HIDDEN = new Set(['field-name', 'field-description', 'field-watchers']);
+
+    setAddedFields((prev) => {
+      const current = snapshotIfNeeded(ticketTypeId, prev);
+      const visibleIds = current.filter((id) => !HIDDEN.has(id));
+
+      if (fromIdx < 0 || fromIdx >= visibleIds.length) return prev;
+      const clampedTo = Math.max(0, Math.min(toIdx, visibleIds.length - 1));
+      if (fromIdx === clampedTo) return { ...prev, [ticketTypeId]: current };
+      const [moved] = visibleIds.splice(fromIdx, 1);
+      visibleIds.splice(clampedTo, 0, moved);
+
+      // Reconstruct: hidden fields keep their positions in the original list,
+      // visible slots get the newly ordered ids in sequence.
+      let cursor = 0;
+      const next = current.map((id) => (HIDDEN.has(id) ? id : (visibleIds[cursor++] ?? id)));
+      return { ...prev, [ticketTypeId]: next };
+    });
+  };
+
+  /**
+   * Replace the board's snapshot for a ticket type with the template's
+   * current defaultFields. Manual opt-in to template changes — the only
+   * channel by which template updates reach the board after the first edit.
+   *
+   * Per-field overrides (label, options, conditions, required) are kept so
+   * any earlier customisation survives — except for `visible=false`, which
+   * would otherwise hide fields that the template now includes. Sync's
+   * intent is "make this look like the template", so we clear those
+   * hide-overrides for fields in the new list. Stale `order` overrides on
+   * the same fields are also cleared so the template's order wins.
+   */
+  const handleSyncToTemplate = (ticketTypeId: string) => {
+    markDirty();
     const tt = config.ticketTypes.find((t) => t.id === ticketTypeId);
     if (!tt) return;
-    const added = addedFields[ticketTypeId] ?? [];
-    const allFieldIds = [...(tt.defaultFields ?? []), ...added];
-
-    const idx = allFieldIds.indexOf(fieldId);
-    if (idx < 0) return;
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= allFieldIds.length) return;
-
-    // Assign order values based on new positions
-    const reordered = [...allFieldIds];
-    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-
+    const newDefaults = [...(tt.defaultFields ?? [])];
+    setAddedFields((prev) => ({ ...prev, [ticketTypeId]: newDefaults }));
     setFieldOverrides((prev) => {
       const next = { ...prev };
-      reordered.forEach((fId, i) => {
-        next[fId] = { ...(next[fId] ?? { visible: true, required: false }), order: i };
-      });
+      const inNew = new Set(newDefaults);
+      for (const fId of Object.keys(next)) {
+        if (!inNew.has(fId)) continue;
+        const cur = next[fId];
+        if (cur.visible === false || typeof cur.order === 'number') {
+          const cleaned: typeof cur = { ...cur, visible: true };
+          if ('order' in cleaned) delete (cleaned as Record<string, unknown>).order;
+          next[fId] = cleaned;
+        }
+      }
       return next;
     });
   };
+
+  /**
+   * Persist a brand-new global field directly from the board settings flow,
+   * matching the CRM Customer Record Layout pattern. The created field is
+   * appended to `addedFields` for this ticket type so it shows up immediately
+   * on this board without affecting other boards. Duplicate-name detection on
+   * the server returns 409 — we surface the confirm dialog (Use existing /
+   * Create anyway), reusing the same UX as Global Settings.
+   */
+  const handleCreateField = useCallback(
+    async (payload: {
+      name: string;
+      fieldType: FieldType;
+      category: FieldCategory;
+      options?: string[];
+    }): Promise<string> => {
+      const persist = async (force: boolean): Promise<FieldDefinition> => {
+        return OpsService.createField(numaPost, payload, { force });
+      };
+      let created: FieldDefinition;
+      try {
+        created = await persist(false);
+      } catch (err) {
+        const e = err as {
+          response?: {
+            status?: number;
+            data?: { error?: string; existing?: { id: string; name: string; isSystem?: boolean } };
+          };
+        };
+        if (e.response?.status === 409 && e.response.data?.error === 'duplicate-name' && e.response.data.existing) {
+          const existing = e.response.data.existing;
+          const shouldForce = await showConfirm({
+            title: t('globalSettings.duplicateFieldTitle', 'Field already exists'),
+            message: t('globalSettings.duplicateFieldPrompt', {
+              name: existing.name,
+              defaultValue: 'A field called "{{name}}" already exists. Use existing, or create a parallel duplicate?',
+            }),
+            confirmLabel: t('globalSettings.duplicateCreateAnyway', 'Create anyway'),
+            cancelLabel: t('globalSettings.duplicateUseExisting', 'Use existing'),
+            variant: 'warning',
+          });
+          if (!shouldForce) {
+            // Use existing — attach the matched field to this board's added
+            // fields rather than persisting another duplicate.
+            await refreshConfig();
+            return existing.id;
+          }
+          created = await persist(true);
+        } else {
+          throw err;
+        }
+      }
+      // Pull the new field into config.fields so the editor renders it.
+      await refreshConfig();
+      return created.id;
+    },
+    [numaPost, refreshConfig, showConfirm, t]
+  );
 
   const handleToggleTicketType = (typeId: string) => {
     markDirty();
@@ -457,7 +574,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered>
+      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered scrollable>
         <Modal.Header closeButton>
           <Modal.Title>{t('boards.settings')}</Modal.Title>
         </Modal.Header>
@@ -546,7 +663,9 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                   onFieldOverrideChange={handleFieldOverrideChange}
                   onAddField={handleAddField}
                   onRemoveAddedField={handleRemoveAddedField}
-                  onReorderField={handleReorderField}
+                  onMoveField={handleMoveField}
+                  onCreateField={handleCreateField}
+                  onSyncToTemplate={handleSyncToTemplate}
                 />
               </Tab.Pane>
 

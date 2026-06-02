@@ -320,17 +320,30 @@ const handleTicketTypes = async (
   // on admin breaks non-admin board creation. Edits/deletes stay admin-only
   // since they affect types other boards may already depend on.
   if (method === 'POST' && segments.length === 0) {
-    const { name, prefix, icon, color, defaultFields } = body;
+    const { name, prefix, icon, color, defaultFields, force } = body;
     if (!name || !prefix || !color) return errorResponse(400, 'Missing required fields: name, prefix, color');
 
     const p = String(prefix).toUpperCase();
     if (!/^[A-Z0-9]{2,6}$/.test(p)) return errorResponse(400, 'Prefix must be 2-6 uppercase alphanumeric characters');
     if (RESERVED_PREFIXES.has(p)) return errorResponse(400, 'Prefix conflicts with a reserved key');
 
-    // Check uniqueness
+    // Check uniqueness — prefix is always strict (no force bypass) since the
+    // display ID generator would otherwise collide. Name duplicates can be
+    // bypassed with { force: true } after the client confirms.
     const existing = await listConfigByPrefix('TICKET_TYPE#');
     if (existing.some((t) => (t.prefix as string)?.toUpperCase() === p)) {
       return errorResponse(409, 'Prefix already in use by another ticket type');
+    }
+    if (force !== true) {
+      const trimmedName = String(name).trim().toLowerCase();
+      const dupe = existing.find((t) => (t.name as string)?.toLowerCase() === trimmedName);
+      if (dupe) {
+        return jsonResponse(409, {
+          error: 'duplicate-name',
+          message: 'A ticket type with that name already exists',
+          existing: { id: dupe.id, name: dupe.name, prefix: dupe.prefix },
+        });
+      }
     }
 
     const resolvedIcon = icon ? String(icon) : 'ticket';
@@ -437,11 +450,26 @@ const handleFields = async (
   if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
 
   if (method === 'POST' && segments.length === 0) {
-    const { name, fieldType, category } = body;
+    const { name, fieldType, category, force } = body;
     if (!name || !fieldType || !category)
       return errorResponse(400, 'Missing required fields: name, fieldType, category');
     const id = `field-${randomUUID().slice(0, 8)}`;
     const existing = await listConfigByPrefix('FIELD#');
+
+    // Duplicate-name detection — surfaces the existing field so the UI can
+    // offer to reuse it. Bypass with { force: true } if the user insists.
+    if (force !== true) {
+      const trimmedName = String(name).trim().toLowerCase();
+      const dupe = existing.find((f) => (f.name as string)?.toLowerCase() === trimmedName);
+      if (dupe) {
+        return jsonResponse(409, {
+          error: 'duplicate-name',
+          message: 'A field with that name already exists',
+          existing: { id: dupe.id, name: dupe.name, isSystem: dupe.isSystem === true, fieldType: dupe.fieldType },
+        });
+      }
+    }
+
     const item = {
       SK: `FIELD#${id}`,
       entityType: 'FIELD',

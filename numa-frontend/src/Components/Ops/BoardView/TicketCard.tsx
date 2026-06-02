@@ -10,6 +10,8 @@ import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { StaffAvatar } from '../Shared/StaffAvatar';
 import { formatDueDate, formatRelativeDate } from '../Shared/ticketUtils';
+import { computeTicketDataQuality } from '../Shared/dataQuality';
+import { DataQualityBadge } from '../Shared/DataQualityBadge';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -53,6 +55,12 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
   const ticketType = config?.ticketTypes.find((tt) => tt.id === ticket.ticketTypeId);
   const workUnit = ticket.workUnitId ? workUnits.find((wu) => wu.id === ticket.workUnitId) : null;
   const dueDateInfo = useMemo(() => formatDueDate(ticket.dueDate), [ticket.dueDate]);
+
+  const { boardData } = useOps();
+  const dataQuality = useMemo(
+    () => computeTicketDataQuality(ticket, boardData?.board ?? null, ticketType, config?.fields ?? []),
+    [ticket, boardData?.board, ticketType, config?.fields]
+  );
 
   const typeColor = ticketType?.color ?? '#6c757d';
 
@@ -261,9 +269,11 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
         ticket.commentCount > 0 ||
         ticket.hasUnresolvedDependencies ||
         ticket.isBlocking ||
-        ticket.hasRecurrence) && (
+        ticket.hasRecurrence ||
+        dataQuality.severity !== 'ok') && (
         <div className="ticket-card-top">
           <div className="d-flex align-items-center gap-2 ms-auto">
+            {dataQuality.severity !== 'ok' && <DataQualityBadge result={dataQuality} />}
             {ticket.hasRecurrence && (
               <OverlayTrigger placement="top" overlay={<Tooltip>{t('recurrence.rowLabel')}</Tooltip>}>
                 <span

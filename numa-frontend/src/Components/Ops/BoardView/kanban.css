@@ -1080,6 +1080,11 @@
   max-width: 35%;
   overflow-y: auto;
   padding-left: 1.5rem;
+  /* Reserve gutter for the scrollbar so the sidebar's right border doesn't
+     get clipped when content overflows. Pairs with a small padding-right so
+     the scrollbar (when present) doesn't sit flush against the rounded border. */
+  scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
 .ticket-detail-section {

@@ -11,7 +11,6 @@ import {
   ZONE_TYPE_BADGE_COLORS,
   getPreset,
   getTicketTypeIconClass,
-  getDefaultFieldsForPrefix,
 } from '../../../constants/opsConstants';
 import type { PresetZone } from '../../../constants/opsConstants';
 import { UserPicker } from '../../Inputs/UserPicker';
@@ -49,14 +48,10 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
   const [wuPatternType, setWuPatternType] = useState<'sequential' | 'months'>('sequential');
 
   // ── Step 2: Ticket Types ─────────────────────────────────────────────────
-  const allTypeIds = useMemo(() => config?.ticketTypes.map((tt) => tt.id) ?? [], [config?.ticketTypes]);
+  // Board creation only allows pulling from existing global ticket types. New
+  // ticket type definitions must go through Global Settings → Ticket Types so
+  // there is one canonical creation path (FEAT-171).
   const [selectedTicketTypes, setSelectedTicketTypes] = useState<string[]>([]);
-  const [customTicketTypes, setCustomTicketTypes] = useState<
-    { tempId: string; name: string; prefix: string; icon: string; color: string }[]
-  >([]);
-  const [showAddType, setShowAddType] = useState(false);
-  const [newTypeName, setNewTypeName] = useState('');
-  const [newTypePrefix, setNewTypePrefix] = useState('');
 
   // ── Step 3: Workflow Customization ───────────────────────────────────────
   const [customStages, setCustomStages] = useState<PresetZone[] | null>(null);
@@ -88,17 +83,13 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
       setWuPatternStart(1);
       setWuPatternType('sequential');
       setSelectedTicketTypes([]);
-      setCustomTicketTypes([]);
-      setShowAddType(false);
-      setNewTypeName('');
-      setNewTypePrefix('');
       setCustomStages(null);
       setNewStageByZone({});
       setAccessMode('all');
       setSelectedUserIds([]);
       setError(null);
     }
-  }, [show, allTypeIds]);
+  }, [show]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -119,23 +110,20 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
         };
       }
 
-      // Persist any custom ticket types to global config
-      const typeIdMap: Record<string, string> = {};
-      for (const ct of customTicketTypes) {
-        const created = await OpsService.createTicketType(numaPost, {
-          name: ct.name,
-          prefix: ct.prefix,
-          icon: ct.icon,
-          color: ct.color,
-          defaultFields: getDefaultFieldsForPrefix(ct.prefix),
-        });
-        typeIdMap[ct.tempId] = created.id;
+      const isAllSelected = selectedTicketTypes.length === config.ticketTypes.length;
+      const effectiveTypeIds = isAllSelected ? config.ticketTypes.map((tt) => tt.id) : selectedTicketTypes;
+
+      // Seed addedFields with the template's defaultFields at creation time
+      // so the board owns a complete, board-scoped snapshot from day one
+      // (FEAT-171). Subsequent template edits no longer flow through — the
+      // template is purely a creation-time blueprint.
+      const addedFields: Record<string, string[]> = {};
+      for (const ttId of effectiveTypeIds) {
+        const tt = config.ticketTypes.find((t) => t.id === ttId);
+        if (tt && tt.defaultFields.length > 0) {
+          addedFields[ttId] = [...tt.defaultFields];
+        }
       }
-
-      // Remap selected ticket types: replace temp IDs with real IDs
-      const resolvedTicketTypes = selectedTicketTypes.map((id) => typeIdMap[id] ?? id);
-
-      const isAllSelected = selectedTicketTypes.length === config.ticketTypes.length + customTicketTypes.length;
 
       // Create the team
       const team = await OpsService.createBoard(numaPost, {
@@ -146,15 +134,15 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
         workUnitSeries,
         allowedTicketTypes: isAllSelected
           ? undefined
-          : resolvedTicketTypes.length > 0
-            ? resolvedTicketTypes
+          : selectedTicketTypes.length > 0
+            ? selectedTicketTypes
             : undefined,
+        addedFields: Object.keys(addedFields).length > 0 ? addedFields : undefined,
         accessControl: { mode: accessMode, users: accessMode === 'specific' ? selectedUserIds : [], owners: [] },
       });
 
-      // Always refresh global config so newly created ticket types
-      // (and the board's allowedTicketTypes) are immediately available
-      // when the user opens the Create Ticket modal.
+      // Refresh global config so the new board's allowedTicketTypes are
+      // immediately available when the user opens the Create Ticket modal.
       await refreshConfig();
 
       onCreated(team);
@@ -168,12 +156,12 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
     teamColor,
     presetId,
     customStages,
-    customTicketTypes,
     enableWorkUnits,
     wuLabel,
     wuPatternStart,
+    wuPatternType,
     selectedTicketTypes,
-    allTypeIds,
+    config.ticketTypes,
     accessMode,
     selectedUserIds,
     numaPost,
@@ -187,7 +175,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
       case 1:
         return boardName.trim().length > 0;
       case 2:
-        return selectedTicketTypes.length > 0 || customTicketTypes.length > 0;
+        return selectedTicketTypes.length > 0;
       case 3:
         return true;
       case 4:
@@ -219,26 +207,6 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
       default:
         return '';
     }
-  };
-
-  // ── Custom type handlers ─────────────────────────────────────────────────
-  const handleAddCustomType = () => {
-    if (!newTypeName.trim() || !newTypePrefix.trim()) return;
-    const tempId = `custom-${Date.now()}`;
-    setCustomTicketTypes((prev) => [
-      ...prev,
-      {
-        tempId,
-        name: newTypeName.trim(),
-        prefix: newTypePrefix.trim().toUpperCase(),
-        icon: 'clipboard',
-        color: '#6c757d',
-      },
-    ]);
-    setSelectedTicketTypes((prev) => [...prev, tempId]);
-    setNewTypeName('');
-    setNewTypePrefix('');
-    setShowAddType(false);
   };
 
   // ── Workflow customization helpers ───────────────────────────────────────
@@ -335,29 +303,17 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                       setPresetId(p.id);
                       setCustomStages(null);
 
-                      // Auto-select ticket types based on prefixes
+                      // Pre-select ticket types whose prefix matches the preset's
+                      // suggested list. Presets without `allowedTicketTypePrefixes`
+                      // leave selection empty so the user picks deliberately
+                      // (FEAT-171 — no more silent "all ticket types").
                       if (p.allowedTicketTypePrefixes && config.ticketTypes) {
                         const autoSelectedIds = config.ticketTypes
                           .filter((tt) => p.allowedTicketTypePrefixes?.includes(tt.prefix))
                           .map((tt) => tt.id);
-
-                        const missingSuggestions = (p.suggestedTicketTypes || []).filter(
-                          (st) => !config.ticketTypes.some((tt) => tt.prefix === st.prefix)
-                        );
-
-                        const newCustomTypes = missingSuggestions.map((st) => ({
-                          tempId: `custom-${st.prefix}-${Date.now()}`,
-                          name: st.name,
-                          prefix: st.prefix,
-                          icon: st.icon,
-                          color: st.color,
-                        }));
-
-                        setCustomTicketTypes(newCustomTypes);
-                        setSelectedTicketTypes([...autoSelectedIds, ...newCustomTypes.map((ct) => ct.tempId)]);
+                        setSelectedTicketTypes(autoSelectedIds);
                       } else {
-                        setCustomTicketTypes([]);
-                        setSelectedTicketTypes([...allTypeIds]);
+                        setSelectedTicketTypes([]);
                       }
 
                       // Auto-configure work units based on preset
@@ -476,62 +432,13 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
               />
             ))}
 
-            {customTicketTypes.map((ct) => (
-              <Form.Check
-                key={ct.tempId}
-                type="checkbox"
-                id={`tt-${ct.tempId}`}
-                label={
-                  <span className="d-flex align-items-center gap-2">
-                    <i className="bi bi-clipboard" />
-                    {ct.name}
-                    <Badge bg="info">{ct.prefix}</Badge>
-                  </span>
-                }
-                checked={selectedTicketTypes.includes(ct.tempId)}
-                onChange={() =>
-                  setSelectedTicketTypes((prev) =>
-                    prev.includes(ct.tempId) ? prev.filter((id) => id !== ct.tempId) : [...prev, ct.tempId]
-                  )
-                }
-                className="mb-2"
-              />
-            ))}
-
-            {showAddType ? (
-              <div className="border rounded p-2 mt-2">
-                <div className="d-flex gap-2 align-items-end">
-                  <Form.Group className="flex-grow-1">
-                    <Form.Control
-                      size="sm"
-                      value={newTypeName}
-                      onChange={(e) => setNewTypeName(e.target.value)}
-                      placeholder={t('boards.newTypeName')}
-                    />
-                  </Form.Group>
-                  <Form.Group style={{ width: 120 }}>
-                    <Form.Control
-                      size="sm"
-                      value={newTypePrefix}
-                      onChange={(e) => setNewTypePrefix(e.target.value)}
-                      placeholder={t('boards.newTypePrefix')}
-                      maxLength={6}
-                    />
-                  </Form.Group>
-                  <Button size="sm" variant="primary" onClick={handleAddCustomType}>
-                    {t('common.add')}
-                  </Button>
-                  <Button size="sm" variant="outline-secondary" onClick={() => setShowAddType(false)}>
-                    {t('common.cancel')}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button variant="outline-secondary" size="sm" className="mt-2" onClick={() => setShowAddType(true)}>
-                <i className="bi bi-plus me-1" />
-                {t('boards.addCustomType')}
-              </Button>
-            )}
+            <p className="text-muted small mt-3 mb-0">
+              <i className="bi bi-info-circle me-1" />
+              {t(
+                'boards.ticketTypesAddHint',
+                'Need a different type? Create it in Global Settings → Ticket Types, then come back here.'
+              )}
+            </p>
           </>
         )}
 
