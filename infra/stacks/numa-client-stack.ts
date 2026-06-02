@@ -107,6 +107,8 @@ export class NumaClientStack extends TerraformStack {
     const clientRole = `arn:aws:iam::${clientConfig.clientAccountId}:role/ArcanumAIAccess`;
     // Centralized email sender Lambda in the deployer account (fixed name)
     const emailSenderLambdaArn = `arn:aws:lambda:us-east-1:${props.arcanumNumaAccount}:function:numa-email-sender`;
+    // Numa Voice config write-back Lambda in the deployer account (FEAT-169, fixed name)
+    const voiceConfigWriterLambdaArn = `arn:aws:lambda:us-east-1:${props.arcanumNumaAccount}:function:numa-voice-config-writer`;
     super(scope, name);
 
     const keyName = [name, 'numa'].join('/') + '.tfstate';
@@ -771,6 +773,8 @@ export class NumaClientStack extends TerraformStack {
         voiceProvider,
         clientAccountId: clientConfig.clientAccountId,
         connectInstanceUrl: clientConfig.connectInstanceUrl,
+        // FEAT-169 config write-back relay (deployer account, fixed name).
+        voiceConfigWriterLambdaArn,
         outputsBucketArn: core.outputsBucket.bucket.arn,
         outputsBucketName: core.outputsBucket.bucket.bucket,
         dataBucketName: core.dataBucket.bucket.bucket,

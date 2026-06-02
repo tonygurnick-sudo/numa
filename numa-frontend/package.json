@@ -84,6 +84,7 @@
     "react-router-dom": "^7.0.0",
     "react-syntax-highlighter": "15.6.1",
     "react-transition-group": "^4.4.5",
+    "recharts": "^3.8.1",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.0",
     "vitest": "^3.0.0",

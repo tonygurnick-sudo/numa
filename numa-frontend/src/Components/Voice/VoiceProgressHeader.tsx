@@ -71,9 +71,11 @@ export const VoiceProgressHeader: React.FC<VoiceProgressHeaderProps> = ({
 
         {/* Row 2 — progress + tally + refresh + filter pills */}
         <div className="d-flex flex-wrap align-items-center gap-3">
-          <div className="flex-grow-1" style={{ minWidth: 200 }}>
-            <ProgressBar now={done} max={total || 1} variant="success" style={{ height: 8 }} />
-            <span className="small fw-semibold text-body-secondary">{t('page.progress', { done, total })}</span>
+          <div className="me-auto" style={{ minWidth: 200, maxWidth: 260 }}>
+            <div className="d-flex align-items-center justify-content-between mb-1">
+              <span className="small fw-semibold text-body-secondary">{t('page.progress', { done, total })}</span>
+            </div>
+            <ProgressBar now={done} max={total || 1} variant="success" style={{ height: 6 }} />
           </div>
 
           <div className="d-flex align-items-center gap-2">

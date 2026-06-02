@@ -102,6 +102,11 @@ def _emit_prospect_event(filename: str, timestamp: str, etag: str) -> None:
     bus (client region). connector-event-dispatcher's `connect` branch matches
     active schedules with `trigger.event == 'prospects.uploaded'` and invokes the
     runner. `payload_summary` fields become `{{ event.* }}` in the agent prompt.
+
+    A PutEvents failure is NOT swallowed: it propagates so the S3 async
+    invocation retries the whole record (see `_handle_record`). Without this, a
+    failed emit would leave the spreadsheet copied to the KB but the Prospect
+    Ingest agent never fired, with no retry — a silent failure.
     """
     if not CONNECTOR_EVENT_BUS_NAME:
         logger.warning(
@@ -135,39 +140,42 @@ def _emit_prospect_event(filename: str, timestamp: str, etag: str) -> None:
             "dedup_key": dedup_key,
         },
     }
-    try:
-        events_client.put_events(
-            Entries=[
-                {
-                    "Source": "numa.connector.connect",
-                    "DetailType": "connector.event",
-                    "EventBusName": CONNECTOR_EVENT_BUS_NAME,
-                    "Detail": json.dumps(detail),
-                }
-            ]
-        )
-        logger.info(
-            "Prospect ingest event emitted",
-            _name="VOICE_INTAKE_DISPATCHED",
-            filename=filename,
-            intake_file=intake_file,
-            kb_id=KB_ID,
-        )
-    except (
-        Exception
-    ) as exc:  # noqa: BLE001 — file is already copied to the KB; log, don't raise
-        logger.exception(
-            "Failed to emit prospect ingest event (file copied to KB but agent not fired)",
-            _name="VOICE_INTAKE_EMIT_ERROR",
-            filename=filename,
-            error=str(exc),
-        )
+    # No try/except around put_events: a failed emit MUST propagate so S3's
+    # async retry re-delivers the record. Swallowing it here would leave the
+    # spreadsheet copied to the KB but the Prospect Ingest agent never fired,
+    # with no retry — a silent failure. Re-processing is safe: the emit is
+    # deduped (dedup_key) and the KB copy is an idempotent overwrite.
+    events_client.put_events(
+        Entries=[
+            {
+                "Source": "numa.connector.connect",
+                "DetailType": "connector.event",
+                "EventBusName": CONNECTOR_EVENT_BUS_NAME,
+                "Detail": json.dumps(detail),
+            }
+        ]
+    )
+    logger.info(
+        "Prospect ingest event emitted",
+        _name="VOICE_INTAKE_DISPATCHED",
+        filename=filename,
+        intake_file=intake_file,
+        kb_id=KB_ID,
+    )
 
 
 def _handle_record(
     source_bucket: str, source_key: str, etag: str
 ) -> dict[str, Any] | None:
-    """Copy one spreadsheet into the KB and emit its ingest event."""
+    """Copy one spreadsheet into the KB and emit its ingest event.
+
+    Order matters: the KB copy runs FIRST so the file is present when the agent
+    reads it, then the emit fires. The emit no longer swallows failures — a
+    PutEvents error propagates (see `_emit_prospect_event` / `handler`), so S3's
+    async retry re-runs the whole record. Both steps are safe to repeat: the copy
+    is an idempotent overwrite and the emit is deduped via `dedup_key`, so the
+    Prospect Ingest agent is never left un-fired with no retry.
+    """
     filename = _filename(source_key)
     # _filename already strips path segments; reject empty / dot / null-byte names
     # so a crafted key can't produce a degenerate KB destination key.
@@ -180,6 +188,9 @@ def _handle_record(
         return None
     timestamp = datetime.now(timezone.utc).isoformat()
     dest_key = _copy_to_kb(source_bucket, source_key, filename)
+    # If this raises, the exception propagates out of handler() and S3 retries
+    # the async invocation — the agent gets fired on a subsequent delivery rather
+    # than the failure being silently dropped.
     _emit_prospect_event(filename, timestamp, etag)
     return {
         "filename": filename,
@@ -212,12 +223,12 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
                 key=source_key,
             )
             continue
-        # Copy-to-KB failures must NOT be swallowed: the ingest agent reads the
-        # file from the KB, so a dropped copy means the prospects are silently
-        # lost. Re-raise so S3's built-in async retry re-delivers — the copy is an
-        # idempotent overwrite and the emit is deduped (dedup_key), so re-processing
-        # is safe. (A copied-but-unemitted PutEvents failure is the only swallowed
-        # case — see _emit_prospect_event — because the file is already in the KB.)
+        # Neither the KB copy NOR the event emit are swallowed: the ingest agent
+        # reads the file from the KB and is only triggered by the emit, so a
+        # dropped copy loses the prospects and a dropped emit means the agent
+        # never runs. Both failures propagate so S3's built-in async retry
+        # re-delivers — the copy is an idempotent overwrite and the emit is
+        # deduped (dedup_key), so re-processing the whole record is safe.
         result = _handle_record(source_bucket, source_key, etag)
         if result is not None:
             processed.append(result)

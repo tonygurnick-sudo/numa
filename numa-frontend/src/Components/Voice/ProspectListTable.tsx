@@ -4,6 +4,7 @@ import Button from 'react-bootstrap/Button';
 import Collapse from 'react-bootstrap/Collapse';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
+import { isDiallable } from '../../Services/voiceData';
 import type { Prospect } from '../../types/voice';
 
 /**
@@ -86,6 +87,245 @@ function outcomeBadgeSpec(outcome: NonNullable<Prospect['call_outcome']>): Outco
   }
 }
 
+/** Props for a single memoized prospect row. */
+interface ProspectRowProps {
+  prospect: Prospect;
+  /** This row is the active call (object identity from the page call machine). */
+  isActiveProspect: boolean;
+  /** This row is the up-next (first un-dialed) entry in the queue. */
+  isUpNext: boolean;
+  /** A call is live on the page (drives row dimming + the on-call chip). */
+  isPhaseConnected: boolean;
+  /** This row's phone is dialing (optimistic or CCP-confirmed). */
+  isDialing: boolean;
+  /** This row's phone is connected per the CCP call-state mirror. */
+  isOnCallByPhone: boolean;
+  /** Another prospect's phone is active — dialing this row must be disabled. */
+  otherActive: boolean;
+  /** Stable dial handler from the parent. */
+  onDial: (prospect: Prospect) => void;
+}
+
+/**
+ * True when the post-call processor has populated any structured outcome detail
+ * (FEAT-165) — summary, objections, next steps, quality rating, or talking
+ * points. Gates the collapsible "Call notes" disclosure on a called row.
+ */
+function hasPostCallDetail(p: Prospect): boolean {
+  return Boolean(
+    p.call_summary ||
+    p.objections?.length ||
+    p.next_steps?.length ||
+    typeof p.call_quality_rating === 'number' ||
+    p.follow_up_talking_points?.length
+  );
+}
+
+/** A labelled bullet list for one structured field; renders nothing when empty. */
+function DetailList({ label, items }: { label: string; items?: string[] }): React.JSX.Element | null {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mb-2">
+      <div className="text-uppercase fw-semibold text-body-secondary" style={{ fontSize: '0.7rem' }}>
+        {label}
+      </div>
+      <ul className="mb-0 ps-3 small">
+        {items.map((item, i) => (
+          <li key={`${label}-${String(i)}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * ProspectRow — a single list-group row, memoized so an unrelated parent state
+ * change (refresh spinner, day-progress counts, focus throttle, etc.) does not
+ * re-render every row. Only rows whose derived booleans actually change re-render.
+ * All inputs are primitives or stable references, so the default shallow compare
+ * is effective. `t` is read internally via the hook (stable across i18n).
+ */
+const ProspectRow = React.memo(function ProspectRow({
+  prospect,
+  isActiveProspect,
+  isUpNext,
+  isPhaseConnected,
+  isDialing,
+  isOnCallByPhone,
+  otherActive,
+  onDial,
+}: ProspectRowProps): React.JSX.Element {
+  const { t } = useTranslation('voice');
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const isOnCall = isOnCallByPhone || (isActiveProspect && isPhaseConnected);
+
+  // Edge highlight: green when on this call, blue when up-next.
+  let edgeClass = '';
+  if (isActiveProspect) {
+    edgeClass = 'border-start border-3 border-success';
+  } else if (isUpNext) {
+    edgeClass = 'border-start border-3 border-primary';
+  }
+  // Dim non-active rows while a call is live so the focus row stands out.
+  const dimClass = isPhaseConnected && !isActiveProspect ? 'opacity-50' : '';
+
+  const outcomeSpec = prospect.call_outcome ? outcomeBadgeSpec(prospect.call_outcome) : null;
+  // Headline never renders empty: fall back company → contact → "Unknown contact"
+  // so a malformed record is visible/labelled rather than a silent blank row.
+  const displayName = prospect.company_name || prospect.contact_name || t('prospectTable.unknownContact');
+
+  // Structured post-call outputs (FEAT-165) — only offer the disclosure once the
+  // post-call processor has actually written something to show.
+  const showDetail = hasPostCallDetail(prospect);
+
+  return (
+    <div className={`list-group-item py-2 ${edgeClass} ${dimClass}`.trim()}>
+      <div className="d-flex align-items-center gap-3">
+        {/* Identity (flush-left so it aligns with the focus card) + an inline
+            status pill. No fixed status column — that left a dead gap before the
+            name and pushed it out of alignment with the card above. */}
+        <div className="flex-grow-1" style={{ minWidth: 0 }}>
+          <div className="d-flex align-items-center gap-2">
+            <span className="fw-semibold text-truncate">{displayName}</span>
+            {isActiveProspect ? (
+              <Badge
+                bg="success-subtle"
+                text="success-emphasis"
+                pill
+                className="d-inline-flex align-items-center gap-1 flex-shrink-0 fw-normal"
+              >
+                <i className="bi bi-record-circle-fill" aria-hidden="true"></i>
+                {t('queue.onCall')}
+              </Badge>
+            ) : isUpNext ? (
+              <Badge bg="primary" pill className="flex-shrink-0 fw-normal">
+                {t('queue.next')}
+              </Badge>
+            ) : outcomeSpec ? (
+              <Badge
+                bg={outcomeSpec.bg}
+                text={outcomeSpec.text}
+                pill
+                className="d-inline-flex align-items-center gap-1 flex-shrink-0 fw-normal"
+              >
+                <i className={`bi ${outcomeSpec.icon}`} aria-hidden="true"></i>
+                {t(`wrapUp.outcome.${outcomeI18nKey(prospect.call_outcome as NonNullable<Prospect['call_outcome']>)}`)}
+                {prospect.qualified === true ? (
+                  <i className="bi bi-star-fill text-warning ms-1" aria-hidden="true"></i>
+                ) : null}
+              </Badge>
+            ) : null}
+          </div>
+          <div className="small text-body-secondary text-truncate">
+            {prospect.contact_name}
+            {prospect.contact_title ? <span> · {prospect.contact_title}</span> : null}
+            {prospect.industry ? (
+              <span className="d-none d-md-inline text-capitalize"> · {prospect.industry}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Call-notes disclosure — only when the processor wrote structured detail. */}
+        {showDetail ? (
+          <Button
+            size="sm"
+            variant="link"
+            className="flex-shrink-0 text-decoration-none p-0 small d-inline-flex align-items-center gap-1"
+            onClick={() => setDetailOpen((prev) => !prev)}
+            aria-expanded={detailOpen}
+            aria-label={t('prospectTable.callDetail.toggle')}
+          >
+            <i className="bi bi-journal-text" aria-hidden="true" />
+            <span className="d-none d-md-inline">{t('prospectTable.callDetail.toggle')}</span>
+            <i className={`bi ${detailOpen ? 'bi-chevron-up' : 'bi-chevron-down'}`} aria-hidden="true" />
+          </Button>
+        ) : null}
+
+        {/* Dial button */}
+        <div className="flex-shrink-0">
+          <Button
+            size="sm"
+            variant={isOnCall ? 'success' : 'outline-primary'}
+            disabled={!isDiallable(prospect.phone) || isDialing || isOnCall || otherActive}
+            onClick={() => onDial(prospect)}
+            aria-label={`${t('prospectTable.dial')} ${prospect.contact_name || displayName}`}
+          >
+            {isDialing ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-1" />
+                {t('prospectTable.dialing')}
+              </>
+            ) : isOnCall ? (
+              <>
+                <i className="bi bi-telephone-fill me-1" aria-hidden="true" />
+                {t('prospectTable.calling')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-telephone-outbound-fill me-1" aria-hidden="true" />
+                {t('prospectTable.dial')}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Structured post-call detail (FEAT-165), collapsible. */}
+      {showDetail ? (
+        <Collapse in={detailOpen}>
+          <div>
+            <div className="mt-2 ps-1 border-start border-2 border-light-subtle ps-3">
+              {prospect.call_summary ? (
+                <div className="mb-2">
+                  <div className="text-uppercase fw-semibold text-body-secondary" style={{ fontSize: '0.7rem' }}>
+                    {t('prospectTable.callDetail.summary')}
+                  </div>
+                  <div className="small">{prospect.call_summary}</div>
+                </div>
+              ) : null}
+              {typeof prospect.call_quality_rating === 'number' ? (
+                <div className="mb-2">
+                  <div className="text-uppercase fw-semibold text-body-secondary" style={{ fontSize: '0.7rem' }}>
+                    {t('prospectTable.callDetail.rating')}
+                  </div>
+                  <div className="small d-flex align-items-center gap-2">
+                    <span>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <i
+                          key={`star-${String(n)}`}
+                          className={`bi ${
+                            n <= (prospect.call_quality_rating ?? 0)
+                              ? 'bi-star-fill text-warning'
+                              : 'bi-star text-body-tertiary'
+                          }`}
+                          aria-hidden="true"
+                        />
+                      ))}
+                    </span>
+                    <span className="text-body-secondary">
+                      {t('prospectTable.callDetail.ratingValue', { rating: prospect.call_quality_rating })}
+                    </span>
+                  </div>
+                  {prospect.call_quality_justification ? (
+                    <div className="small text-body-secondary fst-italic">{prospect.call_quality_justification}</div>
+                  ) : null}
+                </div>
+              ) : null}
+              <DetailList label={t('prospectTable.callDetail.objections')} items={prospect.objections} />
+              <DetailList label={t('prospectTable.callDetail.nextSteps')} items={prospect.next_steps} />
+              <DetailList
+                label={t('prospectTable.callDetail.talkingPoints')}
+                items={prospect.follow_up_talking_points}
+              />
+            </div>
+          </div>
+        </Collapse>
+      ) : null}
+    </div>
+  );
+});
+
 export function ProspectListTable({
   prospects,
   activeProspect,
@@ -121,9 +361,9 @@ export function ProspectListTable({
   const handleDial = useCallback(
     (prospect: Prospect) => {
       const phone = prospect.phone;
-      // E.164 only (leading + and 2-15 digits). A malformed number would optimistically
-      // flip the row to 'dialing' for a dial the CCP will reject, sticking the button.
-      if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+      // E.164 only — a malformed number would optimistically flip the row to
+      // 'dialing' for a dial the CCP will reject, sticking the button.
+      if (!isDiallable(phone)) {
         console.warn('Numa Voice: invalid E.164 phone, not dialing', phone);
         return;
       }
@@ -150,7 +390,7 @@ export function ProspectListTable({
 
   const isPhaseConnected = phase === 'connected';
 
-  /** Render a single prospect row as a list-group item. */
+  /** Render a single prospect row via the memoized ProspectRow. */
   const renderRow = (prospect: Prospect, idx: number, opts: { isUpNext: boolean }): React.JSX.Element => {
     const isActiveByPhone = activePhone !== null && activePhone === prospect.phone;
     const isDialing = isActiveByPhone && activeState === 'dialing';
@@ -160,93 +400,24 @@ export function ProspectListTable({
     const isActiveProspect =
       activeProspect !== undefined &&
       (activeProspect === prospect || (!!activeProspect.phone && activeProspect.phone === prospect.phone));
-    const isOnCall = isOnCallByPhone || (isActiveProspect && isPhaseConnected);
     // Another prospect is on a call — disable dialing this row.
     const otherActive = activePhone !== null && activePhone !== prospect.phone;
     // Unique, stable-ish key: phone is E.164 and effectively unique, but
     // fall back to index to stay safe against duplicates / missing phones.
     const rowKey = prospect.phone ? `${prospect.phone}-${String(idx)}` : `row-${String(idx)}`;
 
-    // Edge highlight: green when on this call, blue when up-next.
-    let edgeClass = '';
-    if (isActiveProspect) {
-      edgeClass = 'border-start border-3 border-success';
-    } else if (opts.isUpNext) {
-      edgeClass = 'border-start border-3 border-primary';
-    }
-    // Dim non-active rows while a call is live so the focus row stands out.
-    const dimClass = isPhaseConnected && !isActiveProspect ? 'opacity-50' : '';
-
-    const outcomeSpec = prospect.call_outcome ? outcomeBadgeSpec(prospect.call_outcome) : null;
-
     return (
-      <div key={rowKey} className={`list-group-item d-flex align-items-center gap-2 ${edgeClass} ${dimClass}`.trim()}>
-        {/* Status chip / quiet dot */}
-        <div className="flex-shrink-0" style={{ width: 92 }}>
-          {isActiveProspect ? (
-            <Badge bg="success-subtle" text="success-emphasis" pill className="d-inline-flex align-items-center gap-1">
-              <i className="bi bi-record-circle-fill" aria-hidden="true"></i>
-              {t('queue.onCall')}
-            </Badge>
-          ) : opts.isUpNext ? (
-            <Badge bg="primary" pill>
-              {t('queue.next')}
-            </Badge>
-          ) : outcomeSpec ? (
-            <Badge bg={outcomeSpec.bg} text={outcomeSpec.text} pill className="d-inline-flex align-items-center gap-1">
-              <i className={`bi ${outcomeSpec.icon}`} aria-hidden="true"></i>
-              {t(`wrapUp.outcome.${outcomeI18nKey(prospect.call_outcome as NonNullable<Prospect['call_outcome']>)}`)}
-              {prospect.qualified === true ? (
-                <i className="bi bi-star-fill text-warning ms-1" aria-hidden="true"></i>
-              ) : null}
-            </Badge>
-          ) : (
-            <span
-              className="d-inline-block rounded-circle border border-secondary-subtle"
-              style={{ width: 8, height: 8 }}
-              aria-hidden="true"
-            />
-          )}
-        </div>
-
-        {/* Identity */}
-        <div className="flex-grow-1 text-truncate">
-          <div className="fw-semibold text-truncate">{prospect.company_name}</div>
-          <div className="small text-body-secondary text-truncate">
-            {prospect.contact_name}
-            {prospect.contact_title ? <span> · {prospect.contact_title}</span> : null}
-            {prospect.industry ? <span className="d-none d-md-inline"> · {prospect.industry}</span> : null}
-          </div>
-        </div>
-
-        {/* Dial button */}
-        <div className="flex-shrink-0">
-          <Button
-            size="sm"
-            variant={isOnCall ? 'success' : 'outline-primary'}
-            disabled={!prospect.phone || isDialing || isOnCall || otherActive}
-            onClick={() => handleDial(prospect)}
-            aria-label={`${t('prospectTable.dial')} ${prospect.contact_name}`}
-          >
-            {isDialing ? (
-              <>
-                <Spinner animation="border" size="sm" className="me-1" />
-                {t('prospectTable.dialing')}
-              </>
-            ) : isOnCall ? (
-              <>
-                <i className="bi bi-telephone-fill me-1" aria-hidden="true" />
-                {t('prospectTable.calling')}
-              </>
-            ) : (
-              <>
-                <i className="bi bi-telephone-outbound-fill me-1" aria-hidden="true" />
-                {t('prospectTable.dial')}
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+      <ProspectRow
+        key={rowKey}
+        prospect={prospect}
+        isActiveProspect={isActiveProspect}
+        isUpNext={opts.isUpNext}
+        isPhaseConnected={isPhaseConnected}
+        isDialing={isDialing}
+        isOnCallByPhone={isOnCallByPhone}
+        otherActive={otherActive}
+        onDial={handleDial}
+      />
     );
   };
 

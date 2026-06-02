@@ -84,3 +84,55 @@ def test_emit_is_skipped_when_no_event_bus(monkeypatch):
         transcription_failed=True,
     )
     assert cap.entries is None  # no bus configured -> no dispatch, no throw
+
+
+class _CapturingCloudwatch:
+    """Capture put_metric_data so we can assert the alarm-facing metric shape."""
+
+    def __init__(self):
+        self.calls = []
+
+    def put_metric_data(self, **kwargs):
+        self.calls.append(kwargs)
+        return {}
+
+
+def test_diarisation_metric_shape_matches_the_alarm(monkeypatch):
+    # The alarm in numa-voice-construct.ts watches namespace 'NumaVoice',
+    # metric 'DiarisationUnexpected', dimension ClientName. If this drifts the
+    # alarm silently receives no data — pin it.
+    cap = _CapturingCloudwatch()
+    monkeypatch.setattr(lf, "cloudwatch_client", cap)
+    monkeypatch.setattr(lf, "VOICE_METRIC_NAMESPACE", "NumaVoice")
+    monkeypatch.setattr(lf, "CLIENT_NAME", "arcanum-demo-tony")
+    lf._emit_diarisation_metric()
+    assert len(cap.calls) == 1
+    call = cap.calls[0]
+    assert call["Namespace"] == "NumaVoice"
+    md = call["MetricData"][0]
+    assert md["MetricName"] == "DiarisationUnexpected"
+    assert {"Name": "ClientName", "Value": "arcanum-demo-tony"} in md["Dimensions"]
+
+
+def test_transcription_failed_metric_shape_matches_the_alarm(monkeypatch):
+    cap = _CapturingCloudwatch()
+    monkeypatch.setattr(lf, "cloudwatch_client", cap)
+    monkeypatch.setattr(lf, "VOICE_METRIC_NAMESPACE", "NumaVoice")
+    monkeypatch.setattr(lf, "CLIENT_NAME", "arcanum-demo-tony")
+    lf._emit_transcription_failed_metric()
+    md = cap.calls[0]["MetricData"][0]
+    assert cap.calls[0]["Namespace"] == "NumaVoice"
+    assert md["MetricName"] == "TranscriptionFailed"
+    assert {"Name": "ClientName", "Value": "arcanum-demo-tony"} in md["Dimensions"]
+
+
+def test_metric_emit_never_raises_even_if_cloudwatch_fails(monkeypatch):
+    # Observability must never mask the real failure handling — a CloudWatch/IAM
+    # error in the emitter must be swallowed.
+    class _Boom:
+        def put_metric_data(self, **kwargs):
+            raise RuntimeError("AccessDenied")
+
+    monkeypatch.setattr(lf, "cloudwatch_client", _Boom())
+    lf._emit_diarisation_metric()  # must not raise
+    lf._emit_transcription_failed_metric()  # must not raise

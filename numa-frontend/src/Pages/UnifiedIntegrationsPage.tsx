@@ -1026,30 +1026,36 @@ export const UnifiedIntegrationsPage = () => {
         onError={(msg) => setError(msg)}
       />
 
-      <UserToolPolicyModal
-        // Re-resolve against the live `services` list so the modal sees the
-        // latest accounts (FEAT-019) — e.g. immediately after a Pipedream
-        // connect where the snapshot captured at click time has no accounts.
-        svc={(() => {
-          if (!toolsModalSvc) return null;
-          return services.find((s) => s.entry.slug === toolsModalSvc.entry.slug) ?? toolsModalSvc;
-        })()}
-        onHide={() => setToolsModalSvc(null)}
-        onError={(msg) => setError(msg)}
-        onAddAccount={async (pipedreamSlug) => {
-          // Re-use the standard connect-token flow; Pipedream's default
-          // behaviour on a second call is to add another account, not
-          // replace the existing one.
-          await connectPipedream(pipedreamSlug);
-        }}
-        onDisconnectAccount={async (accountId) => {
-          if (!user || !lambdaClient) return;
-          const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
-          await PipedreamProxyService.disconnectIntegration(lambdaClient, externalUserId, { accountId });
-          await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
-          await reload({ forceRefresh: true });
-        }}
-      />
+      {toolsModalSvc && (
+        <UserToolPolicyModal
+          // Fresh instance per open (keyed by slug) so the modal's edit state —
+          // toggles, the dirty baseline, `loading` — never carries over from a
+          // previous open/save of the SAME integration. Previously the modal was
+          // mounted permanently (unkeyed) and only rendered null when closed, so
+          // after a save the stale `initialToggles` baseline left "Save changes"
+          // wrongly enabled on reopen even when nothing had changed.
+          key={toolsModalSvc.entry.slug}
+          // Re-resolve against the live `services` list so the modal sees the
+          // latest accounts (FEAT-019) — e.g. immediately after a Pipedream
+          // connect where the snapshot captured at click time has no accounts.
+          svc={services.find((s) => s.entry.slug === toolsModalSvc.entry.slug) ?? toolsModalSvc}
+          onHide={() => setToolsModalSvc(null)}
+          onError={(msg) => setError(msg)}
+          onAddAccount={async (pipedreamSlug) => {
+            // Re-use the standard connect-token flow; Pipedream's default
+            // behaviour on a second call is to add another account, not
+            // replace the existing one.
+            await connectPipedream(pipedreamSlug);
+          }}
+          onDisconnectAccount={async (accountId) => {
+            if (!user || !lambdaClient) return;
+            const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+            await PipedreamProxyService.disconnectIntegration(lambdaClient, externalUserId, { accountId });
+            await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
+            await reload({ forceRefresh: true });
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -1545,6 +1551,10 @@ const UserToolPolicyModal = ({
         mode: 'deny',
         denyTools,
       });
+      // Re-sync the dirty baseline to the just-saved state so the modal is no
+      // longer considered dirty if it stays mounted or is reopened before a
+      // refetch — keeps "Save changes" correctly disabled post-save.
+      setInitialToggles(toggles);
       onHide();
     } catch (e) {
       onError((e as Error).message || 'Failed to save tool policy');

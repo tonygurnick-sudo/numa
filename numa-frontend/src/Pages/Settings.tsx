@@ -83,6 +83,7 @@ import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
 import { VoiceAdminPanel } from '../Components/Voice/VoiceAdminPanel';
 import { CreditsAdminPanel } from '../Components/Settings/CreditsAdminPanel';
 import { CreditAdminPanel } from '../Components/Settings/CreditAdminPanel';
+import { CreditsDashboardPanel } from '../Components/Settings/CreditsDashboard/CreditsDashboardPanel';
 import { loadAdminCapabilityGating, DEFAULT_DISABLED_FLAGS } from '../utils/adminCapabilityGating';
 import { CHAT_SUGGESTIONS_DISABLED } from '../hooks/useChatSuggestions';
 
@@ -1427,6 +1428,15 @@ export default function SettingsPage() {
         : []),
       { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
       ...(creditsEnabled
+        ? [
+            {
+              key: 'credits-dashboard',
+              label: t('tabs.creditsDashboard', { defaultValue: 'Credits Dashboard' }),
+              iconClassName: 'bi bi-bar-chart-line-fill',
+            },
+          ]
+        : []),
+      ...(creditsEnabled
         ? [{ key: 'credits', label: t('tabs.credits', { defaultValue: 'Credits' }), iconClassName: 'bi bi-coin' }]
         : []),
       ...(creditsEnabled
@@ -2641,6 +2651,19 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </Tab>
+              {creditsEnabled && (
+                <Tab
+                  eventKey="credits-dashboard"
+                  title={
+                    <span>
+                      <i className="bi bi-bar-chart-line-fill me-2"></i>
+                      {t('tabs.creditsDashboard', { defaultValue: 'Credits Dashboard' })}
+                    </span>
+                  }
+                >
+                  {activeKey === 'credits-dashboard' && <CreditsDashboardPanel />}
+                </Tab>
+              )}
               {creditsEnabled && (
                 <Tab
                   eventKey="credits"

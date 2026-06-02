@@ -89,6 +89,7 @@ The `documentation/` folder contains detailed reference docs for specific domain
 | `documentation/extending-numa-chat/`  | How to extend Numa chat with new tools: MCP groups, skills, Lambda delegation, HITL, frontend rendering, agent types                                               |
 | `documentation/gitlab-runners/`       | Shared CI runners: AWS resources, autoscaler architecture, tokens, common ops, hotfix log                                                                          |
 | `documentation/nolia/`                | Nolia architecture, pipeline details, rules generation, project notes                                                                                              |
+| `documentation/numa-voice/`           | Numa Voice (Amazon Connect SDR dialer): FEAT-158 Phase-1 Connect setup runbook (manual instance, recording storage, DIDs, approved origins, deploy guard)          |
 | `documentation/pipedream/`            | Pipedream integration into Numa: proxy/relay architecture, account model, security boundaries, triggers deep-dive + add-a-trigger guide, API reference cheat sheet |
 
 ---
