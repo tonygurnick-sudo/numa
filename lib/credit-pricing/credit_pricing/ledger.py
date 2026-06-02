@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from credit_pricing.credits import margin_actual
+from credit_pricing.credits import CREDIT_USD, margin_actual
 
 
 def conv_pk(conversation_id: str) -> str:
@@ -61,6 +61,7 @@ def meta_item(
     last_ts: Optional[str] = None,
     token_cost_usd: Optional[float] = None,
     agentcore_cost_usd: float = 0.0,
+    credit_usd: float = CREDIT_USD,
     rate_card_version: Optional[str] = None,
     cost_incomplete: bool = False,
 ) -> dict[str, Any]:
@@ -89,7 +90,9 @@ def meta_item(
         "creditsFloor": credits_floor,
         "flooredMsgs": floored_msgs,
         "marginVsConsumption": margin_actual(
-            credits_charged, consumption_cost_usd + agentcore_cost_usd
+            credits_charged,
+            consumption_cost_usd + agentcore_cost_usd,
+            credit_usd=credit_usd,
         ),
         "agentCoreCostUsd": agentcore_cost_usd,
         "totalTokens": total_tokens,

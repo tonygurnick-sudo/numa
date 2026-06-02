@@ -21,15 +21,15 @@ const balanceKey = (clientName: string) => ({ PK: `CLIENT#${clientName}`, SK: 'B
 
 /** lib/credit-pricing defaults — keep in sync with credit_pricing/credits.py + tiers.py. */
 export const DEFAULT_CREDIT_CONFIG: Required<CreditConfig> = {
-  creditUsd: 0.5,
-  margin: 2.0,
+  creditUsd: 0.4, // Scheme A — "thin / customer-friendly" default
+  margin: 2.0, // scalar fallback (unclassified); marginsByTier below is the real defence
   agentcoreMult: 1.234,
   trivialConsumptionUsd: 0.01,
   valueTiers: {
-    chat: { low: 2, medium: 5, high: 12, very_high: 30 },
-    agent: { low: 1, medium: 3, high: 6, very_high: 15 },
+    chat: { low: 1, medium: 3, high: 8, very_high: 18 },
+    agent: { low: 1, medium: 2, high: 5, very_high: 12 },
   },
-  marginsByTier: { low: 2.0, medium: 2.0, high: 2.0, very_high: 2.0 },
+  marginsByTier: { low: 1.05, medium: 1.25, high: 1.5, very_high: 1.9 },
   monthlyAllocations: Array.from({ length: 12 }, () => 0),
 };
 

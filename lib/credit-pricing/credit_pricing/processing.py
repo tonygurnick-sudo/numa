@@ -224,6 +224,7 @@ def build_conversation_rows(
         consumption_cost_usd=round(total_consumption_usd, 6),
         token_cost_usd=round(total_consumption_usd, 6),
         agentcore_cost_usd=agentcore_cost_usd,
+        credit_usd=credit_usd,
         total_tokens=sum(
             tn.input_tokens
             + tn.output_tokens

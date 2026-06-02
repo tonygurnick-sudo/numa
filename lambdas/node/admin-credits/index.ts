@@ -44,16 +44,16 @@ const configKey = (): { PK: string; SK: string } => ({ PK: `CLIENT#${CLIENT_NAME
 const TIERS = ['low', 'medium', 'high', 'very_high'] as const;
 const CONTEXTS = ['chat', 'agent'] as const;
 const DEFAULT_CONFIG = {
-  creditUsd: 0.5,
-  margin: 2.0,
+  creditUsd: 0.4,
+  margin: 2.0, // scalar fallback (unclassified); per-tier marginsByTier below are the real defence
   trivialConsumptionUsd: 0.01,
   valueTiers: {
-    chat: { low: 2, medium: 5, high: 12, very_high: 30 },
-    agent: { low: 1, medium: 3, high: 6, very_high: 15 },
+    chat: { low: 1, medium: 3, high: 8, very_high: 18 },
+    agent: { low: 1, medium: 2, high: 5, very_high: 12 },
   },
-  // Per-tier cost-recovery margin (the floor). Default 2x everywhere; raise high/very_high so
-  // token-heavy premium work doesn't collapse to a flat 2x when the floor binds.
-  marginsByTier: { low: 2.0, medium: 2.0, high: 2.0, very_high: 2.0 },
+  // Per-tier cost-recovery (defence) margin (the floor), scaling UP with complexity (Scheme A) so
+  // cheap work isn't punished and premium work keeps a fuller margin.
+  marginsByTier: { low: 1.05, medium: 1.25, high: 1.5, very_high: 1.9 },
   // Monthly credit allocation (Jan..Dec). Credits granted per calendar month; UNUSED CREDITS EXPIRE
   // at month end (no rollover). The Credit Admin panel sets an annual total and splits it evenly,
   // then lets any month be fine-tuned. All zero = unconfigured (no budget enforced/shown).

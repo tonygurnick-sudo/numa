@@ -39,11 +39,11 @@ VALID_CATEGORIES: tuple[str, ...] = (
     "compliance_grading",
 )
 
-# Representative credits per tier (within the rubric's ranges). Agent runs are ~half a chat task
-# (one fire, no multi-message iteration) per the rubric's "agent / 2" rule of thumb.
+# Value credits per tier (Scheme A defaults @ $0.40/credit). Agent runs are ~half a chat task (one
+# fire, no multi-message iteration). Working anchors — tunable per client in the portal.
 VALUE_TIER_CREDITS: dict[str, dict[str, int]] = {
-    "chat": {"low": 2, "medium": 5, "high": 12, "very_high": 30},
-    "agent": {"low": 1, "medium": 3, "high": 6, "very_high": 15},
+    "chat": {"low": 1, "medium": 3, "high": 8, "very_high": 18},
+    "agent": {"low": 1, "medium": 2, "high": 5, "very_high": 12},
 }
 
 NOVA_MODEL = "global.amazon.nova-2-lite-v1:0"

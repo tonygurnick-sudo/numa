@@ -63,8 +63,8 @@ def test_build_rows_charge_is_max_of_value_and_floor() -> None:
     )
     assert meta["PK"] == "CONV#c1" and meta["SK"] == "META"
     assert meta["GSI2PK"] == "MONTH#2026-06"
-    assert meta["creditsValue"] == 12  # high, chat context
-    assert meta["creditsCharged"] == max(12, meta["creditsFloor"])
+    assert meta["creditsValue"] == 8  # high, chat context (Scheme A)
+    assert meta["creditsCharged"] == max(8, meta["creditsFloor"])
     assert meta["category"] == "code_build"
     assert len(msgs) == 1 and msgs[0]["SK"].startswith("MSG#")
     assert "content" not in msgs[0] and "text" not in msgs[0]  # privacy
@@ -128,7 +128,10 @@ def test_floor_is_single_ceil_on_total_not_per_message_sum() -> None:
         context="chat",
         agentcore_mult=1.0,  # isolate the single-ceil property from the AgentCore uplift
     )
-    assert meta["creditsFloor"] == floor_credits(meta["consumptionCostUsd"])
+    # built with credit_usd=0.5 + agentcore_mult=1.0, so compare against the same (not the new default)
+    assert meta["creditsFloor"] == floor_credits(
+        meta["consumptionCostUsd"], credit_usd=0.5
+    )
     assert meta["creditsFloor"] < 10  # not the per-message sum of 10 ceils
 
 
@@ -170,7 +173,7 @@ def test_trivial_cost_caps_value_tier_to_low() -> None:
         value_tier="very_high",
         context="chat",
     )
-    assert meta["dominantTier"] == "low" and meta["creditsValue"] == 2
+    assert meta["dominantTier"] == "low" and meta["creditsValue"] == 1
 
 
 def test_cache_creation_split_priced_per_tier() -> None:

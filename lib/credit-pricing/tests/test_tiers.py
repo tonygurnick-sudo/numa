@@ -15,18 +15,19 @@ from credit_pricing import tiers  # noqa: E402
 
 
 def test_tier_to_credits() -> None:
-    assert tiers.tier_to_credits("low", "chat") == 2
-    assert tiers.tier_to_credits("high", "chat") == 12
-    assert tiers.tier_to_credits("very_high", "chat") == 30
+    # Scheme A defaults @ $0.40/credit
+    assert tiers.tier_to_credits("low", "chat") == 1
+    assert tiers.tier_to_credits("high", "chat") == 8
+    assert tiers.tier_to_credits("very_high", "chat") == 18
     # agent runs are cheaper (the rubric's ÷2 rule)
-    assert tiers.tier_to_credits("high", "agent") == 6
-    assert tiers.tier_to_credits("very_high", "agent") == 15
+    assert tiers.tier_to_credits("high", "agent") == 5
+    assert tiers.tier_to_credits("very_high", "agent") == 12
     # unknown tier -> medium for that context; unknown context -> chat table
     assert (
         tiers.tier_to_credits("bogus", "chat")
         == tiers.VALUE_TIER_CREDITS["chat"]["medium"]
     )
-    assert tiers.tier_to_credits("high", "weird-context") == 12
+    assert tiers.tier_to_credits("high", "weird-context") == 8
 
 
 def test_parse_classification() -> None:

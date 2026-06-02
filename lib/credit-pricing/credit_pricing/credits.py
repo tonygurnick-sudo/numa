@@ -14,8 +14,8 @@ import math
 from typing import Optional
 
 # Working anchors — confirm with Asa/sales before they harden into customer-facing pricing.
-CREDIT_USD: float = 0.50  # 1 credit = US$0.50
-MARGIN_TARGET: float = 2.0  # default floor margin over (measured) consumption cost
+CREDIT_USD: float = 0.40  # 1 credit = US$0.40 (Scheme A default)
+MARGIN_TARGET: float = 2.0  # scalar fallback (unclassified); see MARGINS_BY_TIER
 
 # AgentCore uplift: the cost-recovery floor is enforced over tokens + AgentCore, NOT tokens alone.
 # floor basis = token_cost x AGENTCORE_MULT. 1.234 = the Step-01 fleet average (tokens -> tokens +
@@ -26,11 +26,13 @@ AGENTCORE_MULT: float = 1.234
 # Per-tier cost-recovery margin. The floor binds on token-heavy conversations; a higher multiple
 # for premium tiers stops their margin collapsing to a flat 2x when cost catches up to the value
 # price. Defaults to MARGIN_TARGET for every tier (no change until tuned). Confirm with Asa.
+# Per-tier cost-recovery (defence) margins — scale UP with complexity (Scheme A). Cheap/low-tier work
+# isn't punished; premium work keeps a fuller margin. Confirm with Asa; tunable per client in the portal.
 MARGINS_BY_TIER: dict[str, float] = {
-    "low": 2.0,
-    "medium": 2.0,
-    "high": 2.0,
-    "very_high": 2.0,
+    "low": 1.05,
+    "medium": 1.25,
+    "high": 1.5,
+    "very_high": 1.9,
 }
 
 # Anti-inflation backstop: below this measured consumption (USD) a conversation is treated as
