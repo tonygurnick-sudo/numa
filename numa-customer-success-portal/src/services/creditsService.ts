@@ -1,9 +1,18 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { clientService } from './clientService';
 import { awsCredentialsService } from './awsCredentialsService';
 import { activityService } from './activityService';
 import type { CreditConfig } from '@/types';
+
+/** Live credit standing read back from a client's ledger (read-only, cross-account). */
+export interface CreditStanding {
+  /** Top-up pool (CLIENT#/BALANCE). Additive on top-up; not decremented by usage today. */
+  balance: number;
+  balanceUpdatedAt?: string;
+  /** Keyed 'YYYY-MM' → the live monthly aggregate the in-client credit-debit Lambda maintains. */
+  months: Record<string, { revenueUsd: number; consumptionUsd: number }>;
+}
 
 /**
  * CreditsService — central authoring for the Numa Credit System (SPK-015).
@@ -84,6 +93,39 @@ export class CreditsService {
       success: true,
     });
     return newBalance;
+  }
+
+  /**
+   * Read the client's live credit standing from its ledger (cross-account, read-only): the top-up
+   * BALANCE row and every monthly aggregate (CLIENT#<client>/MONTH#<YYYY-MM>) in one partition query.
+   * The aggregate stores USD revenue, not a credit count — the caller derives credits-used as
+   * creditRevenueUsd ÷ creditUsd. Informational only; never blocks authoring.
+   */
+  async getStanding(clientName: string, accountId: string, region: string): Promise<CreditStanding> {
+    const doc = await this.clientLedger(accountId, region);
+    const res = await doc.send(
+      new QueryCommand({
+        TableName: ledgerTable(clientName),
+        KeyConditionExpression: 'PK = :pk',
+        ExpressionAttributeValues: { ':pk': `CLIENT#${clientName}` },
+      })
+    );
+    let balance = 0;
+    let balanceUpdatedAt: string | undefined;
+    const months: CreditStanding['months'] = {};
+    for (const it of res.Items ?? []) {
+      const sk = String(it.SK ?? '');
+      if (sk === 'BALANCE') {
+        balance = Number(it.balance ?? 0);
+        balanceUpdatedAt = typeof it.updatedAt === 'string' ? it.updatedAt : undefined;
+      } else if (sk.startsWith('MONTH#')) {
+        months[sk.slice('MONTH#'.length)] = {
+          revenueUsd: Number(it.creditRevenueUsd ?? 0),
+          consumptionUsd: Number(it.consumptionCostUsd ?? 0),
+        };
+      }
+    }
+    return { balance, balanceUpdatedAt, months };
   }
 }
 

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, Col, Form, InputGroup, Row, Spinner } from 'react-bootstrap';
 import { Coin } from 'react-bootstrap-icons';
 import { ClientSelectGroup } from '@/components/ClientSelectGroup';
 import { clientService } from '@/services/clientService';
-import { creditsService, DEFAULT_CREDIT_CONFIG } from '@/services/creditsService';
+import { creditsService, DEFAULT_CREDIT_CONFIG, type CreditStanding } from '@/services/creditsService';
 import type { Client, CreditConfig } from '@/types';
 
 /**
@@ -18,6 +18,7 @@ import type { Client, CreditConfig } from '@/types';
 const TIERS = ['low', 'medium', 'high', 'very_high'] as const;
 const CONTEXTS = ['chat', 'agent'] as const;
 const TIER_LABEL: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', very_high: 'Very high' };
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 type FullConfig = Required<CreditConfig>;
 
@@ -46,6 +47,7 @@ export default function NumaCredits() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [standing, setStanding] = useState<CreditStanding | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -67,6 +69,22 @@ export default function NumaCredits() {
     setConfig(withDefaults(client?.config.creditConfig));
   }, [client]);
 
+  const refreshStanding = useCallback(async () => {
+    if (!client) {
+      setStanding(null);
+      return;
+    }
+    try {
+      setStanding(await creditsService.getStanding(client.name, client.config.clientAccountId, client.config.region));
+    } catch {
+      setStanding(null); // standing is informational — never block authoring on a read failure
+    }
+  }, [client]);
+
+  useEffect(() => {
+    void refreshStanding();
+  }, [refreshStanding]);
+
   const isCustom = !!client?.config.creditConfig;
 
   const num = (v: string): number => {
@@ -78,9 +96,14 @@ export default function NumaCredits() {
     setConfig((c) => ({ ...c, valueTiers: { ...c.valueTiers, [ctx]: { ...c.valueTiers[ctx], [tier]: v } } }));
   const setMargin = (tier: string, v: number) =>
     setConfig((c) => ({ ...c, marginsByTier: { ...c.marginsByTier, [tier]: v } }));
-  const monthly = config.monthlyAllocations[0] ?? 0;
-  const setMonthly = (v: number) =>
+  const setAllMonths = (v: number) =>
     setConfig((c) => ({ ...c, monthlyAllocations: Array.from({ length: 12 }, () => v) }));
+  const setMonth = (i: number, v: number) =>
+    setConfig((c) => {
+      const next = Array.from({ length: 12 }, (_, j) => c.monthlyAllocations[j] ?? 0);
+      next[i] = v;
+      return { ...c, monthlyAllocations: next };
+    });
 
   const handleSave = async () => {
     if (!client) return;
@@ -111,12 +134,25 @@ export default function NumaCredits() {
       const bal = await creditsService.topUp(client.name, client.config.clientAccountId, client.config.region, credits);
       setNotice(`Added ${credits.toLocaleString()} credits to ${client.name}. New balance: ${bal.toLocaleString()}.`);
       setTopUp('');
+      void refreshStanding();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Top-up failed');
     } finally {
       setSaving(false);
     }
   };
+
+  // ── live-standing derivation (current calendar year) ──
+  const year = new Date().getFullYear();
+  const curIdx = new Date().getMonth(); // 0=Jan
+  const monthKey = (i: number): string => `${year}-${String(i + 1).padStart(2, '0')}`;
+  const usedCredits = (i: number): number => {
+    const m = standing?.months[monthKey(i)];
+    if (!m || !config.creditUsd) return 0;
+    return Math.round(m.revenueUsd / config.creditUsd);
+  };
+  const curAllocated = config.monthlyAllocations[curIdx] ?? 0;
+  const curUsed = usedCredits(curIdx);
 
   return (
     <div>
@@ -160,6 +196,43 @@ export default function NumaCredits() {
       {client && (
         <>
           <Card className="mb-3">
+            <Card.Header className="fw-semibold">Current standing</Card.Header>
+            <Card.Body>
+              {standing ? (
+                <>
+                  <Row className="g-3 text-center">
+                    <Col xs={6} md={3}>
+                      <div className="fs-4 fw-semibold">{curAllocated.toLocaleString()}</div>
+                      <div className="small text-muted">Allocated ({monthKey(curIdx)})</div>
+                    </Col>
+                    <Col xs={6} md={3}>
+                      <div className="fs-4 fw-semibold">{curUsed.toLocaleString()}</div>
+                      <div className="small text-muted">Used this month</div>
+                    </Col>
+                    <Col xs={6} md={3}>
+                      <div className={`fs-4 fw-semibold ${curAllocated - curUsed < 0 ? 'text-danger' : ''}`}>
+                        {(curAllocated - curUsed).toLocaleString()}
+                      </div>
+                      <div className="small text-muted">Remaining (use-it-or-lose-it)</div>
+                    </Col>
+                    <Col xs={6} md={3}>
+                      <div className="fs-4 fw-semibold">{standing.balance.toLocaleString()}</div>
+                      <div className="small text-muted">Top-up balance (persistent)</div>
+                    </Col>
+                  </Row>
+                  <div className="small text-muted mt-3">
+                    Monthly allocation resets each calendar month (unused credits expire); the top-up balance is a
+                    separate pool that carries over. How usage draws between the two — and whether anything is ever
+                    enforced at zero — is still being defined.
+                  </div>
+                </>
+              ) : (
+                <div className="small text-muted">No usage recorded yet for this client.</div>
+              )}
+            </Card.Body>
+          </Card>
+
+          <Card className="mb-3">
             <Card.Header className="fw-semibold">Pricing algorithm</Card.Header>
             <Card.Body>
               <div className="small text-muted mb-3">
@@ -186,13 +259,17 @@ export default function NumaCredits() {
                   />
                 </Col>
                 <Col md={3}>
-                  <Form.Label>Default margin</Form.Label>
+                  <Form.Label>Fallback margin</Form.Label>
                   <Form.Control
                     type="number"
                     step="0.1"
                     value={config.margin}
                     onChange={(e) => setGlobal('margin', num(e.target.value))}
                   />
+                  <Form.Text className="text-muted">
+                    Only used when a conversation can&apos;t be classified. The per-complexity defence margins below are
+                    the real control.
+                  </Form.Text>
                 </Col>
                 <Col md={3}>
                   <Form.Label>Trivial-cost cap (USD)</Form.Label>
@@ -246,26 +323,57 @@ export default function NumaCredits() {
             </Card.Body>
           </Card>
 
-          <Row className="g-3">
-            <Col md={6}>
-              <Card>
-                <Card.Header className="fw-semibold">Monthly credit allocation</Card.Header>
-                <Card.Body>
-                  <Form.Label>Credits per month (applies to all 12 months)</Form.Label>
+          <Card className="mb-3">
+            <Card.Header className="fw-semibold">Monthly credit allocation</Card.Header>
+            <Card.Body>
+              <Row className="g-2 align-items-end mb-3">
+                <Col xs={12} md={4}>
+                  <Form.Label className="small text-muted">Set every month to…</Form.Label>
                   <Form.Control
                     type="number"
                     step="100"
-                    value={monthly}
-                    onChange={(e) => setMonthly(num(e.target.value))}
+                    placeholder="e.g. 5000"
+                    onChange={(e) => setAllMonths(num(e.target.value))}
                   />
-                  <div className="small text-muted mt-2">Saved with the pricing config above.</div>
-                </Card.Body>
-              </Card>
-            </Col>
+                </Col>
+                <Col xs={12} md={8} className="small text-muted">
+                  Set each calendar month independently, or use “set every month” for a flat plan. Saved with the
+                  pricing config above (the <strong>Save &amp; push</strong> button). “Used” reflects live consumption
+                  for {year}.
+                </Col>
+              </Row>
+              <Row className="g-2">
+                {MONTHS.map((m, i) => (
+                  <Col xs={6} sm={4} md={3} lg={2} key={m}>
+                    <Form.Label className="small text-muted">{m}</Form.Label>
+                    <Form.Control
+                      type="number"
+                      step="100"
+                      value={config.monthlyAllocations[i] ?? 0}
+                      onChange={(e) => setMonth(i, num(e.target.value))}
+                    />
+                    <div className="small text-muted mt-1">used {usedCredits(i).toLocaleString()}</div>
+                  </Col>
+                ))}
+              </Row>
+            </Card.Body>
+          </Card>
+
+          <Row className="g-3">
             <Col md={6}>
-              <Card>
+              <Card className="h-100">
                 <Card.Header className="fw-semibold">Top up credits</Card.Header>
                 <Card.Body>
+                  <div className="mb-2">
+                    Current balance: <span className="fw-semibold">{(standing?.balance ?? 0).toLocaleString()}</span>{' '}
+                    credits
+                    {standing?.balanceUpdatedAt && (
+                      <span className="small text-muted">
+                        {' '}
+                        · updated {new Date(standing.balanceUpdatedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
                   <Form.Label>Add credits to {client.name}&apos;s balance</Form.Label>
                   <InputGroup>
                     <Form.Control
@@ -279,7 +387,9 @@ export default function NumaCredits() {
                       Top up
                     </Button>
                   </InputGroup>
-                  <div className="small text-muted mt-2">Pushed straight to the client ledger balance.</div>
+                  <div className="small text-muted mt-2">
+                    Pushed straight to the client ledger balance (persistent pool).
+                  </div>
                 </Card.Body>
               </Card>
             </Col>
