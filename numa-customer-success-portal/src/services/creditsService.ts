@@ -121,6 +121,61 @@ export class CreditsService {
   }
 
   /**
+   * Append a signed `adjustment` event to the balance log — a manual correction or a reset-to-zero.
+   * `credits` is signed (negative to draw down / zero the balance). Auditable, never a deletion.
+   */
+  async adjustBalance(
+    clientName: string,
+    accountId: string,
+    region: string,
+    credits: number,
+    note: string
+  ): Promise<void> {
+    const doc = await this.clientLedger(accountId, region);
+    const createdAt = new Date().toISOString();
+    const id = globalThis.crypto?.randomUUID?.() ?? createdAt;
+    await doc.send(
+      new PutCommand({
+        TableName: ledgerTable(clientName),
+        Item: {
+          PK: clientPk(clientName),
+          SK: `TXN#${createdAt}#${id}`,
+          txnKind: 'adjustment',
+          credits,
+          note,
+          createdAt,
+          createdBy: 'portal',
+        },
+      })
+    );
+    await activityService.logActivity({
+      type: 'config',
+      action: 'updated',
+      resourceType: 'client-credits',
+      resourceId: clientName,
+      details: { adjustment: credits, note },
+      success: true,
+    });
+  }
+
+  /**
+   * Set whether the in-app credits view is visible to the client (`showCredits`). Writes the central
+   * numa-client-config only; it's emitted to the client's config.json at DEPLOY time, so it takes
+   * visible effect on the next deploy. Metering runs regardless of this flag.
+   */
+  async setVisibility(clientName: string, show: boolean): Promise<void> {
+    await clientService.updateClientConfig(clientName, { showCredits: show });
+    await activityService.logActivity({
+      type: 'config',
+      action: 'updated',
+      resourceType: 'client-credits',
+      resourceId: clientName,
+      details: { showCredits: show },
+      success: true,
+    });
+  }
+
+  /**
    * Derive the client's live credit standing from its ledger in one partition query (read-only,
    * cross-account). Implements the Option-B drawdown waterfall:
    *   - per month: credits used (exact `creditsCharged`, or revenue ÷ creditUsd for older rows) vs the

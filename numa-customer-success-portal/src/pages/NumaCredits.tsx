@@ -76,6 +76,7 @@ export default function NumaCredits() {
   const [selectorOpen, setSelectorOpen] = useState(true);
   const [pricingOpen, setPricingOpen] = useState(false);
   const [fxNzd, setFxNzd] = useState(1.69); // NZD per USD — display-only sense-check (billing stays USD)
+  const [showCredits, setShowCredits] = useState(false); // in-app credits view visible to the client?
 
   useEffect(() => {
     (async () => {
@@ -98,6 +99,7 @@ export default function NumaCredits() {
     setConfig(c);
     setSavedConfig(c); // dirty-tracking baseline
     setSelectorOpen(!client); // collapse the picker once a client is chosen
+    setShowCredits(!!client?.config?.showCredits);
   }, [client]);
 
   const refreshStanding = useCallback(async () => {
@@ -188,6 +190,50 @@ export default function NumaCredits() {
     }
   };
 
+  const handleReset = async () => {
+    if (!client) return;
+    const startMonthly = DEFAULT_CREDIT_CONFIG.monthlyAllocations[0] ?? 0;
+    const ok = window.confirm(
+      `Reset ${client.name} to DEFAULT pricing + ${startMonthly.toLocaleString()} credits/mo allocation, and ` +
+        `zero the top-up balance?\n\nThe balance reset is recorded as an adjustment (auditable, not a deletion).`
+    );
+    if (!ok) return;
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const defaults = withDefaults(); // pure code defaults (pricing + 2000/mo allocation)
+      const { name, config: cc } = client;
+      await creditsService.saveConfig(name, cc.clientAccountId, cc.region, defaults);
+      const settled = standing?.settledBalance ?? 0;
+      if (settled !== 0) {
+        await creditsService.adjustBalance(name, cc.clientAccountId, cc.region, -settled, 'reset to defaults');
+      }
+      setConfig(defaults);
+      setSavedConfig(defaults);
+      setNotice(`Reset ${name} to defaults (pricing, allocation, and balance zeroed).`);
+      void refreshStanding();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reset failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleVisibility = async (next: boolean) => {
+    if (!client) return;
+    setShowCredits(next); // optimistic
+    setError(null);
+    setNotice(null);
+    try {
+      await creditsService.setVisibility(client.name, next);
+      setNotice(`Credits view ${next ? 'enabled' : 'hidden'} for ${client.name} — applies on the next deploy.`);
+    } catch (e) {
+      setShowCredits(!next); // revert on failure
+      setError(e instanceof Error ? e.message : 'Failed to update visibility');
+    }
+  };
+
   // ── live-standing derivation (NZ billing calendar) ──
   const nzNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Pacific/Auckland' }));
   const year = nzNow.getFullYear();
@@ -218,17 +264,36 @@ export default function NumaCredits() {
       <Card className="mb-3">
         <Card.Body>
           {client && !selectorOpen ? (
-            <div className="d-flex align-items-center justify-content-between">
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
               <div>
                 <span className="fw-semibold me-2">{client.name}</span>
-                <Badge bg={isCustom ? 'primary' : 'secondary'}>{isCustom ? 'Custom config' : 'Defaults'}</Badge>
+                <Badge bg={isCustom ? 'primary' : 'secondary'} className="me-1">
+                  {isCustom ? 'Custom config' : 'Defaults'}
+                </Badge>
+                <Badge bg={showCredits ? 'success' : 'secondary'}>
+                  {showCredits ? 'Visible to client' : 'Hidden (metering only)'}
+                </Badge>
                 <div className="small text-muted">
                   Account {client.config.clientAccountId} · {client.config.region}
                 </div>
               </div>
-              <Button variant="outline-secondary" size="sm" onClick={() => setSelectorOpen(true)}>
-                <PencilSquare className="me-1" /> Change client
-              </Button>
+              <div className="d-flex align-items-center gap-3">
+                <Form.Check
+                  type="switch"
+                  id="show-credits-switch"
+                  label="Show in client app"
+                  checked={showCredits}
+                  disabled={saving}
+                  title="Applies on the next deploy. Metering runs regardless."
+                  onChange={(e) => handleToggleVisibility(e.target.checked)}
+                />
+                <Button variant="outline-secondary" size="sm" onClick={() => setSelectorOpen(true)}>
+                  <PencilSquare className="me-1" /> Change
+                </Button>
+                <Button variant="outline-danger" size="sm" disabled={saving} onClick={handleReset}>
+                  Reset to defaults
+                </Button>
+              </div>
             </div>
           ) : (
             <>
