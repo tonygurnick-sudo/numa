@@ -146,21 +146,21 @@ Add files from the workspace to a folder for future retrieval.
 
 ### Parameters
 
-| Parameter   | Required | Default   | Description                                                                                                                                                                                                                                                                            |
-| ----------- | -------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `operation` | Yes      | -         | `"upload"`                                                                                                                                                                                                                                                                             |
-| `file`      | Yes      | -         | Path to file in workspace                                                                                                                                                                                                                                                              |
-| `kb_id`     | No       | "company" | Target folder ID                                                                                                                                                                                                                                                                       |
-| `path`      | No       | root      | **IMPORTANT: Always include when uploading to a sub-path.** Folder prefix within the target folder (e.g. `"reports/2024/"`). This is a directory path, NOT a filename. Omit only when uploading to the folder root. The parameter name MUST be `path` (not `destination` or `folder`). |
+| Parameter   | Required | Default   | Description                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------- | -------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operation` | Yes      | -         | `"upload"`                                                                                                                                                                                                                                                                                                                                                                                     |
+| `file`      | Yes      | -         | Path to file in workspace                                                                                                                                                                                                                                                                                                                                                                      |
+| `kb_id`     | No       | "company" | Target folder ID                                                                                                                                                                                                                                                                                                                                                                               |
+| `path`      | **Yes**  | -         | Folder prefix within the target folder. Pass `""` (or `"/"`) to upload to the folder root, or a sub-path like `"reports/2024/"`. This is a directory path, NOT a filename. The parameter name MUST be `path` (not `destination` or `folder`). **If this file came from a sub-path earlier in the conversation, the updated version must go back to the same sub-path — do not drift to root.** |
 
 ### Examples
 
 ```
-# Upload to Company Files (admin only)
+# Upload to Company Files root (admin only) — path="" makes the root destination explicit
 mcp__numa__numa_tool(
   name="numa_files",
-  description="Uploading report to Company Files",
-  params={"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company"}
+  description="Uploading report to Company Files root",
+  params={"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company", "path": ""}
 )
 
 # Upload to a user folder with sub-path
@@ -168,6 +168,14 @@ mcp__numa__numa_tool(
   name="numa_files",
   description="Uploading analysis to user folder",
   params={"operation": "upload", "file": "/workdir/outputs/analysis.docx", "kb_id": "abc-123-uuid", "path": "reports/2024/"}
+)
+
+# Updating a file you downloaded from a sub-path — preserve the sub-path
+# (download said "uri": "...kb/reports/2024/q3.pdf" — upload back to "reports/2024/")
+mcp__numa__numa_tool(
+  name="numa_files",
+  description="Uploading updated q3 report back to reports/2024/",
+  params={"operation": "upload", "file": "/workdir/outputs/q3.pdf", "kb_id": "company", "path": "reports/2024/"}
 )
 ```
 

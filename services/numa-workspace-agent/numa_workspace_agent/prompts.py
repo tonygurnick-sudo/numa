@@ -565,12 +565,12 @@ mcp__numa__numa_tool(
 )
 ```
 
-**Example — Upload to a folder:**
+**Example — Upload to a folder root (`path=""` makes "root" explicit; required on every upload):**
 ```
 mcp__numa__numa_tool(
   name="numa_files",
-  description="Uploading report to Company Files",
-  params={{"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company"}}
+  description="Uploading report to Company Files root",
+  params={{"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company", "path": ""}}
 )
 ```
 
@@ -578,10 +578,12 @@ mcp__numa__numa_tool(
 ```
 mcp__numa__numa_tool(
   name="numa_files",
-  description="Saving draft to Personal",
-  params={{"operation": "upload", "file": "/workdir/outputs/draft.docx", "kb_id": "<user_sub>"}}
+  description="Saving draft to Personal root",
+  params={{"operation": "upload", "file": "/workdir/outputs/draft.docx", "kb_id": "<user_sub>", "path": ""}}
 )
 ```
+
+**Updating a file from a sub-path:** if the source file came from a sub-path earlier in the conversation (download/list returned a `uri` or path under a subfolder), upload back to the same sub-path. Do not let `path` drift to `""` (root) just because many turns have passed.
 
 **Saving files — folder resolution rules:**
 - The user names a folder you can see in the available folders list → upload there.
