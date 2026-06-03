@@ -35,8 +35,8 @@ def test_meta_item_keys_and_margin() -> None:
     assert it["GSI1SK"] == "TS#2026-05-31T00:00:00Z"
     assert it["GSI2PK"] == "MONTH#2026-05" and it["GSI2SK"] == "CONV#abc"
     assert it["creditsCharged"] == 10
-    # marginVsConsumption = (10 credits x US$0.40 default) / US$2.50 = 1.6
-    assert abs(it["marginVsConsumption"] - 1.6) < 1e-9
+    # marginVsConsumption = (10 credits x US$0.30 default) / US$2.50 = 1.2
+    assert abs(it["marginVsConsumption"] - 1.2) < 1e-9
 
 
 def test_msg_item_carries_no_content() -> None:

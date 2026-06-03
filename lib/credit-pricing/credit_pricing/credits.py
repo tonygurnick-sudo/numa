@@ -14,8 +14,15 @@ import math
 from typing import Optional
 
 # Working anchors — confirm with Asa/sales before they harden into customer-facing pricing.
-CREDIT_USD: float = 0.40  # 1 credit = US$0.40 (Scheme A default)
+CREDIT_USD: float = (
+    0.30  # 1 credit = US$0.30 (~NZD $0.50 @ FX 1.69) — the NZD-anchored default
+)
 MARGIN_TARGET: float = 2.0  # scalar fallback (unclassified); see MARGINS_BY_TIER
+
+# New-client default monthly allocation (credits/month, all 12 months). Used as the fallback when a
+# client has no explicit monthlyAllocations configured — so a fresh client starts on a real plan
+# (2000 credits/mo ≈ NZD $1,015) instead of 0. Portal-set allocations override this; no DB seed.
+DEFAULT_MONTHLY_ALLOCATION: int = 2000
 
 # AgentCore uplift: the cost-recovery floor is enforced over tokens + AgentCore, NOT tokens alone.
 # floor basis = token_cost x AGENTCORE_MULT. 1.234 = the Step-01 fleet average (tokens -> tokens +
@@ -29,10 +36,10 @@ AGENTCORE_MULT: float = 1.234
 # Per-tier cost-recovery (defence) margins — scale UP with complexity (Scheme A). Cheap/low-tier work
 # isn't punished; premium work keeps a fuller margin. Confirm with Asa; tunable per client in the portal.
 MARGINS_BY_TIER: dict[str, float] = {
-    "low": 1.05,
-    "medium": 1.25,
-    "high": 1.5,
-    "very_high": 1.9,
+    "low": 1.15,
+    "medium": 1.3,
+    "high": 1.6,
+    "very_high": 2.0,
 }
 
 # Anti-inflation backstop: below this measured consumption (USD) a conversation is treated as

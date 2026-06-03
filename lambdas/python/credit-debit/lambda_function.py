@@ -30,6 +30,7 @@ from credit_pricing import processing
 from credit_pricing.credits import (
     AGENTCORE_MULT,
     CREDIT_USD,
+    DEFAULT_MONTHLY_ALLOCATION,
     MARGIN_TARGET,
     TRIVIAL_CONSUMPTION_USD,
 )
@@ -184,11 +185,13 @@ def handler(event: dict, context: Any) -> dict:
     )
     # Monthly allocation (12 calendar months). Snapshotted onto the MONTH row each turn so a closed
     # month's overflow is settled against the allocation that actually applied (immune to later edits).
+    # No explicit config -> the new-client default plan (DEFAULT_MONTHLY_ALLOCATION/mo), so a fresh
+    # client meters against a real allowance rather than 0. Portal-set allocations override this.
     raw_alloc = cfg.get("monthlyAllocations")
     eff_allocations = (
         [float(x) for x in raw_alloc]
         if isinstance(raw_alloc, list) and len(raw_alloc) == 12
-        else None
+        else [float(DEFAULT_MONTHLY_ALLOCATION)] * 12
     )
 
     # 2. Reuse an already-set title/tier (bounds Nova to ~once per conversation).
@@ -196,9 +199,14 @@ def handler(event: dict, context: Any) -> dict:
         table.get_item(Key={"PK": f"CONV#{conversation_id}", "SK": "META"}).get("Item")
         or {}
     )
+    # Pricing context: ANY agent conversation prices on the agent value tier — both ad-hoc agent
+    # chats (agent_id passed by the workspace agent) and scheduled runs (conversation_id "schedule-").
+    # Plain chat -> chat tier. source is the 3-way split for the admin dashboard.
+    agent_id = str((event or {}).get("agent_id") or "")
     is_scheduled = conversation_id.startswith("schedule-")
-    context_kind = "agent" if is_scheduled else "chat"
-    source = "scheduled" if is_scheduled else "chat"
+    is_agent_conv = is_scheduled or bool(agent_id)
+    context_kind = "agent" if is_agent_conv else "chat"
+    source = "scheduled" if is_scheduled else ("agent" if agent_id else "chat")
 
     # Title + deliverables are produced by the nightly summariser (anonymised, admin-safe), NOT live
     # — so the admin view never shows non-anonymised content, and live metering does one fewer Nova

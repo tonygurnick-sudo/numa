@@ -173,7 +173,9 @@ def test_trivial_cost_caps_value_tier_to_low() -> None:
         value_tier="very_high",
         context="chat",
     )
-    assert meta["dominantTier"] == "low" and meta["creditsValue"] == 1
+    assert (
+        meta["dominantTier"] == "low" and meta["creditsValue"] == 2
+    )  # low chat = 2 (2-credit floor)
 
 
 def test_cache_creation_split_priced_per_tier() -> None:

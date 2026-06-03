@@ -2,8 +2,10 @@
 
 Gated by ``CREDIT_METERING_ENABLED`` (default OFF — inert until explicitly turned on). After the
 turn's trace is synced to S3, the agent async-invokes the credit-debit Lambda with
-``{conversation_id, user_sub}``; that Lambda reads the trace and writes the credit ledger. The
-balance the admin panel shows then ticks down live.
+``{conversation_id, user_sub, agent_id?}``; that Lambda reads the trace and writes the credit ledger.
+``agent_id`` (present when the conversation is running an agent — ad-hoc OR scheduled) tells the
+debit Lambda to price on the AGENT value tier rather than chat. The balance the admin panel shows
+then ticks down live.
 
 Best-effort by design: any failure is logged and swallowed — metering must NEVER affect a chat
 request. The invoke itself is ``InvocationType='Event'`` (returns 202 immediately), so it doesn't
@@ -26,8 +28,14 @@ def _enabled() -> bool:
     )
 
 
-def maybe_emit_credit_event(user_sub: str, conversation_id: str) -> None:
-    """Async-invoke the credit-debit Lambda for this conversation. No-op unless metering is on."""
+def maybe_emit_credit_event(
+    user_sub: str, conversation_id: str, agent_id: str | None = None
+) -> None:
+    """Async-invoke the credit-debit Lambda for this conversation. No-op unless metering is on.
+
+    ``agent_id`` is set when this conversation is running an agent (ad-hoc agent chat OR scheduled
+    run) — passed through so the debit Lambda prices on the agent value tier.
+    """
     if not _enabled():
         return
     lambda_name = os.environ.get("CREDIT_DEBIT_LAMBDA_NAME", "")
@@ -51,12 +59,16 @@ def maybe_emit_credit_event(user_sub: str, conversation_id: str) -> None:
         session = boto3.Session(
             region_name=os.environ.get("AWS_REGION", "us-east-1"), **creds
         )
+        payload: dict[str, str] = {
+            "conversation_id": conversation_id,
+            "user_sub": user_sub,
+        }
+        if agent_id:
+            payload["agent_id"] = agent_id
         session.client("lambda").invoke(
             FunctionName=lambda_name,
             InvocationType="Event",  # fire-and-forget; returns 202 immediately
-            Payload=json.dumps(
-                {"conversation_id": conversation_id, "user_sub": user_sub}
-            ),
+            Payload=json.dumps(payload),
         )
         logger.info(
             "emitted credit usage event",

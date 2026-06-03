@@ -39,11 +39,13 @@ VALID_CATEGORIES: tuple[str, ...] = (
     "compliance_grading",
 )
 
-# Value credits per tier (Scheme A defaults @ $0.40/credit). Agent runs are ~half a chat task (one
-# fire, no multi-message iteration). Working anchors — tunable per client in the portal.
+# Value credits per tier (defaults @ $0.30/credit). Every interaction has a 2-credit floor (low);
+# agent runs stay cheaper than chat above the floor (3/5/12 vs 4/8/18). Tunable per client in the
+# portal. Both ad-hoc agent chats and scheduled runs price on the "agent" tier (context resolved
+# upstream); only plain chat uses "chat".
 VALUE_TIER_CREDITS: dict[str, dict[str, int]] = {
-    "chat": {"low": 1, "medium": 3, "high": 8, "very_high": 18},
-    "agent": {"low": 1, "medium": 2, "high": 5, "very_high": 12},
+    "chat": {"low": 2, "medium": 4, "high": 8, "very_high": 18},
+    "agent": {"low": 2, "medium": 3, "high": 5, "very_high": 12},
 }
 
 NOVA_MODEL = "global.amazon.nova-2-lite-v1:0"

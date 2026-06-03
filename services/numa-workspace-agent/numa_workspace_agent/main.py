@@ -2135,9 +2135,10 @@ async def _handle_chat(
             )
 
             # Live credit metering — no-op unless CREDIT_METERING_ENABLED. Best-effort.
+            # agent_id (set for agent chats + scheduled runs) → debit prices on the agent tier.
             from .credit_metering import maybe_emit_credit_event
 
-            maybe_emit_credit_event(user_sub, conversation_id)
+            maybe_emit_credit_event(user_sub, conversation_id, agent_id=agent_id)
 
     return StreamingResponse(
         stream_with_sync(),
@@ -2446,9 +2447,10 @@ async def _handle_sync(
     sync_to_s3(user_sub, conversation_id, _checksums_cache, s3_prefix=resolved_prefix)
 
     # Live credit metering — no-op unless CREDIT_METERING_ENABLED. Best-effort.
+    # agent_id (set for agent chats + scheduled runs) → debit prices on the agent tier.
     from .credit_metering import maybe_emit_credit_event
 
-    maybe_emit_credit_event(user_sub, conversation_id)
+    maybe_emit_credit_event(user_sub, conversation_id, agent_id=agent_id)
 
     # Also persist result to S3 for retrieval via /runs endpoint
     s3_prefix = agent_type_config.s3_prefix_template if agent_type_config else None

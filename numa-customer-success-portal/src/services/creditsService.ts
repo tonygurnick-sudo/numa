@@ -45,16 +45,18 @@ const configKey = (clientName: string) => ({ PK: clientPk(clientName), SK: 'CONF
 
 /** lib/credit-pricing defaults — keep in sync with credit_pricing/credits.py + tiers.py. */
 export const DEFAULT_CREDIT_CONFIG: Required<CreditConfig> = {
-  creditUsd: 0.4, // Scheme A — "thin / customer-friendly" default
+  creditUsd: 0.3, // ~NZD $0.50/credit @ FX 1.69 — the NZD-anchored default
   margin: 2.0, // scalar fallback (unclassified); marginsByTier below is the real defence
   agentcoreMult: 1.234,
   trivialConsumptionUsd: 0.01,
+  // 2-credit floor on every interaction (low); agent stays cheaper than chat above the floor.
   valueTiers: {
-    chat: { low: 1, medium: 3, high: 8, very_high: 18 },
-    agent: { low: 1, medium: 2, high: 5, very_high: 12 },
+    chat: { low: 2, medium: 4, high: 8, very_high: 18 },
+    agent: { low: 2, medium: 3, high: 5, very_high: 12 },
   },
-  marginsByTier: { low: 1.05, medium: 1.25, high: 1.5, very_high: 1.9 },
-  monthlyAllocations: Array.from({ length: 12 }, () => 0),
+  marginsByTier: { low: 1.15, medium: 1.3, high: 1.6, very_high: 2.0 },
+  // New-client starter plan: 2000 credits/mo (≈ NZD $1,015). Portal edits override per client.
+  monthlyAllocations: Array.from({ length: 12 }, () => 2000),
 };
 
 export class CreditsService {
