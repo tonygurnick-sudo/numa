@@ -72,6 +72,7 @@ import {
 import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/WorkspaceChatSettingsPanel';
 import { WorkspaceChatAgentsPanel } from '../Components/WorkspaceChat/WorkspaceChatAgentsPanel';
 import { ChatHealthIndicators } from '../Components/WorkspaceChat/ChatHealth/ChatHealthIndicators';
+import { ChatValueIndicator } from '../Components/WorkspaceChat/ChatValue/ChatValueIndicator';
 import { ChatHealthBanner } from '../Components/WorkspaceChat/ChatHealth/ChatHealthBanner';
 import { ChatHealthTopBar } from '../Components/WorkspaceChat/ChatHealth/ChatHealthTopBar';
 import { useChatHealth } from '../Components/WorkspaceChat/ChatHealth/useChatHealth';
@@ -143,6 +144,9 @@ const NumaWorkspaceChatAgents = () => {
   // DEVELOPER_MODE client flag AND the user toggle. Never displayed otherwise.
   const [showChatCost] = useShowChatCost();
   const showCostTotal = getFlag('DEVELOPER_MODE') && showChatCost;
+  // In-chat credit-tier indicator (Numa Credit System). Same visibility gate as the in-app Credits
+  // view; shown to all users (not just admins) so everyone sees their chat's credit tier.
+  const creditsIndicatorEnabled = getFlag('SHOW_CREDITS');
   const chatCostTotal = useMemo(
     () =>
       (messages as Array<{ costUsd?: number }>).reduce(
@@ -3594,11 +3598,20 @@ const NumaWorkspaceChatAgents = () => {
                           voiceRecordingState={voiceRecordingState}
                           onVoiceRecordingComplete={handleVoiceRecordingComplete}
                           chatHealthSlot={
-                            <ChatHealthIndicators
-                              messages={messages}
-                              modelId={selectedModelId}
-                              debugMode={showCostTotal}
-                            />
+                            <>
+                              <ChatHealthIndicators
+                                messages={messages}
+                                modelId={selectedModelId}
+                                debugMode={showCostTotal}
+                              />
+                              {creditsIndicatorEnabled && (
+                                <ChatValueIndicator
+                                  conversationId={conversationId}
+                                  streaming={buttonStatus === 'streaming'}
+                                  numaGet={numaGet}
+                                />
+                              )}
+                            </>
                           }
                         />
                       </div>

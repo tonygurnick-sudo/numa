@@ -23,6 +23,7 @@ import { CreditsSummaryCards } from './CreditsSummaryCards';
 import { CreditsWorkDelivered } from './CreditsWorkDelivered';
 import { CreditsTrendChart } from './CreditsTrendChart';
 import { CreditsSourceChart } from './CreditsSourceChart';
+import { CreditsValueTierChart } from './CreditsValueTierChart';
 import { CreditsTopList, type TopListItem } from './CreditsTopList';
 import { CreditsDrillModal } from './CreditsDrillModal';
 import { CreditsTopupActivity } from './CreditsTopupActivity';
@@ -242,8 +243,6 @@ export const CreditsDashboardPanel: React.FC = () => {
         monthLabel={monthLabel}
       />
 
-      <CreditsTopupActivity txns={balance?.txns ?? []} />
-
       <Tabs defaultActiveKey="dashboard" className="credits-tabs">
         <Tab eventKey="dashboard" title={t('creditsDashboard.tabDashboard', { defaultValue: 'Dashboard' })}>
           <div className="pt-3">
@@ -253,6 +252,12 @@ export const CreditsDashboardPanel: React.FC = () => {
               </div>
               <div className="col-lg-5">
                 <CreditsSourceChart slices={sourceSlices} />
+              </div>
+            </div>
+
+            <div className="row g-3 mb-3">
+              <div className="col-12">
+                <CreditsValueTierChart rows={rows} />
               </div>
             </div>
 
@@ -305,6 +310,11 @@ export const CreditsDashboardPanel: React.FC = () => {
         <Tab eventKey="work" title={t('creditsDashboard.tabWork', { defaultValue: 'Work delivered' })}>
           <div className="pt-3">
             <CreditsWorkDelivered rows={rows} totalCredits={usedThisMonth} who={who} />
+          </div>
+        </Tab>
+        <Tab eventKey="topups" title={t('creditsDashboard.tabTopups', { defaultValue: 'Top-ups' })}>
+          <div className="pt-3">
+            <CreditsTopupActivity txns={balance?.txns ?? []} />
           </div>
         </Tab>
       </Tabs>

@@ -639,5 +639,16 @@
       "helpTitle": "About chat health",
       "helpBody": "Long chats can become slower and less reliable. This bar tracks how worn-down this chat is based on its length, summarisations, and tool use. When it fills up, consider starting a fresh chat for sharper answers."
     }
+  },
+  "creditTier": {
+    "title": "Credit tier",
+    "body": "Higher-impact work moves up a tier and uses more credits.",
+    "rating": "Numa rates each chat's credit tier as it works — this one's still being rated.",
+    "tiers": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "very_high": "Very high"
+    }
   }
 }

@@ -29,11 +29,23 @@ export type CreditMonthly = {
   remaining: number;
   allocations: number[];
 };
+// One top-up-balance event-log entry (CLIENT#/TXN#…). `credits` is signed (top-ups +, settlements −,
+// adjustments ±). The balance is the running sum of these — there's no decrementing scalar.
+export type CreditTxn = {
+  kind: 'topup' | 'settlement' | 'adjustment' | string;
+  credits: number;
+  month?: string;
+  createdAt: string;
+  createdBy?: string;
+  note?: string;
+};
 export type CreditBalance = {
   balance: number;
   updatedAt: string | null;
   config?: CreditConfigEnvelope;
   monthly?: CreditMonthly;
+  /** Top-up-balance event log, newest first (for the in-client top-up activity view). */
+  txns?: CreditTxn[];
 };
 
 export type CreditLedgerRow = {
@@ -65,6 +77,21 @@ export type CreditLedgerFullRow = CreditLedgerRow & {
 };
 export type CreditLedgerFull = { month: string; totalCredits: number; items: CreditLedgerFullRow[] };
 
+// Per-conversation credit tier for the in-chat indicator (ownership-checked, not admin-gated).
+// `classified` is false until credit-debit has metered the conversation (a few seconds after a turn,
+// or never on a brand-new chat), in which case `tier` is null.
+export type ConversationValue = {
+  classified: boolean;
+  tier: 'low' | 'medium' | 'high' | 'very_high' | null;
+  source: string;
+  creditsCharged: number;
+};
+
+// Billing-admin roster (who may see credit data). Membership lives server-side in the credit ledger,
+// not a Cognito group — only an existing billing-admin (or the portal) can grant it.
+export type BillingAdmin = { sub: string; email: string | null; grantedBy: string | null; grantedAt: string | null };
+export type BillingAdminsResponse = { isBillingAdmin: boolean; admins: BillingAdmin[] };
+
 const API = (): string => sessionStorage.getItem('API_ENDPOINT') || '/api';
 
 export const AdminCreditsService = {
@@ -76,6 +103,7 @@ export const AdminCreditsService = {
         updatedAt: res?.updatedAt ?? null,
         config: res?.config,
         monthly: res?.monthly,
+        txns: Array.isArray(res?.txns) ? res.txns : [],
       };
     }
     const resp = await fetch(`${API()}/credits/balance`, { headers: { 'Content-Type': 'application/json' } });
@@ -86,6 +114,7 @@ export const AdminCreditsService = {
       updatedAt: json?.updatedAt ?? null,
       config: json?.config,
       monthly: json?.monthly,
+      txns: Array.isArray(json?.txns) ? json.txns : [],
     };
   },
 
@@ -131,6 +160,60 @@ export const AdminCreditsService = {
     const resp = await fetch(`${API()}/credits/ledger${qs}`, { headers: { 'Content-Type': 'application/json' } });
     if (!resp.ok) return { month: month ?? '', totalCredits: 0, items: [] };
     return normalise((await resp.json()) as Partial<CreditLedger>);
+  },
+
+  // The current credit tier of the caller's OWN conversation (in-chat indicator). Returns an
+  // unrated result on any miss/error so the indicator degrades to a neutral "rating…" state.
+  async getConversationValue(conversationId: string, numaGet?: NumaGet): Promise<ConversationValue> {
+    const unrated: ConversationValue = { classified: false, tier: null, source: 'chat', creditsCharged: 0 };
+    const norm = (j: Partial<ConversationValue>): ConversationValue => ({
+      classified: Boolean(j?.classified),
+      tier: j?.tier ?? null,
+      source: j?.source ?? 'chat',
+      creditsCharged: Number(j?.creditsCharged ?? 0),
+    });
+    const qs = `?id=${encodeURIComponent(conversationId)}`;
+    try {
+      if (numaGet) return norm((await numaGet(`/api/credits/conversation${qs}`)) as Partial<ConversationValue>);
+      const resp = await fetch(`${API()}/credits/conversation${qs}`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!resp.ok) return unrated;
+      return norm((await resp.json()) as Partial<ConversationValue>);
+    } catch {
+      return unrated;
+    }
+  },
+
+  // The caller's billing-admin status + the roster. Any admin may read (so a locked-out admin sees
+  // who to ask, and User Management can render badges). Empty/false on any miss.
+  async getBillingAdmins(numaGet?: NumaGet): Promise<BillingAdminsResponse> {
+    const norm = (j: Partial<BillingAdminsResponse>): BillingAdminsResponse => ({
+      isBillingAdmin: Boolean(j?.isBillingAdmin),
+      admins: Array.isArray(j?.admins) ? j.admins : [],
+    });
+    if (numaGet) return norm((await numaGet('/api/credits/billing-admins')) as Partial<BillingAdminsResponse>);
+    const resp = await fetch(`${API()}/credits/billing-admins`, { headers: { 'Content-Type': 'application/json' } });
+    if (!resp.ok) return { isBillingAdmin: false, admins: [] };
+    return norm((await resp.json()) as Partial<BillingAdminsResponse>);
+  },
+
+  // Grant/revoke billing-admin (peer-propagation). Server enforces that the caller is already a
+  // billing-admin and that the last one can't be revoked; throws with the server's error code so the
+  // UI can message 'last_billing_admin' / 'not_billing_admin' precisely.
+  async setBillingAdmin(
+    action: 'grant' | 'revoke',
+    sub: string,
+    email: string | null,
+    numaPost?: NumaPost
+  ): Promise<BillingAdminsResponse> {
+    if (!numaPost) throw new Error('setBillingAdmin requires an authenticated numaPost');
+    const res = (await numaPost('/api/credits/billing-admins', {
+      action,
+      sub,
+      email,
+    })) as Partial<BillingAdminsResponse>;
+    return { isBillingAdmin: Boolean(res?.isBillingAdmin), admins: Array.isArray(res?.admins) ? res.admins : [] };
   },
 
   async topUp(credits: number, numaPost?: NumaPost): Promise<{ balance: number }> {
