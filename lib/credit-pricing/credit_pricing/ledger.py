@@ -87,7 +87,6 @@ def meta_item(
     credits_charged: float,
     credits_value: float,
     credits_floor: float,
-    floored_msgs: int,
     consumption_cost_usd: float,
     total_tokens: int = 0,
     source: str = "chat",
@@ -125,7 +124,6 @@ def meta_item(
         "consumptionCostUsd": consumption_cost_usd,
         "creditsValue": credits_value,
         "creditsFloor": credits_floor,
-        "flooredMsgs": floored_msgs,
         "marginVsConsumption": margin_actual(
             credits_charged,
             consumption_cost_usd + agentcore_cost_usd,

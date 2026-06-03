@@ -152,7 +152,6 @@ FORBIDDEN_ADMIN = {
     "marginVsConsumption",
     "fxRate",
     "costIncomplete",
-    "flooredMsgs",
     "bedrockRegion",
     "tiers",
     "inputTokens",

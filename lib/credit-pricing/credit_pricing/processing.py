@@ -247,7 +247,6 @@ def build_conversation_rows(
         credits_charged=credits_charged,
         credits_value=credits_value,
         credits_floor=total_floor,
-        floored_msgs=sum(1 for tn in turns if (tn.recomputed_usd or 0) > 0),
         consumption_cost_usd=round(total_consumption_usd, 6),
         token_cost_usd=round(total_consumption_usd, 6),
         agentcore_cost_usd=agentcore_cost_usd,

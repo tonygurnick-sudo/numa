@@ -25,7 +25,6 @@ def test_meta_item_keys_and_margin() -> None:
         credits_charged=10,
         credits_value=6,
         credits_floor=10,
-        floored_msgs=1,
         consumption_cost_usd=2.5,
         last_ts="2026-05-31T00:00:00Z",
         bedrock_region="us-east-1",
