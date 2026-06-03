@@ -112,7 +112,10 @@ client with no `allocationSnapshot` has allocation 0, so all usage overflows (ba
   `<client>-credit-nightly`, `scheduleExpression: cron(30 0 * * ? *)`,
   `scheduleExpressionTimezone: Pacific/Auckland`, `flexibleTimeWindow: OFF`, targeting the nightly Lambda. (Uses
   **EventBridge Scheduler** specifically because it supports a timezone — `CloudwatchEventRule` is UTC-only.)
-- All three lambdas log to the shared `<client>-core` CloudWatch log group.
+- **Dedicated log group** `/numa/<client>-credits` (`creditLogGroup`): both `credit-debit` and
+  `credit-nightly` log here (no longer the shared `<client>-core`), so all credit logs are in one
+  place. Created directly via `CloudwatchLogGroup` (not `NumaLogGroup`, whose hardcoded inner id
+  would collide under this scope); covered by the core group's `/numa/*` resource policy.
 
 `infra/constructs/workspace-chat-agent-construct.ts`: props `creditDebitLambdaName`, `creditDebitLambdaArn`,
 `creditMeteringEnabled`; sets env `CREDIT_METERING_ENABLED` on the agent; grants `lambda:InvokeFunction` on the
@@ -126,17 +129,25 @@ metering accrues for everyone; visibility is gated separately by `SHOW_CREDITS`.
 
 ## 5. CloudWatch logs
 
-Structured logs (`structlog`) with a `_name` field for filtering. Lambdas log to `<client>-core`; the workspace
-agent container logs to `/numa/<client>/workspace-chat-agent`.
+Structured logs (`structlog`) with a `_name` field per event. Every credit line is also bound with
+`domain="credits"`, so a single filter spans all of them regardless of source — `credit-debit` +
+`credit-nightly` (in `/numa/<client>-credits`) **and** the workspace-agent meter emit (which lands in
+the agent's own container group `/numa/<client>/workspace-chat-agent`). Filter by `_name` for a
+specific event, or `domain = "credits"` for everything.
 
-| `_name`                                                               | Where           | Meaning                                                  |
-| --------------------------------------------------------------------- | --------------- | -------------------------------------------------------- |
-| `CREDIT_METER_EMIT` / `CREDIT_METER_EMIT_FAIL`                        | workspace agent | usage event emitted / emit failed                        |
-| `CREDIT_DEBIT_OK`                                                     | credit-debit    | conversation metered (credits, msgCount, tier)           |
-| `CREDIT_DEBIT_SKIP` / `CREDIT_DEBIT_NO_TRACE` / `CREDIT_DEBIT_CONFIG` | credit-debit    | skipped (missing ids / no trace / not configured)        |
-| `CREDIT_DEBIT_MONTHAGG`                                               | credit-debit    | monthly-aggregate update failed (non-fatal)              |
-| `CREDIT_NIGHTLY_OK`                                                   | credit-nightly  | run summary (candidates, summarised, errors, settlement) |
-| `CREDIT_NIGHTLY_SETTLE` / `CREDIT_NIGHTLY_SETTLE_FAIL`                | credit-nightly  | month-close settlement result / failure                  |
-| `CREDIT_NIGHTLY_FAIL`                                                 | credit-nightly  | a single receipt summary failed (best-effort)            |
+| `_name`                                                               | Where           | Meaning                                                                                            |
+| --------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------- |
+| `CREDIT_METER_EMIT` / `CREDIT_METER_EMIT_FAIL`                        | workspace agent | usage event emitted / emit failed                                                                  |
+| `CREDIT_DEBIT_OK`                                                     | credit-debit    | conversation metered (credits, msgCount, tier)                                                     |
+| `CREDIT_DEBIT_CLASSIFY`                                               | credit-debit    | per-turn classification: window size, actions summary, Nova's tier, prior + final (ratcheted) tier |
+| `CREDIT_DEBIT_SKIP` / `CREDIT_DEBIT_NO_TRACE` / `CREDIT_DEBIT_CONFIG` | credit-debit    | skipped (missing ids / no trace / not configured)                                                  |
+| `CREDIT_DEBIT_MONTHAGG`                                               | credit-debit    | monthly-aggregate update failed (non-fatal)                                                        |
+| `CREDIT_NIGHTLY_OK`                                                   | credit-nightly  | run summary (candidates, summarised, errors, settlement)                                           |
+| `CREDIT_NIGHTLY_SETTLE` / `CREDIT_NIGHTLY_SETTLE_FAIL`                | credit-nightly  | month-close settlement result / failure                                                            |
+| `CREDIT_NIGHTLY_FAIL`                                                 | credit-nightly  | a single receipt summary failed (best-effort)                                                      |
 
-Example (CloudWatch Logs Insights): `fields @timestamp, credits_charged, tier, conversation_id | filter _name = "CREDIT_DEBIT_OK" | sort @timestamp desc`.
+Examples (CloudWatch Logs Insights, on `/numa/<client>-credits`):
+
+- One event type: `fields @timestamp, credits_charged, tier, conversation_id | filter _name = "CREDIT_DEBIT_OK" | sort @timestamp desc`
+- Why a tier landed: `fields @timestamp, conversation_id, nova_tier, prior_tier, final_tier, actions | filter _name = "CREDIT_DEBIT_CLASSIFY" | sort @timestamp desc`
+- Everything credit-related (spans the agent container group too): `filter domain = "credits"`

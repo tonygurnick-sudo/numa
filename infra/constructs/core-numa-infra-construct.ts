@@ -643,6 +643,17 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
+    // Dedicated log group for the Numa Credit System lambdas (debit + nightly), so all credit
+    // metering / classification / settlement logs live in one place instead of the busy
+    // <client>-core group. Within it, filter by per-event `_name` (CREDIT_*) or the bound
+    // `domain="credits"` field. (The workspace-agent meter-emit log still lands in the agent's own
+    // container group — `domain="credits"` lets one query span both.) Created directly (not via
+    // NumaLogGroup, whose hardcoded inner id would collide with core-log-group under this scope);
+    // the `/numa/*` resource policy from the core NumaLogGroup already covers this prefix.
+    const creditLogGroup = new CloudwatchLogGroup(this, 'credits-log-group', {
+      name: `/numa/${props.clientName}-credits`,
+    });
+
     // Credit-debit Lambda — live credit metering (Numa Credit System / SPK-015). The workspace
     // agent async-invokes this after each turn (when CREDIT_METERING_ENABLED); it reads the
     // conversation trace from the outputs bucket, recomputes cost, classifies + titles via Nova,
@@ -650,7 +661,7 @@ export class CoreNumaInfra extends Construct {
     this.creditDebitLambda = new NumaLambda(this, 'credit-debit', {
       clientName: props.clientName,
       lambdaDirectory: 'python/credit-debit/',
-      logGroup: this.logGroup,
+      logGroup: creditLogGroup,
       resourceNameSuffix: '_credit-debit',
       environment: {
         CLIENT_NAME: props.clientName,
@@ -686,7 +697,7 @@ export class CoreNumaInfra extends Construct {
     const creditNightlyLambda = new NumaLambda(this, 'credit-nightly', {
       clientName: props.clientName,
       lambdaDirectory: 'python/credit-nightly/',
-      logGroup: this.logGroup,
+      logGroup: creditLogGroup,
       resourceNameSuffix: '_credit-nightly',
       timeout: 600,
       environment: {
