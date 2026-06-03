@@ -1,13 +1,14 @@
 import React from 'react';
-import { Badge, Button, Modal, Table } from 'react-bootstrap';
+import { Button, Modal } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import type { CreditLedgerFullRow } from '../../../Services/AdminCreditsService';
-import { fmtCredits, fmtDuration, fmtTimestamp, shortId, TIER_BADGE } from './helpers';
+import type { CreditLedgerRow } from '../../../Services/AdminCreditsService';
+import { fmtCredits, fmtDuration, fmtTimestamp, shortId } from './helpers';
+import { TierBadge } from './TierBadge';
 
 interface Props {
   show: boolean;
   title: string;
-  rows: CreditLedgerFullRow[];
+  rows: CreditLedgerRow[];
   userMap: Record<string, string>;
   onHide: () => void;
 }
@@ -27,71 +28,64 @@ export const CreditsDrillModal: React.FC<Props> = ({ show, title, rows, userMap,
         <Modal.Title className="fs-6">{title}</Modal.Title>
       </Modal.Header>
       <Modal.Body className="p-0">
-        <div className="px-3 py-2 small text-muted border-bottom d-flex justify-content-between align-items-center">
+        <div className="credits-drill-note">
           <span>
             <i className="bi bi-shield-lock me-1" aria-hidden="true" />
             {t('creditsDashboard.drillPrivacy', {
               defaultValue: 'Run IDs and timings only — chat names and content are never shown.',
             })}
           </span>
-          <Badge bg="light" text="dark" className="border">
+          <span className="credits-live-chip">
             {t('creditsDashboard.drillTotal', { defaultValue: '{{n}} credits', n: fmtCredits(totalCredits) })}
-          </Badge>
+          </span>
         </div>
         {rows.length === 0 ? (
-          <div className="text-muted text-center py-4">
-            {t('creditsDashboard.drillEmpty', { defaultValue: 'No runs to show.' })}
+          <div className="credits-empty">
+            <i className="bi bi-inbox credits-empty__icon" aria-hidden="true" />
+            <span className="credits-empty__text">
+              {t('creditsDashboard.drillEmpty', { defaultValue: 'No runs to show.' })}
+            </span>
           </div>
         ) : (
-          <Table size="sm" responsive hover className="mb-0 align-middle">
-            <thead>
-              <tr>
-                <th>{t('creditsDashboard.drillRun', { defaultValue: 'Run ID' })}</th>
-                <th>{t('creditsDashboard.drillWho', { defaultValue: 'By' })}</th>
-                <th>{t('creditsDashboard.drillLast', { defaultValue: 'Last run' })}</th>
-                <th>{t('creditsDashboard.drillDuration', { defaultValue: 'Duration' })}</th>
-                <th>{t('creditsDashboard.colTier', { defaultValue: 'Value' })}</th>
-                <th className="text-end">{t('creditsDashboard.drillMsgs', { defaultValue: 'Msgs' })}</th>
-                <th className="text-end">{t('creditsDashboard.drillTokens', { defaultValue: 'Tokens' })}</th>
-                <th className="text-end">{t('creditsDashboard.colCredits', { defaultValue: 'Credits' })}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.conversationId}>
-                  <td className="font-monospace small text-nowrap">
-                    {shortId(r.conversationId)}
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="p-0 ms-1 lh-1 text-muted"
-                      onClick={() => copy(r.conversationId)}
-                      title={t('creditsDashboard.copyId', { defaultValue: 'Copy full ID' })}
-                      aria-label={t('creditsDashboard.copyId', { defaultValue: 'Copy full ID' })}
-                    >
-                      <i className="bi bi-clipboard" aria-hidden="true" />
-                    </Button>
-                  </td>
-                  <td className="small">{who(r.userSub)}</td>
-                  <td className="small text-muted text-nowrap">{fmtTimestamp(r.lastTs)}</td>
-                  <td className="small text-muted text-nowrap">{fmtDuration(r.firstTs, r.lastTs, t)}</td>
-                  <td>
-                    <Badge
-                      bg={TIER_BADGE[r.dominantTier] ?? 'light'}
-                      text={TIER_BADGE[r.dominantTier] === 'light' ? 'dark' : undefined}
-                    >
-                      {r.dominantTier}
-                    </Badge>
-                  </td>
-                  <td className="text-end font-monospace small">{r.msgCount}</td>
-                  <td className="text-end font-monospace small">
-                    {r.totalTokens ? r.totalTokens.toLocaleString() : '—'}
-                  </td>
-                  <td className="text-end font-monospace">{fmtCredits(r.creditsCharged)}</td>
+          <div className="credits-table-wrap">
+            <table className="credits-table">
+              <thead>
+                <tr>
+                  <th>{t('creditsDashboard.drillRun', { defaultValue: 'Run ID' })}</th>
+                  <th>{t('creditsDashboard.drillWho', { defaultValue: 'By' })}</th>
+                  <th>{t('creditsDashboard.drillLast', { defaultValue: 'Last run' })}</th>
+                  <th>{t('creditsDashboard.drillDuration', { defaultValue: 'Duration' })}</th>
+                  <th>{t('creditsDashboard.colTier', { defaultValue: 'Value' })}</th>
+                  <th className="text-end">{t('creditsDashboard.colCredits', { defaultValue: 'Credits' })}</th>
                 </tr>
-              ))}
-            </tbody>
-          </Table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.conversationId}>
+                    <td className="font-monospace text-nowrap">
+                      {shortId(r.conversationId)}
+                      <button
+                        type="button"
+                        className="credits-copy-btn ms-1"
+                        onClick={() => copy(r.conversationId)}
+                        title={t('creditsDashboard.copyId', { defaultValue: 'Copy full ID' })}
+                        aria-label={t('creditsDashboard.copyId', { defaultValue: 'Copy full ID' })}
+                      >
+                        <i className="bi bi-clipboard" aria-hidden="true" />
+                      </button>
+                    </td>
+                    <td className="text-nowrap">{who(r.userSub)}</td>
+                    <td className="text-muted text-nowrap">{fmtTimestamp(r.lastTs)}</td>
+                    <td className="text-muted text-nowrap">{fmtDuration(r.firstTs, r.lastTs, t)}</td>
+                    <td>
+                      <TierBadge tier={r.dominantTier} />
+                    </td>
+                    <td className="text-end credits-table__num">{fmtCredits(r.creditsCharged)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Modal.Body>
       <Modal.Footer>

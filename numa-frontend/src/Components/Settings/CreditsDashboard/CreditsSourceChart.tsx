@@ -1,20 +1,12 @@
 import React, { useMemo } from 'react';
-import { Card } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { CreditSlice } from '../../../utils/creditDashboardData';
-import { colorAt, fmtCredits, sourceLabel } from './helpers';
+import { brandColor, colorAt, fmtCredits, sourceLabel } from './helpers';
 
 interface Props {
   slices: CreditSlice[];
 }
-
-/** Stable colours for the three deterministic sources (extra keys fall back to the palette). */
-const SOURCE_COLOR: Record<string, string> = {
-  chat: '#0d6efd',
-  agent: '#6f42c1',
-  scheduled: '#198754',
-};
 
 /** Credit consumption split by invocation source — Chat vs Agent chat vs Scheduled agent.
  *  Deterministic (NOT AI-classified). Real aggregation only — empty when there is nothing to show. */
@@ -23,16 +15,27 @@ export const CreditsSourceChart: React.FC<Props> = ({ slices }) => {
   const total = slices.reduce((a, s) => a + s.credits, 0);
   const data = useMemo(() => slices.map((s) => ({ ...s, label: sourceLabel(s.key, t) })), [slices, t]);
 
+  // Stable colours for the three deterministic sources; chat takes the client's brand colour.
+  const sourceColor = useMemo<Record<string, string>>(
+    () => ({ chat: brandColor(), agent: '#6366f1', scheduled: '#14b8a6' }),
+    []
+  );
+
   return (
-    <Card className="h-100">
-      <Card.Header className="fw-semibold">
-        <i className="bi bi-diagram-3 me-2" aria-hidden="true" />
-        {t('creditsDashboard.sourceTitle', { defaultValue: 'Credits by type' })}
-      </Card.Header>
-      <Card.Body>
+    <div className="credits-card credits-card--hover">
+      <div className="credits-card__header">
+        <i className="bi bi-diagram-3" aria-hidden="true" />
+        <span className="credits-card__title">
+          {t('creditsDashboard.sourceTitle', { defaultValue: 'Credits by type' })}
+        </span>
+      </div>
+      <div className="credits-card__body">
         {data.length === 0 || total === 0 ? (
-          <div className="text-muted text-center py-5">
-            {t('creditsDashboard.sourceEmpty', { defaultValue: 'No usage recorded yet.' })}
+          <div className="credits-empty">
+            <i className="bi bi-pie-chart credits-empty__icon" aria-hidden="true" />
+            <span className="credits-empty__text">
+              {t('creditsDashboard.sourceEmpty', { defaultValue: 'No usage recorded yet.' })}
+            </span>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={260}>
@@ -44,14 +47,17 @@ export const CreditsSourceChart: React.FC<Props> = ({ slices }) => {
                 cx="50%"
                 cy="50%"
                 outerRadius={92}
-                innerRadius={46}
+                innerRadius={52}
                 paddingAngle={2}
+                stroke="#ffffff"
+                strokeWidth={2}
               >
                 {data.map((s, i) => (
-                  <Cell key={s.key} fill={SOURCE_COLOR[s.key] ?? colorAt(i)} />
+                  <Cell key={s.key} fill={sourceColor[s.key] ?? colorAt(i)} />
                 ))}
               </Pie>
               <Tooltip
+                contentStyle={{ borderRadius: 10, border: '1px solid #e4e4e7', fontSize: 12 }}
                 formatter={(value) => {
                   const v = Number(value);
                   const pct = total > 0 ? Math.round((v / total) * 100) : 0;
@@ -62,12 +68,12 @@ export const CreditsSourceChart: React.FC<Props> = ({ slices }) => {
                   });
                 }}
               />
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
             </PieChart>
           </ResponsiveContainer>
         )}
-      </Card.Body>
-    </Card>
+      </div>
+    </div>
   );
 };
 

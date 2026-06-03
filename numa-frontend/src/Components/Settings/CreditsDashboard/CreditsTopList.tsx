@@ -1,7 +1,7 @@
 import React from 'react';
-import { Badge, Button, Card } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { fmtCredits } from './helpers';
+import { TierBadge } from './TierBadge';
 
 export interface TopListItem {
   /** stable key + the value passed to onSelect (conversationId / category / userSub). */
@@ -12,8 +12,8 @@ export interface TopListItem {
   secondary?: string;
   /** credits consumed (drives ranking + the mini bar). */
   value: number;
-  /** optional value-tier badge. */
-  badge?: { text: string; bg: string };
+  /** optional value-tier → renders a tonal {@link TierBadge}. */
+  tier?: string;
   /** full value behind a copy button (e.g. the full UUID). */
   copyValue?: string;
 }
@@ -38,65 +38,76 @@ export const CreditsTopList: React.FC<Props> = ({ title, icon, items, emptyText,
   };
 
   return (
-    <Card className="h-100">
-      <Card.Header className="fw-semibold">
-        <i className={`bi ${icon} me-2`} aria-hidden="true" />
-        {title}
-      </Card.Header>
-      <Card.Body className="p-0">
+    <div className="credits-card credits-card--hover">
+      <div className="credits-card__header">
+        <i className={`bi ${icon}`} aria-hidden="true" />
+        <span className="credits-card__title">{title}</span>
+      </div>
+      <div className="credits-card__body credits-card__body--flush">
         {items.length === 0 ? (
-          <div className="text-muted text-center py-4">{emptyText}</div>
+          <div className="credits-empty">
+            <span className="credits-empty__text">{emptyText}</span>
+          </div>
         ) : (
-          <div className="list-group list-group-flush">
-            {items.map((item, idx) => (
-              <div
-                key={item.id}
-                className={`list-group-item ${onSelect ? 'list-group-item-action' : ''}`}
-                role={onSelect ? 'button' : undefined}
-                onClick={onSelect ? () => onSelect(item.id) : undefined}
-              >
-                <div className="d-flex align-items-center gap-2">
-                  <span className="badge bg-light text-dark border flex-shrink-0">{idx + 1}</span>
-                  <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                    <div className="d-flex align-items-center gap-2">
-                      <span className="fw-semibold text-truncate">{item.primary}</span>
+          <div className="credits-toplist">
+            {items.map((item, idx) => {
+              const select = onSelect ? () => onSelect(item.id) : undefined;
+              return (
+                <div
+                  key={item.id}
+                  className={`credits-toplist__item ${onSelect ? 'credits-toplist__item--action' : ''}`}
+                  role={onSelect ? 'button' : undefined}
+                  tabIndex={onSelect ? 0 : undefined}
+                  onClick={select}
+                  onKeyDown={
+                    select
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            select();
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  <span className="credits-toplist__rank">{idx + 1}</span>
+                  <div className="credits-toplist__main">
+                    <div className="credits-toplist__primary-row">
+                      <span className="credits-toplist__primary">{item.primary}</span>
                       {item.copyValue ? (
-                        <Button
-                          variant="link"
-                          size="sm"
-                          className="p-0 lh-1 text-muted flex-shrink-0"
+                        <button
+                          type="button"
+                          className="credits-copy-btn"
                           onClick={(e) => copy(e, item.copyValue as string)}
                           title={t('creditsDashboard.copyId', { defaultValue: 'Copy full ID' })}
                           aria-label={t('creditsDashboard.copyId', { defaultValue: 'Copy full ID' })}
                         >
                           <i className="bi bi-clipboard" aria-hidden="true" />
-                        </Button>
+                        </button>
                       ) : null}
-                      {item.badge ? <Badge bg={item.badge.bg}>{item.badge.text}</Badge> : null}
+                      {item.tier ? <TierBadge tier={item.tier} /> : null}
                     </div>
-                    {item.secondary ? <div className="small text-muted text-truncate">{item.secondary}</div> : null}
-                    <div className="progress mt-1" style={{ height: 4 }}>
+                    {item.secondary ? <div className="credits-toplist__secondary">{item.secondary}</div> : null}
+                    <div className="credits-toplist__bar">
                       <div
-                        className="progress-bar"
-                        role="progressbar"
-                        aria-valuenow={item.value}
+                        className="credits-toplist__bar-fill"
                         style={{ width: `${max > 0 ? Math.round((item.value / max) * 100) : 0}%` }}
                       />
                     </div>
                   </div>
-                  <div className="text-end flex-shrink-0">
-                    <div className="fw-semibold font-monospace">{fmtCredits(item.value)}</div>
-                    <div className="small text-muted">
+                  <div className="credits-toplist__value">
+                    <div className="credits-toplist__value-num">{fmtCredits(item.value)}</div>
+                    <div className="credits-toplist__value-unit">
                       {t('creditsDashboard.creditsUnit', { defaultValue: 'credits' })}
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
-      </Card.Body>
-    </Card>
+      </div>
+    </div>
   );
 };
 

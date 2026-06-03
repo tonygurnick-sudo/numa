@@ -4,13 +4,53 @@
 /** i18next t() — narrowed to what we use, to avoid a hard dependency on its types. */
 export type TransFn = (key: string, opts?: Record<string, unknown>) => string;
 
-/** Value-tier → Bootstrap badge variant. ("Value" is the client-facing name for the tier.) */
+/** Value-tier → Bootstrap badge variant. ("Value" is the client-facing name for the tier.)
+ *  Retained for any legacy caller — new UI uses the tonal pill via {@link tierClass}. */
 export const TIER_BADGE: Record<string, string> = {
   low: 'secondary',
   medium: 'info',
   high: 'primary',
   very_high: 'warning',
   unclassified: 'light',
+};
+
+/** Known value tiers, low → high (mirrors the lib's VALID_TIERS ordering). */
+export const VALID_TIERS = ['low', 'medium', 'high', 'very_high', 'unclassified'] as const;
+
+/** Value-tier → tonal pill class. One intentional scale (neutral → blue → brand → amber),
+ *  shared across the dashboard, work-delivered table and drill modal. Cost-framed, not a
+ *  judgement: a higher tier means the run drew more credits, nothing more. */
+export const tierClass = (tier: string): string => {
+  const t = (VALID_TIERS as readonly string[]).includes(tier) ? tier : 'unclassified';
+  return `credits-tier credits-tier--${t}`;
+};
+
+/** Humanised tier label (e.g. very_high → "Very high"). */
+export const tierLabel = (tier: string, t: TransFn): string => {
+  switch (tier) {
+    case 'low':
+      return t('credits.tier.low', { defaultValue: 'Low' });
+    case 'medium':
+      return t('credits.tier.medium', { defaultValue: 'Medium' });
+    case 'high':
+      return t('credits.tier.high', { defaultValue: 'High' });
+    case 'very_high':
+      return t('credits.tier.veryHigh', { defaultValue: 'Very high' });
+    default:
+      return t('credits.tier.unclassified', { defaultValue: 'Unclassified' });
+  }
+};
+
+/** Resolve the live brand-primary colour (themeable per client) for recharts, which sets
+ *  `fill`/`stroke` as SVG attributes — those don't resolve CSS var() — so we read it once.
+ *  Falls back through --brand-primary → --color-primary → the default eggplant. */
+export const brandColor = (fallback = '#8e50a7'): string => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return fallback;
+  const s = getComputedStyle(document.documentElement);
+  const brand = s.getPropertyValue('--brand-primary').trim();
+  if (brand) return brand;
+  const base = s.getPropertyValue('--color-primary').trim();
+  return base || fallback;
 };
 
 /** Friendly label for the deterministic invocation `source` (chat | agent | scheduled). */
@@ -29,20 +69,22 @@ export function sourceLabel(source: string, t: TransFn): string {
   }
 }
 
-/** Categorical palette aligned to Bootstrap theme colours, for pie slices / bars. */
+/** Categorical palette (modern, muted) for pie slices / bars. Anchored on the brand
+ *  eggplant with cool + warm companions; resolved per-client brand colour is layered on
+ *  top at the call site for the primary slice. */
 export const CHART_PALETTE = [
-  '#0d6efd',
-  '#6f42c1',
-  '#d63384',
-  '#fd7e14',
-  '#198754',
-  '#0dcaf0',
-  '#ffc107',
-  '#6610f2',
-  '#20c997',
-  '#dc3545',
-  '#6c757d',
-  '#adb5bd',
+  '#8e50a7',
+  '#6366f1',
+  '#14b8a6',
+  '#f59e0b',
+  '#ec4899',
+  '#0ea5e9',
+  '#22c55e',
+  '#a855f7',
+  '#f97316',
+  '#ef4444',
+  '#64748b',
+  '#94a3b8',
 ];
 export const colorAt = (i: number): string => CHART_PALETTE[i % CHART_PALETTE.length];
 

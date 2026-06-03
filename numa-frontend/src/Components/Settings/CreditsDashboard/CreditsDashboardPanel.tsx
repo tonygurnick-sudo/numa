@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Spinner, Tab, Tabs } from 'react-bootstrap';
+import { Alert, Spinner, Tab, Tabs } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import {
   AdminCreditsService,
+  type BillingAdmin,
   type CreditBalance,
-  type CreditLedgerFullRow,
+  type CreditLedgerRow,
 } from '../../../Services/AdminCreditsService';
 import { UsersService, type WorkspaceUser } from '../../../Services/UsersService';
 import { listAgents } from '../../../Services/AgentsService';
@@ -24,7 +25,8 @@ import { CreditsTrendChart } from './CreditsTrendChart';
 import { CreditsSourceChart } from './CreditsSourceChart';
 import { CreditsTopList, type TopListItem } from './CreditsTopList';
 import { CreditsDrillModal } from './CreditsDrillModal';
-import { fmtTimestamp, shortId, TIER_BADGE } from './helpers';
+import { CreditsTopupActivity } from './CreditsTopupActivity';
+import { fmtTimestamp, shortId } from './helpers';
 
 /**
  * CreditsDashboardPanel — the headline admin Credits view (Settings → Admin → Credits Dashboard).
@@ -40,22 +42,31 @@ export const CreditsDashboardPanel: React.FC = () => {
   const { numaGet } = useNumaRequest();
 
   const [balance, setBalance] = useState<CreditBalance | null>(null);
-  const [rows, setRows] = useState<CreditLedgerFullRow[]>([]);
+  const [rows, setRows] = useState<CreditLedgerRow[]>([]);
   const [usedThisMonth, setUsedThisMonth] = useState(0);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
   const [agentMap, setAgentMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [drill, setDrill] = useState<{ title: string; rows: CreditLedgerFullRow[] } | null>(null);
+  const [drill, setDrill] = useState<{ title: string; rows: CreditLedgerRow[] } | null>(null);
+  // null = not yet checked. When isBillingAdmin is false we render the lock screen and never fetch
+  // the credit data (the API also 403s — defence in depth).
+  const [access, setAccess] = useState<{ isBillingAdmin: boolean; admins: BillingAdmin[] } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const acc = await AdminCreditsService.getBillingAdmins(numaGet);
+      setAccess(acc);
+      if (!acc.isBillingAdmin) {
+        setLoading(false);
+        return; // locked — skip the credit-data fetch entirely
+      }
       const bal = await AdminCreditsService.getBalance(numaGet);
       const [ledger, users, agents, tr] = await Promise.all([
-        AdminCreditsService.getLedgerFull(undefined, numaGet),
+        AdminCreditsService.getLedger(undefined, numaGet),
         UsersService.list(numaGet).catch(() => [] as WorkspaceUser[]),
         listAgents(numaGet, { scope: 'all' }).catch(() => [] as AgentSummary[]),
         fetchTrend(numaGet, bal, 6),
@@ -93,7 +104,7 @@ export const CreditsDashboardPanel: React.FC = () => {
   const agentName = useCallback((id: string): string => agentMap[id] ?? `${id.slice(0, 8)}…`, [agentMap]);
 
   const runMeta = useCallback(
-    (r: CreditLedgerFullRow): string =>
+    (r: CreditLedgerRow): string =>
       t('creditsDashboard.runMeta', {
         defaultValue: '{{time}} · {{who}}',
         time: fmtTimestamp(r.lastTs),
@@ -107,7 +118,7 @@ export const CreditsDashboardPanel: React.FC = () => {
   // A run is identified by its anonymised title (from the nightly summariser) + time + who ran it;
   // the full conversation ID rides a copy button so an admin can dig deeper on a specific user/run.
   const toRunItem = useCallback(
-    (r: CreditLedgerFullRow): TopListItem => ({
+    (r: CreditLedgerRow): TopListItem => ({
       id: r.conversationId,
       primary: r.title?.trim()
         ? r.title
@@ -115,7 +126,7 @@ export const CreditsDashboardPanel: React.FC = () => {
       copyValue: r.conversationId,
       secondary: runMeta(r),
       value: r.creditsCharged,
-      badge: { text: r.dominantTier, bg: TIER_BADGE[r.dominantTier] ?? 'light' },
+      tier: r.dominantTier,
     }),
     [runMeta, t]
   );
@@ -147,9 +158,39 @@ export const CreditsDashboardPanel: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="d-flex align-items-center gap-2 py-5 text-muted">
-        <Spinner animation="border" size="sm" />
-        <span>{t('creditsDashboard.loading', { defaultValue: 'Loading dashboard…' })}</span>
+      <div className="credits-dashboard">
+        <div className="credits-empty">
+          <Spinner animation="border" size="sm" className="mb-2" />
+          <span className="credits-empty__text">
+            {t('creditsDashboard.loading', { defaultValue: 'Loading dashboard…' })}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Lock screen: an admin who isn't a billing-admin sees the page exists but not the data. Show who
+  // to ask so they can request access (a billing-admin promotes them in User Management).
+  if (access && !access.isBillingAdmin) {
+    const askList = access.admins.map((a) => a.email || `${a.sub.slice(0, 8)}…`).filter(Boolean);
+    return (
+      <div className="credits-dashboard">
+        <div className="credits-empty">
+          <i className="bi bi-shield-lock credits-empty__icon" aria-hidden="true" />
+          <div className="credits-empty__title">
+            {t('creditsDashboard.lockedTitle', { defaultValue: 'Only billing admins can see credit information' })}
+          </div>
+          <p className="credits-empty__text mb-0">
+            {askList.length > 0
+              ? t('creditsDashboard.lockedAsk', {
+                  defaultValue: 'Ask a billing admin to grant you access: {{who}}',
+                  who: askList.join(', '),
+                })
+              : t('creditsDashboard.lockedNone', {
+                  defaultValue: 'No billing admin has been assigned yet — contact Arcanum to set one up.',
+                })}
+          </p>
+        </div>
       </div>
     );
   }
@@ -172,25 +213,25 @@ export const CreditsDashboardPanel: React.FC = () => {
   };
 
   return (
-    <>
+    <div className="credits-dashboard">
       {error && (
         <Alert variant="danger" dismissible onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
-      <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-        <div className="text-muted small">
-          <i className="bi bi-shield-lock me-1" aria-hidden="true" />
+      <div className="credits-topbar">
+        <span className="credits-privacy-note">
+          <i className="bi bi-shield-lock" aria-hidden="true" />
           {t('creditsDashboard.privacyNote', {
             defaultValue:
               'Privacy-safe — chat & agent names and content are never shown. Identify a run by its ID and time.',
           })}
-        </div>
-        <Badge bg="light" text="dark" className="border">
-          <i className="bi bi-broadcast me-1" aria-hidden="true" />
+        </span>
+        <span className="credits-live-chip">
+          <span className="credits-live-chip__dot" aria-hidden="true" />
           {t('creditsDashboard.liveData', { defaultValue: 'Live data' })}
-        </Badge>
+        </span>
       </div>
 
       <CreditsSummaryCards
@@ -201,7 +242,9 @@ export const CreditsDashboardPanel: React.FC = () => {
         monthLabel={monthLabel}
       />
 
-      <Tabs defaultActiveKey="dashboard" className="mb-3">
+      <CreditsTopupActivity txns={balance?.txns ?? []} />
+
+      <Tabs defaultActiveKey="dashboard" className="credits-tabs">
         <Tab eventKey="dashboard" title={t('creditsDashboard.tabDashboard', { defaultValue: 'Dashboard' })}>
           <div className="pt-3">
             <div className="row g-3 mb-3">
@@ -273,7 +316,7 @@ export const CreditsDashboardPanel: React.FC = () => {
         userMap={userMap}
         onHide={() => setDrill(null)}
       />
-    </>
+    </div>
   );
 };
 
