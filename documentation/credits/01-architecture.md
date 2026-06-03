@@ -231,5 +231,5 @@ USD throughout — the timezone only decides **when** a month boundary falls, ne
   conversation or re-running the nightly/backfill overwrites, never double-counts. Stale MSG rows from a
   shortened/edited conversation are cleaned up on re-meter.
 - **Privacy:** MSG rows and the in-client view never carry chat content. `title` + `deliverables` are
-  AI-anonymised by the nightly summariser (a one-day lag; until then the UI shows a "summary coming overnight"
+  AI-anonymised by the nightly summariser (a one-day lag; until then the UI shows a "anonymised summary coming overnight"
   placeholder alongside live time/credits/tier).

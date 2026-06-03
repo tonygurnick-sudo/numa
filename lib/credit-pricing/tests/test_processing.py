@@ -318,6 +318,35 @@ def test_agentcore_uplift_in_floor_is_default() -> None:
     assert meta["marginVsConsumption"] >= 2.0
 
 
+def test_extract_tools_and_value_signal() -> None:
+    events = [
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "tool_use", "name": "gmail_send"},
+                    {"type": "text", "text": "ok"},
+                ]
+            },
+        },
+        {"type": "user", "message": {"content": [{"type": "text", "text": "hi"}]}},
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "tool_use", "name": "slack_post"},
+                    {"type": "tool_use", "name": "gmail_send"},  # dup -> deduped
+                ]
+            },
+        },
+    ]
+    tools = processing.extract_tools(events)
+    assert tools == ["gmail_send", "slack_post"]  # first-seen order, deduped
+    sig = processing.tools_value_signal(tools)
+    assert "gmail_send" in sig and "slack_post" in sig and "(2)" in sig
+    assert processing.tools_value_signal([]) == ""  # no tools -> no signal block
+
+
 if __name__ == "__main__":
     test_process_trace_events()
     test_build_rows_charge_is_max_of_value_and_floor()
@@ -328,4 +357,5 @@ if __name__ == "__main__":
     test_long_context_tier_premium()
     test_per_tier_margin_lifts_floor()
     test_agentcore_uplift_in_floor_is_default()
+    test_extract_tools_and_value_signal()
     print("processing tests OK")

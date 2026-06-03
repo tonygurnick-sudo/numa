@@ -14,7 +14,7 @@ latest activity — it:
 
 This is what powers the admin view's "what was done" — live metering writes credits/tier/time
 immediately; this fills in the human-readable, anonymised labels overnight. Until it runs, the UI
-shows a "summary coming overnight" placeholder.
+shows a "anonymised summary coming overnight" placeholder.
 
 **Idempotent** — re-running skips rows already summarised after their `lastTs`. **Best-effort** —
 one failing conversation never stops the run. **Privacy** — only the anonymised title + deliverables

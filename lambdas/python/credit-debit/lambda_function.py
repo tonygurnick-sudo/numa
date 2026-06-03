@@ -143,8 +143,9 @@ def handler(event: dict, context: Any) -> dict:
         )
         return {"status": "skipped", "reason": "trace not found"}
 
+    events = list(_iter_trace(body))
     turns, user_texts, trace_first_ts, trace_last_ts = processing.process_trace_events(
-        _iter_trace(body), cache_ttl=CACHE_TTL
+        events, cache_ttl=CACHE_TTL
     )
     if not turns:
         return {"status": "skipped", "reason": "no billable turns"}
@@ -214,7 +215,7 @@ def handler(event: dict, context: Any) -> dict:
     # Title + deliverables are produced by the nightly summariser (anonymised, admin-safe), NOT live
     # — so the admin view never shows non-anonymised content, and live metering does one fewer Nova
     # call. Preserve any title the nightly already wrote; otherwise leave it empty (UI shows a
-    # "summary coming overnight" placeholder).
+    # "anonymised summary coming overnight" placeholder).
     title = existing.get("title") or ""
     prior_tier = existing.get("dominantTier")
     prior_tier = prior_tier if prior_tier in VALID_TIERS else None  # ratchet floor
@@ -231,11 +232,17 @@ def handler(event: dict, context: Any) -> dict:
     nova_tier = None
     window = _classify_window(user_texts)
     actions_summary = _actions_summary(turns)
+    # VALUE signal: the distinct tools/integrations touched so far. A terse ask that pulled from many
+    # integrations (e.g. "generate this week's sales report" hitting 5 sources) is high-VALUE even
+    # though the words are thin — surface that so the classifier tiers it correctly (the proven
+    # backfill signal, now live). Effort still rides in actions_summary; this is value, not volume.
+    value_signal = processing.tools_value_signal(processing.extract_tools(events))
     if prior_tier != "very_high":
         cls = classify(
             window,
             context=context_kind,
             actions=actions_summary,
+            value_signal=value_signal,
             bedrock=bedrock,
             region=REGION,
         )
@@ -257,6 +264,7 @@ def handler(event: dict, context: Any) -> dict:
         context=context_kind,
         window_msgs=len(window),
         actions=actions_summary,
+        value_signal=value_signal,
         nova_tier=nova_tier,
         prior_tier=prior_tier,
         final_tier=value_tier,

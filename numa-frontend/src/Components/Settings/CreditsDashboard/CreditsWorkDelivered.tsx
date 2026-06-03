@@ -80,7 +80,7 @@ export const CreditsWorkDelivered: React.FC<Props> = ({ rows, totalCredits, who 
                       <div>{row.title}</div>
                     ) : (
                       <div className="text-muted fst-italic">
-                        {t('credits.summaryPending', { defaultValue: 'Summary coming overnight' })}
+                        {t('credits.summaryPending', { defaultValue: 'Anonymised summary coming overnight' })}
                       </div>
                     )}
                     {row.deliverables && row.deliverables.length > 0 && (

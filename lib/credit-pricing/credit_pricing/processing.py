@@ -122,6 +122,33 @@ def process_trace_events(
     return turns, user_texts, first_ts, last_ts
 
 
+def extract_tools(events: Iterable[dict]) -> list[str]:
+    """Distinct tool / integration names invoked across the trace (assistant ``tool_use`` blocks),
+    first-seen order. The cross-system breadth signal the classifier needs to value terse-but-broad
+    work correctly — touching many integrations is a VALUE signal, not just effort. (Mirrors the
+    backfill's ``extract_tools`` so live and historical classification see the same input.)
+    """
+    seen: list[str] = []
+    for ev in events:
+        if ev.get("type") != "assistant":
+            continue
+        for c in (ev.get("message") or {}).get("content") or []:
+            if isinstance(c, dict) and c.get("type") == "tool_use":
+                name = c.get("name")
+                if name and name not in seen:
+                    seen.append(name)
+    return seen
+
+
+def tools_value_signal(tools: list[str]) -> str:
+    """Human-readable VALUE signal for the classifier from the tools/integrations touched. Empty
+    string when no tools were used (so the classifier prompt omits the block entirely).
+    """
+    if not tools:
+        return ""
+    return f"tools / data-sources used ({len(tools)}): " + ", ".join(tools[:25])
+
+
 def build_conversation_rows(
     *,
     conversation_id: str,

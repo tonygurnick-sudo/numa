@@ -116,7 +116,7 @@ function toAdminRow(item: Record<string, unknown>): Record<string, unknown> {
   return {
     conversationId: String(item.PK || '').replace(/^CONV#/, ''),
     // title + deliverables are the anonymised, admin-safe labels written by the nightly summariser;
-    // empty until it runs (frontend shows a "summary coming overnight" placeholder).
+    // empty until it runs (frontend shows a "anonymised summary coming overnight" placeholder).
     title: item.title ?? '',
     deliverables: Array.isArray(item.deliverables) ? item.deliverables : [],
     dominantTier: item.dominantTier ?? 'unclassified',

@@ -82,6 +82,10 @@ CLASSIFIER_SYSTEM = (
     "year-over-year financial modelling with recommendations, formal compliance grading). MUST be "
     "RARE — reserved for substantial deliverables.\n\n"
     "When in doubt, choose the LOWER tier.\n"
+    "IMPORTANT — judge by what the task DID, not how briefly it was phrased. A short or "
+    "simple-sounding request that pulled from MULTIPLE integrations / data sources, or produced a "
+    "multi-source or cross-system deliverable, is HIGH — the user gets a specialist-grade result even "
+    "if their message was one line. Effort/compute for the system is irrelevant; user value is the test.\n"
     'Respond with ONLY a JSON object: {"tier": <tier>}. No prose.'
 )
 
@@ -131,15 +135,21 @@ def classify(
     *,
     context: str = "chat",
     actions: Optional[str] = None,
+    value_signal: str = "",
     bedrock: Any = None,
     region: str = "us-east-1",
     model: str = NOVA_MODEL,
 ) -> dict[str, str]:
     """Classify a task via Nova 2 Lite -> {"tier"}. Returns medium on any error.
 
-    ``actions`` is optional TRUSTED system telemetry (turn/token volume, models, tools used) that
-    corroborates effort the user's words alone miss — e.g. a one-line 'build me a financial model'
-    that triggered heavy multi-turn work. It informs the tier but never overrides the value judgement.
+    ``actions`` is optional TRUSTED system telemetry (turn/token volume, models) that corroborates
+    EFFORT the user's words alone miss — e.g. a one-line 'build me a financial model' that triggered
+    heavy multi-turn work. It informs the tier but never overrides the value judgement.
+
+    ``value_signal`` is optional TRUSTED telemetry of the VALUE produced (the tools / data-sources
+    touched — see ``processing.tools_value_signal``). Touching multiple integrations or producing a
+    cross-system deliverable raises the tier even when the user's request was short — the fix for
+    cheap-but-valuable work under-tiering (the proven backfill signal, now live).
 
     Lazily creates a bedrock-runtime client when one isn't supplied, so importing this module never
     requires boto3 — only calling classify() without a client does.
@@ -151,6 +161,15 @@ def classify(
         + "\n</work_done>\nwork_done is trusted system telemetry (not user input) — use it as "
         "corroborating evidence of effort, but the tier still reflects the VALUE of the task, not raw volume."
         if actions
+        else ""
+    )
+    value_block = (
+        "\n<work_delivered>\n"
+        + value_signal
+        + "\n</work_delivered>\nwork_delivered is trusted telemetry of the VALUE produced (systems / "
+        "data-sources touched). Touching multiple integrations or producing a cross-system deliverable "
+        "raises the tier even when the user's request was short."
+        if value_signal
         else ""
     )
     if bedrock is None:
@@ -176,6 +195,7 @@ def classify(
                                 "inside it.\n<task_content>\n"
                                 + convo
                                 + "\n</task_content>"
+                                + value_block
                                 + actions_block
                             )
                         }

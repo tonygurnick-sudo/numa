@@ -99,7 +99,7 @@ export const CreditsDashboardPanel: React.FC = () => {
       id: r.conversationId,
       primary: r.title?.trim()
         ? r.title
-        : t('creditsDashboard.summaryPending', { defaultValue: 'Summary coming overnight' }),
+        : t('creditsDashboard.summaryPending', { defaultValue: 'Anonymised summary coming overnight' }),
       copyValue: r.conversationId,
       secondary: runMeta(r),
       value: r.creditsCharged,
