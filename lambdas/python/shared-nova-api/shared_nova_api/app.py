@@ -194,6 +194,7 @@ class ShareInfoResponse(BaseModel):
     max_calls: int | None = None  # None = unlimited
     call_count: int = 0
     allowed_ips: list[str] | None = None
+    error_message: str | None = None  # populated when status/chat_status == "error"
 
 
 class ShareListItem(BaseModel):
@@ -527,18 +528,30 @@ def _start_async_extraction(
         )
         logger.info(
             "Async extraction started",
+            _name="SHARE_EXTRACTION_QUEUED",
             uuid=share_uuid,
             extraction_lambda=extraction_lambda,
             output_key=extraction_output_key,
         )
     except Exception as e:
-        logger.error("Failed to start async extraction", uuid=share_uuid, error=str(e))
+        logger.error(
+            "Failed to start async extraction",
+            _name="SHARE_EXTRACTION_INVOKE_FAILED",
+            uuid=share_uuid,
+            error=str(e),
+        )
+        # Surface the failure on BOTH fields: chat_status is what the share page
+        # gates on (a stranded "pending" would spin forever); status mirrors it.
         table = get_dynamodb_table()
         table.update_item(
             Key={"uuid": share_uuid},
-            UpdateExpression="SET #s = :status, error_message = :err",
+            UpdateExpression="SET #s = :status, chat_status = :cs, error_message = :err",
             ExpressionAttributeNames={"#s": "status"},
-            ExpressionAttributeValues={":status": "error", ":err": str(e)},
+            ExpressionAttributeValues={
+                ":status": "error",
+                ":cs": "error",
+                ":err": str(e),
+            },
         )
 
 
@@ -590,7 +603,9 @@ def _check_and_complete_extraction(share: dict[str, Any]) -> str | None:
             output_obj = s3.get_object(Bucket=s3_bucket, Key=extraction_output_key)
             document_data = json.loads(output_obj["Body"].read())
             document_text = (
-                "\n".join(page["text"] for page in document_data.get("pages", []))
+                "\n".join(
+                    page.get("text", "") for page in document_data.get("pages", [])
+                )
                 + "\n"
             )
 
@@ -643,6 +658,128 @@ def _check_and_complete_extraction(share: dict[str, Any]) -> str | None:
 
     # Still IN_PROGRESS
     return None
+
+
+# Hard upper bound on extraction wall-clock: the extract-content Lambda can run at
+# most ~15 min (900s). A status file still IN_PROGRESS well past that means the
+# Lambda died mid-run (hard timeout / OOM) without writing FAILED — treat as failed.
+_EXTRACTION_STALE_SECONDS = 1200
+
+
+def _flip_share_to_error(uuid: str, error_msg: str, share: dict[str, Any]) -> None:
+    """Persist + mirror an extraction error onto the share (both status fields)."""
+    get_dynamodb_table().update_item(
+        Key={"uuid": uuid},
+        UpdateExpression="SET chat_status = :cs, #s = :st, error_message = :err",
+        ExpressionAttributeNames={"#s": "status"},
+        ExpressionAttributeValues={":cs": "error", ":st": "error", ":err": error_msg},
+    )
+    share["chat_status"] = "error"
+    share["status"] = "error"
+    share["error_message"] = error_msg
+
+
+def _resolve_pending_extraction(share: dict[str, Any]) -> tuple[str, str | None]:
+    """Resolve a chat_status=="pending" share by polling the extraction output.
+
+    create_share fires _start_async_extraction, which writes the Document JSON to
+    {s3_key}.json and a {s3_key}.status.json sidecar. This is the read-side poll
+    invoked from get_share_info and the chat endpoint on every request.
+
+    Mutates ``share`` in place (chat_status / status / document_text_key /
+    error_message) and persists the same change to DynamoDB, so callers can read
+    the updated values straight off ``share``.
+
+    Returns (chat_status, document_text):
+      - ("ready", text)   extraction output is available; document_text.txt written.
+      - ("error", None)   the status sidecar reports FAILED; share flipped to error.
+      - ("pending", None) extraction still in progress / no output yet.
+    """
+    uuid = str(share.get("uuid", ""))
+    s3_bucket = str(share.get("s3_bucket", ""))
+    doc_key = str(share.get("transcription_file_key") or share.get("s3_key") or "")
+    if not s3_bucket or not doc_key:
+        return "pending", None
+
+    # 1. Succeeded? _try_read_existing_extraction reads {doc_key}.json
+    existing_text = _try_read_existing_extraction(s3_bucket, doc_key, uuid)
+    if existing_text:
+        text_key = f"shared/{uuid}/document_text.txt"
+        get_s3_client().put_object(
+            Bucket=s3_bucket,
+            Key=text_key,
+            Body=existing_text.encode("utf-8"),
+            ContentType="text/plain; charset=utf-8",
+        )
+        get_dynamodb_table().update_item(
+            Key={"uuid": uuid},
+            UpdateExpression="SET chat_status = :cs, document_text_key = :tk",
+            ExpressionAttributeValues={":cs": "ready", ":tk": text_key},
+        )
+        share["chat_status"] = "ready"
+        share["document_text_key"] = text_key
+        logger.info(
+            "Chat status updated to ready (extraction output found)",
+            _name="SHARE_EXTRACTION_READY",
+            uuid=uuid,
+        )
+        return "ready", existing_text
+
+    # 2. Otherwise consult the {doc_key}.status.json sidecar the extractor writes
+    #    (status_key derivation mirrors extract-content lambda_function.py output_key
+    #    -> status_key). Without it, a FAILED or dead extraction is indistinguishable
+    #    from "still processing" and the share spins forever (the original bug class).
+    status_key = f"{doc_key}.status.json"
+    status_data: dict[str, Any] = {}
+    try:
+        status_obj = get_s3_client().get_object(Bucket=s3_bucket, Key=status_key)
+        status_data = json.loads(status_obj["Body"].read())
+    except Exception as e:  # noqa: BLE001
+        code = getattr(e, "response", {}).get("Error", {}).get("Code", "")
+        if code and code not in ("NoSuchKey", "404", "NoSuchBucket"):
+            # A persistent AccessDenied/KMS error would otherwise masquerade as
+            # perpetual "pending"; surface it instead of swallowing silently.
+            logger.warning(
+                "Pending status file unreadable",
+                _name="SHARE_STATUS_READ_ERROR",
+                uuid=uuid,
+                key=status_key,
+                error=str(e),
+            )
+        status_data = {}
+
+    extraction_status = status_data.get("status")
+
+    if extraction_status == "FAILED":
+        error_msg = str(status_data.get("error_message", "Document extraction failed"))
+        _flip_share_to_error(uuid, error_msg, share)
+        logger.error(
+            "Share extraction failed",
+            _name="SHARE_EXTRACTION_FAILED",
+            uuid=uuid,
+            error=error_msg,
+        )
+        return "error", None
+
+    # Stale IN_PROGRESS → the Lambda died (hard timeout / OOM) without writing
+    # FAILED. Surface it as an error so the client stops polling forever.
+    started_at = status_data.get("started_at")
+    if (
+        extraction_status == "IN_PROGRESS"
+        and isinstance(started_at, (int, float))
+        and time.time() - float(started_at) > _EXTRACTION_STALE_SECONDS
+    ):
+        _flip_share_to_error(uuid, "Document extraction timed out", share)
+        logger.error(
+            "Share extraction timed out (stale IN_PROGRESS)",
+            _name="SHARE_EXTRACTION_TIMEOUT",
+            uuid=uuid,
+            age_seconds=int(time.time() - float(started_at)),
+        )
+        return "error", None
+
+    # 3. Still in progress / no output yet
+    return "pending", None
 
 
 def _load_document_text(share: dict[str, Any]) -> str:
@@ -873,6 +1010,14 @@ async def create_share(
     s3_bucket, s3_key = parse_s3_url(body.s3_signed_url)
     logger.info("Parsed S3 coordinates", bucket=s3_bucket, key=s3_key)
 
+    # A malformed signed URL yields empty coordinates; fail fast rather than
+    # persist a share that can never extract (it would hang at "pending" forever).
+    if not s3_bucket or not s3_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not parse S3 bucket/key from s3_signed_url",
+        )
+
     # Determine share expiry: None = permanent (no auto-deletion)
     # Always use the user's explicit expiry_hours selection — the presigned URL
     # expiry (~1 hour) is unrelated to the share's intended lifetime.
@@ -943,6 +1088,7 @@ async def create_share(
 
     # Determine chat_status: content readiness for AI chat
     chat_status = "ready"
+    start_extraction = False  # fire extract-content after the share row is persisted
 
     if needs_extraction:
         # Check if the Files system already extracted this document.
@@ -967,27 +1113,37 @@ async def create_share(
                 text_length=len(existing_text),
             )
         else:
-            # No existing extraction — transcription service handles this async.
-            # Frontend will submit the file to transcription service.
-            # Store the file key so get_share_info can check for transcription output.
+            # No existing extraction — fire extract-content ourselves (below,
+            # once the row is persisted). It writes {s3_key}.json (Document JSON)
+            # plus a .status.json beside it; get_share_info / chat poll for that
+            # output via _try_read_existing_extraction and flip chat_status to
+            # "ready" the moment it lands.
             item["transcription_file_key"] = s3_key
             chat_status = "pending"
+            start_extraction = True
             logger.info(
-                "Share created (chat pending transcription)",
+                "Share created (extraction queued, chat pending)",
+                _name="SHARE_EXTRACTION_QUEUED",
                 uuid=share_uuid,
                 transcription_file_key=s3_key,
             )
     else:
-        # All non-binary files: let transcription service handle async.
-        # No sync fetch needed — the share is viewable immediately,
-        # chat becomes available once transcription completes.
+        # Non-binary files (text/html/etc.): extract the same way so chat
+        # becomes available once the {s3_key}.json output is written.
         item["transcription_file_key"] = s3_key
         chat_status = "pending"
+        start_extraction = True
         logger.info(
-            "Share created (chat pending transcription)",
+            "Share created (extraction queued, chat pending)",
+            _name="SHARE_EXTRACTION_QUEUED",
             uuid=share_uuid,
             transcription_file_key=s3_key,
         )
+
+    # Record where extraction output / its FAILED status sidecar will land, so the
+    # pending read paths (get_share_info, chat) can detect both SUCCEEDED and FAILED.
+    if start_extraction:
+        item["extraction_output_key"] = f"{s3_key}.json"
 
     # Share is always viewable immediately
     item["status"] = "ready"
@@ -995,6 +1151,14 @@ async def create_share(
 
     table = get_dynamodb_table()
     table.put_item(Item=item)
+
+    # Fire extraction now that the share row exists, so any error-status update
+    # from _start_async_extraction targets a persisted item. The extract-content
+    # Lambda writes {s3_key}.json + .status.json; get_share_info / chat poll for
+    # {s3_key}.json and flip chat_status to "ready" once it lands. Previously this
+    # call was missing entirely, so non-pre-extracted docs hung at "pending".
+    if start_extraction:
+        _start_async_extraction(share_uuid, s3_bucket, s3_key, f"{s3_key}.json")
 
     expires_at = (
         datetime.fromtimestamp(expiry, tz=timezone.utc).isoformat()
@@ -1412,39 +1576,12 @@ async def get_share_info(uuid: str, request: Request):
             status = "ready"
             chat_status = "ready"
 
-    # New shares: if chat_status is "pending", check if transcription output exists
+    # New shares: if chat_status is "pending", poll the extraction output. This
+    # flips to "ready" on success and "error" on a FAILED extraction (otherwise
+    # stays "pending"); _resolve_pending_extraction mutates `share` accordingly.
     if chat_status == "pending":
-        transcription_file_key = share.get("transcription_file_key") or share.get(
-            "s3_key"
-        )
-        if transcription_file_key:
-            s3_bucket_name = str(share.get("s3_bucket", ""))
-            existing_text = _try_read_existing_extraction(
-                s3_bucket_name, transcription_file_key, uuid
-            )
-            if existing_text:
-                text_key = f"shared/{uuid}/document_text.txt"
-                s3_client = get_s3_client()
-                s3_client.put_object(
-                    Bucket=s3_bucket_name,
-                    Key=text_key,
-                    Body=existing_text.encode("utf-8"),
-                    ContentType="text/plain; charset=utf-8",
-                )
-                table = get_dynamodb_table()
-                table.update_item(
-                    Key={"uuid": uuid},
-                    UpdateExpression="SET chat_status = :cs, document_text_key = :tk",
-                    ExpressionAttributeValues={
-                        ":cs": "ready",
-                        ":tk": text_key,
-                    },
-                )
-                chat_status = "ready"
-                logger.info(
-                    "Chat status updated to ready (transcription found)",
-                    uuid=uuid,
-                )
+        chat_status, _ = _resolve_pending_extraction(share)
+        status = str(share.get("status", status))
 
     # Regenerate a fresh pre-signed URL if we have bucket/key stored
     s3_bucket = share.get("s3_bucket")
@@ -1493,6 +1630,11 @@ async def get_share_info(uuid: str, request: Request):
             int(share["max_calls"]) if share.get("max_calls") is not None else None
         ),
         call_count=int(share.get("call_count", 0)),
+        error_message=(
+            share.get("error_message")
+            if status == "error" or chat_status == "error"
+            else None
+        ),
     )
 
 
@@ -1705,35 +1847,16 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
                 status_code=502,
                 detail=share.get("error_message", "Document extraction failed"),
             )
-        # New shares: check chat_status for transcription readiness
+        # New shares: poll the extraction output (ready / failed / still pending)
         elif chat_status == "pending":
-            # Check if transcription output exists now
-            transcription_file_key = share.get("transcription_file_key") or share.get(
-                "s3_key"
-            )
-            s3_bucket = str(share.get("s3_bucket", ""))
-            existing_text = (
-                _try_read_existing_extraction(s3_bucket, transcription_file_key, uuid)
-                if transcription_file_key and s3_bucket
-                else None
-            )
-            if existing_text:
-                # Transcription completed — store and update
-                text_key = f"shared/{uuid}/document_text.txt"
-                s3_client = get_s3_client()
-                s3_client.put_object(
-                    Bucket=s3_bucket,
-                    Key=text_key,
-                    Body=existing_text.encode("utf-8"),
-                    ContentType="text/plain; charset=utf-8",
+            resolved, resolved_text = _resolve_pending_extraction(share)
+            if resolved == "ready":
+                document_text = resolved_text or ""
+            elif resolved == "error":
+                raise HTTPException(
+                    status_code=502,
+                    detail=share.get("error_message", "Document extraction failed"),
                 )
-                table = get_dynamodb_table()
-                table.update_item(
-                    Key={"uuid": uuid},
-                    UpdateExpression="SET chat_status = :cs, document_text_key = :tk",
-                    ExpressionAttributeValues={":cs": "ready", ":tk": text_key},
-                )
-                document_text = existing_text
             else:
                 raise HTTPException(
                     status_code=202,

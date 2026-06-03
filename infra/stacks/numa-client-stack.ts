@@ -1246,6 +1246,23 @@ export class NumaClientStack extends TerraformStack {
       // for stable synth diffs.
       .sort();
 
+    // The existsSync guard above catches a MISSING dir, but a PRESENT-but-partial dir
+    // would synth too few S3Objects and let Terraform prune the client's bucket
+    // silently. Fail loudly here too so a partially-packaged deploy (e.g. a sparse or
+    // interrupted host checkout — which never builds the Dockerfile, so its build-time
+    // check can't catch it) can never empty docs. Floor MUST match the Dockerfile
+    // assertion in infra/container/Dockerfile (real corpus is ~254 .md across ~30
+    // connectors); bump both together if the corpus ever shrinks.
+    const MIN_EXT_API_DOC_FILES = 50;
+    if (mdFiles.length < MIN_EXT_API_DOC_FILES) {
+      throw new Error(
+        `ext-api-doc directory at ${extApiDocPath} has only ${mdFiles.length} shippable files ` +
+          `(expected >= ${MIN_EXT_API_DOC_FILES}, after excluding _templates/ and dotfiles). Refusing to ` +
+          "deploy: a short sync would let Terraform prune this client's ext-api-doc bucket. Verify the deploy " +
+          'context shipped the full docs corpus.'
+      );
+    }
+
     for (const source of mdFiles) {
       const key = path.relative(extApiDocPath, source);
       new S3Object(this, `ext-api-doc-${key.replace(/[^a-zA-Z0-9]/g, '-')}`, {

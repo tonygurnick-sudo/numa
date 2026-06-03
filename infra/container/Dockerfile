@@ -62,6 +62,16 @@ COPY infra infra
 # container deploys (CI build-deployment-container + Customer Success Portal) shipped
 # zero docs while host `make deploy` worked, which read as "docs deploy inconsistently".
 COPY ext-api-doc ext-api-doc
+# Fail the IMAGE BUILD if the docs dir is missing or suspiciously empty, instead of
+# letting a deploy from this image silently sync zero docs and let Terraform prune a
+# client's ext-api-doc bucket. Catches a dropped COPY / bad context one stage earlier
+# than the deploy-time throw guard in numa-client-stack.ts. Threshold is a low floor
+# (real set is ~254 .md across ~30 connectors); bump if the corpus ever shrinks.
+RUN count=$(find ext-api-doc -name '*.md' -not -path 'ext-api-doc/_templates/*' | wc -l) && \
+    if [ "$count" -lt 50 ]; then \
+      echo "FATAL: ext-api-doc has only $count shippable .md files (expected >=50). Refusing to build a deploy image that would empty client connector-doc buckets." >&2; \
+      exit 1; \
+    fi && echo "ext-api-doc OK: $count shippable .md files"
 COPY clientConfigProd.json .
 
 # Install yarn.
