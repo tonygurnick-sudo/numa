@@ -667,6 +667,9 @@ export class CoreNumaInfra extends Construct {
         CLIENT_NAME: props.clientName,
         CREDITS_TABLE_NAME: this.creditLedgerTable.name,
         OUTPUTS_BUCKET_NAME: this.outputsBucket.bucket.bucket,
+        // Read-only: recover a scheduled run's agentId from its chat-history rows when the metering
+        // event lacks one (so the run attributes to its agent in the dashboard's Top-5-agents).
+        CHAT_HISTORY_TABLE_NAME: this.chatHistoryTable.name,
       },
       additionalPolicyStatements: [
         {
@@ -674,6 +677,12 @@ export class CoreNumaInfra extends Construct {
           // Query: orphan-MSG cleanup (table) + monthly reconciliation rollup (GSI2 index).
           actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:BatchWriteItem', 'dynamodb:Query'],
           resources: [this.creditLedgerTable.arn, `${this.creditLedgerTable.arn}/index/*`],
+        },
+        {
+          // Read-only Query for the scheduled-run agentId recovery above.
+          effect: 'Allow',
+          actions: ['dynamodb:Query'],
+          resources: [this.chatHistoryTable.arn],
         },
         {
           effect: 'Allow',

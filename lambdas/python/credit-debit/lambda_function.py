@@ -49,6 +49,7 @@ REGION = os.environ.get("AWS_REGION", "us-east-1")
 TABLE_NAME = os.environ.get("CREDITS_TABLE_NAME", "")
 OUTPUTS_BUCKET = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "")
+CHAT_HISTORY_TABLE = os.environ.get("CHAT_HISTORY_TABLE_NAME", "")
 MARGIN = float(os.environ.get("CREDIT_MARGIN", str(MARGIN_TARGET)))
 CREDIT_UNIT = float(os.environ.get("CREDIT_UNIT_USD", str(CREDIT_USD)))
 AGENTCORE_MULT_ENV = float(os.environ.get("CREDIT_AGENTCORE_MULT", str(AGENTCORE_MULT)))
@@ -108,6 +109,45 @@ def _actions_summary(turns: list) -> str:
         f"{len(turns)} model turns; ~{total:,} tokens total ({generated:,} generated); "
         f"models: {', '.join(models) or 'unknown'}"
     )
+
+
+def _scheduled_agent_id(user_sub: str, conversation_id: str) -> str:
+    """Recover the agentId for a scheduled run from its chat-history rows.
+
+    Scheduled runs are detected by the ``schedule-`` conversation-id prefix, but the metering event
+    can arrive without an ``agent_id`` (the schedule runner's emit may omit it). The conversation's
+    chat-history messages carry ``agentId``, so we grab it here — otherwise the run shows in the
+    dashboard's 'scheduled' consumption slice but can't be attributed to its agent in Top-5-agents.
+    Best-effort: any failure returns "" and metering proceeds (the run just stays unattributed).
+    """
+    if not CHAT_HISTORY_TABLE:
+        return ""
+    try:
+        resp = (
+            prm_resource("dynamodb", region=REGION)
+            .Table(CHAT_HISTORY_TABLE)
+            .query(
+                KeyConditionExpression=Key("user_id").eq(user_sub)
+                & Key("sk").begins_with(conversation_id),
+                ProjectionExpression="agentId",
+                Limit=5,
+            )
+        )
+        for item in resp.get("Items", []):
+            aid = item.get("agentId")
+            if aid:
+                return str(aid)
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 — attribution is best-effort, never break metering
+        logger.warning(
+            "scheduled agentId lookup failed",
+            _name="CREDIT_DEBIT_AGENT_LOOKUP",
+            phase="classify",
+            conversation_id=conversation_id,
+            error=str(exc),
+        )
+    return ""
 
 
 def handler(event: dict, context: Any) -> dict:
@@ -211,6 +251,11 @@ def handler(event: dict, context: Any) -> dict:
     is_agent_conv = is_scheduled or bool(agent_id)
     context_kind = "agent" if is_agent_conv else "chat"
     source = "scheduled" if is_scheduled else ("agent" if agent_id else "chat")
+    # A scheduled run is detected by its id prefix, but the emit may not carry the agent_id. Recover
+    # it from chat-history so the run attributes to its agent (Top-5-agents groups by agentId).
+    # source/context above are already correct for scheduled runs; this only fills the agentId.
+    if is_scheduled and not agent_id:
+        agent_id = _scheduled_agent_id(user_sub, conversation_id)
 
     # Title + deliverables are produced by the nightly summariser (anonymised, admin-safe), NOT live
     # — so the admin view never shows non-anonymised content, and live metering does one fewer Nova
