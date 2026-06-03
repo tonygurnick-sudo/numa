@@ -396,12 +396,15 @@ export default function NumaCredits() {
                 <Card.Body>
                   <Row className="g-3">
                     <Col xs={6} md={3}>
-                      <StatTile value={`$${DEFAULT_CREDIT_CONFIG.creditUsd}`} label={`per credit · ${nzdAt(1)} ea`} />
+                      <StatTile
+                        value={`$${DEFAULT_CREDIT_CONFIG.creditUsd} USD`}
+                        label={`per credit · ≈ NZD $${(DEFAULT_CREDIT_CONFIG.creditUsd * fxNzd).toFixed(2)} ea`}
+                      />
                     </Col>
                     <Col xs={6} md={3}>
                       <StatTile
                         value={(DEFAULT_CREDIT_CONFIG.monthlyAllocations[0] ?? 0).toLocaleString()}
-                        label="starter allocation / mo"
+                        label={`default allocation / mo · ${nzdAt(DEFAULT_CREDIT_CONFIG.monthlyAllocations[0] ?? 0)}`}
                       />
                     </Col>
                     <Col xs={6} md={3}>
