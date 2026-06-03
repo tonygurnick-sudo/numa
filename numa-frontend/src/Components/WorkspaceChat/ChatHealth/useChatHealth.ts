@@ -5,6 +5,7 @@ import {
   CHAT_HEALTH_RED,
   CONTEXT_PRE_COMPACT_PULSE,
   DEFAULT_MODEL_CONTEXT,
+  MAX_OUTPUT_TOKENS_RESERVE,
   MODEL_CONTEXT_LIMITS,
 } from './constants';
 
@@ -45,6 +46,11 @@ export function useChatHealth(
     const safeMessages = messages ?? [];
 
     const modelContextLimit = (modelId && MODEL_CONTEXT_LIMITS[modelId]) || DEFAULT_MODEL_CONTEXT;
+    // Usable input budget = model window minus the output headroom the agent
+    // reserves. A turn physically can't take more input than this, and the SDK
+    // auto-compacts at/around it — so this, not the raw window, is what "fills
+    // up" means for the donut.
+    const usableContextLimit = Math.max(1, modelContextLimit - MAX_OUTPUT_TOKENS_RESERVE);
 
     let userMessages = 0;
     let compactions = 0;
@@ -99,9 +105,9 @@ export function useChatHealth(
       }
     }
 
-    // 100% = the model's actual hard context window. Adapts upward only in the
-    // unlikely case we observe a compaction at preTokens above the window.
-    const effectiveContextLimit = Math.max(modelContextLimit, maxPreTokens);
+    // 100% = the usable input budget (window − reserved output). Adapts upward
+    // only if we actually observe a compaction at higher preTokens than that.
+    const effectiveContextLimit = Math.max(usableContextLimit, maxPreTokens);
 
     // Total context size = input + cache_read + cache_creation + output.
     // Prompt caching splits the model's input across input_tokens (the

@@ -13,10 +13,17 @@ export const MODEL_CONTEXT_LIMITS: Partial<Record<WorkspaceChatModelId, number>>
 
 export const DEFAULT_MODEL_CONTEXT = 200_000;
 
-// Donut pulses near the SDK's typical auto-compact zone (~95% of the model's
-// context window). 100% of the donut = the model's actual hard window
-// (resolved per-model in the hook), so the pulse reliably signals imminent
-// automatic compaction.
+// The agent reserves output headroom out of the model's context window: a turn
+// can't take more *input* than (window − max output tokens), and the SDK's
+// auto-compaction fires at/around that input ceiling — not at the raw window.
+// So the donut's 100% ("fills up" → summarisation) is (window − this), not the
+// full window. Keep in sync with the agent's NUMA_MAX_OUTPUT_TOKENS (default
+// 32k): services/numa-workspace-agent/numa_workspace_agent/sdk_config.py:MAX_OUTPUT_TOKENS
+export const MAX_OUTPUT_TOKENS_RESERVE = 32_000;
+
+// Donut pulses near the auto-compact zone (~95% of the *usable* input budget,
+// i.e. window − reserved output — resolved in the hook). 100% of the donut =
+// that usable budget, so the pulse reliably fires before summarisation happens.
 export const CONTEXT_PRE_COMPACT_PULSE = 0.95;
 
 // Composite signals for the chat-health alarm. ANY one of these crosses the

@@ -16,8 +16,9 @@ interface Props {
 
 /**
  * Shared popover for both chat-health indicators. Informational only - no
- * action buttons. Uses the memory/attention metaphor instead of jargon
- * (tokens / context window / compaction).
+ * action buttons. Uses a plain-English "chat length" framing instead of jargon
+ * (tokens / context window / compaction). The raw token breakdown is rendered
+ * only in debugMode (DEVELOPER_MODE + cost toggle), never for end users.
  */
 export const ChatHealthPopover = React.forwardRef<HTMLDivElement, Props & React.HTMLAttributes<HTMLDivElement>>(
   ({ state, anchor, debugMode, latestUsageMessage, ...overlayProps }, ref) => {

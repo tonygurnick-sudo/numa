@@ -613,8 +613,8 @@
   },
   "chatHealth": {
     "context": {
-      "title": "Chat memory",
-      "body": "This chat is using about {{pct}}% of the AI’s short-term memory. Older messages are automatically summarised when it fills up.",
+      "title": "Chat length",
+      "body": "This chat has used about {{pct}}% of its length. Older messages are automatically summarised when it gets full.",
       "preCompactTitle": "Nearly full",
       "preCompactBody": "This chat is nearly full ({{pct}}%). Older messages will be summarised soon to make room — you don’t need to do anything."
     },

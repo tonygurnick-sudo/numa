@@ -51,7 +51,7 @@ export const ChatHealthIndicators: React.FC<Props> = ({ messages, modelId, debug
           />
         }
       >
-        <button type="button" className="chat-health-indicator-btn" aria-label="Chat memory usage">
+        <button type="button" className="chat-health-indicator-btn" aria-label="Chat length usage">
           <ContextDonut pct={state.contextPct} pulse={state.prePulse} />
         </button>
       </OverlayTrigger>
