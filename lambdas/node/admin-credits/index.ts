@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, GetCommand, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 
 // Per-client credit ledger (Numa Credit System / SPK-015).
 const TABLE_NAME = process.env.CREDITS_TABLE_NAME as string;
@@ -35,7 +35,51 @@ function isAdmin(event: { headers?: Record<string, string | undefined> }): boole
   return groups.includes('admin');
 }
 
+// The caller's Cognito sub (from the access token). Used to ownership-check the per-conversation
+// credit-tier endpoint so a user can only read their OWN conversation's tier.
+function callerSub(event: { headers?: Record<string, string | undefined> }): string | null {
+  const auth = event.headers?.authorization || event.headers?.Authorization;
+  if (!auth) return null;
+  const sub = parseJwt(String(auth).replace(/^Bearer\s+/i, ''))['sub'];
+  return typeof sub === 'string' ? sub : null;
+}
+
 const clientPk = (): string => `CLIENT#${CLIENT_NAME}`;
+
+// ── Billing-admin membership (Numa Credit System) ────────────────────────────────────────────────
+// Who may SEE credit data, stored as BILLING_ADMIN#<sub> rows on the CLIENT# partition. Deliberately
+// NOT a Cognito group: admins hold cognito-idp:AdminAddUserToGroup client-side, so a group would be
+// self-grantable. Admin browser creds can't write this table, so the ONLY way in is a caller-checked
+// server write (this Lambda) or the Customer Success Portal (assume-role) — enforcing "only a billing
+// admin promotes another", with Arcanum bootstrapping the first via the portal.
+const billingAdminSk = (sub: string): string => `BILLING_ADMIN#${sub}`;
+
+type BillingAdmin = { sub: string; email: string | null; grantedBy: string | null; grantedAt: string | null };
+
+async function listBillingAdmins(): Promise<BillingAdmin[]> {
+  const res = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': clientPk(), ':sk': 'BILLING_ADMIN#' },
+    })
+  );
+  return (res.Items ?? []).map((it) => ({
+    sub: String(it.sub ?? String(it.SK).slice('BILLING_ADMIN#'.length)),
+    email: it.email ? String(it.email) : null,
+    grantedBy: it.grantedBy ? String(it.grantedBy) : null,
+    grantedAt: it.grantedAt ? String(it.grantedAt) : null,
+  }));
+}
+
+async function isBillingAdmin(event: { headers?: Record<string, string | undefined> }): Promise<boolean> {
+  const sub = callerSub(event);
+  if (!sub) return false;
+  const res = await ddb.send(
+    new GetCommand({ TableName: TABLE_NAME, Key: { PK: clientPk(), SK: billingAdminSk(sub) } })
+  );
+  return !!res.Item;
+}
 
 // ── Pricing-policy defaults — MUST mirror lib/credit-pricing (credits.py + tiers.py). The Credit
 // Admin tab edits these; the debit Lambda reads the CONFIG row at meter time. AWS token rates and
@@ -155,10 +199,60 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: 'Server configuration error' }) };
     }
 
-    // GET /credits/balance -> live drawdown standing (admin-only: exposes spend signal).
-    if (method === 'GET' && /\/credits\/balance\/?$/.test(path)) {
-      if (!isAdmin(event)) {
+    // GET /credits/conversation?id=<conversationId> -> the credit tier of the caller's OWN
+    // conversation, for the in-chat credit indicator. NOT admin-gated (any user sees the tier of
+    // their own chats), but ownership-checked: the caller's JWT sub must match the conversation's
+    // userSub. Returns ONLY tier + credits (no cost/token internals, no chat content). The tier is
+    // the ratcheted dominantTier written by credit-debit, so it lags a few seconds behind a turn and
+    // is unrated (classified:false) on a brand-new conversation not yet metered.
+    if (method === 'GET' && /\/credits\/conversation\/?$/.test(path)) {
+      const sub = callerSub(event);
+      if (!sub) {
+        return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
+      }
+      const conversationId = event.queryStringParameters?.id;
+      if (!conversationId) {
+        return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Missing id' }) };
+      }
+      const res = await ddb.send(
+        new QueryCommand({
+          TableName: TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': `CONV#${conversationId}`, ':sk': 'META' },
+          Limit: 1,
+        })
+      );
+      const item = res.Items?.[0];
+      // No META yet (not metered) -> report unrated rather than 404, so the indicator can show a
+      // neutral "rating…" state on a fresh chat instead of an error.
+      if (!item) {
+        return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ classified: false }) };
+      }
+      // Ownership check — never expose another user's conversation tier.
+      if (item.userSub && item.userSub !== sub) {
         return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };
+      }
+      const tier =
+        typeof item.dominantTier === 'string' && (TIERS as readonly string[]).includes(item.dominantTier)
+          ? item.dominantTier
+          : null;
+      return {
+        statusCode: 200,
+        headers: HEADERS,
+        body: JSON.stringify({
+          classified: tier !== null,
+          tier,
+          source: item.source ?? 'chat',
+          creditsCharged: Number(item.creditsCharged ?? 0),
+        }),
+      };
+    }
+
+    // GET /credits/balance -> live drawdown standing. Billing-admin only (exposes the spend signal);
+    // a plain admin gets 403 'not_billing_admin' and the UI shows the lock screen.
+    if (method === 'GET' && /\/credits\/balance\/?$/.test(path)) {
+      if (!(await isBillingAdmin(event))) {
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'not_billing_admin' }) };
       }
       // One CLIENT# partition query returns CONFIG + MONTH# aggregates + TXN# event log together, so we
       // can derive the Option-B drawdown waterfall here (same logic as the portal's getStanding):
@@ -214,6 +308,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
               month: t.month ? String(t.month) : undefined,
               createdAt: String(t.createdAt ?? ''),
               createdBy: t.createdBy ? String(t.createdBy) : undefined,
+              note: t.note ? String(t.note) : undefined,
             }))
             .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
           config: {
@@ -234,10 +329,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    // GET /credits/ledger?month=YYYY-MM -> this month's conversations (admin-safe rows, newest first)
+    // GET /credits/ledger?month=YYYY-MM -> this month's conversations (admin-safe rows, newest first).
+    // Billing-admin only (same gate as balance).
     if (method === 'GET' && /\/credits\/ledger\/?$/.test(path)) {
-      if (!isAdmin(event)) {
-        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };
+      if (!(await isBillingAdmin(event))) {
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'not_billing_admin' }) };
       }
       const month = event.queryStringParameters?.month || currentMonth();
       const res = await ddb.send(
@@ -269,6 +365,78 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         body: JSON.stringify({
           error: 'Credit config and top-ups are managed centrally in the Customer Success Portal.',
         }),
+      };
+    }
+
+    // GET /credits/billing-admins -> the caller's own billing-admin status + the roster (so an admin
+    // who's locked out can see who to ask, and User Management can render badges). Any admin may read.
+    if (method === 'GET' && /\/credits\/billing-admins\/?$/.test(path)) {
+      if (!isAdmin(event)) {
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };
+      }
+      const sub = callerSub(event);
+      const admins = await listBillingAdmins();
+      return {
+        statusCode: 200,
+        headers: HEADERS,
+        body: JSON.stringify({ isBillingAdmin: !!sub && admins.some((a) => a.sub === sub), admins }),
+      };
+    }
+
+    // POST /credits/billing-admins {action:'grant'|'revoke', sub, email?} -> peer-propagation.
+    // Caller MUST already be a billing-admin (server-enforced; admins can't write this table from the
+    // browser). Lockout: the final billing-admin can't be removed — Arcanum re-seeds via the portal.
+    if (method === 'POST' && /\/credits\/billing-admins\/?$/.test(path)) {
+      const caller = callerSub(event);
+      if (!caller) {
+        return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
+      }
+      const admins = await listBillingAdmins();
+      if (!admins.some((a) => a.sub === caller)) {
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'not_billing_admin' }) };
+      }
+      let body: { action?: string; sub?: string; email?: string };
+      try {
+        body = JSON.parse(event.body || '{}');
+      } catch {
+        return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Invalid JSON' }) };
+      }
+      const targetSub = String(body.sub || '');
+      const action = body.action;
+      if (!targetSub || (action !== 'grant' && action !== 'revoke')) {
+        return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Missing action/sub' }) };
+      }
+      if (action === 'revoke') {
+        if (admins.length <= 1 && admins.some((a) => a.sub === targetSub)) {
+          return {
+            statusCode: 409,
+            headers: HEADERS,
+            body: JSON.stringify({ error: 'last_billing_admin' }),
+          };
+        }
+        await ddb.send(
+          new DeleteCommand({ TableName: TABLE_NAME, Key: { PK: clientPk(), SK: billingAdminSk(targetSub) } })
+        );
+      } else {
+        await ddb.send(
+          new PutCommand({
+            TableName: TABLE_NAME,
+            Item: {
+              PK: clientPk(),
+              SK: billingAdminSk(targetSub),
+              sub: targetSub,
+              email: body.email ? String(body.email) : null,
+              grantedBy: caller,
+              grantedAt: new Date().toISOString(),
+            },
+          })
+        );
+      }
+      const updated = await listBillingAdmins();
+      return {
+        statusCode: 200,
+        headers: HEADERS,
+        body: JSON.stringify({ isBillingAdmin: updated.some((a) => a.sub === caller), admins: updated }),
       };
     }
 

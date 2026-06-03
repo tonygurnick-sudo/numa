@@ -16,6 +16,7 @@ import {
 import { Coin, ChevronDown, ChevronRight } from 'react-bootstrap-icons';
 import { clientService, groupClientsByType } from '@/services/clientService';
 import { creditsService, DEFAULT_CREDIT_CONFIG, type CreditStanding } from '@/services/creditsService';
+import BillingAdminsPanel from '@/components/BillingAdminsPanel';
 import type { Client, CreditConfig } from '@/types';
 
 /**
@@ -293,6 +294,12 @@ export default function NumaCredits() {
 
   // ── per-client derivations ──
   const usedCredits = (i: number): number => standing?.months[monthKey(i)]?.used ?? 0;
+  // Internal economics for the month (Arcanum-only): real consumption cost (USD) + realised margin.
+  const monthCostUsd = (i: number): number => standing?.months[monthKey(i)]?.costUsd ?? 0;
+  const monthMargin = (i: number): number | null => {
+    const m = standing?.months[monthKey(i)];
+    return m && m.costUsd > 0 ? m.revenueUsd / m.costUsd : null;
+  };
   const nzd = (credits: number): number => credits * config.creditUsd * fxNzd;
   const nzdLabel = (credits: number): string =>
     `≈ NZD $${nzd(credits).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -362,7 +369,14 @@ export default function NumaCredits() {
           <ListGroup className="mb-2">
             <ListGroup.Item action active={!selected} onClick={() => setSelected('')}>
               <strong>Overview</strong>
-              <div className="small text-muted">Defaults &amp; fleet rollup</div>
+              {/* Drop text-muted (it's !important, so it stays dark/low-contrast on the active blue bg)
+                  and use a translucent-white subtitle when active, muted otherwise. */}
+              <div
+                className={selected ? 'small text-muted' : 'small'}
+                style={selected ? undefined : { color: 'rgba(255,255,255,0.85)' }}
+              >
+                Defaults &amp; fleet rollup
+              </div>
             </ListGroup.Item>
           </ListGroup>
           {loading && (
@@ -631,7 +645,15 @@ export default function NumaCredits() {
                               value={config.monthlyAllocations[i] ?? 0}
                               onChange={(e) => setMonth(i, num(e.target.value))}
                             />
-                            <div className="small text-muted mt-1">used {usedCredits(i).toLocaleString()}</div>
+                            <div className="small text-muted mt-1">
+                              used {usedCredits(i).toLocaleString()}
+                              {monthCostUsd(i) > 0 && (
+                                <>
+                                  {' · '}${monthCostUsd(i).toFixed(2)} cost
+                                  {monthMargin(i) != null && ` · ${monthMargin(i)!.toFixed(1)}× margin`}
+                                </>
+                              )}
+                            </div>
                           </Col>
                         ))}
                       </Row>
@@ -669,8 +691,73 @@ export default function NumaCredits() {
                       <div className="small text-muted mt-2">
                         Persistent pool — carries over month to month. Separate from the monthly allocation.
                       </div>
+
+                      {/* Top-up activity — the balance event log (top-ups + month-close settlements +
+                          adjustments) from the client ledger (CLIENT#/TXN#…). Balance above = Σ of these. */}
+                      {standing && (
+                        <div className="mt-3">
+                          <div className="small fw-semibold text-muted mb-1">Activity</div>
+                          {standing.txns.length === 0 ? (
+                            <div className="small text-muted">No top-up activity yet.</div>
+                          ) : (
+                            <div className="table-responsive" style={{ maxHeight: 220, overflowY: 'auto' }}>
+                              <table className="table table-sm align-middle mb-0" style={{ fontSize: '0.8rem' }}>
+                                <thead>
+                                  <tr className="text-muted">
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th className="text-end">Credits</th>
+                                    <th>By</th>
+                                    <th>Note</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {standing.txns.map((t, i) => {
+                                    const label =
+                                      t.kind === 'topup'
+                                        ? 'Top-up'
+                                        : t.kind === 'settlement'
+                                          ? `Settlement${t.month ? ` (${t.month})` : ''}`
+                                          : t.kind === 'adjustment'
+                                            ? 'Adjustment'
+                                            : t.kind;
+                                    const when = t.createdAt
+                                      ? new Date(t.createdAt).toLocaleDateString('en-NZ', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric',
+                                        })
+                                      : '—';
+                                    return (
+                                      <tr key={`${t.createdAt}-${i}`}>
+                                        <td className="text-nowrap">{when}</td>
+                                        <td>{label}</td>
+                                        <td
+                                          className={`text-end fw-semibold ${t.credits < 0 ? 'text-danger' : 'text-success'}`}
+                                        >
+                                          {t.credits > 0 ? '+' : ''}
+                                          {t.credits.toLocaleString()}
+                                        </td>
+                                        <td className="text-muted">{t.createdBy ?? '—'}</td>
+                                        <td className="text-muted">{t.note ?? ''}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </Card.Body>
                   </Card>
+
+                  {/* Billing admins — who may see credit data in-client (seed the first here) */}
+                  <BillingAdminsPanel
+                    clientName={client.name}
+                    accountId={client.config.clientAccountId}
+                    region={client.config.region}
+                  />
 
                   {/* Advanced pricing — collapsed by default (set rarely) */}
                   <Card>

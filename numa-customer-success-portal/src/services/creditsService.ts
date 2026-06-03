@@ -1,9 +1,29 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  CognitoIdentityProviderClient,
+  ListUserPoolsCommand,
+  ListUsersCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 import { clientService } from './clientService';
 import { awsCredentialsService } from './awsCredentialsService';
 import { activityService } from './activityService';
 import type { CreditConfig } from '@/types';
+
+/** A billing-admin roster entry (CLIENT#/BILLING_ADMIN#<sub>) — who may see credit data in-client. */
+export interface BillingAdminRow {
+  sub: string;
+  email: string | null;
+  grantedBy: string | null;
+  grantedAt: string | null;
+}
+
+/** A client Cognito user (for the promote picker). */
+export interface ClientUser {
+  sub: string;
+  email: string;
+  enabled: boolean;
+}
 
 /** A top-up-balance event-log entry (CLIENT#/TXN#…). `credits` is signed. */
 export interface CreditTxn {
@@ -23,8 +43,12 @@ export interface CreditStanding {
   settledBalance: number;
   /** Overflow past allocation for months not yet settled (open month + any closed-but-unsettled). */
   liveOverflow: number;
-  /** Per NZ billing month ('YYYY-MM') → credits used, allocation in effect, and whether settled. */
-  months: Record<string, { used: number; allocation: number; settled: boolean }>;
+  /**
+   * Per NZ billing month ('YYYY-MM') → credits used, allocation in effect, whether settled, plus the
+   * underlying USD economics (Arcanum-internal): `costUsd` = real token+AgentCore consumption that
+   * month, `revenueUsd` = credit value billed. margin ≈ revenueUsd / costUsd.
+   */
+  months: Record<string, { used: number; allocation: number; settled: boolean; costUsd: number; revenueUsd: number }>;
   /** Top-up-balance event log, newest first (for audit / display). */
   txns: CreditTxn[];
 }
@@ -231,7 +255,13 @@ export class CreditsService {
             : 0;
       const allocation = it.allocationSnapshot != null ? Number(it.allocationSnapshot) : (allocations[monthIdx] ?? 0);
       const settled = settledMonths.has(m);
-      months[m] = { used, allocation, settled };
+      months[m] = {
+        used,
+        allocation,
+        settled,
+        costUsd: Number(it.consumptionCostUsd ?? 0),
+        revenueUsd: Number(it.creditRevenueUsd ?? 0),
+      };
       if (!settled) liveOverflow += Math.max(0, used - Math.max(0, allocation));
     }
 
@@ -242,6 +272,101 @@ export class CreditsService {
       months,
       txns,
     };
+  }
+
+  // ── Billing admins (who may see credit data in-client) ─────────────────────────────────────────
+  // Membership lives in the client ledger (NOT a Cognito group — that'd be self-grantable by any
+  // admin). The portal seeds the first billing-admin per client; after that an existing billing-admin
+  // propagates from in-client User Management. All writes here are Arcanum-side (assume-role) + logged.
+
+  /** List the client's enabled Cognito users (for the promote picker), via ArcanumAIAccess. */
+  async listClientUsers(clientName: string, accountId: string, region: string): Promise<ClientUser[]> {
+    const cfg = await awsCredentialsService.getClientConfig(accountId, region);
+    const cognito = new CognitoIdentityProviderClient(cfg);
+    const pools = await cognito.send(new ListUserPoolsCommand({ MaxResults: 60 }));
+    const pool = pools.UserPools?.find((p) => p.Name === `numa-${clientName}`);
+    if (!pool?.Id) throw new Error(`User pool numa-${clientName} not found`);
+    const users: ClientUser[] = [];
+    let token: string | undefined;
+    do {
+      const res = await cognito.send(new ListUsersCommand({ UserPoolId: pool.Id, Limit: 60, PaginationToken: token }));
+      for (const u of res.Users ?? []) {
+        const sub = u.Attributes?.find((a) => a.Name === 'sub')?.Value;
+        const email = u.Attributes?.find((a) => a.Name === 'email')?.Value;
+        if (sub && email) users.push({ sub, email, enabled: u.Enabled !== false });
+      }
+      token = res.PaginationToken;
+    } while (token);
+    return users.filter((u) => u.enabled).sort((a, b) => a.email.localeCompare(b.email));
+  }
+
+  /** The current billing-admin roster for a client (CLIENT#/BILLING_ADMIN# rows). */
+  async listBillingAdmins(clientName: string, accountId: string, region: string): Promise<BillingAdminRow[]> {
+    const doc = await this.clientLedger(accountId, region);
+    const res = await doc.send(
+      new QueryCommand({
+        TableName: ledgerTable(clientName),
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        ExpressionAttributeValues: { ':pk': clientPk(clientName), ':sk': 'BILLING_ADMIN#' },
+      })
+    );
+    return (res.Items ?? []).map((it) => ({
+      sub: String(it.sub ?? String(it.SK).slice('BILLING_ADMIN#'.length)),
+      email: it.email ? String(it.email) : null,
+      grantedBy: it.grantedBy ? String(it.grantedBy) : null,
+      grantedAt: it.grantedAt ? String(it.grantedAt) : null,
+    }));
+  }
+
+  /** Seed/grant a billing-admin (bootstrap). Writes the ledger row via assume-role + logs it. */
+  async promoteBillingAdmin(
+    clientName: string,
+    accountId: string,
+    region: string,
+    sub: string,
+    email: string | null
+  ): Promise<void> {
+    const doc = await this.clientLedger(accountId, region);
+    await doc.send(
+      new PutCommand({
+        TableName: ledgerTable(clientName),
+        Item: {
+          PK: clientPk(clientName),
+          SK: `BILLING_ADMIN#${sub}`,
+          sub,
+          email: email ?? null,
+          grantedBy: 'portal',
+          grantedAt: new Date().toISOString(),
+        },
+      })
+    );
+    await activityService.logActivity({
+      type: 'config',
+      action: 'billing-admin-grant',
+      resourceType: 'client-credits',
+      resourceId: clientName,
+      details: { metadata: { sub, email } },
+      success: true,
+    });
+  }
+
+  /** Revoke a billing-admin. */
+  async demoteBillingAdmin(clientName: string, accountId: string, region: string, sub: string): Promise<void> {
+    const doc = await this.clientLedger(accountId, region);
+    await doc.send(
+      new DeleteCommand({
+        TableName: ledgerTable(clientName),
+        Key: { PK: clientPk(clientName), SK: `BILLING_ADMIN#${sub}` },
+      })
+    );
+    await activityService.logActivity({
+      type: 'config',
+      action: 'billing-admin-revoke',
+      resourceType: 'client-credits',
+      resourceId: clientName,
+      details: { metadata: { sub } },
+      success: true,
+    });
   }
 }
 

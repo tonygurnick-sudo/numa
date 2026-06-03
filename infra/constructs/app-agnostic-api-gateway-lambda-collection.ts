@@ -555,6 +555,38 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       additionalPolicyStatements: adminCreditsPolicy,
       route: { verb: 'POST', path: 'credits/topup' },
     });
+    // Per-conversation credit tier for the in-chat indicator. Same lambda, but the handler
+    // ownership-checks the caller's JWT sub against the conversation's userSub (NOT admin-gated),
+    // so any user can read the tier of their own chats.
+    this.addLambdaFunction(this, 'admin-credits-conversation', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-credits',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminCreditsEnv,
+      additionalPolicyStatements: adminCreditsPolicy,
+      route: { verb: 'GET', path: 'credits/conversation' },
+    });
+    // Billing-admin roster (who may see credit data). GET = read status + roster (any admin);
+    // POST = grant/revoke, server-enforced so only an existing billing-admin can propagate.
+    this.addLambdaFunction(this, 'admin-credits-billing-admins-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-credits',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminCreditsEnv,
+      additionalPolicyStatements: adminCreditsPolicy,
+      route: { verb: 'GET', path: 'credits/billing-admins' },
+    });
+    this.addLambdaFunction(this, 'admin-credits-billing-admins-set', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-credits',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminCreditsEnv,
+      additionalPolicyStatements: adminCreditsPolicy,
+      route: { verb: 'POST', path: 'credits/billing-admins' },
+    });
 
     // Admin Agents Settings API (GET/PUT policy)
     const adminAgentsEnv = {
