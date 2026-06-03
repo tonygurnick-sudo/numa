@@ -7,12 +7,13 @@ interface Props {
   allocated: number;
   used: number;
   remaining: number;
+  topUpBalance: number;
   monthLabel: string;
 }
 
-/** Top-of-dashboard stat tiles: remaining / allocated / used, plus a usage bar.
+/** Top-of-page stat tiles: remaining / allocated / used / top-up balance, plus a usage bar.
  *  Pure presentation — all numbers come from real balance + ledger totals. */
-export const CreditsSummaryCards: React.FC<Props> = ({ allocated, used, remaining, monthLabel }) => {
+export const CreditsSummaryCards: React.FC<Props> = ({ allocated, used, remaining, topUpBalance, monthLabel }) => {
   const { t } = useTranslation('settings');
   const pct = allocated > 0 ? Math.min(100, Math.round((used / allocated) * 100)) : 0;
   const barVariant = pct < 75 ? 'success' : pct < 90 ? 'warning' : 'danger';
@@ -35,7 +36,7 @@ export const CreditsSummaryCards: React.FC<Props> = ({ allocated, used, remainin
   return (
     <div className="mb-3">
       <div className="row g-3 mb-3">
-        <div className="col-md-4">
+        <div className="col-md-3 col-6">
           <Tile
             label={t('creditsDashboard.remaining', { defaultValue: 'Credits remaining' })}
             value={fmtCredits(remaining)}
@@ -46,19 +47,27 @@ export const CreditsSummaryCards: React.FC<Props> = ({ allocated, used, remainin
             accent="text-success"
           />
         </div>
-        <div className="col-md-4">
+        <div className="col-md-3 col-6">
           <Tile
             label={t('creditsDashboard.allocated', { defaultValue: 'Allocated' })}
             value={fmtCredits(allocated)}
             sub={t('creditsDashboard.allocatedSub', { defaultValue: 'This month' })}
           />
         </div>
-        <div className="col-md-4">
+        <div className="col-md-3 col-6">
           <Tile
             label={t('creditsDashboard.used', { defaultValue: 'Used this month' })}
             value={fmtCredits(used)}
             sub={t('creditsDashboard.usedSub', { defaultValue: '{{pct}}% of allocation', pct })}
             accent="text-primary"
+          />
+        </div>
+        <div className="col-md-3 col-6">
+          <Tile
+            label={t('creditsDashboard.topUpBalance', { defaultValue: 'Top-up balance' })}
+            value={fmtCredits(topUpBalance)}
+            sub={t('creditsDashboard.topUpBalanceSub', { defaultValue: 'persistent pool' })}
+            accent={topUpBalance < 0 ? 'text-danger' : undefined}
           />
         </div>
       </div>

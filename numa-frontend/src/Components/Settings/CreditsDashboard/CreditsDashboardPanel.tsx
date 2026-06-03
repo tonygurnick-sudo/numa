@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Spinner, Tab, Tabs } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import {
@@ -17,6 +17,7 @@ import {
   type TrendPoint,
 } from '../../../utils/creditDashboardData';
 import { CreditsSummaryCards } from './CreditsSummaryCards';
+import { CreditsWorkDelivered } from './CreditsWorkDelivered';
 import { CreditsTrendChart } from './CreditsTrendChart';
 import { CreditsCategoryPie } from './CreditsCategoryPie';
 import { CreditsTopList, type TopListItem } from './CreditsTopList';
@@ -181,67 +182,84 @@ export const CreditsDashboardPanel: React.FC = () => {
         </Badge>
       </div>
 
-      <CreditsSummaryCards allocated={allocated} used={usedThisMonth} remaining={remaining} monthLabel={monthLabel} />
+      <CreditsSummaryCards
+        allocated={allocated}
+        used={usedThisMonth}
+        remaining={remaining}
+        topUpBalance={balance?.balance ?? 0}
+        monthLabel={monthLabel}
+      />
 
-      <div className="row g-3 mb-3">
-        <div className="col-lg-7">
-          <CreditsTrendChart data={trend} />
-        </div>
-        <div className="col-lg-5">
-          <CreditsCategoryPie slices={categorySlices} />
-        </div>
-      </div>
+      <Tabs defaultActiveKey="dashboard" className="mb-3">
+        <Tab eventKey="dashboard" title={t('creditsDashboard.tabDashboard', { defaultValue: 'Dashboard' })}>
+          <div className="pt-3">
+            <div className="row g-3 mb-3">
+              <div className="col-lg-7">
+                <CreditsTrendChart data={trend} />
+              </div>
+              <div className="col-lg-5">
+                <CreditsCategoryPie slices={categorySlices} />
+              </div>
+            </div>
 
-      <div className="row g-3">
-        <div className="col-xl-6">
-          <CreditsTopList
-            title={t('creditsDashboard.topChats', { defaultValue: 'Top 5 chats' })}
-            icon="bi-chat-dots"
-            items={topChats}
-            emptyText={t('creditsDashboard.noChats', { defaultValue: 'No chat runs recorded yet.' })}
-            onSelect={(id) => openRun(id, 'creditsDashboard.drillChat', 'Chat run {{id}}')}
-          />
-        </div>
-        <div className="col-xl-6">
-          <CreditsTopList
-            title={t('creditsDashboard.topAgents', { defaultValue: 'Top 5 agents' })}
-            icon="bi-robot"
-            items={topAgents}
-            emptyText={t('creditsDashboard.noAgents', {
-              defaultValue: 'No agent runs recorded yet — populates once agent metering is on.',
-            })}
-            onSelect={(id) => openRun(id, 'creditsDashboard.drillAgent', 'Agent run {{id}}')}
-          />
-        </div>
-        <div className="col-xl-6">
-          <CreditsTopList
-            title={t('creditsDashboard.topCategories', { defaultValue: 'Top 5 categories' })}
-            icon="bi-tags"
-            items={topCategories}
-            emptyText={t('creditsDashboard.noCategories', { defaultValue: 'No categorised usage yet.' })}
-            onSelect={(id) =>
-              setDrill({
-                title: t('creditsDashboard.drillCategory', { defaultValue: 'Category: {{id}}', id }),
-                rows: rowsForCategory(rows, id),
-              })
-            }
-          />
-        </div>
-        <div className="col-xl-6">
-          <CreditsTopList
-            title={t('creditsDashboard.topStaff', { defaultValue: 'Top 5 staff' })}
-            icon="bi-people"
-            items={topStaff}
-            emptyText={t('creditsDashboard.noStaff', { defaultValue: 'No usage attributed to staff yet.' })}
-            onSelect={(id) =>
-              setDrill({
-                title: t('creditsDashboard.drillStaff', { defaultValue: 'Staff: {{name}}', name: who(id) }),
-                rows: rows.filter((r) => r.userSub === id),
-              })
-            }
-          />
-        </div>
-      </div>
+            <div className="row g-3">
+              <div className="col-xl-6">
+                <CreditsTopList
+                  title={t('creditsDashboard.topChats', { defaultValue: 'Top 5 chats' })}
+                  icon="bi-chat-dots"
+                  items={topChats}
+                  emptyText={t('creditsDashboard.noChats', { defaultValue: 'No chat runs recorded yet.' })}
+                  onSelect={(id) => openRun(id, 'creditsDashboard.drillChat', 'Chat run {{id}}')}
+                />
+              </div>
+              <div className="col-xl-6">
+                <CreditsTopList
+                  title={t('creditsDashboard.topAgents', { defaultValue: 'Top 5 agents' })}
+                  icon="bi-robot"
+                  items={topAgents}
+                  emptyText={t('creditsDashboard.noAgents', {
+                    defaultValue: 'No agent runs recorded yet — populates once agent metering is on.',
+                  })}
+                  onSelect={(id) => openRun(id, 'creditsDashboard.drillAgent', 'Agent run {{id}}')}
+                />
+              </div>
+              <div className="col-xl-6">
+                <CreditsTopList
+                  title={t('creditsDashboard.topCategories', { defaultValue: 'Top 5 categories' })}
+                  icon="bi-tags"
+                  items={topCategories}
+                  emptyText={t('creditsDashboard.noCategories', { defaultValue: 'No categorised usage yet.' })}
+                  onSelect={(id) =>
+                    setDrill({
+                      title: t('creditsDashboard.drillCategory', { defaultValue: 'Category: {{id}}', id }),
+                      rows: rowsForCategory(rows, id),
+                    })
+                  }
+                />
+              </div>
+              <div className="col-xl-6">
+                <CreditsTopList
+                  title={t('creditsDashboard.topStaff', { defaultValue: 'Top 5 staff' })}
+                  icon="bi-people"
+                  items={topStaff}
+                  emptyText={t('creditsDashboard.noStaff', { defaultValue: 'No usage attributed to staff yet.' })}
+                  onSelect={(id) =>
+                    setDrill({
+                      title: t('creditsDashboard.drillStaff', { defaultValue: 'Staff: {{name}}', name: who(id) }),
+                      rows: rows.filter((r) => r.userSub === id),
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </Tab>
+        <Tab eventKey="work" title={t('creditsDashboard.tabWork', { defaultValue: 'Work delivered' })}>
+          <div className="pt-3">
+            <CreditsWorkDelivered rows={rows} totalCredits={usedThisMonth} who={who} />
+          </div>
+        </Tab>
+      </Tabs>
 
       <CreditsDrillModal
         show={drill !== null}

@@ -81,7 +81,6 @@ import type { CapabilityItem } from '../utils/capabilityRegistry';
 import { getFlagRegistry } from '../utils/featureFlags';
 import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
 import { VoiceAdminPanel } from '../Components/Voice/VoiceAdminPanel';
-import { CreditsAdminPanel } from '../Components/Settings/CreditsAdminPanel';
 import { CreditsDashboardPanel } from '../Components/Settings/CreditsDashboard/CreditsDashboardPanel';
 import { loadAdminCapabilityGating, DEFAULT_DISABLED_FLAGS } from '../utils/adminCapabilityGating';
 import { CHAT_SUGGESTIONS_DISABLED } from '../hooks/useChatSuggestions';
@@ -1427,15 +1426,6 @@ export default function SettingsPage() {
         : []),
       { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
       ...(creditsEnabled
-        ? [
-            {
-              key: 'credits-dashboard',
-              label: t('tabs.creditsDashboard', { defaultValue: 'Credits Dashboard' }),
-              iconClassName: 'bi bi-bar-chart-line-fill',
-            },
-          ]
-        : []),
-      ...(creditsEnabled
         ? [{ key: 'credits', label: t('tabs.credits', { defaultValue: 'Credits' }), iconClassName: 'bi bi-coin' }]
         : []),
       ...(voiceEnabled ? [{ key: 'voice', label: t('tabs.voice'), iconClassName: 'bi bi-telephone' }] : []),
@@ -2643,19 +2633,6 @@ export default function SettingsPage() {
               </Tab>
               {creditsEnabled && (
                 <Tab
-                  eventKey="credits-dashboard"
-                  title={
-                    <span>
-                      <i className="bi bi-bar-chart-line-fill me-2"></i>
-                      {t('tabs.creditsDashboard', { defaultValue: 'Credits Dashboard' })}
-                    </span>
-                  }
-                >
-                  {activeKey === 'credits-dashboard' && <CreditsDashboardPanel />}
-                </Tab>
-              )}
-              {creditsEnabled && (
-                <Tab
                   eventKey="credits"
                   title={
                     <span>
@@ -2664,7 +2641,7 @@ export default function SettingsPage() {
                     </span>
                   }
                 >
-                  {activeKey === 'credits' && <CreditsAdminPanel />}
+                  {activeKey === 'credits' && <CreditsDashboardPanel />}
                 </Tab>
               )}
               {voiceEnabled && (
