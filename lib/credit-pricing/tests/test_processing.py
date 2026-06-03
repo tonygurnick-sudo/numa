@@ -347,6 +347,29 @@ def test_extract_tools_and_value_signal() -> None:
     assert processing.tools_value_signal([]) == ""  # no tools -> no signal block
 
 
+def test_agent_id_flows_to_meta() -> None:
+    turns, _, _, _ = processing.process_trace_events(iter(EVENTS), cache_ttl="1h")
+    common = dict(
+        conversation_id="c1",
+        user_sub="u1",
+        month="2026-06",
+        last_ts="2026-06-01T00:00:00Z",
+        turns=turns,
+        title="x",
+        margin=2.0,
+        credit_usd=0.3,
+        value_tier="medium",
+    )
+    meta, _ = processing.build_conversation_rows(
+        **common, context="agent", source="agent", agent_id="agt-123"
+    )
+    assert meta["agentId"] == "agt-123"  # stored on agent runs for the name join
+    meta2, _ = processing.build_conversation_rows(
+        **common, context="chat", source="chat"
+    )
+    assert "agentId" not in meta2  # omitted for plain chat
+
+
 if __name__ == "__main__":
     test_process_trace_events()
     test_build_rows_charge_is_max_of_value_and_floor()
@@ -358,4 +381,5 @@ if __name__ == "__main__":
     test_per_tier_margin_lifts_floor()
     test_agentcore_uplift_in_floor_is_default()
     test_extract_tools_and_value_signal()
+    test_agent_id_flows_to_meta()
     print("processing tests OK")

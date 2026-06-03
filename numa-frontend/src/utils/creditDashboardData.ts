@@ -11,6 +11,7 @@ type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>)
 
 export type CreditSlice = { key: string; credits: number; count: number };
 export type UserSlice = { userSub: string; credits: number; count: number };
+export type AgentSlice = { agentId: string; credits: number; count: number };
 export type TrendPoint = { month: string; label: string; used: number; allocated: number };
 
 const credits = (r: CreditLedgerRow): number => Number(r.creditsCharged) || 0;
@@ -48,6 +49,20 @@ export function topUsersByCredits(rows: CreditLedgerRow[], n: number): UserSlice
     e.credits += credits(r);
     e.count += 1;
     map.set(r.userSub, e);
+  }
+  return [...map.values()].sort((a, b) => b.credits - a.credits).slice(0, n);
+}
+
+/** Top N agents (by agentId) by total credits consumed — aggregates every run an agent did
+ *  (ad-hoc agent chats + scheduled runs both carry agentId). Rows with no agentId are skipped. */
+export function topAgentsByCredits(rows: CreditLedgerRow[], n: number): AgentSlice[] {
+  const map = new Map<string, AgentSlice>();
+  for (const r of rows) {
+    if (!r.agentId) continue;
+    const e = map.get(r.agentId) ?? { agentId: r.agentId, credits: 0, count: 0 };
+    e.credits += credits(r);
+    e.count += 1;
+    map.set(r.agentId, e);
   }
   return [...map.values()].sort((a, b) => b.credits - a.credits).slice(0, n);
 }

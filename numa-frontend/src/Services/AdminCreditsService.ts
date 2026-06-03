@@ -45,6 +45,8 @@ export type CreditLedgerRow = {
   creditsCharged: number;
   msgCount: number;
   source: string;
+  /** Present on agent / scheduled runs; the dashboard joins it to the agent's name. */
+  agentId: string | null;
   userSub: string | null;
   firstTs: string | null;
   lastTs: string | null;

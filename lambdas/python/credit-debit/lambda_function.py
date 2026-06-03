@@ -287,6 +287,7 @@ def handler(event: dict, context: Any) -> dict:
         value_tier=value_tier,
         context=context_kind,
         source=source,
+        agent_id=agent_id or None,
         bedrock_region=REGION,
         value_tier_credits=eff_tiers,
         trivial_consumption_usd=eff_trivial,

@@ -163,6 +163,7 @@ def build_conversation_rows(
     value_tier: Optional[str] = None,
     context: str = "chat",
     source: str = "chat",
+    agent_id: Optional[str] = None,
     bedrock_region: Optional[str] = None,
     value_tier_credits: Optional[dict[str, dict[str, int]]] = None,
     trivial_consumption_usd: float = TRIVIAL_CONSUMPTION_USD,
@@ -263,5 +264,6 @@ def build_conversation_rows(
         last_ts=last_ts,
         cost_incomplete=(unknown > 0),
         source=source,
+        agent_id=agent_id,
     )
     return meta, msg_rows

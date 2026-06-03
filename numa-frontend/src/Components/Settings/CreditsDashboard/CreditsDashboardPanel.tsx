@@ -8,9 +8,12 @@ import {
   type CreditLedgerFullRow,
 } from '../../../Services/AdminCreditsService';
 import { UsersService, type WorkspaceUser } from '../../../Services/UsersService';
+import { listAgents } from '../../../Services/AgentsService';
+import type { AgentSummary } from '../../../types/agents';
 import {
   fetchTrend,
   groupBySource,
+  topAgentsByCredits,
   topRowsByCredits,
   topUsersByCredits,
   type TrendPoint,
@@ -41,6 +44,7 @@ export const CreditsDashboardPanel: React.FC = () => {
   const [usedThisMonth, setUsedThisMonth] = useState(0);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
+  const [agentMap, setAgentMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [drill, setDrill] = useState<{ title: string; rows: CreditLedgerFullRow[] } | null>(null);
@@ -50,9 +54,10 @@ export const CreditsDashboardPanel: React.FC = () => {
     setError(null);
     try {
       const bal = await AdminCreditsService.getBalance(numaGet);
-      const [ledger, users, tr] = await Promise.all([
+      const [ledger, users, agents, tr] = await Promise.all([
         AdminCreditsService.getLedgerFull(undefined, numaGet),
         UsersService.list(numaGet).catch(() => [] as WorkspaceUser[]),
+        listAgents(numaGet, { scope: 'all' }).catch(() => [] as AgentSummary[]),
         fetchTrend(numaGet, bal, 6),
       ]);
       setBalance(bal);
@@ -62,6 +67,9 @@ export const CreditsDashboardPanel: React.FC = () => {
       const map: Record<string, string> = {};
       for (const u of users) if (u.sub) map[u.sub] = u.email;
       setUserMap(map);
+      const amap: Record<string, string> = {};
+      for (const a of agents) if (a.agentId) amap[a.agentId] = a.title;
+      setAgentMap(amap);
     } catch (err) {
       console.error('[CreditsDashboard] load failed', err);
       setError(t('creditsDashboard.loadError', { defaultValue: 'Could not load credit data.' }));
@@ -79,6 +87,10 @@ export const CreditsDashboardPanel: React.FC = () => {
       sub ? (userMap[sub] ?? `${sub.slice(0, 8)}…`) : t('creditsDashboard.unknownUser', { defaultValue: 'Unknown' }),
     [userMap, t]
   );
+
+  // Resolve an agentId to its display name (current title); falls back to a short id for an agent
+  // that's been deleted or isn't visible to this admin.
+  const agentName = useCallback((id: string): string => agentMap[id] ?? `${id.slice(0, 8)}…`, [agentMap]);
 
   const runMeta = useCallback(
     (r: CreditLedgerFullRow): string =>
@@ -113,8 +125,14 @@ export const CreditsDashboardPanel: React.FC = () => {
     [rows, toRunItem]
   );
   const topAgents = useMemo<TopListItem[]>(
-    () => topRowsByCredits(rows, 5, (r) => r.source === 'agent').map(toRunItem),
-    [rows, toRunItem]
+    () =>
+      topAgentsByCredits(rows, 5).map((a) => ({
+        id: a.agentId,
+        primary: agentName(a.agentId),
+        secondary: t('creditsDashboard.runsCount', { defaultValue: '{{n}} runs', n: a.count }),
+        value: a.credits,
+      })),
+    [rows, agentName, t]
   );
   const topStaff = useMemo<TopListItem[]>(
     () =>
@@ -211,9 +229,17 @@ export const CreditsDashboardPanel: React.FC = () => {
                   icon="bi-robot"
                   items={topAgents}
                   emptyText={t('creditsDashboard.noAgents', {
-                    defaultValue: 'No agent runs recorded yet — populates once agent metering is on.',
+                    defaultValue: 'No agent runs recorded yet — populates once agents run.',
                   })}
-                  onSelect={(id) => openRun(id, 'creditsDashboard.drillAgent', 'Agent run {{id}}')}
+                  onSelect={(id) =>
+                    setDrill({
+                      title: t('creditsDashboard.drillAgentName', {
+                        defaultValue: 'Agent: {{name}}',
+                        name: agentName(id),
+                      }),
+                      rows: rows.filter((r) => r.agentId === id),
+                    })
+                  }
                 />
               </div>
               <div className="col-xl-4 col-lg-6">

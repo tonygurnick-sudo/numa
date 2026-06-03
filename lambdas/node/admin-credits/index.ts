@@ -123,6 +123,8 @@ function toAdminRow(item: Record<string, unknown>): Record<string, unknown> {
     creditsCharged: item.creditsCharged ?? 0,
     msgCount: item.msgCount ?? 0,
     source: item.source ?? 'chat',
+    // agentId present on agent / scheduled runs; the frontend joins it to the agent's name.
+    agentId: item.agentId ?? null,
     userSub: item.userSub ?? null,
     firstTs: item.firstTs ?? null,
     lastTs: item.lastTs ?? null,
