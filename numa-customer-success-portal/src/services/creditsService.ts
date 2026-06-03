@@ -1,17 +1,32 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { clientService } from './clientService';
 import { awsCredentialsService } from './awsCredentialsService';
 import { activityService } from './activityService';
 import type { CreditConfig } from '@/types';
 
-/** Live credit standing read back from a client's ledger (read-only, cross-account). */
+/** A top-up-balance event-log entry (CLIENT#/TXN#…). `credits` is signed. */
+export interface CreditTxn {
+  kind: 'topup' | 'settlement' | 'adjustment' | string;
+  credits: number;
+  month?: string;
+  createdAt: string;
+  createdBy?: string;
+  note?: string;
+}
+
+/** Live credit standing derived from a client's ledger (read-only, cross-account). */
 export interface CreditStanding {
-  /** Top-up pool (CLIENT#/BALANCE). Additive on top-up; not decremented by usage today. */
-  balance: number;
-  balanceUpdatedAt?: string;
-  /** Keyed 'YYYY-MM' → the live monthly aggregate the in-client credit-debit Lambda maintains. */
-  months: Record<string, { revenueUsd: number; consumptionUsd: number }>;
+  /** Live top-up balance: settled TXN events minus not-yet-settled monthly overflow. Can be negative. */
+  availableBalance: number;
+  /** Σ of all TXN credits (top-ups + month-close settlements + adjustments). */
+  settledBalance: number;
+  /** Overflow past allocation for months not yet settled (open month + any closed-but-unsettled). */
+  liveOverflow: number;
+  /** Per NZ billing month ('YYYY-MM') → credits used, allocation in effect, and whether settled. */
+  months: Record<string, { used: number; allocation: number; settled: boolean }>;
+  /** Top-up-balance event log, newest first (for audit / display). */
+  txns: CreditTxn[];
 }
 
 /**
@@ -25,8 +40,8 @@ export interface CreditStanding {
  */
 
 const ledgerTable = (clientName: string): string => `numa-${clientName}-credit-ledger`;
-const configKey = (clientName: string) => ({ PK: `CLIENT#${clientName}`, SK: 'CONFIG' });
-const balanceKey = (clientName: string) => ({ PK: `CLIENT#${clientName}`, SK: 'BALANCE' });
+const clientPk = (clientName: string) => `CLIENT#${clientName}`;
+const configKey = (clientName: string) => ({ PK: clientPk(clientName), SK: 'CONFIG' });
 
 /** lib/credit-pricing defaults — keep in sync with credit_pricing/credits.py + tiers.py. */
 export const DEFAULT_CREDIT_CONFIG: Required<CreditConfig> = {
@@ -71,35 +86,47 @@ export class CreditsService {
     });
   }
 
-  /** Add credits to the client's ledger BALANCE row (the monthly/annual allocation top-up). */
-  async topUp(clientName: string, accountId: string, region: string, credits: number): Promise<number> {
+  /**
+   * Top up the client's persistent balance by appending a `topup` event to the ledger event log
+   * (CLIENT#/TXN#…). Balance is the sum of TXN events — there's no decrementing scalar — so a top-up
+   * is an append, never a mutation. Also logged to the portal activity table for the audit trail.
+   */
+  async topUp(clientName: string, accountId: string, region: string, credits: number): Promise<void> {
     const doc = await this.clientLedger(accountId, region);
-    const res = await doc.send(
-      new UpdateCommand({
+    const createdAt = new Date().toISOString();
+    const id = globalThis.crypto?.randomUUID?.() ?? createdAt;
+    await doc.send(
+      new PutCommand({
         TableName: ledgerTable(clientName),
-        Key: balanceKey(clientName),
-        UpdateExpression: 'ADD balance :c SET updatedAt = :t, updatedBy = :u',
-        ExpressionAttributeValues: { ':c': credits, ':t': new Date().toISOString(), ':u': 'portal' },
-        ReturnValues: 'UPDATED_NEW',
+        Item: {
+          PK: clientPk(clientName),
+          SK: `TXN#${createdAt}#${id}`,
+          txnKind: 'topup',
+          credits,
+          createdAt,
+          createdBy: 'portal',
+        },
       })
     );
-    const newBalance = Number(res.Attributes?.balance ?? credits);
     await activityService.logActivity({
       type: 'config',
       action: 'topup',
       resourceType: 'client-credits',
       resourceId: clientName,
-      details: { credits, newBalance },
+      details: { credits },
       success: true,
     });
-    return newBalance;
   }
 
   /**
-   * Read the client's live credit standing from its ledger (cross-account, read-only): the top-up
-   * BALANCE row and every monthly aggregate (CLIENT#<client>/MONTH#<YYYY-MM>) in one partition query.
-   * The aggregate stores USD revenue, not a credit count — the caller derives credits-used as
-   * creditRevenueUsd ÷ creditUsd. Informational only; never blocks authoring.
+   * Derive the client's live credit standing from its ledger in one partition query (read-only,
+   * cross-account). Implements the Option-B drawdown waterfall:
+   *   - per month: credits used (exact `creditsCharged`, or revenue ÷ creditUsd for older rows) vs the
+   *     allocation in effect (the month's frozen `allocationSnapshot`, else the live CONFIG allocation);
+   *   - `liveOverflow` = Σ over months WITHOUT a settlement TXN of max(0, used − allocation);
+   *   - `settledBalance` = Σ TXN credits (top-ups + settlements + adjustments);
+   *   - `availableBalance` = settledBalance − liveOverflow (can be negative = invoice signal).
+   * Months already settled by the nightly job are excluded from liveOverflow (their overflow is in TXN).
    */
   async getStanding(clientName: string, accountId: string, region: string): Promise<CreditStanding> {
     const doc = await this.clientLedger(accountId, region);
@@ -107,25 +134,57 @@ export class CreditsService {
       new QueryCommand({
         TableName: ledgerTable(clientName),
         KeyConditionExpression: 'PK = :pk',
-        ExpressionAttributeValues: { ':pk': `CLIENT#${clientName}` },
+        ExpressionAttributeValues: { ':pk': clientPk(clientName) },
       })
     );
-    let balance = 0;
-    let balanceUpdatedAt: string | undefined;
+    const items = res.Items ?? [];
+
+    const cfg = items.find((it) => String(it.SK) === 'CONFIG');
+    const allocations: number[] = Array.isArray(cfg?.monthlyAllocations)
+      ? (cfg!.monthlyAllocations as unknown[]).map(Number)
+      : [];
+    const creditUsd = Number(cfg?.creditUsd ?? DEFAULT_CREDIT_CONFIG.creditUsd) || DEFAULT_CREDIT_CONFIG.creditUsd;
+
+    const txns: CreditTxn[] = items
+      .filter((it) => String(it.SK ?? '').startsWith('TXN#'))
+      .map((it) => ({
+        kind: String(it.txnKind ?? ''),
+        credits: Number(it.credits ?? 0),
+        month: it.month ? String(it.month) : undefined,
+        createdAt: String(it.createdAt ?? ''),
+        createdBy: it.createdBy ? String(it.createdBy) : undefined,
+        note: it.note ? String(it.note) : undefined,
+      }))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    const settledBalance = txns.reduce((s, t) => s + t.credits, 0);
+    const settledMonths = new Set(txns.filter((t) => t.kind === 'settlement' && t.month).map((t) => t.month!));
+
     const months: CreditStanding['months'] = {};
-    for (const it of res.Items ?? []) {
+    let liveOverflow = 0;
+    for (const it of items) {
       const sk = String(it.SK ?? '');
-      if (sk === 'BALANCE') {
-        balance = Number(it.balance ?? 0);
-        balanceUpdatedAt = typeof it.updatedAt === 'string' ? it.updatedAt : undefined;
-      } else if (sk.startsWith('MONTH#')) {
-        months[sk.slice('MONTH#'.length)] = {
-          revenueUsd: Number(it.creditRevenueUsd ?? 0),
-          consumptionUsd: Number(it.consumptionCostUsd ?? 0),
-        };
-      }
+      if (!sk.startsWith('MONTH#')) continue;
+      const m = sk.slice('MONTH#'.length);
+      const monthIdx = Number(m.slice(5, 7)) - 1;
+      const used =
+        it.creditsCharged != null
+          ? Number(it.creditsCharged)
+          : creditUsd
+            ? Math.round(Number(it.creditRevenueUsd ?? 0) / creditUsd)
+            : 0;
+      const allocation = it.allocationSnapshot != null ? Number(it.allocationSnapshot) : (allocations[monthIdx] ?? 0);
+      const settled = settledMonths.has(m);
+      months[m] = { used, allocation, settled };
+      if (!settled) liveOverflow += Math.max(0, used - Math.max(0, allocation));
     }
-    return { balance, balanceUpdatedAt, months };
+
+    return {
+      availableBalance: settledBalance - Math.max(0, liveOverflow),
+      settledBalance,
+      liveOverflow,
+      months,
+      txns,
+    };
   }
 }
 

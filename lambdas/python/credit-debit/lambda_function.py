@@ -35,6 +35,7 @@ from credit_pricing.credits import (
 )
 from credit_pricing.ledger import month_aggregate_item
 from credit_pricing.tiers import VALID_TIERS, classify, max_tier
+from credit_pricing.timeutil import billing_month_of
 from prm import client as prm_client
 from prm import resource as prm_resource
 
@@ -181,6 +182,14 @@ def handler(event: dict, context: Any) -> dict:
         if cfg.get("agentcoreMult") is not None
         else AGENTCORE_MULT_ENV
     )
+    # Monthly allocation (12 calendar months). Snapshotted onto the MONTH row each turn so a closed
+    # month's overflow is settled against the allocation that actually applied (immune to later edits).
+    raw_alloc = cfg.get("monthlyAllocations")
+    eff_allocations = (
+        [float(x) for x in raw_alloc]
+        if isinstance(raw_alloc, list) and len(raw_alloc) == 12
+        else None
+    )
 
     # 2. Reuse an already-set title/tier (bounds Nova to ~once per conversation).
     existing = (
@@ -222,7 +231,9 @@ def handler(event: dict, context: Any) -> dict:
             category = cls["category"]
 
     # 3. Assemble the ledger rows (shared engine; deterministic SKs -> idempotent overwrite).
-    month = last_ts[:7]
+    # Bucket on the NZ billing calendar (Pacific/Auckland) — one calendar for all clients, so a
+    # conversation just after NZ-midnight on the 1st counts in the new month (not the prior UTC one).
+    month = billing_month_of(last_ts)
     meta, msg_rows = processing.build_conversation_rows(
         conversation_id=conversation_id,
         user_sub=user_sub,
@@ -295,11 +306,19 @@ def handler(event: dict, context: Any) -> dict:
             )
             total_credits = sum(c for c, _ in contrib.values())
             total_cons = sum(k for _, k in contrib.values())
+            month_idx = int(month[5:7]) - 1  # 0=Jan
+            alloc_snapshot = (
+                eff_allocations[month_idx]
+                if eff_allocations is not None and 0 <= month_idx < 12
+                else None
+            )
             agg = month_aggregate_item(
                 client=CLIENT_NAME,
                 month=month,
                 credit_revenue_usd=round(total_credits * eff_credit, 6),
                 consumption_cost_usd=round(total_cons, 6),
+                credits_charged=round(total_credits, 4),
+                allocation_snapshot=alloc_snapshot,
             )
             table.put_item(Item=_to_dynamo(agg))
         except (

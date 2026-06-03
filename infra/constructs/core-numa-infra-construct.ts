@@ -10,8 +10,7 @@ import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
-import { CloudwatchEventRule } from '@cdktf/provider-aws/lib/cloudwatch-event-rule';
-import { CloudwatchEventTarget } from '@cdktf/provider-aws/lib/cloudwatch-event-target';
+import { SchedulerSchedule } from '@cdktf/provider-aws/lib/scheduler-schedule';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { S3BucketCorsConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-cors-configuration';
@@ -680,9 +679,10 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
-    // Credit-nightly Lambda — runs at midnight UTC and, for conversations updated that day, writes an
-    // ADMIN-SAFE anonymised title + deliverables onto the ledger META rows (Nova 2 Lite via the shared
-    // lib). The admin view shows live credits/tier immediately; the human-readable labels lag ~1 day.
+    // Credit-nightly Lambda — runs just after midnight NZ (Pacific/Auckland). Two jobs: (1) writes
+    // ADMIN-SAFE anonymised title + deliverables onto that day's ledger META rows (Nova 2 Lite via the
+    // shared lib); (2) month-close settlement — locks the previous NZ month's overflow into the top-up
+    // balance as a settlement TXN. The admin view shows live credits/tier immediately; labels lag ~1 day.
     const creditNightlyLambda = new NumaLambda(this, 'credit-nightly', {
       clientName: props.clientName,
       lambdaDirectory: 'python/credit-nightly/',
@@ -697,8 +697,15 @@ export class CoreNumaInfra extends Construct {
       additionalPolicyStatements: [
         {
           effect: 'Allow',
-          // Query GSI2 (month rollup) + UpdateItem the META rows with title/deliverables/summarisedAt.
-          actions: ['dynamodb:Query', 'dynamodb:UpdateItem'],
+          // Summariser: Query GSI2 + UpdateItem META rows. Settlement: GetItem the MONTH aggregate,
+          // Put/Delete the settlement TXN row.
+          actions: [
+            'dynamodb:Query',
+            'dynamodb:UpdateItem',
+            'dynamodb:GetItem',
+            'dynamodb:PutItem',
+            'dynamodb:DeleteItem',
+          ],
           resources: [this.creditLedgerTable.arn, `${this.creditLedgerTable.arn}/index/*`],
         },
         {
@@ -714,21 +721,43 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
-    const creditNightlyRule = new CloudwatchEventRule(this, 'credit-nightly-schedule-rule', {
+    // Schedule on the NZ billing calendar via EventBridge Scheduler (DST-aware ScheduleExpressionTimezone
+    // — unlike CloudwatchEventRule, which is UTC-only). Fires 00:30 NZ so the previous month is freshly
+    // closed when settlement runs. Scheduler invokes the Lambda via an assumed role (no resource policy).
+    const creditNightlySchedulerRole = new IamRole(this, 'credit-nightly-scheduler-role', {
+      name: `${props.clientName}-credit-nightly-scheduler`,
+      assumeRolePolicy: new DataAwsIamPolicyDocument(this, 'credit-nightly-scheduler-assume', {
+        statement: [
+          {
+            actions: ['sts:AssumeRole'],
+            principals: [{ identifiers: ['scheduler.amazonaws.com'], type: 'Service' }],
+          },
+        ],
+      }).json,
+    });
+    new IamRolePolicy(this, 'credit-nightly-scheduler-policy', {
+      name: `${props.clientName}-credit-nightly-scheduler`,
+      role: creditNightlySchedulerRole.name,
+      policy: new DataAwsIamPolicyDocument(this, 'credit-nightly-scheduler-policy-doc', {
+        statement: [
+          {
+            effect: 'Allow',
+            actions: ['lambda:InvokeFunction'],
+            resources: [creditNightlyLambda.lambda.arn, `${creditNightlyLambda.lambda.arn}:*`],
+          },
+        ],
+      }).json,
+    });
+    new SchedulerSchedule(this, 'credit-nightly-schedule', {
       name: `${props.clientName}-credit-nightly`,
-      description: 'Nightly anonymised receipt summariser for the Numa Credit System (midnight UTC)',
-      scheduleExpression: 'cron(0 0 * * ? *)',
-    });
-    new CloudwatchEventTarget(this, 'credit-nightly-schedule-target', {
-      rule: creditNightlyRule.name,
-      arn: creditNightlyLambda.lambda.arn,
-    });
-    new LambdaPermission(this, 'credit-nightly-invoke-permission', {
-      statementId: 'AllowEventBridgeCreditNightly',
-      action: 'lambda:InvokeFunction',
-      functionName: creditNightlyLambda.lambda.functionName,
-      principal: 'events.amazonaws.com',
-      sourceArn: creditNightlyRule.arn,
+      description: 'Numa Credit System: nightly receipt summariser + NZ month-close settlement',
+      flexibleTimeWindow: { mode: 'OFF' },
+      scheduleExpression: 'cron(30 0 * * ? *)',
+      scheduleExpressionTimezone: 'Pacific/Auckland',
+      target: {
+        arn: creditNightlyLambda.lambda.arn,
+        roleArn: creditNightlySchedulerRole.arn,
+      },
     });
 
     // Agents tables

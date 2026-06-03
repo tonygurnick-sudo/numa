@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
-import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 
 // Per-client credit ledger (Numa Credit System / SPK-015).
 const TABLE_NAME = process.env.CREDITS_TABLE_NAME as string;
@@ -35,8 +35,7 @@ function isAdmin(event: { headers?: Record<string, string | undefined> }): boole
   return groups.includes('admin');
 }
 
-const balanceKey = (): { PK: string; SK: string } => ({ PK: `CLIENT#${CLIENT_NAME}`, SK: 'BALANCE' });
-const configKey = (): { PK: string; SK: string } => ({ PK: `CLIENT#${CLIENT_NAME}`, SK: 'CONFIG' });
+const clientPk = (): string => `CLIENT#${CLIENT_NAME}`;
 
 // ── Pricing-policy defaults — MUST mirror lib/credit-pricing (credits.py + tiers.py). The Credit
 // Admin tab edits these; the debit Lambda reads the CONFIG row at meter time. AWS token rates and
@@ -104,8 +103,9 @@ function effectiveConfig(stored?: Record<string, unknown>): CreditConfig {
 // Config validation/write now lives in the Customer Success Portal (the central authoring surface);
 // this Lambda is read-only for pricing config (validateConfig retired with the POST write path).
 
-// UTC YYYY-MM. (Monthly expiry is Asa's default — the ledger is keyed by month.)
-const currentMonth = (): string => new Date().toISOString().slice(0, 7);
+// Current NZ billing month (YYYY-MM). The credit system bills on one calendar — Pacific/Auckland —
+// for all clients, matching how credit-debit buckets months. The TZ only decides the month boundary.
+const currentMonth = (): string => new Date().toLocaleDateString('en-CA', { timeZone: 'Pacific/Auckland' }).slice(0, 7);
 
 // Admin-safe projection of a META row. NEVER returns internal cost/token fields or chat content —
 // admins see what was done, by whom, over what span, and what it cost in credits. userSub is
@@ -153,46 +153,72 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: 'Server configuration error' }) };
     }
 
-    // GET /credits/balance -> current credit balance (admin-only: exposes spend signal)
+    // GET /credits/balance -> live drawdown standing (admin-only: exposes spend signal).
     if (method === 'GET' && /\/credits\/balance\/?$/.test(path)) {
       if (!isAdmin(event)) {
         return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };
       }
-      // Also return the pricing config here (the Credit Admin tab reads it from this call — avoids
-      // adding a new API-GW route so the whole feature is hotfix-deployable). Plus this month's
-      // allocation/consumption so the panel can show "X / Y used, Z remaining (expires month end)".
+      // One CLIENT# partition query returns CONFIG + MONTH# aggregates + TXN# event log together, so we
+      // can derive the Option-B drawdown waterfall here (same logic as the portal's getStanding):
+      //   balance = Σ TXN credits − overflow of months not yet settled by the nightly job.
       const month = currentMonth();
       const monthIndex = Number(month.slice(5, 7)) - 1; // 0=Jan .. 11=Dec
-      const [balRes, cfgRes, monthRes] = await Promise.all([
-        ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: balanceKey() })),
-        ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: configKey() })),
-        ddb.send(
-          new QueryCommand({
-            TableName: TABLE_NAME,
-            IndexName: 'GSI2',
-            KeyConditionExpression: 'GSI2PK = :pk',
-            ExpressionAttributeValues: { ':pk': `MONTH#${month}` },
-            ProjectionExpression: 'creditsCharged',
-          })
-        ),
-      ]);
-      const balance = (balRes.Item?.balance as number) ?? 0;
-      const cfg = effectiveConfig(cfgRes.Item);
-      // Use-it-or-lose-it: remaining is THIS month's allocation minus THIS month's consumption.
-      // Prior months never carry over (the ledger is keyed by month), so expiry is implicit.
-      const consumed = (monthRes.Items || []).reduce((sum, it) => sum + Number(it.creditsCharged ?? 0), 0);
+      const part = await ddb.send(
+        new QueryCommand({
+          TableName: TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk',
+          ExpressionAttributeValues: { ':pk': clientPk() },
+        })
+      );
+      const items = part.Items ?? [];
+      const cfgItem = items.find((it) => it.SK === 'CONFIG');
+      const cfg = effectiveConfig(cfgItem);
+      const txns = items.filter((it) => String(it.SK).startsWith('TXN#'));
+      const settledBalance = txns.reduce((sum, t) => sum + Number(t.credits ?? 0), 0);
+      const settledMonths = new Set(
+        txns.filter((t) => t.txnKind === 'settlement' && t.month).map((t) => String(t.month))
+      );
+      let liveOverflow = 0;
+      let consumed = 0;
+      for (const it of items) {
+        const sk = String(it.SK ?? '');
+        if (!sk.startsWith('MONTH#')) continue;
+        const m = sk.slice('MONTH#'.length);
+        const mIdx = Number(m.slice(5, 7)) - 1;
+        const used =
+          it.creditsCharged != null
+            ? Number(it.creditsCharged)
+            : cfg.creditUsd
+              ? Math.round(Number(it.creditRevenueUsd ?? 0) / cfg.creditUsd)
+              : 0;
+        const alloc =
+          it.allocationSnapshot != null ? Number(it.allocationSnapshot) : (cfg.monthlyAllocations[mIdx] ?? 0);
+        if (m === month) consumed = used;
+        if (!settledMonths.has(m)) liveOverflow += Math.max(0, used - Math.max(0, alloc));
+      }
+      const availableBalance = settledBalance - Math.max(0, liveOverflow);
       const allocation = cfg.monthlyAllocations[monthIndex] ?? 0;
       return {
         statusCode: 200,
         headers: HEADERS,
         body: JSON.stringify({
-          balance,
-          updatedAt: balRes.Item?.updatedAt ?? null,
+          balance: availableBalance, // live: settled events minus unsettled overflow (can be negative)
+          settledBalance,
+          liveOverflow,
+          txns: txns
+            .map((t) => ({
+              kind: String(t.txnKind ?? ''),
+              credits: Number(t.credits ?? 0),
+              month: t.month ? String(t.month) : undefined,
+              createdAt: String(t.createdAt ?? ''),
+              createdBy: t.createdBy ? String(t.createdBy) : undefined,
+            }))
+            .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
           config: {
             defaults: DEFAULT_CONFIG,
             current: cfg,
-            isCustom: !!cfgRes.Item,
-            updatedAt: cfgRes.Item?.updatedAt ?? null,
+            isCustom: !!cfgItem,
+            updatedAt: (cfgItem?.updatedAt as string) ?? null,
           },
           monthly: {
             month,

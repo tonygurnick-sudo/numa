@@ -1,17 +1,21 @@
 """
-credit-nightly — anonymised receipt summariser for the Numa Credit System (SPK-015).
+credit-nightly — anonymised receipt summariser + month-close settlement for the Numa Credit System.
 
-Runs once a day (EventBridge cron, midnight UTC). For conversations whose ledger META row was updated
-in the recent window and not yet summarised (or summarised before their latest activity), it reads the
-trace from S3 and runs Amazon Nova 2 Lite to produce an ADMIN-SAFE anonymised title + deliverables,
-then writes them onto the META row. The admin view shows these once filled; until then it shows live
-time / credits / tier with a "summary coming overnight" placeholder.
+Runs once a day on the NZ billing calendar (EventBridge Scheduler, ``Pacific/Auckland``). Two jobs:
 
-No raw chat content is ever stored — only the anonymised title + deliverables list (privacy decision).
-Idempotent: re-running skips rows already summarised after their lastTs. Best-effort per conversation.
+1. **Receipt summariser.** For conversations whose ledger META row was updated in the recent window
+   and not yet summarised, read the trace from S3 and run Amazon Nova 2 Lite to produce an ADMIN-SAFE
+   anonymised title + deliverables, then write them onto the META row. No raw chat content is ever
+   stored. Idempotent: re-running skips rows already summarised after their lastTs.
 
-All billing/summary logic is shared via lib/credit-pricing (processing + tiers.generate_receipt), so
-the nightly summariser, live debit, and backfill never drift.
+2. **Month-close settlement (Option B).** Settle the PREVIOUS NZ billing month: lock its overflow past
+   the month's allocation snapshot into the top-up balance as a ``settlement`` TXN event (signed −).
+   Deterministic per-month SK → idempotent; re-running within the settling window self-corrects for
+   late-arriving traces, and months older than "previous" are never re-touched, so they stay frozen.
+   The top-up balance is the sum of TXN events; a negative balance is the invoice signal.
+
+All billing/summary logic is shared via lib/credit-pricing so the nightly job, live debit, and backfill
+never drift. All monetary values are USD; the NZ timezone only decides WHEN a month boundary falls.
 
 Env: CREDITS_TABLE_NAME, OUTPUTS_BUCKET_NAME, CLIENT_NAME, AWS_REGION;
 optional CREDIT_NIGHTLY_LOOKBACK_HOURS (default 36), CREDIT_NIGHTLY_MAX (0 = no cap), CREDIT_CACHE_TTL.
@@ -22,13 +26,26 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Iterator
 
 import structlog
 from boto3.dynamodb.conditions import Key
 
 from credit_pricing import processing
+from credit_pricing.ledger import (
+    client_pk,
+    month_sk,
+    overflow_credits,
+    settlement_sk,
+    txn_item,
+)
 from credit_pricing.tiers import generate_receipt
+from credit_pricing.timeutil import (
+    billing_month_now,
+    billing_now,
+    previous_billing_month,
+)
 from prm import client as prm_client
 from prm import resource as prm_resource
 
@@ -42,6 +59,19 @@ LOOKBACK_HOURS = float(os.environ.get("CREDIT_NIGHTLY_LOOKBACK_HOURS", "36"))
 MAX_CONVS = int(os.environ.get("CREDIT_NIGHTLY_MAX", "0"))  # 0 = no cap
 CACHE_TTL = os.environ.get("CREDIT_CACHE_TTL", "1h")
 S3_PREFIX = "numa-chat/workspace"
+
+
+def _to_dynamo(obj: Any) -> Any:
+    """Coerce for the DynamoDB resource API: floats -> Decimal, drop None values."""
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: _to_dynamo(v) for k, v in obj.items() if v is not None}
+    if isinstance(obj, list):
+        return [_to_dynamo(v) for v in obj]
+    return obj
 
 
 def _iter_trace(text: str) -> Iterator[dict]:
@@ -86,6 +116,62 @@ def _needs_summary(item: dict, cutoff_iso: str) -> bool:
     return (not summarised) or (summarised < last_ts)
 
 
+def _settle_prev_month(table: Any, now_iso: str) -> dict:
+    """Month-close settlement for the PREVIOUS NZ billing month (Option B).
+
+    Overflow = max(0, creditsCharged − allocationSnapshot) for that month. A client with no
+    allocation configured (snapshot absent) has allocation 0, so all their usage overflows (balance
+    goes negative = invoice). If overflow > 0 we write a ``settlement`` TXN (−overflow, deterministic
+    SK → idempotent); if it cleared (e.g. allocation raised within the settling window) we remove any
+    prior settlement. Returns a small summary for logging.
+    """
+    month = previous_billing_month(billing_month_now())
+    key = {"PK": client_pk(CLIENT_NAME), "SK": month_sk(month)}
+    agg = table.get_item(Key=key).get("Item") or {}
+    consumed = float(agg.get("creditsCharged") or 0)
+    snapshot = agg.get("allocationSnapshot")
+    allocation = float(snapshot) if snapshot is not None else 0.0
+    overflow = overflow_credits(consumed, allocation)
+    if overflow > 0:
+        table.put_item(
+            Item=_to_dynamo(
+                txn_item(
+                    client=CLIENT_NAME,
+                    kind="settlement",
+                    credits=-overflow,
+                    created_at=now_iso,
+                    created_by="nightly",
+                    month=month,
+                )
+            )
+        )
+        action = "settled"
+    else:
+        # No overflow (or it cleared) — ensure no stale settlement lingers for this month.
+        table.delete_item(
+            Key={"PK": client_pk(CLIENT_NAME), "SK": settlement_sk(month)}
+        )
+        action = "no-overflow"
+    logger.info(
+        "month settlement",
+        _name="CREDIT_NIGHTLY_SETTLE",
+        phase="settle",
+        client=CLIENT_NAME,
+        month=month,
+        consumed=consumed,
+        allocation=allocation,
+        overflow=overflow,
+        action=action,
+    )
+    return {
+        "month": month,
+        "consumed": consumed,
+        "allocation": allocation,
+        "overflow": overflow,
+        "action": action,
+    }
+
+
 def handler(event: dict, context: Any) -> dict:
     if not TABLE_NAME or not OUTPUTS_BUCKET:
         logger.error("not configured", _name="CREDIT_NIGHTLY_CONFIG", phase="init")
@@ -98,8 +184,9 @@ def handler(event: dict, context: Any) -> dict:
     bedrock = prm_client("bedrock-runtime", region=REGION)
 
     # 1. Gather candidate META rows (recently updated, not yet summarised) via the GSI2 month rollup.
+    #    Scan on the NZ billing calendar so the month partitions match how credit-debit buckets them.
     candidates: list[dict] = []
-    for month in _months_to_scan(now):
+    for month in _months_to_scan(billing_now()):
         resp = table.query(
             IndexName="GSI2", KeyConditionExpression=Key("GSI2PK").eq(f"MONTH#{month}")
         )
@@ -169,18 +256,35 @@ def handler(event: dict, context: Any) -> dict:
                 error=str(exc),
             )
 
+    # 3. Month-close settlement for the previous NZ billing month (best-effort; never break the run).
+    settlement = None
+    try:
+        settlement = _settle_prev_month(table, now.isoformat())
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 — settlement must not break the summariser run
+        logger.warning(
+            "settlement failed",
+            _name="CREDIT_NIGHTLY_SETTLE_FAIL",
+            phase="settle",
+            client=CLIENT_NAME,
+            error=str(exc),
+        )
+
     logger.info(
-        "nightly summarise complete",
+        "nightly run complete",
         _name="CREDIT_NIGHTLY_OK",
         phase="cleanup",
         client=CLIENT_NAME,
         candidates=len(candidates),
         summarised=summarised,
         errors=errors,
+        settlement=settlement,
     )
     return {
         "status": "ok",
         "summarised": summarised,
         "errors": errors,
         "candidates": len(candidates),
+        "settlement": settlement,
     }
