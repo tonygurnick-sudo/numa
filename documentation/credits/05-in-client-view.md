@@ -43,14 +43,21 @@ feature flag (default **off**) — metering runs for every client regardless, bu
 
 **Inner tabs:**
 
-- **Dashboard** — `CreditsTrendChart` (allocated vs used, monthly), `CreditsCategoryPie` (consumption by
-  category), and four `CreditsTopList`s: Top-5 chats / agents / categories / staff, each clickable into
-  `CreditsDrillModal`. (Top-5 agents populates once agent metering surfaces agent runs.)
+- **Dashboard** — `CreditsTrendChart` (allocated vs used, monthly), `CreditsSourceChart` (**Credits by type** —
+  the deterministic Chat / Agent chat / Scheduled agent split, via `groupBySource`), and three `CreditsTopList`s:
+  Top-5 chats / agents / staff, each clickable into `CreditsDrillModal`. Each chat/agent row leads with the
+  anonymised nightly **title** + **timestamp + email** (the conversation UUID rides a copy button to drill into a
+  specific user/run). (Top-5 agents populates once agent metering surfaces agent runs.)
 - **Work delivered** — `CreditsWorkDelivered`: the anonymised receipt table
-  (What was done · By · Duration · Complexity · Credits). Title + deliverables come from the nightly summariser;
-  until then a row shows a "Summary coming overnight" placeholder alongside live tier/credits/duration.
+  (What was done · By · When · Duration · **Value** · Credits). Title + deliverables come from the nightly
+  summariser; until then a row shows a "Summary coming overnight" placeholder alongside live tier/credits/duration.
 
-Sub-components live in `CreditsDashboard/`: `CreditsSummaryCards`, `CreditsTrendChart`, `CreditsCategoryPie`,
+> **No category.** The Nova work-`category` was removed from the live path (2026-06-03): there is no
+> "Consumption by category" pie or Top-5-categories list any more — the breakdown is by **source** (chat / agent /
+> scheduled). "Complexity" is renamed **Value** everywhere (the client-facing name). See
+> [02-shared-lib.md](02-shared-lib.md) for the future nightly-category plan.
+
+Sub-components live in `CreditsDashboard/`: `CreditsSummaryCards`, `CreditsTrendChart`, `CreditsSourceChart`,
 `CreditsTopList`, `CreditsDrillModal`, `CreditsWorkDelivered`, `helpers.ts`.
 
 Frontend service: `numa-frontend/src/Services/AdminCreditsService.ts` — `getBalance` → `/api/credits/balance`;
@@ -94,9 +101,9 @@ admin-safe projection (never returns cost/token fields or chat content for the r
 
 ## What the client admin sees (and doesn't)
 
-- **Sees:** remaining/allocated/used + top-up balance, a usage trend, consumption by category, top-5
-  chats/agents/categories/staff (by **anonymised** ID + time), and the "work delivered" receipt (anonymised
-  title + deliverables, complexity tier, credits, duration, who).
+- **Sees:** remaining/allocated/used + top-up balance, a usage trend, credits by type (chat / agent / scheduled),
+  top-5 chats/agents/staff (by **anonymised** title + time + email), and the "work delivered" receipt (anonymised
+  title + deliverables, value tier, credits, when, duration, who).
 - **Never sees:** raw chat content, real conversation/agent titles, or cost/token figures (those are internal
   telemetry on the META row, not exposed by the admin-safe API).
 - **Lag:** title/deliverables are filled by the nightly job (~1 day); live tier/credits/duration are immediate.

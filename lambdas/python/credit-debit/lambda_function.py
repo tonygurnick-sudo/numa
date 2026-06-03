@@ -40,7 +40,10 @@ from credit_pricing.timeutil import billing_month_of
 from prm import client as prm_client
 from prm import resource as prm_resource
 
-logger = structlog.get_logger()
+# Bind domain="credits" on every line so all credit logs (debit + nightly + the workspace-agent
+# meter emit) share one exact-match filter key, on top of the per-event `_name` (CREDIT_DEBIT_*).
+# CloudWatch: `filter domain = "credits"`.
+logger = structlog.get_logger().bind(domain="credits")
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 TABLE_NAME = os.environ.get("CREDITS_TABLE_NAME", "")
@@ -215,7 +218,6 @@ def handler(event: dict, context: Any) -> dict:
     title = existing.get("title") or ""
     prior_tier = existing.get("dominantTier")
     prior_tier = prior_tier if prior_tier in VALID_TIERS else None  # ratchet floor
-    category = existing.get("category")
 
     bedrock = prm_client("bedrock-runtime", region=REGION)
 
@@ -226,17 +228,39 @@ def handler(event: dict, context: Any) -> dict:
     # (very_high) is reached. The trivial-cost cap in build_conversation_rows still pins near-zero
     # conversations to 'low', so word volume alone can't inflate the tier.
     value_tier = prior_tier
+    nova_tier = None
+    window = _classify_window(user_texts)
+    actions_summary = _actions_summary(turns)
     if prior_tier != "very_high":
         cls = classify(
-            _classify_window(user_texts),
+            window,
             context=context_kind,
-            actions=_actions_summary(turns),
+            actions=actions_summary,
             bedrock=bedrock,
             region=REGION,
         )
-        value_tier = max_tier(prior_tier, cls["tier"])
-        if not category:
-            category = cls["category"]
+        nova_tier = cls["tier"]
+        value_tier = max_tier(prior_tier, nova_tier)
+
+    # Observability for the (ratcheted) classification. Only the running MAX survives on the META row
+    # as dominantTier, so each turn's individual Nova verdict is otherwise lost — making it impossible
+    # to see WHY a conversation landed on a tier (e.g. a terse ask that did heavy multi-integration
+    # work still scoring 'low'; see the B1 value-signal item). Logs what Nova was shown (window size +
+    # the trusted actions/volume summary — never raw user text, for privacy) and what it returned, vs
+    # the prior ratchet floor and the final tier. Pure visibility — no effect on pricing. nova_tier is
+    # None when the ratchet was already at the ceiling and Nova was skipped.
+    logger.info(
+        "classified conversation",
+        _name="CREDIT_DEBIT_CLASSIFY",
+        phase="classify",
+        conversation_id=conversation_id,
+        context=context_kind,
+        window_msgs=len(window),
+        actions=actions_summary,
+        nova_tier=nova_tier,
+        prior_tier=prior_tier,
+        final_tier=value_tier,
+    )
 
     # 3. Assemble the ledger rows (shared engine; deterministic SKs -> idempotent overwrite).
     # Bucket on the NZ billing calendar (Pacific/Auckland) — one calendar for all clients, so a
@@ -253,7 +277,6 @@ def handler(event: dict, context: Any) -> dict:
         margin=eff_margin,
         credit_usd=eff_credit,
         value_tier=value_tier,
-        category=category,
         context=context_kind,
         source=source,
         bedrock_region=REGION,

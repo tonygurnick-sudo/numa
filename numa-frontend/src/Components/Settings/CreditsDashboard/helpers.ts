@@ -4,7 +4,7 @@
 /** i18next t() — narrowed to what we use, to avoid a hard dependency on its types. */
 export type TransFn = (key: string, opts?: Record<string, unknown>) => string;
 
-/** Complexity-tier → Bootstrap badge variant. Mirrors CreditsAdminPanel. */
+/** Value-tier → Bootstrap badge variant. ("Value" is the client-facing name for the tier.) */
 export const TIER_BADGE: Record<string, string> = {
   low: 'secondary',
   medium: 'info',
@@ -12,6 +12,22 @@ export const TIER_BADGE: Record<string, string> = {
   very_high: 'warning',
   unclassified: 'light',
 };
+
+/** Friendly label for the deterministic invocation `source` (chat | agent | scheduled). */
+export function sourceLabel(source: string, t: TransFn): string {
+  switch (source) {
+    case 'chat':
+      return t('creditsDashboard.sourceChat', { defaultValue: 'Chat' });
+    case 'agent':
+      return t('creditsDashboard.sourceAgent', { defaultValue: 'Agent chat' });
+    case 'scheduled':
+      return t('creditsDashboard.sourceScheduled', { defaultValue: 'Scheduled agent' });
+    default:
+      return source
+        ? source.charAt(0).toUpperCase() + source.slice(1)
+        : t('creditsDashboard.sourceOther', { defaultValue: 'Other' });
+  }
+}
 
 /** Categorical palette aligned to Bootstrap theme colours, for pie slices / bars. */
 export const CHART_PALETTE = [

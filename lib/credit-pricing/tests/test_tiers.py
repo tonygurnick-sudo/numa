@@ -34,24 +34,16 @@ def test_tier_to_credits() -> None:
 
 
 def test_parse_classification() -> None:
+    # Tier-only now (category is no longer produced on the live path); any extra keys are ignored.
     assert tiers._parse_classification('{"tier":"high","category":"code_build"}') == {
         "tier": "high",
-        "category": "code_build",
     }
     # case-insensitive tier, surrounding prose tolerated
-    out = tiers._parse_classification(
-        'Here: {"tier":"VERY_HIGH","category":"analysis"} done'
-    )
-    assert out["tier"] == "very_high" and out["category"] == "analysis"
+    out = tiers._parse_classification('Here: {"tier":"VERY_HIGH"} done')
+    assert out == {"tier": "very_high"}
     # garbage / invalid -> safe medium default
-    assert tiers._parse_classification("no json here") == {
-        "tier": "medium",
-        "category": "analysis",
-    }
-    assert tiers._parse_classification('{"tier":"enormous"}') == {
-        "tier": "medium",
-        "category": "analysis",
-    }
+    assert tiers._parse_classification("no json here") == {"tier": "medium"}
+    assert tiers._parse_classification('{"tier":"enormous"}') == {"tier": "medium"}
 
 
 def test_max_tier_ratchet() -> None:

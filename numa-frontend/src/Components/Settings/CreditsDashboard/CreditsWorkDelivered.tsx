@@ -2,6 +2,7 @@ import React from 'react';
 import { Badge, Card, Table } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { CreditLedgerRow } from '../../../Services/AdminCreditsService';
+import { fmtTimestamp, sourceLabel } from './helpers';
 
 const TIER_BADGE: Record<string, string> = {
   low: 'secondary',
@@ -18,7 +19,7 @@ interface Props {
 }
 
 /**
- * "This month — work delivered": the anonymised value receipt (title · who · duration · complexity ·
+ * "This month — work delivered": the anonymised value receipt (title · who · when · duration · value ·
  * credits). Title + deliverables are filled by the nightly summariser; until then a placeholder shows
  * alongside the live tier/credits/duration. Deliberately shows NO cost or chat content (privacy).
  */
@@ -65,8 +66,9 @@ export const CreditsWorkDelivered: React.FC<Props> = ({ rows, totalCredits, who 
               <tr>
                 <th>{t('credits.colTitle', { defaultValue: 'What was done' })}</th>
                 <th>{t('credits.colBy', { defaultValue: 'By' })}</th>
+                <th>{t('credits.colWhen', { defaultValue: 'When' })}</th>
                 <th>{t('credits.colDuration', { defaultValue: 'Duration' })}</th>
-                <th>{t('credits.colTier', { defaultValue: 'Complexity' })}</th>
+                <th>{t('credits.colTier', { defaultValue: 'Value' })}</th>
                 <th className="text-end">{t('credits.colCredits', { defaultValue: 'Credits' })}</th>
               </tr>
             </thead>
@@ -91,12 +93,13 @@ export const CreditsWorkDelivered: React.FC<Props> = ({ rows, totalCredits, who 
                     <div className="small text-muted">
                       {t('credits.rowMeta', {
                         defaultValue: '{{label}} · {{count}} msgs',
-                        label: row.category ?? row.source,
+                        label: sourceLabel(row.source, t),
                         count: row.msgCount,
                       })}
                     </div>
                   </td>
                   <td className="small">{who(row.userSub)}</td>
+                  <td className="small text-muted text-nowrap">{fmtTimestamp(row.lastTs)}</td>
                   <td className="small text-muted">{fmtDuration(row.firstTs, row.lastTs)}</td>
                   <td>
                     <Badge

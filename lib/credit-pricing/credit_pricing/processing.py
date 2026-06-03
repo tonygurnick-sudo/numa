@@ -134,7 +134,6 @@ def build_conversation_rows(
     credit_usd: float,
     first_ts: Optional[str] = None,
     value_tier: Optional[str] = None,
-    category: Optional[str] = None,
     context: str = "chat",
     source: str = "chat",
     bedrock_region: Optional[str] = None,
@@ -238,6 +237,4 @@ def build_conversation_rows(
         cost_incomplete=(unknown > 0),
         source=source,
     )
-    if category:
-        meta["category"] = category
     return meta, msg_rows

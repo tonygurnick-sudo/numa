@@ -120,7 +120,6 @@ function toAdminRow(item: Record<string, unknown>): Record<string, unknown> {
     title: item.title ?? '',
     deliverables: Array.isArray(item.deliverables) ? item.deliverables : [],
     dominantTier: item.dominantTier ?? 'unclassified',
-    category: item.category ?? null,
     creditsCharged: item.creditsCharged ?? 0,
     msgCount: item.msgCount ?? 0,
     source: item.source ?? 'chat',

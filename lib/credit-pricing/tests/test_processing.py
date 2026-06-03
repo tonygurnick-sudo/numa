@@ -57,7 +57,6 @@ def test_build_rows_charge_is_max_of_value_and_floor() -> None:
         margin=2.0,
         credit_usd=0.5,
         value_tier="high",
-        category="code_build",
         context="chat",
         source="chat",
     )
@@ -65,7 +64,7 @@ def test_build_rows_charge_is_max_of_value_and_floor() -> None:
     assert meta["GSI2PK"] == "MONTH#2026-06"
     assert meta["creditsValue"] == 8  # high, chat context (Scheme A)
     assert meta["creditsCharged"] == max(8, meta["creditsFloor"])
-    assert meta["category"] == "code_build"
+    assert "category" not in meta  # category removed from the live ledger row
     assert len(msgs) == 1 and msgs[0]["SK"].startswith("MSG#")
     assert "content" not in msgs[0] and "text" not in msgs[0]  # privacy
 

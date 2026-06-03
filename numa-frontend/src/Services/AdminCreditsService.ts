@@ -42,7 +42,6 @@ export type CreditLedgerRow = {
   title: string;
   deliverables?: string[];
   dominantTier: string;
-  category: string | null;
   creditsCharged: number;
   msgCount: number;
   source: string;

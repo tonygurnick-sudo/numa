@@ -17,7 +17,9 @@ import os
 
 import structlog
 
-logger = structlog.get_logger()
+# Shared exact-match filter key across all credit logs (see credit-debit). The meter emit lands in
+# the workspace-agent container log group; `domain="credits"` lets one filter span it + the lambdas.
+logger = structlog.get_logger().bind(domain="credits")
 
 
 def _enabled() -> bool:

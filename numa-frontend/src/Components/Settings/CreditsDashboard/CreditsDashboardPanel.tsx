@@ -10,8 +10,7 @@ import {
 import { UsersService, type WorkspaceUser } from '../../../Services/UsersService';
 import {
   fetchTrend,
-  groupByCategory,
-  rowsForCategory,
+  groupBySource,
   topRowsByCredits,
   topUsersByCredits,
   type TrendPoint,
@@ -19,7 +18,7 @@ import {
 import { CreditsSummaryCards } from './CreditsSummaryCards';
 import { CreditsWorkDelivered } from './CreditsWorkDelivered';
 import { CreditsTrendChart } from './CreditsTrendChart';
-import { CreditsCategoryPie } from './CreditsCategoryPie';
+import { CreditsSourceChart } from './CreditsSourceChart';
 import { CreditsTopList, type TopListItem } from './CreditsTopList';
 import { CreditsDrillModal } from './CreditsDrillModal';
 import { fmtTimestamp, shortId, TIER_BADGE } from './helpers';
@@ -91,18 +90,22 @@ export const CreditsDashboardPanel: React.FC = () => {
     [t, who]
   );
 
-  const categorySlices = useMemo(() => groupByCategory(rows), [rows]);
+  const sourceSlices = useMemo(() => groupBySource(rows), [rows]);
 
+  // A run is identified by its anonymised title (from the nightly summariser) + time + who ran it;
+  // the full conversation ID rides a copy button so an admin can dig deeper on a specific user/run.
   const toRunItem = useCallback(
     (r: CreditLedgerFullRow): TopListItem => ({
       id: r.conversationId,
-      primary: shortId(r.conversationId),
+      primary: r.title?.trim()
+        ? r.title
+        : t('creditsDashboard.summaryPending', { defaultValue: 'Summary coming overnight' }),
       copyValue: r.conversationId,
       secondary: runMeta(r),
       value: r.creditsCharged,
       badge: { text: r.dominantTier, bg: TIER_BADGE[r.dominantTier] ?? 'light' },
     }),
-    [runMeta]
+    [runMeta, t]
   );
 
   const topChats = useMemo<TopListItem[]>(
@@ -112,16 +115,6 @@ export const CreditsDashboardPanel: React.FC = () => {
   const topAgents = useMemo<TopListItem[]>(
     () => topRowsByCredits(rows, 5, (r) => r.source === 'agent').map(toRunItem),
     [rows, toRunItem]
-  );
-  const topCategories = useMemo<TopListItem[]>(
-    () =>
-      categorySlices.slice(0, 5).map((c) => ({
-        id: c.key,
-        primary: c.key,
-        secondary: t('creditsDashboard.runsCount', { defaultValue: '{{n}} runs', n: c.count }),
-        value: c.credits,
-      })),
-    [categorySlices, t]
   );
   const topStaff = useMemo<TopListItem[]>(
     () =>
@@ -198,12 +191,12 @@ export const CreditsDashboardPanel: React.FC = () => {
                 <CreditsTrendChart data={trend} />
               </div>
               <div className="col-lg-5">
-                <CreditsCategoryPie slices={categorySlices} />
+                <CreditsSourceChart slices={sourceSlices} />
               </div>
             </div>
 
             <div className="row g-3">
-              <div className="col-xl-6">
+              <div className="col-xl-4 col-lg-6">
                 <CreditsTopList
                   title={t('creditsDashboard.topChats', { defaultValue: 'Top 5 chats' })}
                   icon="bi-chat-dots"
@@ -212,7 +205,7 @@ export const CreditsDashboardPanel: React.FC = () => {
                   onSelect={(id) => openRun(id, 'creditsDashboard.drillChat', 'Chat run {{id}}')}
                 />
               </div>
-              <div className="col-xl-6">
+              <div className="col-xl-4 col-lg-6">
                 <CreditsTopList
                   title={t('creditsDashboard.topAgents', { defaultValue: 'Top 5 agents' })}
                   icon="bi-robot"
@@ -223,21 +216,7 @@ export const CreditsDashboardPanel: React.FC = () => {
                   onSelect={(id) => openRun(id, 'creditsDashboard.drillAgent', 'Agent run {{id}}')}
                 />
               </div>
-              <div className="col-xl-6">
-                <CreditsTopList
-                  title={t('creditsDashboard.topCategories', { defaultValue: 'Top 5 categories' })}
-                  icon="bi-tags"
-                  items={topCategories}
-                  emptyText={t('creditsDashboard.noCategories', { defaultValue: 'No categorised usage yet.' })}
-                  onSelect={(id) =>
-                    setDrill({
-                      title: t('creditsDashboard.drillCategory', { defaultValue: 'Category: {{id}}', id }),
-                      rows: rowsForCategory(rows, id),
-                    })
-                  }
-                />
-              </div>
-              <div className="col-xl-6">
+              <div className="col-xl-4 col-lg-6">
                 <CreditsTopList
                   title={t('creditsDashboard.topStaff', { defaultValue: 'Top 5 staff' })}
                   icon="bi-people"

@@ -12,8 +12,8 @@ interface Props {
   onHide: () => void;
 }
 
-/** Drill-in detail for a top-5 row / category / staff member. Privacy-safe:
- *  shows run IDs, timings, complexity, volume — never the chat/agent name. */
+/** Drill-in detail for a top-5 run / staff member. Privacy-safe:
+ *  shows run IDs, timings, value tier, volume — never the chat/agent name. */
 export const CreditsDrillModal: React.FC<Props> = ({ show, title, rows, userMap, onHide }) => {
   const { t } = useTranslation('settings');
   const who = (sub: string | null): string =>
@@ -50,7 +50,7 @@ export const CreditsDrillModal: React.FC<Props> = ({ show, title, rows, userMap,
                 <th>{t('creditsDashboard.drillWho', { defaultValue: 'By' })}</th>
                 <th>{t('creditsDashboard.drillLast', { defaultValue: 'Last run' })}</th>
                 <th>{t('creditsDashboard.drillDuration', { defaultValue: 'Duration' })}</th>
-                <th>{t('creditsDashboard.colTier', { defaultValue: 'Complexity' })}</th>
+                <th>{t('creditsDashboard.colTier', { defaultValue: 'Value' })}</th>
                 <th className="text-end">{t('creditsDashboard.drillMsgs', { defaultValue: 'Msgs' })}</th>
                 <th className="text-end">{t('creditsDashboard.drillTokens', { defaultValue: 'Tokens' })}</th>
                 <th className="text-end">{t('creditsDashboard.colCredits', { defaultValue: 'Credits' })}</th>

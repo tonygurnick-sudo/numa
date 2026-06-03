@@ -9,29 +9,16 @@ import { AdminCreditsService, type CreditBalance, type CreditLedgerRow } from '.
 
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 
-export type CategorySlice = { key: string; credits: number; count: number };
+export type CreditSlice = { key: string; credits: number; count: number };
 export type UserSlice = { userSub: string; credits: number; count: number };
 export type TrendPoint = { month: string; label: string; used: number; allocated: number };
 
 const credits = (r: CreditLedgerRow): number => Number(r.creditsCharged) || 0;
 
-/** Group rows into category slices, falling back to `source` then 'uncategorised'
- *  when a row has no classified category. Sorted by credits desc. Real data only. */
-export function groupByCategory(rows: CreditLedgerRow[]): CategorySlice[] {
-  const map = new Map<string, CategorySlice>();
-  for (const r of rows) {
-    const key = r.category || r.source || 'uncategorised';
-    const e = map.get(key) ?? { key, credits: 0, count: 0 };
-    e.credits += credits(r);
-    e.count += 1;
-    map.set(key, e);
-  }
-  return [...map.values()].sort((a, b) => b.credits - a.credits);
-}
-
-/** Group rows by `source` (chat | agent | scheduled | …). Sorted by credits desc. */
-export function groupBySource(rows: CreditLedgerRow[]): CategorySlice[] {
-  const map = new Map<string, CategorySlice>();
+/** Group rows by `source` — the deterministic invocation split: chat | agent | scheduled.
+ *  Sorted by credits desc. Real data only (empty dimensions render an honest empty state). */
+export function groupBySource(rows: CreditLedgerRow[]): CreditSlice[] {
+  const map = new Map<string, CreditSlice>();
   for (const r of rows) {
     const key = r.source || 'unknown';
     const e = map.get(key) ?? { key, credits: 0, count: 0 };
@@ -63,11 +50,6 @@ export function topUsersByCredits(rows: CreditLedgerRow[], n: number): UserSlice
     map.set(r.userSub, e);
   }
   return [...map.values()].sort((a, b) => b.credits - a.credits).slice(0, n);
-}
-
-/** All rows belonging to a given category key (matches the groupByCategory fallback). */
-export function rowsForCategory<T extends CreditLedgerRow>(rows: T[], key: string): T[] {
-  return rows.filter((r) => (r.category || r.source || 'uncategorised') === key);
 }
 
 /** Build the last `months` YYYY-MM windows ending with the current month. */

@@ -49,7 +49,9 @@ from credit_pricing.timeutil import (
 from prm import client as prm_client
 from prm import resource as prm_resource
 
-logger = structlog.get_logger()
+# Shared exact-match filter key across all credit logs (see credit-debit). CloudWatch:
+# `filter domain = "credits"`, on top of the per-event `_name` (CREDIT_NIGHTLY_*).
+logger = structlog.get_logger().bind(domain="credits")
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 TABLE_NAME = os.environ.get("CREDITS_TABLE_NAME", "")

@@ -92,10 +92,16 @@ over 200K.
 **Nova classifier:**
 
 - `NOVA_MODEL = "global.amazon.nova-2-lite-v1:0"` (Amazon Nova 2 Lite).
-- `classify(user_texts, *, context, actions, bedrock, region, model=NOVA_MODEL) -> {"tier", "category"}` — calls
-  Nova with `CLASSIFIER_SYSTEM`; returns `medium`/`analysis` on any error. The complexity rubric lives in
+- `classify(user_texts, *, context, actions, bedrock, region, model=NOVA_MODEL) -> {"tier"}` — calls
+  Nova with `CLASSIFIER_SYSTEM`; returns `medium` on any error. **Tier only** — the live path no longer
+  produces a work `category` (see note below). The complexity rubric lives in
   `dev-notes/tasks/credits-work/complexity-rubric.md` (R&D); `CLASSIFIER_SYSTEM` is the shipped prompt.
-- `_parse_classification(text) -> {"tier","category"}` — tolerant JSON parse.
+- `_parse_classification(text) -> {"tier"}` — tolerant JSON parse (ignores any extra keys).
+
+> **No live `category`.** `classify()` used to return a descriptive work `category` too; it was removed from
+> the live debit path (2026-06-03). `VALID_CATEGORIES` is kept in `tiers.py` marked **reserved** for a planned
+> nightly-receipt category field (admin-safe, off the hot path) — see
+> [08-open-questions.md](08-open-questions.md). Don't re-add category to the live classifier.
 
 **Anonymised receipt (nightly):**
 
@@ -114,7 +120,7 @@ Pure orchestration; no S3/Nova/boto3 (callers fetch the trace and decide the tit
 - `process_trace_events(events, *, cache_ttl="1h") -> (turns, user_texts, first_ts, last_ts)` — walks the trace
   once: recovers the model from the preceding `assistant` event, prices each `result` turn via `pricing.py`,
   collects user texts (for the classifier), and the earliest/latest ISO timestamps (the real wall-clock span).
-- `build_conversation_rows(*, conversation_id, user_sub, month, last_ts, turns, title, margin, credit_usd, …, value_tier, category, context, source, value_tier_credits, trivial_consumption_usd, margins, agentcore_mult) -> (meta, msg_rows)`
+- `build_conversation_rows(*, conversation_id, user_sub, month, last_ts, turns, title, margin, credit_usd, …, value_tier, context, source, value_tier_credits, trivial_consumption_usd, margins, agentcore_mult) -> (meta, msg_rows)`
   — the deterministic assembly: applies the trivial cap, computes the single-ceil floor on
   `total_consumption × agentcore_mult`, records `agentCoreCostUsd = consumption × (mult − 1)`, computes
   `charge = max(value, floor)`, and builds the META + MSG rows (via `ledger.py`). Pre-classification (no

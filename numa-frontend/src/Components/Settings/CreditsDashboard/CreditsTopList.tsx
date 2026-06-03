@@ -6,13 +6,13 @@ import { fmtCredits } from './helpers';
 export interface TopListItem {
   /** stable key + the value passed to onSelect (conversationId / category / userSub). */
   id: string;
-  /** main label — a UUID (short), email, or category. NEVER a chat/agent name. */
+  /** main label — an anonymised run title or an email. NEVER a raw chat/agent name. */
   primary: string;
-  /** sub label — timestamp / run count / owner. */
+  /** sub label — timestamp · who / run count. */
   secondary?: string;
   /** credits consumed (drives ranking + the mini bar). */
   value: number;
-  /** optional complexity badge. */
+  /** optional value-tier badge. */
   badge?: { text: string; bg: string };
   /** full value behind a copy button (e.g. the full UUID). */
   copyValue?: string;
@@ -59,7 +59,7 @@ export const CreditsTopList: React.FC<Props> = ({ title, icon, items, emptyText,
                   <span className="badge bg-light text-dark border flex-shrink-0">{idx + 1}</span>
                   <div className="flex-grow-1" style={{ minWidth: 0 }}>
                     <div className="d-flex align-items-center gap-2">
-                      <span className="fw-semibold text-truncate font-monospace">{item.primary}</span>
+                      <span className="fw-semibold text-truncate">{item.primary}</span>
                       {item.copyValue ? (
                         <Button
                           variant="link"
