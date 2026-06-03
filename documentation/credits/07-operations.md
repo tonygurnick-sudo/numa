@@ -49,6 +49,12 @@ cd numa-frontend && yarn build      # 8GB Node heap
 - **Customer stacks:** **never** deploy locally — go through the Customer Success Portal deploy UI.
 - **Portal itself:** `yarn build` then deploy the `q-apps-deployer` stack.
 
+> **Billing-admin rollout order** (see [09-billing-admin.md](09-billing-admin.md)): deploy the `admin-credits`
+> gate **and** the numa-frontend lock screen **together** — the gate alone makes `/credits/balance`+`/ledger`
+> return `403` to plain admins with no friendly screen. After deploying, **seed the first billing-admin** for the
+> client via the portal's NumaCredits → Billing admins panel (the only bootstrap path); they then promote others
+> in-client. Until one is seeded, every admin sees the lock screen.
+
 ---
 
 ## 2. Inspecting a client's ledger
@@ -75,6 +81,12 @@ AWS_PROFILE=q-demo aws dynamodb query --region us-east-1 \
   --table-name numa-nd-labs-credit-ledger --index-name GSI2 \
   --key-condition-expression "GSI2PK = :pk" \
   --expression-attribute-values '{":pk":{"S":"MONTH#2026-06"}}'
+
+# Billing-admin roster (who may see credit data in-client)
+AWS_PROFILE=q-demo aws dynamodb query --region us-east-1 \
+  --table-name numa-nd-labs-credit-ledger \
+  --key-condition-expression "PK = :pk AND begins_with(SK, :sk)" \
+  --expression-attribute-values '{":pk":{"S":"CLIENT#nd-labs"},":sk":{"S":"BILLING_ADMIN#"}}'
 ```
 
 **Reading it:** `CONFIG.monthlyAllocations` = the plan; `MONTH#<m>.creditsCharged` + `.allocationSnapshot` =

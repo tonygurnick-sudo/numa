@@ -44,13 +44,15 @@ a deploy never clobbers a portal-set value (there's no DB seed — see [06-defau
 
 ## `creditsService.ts` — the API
 
-| Method                                                    | What it does                                                                                                                                                                                                               |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `saveConfig(client, accountId, region, config)`           | Writes `creditConfig` centrally **and** pushes the `CONFIG` row to the client ledger. Logs activity. This is the "Save & push" action.                                                                                     |
-| `topUp(client, accountId, region, credits)`               | Appends a `topup` TXN event (`TXN#<iso>#<uuid>`, `credits` +) to the client ledger. No scalar mutation — balance is the TXN sum. Logs activity.                                                                            |
-| `adjustBalance(client, accountId, region, credits, note)` | Appends a signed `adjustment` TXN (used by Reset-to-defaults to zero the balance, and for manual corrections). Auditable, never a deletion.                                                                                |
-| `setVisibility(client, show)`                             | Writes `showCredits` to the central `numa-client-config` only (the in-app view gate). **Applies on the next deploy** (it's emitted to the client's `config.json` at deploy time); metering runs regardless. Logs activity. |
-| `getStanding(client, accountId, region)`                  | **Read-only** cross-account: one `CLIENT#` partition query → CONFIG + MONTH# + TXN# rows → computes the drawdown waterfall. Returns `CreditStanding`.                                                                      |
+| Method                                                             | What it does                                                                                                                                                                                                               |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `saveConfig(client, accountId, region, config)`                    | Writes `creditConfig` centrally **and** pushes the `CONFIG` row to the client ledger. Logs activity. This is the "Save & push" action.                                                                                     |
+| `topUp(client, accountId, region, credits)`                        | Appends a `topup` TXN event (`TXN#<iso>#<uuid>`, `credits` +) to the client ledger. No scalar mutation — balance is the TXN sum. Logs activity.                                                                            |
+| `adjustBalance(client, accountId, region, credits, note)`          | Appends a signed `adjustment` TXN (used by Reset-to-defaults to zero the balance, and for manual corrections). Auditable, never a deletion.                                                                                |
+| `setVisibility(client, show)`                                      | Writes `showCredits` to the central `numa-client-config` only (the in-app view gate). **Applies on the next deploy** (it's emitted to the client's `config.json` at deploy time); metering runs regardless. Logs activity. |
+| `getStanding(client, accountId, region)`                           | **Read-only** cross-account: one `CLIENT#` partition query → CONFIG + MONTH# + TXN# rows → computes the drawdown waterfall. Returns `CreditStanding`.                                                                      |
+| `listClientUsers(client, accountId, region)`                       | Cross-account Cognito `ListUsers` (assume-role) → `{sub, email, enabled}[]` for the billing-admin promote picker.                                                                                                          |
+| `listBillingAdmins` / `promoteBillingAdmin` / `demoteBillingAdmin` | The billing-admin roster: list `BILLING_ADMIN#` rows, write/delete one (logged to activity). See [09-billing-admin.md](09-billing-admin.md).                                                                               |
 
 `DEFAULT_CREDIT_CONFIG` (exported) — the TS mirror of the lib defaults; **keep in sync** with
 `credit_pricing/credits.py` + `tiers.py`.
@@ -62,7 +64,7 @@ interface CreditStanding {
   availableBalance: number; // settled TXN − unsettled overflow (live; can be negative)
   settledBalance: number; // Σ TXN.credits (top-ups + settlements + adjustments)
   liveOverflow: number; // overflow of months NOT yet settled (open + closed-unsettled)
-  months: Record<string, { used: number; allocation: number; settled: boolean }>; // keyed 'YYYY-MM'
+  months: Record<string, { used: number; allocation: number; settled: boolean; costUsd: number; revenueUsd: number }>; // keyed 'YYYY-MM'; costUsd/revenueUsd drive the per-month cost + margin display
   txns: CreditTxn[]; // event log, newest first
 }
 ```
@@ -105,9 +107,18 @@ Dashboard-style: a **left rail** drives the **main pane**.
 - **NZD overlay:** an editable FX rate (`fxNzd`, default 1.69) driving "≈ NZD" annotations on the allocation
   total, the balance, and the top-up confirm. Display-only — billing stays USD.
 - **Monthly credit allocation:** a "set every month to…" broadcast + a 12-month grid (Jan–Dec), each with its
-  live "used N" for the current year.
+  live **"used N · $X cost · Y× margin"** for the current year. The cost + margin come from the `MONTH#` rows'
+  `consumptionCostUsd` / `creditRevenueUsd` (surfaced by `getStanding`) — Arcanum-internal economics, never shown
+  in the client's own view. Persists per month: each month is its own immutable `MONTH#<YYYY-MM>` row, so a past
+  month stays frozen at its final totals after rollover. (The grid is scoped to the current calendar year.)
 - **Top up balance:** current balance + an "add credits" input with a **NZD confirm dialog**
-  (`Allocate N ≈ NZD $X — sure?`), applied immediately (separate from the config Save).
+  (`Allocate N ≈ NZD $X — sure?`), applied immediately (separate from the config Save). Below it, a **Top-up
+  activity** table renders `standing.txns` (Date · Type [Top-up / Settlement (month) / Adjustment] · signed
+  Credits · By · Note) — the balance reconciles visibly as Σ of these. (The portal keeps the **By** column for
+  the staff audit trail; the in-client view drops it — see [05-in-client-view.md](05-in-client-view.md).)
+- **Billing admins:** `BillingAdminsPanel` — lists the client's Cognito users + current billing admins, and
+  **promotes/demotes** (writes `BILLING_ADMIN#<sub>` rows via assume-role, logged to portal activity). Seeds the
+  first billing-admin per client. Full model in [09-billing-admin.md](09-billing-admin.md).
 - **Advanced pricing** (collapsed by default): `1 credit (USD)`, `AgentCore multiplier`, `Fallback margin`,
   `Trivial-cost cap`, the per-tier **Minimum enforced margin**, and value tiers for chat + agent run.
 - **Dirty-aware sticky save bar:** appears whenever pricing/allocation differs from the saved baseline →

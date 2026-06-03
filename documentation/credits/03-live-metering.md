@@ -57,10 +57,21 @@ lib defaults). (Note: `CREDIT_METERING_ENABLED` is on the **workspace agent**, n
 4. **Context / source** (see [01-architecture.md §5](01-architecture.md)):
    `is_scheduled = conversation_id.startswith("schedule-")`; `is_agent = is_scheduled or bool(agent_id)`;
    `context = "agent" if is_agent else "chat"`; `source = "scheduled" if is_scheduled else ("agent" if agent_id else "chat")`.
+   - **Scheduled-run agentId recovery:** a scheduled run is detected by the `schedule-` id prefix, but the
+     metering event can arrive **without** an `agent_id` (the schedule runner's emit may omit it). When
+     `is_scheduled and not agent_id`, credit-debit recovers it from the conversation's **chat-history** rows
+     (`_scheduled_agent_id` → Query `user_id` + `begins_with(sk, conversation_id)` → read `agentId`) and stamps it
+     on the META. Without this the run lands in the `scheduled` consumption slice but is **absent from Top-5-agents**
+     (which groups by `agentId`). Best-effort (logs `CREDIT_DEBIT_AGENT_LOOKUP` on failure, never blocks metering);
+     needs `CHAT_HISTORY_TABLE_NAME` + a read-only chat-history Query grant (§4).
 5. **Ratcheting classification:** reuse the prior `dominantTier` as a floor; if it isn't already `very_high`,
-   re-classify a **bounded window** (opening intent + recent turns + an actions/volume summary) with Nova and
-   keep `max_tier(prior, new)`. Once `very_high` is reached, Nova is skipped (bounds Nova calls). The trivial-cost
-   cap still pins near-zero conversations to `low`. **No live titling** — the nightly job owns anonymised labels.
+   re-classify a **bounded window** (opening intent + recent turns) with Nova and keep `max_tier(prior, new)`.
+   Two trusted signals go in alongside the window: an **effort** summary (`_actions_summary` — turn/token volume)
+   and a **value** signal (`processing.tools_value_signal(processing.extract_tools(events))` — the distinct
+   tools/integrations the run touched). The value signal is the fix for terse-but-cross-system work: a one-line
+   ask that pulled from many integrations now tiers as high, not medium. Once `very_high` is reached, Nova is
+   skipped (bounds Nova calls). The trivial-cost cap still pins near-zero conversations to `low`. **No live
+   titling** — the nightly job owns anonymised labels. (Category is **not** produced live; tier only.)
 6. `build_conversation_rows` → META + MSG rows; write with a batch writer, deleting stale MSG rows from a
    shortened/edited conversation (idempotent).
 7. **Maintain the monthly aggregate** (`CLIENT#<client>/MONTH#<nz-month>`): recompute from GSI2 (sum
@@ -104,8 +115,10 @@ client with no `allocationSnapshot` has allocation 0, so all usage overflows (ba
 `infra/constructs/core-numa-infra-construct.ts`:
 
 - **Table** `numa-<client>-credit-ledger` (`creditLedgerTable`) with GSI1 + GSI2.
-- **`credit-debit`** `NumaLambda` (env: `CLIENT_NAME`, `CREDITS_TABLE_NAME`, `OUTPUTS_BUCKET_NAME`); IAM:
-  DynamoDB read/write on the table + index, S3 GetObject on the outputs bucket, `bedrock:InvokeModel` (Nova).
+- **`credit-debit`** `NumaLambda` (env: `CLIENT_NAME`, `CREDITS_TABLE_NAME`, `OUTPUTS_BUCKET_NAME`,
+  `CHAT_HISTORY_TABLE_NAME`); IAM: DynamoDB read/write on the ledger table + index, **read-only `dynamodb:Query`
+  on the chat-history table** (the scheduled-run agentId recovery, §1 step 4), S3 GetObject on the outputs bucket,
+  `bedrock:InvokeModel` (Nova).
 - **`credit-nightly`** `NumaLambda` (timeout 600); IAM: DynamoDB Query/UpdateItem/GetItem/PutItem/DeleteItem,
   S3 GetObject, `bedrock:InvokeModel`.
 - **Scheduler:** an `IamRole` (assumed by `scheduler.amazonaws.com`) + `SchedulerSchedule` named
@@ -135,16 +148,17 @@ Structured logs (`structlog`) with a `_name` field per event. Every credit line 
 the agent's own container group `/numa/<client>/workspace-chat-agent`). Filter by `_name` for a
 specific event, or `domain = "credits"` for everything.
 
-| `_name`                                                               | Where           | Meaning                                                                                            |
-| --------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------- |
-| `CREDIT_METER_EMIT` / `CREDIT_METER_EMIT_FAIL`                        | workspace agent | usage event emitted / emit failed                                                                  |
-| `CREDIT_DEBIT_OK`                                                     | credit-debit    | conversation metered (credits, msgCount, tier)                                                     |
-| `CREDIT_DEBIT_CLASSIFY`                                               | credit-debit    | per-turn classification: window size, actions summary, Nova's tier, prior + final (ratcheted) tier |
-| `CREDIT_DEBIT_SKIP` / `CREDIT_DEBIT_NO_TRACE` / `CREDIT_DEBIT_CONFIG` | credit-debit    | skipped (missing ids / no trace / not configured)                                                  |
-| `CREDIT_DEBIT_MONTHAGG`                                               | credit-debit    | monthly-aggregate update failed (non-fatal)                                                        |
-| `CREDIT_NIGHTLY_OK`                                                   | credit-nightly  | run summary (candidates, summarised, errors, settlement)                                           |
-| `CREDIT_NIGHTLY_SETTLE` / `CREDIT_NIGHTLY_SETTLE_FAIL`                | credit-nightly  | month-close settlement result / failure                                                            |
-| `CREDIT_NIGHTLY_FAIL`                                                 | credit-nightly  | a single receipt summary failed (best-effort)                                                      |
+| `_name`                                                               | Where           | Meaning                                                                                                                            |
+| --------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `CREDIT_METER_EMIT` / `CREDIT_METER_EMIT_FAIL`                        | workspace agent | usage event emitted / emit failed                                                                                                  |
+| `CREDIT_DEBIT_OK`                                                     | credit-debit    | conversation metered (credits, msgCount, tier)                                                                                     |
+| `CREDIT_DEBIT_CLASSIFY`                                               | credit-debit    | per-turn classification: window size, actions (effort) + value_signal (tools touched), Nova's tier, prior + final (ratcheted) tier |
+| `CREDIT_DEBIT_SKIP` / `CREDIT_DEBIT_NO_TRACE` / `CREDIT_DEBIT_CONFIG` | credit-debit    | skipped (missing ids / no trace / not configured)                                                                                  |
+| `CREDIT_DEBIT_MONTHAGG`                                               | credit-debit    | monthly-aggregate update failed (non-fatal)                                                                                        |
+| `CREDIT_DEBIT_AGENT_LOOKUP`                                           | credit-debit    | scheduled-run agentId recovery from chat-history failed (non-fatal; run stays unattributed)                                        |
+| `CREDIT_NIGHTLY_OK`                                                   | credit-nightly  | run summary (candidates, summarised, errors, settlement)                                                                           |
+| `CREDIT_NIGHTLY_SETTLE` / `CREDIT_NIGHTLY_SETTLE_FAIL`                | credit-nightly  | month-close settlement result / failure                                                                                            |
+| `CREDIT_NIGHTLY_FAIL`                                                 | credit-nightly  | a single receipt summary failed (best-effort)                                                                                      |
 
 Examples (CloudWatch Logs Insights, on `/numa/<client>-credits`):
 

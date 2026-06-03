@@ -57,8 +57,10 @@ credit-debit (meter time) reads its LOCAL CLIENT#/CONFIG row ─> effective conf
 
 ## 3. `SHOW_CREDITS` — the visibility flag
 
-Gates the in-app **Settings → Credits** tab. **Metering is NOT gated by it** — it accrues for everyone; this only
-controls who can _see_ the admin view.
+Gates the in-app **Settings → Credits** tab **and** the in-chat credit indicator (the coin in the chat bar — see
+[05-in-client-view.md](05-in-client-view.md)). **Metering is NOT gated by it** — it accrues for everyone; this only
+controls who can _see_ the credit surfaces. Note the two surfaces gate differently _within_ `SHOW_CREDITS`: the
+Settings dashboard is **billing-admin only**, while the in-chat indicator shows for **all users**.
 
 - **Defined:** `infra/capabilities-metadata.ts` — capability `SHOW_CREDITS`, `enabled: false`, with title +
   description ("Shows the in-app credit usage view … Credit metering runs for all clients regardless; this only
@@ -68,7 +70,8 @@ controls who can _see_ the admin view.
 - **Emitted to the frontend:** `numa-client-stack.ts` config.json generation emits
   `SHOW_CREDITS: clientConfig.showCredits ?? false`. **Must be emitted explicitly** because the frontend's
   `getFlag` defaults **true** when a key is absent — omitting it would show the tab everywhere.
-- **Read:** `numa-frontend/src/Pages/Settings.tsx` → `getFlag('SHOW_CREDITS')`.
+- **Read:** `Settings.tsx` (the Credits dashboard tab) **and** `NumaWorkspaceChatAgents.tsx` (the in-chat
+  credit indicator) → `getFlag('SHOW_CREDITS')`.
 - **Timing:** because it's baked into the client's `config.json` at deploy, toggling it in the portal takes
   visible effect on the **next deploy**.
 

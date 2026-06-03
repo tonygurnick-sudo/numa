@@ -100,14 +100,15 @@ Lambda and the backfill build identical rows, so the two writers can't drift.
 
 ### Row types
 
-| PK                | SK                         | What it is                                                                                                                                                                                      |
-| ----------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONV#<id>`       | `META`                     | **Conversation aggregate** — the row the admin dashboard lists. Display + cost telemetry.                                                                                                       |
-| `CONV#<id>`       | `MSG#<turn_idx>#<msg_id>`  | **Per-message** cost/credit detail. **No chat content** (privacy).                                                                                                                              |
-| `CLIENT#<client>` | `MONTH#<YYYY-MM>`          | **Monthly aggregate** — revenue, consumption, `creditsCharged` count, `allocationSnapshot`, `marginVsConsumption`. Recomputed live each turn.                                                   |
-| `CLIENT#<client>` | `TXN#<iso_ts>#<id>`        | **Top-up / adjustment** event (balance event log). `credits` signed.                                                                                                                            |
-| `CLIENT#<client>` | `TXN#SETTLEMENT#<YYYY-MM>` | **Month-close settlement** event. Deterministic SK ⇒ idempotent (one per month).                                                                                                                |
-| `CLIENT#<client>` | `CONFIG`                   | **Pushed pricing config** (creditUsd, margins, valueTiers, marginsByTier, agentcoreMult, trivialConsumptionUsd, monthlyAllocations). Written by the portal; read by credit-debit at meter time. |
+| PK                | SK                         | What it is                                                                                                                                                                                                      |
+| ----------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONV#<id>`       | `META`                     | **Conversation aggregate** — the row the admin dashboard lists. Display + cost telemetry.                                                                                                                       |
+| `CONV#<id>`       | `MSG#<turn_idx>#<msg_id>`  | **Per-message** cost/credit detail. **No chat content** (privacy).                                                                                                                                              |
+| `CLIENT#<client>` | `MONTH#<YYYY-MM>`          | **Monthly aggregate** — revenue, consumption, `creditsCharged` count, `allocationSnapshot`, `marginVsConsumption`. Recomputed live each turn.                                                                   |
+| `CLIENT#<client>` | `TXN#<iso_ts>#<id>`        | **Top-up / adjustment** event (balance event log). `credits` signed.                                                                                                                                            |
+| `CLIENT#<client>` | `TXN#SETTLEMENT#<YYYY-MM>` | **Month-close settlement** event. Deterministic SK ⇒ idempotent (one per month).                                                                                                                                |
+| `CLIENT#<client>` | `CONFIG`                   | **Pushed pricing config** (creditUsd, margins, valueTiers, marginsByTier, agentcoreMult, trivialConsumptionUsd, monthlyAllocations). Written by the portal; read by credit-debit at meter time.                 |
+| `CLIENT#<client>` | `BILLING_ADMIN#<sub>`      | **Billing-admin grant** — who may see credit data in-client (`sub`, `email`, `grantedBy`, `grantedAt`). Server-written only (deliberately not a Cognito group). See [09-billing-admin.md](09-billing-admin.md). |
 
 > **Deprecated:** an older `CLIENT#<client>/BALANCE` scalar row existed (top-ups did `ADD balance`). The balance
 > is now derived from the TXN event log (`Σ TXN.credits`); the scalar is no longer written or read. Ignore it.
@@ -122,9 +123,13 @@ Lambda and the backfill build identical rows, so the two writers can't drift.
 ### Key META fields
 
 - Display (admin-safe): `title`, `deliverables[]` (both AI-anonymised by the nightly job; empty until it runs),
-  `msgCount`, `tiers`, `dominantTier`, `creditsCharged`, `source` (`chat`/`agent`/`scheduled`), `firstTs`, `lastTs`.
+  `msgCount`, `tiers`, `dominantTier`, `creditsCharged`, `source` (`chat`/`agent`/`scheduled`),
+  `agentId` (present on agent/scheduled runs — the dashboard joins it to the agent's name for Top-5 agents),
+  `firstTs`, `lastTs`.
 - Internal cost telemetry: `consumptionCostUsd`, `tokenCostUsd`, `agentCoreCostUsd`, `creditsValue`, `creditsFloor`,
-  `flooredMsgs`, `marginVsConsumption`, `totalTokens`, `costIncomplete`, `userSub`, `month`, `bedrockRegion`.
+  `marginVsConsumption`, `totalTokens`, `costIncomplete`, `userSub`, `month`, `bedrockRegion`.
+- **No `category`** — the Nova classifier returns a complexity tier only (a work `category` was removed from the
+  live path; see [02-shared-lib.md](02-shared-lib.md)). **No `flooredMsgs`** — that field was removed (dead, mislabeled).
 
 ### Key MONTH-aggregate fields (added for the drawdown model)
 

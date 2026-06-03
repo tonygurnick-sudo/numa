@@ -92,10 +92,16 @@ over 200K.
 **Nova classifier:**
 
 - `NOVA_MODEL = "global.amazon.nova-2-lite-v1:0"` (Amazon Nova 2 Lite).
-- `classify(user_texts, *, context, actions, bedrock, region, model=NOVA_MODEL) -> {"tier"}` — calls
-  Nova with `CLASSIFIER_SYSTEM`; returns `medium` on any error. **Tier only** — the live path no longer
+- `classify(user_texts, *, context, actions, value_signal="", bedrock, region, model=NOVA_MODEL) -> {"tier"}` —
+  calls Nova with `CLASSIFIER_SYSTEM`; returns `medium` on any error. **Tier only** — the live path no longer
   produces a work `category` (see note below). The complexity rubric lives in
   `dev-notes/tasks/credits-work/complexity-rubric.md` (R&D); `CLASSIFIER_SYSTEM` is the shipped prompt.
+  - **`actions`** = trusted EFFORT telemetry (turn/token volume, models) → a `<work_done>` block.
+  - **`value_signal`** = trusted VALUE telemetry — the distinct tools/integrations touched (from
+    `processing.tools_value_signal`) → a `<work_delivered>` block. This is the **cross-system value signal**:
+    a terse ask that pulled from many integrations is high-VALUE even when the words are thin. `CLASSIFIER_SYSTEM`
+    carries the matching rubric rule ("judge by what the task DID; multi-source/cross-system = high"). Ported
+    live 2026-06-03 from the proven backfill prototype, so live == backfill classification.
 - `_parse_classification(text) -> {"tier"}` — tolerant JSON parse (ignores any extra keys).
 
 > **No live `category`.** `classify()` used to return a descriptive work `category` too; it was removed from
@@ -120,11 +126,15 @@ Pure orchestration; no S3/Nova/boto3 (callers fetch the trace and decide the tit
 - `process_trace_events(events, *, cache_ttl="1h") -> (turns, user_texts, first_ts, last_ts)` — walks the trace
   once: recovers the model from the preceding `assistant` event, prices each `result` turn via `pricing.py`,
   collects user texts (for the classifier), and the earliest/latest ISO timestamps (the real wall-clock span).
-- `build_conversation_rows(*, conversation_id, user_sub, month, last_ts, turns, title, margin, credit_usd, …, value_tier, context, source, value_tier_credits, trivial_consumption_usd, margins, agentcore_mult) -> (meta, msg_rows)`
+- `extract_tools(events) -> list[str]` — distinct tool/integration names from the trace's assistant `tool_use`
+  blocks (first-seen, deduped). `tools_value_signal(tools) -> str` — formats them into the classifier's VALUE
+  signal (empty string when no tools, so the prompt omits the block). The cross-system breadth signal fed to
+  `classify(value_signal=…)`. Mirrors the backfill so live == historical classification.
+- `build_conversation_rows(*, conversation_id, user_sub, month, last_ts, turns, title, margin, credit_usd, …, value_tier, context, source, agent_id, value_tier_credits, trivial_consumption_usd, margins, agentcore_mult) -> (meta, msg_rows)`
   — the deterministic assembly: applies the trivial cap, computes the single-ceil floor on
   `total_consumption × agentcore_mult`, records `agentCoreCostUsd = consumption × (mult − 1)`, computes
-  `charge = max(value, floor)`, and builds the META + MSG rows (via `ledger.py`). Pre-classification (no
-  `value_tier`) → value 0, charged = floor.
+  `charge = max(value, floor)`, stamps `agentId` on the META row (for Top-5-agents name resolution), and builds
+  the META + MSG rows (via `ledger.py`). Pre-classification (no `value_tier`) → value 0, charged = floor.
 
 ---
 

@@ -35,16 +35,14 @@ The living "what's not done / not decided" list. The authoritative running versi
 
 ## B. Decided / understood — not yet built
 
-### B1. Classifier value-signal (the "#0" item — high priority)
+### B1. Classifier value-signal (the "#0" item) — ✅ DONE 2026-06-03
 
-The classifier under-tiers **execution-only value**: a terse ask ("generate this week's sales report") that pulls
-from 5 integrations classifies **medium**, not high, because the prompt is ask-anchored and the actions block is
-framed as _effort_ (discounted). Proven fix (empirically flips medium→high without over-inflating): surface the
-**tools/integrations/data-sources touched + deliverable nature** as a **value** signal (from trace `tool_use`),
-not effort telemetry; optionally add the rubric rule "judge by what the task did; multi-source/cross-system =
-high." This is **the real efficiency hedge** — value-led pricing only protects margin if cheap-but-valuable work
-actually reaches the high tier. Prototyped in the R&D backfill; the live prompt/signal change is the prod
-follow-up. (Aligns the shipped `CLASSIFIER_SYSTEM` with `complexity-rubric.md`.)
+The classifier under-tiered **execution-only value**: a terse ask ("generate this week's sales report") that pulls
+from 5 integrations classified **medium**, not high. **Shipped live**: `classify(value_signal=…)` now gets the
+distinct tools/integrations touched (`processing.extract_tools`/`tools_value_signal`) as a `<work_delivered>`
+VALUE signal, and `CLASSIFIER_SYSTEM` carries the rubric rule "judge by what the task did; multi-source/
+cross-system = high." Ported from the proven backfill prototype, so live == backfill. See
+[02-shared-lib.md](02-shared-lib.md) / [03-live-metering.md](03-live-metering.md).
 
 ### B2. Measured AgentCore-seconds (replace the flat 1.234×)
 
@@ -55,8 +53,8 @@ cost lines too. The multiplier is the correct _default_; these are refinements.
 ### B3. Classifier-cost handling + re-classify cadence
 
 Nova classifier cost isn't currently folded into `consumptionCostUsd`. Decide storage (separate running tally vs
-fold-in). Also: live classification currently runs **every turn until `very_high`** — likely ~10× more Nova than
-needed; evaluate a **re-classify-every-K-turns** optimisation.
+fold-in). (The **re-classify-every-K-turns** idea was considered and **dropped** 2026-06-03 — the current
+every-turn-until-`very_high` cadence is fine; Nova cost is a tiny fraction of consumption.)
 
 ### B4. Monthly reconciliation vs the real AWS bill
 
@@ -64,11 +62,15 @@ needed; evaluate a **re-classify-every-K-turns** optimisation.
 pulls Cost Explorer, so `marginVsRealBill` is unpopulated. This is the spec's §6 "standing monthly control" — the
 only check that catches infra drift (it doesn't depend on any internal multiplier).
 
-### B5. Billing-admin Cognito role
+### B5. Billing-admin — ✅ DONE 2026-06-03 (built as a DynamoDB roster, NOT a Cognito role)
 
-Ian wants a single special **billing-admin** who can see the credit admin view (vs the generic `admin` check).
-Replace `isAdmin('admin')` in `admin-credits` + the `SHOW_CREDITS` gating, and wrap the portal `/numa-credits`
-route in `<ProtectedRoute requireRole=…>` once the role exists.
+Ian's "single special billing-admin who sees the credit view (vs generic `admin`)" is shipped — but **not** as a
+Cognito group/role. Rationale: role changes are client-side (admins hold `AdminAddUserToGroup`), so a group would
+be self-grantable. Instead membership is `CLIENT#/BILLING_ADMIN#<sub>` rows, written only through caller-checked
+server paths (`admin-credits` POST) or the portal (assume-role) — genuinely enforceable. `admin-credits`
+balance/ledger now gate on `isBillingAdmin`; in-client lock screen + User Management toggle; portal bootstrap
+tool. Full model in [09-billing-admin.md](09-billing-admin.md). (The portal `/numa-credits` route stays on the
+existing portal auth — no new portal role needed.)
 
 ### B6. Portal allocation enhancements
 
@@ -78,10 +80,10 @@ broadcast already exist; this is the next step if multi-year is needed.
 
 ### B7. In-client dashboard polish
 
-- The in-client **Credits Dashboard** doesn't yet surface the **top-up balance** as its own card (it's in the
-  shared summary header but not the charts area) — minor add when the dashboard styling pass happens.
-- Ian's full admin-dashboard vision (3–6 month trend, separate agent-adhoc split, top-5 agents via agentId join,
-  deeper board→agent→run navigation) — partially prototyped in the R&D calculator HTML.
+- ✅ **Done 2026-06-03:** the **source split** (chat / agent / scheduled, the agent-adhoc separation) ships as
+  `CreditsSourceChart`; **Top-5 agents by agentId→name** ships (agentId stamped on META, resolved via
+  `listAgents`); top-up balance is its own summary tile.
+- Still open: a 3–6 month trend graph and deeper board→agent→run navigation (prototyped in the R&D calculator HTML).
 
 ### B8. Deploy-time seed of the `CONFIG` row (optional)
 
@@ -92,8 +94,8 @@ lib defaults cover until the first portal save, and skipping it guarantees a dep
 
 ## C. Known minor issues / tidy-ups
 
-- **`flooredMsgs` mislabel** — `processing.py` sets it to the count of turns with _positive cost_, not turns where
-  the floor beat the value tier. Cosmetic telemetry field; fix when convenient.
+- ~~**`flooredMsgs` mislabel**~~ — ✅ DONE 2026-06-03: the field was **removed** entirely (dead — written but
+  read by nobody, and meaningless under the conversation-level floor).
 - **`generate_title` is dead-ish** — still defined in `tiers.py` but no longer called live (the nightly owns
   anonymised labels). Leave or remove.
 - **Stale comments** — `numa-frontend/.../CreditsDashboard/helpers.ts` references the now-deleted
