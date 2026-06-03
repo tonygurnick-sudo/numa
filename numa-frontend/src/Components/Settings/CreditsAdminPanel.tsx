@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Badge, Card, Spinner, Table } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
-import { AdminCreditsService, type CreditLedger } from '../../Services/AdminCreditsService';
+import { AdminCreditsService, type CreditLedger, type CreditMonthly } from '../../Services/AdminCreditsService';
 import { UsersService, type WorkspaceUser } from '../../Services/UsersService';
 
 /**
@@ -25,7 +25,8 @@ export const CreditsAdminPanel: React.FC = () => {
   const { t } = useTranslation('settings');
   const { numaGet } = useNumaRequest();
 
-  const [balance, setBalance] = useState<number>(0);
+  const [balance, setBalance] = useState<number>(0); // top-up balance (persistent pool)
+  const [monthly, setMonthly] = useState<CreditMonthly | null>(null); // this-month allocation/used/remaining
   const [ledger, setLedger] = useState<CreditLedger | null>(null);
   const [userMap, setUserMap] = useState<Record<string, string>>({}); // cognito sub -> email
   const [loading, setLoading] = useState(true);
@@ -41,6 +42,7 @@ export const CreditsAdminPanel: React.FC = () => {
         UsersService.list(numaGet).catch(() => [] as WorkspaceUser[]), // best-effort; for sub->email
       ]);
       setBalance(bal.balance);
+      setMonthly(bal.monthly ?? null);
       setLedger(led);
       const map: Record<string, string> = {};
       for (const u of users) if (u.sub) map[u.sub] = u.email;
@@ -66,10 +68,12 @@ export const CreditsAdminPanel: React.FC = () => {
     );
   }
 
-  // Remaining is derived (allocation − consumed this month), not a decremented counter, so
-  // re-running backfill never double-burns. Live real-time burn is handled separately (#5).
-  const usedThisMonth = ledger?.totalCredits ?? 0;
-  const remaining = balance - usedThisMonth;
+  // This-month picture comes from the monthly allocation (use-it-or-lose-it), NOT the top-up balance.
+  // Remaining = allocation − consumed (derived, not a decremented counter). The top-up balance is the
+  // separate persistent pool the overflow draws once the monthly allocation is used up.
+  const usedThisMonth = monthly?.consumed ?? ledger?.totalCredits ?? 0;
+  const allocated = monthly?.allocation ?? 0;
+  const remaining = monthly?.remaining ?? allocated - usedThisMonth;
 
   // Resolve a conversation's owner (cognito sub) to an email; fall back to a short sub.
   const whoLabel = (sub: string | null): string =>
@@ -112,8 +116,14 @@ export const CreditsAdminPanel: React.FC = () => {
           <div className="small text-muted">
             {t('credits.remainingSub', {
               defaultValue: '{{allocated}} allocated · {{used}} used this month',
-              allocated: balance.toLocaleString(),
+              allocated: allocated.toLocaleString(),
               used: usedThisMonth.toLocaleString(),
+            })}
+          </div>
+          <div className="small text-muted">
+            {t('credits.topUpBalance', {
+              defaultValue: 'Top-up balance: {{balance}} credits (carries over)',
+              balance: balance.toLocaleString(),
             })}
           </div>
         </Card.Body>

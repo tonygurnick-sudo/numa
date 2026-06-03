@@ -142,8 +142,10 @@ export const CreditsDashboardPanel: React.FC = () => {
     );
   }
 
-  const allocated = balance?.balance ?? 0;
-  const remaining = allocated - usedThisMonth;
+  // Allocation picture = this month's monthly allocation (use-it-or-lose-it), NOT the top-up balance
+  // (which is the separate persistent pool the overflow draws from).
+  const allocated = balance?.monthly?.allocation ?? 0;
+  const remaining = balance?.monthly?.remaining ?? allocated - usedThisMonth;
   const monthLabel = (() => {
     const m = balance?.monthly?.month;
     const d = m ? new Date(`${m}-01T00:00:00`) : new Date();
