@@ -39,6 +39,17 @@ export const useSchedulePreflight = (agent: AgentSummary | null): SchedulePrefli
   // pairings so a required `google_drive` is satisfied by either Pipedream
   // `google_drive` or native `googledrive` (and vice versa).
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
+  // True while the connected-integrations lookup is in flight. We must NOT
+  // assert "integration not connected" before it resolves — otherwise the
+  // blocker flashes on first render (when the set is still empty) and clears
+  // a second later once the async status calls return.
+  const [statusLoading, setStatusLoading] = useState(false);
+  // False when a status lookup we relied on failed transiently (network /
+  // cold-start / 5xx) or returned `check_failed`. In that case
+  // `connectedIntegrations` may be MISSING a real connection, so it's unsafe
+  // to claim something isn't connected. Confirmed `disconnected` reads keep
+  // this true — those are reliable signals and SHOULD surface the blocker.
+  const [statusReliable, setStatusReliable] = useState(true);
 
   const schedulingFeatureEnabled = getFlag('SCHEDULING');
   const relayLambdaArn = useMemo(() => window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN') || '', []);
@@ -52,11 +63,23 @@ export const useSchedulePreflight = (agent: AgentSummary | null): SchedulePrefli
   // the backend save catches them.
   useEffect(() => {
     setConnectedIntegrations([]);
-    if (!agent || !user) return;
-    if (!agent.requiredIntegrations || agent.requiredIntegrations.length === 0) return;
+    setStatusReliable(true);
+    if (!agent || !user) {
+      setStatusLoading(false);
+      return;
+    }
+    if (!agent.requiredIntegrations || agent.requiredIntegrations.length === 0) {
+      setStatusLoading(false);
+      return;
+    }
     let cancelled = false;
+    setStatusLoading(true);
     (async () => {
       const satisfied = new Set<string>();
+      // Flipped to false the moment any lookup we depend on fails transiently
+      // (so `satisfied` might be incomplete). Confirmed `disconnected` reads
+      // do NOT flip it — those are reliable "not connected" answers.
+      let reliable = true;
 
       // Pipedream side — same shape as AgentCreateModal's lookup.
       if (hasPipedreamIntegrations && relayLambdaArn && lambdaClient) {
@@ -86,7 +109,10 @@ export const useSchedulePreflight = (agent: AgentSummary | null): SchedulePrefli
             }
           }
         } catch (err) {
+          // Couldn't read the Pipedream side — a required slug might be
+          // connected there, so we can't trust an "absent" result.
           console.warn('[useSchedulePreflight] Pipedream status lookup failed', err);
+          reliable = false;
         }
       }
 
@@ -104,24 +130,35 @@ export const useSchedulePreflight = (agent: AgentSummary | null): SchedulePrefli
             candidates.map(async (slug) => {
               try {
                 const st = await ConnectorsService.getStatus(slug);
-                return st.status === 'connected' ? slug : null;
+                if (st.status === 'connected') return { slug, connected: true, confirmed: true };
+                // `disconnected` / `error` are confirmed answers; `check_failed`
+                // means the fetch itself failed — NOT a real disconnect, so we
+                // must not let it drop a possibly-connected integration.
+                const confirmed = st.status === 'disconnected' || st.status === 'error';
+                return { slug, connected: false, confirmed };
               } catch {
-                return null;
+                return { slug, connected: false, confirmed: false };
               }
             })
           );
-          for (const slug of results) {
-            if (!slug) continue;
-            satisfied.add(slug);
-            const pairedPd = pipedreamSlugForConnector(slug);
+          for (const r of results) {
+            if (!r.confirmed) reliable = false;
+            if (!r.connected) continue;
+            satisfied.add(r.slug);
+            const pairedPd = pipedreamSlugForConnector(r.slug);
             if (pairedPd) satisfied.add(pairedPd);
           }
         } catch (err) {
           console.warn('[useSchedulePreflight] native catalog lookup failed', err);
+          reliable = false;
         }
       }
 
-      if (!cancelled) setConnectedIntegrations(Array.from(satisfied));
+      if (!cancelled) {
+        setConnectedIntegrations(Array.from(satisfied));
+        setStatusReliable(reliable);
+        setStatusLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -130,7 +167,7 @@ export const useSchedulePreflight = (agent: AgentSummary | null): SchedulePrefli
 
   return useMemo<SchedulePreflightBlocker[]>(() => {
     if (!agent) return [];
-    return runSchedulePreflight({
+    const blockers = runSchedulePreflight({
       schedulingFeatureEnabled,
       agent: {
         agentId: agent.agentId,
@@ -144,5 +181,14 @@ export const useSchedulePreflight = (agent: AgentSummary | null): SchedulePrefli
       connectedIntegrations,
       accessibleKBIds: availableKBs.map((kb) => kb.kb_id),
     });
-  }, [agent, schedulingFeatureEnabled, connectedIntegrations, availableKBs]);
+    // Only surface "integration not connected" once we've reliably confirmed
+    // the connected set. While the lookup is in flight, or if a status fetch
+    // failed transiently, we can't assert an integration is missing — so we
+    // drop just those blockers (other kinds don't depend on async status).
+    // The backend re-checks at save time, so nothing slips through.
+    if (statusLoading || !statusReliable) {
+      return blockers.filter((b) => b.kind !== 'integration_not_connected');
+    }
+    return blockers;
+  }, [agent, schedulingFeatureEnabled, connectedIntegrations, availableKBs, statusLoading, statusReliable]);
 };

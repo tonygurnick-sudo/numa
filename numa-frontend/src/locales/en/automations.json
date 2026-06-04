@@ -151,6 +151,8 @@
       "comingSoon": "Coming soon",
       "triggersDisabled": "Event triggers aren't enabled for your account yet. Contact your admin to turn them on.",
       "gmailNotConnected": "Connect your Gmail account in Data Connectors to use email triggers.",
+      "gmailCheckFailed": "We couldn't verify your Gmail connection. Check your network and try again.",
+      "retryCheck": "Try again",
       "checkingGmail": "Checking Gmail connection...",
       "builder": {
         "title": "Set up the trigger",
