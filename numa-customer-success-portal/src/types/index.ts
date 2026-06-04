@@ -80,6 +80,8 @@ export const clientConfigSchema = z.object({
   // Q Business settings
   qBusinessRegion: z.string().optional(), // default: 'us-east-1'
   provisionQResources: z.boolean().optional(), // default: false
+  enableDirectLLMAccess: z.boolean().optional(), // default: true — Q "allow end users to send queries directly to the LLM"
+  enableLLMKnowledgeFallback: z.boolean().optional(), // default: true — Q "allow fall back to LLM knowledge"
 
   // App deployment settings
   allApps: z.boolean().optional(), // default: false
@@ -107,8 +109,11 @@ export const clientConfigSchema = z.object({
   allowBedrockQuotaSharing: z.boolean().optional(), // default: false
   pipedreamIntegrations: z.boolean().optional(), // default: false
   dataConnectorsEnabled: z.boolean().optional(), // default: false
+  synergyFileParity: z.boolean().optional(), // default: false — Synergy 12d file-interface parity (sub-flag of data connectors)
   agents: z.boolean().optional(), // default: false
   brandingProviderEnabled: z.boolean().optional(), // default: false
+  brandingAssetsBucketArn: z.string().optional(),
+  brandingAssetsPrefix: z.string().optional(),
   numaWorkspaceChat: z.boolean().optional(), // default: true
   agentCoreRegion: z.string().optional(), // default: client region
   useGlobalInferenceProfile: z.boolean().optional(), // default: true (global Bedrock CRI; false routes to regional us./au./apac.* for tight-SCP customers)
@@ -155,6 +160,26 @@ export const clientConfigSchema = z.object({
   v2Apps: z.boolean().optional(), // default: false
   publicDemo: z.boolean().optional(), // default: false
   publicDemoDailyLimitUsd: z.number().optional(), // default: 10
+
+  // Numa Files
+  numaFiles: z.boolean().optional(),
+
+  // Numa Voice (Amazon Connect — FEAT-158/169). connectInstanceUrl, recordingsBucket and
+  // didNumbers are written back into the config map by the numa-voice-config-writer Lambda;
+  // they must be declared here so the .strict() parse in replaceClientConfig doesn't reject
+  // a voice-enabled tenant's config on read-back.
+  numaVoice: z.boolean().optional(), // default: false
+  connectAutoProvision: z.boolean().optional(), // default: false
+  connectClaimDid: z.boolean().optional(), // default: false
+  connectInstanceUrl: z.string().optional(),
+  recordingsBucket: z.string().optional(),
+  didNumbers: z.array(z.string()).optional(),
+
+  // Forward-compat / internal — kept so existing DynamoDB items parse under .strict().
+  // transcriptionService mirrors the infra `z.any()` forward-compat field; logGroup is an
+  // internal infra-only prop (never persisted) included for full schema parity.
+  transcriptionService: z.any().optional(),
+  logGroup: z.any().optional(),
 
   // Whitelabel / multi-frontend
   additionalCognitoClientIds: z.string().optional(),
