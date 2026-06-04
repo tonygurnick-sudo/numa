@@ -632,6 +632,36 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                 "isError": True,
             }
 
+    # Guard: the raw proxy sends a JSON body, not multipart media — it cannot
+    # upload files. Routing an upload here overwrites the target with JSON
+    # instead of the file's contents (this corrupted a customer document).
+    # Steer the model to the upload/update-file action, which streams bytes.
+    try:
+        body_blob = body if isinstance(body, str) else json.dumps(body or {})
+    except Exception:
+        body_blob = str(body)
+    if method.upper() in ("POST", "PUT", "PATCH") and (
+        "upload" in upstream_url.lower() or "/workdir/" in body_blob.lower()
+    ):
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "Don't upload files through proxy_request — it sends a "
+                        "JSON body, not multipart media, so it overwrites the "
+                        "file with JSON instead of its contents. Use the "
+                        "integration's upload/update-file action instead. For "
+                        "Google Drive, call the google_drive-update-file action "
+                        "with `fileId` set to the existing file and `filePath` "
+                        "set to your /workdir file."
+                    ),
+                }
+            ],
+            "is_error": True,
+            "isError": True,
+        }
+
     try:
         result = invoke_workspace_tool(
             "pipedream_proxy_request",

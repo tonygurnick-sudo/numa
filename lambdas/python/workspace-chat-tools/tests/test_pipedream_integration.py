@@ -127,36 +127,48 @@ class TestPreprocessFilePaths(unittest.TestCase):
         self.assertEqual(result, props)
 
     @patch("tools.pipedream_integration.prm_client")
-    def test_path_traversal_blocked(self, mock_prm):
-        """Paths with .. are rejected and left unchanged."""
+    def test_path_traversal_fails_closed(self, mock_prm):
+        """A /workdir path with .. fails closed (raises) rather than being
+        forwarded verbatim — a raw path must never reach the upstream."""
         mock_prm.return_value = self._make_s3_client()
 
-        result = _preprocess_file_paths(
-            {"filePath": "/workdir/../etc/passwd"},
-            user_sub="user1",
-            conversation_id="conv1",
-        )
-        self.assertEqual(result["filePath"], "/workdir/../etc/passwd")
+        with self.assertRaises(ValueError):
+            _preprocess_file_paths(
+                {"filePath": "/workdir/../etc/passwd"},
+                user_sub="user1",
+                conversation_id="conv1",
+            )
 
     @patch("tools.pipedream_integration.prm_client")
-    def test_path_traversal_blocked_in_list(self, mock_prm):
-        """Path traversal in array elements is rejected."""
+    def test_path_traversal_in_list_fails_closed(self, mock_prm):
+        """Path traversal in an array element fails closed (raises)."""
         s3 = self._make_s3_client(
             {"numa-chat/workspace/user1/conversations/conv1/outputs/good.txt"}
         )
         mock_prm.return_value = s3
 
-        result = _preprocess_file_paths(
-            {
-                "files": [
-                    "/workdir/../etc/passwd",
-                    "/workdir/outputs/good.txt",
-                ]
-            },
-            user_sub="user1",
-            conversation_id="conv1",
-        )
+        with self.assertRaises(ValueError):
+            _preprocess_file_paths(
+                {
+                    "files": [
+                        "/workdir/../etc/passwd",
+                        "/workdir/outputs/good.txt",
+                    ]
+                },
+                user_sub="user1",
+                conversation_id="conv1",
+            )
 
-        # Traversal path left unchanged, good path converted
-        self.assertEqual(result["files"][0], "/workdir/../etc/passwd")
-        self.assertEqual(result["files"][1], "https://presigned.example.com/file")
+    @patch("tools.pipedream_integration.prm_client")
+    def test_missing_file_fails_closed(self, mock_prm):
+        """A /workdir path with no matching S3 object raises instead of being
+        forwarded as a literal string — this is the corruption class that
+        overwrote a customer .docx with a JSON-ish reference."""
+        mock_prm.return_value = self._make_s3_client()  # no existing keys
+
+        with self.assertRaises(ValueError):
+            _preprocess_file_paths(
+                {"filePath": "/workdir/outputs/missing.docx"},
+                user_sub="user1",
+                conversation_id="conv1",
+            )

@@ -94,6 +94,65 @@ def _content_type_to_extension(content_type: str) -> str:
     return _CONTENT_TYPE_EXTENSIONS.get(base, ".bin")
 
 
+def _is_textual_content_type(content_type: str) -> bool:
+    """True if a Content-Type is safe to decode as text.
+
+    This is an allowlist of TEXT types. Everything else — including an absent
+    Content-Type — is treated as binary and base64-encoded, because decoding
+    binary as text is lossy and irreversible (this corrupted a customer .docx
+    when an OOXML download fell through to ``response.text``). Wrapping text as
+    base64 by mistake, in contrast, is fully recoverable, so defaulting to
+    binary is the safe choice.
+    """
+    raw = (content_type or "").lower()
+    base = raw.split(";")[0].strip()
+    if base.startswith("text/"):
+        return True
+    if base in (
+        "application/json",
+        "application/xml",
+        "application/javascript",
+        "application/x-www-form-urlencoded",
+        "application/ld+json",
+        "application/graphql",
+    ):
+        return True
+    # Structured-suffix text types: application/<x>+json, application/<x>+xml.
+    if base.endswith("+json") or base.endswith("+xml"):
+        return True
+    # An explicitly declared charset is a strong textual signal (but never
+    # override an octet-stream, which is binary-by-definition).
+    if "charset=" in raw and not base.startswith("application/octet"):
+        return True
+    return False
+
+
+def _is_unsafe_proxy_upload(method: str, upstream_url: str, body: Any) -> bool:
+    """Detect a binary/media upload the passthrough proxy cannot perform.
+
+    ``proxy_request`` forwards the request with ``json=body`` — it has no
+    multipart/resumable media-upload capability. Routing a file upload through
+    it serializes the JSON body and the upstream stores THAT as the file
+    content (this overwrote a customer .docx with a ~79-byte JSON blob).
+    Callers must use the dedicated upload/update-file *action* instead, which
+    streams the bytes correctly.
+    """
+    if (method or "").upper() not in ("POST", "PUT", "PATCH"):
+        return False
+    # Covers Google (uploadType=, /upload/), Dropbox (files/upload),
+    # Microsoft Graph (createUploadSession), Slack (files.upload), etc.
+    if "upload" in (upstream_url or "").lower():
+        return True
+    # A workspace file reference passed as a JSON body is the exact corruption
+    # pattern: the proxy serializes it verbatim and the upstream stores the
+    # JSON. ``/workdir/`` never legitimately appears in an external API body.
+    try:
+        blob = body if isinstance(body, str) else json.dumps(body or {})
+    except Exception:
+        blob = str(body)
+    return "/workdir/" in blob.lower()
+
+
 def _extract_filename_from_content_disposition(disposition: str) -> Optional[str]:
     """Extract filename from a Content-Disposition header, or None.
 
@@ -1614,6 +1673,21 @@ class PipedreamOperations:
             base64. Larger binaries are uploaded to the binary cache bucket
             and a short-lived presigned GET URL is returned instead.
         """
+        # Enforcement boundary: the passthrough proxy sends `json=body` and
+        # cannot perform multipart/resumable media uploads. Routing a file
+        # upload here writes the JSON body as the file content (this corrupted
+        # a customer .docx). Reject before making the call and steer callers to
+        # the dedicated upload/update-file action.
+        if _is_unsafe_proxy_upload(method, upstream_url, body):
+            raise Exception(
+                "Refusing media upload via the raw API proxy: it sends a JSON "
+                "body, not multipart media, and would overwrite the target with "
+                "JSON instead of the file's contents. Use the integration's "
+                "upload/update-file action instead (for Google Drive: the "
+                "google_drive-update-file action with `fileId` set to the "
+                "existing file and `filePath` set to your /workdir file)."
+            )
+
         credentials = self.get_credentials()
         access_token = self.get_access_token()
         project_id = credentials["project_id"]
@@ -1658,15 +1732,14 @@ class PipedreamOperations:
                 result = response.json()
             except Exception:
                 content_type = response.headers.get("content-type", "")
-                if any(
-                    t in content_type
-                    for t in (
-                        "image/",
-                        "application/octet",
-                        "application/pdf",
-                        "force-download",
-                    )
-                ):
+                # Default to binary. Only decode as text when the Content-Type
+                # is an explicit text type — otherwise base64 the raw bytes so
+                # binary payloads (.docx, .xlsx, .zip, images, ...) survive the
+                # proxy intact. Treating unknown/binary content as text here is
+                # lossy and previously corrupted a customer document download.
+                if _is_textual_content_type(content_type):
+                    result = {"text": response.text}
+                else:
                     result = self._build_binary_result(
                         response_content=response.content,
                         content_type=content_type,
@@ -1676,8 +1749,6 @@ class PipedreamOperations:
                         external_user_id=external_user_id,
                         request_id=request_id,
                     )
-                else:
-                    result = {"text": response.text}
 
             if not response.ok:
                 # Extract the most useful error message from the

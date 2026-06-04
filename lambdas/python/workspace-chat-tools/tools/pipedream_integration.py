@@ -156,25 +156,37 @@ def _preprocess_file_paths(
     s3_client = prm_client("s3")
     result = dict(configured_props)
 
-    for key, value in result.items():
-        # Handle single string values
-        if isinstance(value, str):
-            resolved = _resolve_workdir_path(
-                value, key, s3_client, user_sub, conversation_id
+    def _resolve_or_fail(val: str, k: str) -> str:
+        # A literal /workdir/ path is never valid to forward to Pipedream — it
+        # must resolve to a fetchable URL. If it can't (missing/unsynced file,
+        # path traversal, blocked pattern), fail CLOSED rather than forwarding
+        # the raw string: an unresolved reference forwarded as a content prop
+        # risks the upstream storing that string as the file's contents (this
+        # corrupted a customer .docx).
+        resolved = _resolve_workdir_path(val, k, s3_client, user_sub, conversation_id)
+        if resolved is None:
+            raise ValueError(
+                f"Could not resolve workspace file '{val}' for prop '{k}'. "
+                "The file may be missing, still syncing, or blocked. Refusing "
+                "to forward the raw path so it cannot be uploaded as file "
+                "content. Verify the file exists in /workdir and retry."
             )
-            if resolved is not None:
-                result[key] = resolved
+        return resolved
+
+    for key, value in result.items():
+        # Handle single string values. Only /workdir/ paths are rewritten;
+        # anything else (URLs, IDs, plain text) is passed through untouched.
+        if isinstance(value, str):
+            if value.startswith(WORKSPACE_ROOT + "/"):
+                result[key] = _resolve_or_fail(value, key)
 
         # Handle string array values (e.g. Gmail attachmentUrlsOrPaths,
         # Outlook files, Jira multi-attachments)
         elif isinstance(value, list):
             new_list = []
             for item in value:
-                if isinstance(item, str):
-                    resolved = _resolve_workdir_path(
-                        item, key, s3_client, user_sub, conversation_id
-                    )
-                    new_list.append(resolved if resolved is not None else item)
+                if isinstance(item, str) and item.startswith(WORKSPACE_ROOT + "/"):
+                    new_list.append(_resolve_or_fail(item, key))
                 else:
                     new_list.append(item)
             result[key] = new_list
@@ -549,12 +561,26 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
             approval_id=approval_id,
         )
 
-    # Approved — preprocess workspace file paths into presigned URLs
-    configured_props = _preprocess_file_paths(
-        configured_props,
-        user_sub=user_sub,
-        conversation_id=params.get("__conversation_id", ""),
-    )
+    # Approved — preprocess workspace file paths into presigned URLs.
+    # Fail closed: an unresolvable /workdir reference must not be forwarded
+    # (it could be stored as the file's contents by the upstream).
+    try:
+        configured_props = _preprocess_file_paths(
+            configured_props,
+            user_sub=user_sub,
+            conversation_id=params.get("__conversation_id", ""),
+        )
+    except ValueError as exc:
+        logger.warning(
+            "Refused to forward unresolved workspace file path",
+            action_key=action_key,
+            error=str(exc),
+        )
+        return {
+            "status": "execution_failed",
+            "message": str(exc),
+            "approval_id": approval_id,
+        }
 
     # Execute the action with idempotency guard to prevent duplicate execution
     relay_params: Dict[str, Any] = {

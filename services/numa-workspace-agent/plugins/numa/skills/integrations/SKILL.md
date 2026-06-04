@@ -121,6 +121,8 @@ mcp__integrations__proxy_request(
 
 **When to use:** APIs not covered by actions, advanced queries with OData filters, bulk operations, or new API features before Pipedream adds them.
 
+**NEVER use `proxy_request` for files — uploads OR downloads.** It forwards a JSON body and decodes responses as text, not binary. Uploading a file through it overwrites the file with a tiny JSON blob (this has corrupted a customer document); downloading binary through it mangles the bytes. Always use the integration's upload / update / download **action** for any file. The proxy now rejects obvious upload URLs, but the rule applies to all binary in both directions.
+
 ---
 
 ## File Uploads
