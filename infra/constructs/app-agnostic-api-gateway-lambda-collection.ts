@@ -1993,6 +1993,16 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           actions: ['dynamodb:Query'],
           resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
         },
+        // Native OAuth integrations (Gmail, Calendar…) live in the per-user
+        // vault, not the data-connectors table. The unified payload reads the
+        // vault to detect them — without this grant the runner can't see
+        // vault-only native connections and silently drops them
+        // (INTEGRATION_DROPPED_NO_AUTH) so the scheduled run fails.
+        {
+          effect: 'Allow',
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [`arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/*`],
+        },
         // GetItem for Level-3 admin overrides (read on each invocation so
         // admin toggle changes apply immediately). UpdateItem for the
         // atomic trigger-counter rows (`trigger_count_*`) the runner

@@ -13,7 +13,11 @@
  * resolved at run time against:
  *   1. the global integration settings table (admin `preferred_method`),
  *   2. the user's Pipedream connections (via the relay),
- *   3. the user's native connector rows (in DDB).
+ *   3. the user's native connector rows — both the data-connectors DynamoDB
+ *      table (Files-style connectors) AND the secrets vault (OAuth-integration
+ *      "Native" flavour: Gmail, Calendar, …). These are two separate backends
+ *      post-FEAT-143; both must be read or vault-only native connections are
+ *      invisible here and get dropped.
  *
  * Slugs that resolve to neither method are dropped with a warn log — the
  * workspace agent will surface "integration not connected" if the LLM
@@ -22,9 +26,10 @@
  */
 
 import { InvokeCommand, type LambdaClient } from '@aws-sdk/client-lambda';
+import { GetSecretValueCommand, type SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import { QueryCommand, ScanCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
-import { CONNECTOR_TO_PIPEDREAM, PIPEDREAM_TO_CONNECTOR } from '../../../infra/config/connectors';
+import { CONNECTOR_TO_PIPEDREAM, NATIVE_CONNECTORS, PIPEDREAM_TO_CONNECTOR } from '../../../infra/config/connectors';
 
 // ---------------------------------------------------------------------------
 // Types — mirror the lib/scheduling-schemas.ts shapes without a runtime dep
@@ -306,6 +311,79 @@ export const listUserConnectedNativeConnectors = async ({
   }
 };
 
+/** Subset of the consolidated user-vault shape we need. Mirrors the structure
+ *  read by gmail-watch-manager / connector-event-dispatcher. */
+interface VaultData {
+  secrets?: Record<string, { fields?: Record<string, string> }>;
+  _compressed?: boolean;
+  _data?: string;
+}
+
+const NATIVE_CONNECTOR_SET: ReadonlySet<string> = new Set(NATIVE_CONNECTORS);
+
+/**
+ * Native OAuth integrations the user has connected via the *vault* — the
+ * `oauthIntegrationsEnabled` "Native" flavour (Gmail, Google Calendar, …).
+ *
+ * These live in Secrets Manager at `{clientName}/vault/users/{userSub}` under
+ * `secrets['oauth-<slug>']`, NOT in the data-connectors DynamoDB table that
+ * `listUserConnectedNativeConnectors` reads. Post-FEAT-143 those are two
+ * separate native backends; the runner must union both or a vault-only native
+ * connection (e.g. a Gmail agent with no Pipedream fallback) is invisible and
+ * gets dropped → `INTEGRATION_DROPPED_NO_AUTH` → the run fails with "integration
+ * not enabled".
+ *
+ * A slug counts as connected when its `oauth-<slug>` entry carries an
+ * `access_token` — the same connected-check gmail-watch-manager uses. We only
+ * surface slugs that are known native connectors (`NATIVE_CONNECTORS`) so other
+ * vault secret types can't leak in.
+ */
+export const listUserVaultNativeIntegrations = async ({
+  secretsManager,
+  clientName,
+  userSub,
+}: {
+  secretsManager: SecretsManagerClient;
+  clientName: string;
+  userSub: string;
+}): Promise<Set<string>> => {
+  const out = new Set<string>();
+  if (!clientName) return out;
+  try {
+    const res = await secretsManager.send(
+      new GetSecretValueCommand({ SecretId: `${clientName}/vault/users/${userSub}` })
+    );
+    if (!res.SecretString) return out;
+
+    let vault = JSON.parse(res.SecretString) as VaultData;
+    // Large vaults are gzip+base64 packed under `_data` (mirror watch-manager).
+    if (vault._compressed && vault._data) {
+      const { gunzipSync } = await import('zlib');
+      const decompressed = gunzipSync(Buffer.from(vault._data, 'base64')).toString('utf-8');
+      vault = JSON.parse(decompressed) as VaultData;
+    }
+
+    for (const [key, entry] of Object.entries(vault.secrets ?? {})) {
+      // OAuth integration tokens are keyed `oauth-<slug>`. Skip company
+      // client-credential entries (`oauth-client-*`).
+      if (!key.startsWith('oauth-') || key.startsWith('oauth-client-')) continue;
+      const slug = key.slice('oauth-'.length);
+      if (!NATIVE_CONNECTOR_SET.has(slug)) continue;
+      if (entry?.fields?.access_token) out.add(slug);
+    }
+    return out;
+  } catch (err) {
+    const e = err as { name?: string; message?: string };
+    // No vault yet = the user has connected nothing. Not an error.
+    if (e?.name !== 'ResourceNotFoundException') {
+      console.warn('[SCHEDULE_RUNNER] failed to list vault native integrations', {
+        error: e?.message,
+      });
+    }
+    return out;
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Method-resolution core
 // ---------------------------------------------------------------------------
@@ -400,9 +478,13 @@ export const decideMethod = ({
 export interface BuildUnifiedIntegrationsPayloadParams {
   dynamo: DynamoDBDocumentClient;
   lambdaClient: LambdaClient;
+  secretsManager: SecretsManagerClient;
   globalIntegrationSettingsTableName: string;
   dataConnectorsTableName: string;
   dataConnectorsEnabled: boolean;
+  /** Enables reading vault-based native OAuth integrations (Gmail, Calendar…).
+   *  Mirrors the flag that gates the vault MCP family in scheduled runs. */
+  oauthIntegrationsEnabled: boolean;
   pipedreamRelayLambdaArn: string;
   clientName: string;
   userSub: string;
@@ -435,9 +517,11 @@ export interface UnifiedIntegrationsPayload {
 export const buildUnifiedIntegrationsPayload = async ({
   dynamo,
   lambdaClient,
+  secretsManager,
   globalIntegrationSettingsTableName,
   dataConnectorsTableName,
   dataConnectorsEnabled,
+  oauthIntegrationsEnabled,
   pipedreamRelayLambdaArn,
   clientName,
   userSub,
@@ -469,14 +553,23 @@ export const buildUnifiedIntegrationsPayload = async ({
 
   // ── Step 2: load admin pref + per-user auth state in parallel ──────────
   const externalUserId = `${clientName}_${userSub}`;
-  const [preferred, pipedreamState, nativeConnected] = await Promise.all([
+  const [preferred, pipedreamState, dataConnectorNative, vaultNative] = await Promise.all([
     loadGlobalPreferredMethods({ dynamo, tableName: globalIntegrationSettingsTableName }),
     listUserPipedreamConnectedApps({ lambdaClient, relayArn: pipedreamRelayLambdaArn, externalUserId }),
     dataConnectorsEnabled
       ? listUserConnectedNativeConnectors({ dynamo, tableName: dataConnectorsTableName, userSub })
       : Promise.resolve(new Set<string>()),
+    // Native OAuth integrations (Gmail, Calendar, …) are stored in the vault,
+    // not the data-connectors table — union them in or vault-only native
+    // connections are dropped. Gated on the same flag that enables the vault
+    // MCP family in scheduled runs.
+    oauthIntegrationsEnabled
+      ? listUserVaultNativeIntegrations({ secretsManager, clientName, userSub })
+      : Promise.resolve(new Set<string>()),
   ]);
   const pipedreamConnected = pipedreamState.connectedSlugs;
+  // The two native backends are disjoint by design; union for method resolution.
+  const nativeConnected = new Set<string>([...dataConnectorNative, ...vaultNative]);
 
   // ── Step 3: resolve each row's method ──────────────────────────────────
   const resolved: IntegrationListItem[] = [];
