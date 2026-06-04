@@ -26,6 +26,7 @@ import { CognitoPreSignup } from './cognito-pre-signup-construct';
 import { SSOGroupMapper } from './sso-group-mapper-construct';
 import { CognitoEmailHandler } from './cognito-email-handler-construct';
 import { NoliaCognitoEmailHandler } from './nolia-cognito-email-handler-construct';
+import { CognitoCustomEmailSender } from './cognito-custom-email-sender-construct';
 import { BoxDataSource, boxDataSourcePropsSchema } from './data-sources/box-datasource-construct';
 import { S3DataSource, s3DataSourcePropsSchema } from './data-sources/s3-datasource-construct';
 import { SharePointDataSource, sharePointDataSourcePropsSchema } from './data-sources/sharepoint-datasource-construct';
@@ -193,6 +194,25 @@ export class CoreNumaInfra extends Construct {
         : {
             mfaConfiguration: 'OFF',
           };
+    // CustomEmailSender trigger (BUG-188): route all Cognito auth emails
+    // (verification / activation / password reset) through the centralized
+    // numa-email-sender (our DKIM/SPF/DMARC-aligned notifications.numa.arcanum.ai
+    // domain) instead of Cognito's default verificationemail.com sender, which is
+    // silently dropped or spam-foldered by many Microsoft 365 / Google tenants.
+    // Created before the user pool so its Lambda ARN + KMS key can be wired into
+    // lambdaConfig below. This fully replaces Cognito's own sending, so the
+    // customMessage trigger (which only customizes Cognito-sent mail) is left
+    // wired but unused.
+    if (!props.emailSenderLambdaArn) {
+      throw new Error('emailSenderLambdaArn is required to wire the Cognito CustomEmailSender trigger');
+    }
+    const customEmailSender = new CognitoCustomEmailSender(this, 'cognito-custom-email-sender', {
+      clientName: props.clientName,
+      nameSuffix: numaClient,
+      domainName: emailDomain,
+      emailSenderLambdaArn: props.emailSenderLambdaArn,
+    });
+
     const userPool = new CognitoUserPool(this, 'user-pool', {
       name: numaClient,
       usernameAttributes: ['email'],
@@ -204,6 +224,11 @@ export class CoreNumaInfra extends Construct {
           lambdaVersion: 'V2_0',
         },
         customMessage: customMessageLambda.arn,
+        customEmailSender: {
+          lambdaArn: customEmailSender.function.arn,
+          lambdaVersion: 'V1_0',
+        },
+        kmsKeyId: customEmailSender.kmsKeyArn,
       },
       userPoolAddOns: {
         advancedSecurityMode: 'AUDIT',
@@ -258,6 +283,15 @@ export class CoreNumaInfra extends Construct {
     new LambdaPermission(this, 'cognito-email-permission', {
       statementId: 'cognito-email-handler',
       functionName: customMessageLambda.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: 'cognito-idp.amazonaws.com',
+      sourceArn: userPool.arn,
+    });
+
+    // Grant Cognito permission to invoke the CustomEmailSender trigger (BUG-188)
+    new LambdaPermission(this, 'cognito-custom-email-sender-permission', {
+      statementId: 'cognito-custom-email-sender',
+      functionName: customEmailSender.function.functionName,
       action: 'lambda:InvokeFunction',
       principal: 'cognito-idp.amazonaws.com',
       sourceArn: userPool.arn,
@@ -2258,4 +2292,10 @@ export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
   knowledgeBase?: KnowledgeBase;
   /** Deployer role ARN for chain assume during ECR image push (container Lambdas) */
   deployerRoleArn?: string;
+  /**
+   * ARN of the centralized numa-email-sender Lambda (deployer account). Required
+   * so the Cognito CustomEmailSender trigger can route auth emails through it.
+   * (BUG-188)
+   */
+  emailSenderLambdaArn?: string;
 };
