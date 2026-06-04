@@ -745,14 +745,33 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
     # kb_path is a folder prefix, not a destination filename.
     # Accept common aliases — in long conversations the model sometimes
     # hallucinates "destination", "folder", etc. instead of "path".
-    kb_path = (
-        params.get("path")
-        or params.get("destination")
-        or params.get("folder")
-        or params.get("folder_path")
-        or params.get("target_path")
-        or ""
+    # Required: the model must explicitly decide the destination on every
+    # upload. Passing "" or "/" means "upload to root"; anything else is
+    # treated as a subfolder. This prevents silent drift to root when the
+    # source file came from a subfolder earlier in the conversation.
+    # kb_path is included because it is the internal Lambda field name and
+    # the most intuitive guess — silently dropping it caused BUG-126.
+    path_aliases = (
+        "path",
+        "kb_path",
+        "destination",
+        "folder",
+        "folder_path",
+        "target_path",
     )
+    provided_alias = next((k for k in path_aliases if k in params), None)
+    if provided_alias is None:
+        return _err(
+            '\'path\' is required for kb_upload. Pass path="" (or path="/") '
+            'to upload to the folder root, or path="subfolder/" to upload '
+            "to a sub-path. If this file came from a sub-path earlier in the "
+            "conversation, the updated version should usually go back to the "
+            "same sub-path — re-check before defaulting to root."
+        )
+    kb_path = params.get(provided_alias) or ""
+    # Treat explicit "/" as root.
+    if kb_path == "/":
+        kb_path = ""
     # Strip the last segment if it looks like a filename (has a file extension)
     # but preserve folder names that happen to contain dots (e.g. "v2.7 reports/").
     if kb_path:

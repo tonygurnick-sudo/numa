@@ -1,0 +1,592 @@
+// Credits dashboard (Settings → Credits / Numa Credit System, SPK-015).
+// Brings the admin Credits view in line with the V2 design language used across the
+// app (see _v2_apps.scss, the scheduling table in _layout.scss, and .settings-card in
+// _chat_components.scss): 12px cards, neutral-gray text, soft borders + hover shadow,
+// Metropolis type, brand-primary accents. All classes are scoped under .credits-dashboard.
+
+@use '../abstracts/mixins' as *;
+
+// ─── Tokens (mirror the V2 app tokens) ──────────────────────────────────────
+$cr-border: #e4e4e7;
+$cr-border-strong: #d4d4d8;
+$cr-radius: 12px;
+$cr-radius-sm: 10px;
+$cr-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+$cr-text: #18181b;
+$cr-text-2: #3f3f46;
+$cr-muted: #71717a;
+$cr-muted-2: #9ca3af;
+$cr-bg-soft: #fafafa;
+$cr-bg-hover: #f4f4f5;
+$cr-row-border: #f1f1f3;
+
+$cr-ok: #22c55e;
+$cr-warn: #f59e0b;
+$cr-crit: #ef4444;
+
+$brand: var(--brand-primary, var(--color-primary));
+
+// ─── Root ────────────────────────────────────────────────────────────────────
+.credits-dashboard {
+  font-family: 'Metropolis Regular';
+  color: $cr-text-2;
+
+  .display-6 {
+    font-family: 'Metropolis Semi Bold';
+  }
+}
+
+// ─── Topbar (privacy note + live chip) ───────────────────────────────────────
+.credits-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.credits-privacy-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: $cr-muted;
+
+  i {
+    color: $cr-muted-2;
+  }
+}
+
+.credits-live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid $cr-border;
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: $cr-text-2;
+  white-space: nowrap;
+
+  &__dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: $cr-ok;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+    animation: credits-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes credits-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+// ─── Generic card ─────────────────────────────────────────────────────────────
+.credits-card {
+  background: #ffffff;
+  border: 1px solid $cr-border;
+  border-radius: $cr-radius;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+
+  &--hover:hover {
+    box-shadow: $cr-shadow-hover;
+    border-color: $cr-border-strong;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.875rem 1.125rem;
+    border-bottom: 1px solid $cr-border;
+
+    > i {
+      color: $brand;
+      font-size: 1rem;
+      line-height: 1;
+    }
+  }
+
+  &__title {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 0.9375rem;
+    font-weight: normal;
+    color: $cr-text;
+    margin: 0;
+  }
+
+  &__header-end {
+    margin-left: auto;
+  }
+
+  &__body {
+    padding: 1.125rem;
+    flex: 1 1 auto;
+
+    &--flush {
+      padding: 0;
+    }
+  }
+}
+
+// ─── Hero allocation meter ────────────────────────────────────────────────────
+.credits-hero {
+  background: #ffffff;
+  border: 1px solid $cr-border;
+  border-radius: $cr-radius;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  &__month {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: $cr-muted;
+  }
+
+  &__remaining {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  &__remaining-value {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 2.25rem;
+    line-height: 1.1;
+    color: $cr-text;
+  }
+
+  &__remaining-label {
+    font-size: 0.9375rem;
+    color: $cr-muted;
+  }
+
+  &__meter {
+    margin-top: 0.875rem;
+  }
+
+  &__meter-track {
+    position: relative;
+    height: 0.6rem;
+    border-radius: 999px;
+    background: #f1f1f3;
+    overflow: hidden;
+  }
+
+  &__meter-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    height: 100%;
+    border-radius: 999px;
+    background: $brand;
+    transition: width 0.4s ease;
+
+    &--ok {
+      background: $cr-ok;
+    }
+    &--warn {
+      background: $cr-warn;
+    }
+    &--crit {
+      background: $cr-crit;
+    }
+  }
+
+  &__meter-caption {
+    margin-top: 0.4rem;
+    font-size: 0.8125rem;
+    color: $cr-muted;
+  }
+
+  &__stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-top: 1.125rem;
+    padding-top: 1rem;
+    border-top: 1px solid $cr-border;
+
+    @include mobile {
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
+    }
+  }
+}
+
+.credits-stat {
+  &__label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $cr-muted-2;
+    margin-bottom: 0.15rem;
+  }
+
+  &__value {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 1.25rem;
+    line-height: 1.2;
+    color: $cr-text;
+
+    &--danger {
+      color: $cr-crit;
+    }
+  }
+
+  &__sub {
+    font-size: 0.75rem;
+    color: $cr-muted;
+  }
+}
+
+// ─── Top-5 ranked list ────────────────────────────────────────────────────────
+.credits-toplist {
+  display: flex;
+  flex-direction: column;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.125rem;
+    border-bottom: 1px solid $cr-row-border;
+    text-align: left;
+    background: transparent;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+    width: 100%;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &--action {
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+
+      &:hover {
+        background: $cr-bg-soft;
+      }
+    }
+  }
+
+  &__rank {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 7px;
+    background: #f3f4f6;
+    color: $cr-muted;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  &__main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__primary-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  &__primary {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 0.875rem;
+    color: $cr-text;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__secondary {
+    font-size: 0.75rem;
+    color: $cr-muted;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__bar {
+    margin-top: 0.4rem;
+    height: 0.3rem;
+    border-radius: 999px;
+    background: #f1f1f3;
+    overflow: hidden;
+  }
+
+  &__bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: $brand;
+    opacity: 0.85;
+  }
+
+  &__value {
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  &__value-num {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 0.875rem;
+    color: $cr-text;
+  }
+
+  &__value-unit {
+    font-size: 0.6875rem;
+    color: $cr-muted-2;
+  }
+}
+
+// Ghost icon button (copy ID) — used in lists + tables.
+.credits-copy-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  color: $cr-muted-2;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+
+  &:hover {
+    color: $cr-text-2;
+    background: $cr-bg-hover;
+  }
+}
+
+// ─── Value-tier pill ──────────────────────────────────────────────────────────
+.credits-tier {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+
+  &--low {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+  &--medium {
+    background: #eff6ff;
+    color: #2563eb;
+  }
+  &--high {
+    background: #f5eefa;
+    color: var(--brand-primary, #8e50a7);
+  }
+  &--very_high {
+    background: #fff7ed;
+    color: #c2410c;
+  }
+  &--unclassified {
+    background: #fafafa;
+    color: $cr-muted-2;
+    border-color: $cr-border;
+    border-style: dashed;
+  }
+}
+
+// ─── Tabs (underline / segmented) ─────────────────────────────────────────────
+.credits-tabs.nav-tabs {
+  border-bottom: 1px solid $cr-border;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+
+  .nav-link {
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: $cr-muted;
+    background: transparent;
+
+    &:hover {
+      color: $cr-text;
+      border-bottom-color: $cr-border-strong;
+    }
+
+    &.active {
+      color: $brand;
+      background: transparent;
+      border-bottom-color: $brand;
+    }
+  }
+}
+
+// ─── Data table (work delivered + drill) ──────────────────────────────────────
+.credits-table {
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-family: 'Metropolis Regular';
+
+  thead th {
+    background: $cr-bg-soft;
+    border-bottom: 1px solid $cr-border;
+    color: $cr-muted;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 0.75rem 1rem;
+    white-space: nowrap;
+  }
+
+  tbody td {
+    padding: 0.8rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid $cr-row-border;
+    color: $cr-text-2;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  tbody tr:hover td {
+    background: $cr-bg-soft;
+  }
+
+  &__title {
+    color: $cr-text;
+    font-family: 'Metropolis Semi Bold';
+  }
+
+  &__deliverables {
+    margin: 0.25rem 0 0;
+    padding-left: 1rem;
+    font-size: 0.8125rem;
+    color: $cr-muted;
+  }
+
+  &__meta {
+    font-size: 0.75rem;
+    color: $cr-muted;
+  }
+
+  &__num {
+    font-family: 'Metropolis Semi Bold';
+    color: $cr-text;
+  }
+
+  .text-muted,
+  small {
+    color: $cr-muted !important;
+  }
+
+  th:first-child,
+  td:first-child {
+    padding-left: 1.125rem;
+  }
+
+  th:last-child,
+  td:last-child {
+    padding-right: 1.125rem;
+  }
+}
+
+.credits-table-wrap {
+  overflow-x: auto;
+}
+
+// ─── Empty / lock / loading states ────────────────────────────────────────────
+.credits-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: $cr-muted;
+  padding: 2.5rem 1.25rem;
+
+  &__icon {
+    font-size: 1.75rem;
+    color: $cr-muted-2;
+    margin-bottom: 0.5rem;
+  }
+
+  &__title {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 1rem;
+    color: $cr-text;
+    margin-bottom: 0.25rem;
+  }
+
+  &__text {
+    font-size: 0.875rem;
+    color: $cr-muted;
+    max-width: 28rem;
+  }
+}
+
+// ─── Drill modal privacy strip ─────────────────────────────────────────────────
+.credits-drill-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 1.125rem;
+  border-bottom: 1px solid $cr-border;
+  background: $cr-bg-soft;
+  font-size: 0.8125rem;
+  color: $cr-muted;
+
+  i {
+    color: $cr-muted-2;
+  }
+}

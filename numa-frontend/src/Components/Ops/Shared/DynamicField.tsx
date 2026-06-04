@@ -12,6 +12,7 @@ import type {
   Project,
 } from '../../../types/ops';
 import { SidebarDropdown, type DropdownOption } from './SidebarDropdown';
+import { getEffectiveField, isFieldRequired, isFieldVisible } from './fieldResolution';
 
 interface DynamicFieldProps {
   field: FieldDefinition;
@@ -20,6 +21,12 @@ interface DynamicFieldProps {
   readOnly?: boolean;
   compact?: boolean;
   fieldOverride?: FieldOverride;
+  /**
+   * Snapshot of all field values on the ticket — used to evaluate
+   * conditional rules (Phase 4.1). When provided, the field hides itself
+   * automatically if its rules say so, and reports `required` accordingly.
+   */
+  ticketValues?: Record<string, unknown>;
   staff?: StaffProfile[];
   customers?: Customer[];
   suppliers?: Supplier[];
@@ -60,6 +67,7 @@ export function DynamicField({
   readOnly = false,
   compact = false,
   fieldOverride,
+  ticketValues,
   staff,
   customers,
   suppliers,
@@ -81,22 +89,32 @@ export function DynamicField({
     }
   };
 
-  if (fieldOverride?.visible === false) {
+  // Conditional visibility / required — evaluated against the current
+  // ticketValues snapshot. When no snapshot is passed, fall back to static
+  // override / field-def visibility so callers that haven't opted in keep
+  // their current behaviour.
+  const values = ticketValues ?? {};
+  if (!isFieldVisible(field, fieldOverride, values)) {
     return null;
   }
-
-  const isRequired = fieldOverride?.required === true;
+  // Merge the board's per-field override into the global definition so the
+  // rendered label / select options reflect any per-board customisation
+  // (e.g. renaming "Priority" → "Severity" or adding a custom option). The
+  // effective field is the single source of truth from here on; downstream
+  // render helpers receive it instead of the raw global field.
+  const effective = getEffectiveField(field, fieldOverride);
+  const isRequired = isFieldRequired(field, fieldOverride, values);
   const compactStyle: React.CSSProperties = compact ? { fontSize: '0.85rem', padding: '0.2rem 0.4rem' } : {};
 
   const label = hideLabel ? null : (
     <Form.Label className="mb-1" style={compact ? { fontSize: '0.85rem' } : {}}>
-      {field.name}
+      {effective.name}
       {isRequired && <span className="text-danger ms-1">*</span>}
     </Form.Label>
   );
 
   if (readOnly) {
-    const displayValue = renderReadOnlyValue(field, value, staff, t);
+    const displayValue = renderReadOnlyValue(effective, value, staff, t);
     return (
       <Form.Group className="mb-2">
         {label}
@@ -109,7 +127,7 @@ export function DynamicField({
     <Form.Group className="mb-2">
       {label}
       {renderEditControl(
-        field,
+        effective,
         value,
         localValue,
         onChange,

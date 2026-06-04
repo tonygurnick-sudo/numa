@@ -357,6 +357,17 @@ export interface WorkspaceChatMessage {
   cacheCreationTokens?: number;
   durationMs?: number;
   /**
+   * Snapshot tokens for the LAST API call in the agentic loop (vs. the
+   * cumulative-across-sub-turns values above, which the SDK's ResultMessage
+   * reports for billing). These come from `message_start` / `message_delta`
+   * stream events and represent the actual context window state of one call -
+   * always ≤ the model's hard window. Used by the chat-health donut.
+   */
+  snapshotInputTokens?: number;
+  snapshotOutputTokens?: number;
+  snapshotCacheReadTokens?: number;
+  snapshotCacheCreationTokens?: number;
+  /**
    * Set when this assistant turn ended with one or more `run_in_background`
    * bash shells still alive in the MicroVM. The UI renders a subtle italic
    * footer beneath the message ("Numa finished while N background tasks are

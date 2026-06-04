@@ -17,7 +17,8 @@ import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { Ticket, WorkStage, StaffProfile } from '../../../types/ops';
+import type { Ticket, WorkStage } from '../../../types/ops';
+import { resolveBoardMembers } from '../Shared/boardMembers';
 import KanbanZone from './KanbanZone';
 import SprintBoardBar from './SprintBoardBar';
 import BoardToolbar from './BoardToolbar';
@@ -150,15 +151,7 @@ const BoardView = () => {
   const hasWorkUnitSeries = Boolean(team?.workUnitSeries?.enabled);
 
   // ── Board members for toolbar avatar filter ──
-  const boardMembers = useMemo(() => {
-    if (!config?.staff || !team) return [];
-    const isAll = team.accessControl?.mode !== 'specific';
-    const memberIdSet = new Set(
-      isAll ? config.staff.filter((s) => s.isActive).map((s) => s.id) : (team.accessControl?.users ?? [])
-    );
-    if (team.createdBy) memberIdSet.add(team.createdBy);
-    return [...memberIdSet].map((id) => config.staff.find((s) => s.id === id)).filter(Boolean) as StaffProfile[];
-  }, [config?.staff, team]);
+  const boardMembers = useMemo(() => resolveBoardMembers(team, config?.staff), [config?.staff, team]);
 
   const toggleAssignee = useCallback((id: string) => {
     setAssigneeFilter((prev) => {

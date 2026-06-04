@@ -57,15 +57,14 @@ def test_build_rows_charge_is_max_of_value_and_floor() -> None:
         margin=2.0,
         credit_usd=0.5,
         value_tier="high",
-        category="code_build",
         context="chat",
         source="chat",
     )
     assert meta["PK"] == "CONV#c1" and meta["SK"] == "META"
     assert meta["GSI2PK"] == "MONTH#2026-06"
-    assert meta["creditsValue"] == 12  # high, chat context
-    assert meta["creditsCharged"] == max(12, meta["creditsFloor"])
-    assert meta["category"] == "code_build"
+    assert meta["creditsValue"] == 8  # high, chat context (Scheme A)
+    assert meta["creditsCharged"] == max(8, meta["creditsFloor"])
+    assert "category" not in meta  # category removed from the live ledger row
     assert len(msgs) == 1 and msgs[0]["SK"].startswith("MSG#")
     assert "content" not in msgs[0] and "text" not in msgs[0]  # privacy
 
@@ -126,8 +125,12 @@ def test_floor_is_single_ceil_on_total_not_per_message_sum() -> None:
         credit_usd=0.5,
         value_tier="low",
         context="chat",
+        agentcore_mult=1.0,  # isolate the single-ceil property from the AgentCore uplift
     )
-    assert meta["creditsFloor"] == floor_credits(meta["consumptionCostUsd"])
+    # built with credit_usd=0.5 + agentcore_mult=1.0, so compare against the same (not the new default)
+    assert meta["creditsFloor"] == floor_credits(
+        meta["consumptionCostUsd"], credit_usd=0.5
+    )
     assert meta["creditsFloor"] < 10  # not the per-message sum of 10 ceils
 
 
@@ -169,7 +172,9 @@ def test_trivial_cost_caps_value_tier_to_low() -> None:
         value_tier="very_high",
         context="chat",
     )
-    assert meta["dominantTier"] == "low" and meta["creditsValue"] == 2
+    assert (
+        meta["dominantTier"] == "low" and meta["creditsValue"] == 2
+    )  # low chat = 2 (2-credit floor)
 
 
 def test_cache_creation_split_priced_per_tier() -> None:
@@ -255,6 +260,7 @@ def test_per_tier_margin_lifts_floor() -> None:
         credit_usd=0.5,
         value_tier="very_high",
         context="chat",
+        agentcore_mult=1.0,
     )
     hi, _ = processing.build_conversation_rows(
         conversation_id="c",
@@ -268,9 +274,100 @@ def test_per_tier_margin_lifts_floor() -> None:
         value_tier="very_high",
         context="chat",
         margins={"very_high": 4.0},
+        agentcore_mult=1.0,
     )
     assert base["creditsFloor"] == 4  # ceil($1.00 * 2 / $0.50)
     assert hi["creditsFloor"] == 8  # ceil($1.00 * 4 / $0.50) — per-tier 4x
+
+
+def test_agentcore_uplift_in_floor_is_default() -> None:
+    """The floor is enforced over tokens + AgentCore (default 1.234x), and the recorded margin
+    reflects tokens + AgentCore — not tokens alone."""
+    from credit_pricing.credits import AGENTCORE_MULT, floor_credits
+    from credit_pricing.processing import TurnCost
+
+    turns = [
+        TurnCost(0, "m0", "anthropic.claude-sonnet-4-6", 0, 0, 0, 0, 1.0)
+    ]  # $1.00 token cost
+    meta, _ = processing.build_conversation_rows(
+        conversation_id="c",
+        user_sub="u",
+        month="2026-06",
+        last_ts=None,
+        turns=turns,
+        title="x",
+        margin=2.0,
+        credit_usd=0.5,
+        value_tier="low",
+        context="chat",
+    )
+    # floor basis = $1.00 x 1.234; floor = ceil(1.234 * 2 / 0.5) = ceil(4.936) = 5
+    assert (
+        meta["creditsFloor"]
+        == floor_credits(1.0 * AGENTCORE_MULT, margin=2.0, credit_usd=0.5)
+        == 5
+    )
+    assert abs(meta["agentCoreCostUsd"] - 0.234) < 1e-6  # recorded uplift
+    charged = meta["creditsCharged"]  # max(value low=2, floor 5) = 5
+    assert charged == 5
+    # margin measured against tokens + AgentCore, and >= the 2x target (ceil rounds it slightly up)
+    assert (
+        abs(meta["marginVsConsumption"] - (charged * 0.5) / (1.0 * AGENTCORE_MULT))
+        < 1e-6
+    )
+    assert meta["marginVsConsumption"] >= 2.0
+
+
+def test_extract_tools_and_value_signal() -> None:
+    events = [
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "tool_use", "name": "gmail_send"},
+                    {"type": "text", "text": "ok"},
+                ]
+            },
+        },
+        {"type": "user", "message": {"content": [{"type": "text", "text": "hi"}]}},
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "tool_use", "name": "slack_post"},
+                    {"type": "tool_use", "name": "gmail_send"},  # dup -> deduped
+                ]
+            },
+        },
+    ]
+    tools = processing.extract_tools(events)
+    assert tools == ["gmail_send", "slack_post"]  # first-seen order, deduped
+    sig = processing.tools_value_signal(tools)
+    assert "gmail_send" in sig and "slack_post" in sig and "(2)" in sig
+    assert processing.tools_value_signal([]) == ""  # no tools -> no signal block
+
+
+def test_agent_id_flows_to_meta() -> None:
+    turns, _, _, _ = processing.process_trace_events(iter(EVENTS), cache_ttl="1h")
+    common = dict(
+        conversation_id="c1",
+        user_sub="u1",
+        month="2026-06",
+        last_ts="2026-06-01T00:00:00Z",
+        turns=turns,
+        title="x",
+        margin=2.0,
+        credit_usd=0.3,
+        value_tier="medium",
+    )
+    meta, _ = processing.build_conversation_rows(
+        **common, context="agent", source="agent", agent_id="agt-123"
+    )
+    assert meta["agentId"] == "agt-123"  # stored on agent runs for the name join
+    meta2, _ = processing.build_conversation_rows(
+        **common, context="chat", source="chat"
+    )
+    assert "agentId" not in meta2  # omitted for plain chat
 
 
 if __name__ == "__main__":
@@ -282,4 +379,7 @@ if __name__ == "__main__":
     test_cache_creation_split_priced_per_tier()
     test_long_context_tier_premium()
     test_per_tier_margin_lifts_floor()
+    test_agentcore_uplift_in_floor_is_default()
+    test_extract_tools_and_value_signal()
+    test_agent_id_flows_to_meta()
     print("processing tests OK")

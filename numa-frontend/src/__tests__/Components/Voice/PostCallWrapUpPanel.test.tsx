@@ -52,3 +52,21 @@ describe('PostCallWrapUpPanel — prospect_phone guard', () => {
     expect(screen.queryByText(/cannot be matched to a prospect/i)).not.toBeInTheDocument();
   });
 });
+
+describe('PostCallWrapUpPanel — recording-consent attestation (audit)', () => {
+  it('shows a recording-disclosure attestation, checked by default, that can be toggled', () => {
+    render(<PostCallWrapUpPanel />);
+    fireAcw({
+      phase: 'acw',
+      contactId: 'c3',
+      prospect: { company_name: 'Kauri', phone: '+6421677460', industry: 'Healthcare' },
+    });
+    const checkbox = screen.getByRole('checkbox', { name: /told the prospect this call was being recorded/i });
+    expect(checkbox).toBeInTheDocument();
+    expect(checkbox).toBeChecked();
+    act(() => {
+      fireEvent.click(checkbox);
+    });
+    expect(checkbox).not.toBeChecked();
+  });
+});

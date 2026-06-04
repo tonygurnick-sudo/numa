@@ -12,7 +12,12 @@ import { DynamicField } from '../Shared/DynamicField';
 import { SidebarDropdown } from '../Shared/SidebarDropdown';
 import type { DropdownOption } from '../Shared/SidebarDropdown';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
-import { getPriorityColor } from '../Shared/colorUtils';
+import {
+  getFieldOptionColor,
+  isCanonicalPriority,
+  resolveBoardFieldList,
+  resolveFieldOptions,
+} from '../Shared/fieldResolution';
 import type {
   Ticket,
   TicketType,
@@ -24,6 +29,7 @@ import type {
 } from '../../../types/ops';
 import { getTicketTypeIconClass, getPreset } from '../../../constants/opsConstants';
 import { StaffAvatar } from '../Shared/StaffAvatar';
+import { resolveBoardMembers } from '../Shared/boardMembers';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -46,33 +52,18 @@ interface CreateTicketModalProps {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 /**
- * Field IDs handled as first-class ticket properties — excluded from the
- * dynamic fields grid to prevent duplication. The title input handles
- * field-name; the description textarea handles field-description.
+ * Field IDs rendered outside the right sidebar entirely (title input handles
+ * field-name in the header; description textarea handles field-description in
+ * the left panel; field-watchers isn't implemented). Everything else goes
+ * through the ordered sidebar loop so Board Settings reordering takes effect.
  */
-const SYSTEM_FIELD_IDS = new Set([
-  'field-name',
-  'field-description',
-  'field-priority',
-  'field-assignee',
-  'field-reporter',
-  'field-due-date',
-  'field-project',
-  'field-client',
-  'field-supplier',
-  'field-labels',
-  'field-watchers',
-  'field-work-unit-id',
-  'field-effort-points',
-]);
+const RENDERED_ELSEWHERE = new Set(['field-name', 'field-description', 'field-watchers']);
 
 /**
  * Field IDs that map directly to top-level ticket payload properties.
  * Their values are extracted from customFields and mapped at submit time
  * rather than being sent inside the `fields` object.
  */
-const PRIORITY_OPTIONS: TicketPriority[] = ['highest', 'high', 'medium', 'low', 'lowest'];
-
 const TICKET_PROP_FIELD_IDS = new Set([
   'field-name',
   'field-description',
@@ -222,26 +213,51 @@ export function CreateTicketModal({
   );
 
   /**
+   * Resolved priority options for this board. If the board's priority field
+   * override defines custom options (e.g. Ian adds "Tom"), use those. Otherwise
+   * fall back to the canonical TicketPriority enum so existing boards keep
+   * their familiar list.
+   */
+  const priorityOptions = useMemo(
+    () => resolveFieldOptions(config?.fields, fieldOverrides, 'field-priority'),
+    [config?.fields, fieldOverrides]
+  );
+
+  /**
    * Dynamic fields for the right panel: ticket type's defaultFields minus
    * system fields (name, description) which are rendered separately on left.
    * Filtered by team field overrides.
    */
   const hasWorkUnits = boardData?.board?.workUnitSeries?.enabled === true;
 
+  // Staff scoped to the current board's membership — used for the Assignee picker.
+  const boardMembers = useMemo(
+    () => resolveBoardMembers(boardData?.board, config?.staff),
+    [boardData?.board, config?.staff]
+  );
+
   const dynamicFields: FieldDefinition[] = useMemo(() => {
     if (!selectedType || !config) return [];
-    // Hide sprint & effort fields when work units are not enabled (same as detail modal)
-    const hiddenWhenNoWorkUnits = new Set(hasWorkUnits ? [] : ['field-work-unit-id', 'field-effort-points']);
-    return selectedType.defaultFields
+    // Hide sprint when the board doesn't have work units enabled.
+    const hiddenWhenNoWorkUnits = new Set(hasWorkUnits ? [] : ['field-work-unit-id']);
+    // The board owns its effective list — falls back to template defaults
+    // when the board has never touched this ticket type. resolveBoardFieldList
+    // handles both the post-FEAT-171 complete-snapshot shape and the legacy
+    // "extras on top of defaults" shape transparently. The list IS the order:
+    // we no longer consult `fieldOverrides[].order`, since the editor and the
+    // sidebar would otherwise drift apart on legacy boards where the old
+    // reorder handler wrote `.order` values that the new editor doesn't.
+    const ids = resolveBoardFieldList(selectedType, boardData?.board?.addedFields);
+    return ids
       .map((fId) => config.fields.find((f) => f.id === fId))
       .filter((f): f is FieldDefinition => {
         if (!f) return false;
-        if (SYSTEM_FIELD_IDS.has(f.id)) return false;
+        if (RENDERED_ELSEWHERE.has(f.id)) return false;
         if (hiddenWhenNoWorkUnits.has(f.id)) return false;
         if (fieldOverrides[f.id]?.visible === false) return false;
         return true;
       });
-  }, [selectedType, config, fieldOverrides, hasWorkUnits]);
+  }, [selectedType, config, fieldOverrides, hasWorkUnits, boardData?.board?.addedFields]);
 
   // ── Reset on open / close ─────────────────────────────────────────────────
 
@@ -369,8 +385,15 @@ export function CreateTicketModal({
         }
       }
 
-      // Extract known field IDs into their canonical ticket properties
-      const cfPriority = customFields['field-priority'] as TicketPriority | undefined;
+      // Extract known field IDs into their canonical ticket properties.
+      // Priority is dual-tracked: canonical values (highest/high/medium/low/lowest)
+      // go on the enum `priority` column; board-defined custom values (e.g. Ian's
+      // "Tom") go in `fields['field-priority']` so the dropdown can re-render them.
+      const rawPriority = customFields['field-priority'] as string | undefined;
+      const cfPriority: TicketPriority = isCanonicalPriority(rawPriority) ? rawPriority : 'medium';
+      if (rawPriority && !isCanonicalPriority(rawPriority)) {
+        remainingFields['field-priority'] = rawPriority;
+      }
       const cfAssigneeId = customFields['field-assignee'] ? String(customFields['field-assignee']) : null;
       const currentUserSub = user?.decoded_tokens?.idToken?.sub ?? null;
       const cfReporterId = customFields['field-reporter'] ? String(customFields['field-reporter']) : currentUserSub;
@@ -389,7 +412,7 @@ export function CreateTicketModal({
         ticketTypeId: selectedTypeId,
         title: title.trim(),
         description: description.trim() || undefined,
-        priority: cfPriority || 'medium',
+        priority: cfPriority,
         zoneId: zoneId || undefined,
         stageId: stageId || undefined,
         assigneeId: cfAssigneeId,
@@ -838,301 +861,333 @@ export function CreateTicketModal({
                 </div>
 
                 <div style={{ padding: '0 14px 10px' }}>
-                  {/* Priority */}
-                  <div className="ticket-sidebar-field">
-                    <div className="ticket-sidebar-field-label">{t('tickets.priority')}</div>
-                    <SidebarDropdown
-                      value={(customFields['field-priority'] as string) || 'medium'}
-                      onChange={(val) => setFieldValue('field-priority', val)}
-                      options={PRIORITY_OPTIONS.map((p) => ({
-                        value: p,
-                        label: t(`priority.${p}`),
-                        icon: (
-                          <span
-                            style={{
-                              width: 12,
-                              height: 12,
-                              borderRadius: '50%',
-                              backgroundColor: getPriorityColor(p),
-                              display: 'inline-block',
-                              flexShrink: 0,
-                            }}
+                  {/* Every field renders in the order set in Board Settings —
+                      system fields get their rich UI; anything else falls
+                      through to DynamicField. The label always comes from the
+                      field's own `name` (with board override.label taking
+                      precedence) so the modal matches Board Settings exactly. */}
+                  {dynamicFields.map((field) => {
+                    const override = fieldOverrides[field.id];
+                    const label = override?.label?.trim() || field.name;
+                    switch (field.id) {
+                      case 'field-priority':
+                        return (
+                          <div key={field.id} className="ticket-sidebar-field">
+                            <div className="ticket-sidebar-field-label">{label}</div>
+                            <SidebarDropdown
+                              value={(customFields['field-priority'] as string) || 'medium'}
+                              onChange={(val) => setFieldValue('field-priority', val)}
+                              options={priorityOptions.map((p) => ({
+                                value: p,
+                                label: isCanonicalPriority(p) ? t(`priority.${p}`) : p,
+                                icon: (
+                                  <span
+                                    style={{
+                                      width: 12,
+                                      height: 12,
+                                      borderRadius: '50%',
+                                      backgroundColor: getFieldOptionColor('field-priority', p),
+                                      display: 'inline-block',
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                ),
+                              }))}
+                              renderValue={(opt) => {
+                                const currentRaw = (customFields['field-priority'] as string) || 'medium';
+                                return (
+                                  <>
+                                    {isCanonicalPriority(currentRaw) ? (
+                                      <PriorityIndicator priority={currentRaw} />
+                                    ) : (
+                                      <span
+                                        style={{
+                                          width: 12,
+                                          height: 12,
+                                          borderRadius: '50%',
+                                          backgroundColor: getFieldOptionColor('field-priority', currentRaw),
+                                          display: 'inline-block',
+                                          flexShrink: 0,
+                                        }}
+                                      />
+                                    )}
+                                    <span>{opt?.label ?? currentRaw}</span>
+                                  </>
+                                );
+                              }}
+                            />
+                          </div>
+                        );
+                      case 'field-assignee':
+                        return (
+                          <div key={field.id} className="ticket-sidebar-field">
+                            <div className="ticket-sidebar-field-label">{label}</div>
+                            <SidebarDropdown
+                              value={(customFields['field-assignee'] as string) || ''}
+                              onChange={(val) => setFieldValue('field-assignee', val || null)}
+                              options={[
+                                { value: '', label: t('fields.unassigned') },
+                                ...boardMembers
+                                  .filter((s) => s.isActive)
+                                  .map(
+                                    (s): DropdownOption => ({
+                                      value: s.id,
+                                      label: s.name || s.email,
+                                      icon: <StaffAvatar staff={s} size={22} />,
+                                    })
+                                  ),
+                              ]}
+                              renderValue={() => {
+                                const assignee = customFields['field-assignee']
+                                  ? (config?.staff ?? []).find((s) => s.id === customFields['field-assignee'])
+                                  : undefined;
+                                return (
+                                  <>
+                                    <StaffAvatar staff={assignee} size={28} />
+                                    <span
+                                      className={!customFields['field-assignee'] ? 'sidebar-dropdown-placeholder' : ''}
+                                    >
+                                      {assignee?.name || assignee?.email || t('fields.unassigned')}
+                                    </span>
+                                  </>
+                                );
+                              }}
+                            />
+                          </div>
+                        );
+                      case 'field-reporter':
+                        return (
+                          <div key={field.id} className="ticket-sidebar-field">
+                            <div className="ticket-sidebar-field-label">{label}</div>
+                            <SidebarDropdown
+                              value={(customFields['field-reporter'] as string) || ''}
+                              onChange={(val) => setFieldValue('field-reporter', val || null)}
+                              options={[
+                                { value: '', label: t('fields.unassigned') },
+                                ...(config?.staff ?? [])
+                                  .filter((s) => s.isActive)
+                                  .map(
+                                    (s): DropdownOption => ({
+                                      value: s.id,
+                                      label: s.name || s.email,
+                                      icon: <StaffAvatar staff={s} size={22} />,
+                                    })
+                                  ),
+                              ]}
+                              renderValue={() => {
+                                const reporter = customFields['field-reporter']
+                                  ? (config?.staff ?? []).find((s) => s.id === customFields['field-reporter'])
+                                  : undefined;
+                                return (
+                                  <>
+                                    <StaffAvatar staff={reporter} size={28} />
+                                    <span
+                                      className={!customFields['field-reporter'] ? 'sidebar-dropdown-placeholder' : ''}
+                                    >
+                                      {reporter?.name || reporter?.email || t('fields.unassigned')}
+                                    </span>
+                                  </>
+                                );
+                              }}
+                            />
+                          </div>
+                        );
+                      case 'field-due-date':
+                        return (
+                          <div key={field.id} className="ticket-sidebar-field">
+                            <div className="ticket-sidebar-field-label">{label}</div>
+                            <Form.Control
+                              type="date"
+                              size="sm"
+                              value={(customFields['field-due-date'] as string) || ''}
+                              onChange={(e) => setFieldValue('field-due-date', e.target.value || null)}
+                            />
+                          </div>
+                        );
+                      case 'field-project':
+                        return (
+                          <div key={field.id} className="ticket-sidebar-field">
+                            <div className="ticket-sidebar-field-label">{label}</div>
+                            <SidebarDropdown
+                              value={(customFields['field-project'] as string) || ''}
+                              onChange={(val) => setFieldValue('field-project', val || null)}
+                              options={[
+                                { value: '', label: t('common.none') },
+                                ...(config?.projects ?? [])
+                                  .filter(
+                                    (p) =>
+                                      p.isActive &&
+                                      (!p.boardIds?.length || p.boardIds.includes(boardData?.board?.id ?? ''))
+                                  )
+                                  .map(
+                                    (p): DropdownOption => ({
+                                      value: p.id,
+                                      label: p.name,
+                                      icon: (
+                                        <i
+                                          className="bi bi-folder"
+                                          style={{ fontSize: '0.78rem', color: p.color || '#6d28d9' }}
+                                        />
+                                      ),
+                                    })
+                                  ),
+                              ]}
+                              renderValue={(opt) => {
+                                if (!opt?.value)
+                                  return <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>;
+                                const proj = (config?.projects ?? []).find((p) => p.id === opt.value);
+                                const pColor = proj?.color || '#6d28d9';
+                                return (
+                                  <span
+                                    className="ticket-badge ticket-badge-project"
+                                    style={{
+                                      margin: 0,
+                                      backgroundColor: `${pColor}18`,
+                                      color: pColor,
+                                      borderColor: `${pColor}30`,
+                                    }}
+                                  >
+                                    <i className="bi bi-folder me-1" />
+                                    {opt.label}
+                                  </span>
+                                );
+                              }}
+                            />
+                          </div>
+                        );
+                      case 'field-client':
+                        return (
+                          <div key={field.id} className="ticket-sidebar-field">
+                            <div className="ticket-sidebar-field-label">{label}</div>
+                            <SidebarDropdown
+                              value={(customFields['field-client'] as string) || ''}
+                              onChange={(val) => setFieldValue('field-client', val || null)}
+                              disabled={!!prefilledCustomerId}
+                              options={[
+                                { value: '', label: t('common.none') },
+                                ...customers.map(
+                                  (c): DropdownOption => ({
+                                    value: c.id,
+                                    label: c.companyName,
+                                    icon: (
+                                      <i className="bi bi-building" style={{ fontSize: '0.78rem', color: '#1d4ed8' }} />
+                                    ),
+                                  })
+                                ),
+                              ]}
+                              renderValue={(opt) =>
+                                opt?.value ? (
+                                  <span className="ticket-badge ticket-badge-customer" style={{ margin: 0 }}>
+                                    <i className="bi bi-building me-1" />
+                                    {opt.label}
+                                  </span>
+                                ) : (
+                                  <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                                )
+                              }
+                            />
+                          </div>
+                        );
+                      case 'field-supplier':
+                        return (
+                          <div key={field.id} className="ticket-sidebar-field">
+                            <div className="ticket-sidebar-field-label">{label}</div>
+                            <SidebarDropdown
+                              value={(customFields['field-supplier'] as string) || ''}
+                              onChange={(val) => setFieldValue('field-supplier', val || null)}
+                              disabled={!!prefilledSupplierId}
+                              options={[
+                                { value: '', label: t('common.none') },
+                                ...suppliers.map(
+                                  (s): DropdownOption => ({
+                                    value: s.id,
+                                    label: s.companyName,
+                                    icon: (
+                                      <i className="bi bi-truck" style={{ fontSize: '0.78rem', color: '#c2410c' }} />
+                                    ),
+                                  })
+                                ),
+                              ]}
+                              renderValue={(opt) =>
+                                opt?.value ? (
+                                  <span className="ticket-badge ticket-badge-supplier" style={{ margin: 0 }}>
+                                    <i className="bi bi-truck me-1" />
+                                    {opt.label}
+                                  </span>
+                                ) : (
+                                  <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                                )
+                              }
+                            />
+                          </div>
+                        );
+                      case 'field-work-unit-id':
+                        return (
+                          <div key={field.id} className="ticket-sidebar-field">
+                            <div className="ticket-sidebar-field-label">{label}</div>
+                            <SidebarDropdown
+                              value={(customFields['field-work-unit-id'] as string) || ''}
+                              onChange={(val) => setFieldValue('field-work-unit-id', val || null)}
+                              options={[
+                                { value: '', label: t('common.none') },
+                                ...workUnits.map(
+                                  (wu): DropdownOption => ({
+                                    value: wu.id,
+                                    label: wu.name,
+                                    icon: (
+                                      <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />
+                                    ),
+                                  })
+                                ),
+                              ]}
+                              renderValue={(opt) =>
+                                opt?.value ? (
+                                  <span className="ticket-badge ticket-badge-sprint" style={{ margin: 0 }}>
+                                    <i
+                                      className="bi bi-circle-fill me-1"
+                                      style={{ fontSize: '0.28rem', verticalAlign: 'middle' }}
+                                    />
+                                    {opt.label}
+                                  </span>
+                                ) : (
+                                  <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                                )
+                              }
+                            />
+                          </div>
+                        );
+                      case 'field-labels':
+                        return (
+                          <div key={field.id} className="ticket-sidebar-field">
+                            <div className="ticket-sidebar-field-label">{label}</div>
+                            <Form.Control
+                              size="sm"
+                              type="text"
+                              value={tagsInput}
+                              onChange={(e) => setTagsInput(e.target.value)}
+                              placeholder={t('tickets.tagsHelp')}
+                            />
+                          </div>
+                        );
+                      default:
+                        return (
+                          <DynamicField
+                            key={field.id}
+                            field={field}
+                            value={customFields[field.id] ?? field.defaultValue ?? null}
+                            onChange={(val) => setFieldValue(field.id, val)}
+                            fieldOverride={fieldOverrides[field.id]}
+                            ticketValues={customFields}
+                            compact
+                            staff={config?.staff}
+                            customers={customers}
+                            suppliers={suppliers}
+                            workUnits={workUnits}
+                            projects={config?.projects}
                           />
-                        ),
-                      }))}
-                      renderValue={(opt) => (
-                        <>
-                          <PriorityIndicator
-                            priority={((customFields['field-priority'] as string) || 'medium') as TicketPriority}
-                          />
-                          <span>{opt?.label ?? t('tickets.priority')}</span>
-                        </>
-                      )}
-                    />
-                  </div>
-
-                  {/* Assignee */}
-                  <div className="ticket-sidebar-field">
-                    <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
-                    <SidebarDropdown
-                      value={(customFields['field-assignee'] as string) || ''}
-                      onChange={(val) => setFieldValue('field-assignee', val || null)}
-                      options={[
-                        { value: '', label: t('fields.unassigned') },
-                        ...(config?.staff ?? [])
-                          .filter((s) => s.isActive)
-                          .map(
-                            (s): DropdownOption => ({
-                              value: s.id,
-                              label: s.name || s.email,
-                              icon: <StaffAvatar staff={s} size={22} />,
-                            })
-                          ),
-                      ]}
-                      renderValue={() => {
-                        const assignee = customFields['field-assignee']
-                          ? (config?.staff ?? []).find((s) => s.id === customFields['field-assignee'])
-                          : undefined;
-                        return (
-                          <>
-                            <StaffAvatar staff={assignee} size={28} />
-                            <span className={!customFields['field-assignee'] ? 'sidebar-dropdown-placeholder' : ''}>
-                              {assignee?.name || assignee?.email || t('fields.unassigned')}
-                            </span>
-                          </>
                         );
-                      }}
-                    />
-                  </div>
-
-                  {/* Reporter */}
-                  <div className="ticket-sidebar-field">
-                    <div className="ticket-sidebar-field-label">{t('tickets.reporter')}</div>
-                    <SidebarDropdown
-                      value={(customFields['field-reporter'] as string) || ''}
-                      onChange={(val) => setFieldValue('field-reporter', val || null)}
-                      options={[
-                        { value: '', label: t('fields.unassigned') },
-                        ...(config?.staff ?? [])
-                          .filter((s) => s.isActive)
-                          .map(
-                            (s): DropdownOption => ({
-                              value: s.id,
-                              label: s.name || s.email,
-                              icon: <StaffAvatar staff={s} size={22} />,
-                            })
-                          ),
-                      ]}
-                      renderValue={() => {
-                        const reporter = customFields['field-reporter']
-                          ? (config?.staff ?? []).find((s) => s.id === customFields['field-reporter'])
-                          : undefined;
-                        return (
-                          <>
-                            <StaffAvatar staff={reporter} size={28} />
-                            <span className={!customFields['field-reporter'] ? 'sidebar-dropdown-placeholder' : ''}>
-                              {reporter?.name || reporter?.email || t('fields.unassigned')}
-                            </span>
-                          </>
-                        );
-                      }}
-                    />
-                  </div>
-
-                  {/* Due Date */}
-                  <div className="ticket-sidebar-field">
-                    <div className="ticket-sidebar-field-label">{t('tickets.dueDate')}</div>
-                    <Form.Control
-                      type="date"
-                      size="sm"
-                      value={(customFields['field-due-date'] as string) || ''}
-                      onChange={(e) => setFieldValue('field-due-date', e.target.value || null)}
-                    />
-                  </div>
-
-                  {/* Project */}
-                  <div className="ticket-sidebar-field">
-                    <div className="ticket-sidebar-field-label">{t('tickets.project')}</div>
-                    <SidebarDropdown
-                      value={(customFields['field-project'] as string) || ''}
-                      onChange={(val) => setFieldValue('field-project', val || null)}
-                      options={[
-                        { value: '', label: t('common.none') },
-                        ...(config?.projects ?? [])
-                          .filter(
-                            (p) =>
-                              p.isActive && (!p.boardIds?.length || p.boardIds.includes(boardData?.board?.id ?? ''))
-                          )
-                          .map(
-                            (p): DropdownOption => ({
-                              value: p.id,
-                              label: p.name,
-                              icon: (
-                                <i
-                                  className="bi bi-folder"
-                                  style={{ fontSize: '0.78rem', color: p.color || '#6d28d9' }}
-                                />
-                              ),
-                            })
-                          ),
-                      ]}
-                      renderValue={(opt) => {
-                        if (!opt?.value)
-                          return <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>;
-                        const proj = (config?.projects ?? []).find((p) => p.id === opt.value);
-                        const pColor = proj?.color || '#6d28d9';
-                        return (
-                          <span
-                            className="ticket-badge ticket-badge-project"
-                            style={{
-                              margin: 0,
-                              backgroundColor: `${pColor}18`,
-                              color: pColor,
-                              borderColor: `${pColor}30`,
-                            }}
-                          >
-                            <i className="bi bi-folder me-1" />
-                            {opt.label}
-                          </span>
-                        );
-                      }}
-                    />
-                  </div>
-
-                  {/* Customer */}
-                  <div className="ticket-sidebar-field">
-                    <div className="ticket-sidebar-field-label">{t('tickets.customer')}</div>
-                    <SidebarDropdown
-                      value={(customFields['field-client'] as string) || ''}
-                      onChange={(val) => setFieldValue('field-client', val || null)}
-                      disabled={!!prefilledCustomerId}
-                      options={[
-                        { value: '', label: t('common.none') },
-                        ...customers.map(
-                          (c): DropdownOption => ({
-                            value: c.id,
-                            label: c.companyName,
-                            icon: <i className="bi bi-building" style={{ fontSize: '0.78rem', color: '#1d4ed8' }} />,
-                          })
-                        ),
-                      ]}
-                      renderValue={(opt) =>
-                        opt?.value ? (
-                          <span className="ticket-badge ticket-badge-customer" style={{ margin: 0 }}>
-                            <i className="bi bi-building me-1" />
-                            {opt.label}
-                          </span>
-                        ) : (
-                          <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
-                        )
-                      }
-                    />
-                  </div>
-
-                  {/* Supplier */}
-                  <div className="ticket-sidebar-field">
-                    <div className="ticket-sidebar-field-label">{t('tickets.supplier')}</div>
-                    <SidebarDropdown
-                      value={(customFields['field-supplier'] as string) || ''}
-                      onChange={(val) => setFieldValue('field-supplier', val || null)}
-                      disabled={!!prefilledSupplierId}
-                      options={[
-                        { value: '', label: t('common.none') },
-                        ...suppliers.map(
-                          (s): DropdownOption => ({
-                            value: s.id,
-                            label: s.companyName,
-                            icon: <i className="bi bi-truck" style={{ fontSize: '0.78rem', color: '#c2410c' }} />,
-                          })
-                        ),
-                      ]}
-                      renderValue={(opt) =>
-                        opt?.value ? (
-                          <span className="ticket-badge ticket-badge-supplier" style={{ margin: 0 }}>
-                            <i className="bi bi-truck me-1" />
-                            {opt.label}
-                          </span>
-                        ) : (
-                          <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
-                        )
-                      }
-                    />
-                  </div>
-
-                  {/* Sprint */}
-                  {hasWorkUnits && (
-                    <div className="ticket-sidebar-field">
-                      <div className="ticket-sidebar-field-label">{t('tickets.workUnit')}</div>
-                      <SidebarDropdown
-                        value={(customFields['field-work-unit-id'] as string) || ''}
-                        onChange={(val) => setFieldValue('field-work-unit-id', val || null)}
-                        options={[
-                          { value: '', label: t('common.none') },
-                          ...workUnits
-                            .filter((wu) => wu.status !== 'completed')
-                            .map(
-                              (wu): DropdownOption => ({
-                                value: wu.id,
-                                label: wu.name,
-                                icon: <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />,
-                              })
-                            ),
-                        ]}
-                        renderValue={(opt) =>
-                          opt?.value ? (
-                            <span className="ticket-badge ticket-badge-sprint" style={{ margin: 0 }}>
-                              <i
-                                className="bi bi-circle-fill me-1"
-                                style={{ fontSize: '0.28rem', verticalAlign: 'middle' }}
-                              />
-                              {opt.label}
-                            </span>
-                          ) : (
-                            <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
-                          )
-                        }
-                      />
-                    </div>
-                  )}
-
-                  {/* Tags */}
-                  <div className="ticket-sidebar-field">
-                    <div className="ticket-sidebar-field-label">{t('tickets.tags')}</div>
-                    <Form.Control
-                      size="sm"
-                      type="text"
-                      value={tagsInput}
-                      onChange={(e) => setTagsInput(e.target.value)}
-                      placeholder={t('tickets.tagsHelp')}
-                    />
-                  </div>
-
-                  {/* Custom / Dynamic Fields */}
-                  {dynamicFields.length > 0 && (
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #f0f0f0' }}>
-                      <div
-                        className="ticket-sidebar-field-label"
-                        style={{ marginBottom: 6, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.05em' }}
-                      >
-                        {t('fields.dynamicFields')}
-                      </div>
-                      {dynamicFields.map((field) => (
-                        <DynamicField
-                          key={field.id}
-                          field={field}
-                          value={customFields[field.id] ?? field.defaultValue ?? null}
-                          onChange={(val) => setFieldValue(field.id, val)}
-                          fieldOverride={fieldOverrides[field.id]}
-                          compact
-                          staff={config?.staff}
-                          customers={customers}
-                          suppliers={suppliers}
-                          workUnits={workUnits}
-                          projects={config?.projects}
-                        />
-                      ))}
-                    </div>
-                  )}
+                    }
+                  })}
                 </div>
               </div>
             </div>

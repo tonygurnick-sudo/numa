@@ -11,6 +11,7 @@ import {
   Clock,
   Tools,
   Speedometer2,
+  Coin,
 } from 'react-bootstrap-icons';
 import { Book } from 'react-bootstrap-icons';
 import { useAuth } from '@/contexts/AuthContext';
@@ -71,6 +72,17 @@ export default function NavigationBar() {
             >
               <Speedometer2 className="me-1" />
               Numa Dashboard
+            </Nav.Link>
+
+            <Nav.Link
+              as={Link}
+              to="/numa-credits"
+              active={location.pathname.startsWith('/numa-credits')}
+              className="d-flex align-items-center"
+              onClick={handleNavClick}
+            >
+              <Coin className="me-1" />
+              Numa Credits
             </Nav.Link>
 
             <Nav.Link

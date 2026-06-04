@@ -698,6 +698,30 @@ def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
                 "error": "NetSuite connector config is malformed. Ask an admin to re-save the connector.",
             }
 
+        # Gate MCP on scope. The MCP endpoint (com.netsuite.mcpstandardtools) only
+        # accepts tokens minted with the `mcp` scope — which is mutually exclusive
+        # with rest_webservices / restlets / suite_analytics on the NetSuite side.
+        # A connector configured for any non-mcp scope will 401 on every MCP call,
+        # so route the agent to the REST `request` path (which the connected token
+        # IS valid for) instead of letting it hammer a doomed MCP call.
+        scopes = str(fields.get("scopes", "")).strip().lower()
+        scope_set = set(scopes.replace(",", " ").split())
+        if scopes and "mcp" not in scope_set:
+            return {
+                "status": "error",
+                "result": None,
+                "error": (
+                    f"NetSuite is connected with the '{scopes}' scope, not 'mcp', so MCP "
+                    "methods (mcp_call / ns_*) are unavailable — they would fail with 401. "
+                    "Use the REST 'request' operation instead, which this token is valid for: "
+                    "connectors(name='request', connector='netsuite', method='POST', "
+                    "path='/services/rest/query/v1/suiteql', headers={'Prefer':'transient'}, "
+                    "body={'q':'SELECT id, name FROM subsidiary'}) for SuiteQL, or method='GET' "
+                    "path='/services/rest/record/v1/{recordType}' for the Record API. Follow "
+                    "/workdir/api-docs/netsuite/01-llm-api-rest-rules.md for endpoints and rules."
+                ),
+            }
+
         client_id = fields.get("client_id", "")
         account_id = fields.get("account_id", "")
         if not client_id or not account_id:

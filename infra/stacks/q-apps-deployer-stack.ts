@@ -12,6 +12,7 @@ import { CustomerSuccessPortalConstruct } from '../constructs/customer-success-p
 import { PortalDeploymentsConstruct } from '../constructs/portal-deployments-construct';
 import { PortalNextgenBrokerConstruct } from '../constructs/portal-nextgen-broker-construct';
 import { EmailSenderConstruct } from '../constructs/email-sender-construct';
+import { VoiceConfigWriterConstruct } from '../constructs/voice-config-writer-construct';
 import { QuotaReportDailyConstruct } from '../constructs/quota-report-daily-construct';
 import { NumaDashboardRollupConstruct } from '../constructs/numa-dashboard-rollup-construct';
 
@@ -140,6 +141,18 @@ export class QAppsDeployerStack extends ArcanumStack {
 
     new TerraformOutput(this, 'email-sender-function-name', {
       value: emailSender.functionName,
+    });
+
+    // Numa Voice config write-back (FEAT-169) — STS-proof relay that lets a
+    // client-account voice-admin Lambda persist Connect/Voice values back into
+    // numa-client-config without any direct cross-account table access.
+    const voiceConfigWriter = new VoiceConfigWriterConstruct(this, 'voice-config-writer', {
+      clientConfigTableArn: clientConfigTable.arn,
+      clientConfigTableName: clientConfigTable.name,
+    });
+
+    new TerraformOutput(this, 'voice-config-writer-lambda-arn', {
+      value: voiceConfigWriter.functionArn,
     });
 
     // Daily quota report — snapshots Bedrock quotas across all client accounts,

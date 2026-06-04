@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { CognitoIdentityProviderClient, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { v5 as uuidv5 } from 'uuid';
 import { withPRM } from '../../../lib/prm-node/prm';
@@ -39,22 +39,79 @@ interface SeedResult {
 
 const sleep = (ms: number): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function putIfNotExists(
-  tableName: string,
-  item: Record<string, unknown>,
-  condition: string,
-  id: string,
-  result: SeedResult
-): Promise<void> {
+// Schedule-record fields that carry RUNTIME state — never overwritten on a
+// re-seed (only the create path sets them). Everything else (prompt_text,
+// agent_snapshot, trigger/cron, titles) is seed-managed and refreshed.
+const PRESERVE_ON_REFRESH = new Set<string>([
+  'user_id',
+  'schedule_id',
+  'status',
+  'total_runs',
+  'recent_runs',
+  'last_run_epoch',
+  'last_run_started_epoch',
+  'last_run_s3_key',
+  'last_run_conversation_id',
+  'last_status',
+  'last_error',
+  'consecutive_failures',
+  'created_at',
+  'last_quota_blocked_month',
+]);
+
+/**
+ * Seed a schedule record: create it if absent, otherwise REFRESH the seed-managed
+ * fields (prompt_text, agent_snapshot, trigger/cron, titles) while preserving all
+ * runtime state. A plain create-if-absent froze the original prompts forever, so
+ * the file-format contract / prompt fixes in seed-data.ts never reached existing
+ * stacks on re-deploy. This makes them propagate without resetting run history.
+ */
+async function seedSchedule(item: Record<string, unknown>, id: string, result: SeedResult): Promise<void> {
   try {
-    await dynamo.send(new PutCommand({ TableName: tableName, Item: item, ConditionExpression: condition }));
+    await dynamo.send(
+      new PutCommand({
+        TableName: SCHEDULES_TABLE,
+        Item: item,
+        ConditionExpression: 'attribute_not_exists(user_id) AND attribute_not_exists(schedule_id)',
+      })
+    );
     result.created++;
+    return;
   } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'name' in err && err.name === 'ConditionalCheckFailedException') {
-      result.skipped++;
-    } else {
+    if (!(err && typeof err === 'object' && 'name' in err && err.name === 'ConditionalCheckFailedException')) {
       result.errors.push(`Failed to seed ${id}: ${String(err)}`);
+      return;
     }
+  }
+  // Record exists — refresh only the seed-managed fields.
+  const names: Record<string, string> = {};
+  const values: Record<string, unknown> = {};
+  const sets: string[] = [];
+  let i = 0;
+  for (const [k, v] of Object.entries(item)) {
+    if (PRESERVE_ON_REFRESH.has(k)) continue;
+    names[`#k${i}`] = k;
+    values[`:v${i}`] = v;
+    sets.push(`#k${i} = :v${i}`);
+    i += 1;
+  }
+  if (sets.length === 0) {
+    result.skipped++;
+    return;
+  }
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: SCHEDULES_TABLE,
+        Key: { user_id: item.user_id, schedule_id: item.schedule_id },
+        UpdateExpression: `SET ${sets.join(', ')}`,
+        ExpressionAttributeNames: names,
+        ExpressionAttributeValues: values,
+      })
+    );
+    result.created++;
+  } catch (uerr: unknown) {
+    result.errors.push(`Failed to refresh ${id}: ${String(uerr)}`);
   }
 }
 
@@ -198,13 +255,7 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
     updated_at: now,
     schedule_name: 'Numa Voice — Post-Call Processor',
   });
-  await putIfNotExists(
-    SCHEDULES_TABLE,
-    scheduleRecord as unknown as Record<string, unknown>,
-    'attribute_not_exists(user_id) AND attribute_not_exists(schedule_id)',
-    `schedule:${scheduleId}`,
-    result
-  );
+  await seedSchedule(scheduleRecord as unknown as Record<string, unknown>, `schedule:${scheduleId}`, result);
 
   // ── Call List Preparer cron schedule → {client}-agent-schedules ───────────
   // Timing is driven by the SchedulerSchedule in NumaVoiceConstruct (which fires
@@ -237,13 +288,7 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
     updated_at: now,
     schedule_name: 'Numa Voice — Call List Preparer',
   });
-  await putIfNotExists(
-    SCHEDULES_TABLE,
-    callPrepRecord as unknown as Record<string, unknown>,
-    'attribute_not_exists(user_id) AND attribute_not_exists(schedule_id)',
-    `schedule:${callPrepScheduleId}`,
-    result
-  );
+  await seedSchedule(callPrepRecord as unknown as Record<string, unknown>, `schedule:${callPrepScheduleId}`, result);
 
   // ── Prospect Ingest event schedule (connect / 'prospects.uploaded') ───────
   const ingestScheduleId = uuidv5(`ingest-${CLIENT_NAME}`, VOICE_UUID_NAMESPACE);
@@ -265,13 +310,7 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
     updated_at: now,
     schedule_name: 'Numa Voice — Prospect Ingest',
   });
-  await putIfNotExists(
-    SCHEDULES_TABLE,
-    ingestRecord as unknown as Record<string, unknown>,
-    'attribute_not_exists(user_id) AND attribute_not_exists(schedule_id)',
-    `schedule:${ingestScheduleId}`,
-    result
-  );
+  await seedSchedule(ingestRecord as unknown as Record<string, unknown>, `schedule:${ingestScheduleId}`, result);
 
   // NOTE: the Qualification Promoter AGENT is seeded (agt_voice_promoter) and
   // available for manual / future use, but it is intentionally NOT given a

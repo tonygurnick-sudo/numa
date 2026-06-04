@@ -33,6 +33,11 @@ logger = structlog.get_logger(__name__)
 
 s3_client = prm_client("s3")
 transcribe_client = prm_client("transcribe")
+# CloudWatch lives in this Lambda's region (ap-southeast-2) — used to emit a
+# custom metric on transcription failure so the silent failure can be alarmed.
+cloudwatch_client = prm_client("cloudwatch")
+
+VOICE_METRIC_NAMESPACE = os.environ.get("VOICE_METRIC_NAMESPACE", "NumaVoice")
 
 TRANSCRIPTS_PREFIX = os.environ.get("TRANSCRIPTS_PREFIX", "transcripts/")
 LANGUAGE_CODE = os.environ.get("NUMA_VOICE_LANGUAGE", "en-NZ")
@@ -163,6 +168,59 @@ def _handle_s3(event: dict[str, Any]) -> dict[str, Any]:
 # ── Branch 2: Transcribe Job State Change → fetch + write transcript ───────────
 
 
+def _emit_transcription_failed_metric() -> None:
+    """Publish a CloudWatch custom metric so a failed transcription is alarmable
+    rather than a silent failure. Best-effort — wrapped so a metric/IAM error
+    can never mask the original failure handling (degraded post-call dispatch)."""
+    try:
+        cloudwatch_client.put_metric_data(
+            Namespace=VOICE_METRIC_NAMESPACE,
+            MetricData=[
+                {
+                    "MetricName": "TranscriptionFailed",
+                    "Dimensions": [{"Name": "ClientName", "Value": CLIENT_NAME}],
+                    "Value": 1,
+                    "Unit": "Count",
+                }
+            ],
+        )
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 — metric is observability-only, never block on it
+        logger.warning(
+            "Failed to emit TranscriptionFailed metric",
+            _name="VOICE_METRIC_EMIT_ERROR",
+            client_name=CLIENT_NAME,
+            error=str(exc),
+        )
+
+
+def _emit_diarisation_metric() -> None:
+    """Publish a CloudWatch metric when Transcribe did not return exactly 2
+    speakers, so a corrupted SDR/prospect mapping is alarmable. Best-effort."""
+    try:
+        cloudwatch_client.put_metric_data(
+            Namespace=VOICE_METRIC_NAMESPACE,
+            MetricData=[
+                {
+                    "MetricName": "DiarisationUnexpected",
+                    "Dimensions": [{"Name": "ClientName", "Value": CLIENT_NAME}],
+                    "Value": 1,
+                    "Unit": "Count",
+                }
+            ],
+        )
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 — metric is observability-only, never block on it
+        logger.warning(
+            "Failed to emit DiarisationUnexpected metric",
+            _name="VOICE_METRIC_EMIT_ERROR",
+            client_name=CLIENT_NAME,
+            error=str(exc),
+        )
+
+
 def _handle_completion(event: dict[str, Any]) -> dict[str, Any]:
     detail = event.get("detail", {})
     job_name = detail.get("TranscriptionJobName", "")
@@ -195,6 +253,9 @@ def _handle_completion(event: dict[str, Any]) -> dict[str, Any]:
             contact_id=contact_id,
             failure_reason=job.get("FailureReason"),
         )
+        # Emit a CloudWatch metric so this otherwise-silent failure can be alarmed.
+        # Best-effort: it must never mask the degraded post-call dispatch below.
+        _emit_transcription_failed_metric()
         _emit_post_call_event(
             contact_id=contact_id,
             recording_bucket=recording_bucket,
@@ -213,9 +274,28 @@ def _handle_completion(event: dict[str, Any]) -> dict[str, Any]:
     kb_s3_key = f"{KB_TRANSCRIPTS_S3_PREFIX}{stem}.json"
     transcript_kb_file = f"{KB_TRANSCRIPTS_FILE_PREFIX}{stem}.json"
     try:
-        transcript_text = aws_transcribe.fetch_transcript(
-            recording_bucket, _raw_output_key(job_name)
+        transcript_text, detected_speakers = (
+            aws_transcribe.fetch_transcript_with_speakers(
+                recording_bucket, _raw_output_key(job_name)
+            )
         )
+        # Diarisation validation: the static spk_0=SDR / spk_1=prospect mapping is
+        # only valid when Transcribe produced EXACTLY 2 speakers. A voicemail (1) or
+        # a 3-way call (3+) would silently corrupt the mapping — flag it on the
+        # record and alarm via a metric instead of asserting a false truth. We still
+        # write the transcript (it remains useful), just marked as unverified.
+        diarisation_ok = len(detected_speakers) == MAX_SPEAKERS
+        if not diarisation_ok:
+            logger.warning(
+                "Unexpected speaker count from Transcribe diarisation",
+                _name="VOICE_DIARISATION_UNEXPECTED",
+                job_name=job_name,
+                contact_id=contact_id,
+                expected=MAX_SPEAKERS,
+                detected=len(detected_speakers),
+                speakers=detected_speakers,
+            )
+            _emit_diarisation_metric()
         transcript_doc = {
             "_name": "VOICE_TRANSCRIPT",
             "client": CLIENT_NAME,
@@ -224,6 +304,8 @@ def _handle_completion(event: dict[str, Any]) -> dict[str, Any]:
             "contact_id": contact_id,
             "language_code": language_code,
             "speakers": {"spk_0": "sdr", "spk_1": "prospect"},
+            "detected_speaker_count": len(detected_speakers),
+            "diarisation_ok": diarisation_ok,
             "transcript": transcript_text,
             # SDR's in-UI wrap-up selections (outcome / notes / qualified), if captured.
             "sdr_outcome": sdr_outcome,

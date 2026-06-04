@@ -3,6 +3,7 @@ import { Badge, Button, Card, Collapse, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { loadPlaybook } from '../../Services/voiceData';
+import { inferIndustry } from '../../utils/voiceIndustry';
 import type { IndustryPanel, Prospect, SdrPlaybook } from '../../types/voice';
 
 /**
@@ -77,12 +78,19 @@ export interface SdrAssistSidebarProps {
   className?: string;
 }
 
-/** Resolve the playbook panel for a prospect, falling back to the `general` panel. */
+/** Resolve the playbook panel for a prospect, falling back to the `general` panel.
+ *  When the record has no (or an unrecognised) industry, deterministically infer
+ *  one from the company description (FEAT-167 mirror) so the SDR still gets a
+ *  relevant panel instead of the bare `general` fallback. */
 function resolvePanel(playbook: SdrPlaybook, prospect: Prospect | null): IndustryPanel | null {
   if (!prospect) return null;
   const industries = playbook.industries ?? {};
   const slug = (prospect.industry || '').trim().toLowerCase();
-  return industries[slug] ?? industries[prospect.industry] ?? industries[FALLBACK_INDUSTRY] ?? null;
+  const direct = industries[slug] ?? industries[prospect.industry];
+  if (direct) return direct;
+  // No direct match — infer from the company description before giving up to general.
+  const inferred = inferIndustry(prospect.company_description, prospect.industry);
+  return industries[inferred] ?? industries[FALLBACK_INDUSTRY] ?? null;
 }
 
 export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
@@ -187,9 +195,12 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
 
   const panel = useMemo(() => (playbook ? resolvePanel(playbook, prospect) : null), [playbook, prospect]);
 
-  const discoveryQuestions = panel?.discovery_questions ?? [];
-  const objections = panel?.objections ?? [];
-  const hookLines = panel?.hook_lines ?? [];
+  // Derive the panel content arrays off `panel` only (not the whole component
+  // render): a fresh `?? []` fallback every render churns their identity and
+  // forces dependent memos/callbacks to recompute needlessly. Tie them to `panel`.
+  const discoveryQuestions = useMemo(() => panel?.discovery_questions ?? [], [panel]);
+  const objections = useMemo(() => panel?.objections ?? [], [panel]);
+  const hookLines = useMemo(() => panel?.hook_lines ?? [], [panel]);
 
   // 'brief' prep view applies only when seeded but no call is on the wire.
   const isPrep = variant === 'brief' && !liveProspect && !!prospect;

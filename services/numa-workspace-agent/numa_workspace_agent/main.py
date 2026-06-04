@@ -37,6 +37,7 @@ from .agent_config import (
     fetch_user_profile,
     resolve_all_approval_modes,
     resolve_approval_mode,
+    resolve_per_integration_approval_modes,
 )
 from .agent_types import (
     ALWAYS_COPY,
@@ -1946,6 +1947,9 @@ async def _handle_chat(
     numa_tool_approval_mode = {
         k: v for k, v in all_approval_modes.items() if k != "integrations"
     }
+    # TASK-127: per-integration approval-mode overrides set by the user on
+    # the Integrations page. Empty when no overrides have been configured.
+    integration_approval_modes = resolve_per_integration_approval_modes(user_sub)
 
     logger.info(
         "Chat request",
@@ -2089,6 +2093,7 @@ async def _handle_chat(
                 available_integrations=available_unified,  # Unified [{slug, method, name}]
                 approval_mode=effective_approval_mode,  # Integration approval mode
                 numa_tool_approval_mode=numa_tool_approval_mode,  # Per-category numa tool approval
+                integration_approval_modes=integration_approval_modes,  # TASK-127: per-slug overrides
                 email_signature=email_signature,  # Email signature settings
                 agent_type_config=agent_type_config,  # Agent type configuration
                 user_profile=user_profile,  # User profile for AI personalisation
@@ -2130,9 +2135,10 @@ async def _handle_chat(
             )
 
             # Live credit metering — no-op unless CREDIT_METERING_ENABLED. Best-effort.
+            # agent_id (set for agent chats + scheduled runs) → debit prices on the agent tier.
             from .credit_metering import maybe_emit_credit_event
 
-            maybe_emit_credit_event(user_sub, conversation_id)
+            maybe_emit_credit_event(user_sub, conversation_id, agent_id=agent_id)
 
     return StreamingResponse(
         stream_with_sync(),
@@ -2294,10 +2300,13 @@ async def _handle_sync(
     effective_approval_mode = all_approval_modes_sync.get(
         "integrations", "non_destructive"
     )
+    # TASK-127: per-integration overrides from the user's Integrations page.
+    integration_approval_modes_sync = resolve_per_integration_approval_modes(user_sub)
     logger.info(
         "Resolved approval modes for sync request",
         _name="SYNC_APPROVAL_MODE",
         resolved_modes=all_approval_modes_sync,
+        per_integration_overrides=integration_approval_modes_sync,
         agent_id=agent_id,
     )
 
@@ -2386,6 +2395,7 @@ async def _handle_sync(
             available_integrations=available_unified,
             approval_mode=effective_approval_mode,
             numa_tool_approval_mode=numa_tool_approval_mode_sync,
+            integration_approval_modes=integration_approval_modes_sync,
             agent_type_config=agent_type_config,
             company_profile=company_profile,
             feature_flags=feature_flags,
@@ -2437,9 +2447,10 @@ async def _handle_sync(
     sync_to_s3(user_sub, conversation_id, _checksums_cache, s3_prefix=resolved_prefix)
 
     # Live credit metering — no-op unless CREDIT_METERING_ENABLED. Best-effort.
+    # agent_id (set for agent chats + scheduled runs) → debit prices on the agent tier.
     from .credit_metering import maybe_emit_credit_event
 
-    maybe_emit_credit_event(user_sub, conversation_id)
+    maybe_emit_credit_event(user_sub, conversation_id, agent_id=agent_id)
 
     # Also persist result to S3 for retrieval via /runs endpoint
     s3_prefix = agent_type_config.s3_prefix_template if agent_type_config else None
@@ -2615,10 +2626,13 @@ async def _handle_fire_and_forget(
     effective_approval_mode = all_approval_modes_async.get(
         "integrations", "non_destructive"
     )
+    # TASK-127: per-integration overrides from the user's Integrations page.
+    integration_approval_modes_async = resolve_per_integration_approval_modes(user_sub)
     logger.info(
         "Resolved approval modes for fire-and-forget request",
         _name="ASYNC_APPROVAL_MODE",
         resolved_modes=all_approval_modes_async,
+        per_integration_overrides=integration_approval_modes_async,
         agent_id=agent_id,
     )
 
@@ -2725,6 +2739,7 @@ async def _handle_fire_and_forget(
                     available_integrations=available_unified,
                     approval_mode=effective_approval_mode,
                     numa_tool_approval_mode=numa_tool_approval_mode_async,
+                    integration_approval_modes=integration_approval_modes_async,
                     agent_type_config=agent_type_config,
                     company_profile=company_profile,
                     feature_flags=feature_flags,

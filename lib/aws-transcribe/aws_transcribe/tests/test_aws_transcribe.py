@@ -1,6 +1,57 @@
+import json
 import unittest
+from unittest.mock import MagicMock, patch
 
-from aws_transcribe import _format_transcript
+import aws_transcribe
+from aws_transcribe import _format_transcript, fetch_transcript_with_speakers
+
+
+def _transcribe_doc(labels):
+    """Build a minimal Transcribe output JSON with one segment per speaker label."""
+    segments = [
+        {"speaker_label": label, "items": [{"start_time": str(i)}]}
+        for i, label in enumerate(labels)
+    ]
+    items = [
+        {"alternatives": [{"content": "hi"}], "start_time": str(i)}
+        for i in range(len(labels))
+    ]
+    return {"results": {"speaker_labels": {"segments": segments}, "items": items}}
+
+
+def _mock_s3_returning(doc):
+    body = MagicMock()
+    body.read.return_value = json.dumps(doc).encode("utf-8")
+    s3 = MagicMock()
+    s3.get_object.return_value = {"Body": body}
+    return s3
+
+
+class TestFetchTranscriptWithSpeakers(unittest.TestCase):
+    """Diarisation detection — numa-voice-processor relies on the distinct speaker
+    count to validate the spk_0=SDR / spk_1=prospect mapping."""
+
+    def test_two_speakers_detected(self):
+        with patch.object(
+            aws_transcribe,
+            "s3_client",
+            _mock_s3_returning(_transcribe_doc(["spk_0", "spk_1"])),
+        ):
+            _text, speakers = fetch_transcript_with_speakers("bucket", "key")
+        self.assertEqual(speakers, ["spk_0", "spk_1"])
+
+    def test_single_speaker_voicemail(self):
+        with patch.object(
+            aws_transcribe, "s3_client", _mock_s3_returning(_transcribe_doc(["spk_0"]))
+        ):
+            _text, speakers = fetch_transcript_with_speakers("bucket", "key")
+        self.assertEqual(speakers, ["spk_0"])
+
+    def test_three_speakers(self):
+        doc = _transcribe_doc(["spk_0", "spk_1", "spk_2"])
+        with patch.object(aws_transcribe, "s3_client", _mock_s3_returning(doc)):
+            _text, speakers = fetch_transcript_with_speakers("bucket", "key")
+        self.assertEqual(speakers, ["spk_0", "spk_1", "spk_2"])
 
 
 class TestFormatTranscript(unittest.TestCase):

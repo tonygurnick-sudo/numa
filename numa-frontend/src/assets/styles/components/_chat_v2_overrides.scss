@@ -2404,6 +2404,19 @@
   margin-right: 0.28rem;
 }
 
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-formats {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: #71717a;
+  text-transform: uppercase;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-action-btn--dropdown::after {
+  display: none;
+}
+
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-actions {
   flex-shrink: 0;
   display: inline-flex;

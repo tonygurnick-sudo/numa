@@ -9,6 +9,7 @@ import { ProspectListTable } from '../Components/Voice/ProspectListTable';
 import { SdrAssistSidebar } from '../Components/Voice/SdrAssistSidebar';
 import { VoiceProgressHeader } from '../Components/Voice/VoiceProgressHeader';
 import { FocusCallCard } from '../Components/Voice/FocusCallCard';
+import { RecordingConsentBanner } from '../Components/Voice/RecordingConsentBanner';
 import { subscribeVoiceContact } from '../hooks/useConnectCcp';
 import type { VoiceQueueFilter } from '../Components/Voice/VoiceProgressHeader';
 import type { FocusCallPhase } from '../Components/Voice/FocusCallCard';
@@ -149,6 +150,12 @@ export const VoicePage: React.FC = () => {
     setReloadToken((prev) => prev + 1);
   }, []);
 
+  // Stable handlers passed to children — keeps VoiceProgressHeader / FocusCallCard
+  // from re-rendering on every unrelated parent state change.
+  const handleDismissed = useCallback(() => {
+    setCallState({ phase: 'idle' });
+  }, []);
+
   // Quiet re-fetch (no full-page spinner) for the manual refresh button and for
   // tab-focus — so a prospect added/edited via chat shows up without a hard reload.
   const [refreshing, setRefreshing] = useState(false);
@@ -167,10 +174,24 @@ export const VoicePage: React.FC = () => {
     }
   }, [voiceEnabled, getCredentials, applyOverlay]);
 
+  // Stable, fire-and-forget wrapper for the header's refresh button so the header
+  // doesn't get a fresh function identity on every render.
+  const handleRefresh = useCallback(() => {
+    void refresh();
+  }, [refresh]);
+
   // Re-fetch when the tab regains focus (e.g. after editing the call list in chat).
+  // The 'focus' event can fire rapidly (e.g. devtools, alt-tab storms), so throttle
+  // it: skip a focus-driven refetch within ~10s of the last one. The manual refresh
+  // button and post-save reconcile remain immediate (they call refresh() directly).
+  const lastFocusRefreshRef = useRef(0);
   useEffect(() => {
     if (!voiceEnabled) return undefined;
+    const FOCUS_REFRESH_THROTTLE_MS = 10_000;
     const onFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusRefreshRef.current < FOCUS_REFRESH_THROTTLE_MS) return;
+      lastFocusRefreshRef.current = now;
       void refresh();
     };
     window.addEventListener('focus', onFocus);
@@ -246,7 +267,7 @@ export const VoicePage: React.FC = () => {
       <>
         <VoiceProgressHeader
           counts={counts}
-          onRefresh={() => void refresh()}
+          onRefresh={handleRefresh}
           refreshing={refreshing}
           isAdmin={isAdmin}
           filter={filter}
@@ -267,7 +288,7 @@ export const VoicePage: React.FC = () => {
       <>
         <VoiceProgressHeader
           counts={counts}
-          onRefresh={() => void refresh()}
+          onRefresh={handleRefresh}
           refreshing={refreshing}
           isAdmin={isAdmin}
           filter={filter}
@@ -292,7 +313,7 @@ export const VoicePage: React.FC = () => {
     <>
       <VoiceProgressHeader
         counts={counts}
-        onRefresh={() => void refresh()}
+        onRefresh={handleRefresh}
         refreshing={refreshing}
         isAdmin={isAdmin}
         filter={filter}
@@ -300,6 +321,7 @@ export const VoicePage: React.FC = () => {
       />
 
       <div className="container-fluid pb-4">
+        <RecordingConsentBanner />
         <div className="row g-3">
           <div className="col-lg-8">
             <FocusCallCard
@@ -307,6 +329,7 @@ export const VoicePage: React.FC = () => {
               prospect={focusProspect}
               positionLabel={positionLabel}
               onSaved={handleSaved}
+              onDismissed={handleDismissed}
             />
 
             <section className="bg-white border rounded-3 overflow-hidden" aria-label={t('prospectTable.title')}>

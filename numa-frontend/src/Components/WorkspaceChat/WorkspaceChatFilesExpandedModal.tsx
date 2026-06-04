@@ -7,17 +7,20 @@
  * Chat Artifacts tab (finder-grid layout) so users get full filenames,
  * types, sizes, and modified dates without leaving the chat.
  */
-import { Modal } from 'react-bootstrap';
+import { Dropdown, Modal } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Download, Eye, X } from 'lucide-react';
 import { formatFileSize, getFileIconClass, getFileIconColorClass } from '../../utils/fileUtils';
 import type { WorkspaceChatFileInfo } from '../../types/workspaceChatTypes';
+import { getVariantExtension, type OutputFileGroup } from '../../utils/outputFileGroups';
 
 interface WorkspaceChatFilesExpandedModalProps {
   show: boolean;
   onHide: () => void;
   title: string;
   files: WorkspaceChatFileInfo[];
+  /** When provided, render one row per group with a multi-format download dropdown. */
+  groups?: OutputFileGroup[];
   rootPrefix: string;
   onOpen?: (file: WorkspaceChatFileInfo) => void;
   onDownload?: (file: WorkspaceChatFileInfo) => void;
@@ -35,33 +38,56 @@ const formatModified = (modifiedAt: string): string => {
   });
 };
 
+type DisplayRow = {
+  key: string;
+  primary: WorkspaceChatFileInfo;
+  displayName: string;
+  relativePath: string;
+  variants: WorkspaceChatFileInfo[];
+};
+
 export const WorkspaceChatFilesExpandedModal = ({
   show,
   onHide,
   title,
   files,
+  groups,
   rootPrefix,
   onOpen,
   onDownload,
 }: WorkspaceChatFilesExpandedModalProps) => {
   const { t } = useTranslation('chat');
 
-  const rows = files
-    .filter((file) => !file.isDirectory)
-    .map((file) => {
-      const relativePath = file.path.startsWith(rootPrefix) ? file.path.slice(rootPrefix.length) : file.path;
-      const fallbackName = relativePath.split('/').filter(Boolean).pop() || relativePath;
-      return {
-        ...file,
-        displayName: file.name || fallbackName,
-        relativePath,
-      };
-    })
-    .sort((a, b) => {
-      const timestampDiff = new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
-      if (!Number.isNaN(timestampDiff) && timestampDiff !== 0) return timestampDiff;
-      return a.displayName.localeCompare(b.displayName);
-    });
+  const rows: DisplayRow[] = groups
+    ? groups.map((group) => {
+        const primary = group.variants[0];
+        const relativePath = primary.path.startsWith(rootPrefix) ? primary.path.slice(rootPrefix.length) : primary.path;
+        return {
+          key: group.key,
+          primary,
+          displayName: group.displayName,
+          relativePath,
+          variants: group.variants,
+        };
+      })
+    : files
+        .filter((file) => !file.isDirectory)
+        .map((file) => {
+          const relativePath = file.path.startsWith(rootPrefix) ? file.path.slice(rootPrefix.length) : file.path;
+          const fallbackName = relativePath.split('/').filter(Boolean).pop() || relativePath;
+          return {
+            key: file.path,
+            primary: file,
+            displayName: file.name || fallbackName,
+            relativePath,
+            variants: [file],
+          };
+        })
+        .sort((a, b) => {
+          const timestampDiff = new Date(b.primary.modifiedAt).getTime() - new Date(a.primary.modifiedAt).getTime();
+          if (!Number.isNaN(timestampDiff) && timestampDiff !== 0) return timestampDiff;
+          return a.displayName.localeCompare(b.displayName);
+        });
 
   return (
     <Modal
@@ -103,45 +129,76 @@ export const WorkspaceChatFilesExpandedModal = ({
               <div className="finder-col">{t('workspaceSettings.expandedColActions')}</div>
             </div>
             <div className="finder-list">
-              {rows.map((file) => {
-                const ext = file.displayName.includes('.')
-                  ? (file.displayName.split('.').pop()?.toUpperCase() ?? '')
-                  : '';
+              {rows.map((row) => {
+                const isMultiVariant = row.variants.length > 1;
+                const typeLabel = isMultiVariant
+                  ? row.variants.map((v) => getVariantExtension(v).toUpperCase()).join(' · ')
+                  : row.primary.name.includes('.')
+                    ? (row.primary.name.split('.').pop()?.toUpperCase() ?? '')
+                    : '';
                 return (
-                  <div key={file.path} className="finder-row finder-grid-artifacts">
+                  <div key={row.key} className="finder-row finder-grid-artifacts">
                     <div className="finder-row__name-content">
                       <i
-                        className={`${getFileIconClass(file.displayName)} finder-icon finder-icon--file ${getFileIconColorClass(file.displayName)}`}
+                        className={`${getFileIconClass(row.primary.name)} finder-icon finder-icon--file ${getFileIconColorClass(row.primary.name)}`}
                         aria-hidden="true"
                       />
-                      <span className="finder-name" title={file.relativePath}>
-                        {file.displayName}
+                      <span className="finder-name" title={row.relativePath}>
+                        {row.displayName}
                       </span>
                     </div>
-                    <div className="finder-row__meta finder-row__meta--type d-none d-md-block">{ext}</div>
-                    <div className="finder-row__meta d-none d-sm-block">{formatFileSize(file.size)}</div>
-                    <div className="finder-row__meta d-none d-md-block">{formatModified(file.modifiedAt)}</div>
+                    <div className="finder-row__meta finder-row__meta--type d-none d-md-block">{typeLabel}</div>
+                    <div className="finder-row__meta d-none d-sm-block">
+                      {isMultiVariant ? '—' : formatFileSize(row.primary.size)}
+                    </div>
+                    <div className="finder-row__meta d-none d-md-block">{formatModified(row.primary.modifiedAt)}</div>
                     <div className="finder-row__actions">
                       {onOpen && (
                         <button
                           type="button"
-                          onClick={() => onOpen(file)}
+                          onClick={() => onOpen(row.primary)}
                           title={t('workspaceSettings.preview')}
                           aria-label={t('workspaceSettings.preview')}
                         >
                           <Eye size={14} />
                         </button>
                       )}
-                      {onDownload && (
-                        <button
-                          type="button"
-                          onClick={() => onDownload(file)}
-                          title={t('workspaceSettings.download')}
-                          aria-label={t('workspaceSettings.download')}
-                        >
-                          <Download size={14} />
-                        </button>
-                      )}
+                      {onDownload &&
+                        (isMultiVariant ? (
+                          <Dropdown align="end">
+                            <Dropdown.Toggle
+                              as="button"
+                              bsPrefix="finder-row__action-toggle"
+                              title={t('workspaceSettings.chooseFormat')}
+                              aria-label={t('workspaceSettings.chooseFormat')}
+                            >
+                              <Download size={14} />
+                            </Dropdown.Toggle>
+                            <Dropdown.Menu>
+                              {row.variants.map((variant) => {
+                                const ext = getVariantExtension(variant).toUpperCase();
+                                return (
+                                  <Dropdown.Item
+                                    key={variant.path}
+                                    onClick={() => onDownload(variant)}
+                                    title={variant.name}
+                                  >
+                                    {t('workspaceSettings.downloadAs', { format: ext || variant.name })}
+                                  </Dropdown.Item>
+                                );
+                              })}
+                            </Dropdown.Menu>
+                          </Dropdown>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onDownload(row.primary)}
+                            title={t('workspaceSettings.download')}
+                            aria-label={t('workspaceSettings.download')}
+                          >
+                            <Download size={14} />
+                          </button>
+                        ))}
                     </div>
                   </div>
                 );

@@ -15,39 +15,35 @@ from credit_pricing import tiers  # noqa: E402
 
 
 def test_tier_to_credits() -> None:
+    # Defaults @ $0.30/credit — 2-credit floor on every interaction (low)
     assert tiers.tier_to_credits("low", "chat") == 2
-    assert tiers.tier_to_credits("high", "chat") == 12
-    assert tiers.tier_to_credits("very_high", "chat") == 30
-    # agent runs are cheaper (the rubric's ÷2 rule)
-    assert tiers.tier_to_credits("high", "agent") == 6
-    assert tiers.tier_to_credits("very_high", "agent") == 15
+    assert tiers.tier_to_credits("medium", "chat") == 4
+    assert tiers.tier_to_credits("high", "chat") == 8
+    assert tiers.tier_to_credits("very_high", "chat") == 18
+    # agent runs are cheaper than chat above the shared 2-credit floor
+    assert tiers.tier_to_credits("low", "agent") == 2
+    assert tiers.tier_to_credits("medium", "agent") == 3
+    assert tiers.tier_to_credits("high", "agent") == 5
+    assert tiers.tier_to_credits("very_high", "agent") == 12
     # unknown tier -> medium for that context; unknown context -> chat table
     assert (
         tiers.tier_to_credits("bogus", "chat")
         == tiers.VALUE_TIER_CREDITS["chat"]["medium"]
     )
-    assert tiers.tier_to_credits("high", "weird-context") == 12
+    assert tiers.tier_to_credits("high", "weird-context") == 8
 
 
 def test_parse_classification() -> None:
+    # Tier-only now (category is no longer produced on the live path); any extra keys are ignored.
     assert tiers._parse_classification('{"tier":"high","category":"code_build"}') == {
         "tier": "high",
-        "category": "code_build",
     }
     # case-insensitive tier, surrounding prose tolerated
-    out = tiers._parse_classification(
-        'Here: {"tier":"VERY_HIGH","category":"analysis"} done'
-    )
-    assert out["tier"] == "very_high" and out["category"] == "analysis"
+    out = tiers._parse_classification('Here: {"tier":"VERY_HIGH"} done')
+    assert out == {"tier": "very_high"}
     # garbage / invalid -> safe medium default
-    assert tiers._parse_classification("no json here") == {
-        "tier": "medium",
-        "category": "analysis",
-    }
-    assert tiers._parse_classification('{"tier":"enormous"}') == {
-        "tier": "medium",
-        "category": "analysis",
-    }
+    assert tiers._parse_classification("no json here") == {"tier": "medium"}
+    assert tiers._parse_classification('{"tier":"enormous"}') == {"tier": "medium"}
 
 
 def test_max_tier_ratchet() -> None:
@@ -65,8 +61,31 @@ def test_max_tier_ratchet() -> None:
     assert tiers.max_tier("bogus", "bogus") == "low"
 
 
+def test_parse_receipt() -> None:
+    out = tiers._parse_receipt(
+        '{"title":"Monthly revenue summary","deliverables":["pulled sales data","built summary table"]}',
+        "fallback",
+    )
+    assert out["title"] == "Monthly revenue summary"
+    assert out["deliverables"] == ["pulled sales data", "built summary table"]
+    # prose tolerated, deliverables capped at 6, whitespace/newlines collapsed
+    many = tiers._parse_receipt(
+        'noise {"title":"A\\n B","deliverables":["d1","d2","d3","d4","d5","d6","d7"]} tail',
+        "fallback",
+    )
+    assert many["title"] == "A B" and len(many["deliverables"]) == 6
+    # garbage / missing -> fallback title, empty deliverables
+    assert tiers._parse_receipt("no json", "fallback") == {
+        "title": "fallback",
+        "deliverables": [],
+    }
+    bad = tiers._parse_receipt('{"deliverables":"not-a-list"}', "fallback")
+    assert bad["title"] == "fallback" and bad["deliverables"] == []
+
+
 if __name__ == "__main__":
     test_tier_to_credits()
     test_parse_classification()
     test_max_tier_ratchet()
-    print("tier mapping + parser + ratchet tests OK")
+    test_parse_receipt()
+    print("tier mapping + parser + ratchet + receipt tests OK")

@@ -60,7 +60,8 @@ export const CcpSoftphoneWidget = () => {
     try {
       const res = (await numaGet('/api/voice/federation-token')) as { signInUrl?: string } | null;
       return res?.signInUrl ?? null;
-    } catch {
+    } catch (err) {
+      console.warn('Numa Voice: failed to mint federation token; CCP will use the default login popup', err);
       return null;
     }
   }, [numaGet]);
@@ -111,6 +112,17 @@ export const CcpSoftphoneWidget = () => {
         </div>
       );
     }
+    if (status === 'inactive_tab') {
+      // Another browser tab already owns the single CCP agent session, so this
+      // tab deliberately skipped initCCP. If that tab closes, the cross-tab guard
+      // promotes this one automatically (no reload needed).
+      return (
+        <div className="p-3 text-center text-muted small" style={{ minHeight: PANEL_BODY_HEIGHT / 2 }}>
+          <i className="bi bi-window-stack d-block fs-3 mb-2" aria-hidden="true"></i>
+          {t('ccp.activeInOtherTab', { defaultValue: 'The softphone is active in another browser tab.' })}
+        </div>
+      );
+    }
     if (status === 'initialising') {
       return (
         <div className="p-3 text-center text-muted small">
@@ -127,7 +139,10 @@ export const CcpSoftphoneWidget = () => {
         </div>
       );
     }
-    // ready
+    // ready — the "allow microphone" nudge is only useful before the first call;
+    // suppress it once a call is live (otherwise it lingers as a stale hint over
+    // an active call, which reads like something is wrong).
+    if (onCall) return null;
     return (
       <div className="px-3 pt-2 text-center text-muted small">
         <i className="bi bi-mic me-1" aria-hidden="true"></i>
@@ -138,7 +153,9 @@ export const CcpSoftphoneWidget = () => {
 
   // The iframe host stays mounted whenever Voice is enabled + configured (so the
   // CCP initialises without the SDR opening the panel); we only hide the chrome.
-  const showIframeHost = status !== 'not_configured' && status !== 'error';
+  // Suppress it for 'inactive_tab' too: this tab never ran initCCP (another tab
+  // owns the session), so there's no iframe to host — show only the notice.
+  const showIframeHost = status !== 'not_configured' && status !== 'error' && status !== 'inactive_tab';
 
   return (
     <>

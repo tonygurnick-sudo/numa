@@ -64,15 +64,29 @@ Set `bodyType="html"` when your content includes links, lists, bold/italics, or 
 
 Use `inReplyTo` with the Gmail message ID (hex string like `19c216feb2f7b960`) to keep replies in the same thread. The response will show matching `threadId` confirming proper threading.
 
-## Listing Emails — Accuracy and Pagination
+## Listing Emails — count, timezone, and getting details in one call
 
-Pipedream's Gmail actions default to returning only **20 messages**. Be precise about what you actually fetched:
+**`maxResults` works — there is no hidden 5-result cap.** `gmail-find-email` defaults to **20** and honours whatever you set, up to **500 in a single call** (verified live: 5→5, 20→20, 50→50). If you get fewer results than expected, it's because **only that many matched your filter** — do **not** conclude "the action caps at N" and fall back to raw `proxy_request` API calls. Widen the filter or raise `maxResults` instead.
 
-- If you fetch 20 emails without a time filter, say "your 20 most recent emails", **not** "20 emails in the last 7 days". You only know how many were _returned_, not how many _exist_.
-- **Time-bound requests need search filters.** If the user asks for "emails today" or "emails this week", use the `q` parameter with time operators (e.g., `newer_than:1d`, `newer_than:7d`) so the results genuinely reflect that time range.
-- You can increase `maxResults` (up to 500) when the user needs a broader view, but 20 is fine for casual "check my recent emails" requests — just describe it accurately.
-- If the response includes a `nextPageToken`, mention that more results are available.
-- **Pagination past page 1 requires `proxy_request`.** Pipedream's built-in Gmail actions strip `nextPageToken` from the response, so you can't follow it through `run_action`. For multi-page pulls, call `https://gmail.googleapis.com/gmail/v1/users/me/messages` via `proxy_request` and follow `nextPageToken` (pass it back as `pageToken=...`) until it's absent.
+- Be precise about what you fetched: 20 emails with no time filter is "your 20 most recent", **not** "20 emails this week". You know how many were _returned_, not how many _exist_.
+- If the response includes a `nextPageToken`, more results exist beyond what you fetched.
+
+### Timezone — the #1 cause of "missing" emails
+
+`after:` / `before:` date filters use **UTC dates**, not the user's local day. For users east of UTC (NZ = UTC+12/13, AU = UTC+10), `after:2026/06/03` begins at UTC midnight ≈ mid-morning local time, so it **silently drops everything sent earlier that local morning** — which looks exactly like "it only returned 5". For "today" / "this morning":
+
+- Prefer **rolling** operators — `newer_than:1d`, `newer_than:12h` — which are timezone-agnostic and usually what the user means.
+- For an exact "since local midnight" boundary, pass a **Unix timestamp** (Gmail accepts epoch seconds): `after:1780444800`. Compute it from the user's local midnight, not UTC.
+
+Never respond to an under-returning date filter by firing dozens of `proxy_request` calls — fix the filter.
+
+### Getting email details — one call, not one-per-message
+
+`gmail-find-email` already returns, **per message**: `id`, `threadId`, `subject`, `sender`, `recipient`, `date`, `snippet`, `labelIds`, and the full `payload`. So a single call with `maxResults: 50` gives you 50 fully-populated emails — subjects, senders, dates, and snippets included. **Do not** loop `proxy_request` (or `get-email`) to fetch each message's metadata individually; it's already in the find result. Set `withTextPayload: true` if you want the body flattened to text for summarising.
+
+### Beyond 500 results / true pagination
+
+Only needed for >500 messages or to walk every page: call `https://gmail.googleapis.com/gmail/v1/users/me/messages` via `proxy_request` and follow `nextPageToken` (pass it back as `pageToken=...`) until it's absent — the built-in action strips `nextPageToken`, so `run_action` alone can't paginate past its single (up-to-500) call.
 
 ## Search Query Syntax
 

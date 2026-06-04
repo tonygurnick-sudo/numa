@@ -81,8 +81,7 @@ import type { CapabilityItem } from '../utils/capabilityRegistry';
 import { getFlagRegistry } from '../utils/featureFlags';
 import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
 import { VoiceAdminPanel } from '../Components/Voice/VoiceAdminPanel';
-import { CreditsAdminPanel } from '../Components/Settings/CreditsAdminPanel';
-import { CreditAdminPanel } from '../Components/Settings/CreditAdminPanel';
+import { CreditsDashboardPanel } from '../Components/Settings/CreditsDashboard/CreditsDashboardPanel';
 import { loadAdminCapabilityGating, DEFAULT_DISABLED_FLAGS } from '../utils/adminCapabilityGating';
 import { CHAT_SUGGESTIONS_DISABLED } from '../hooks/useChatSuggestions';
 
@@ -174,10 +173,10 @@ export default function SettingsPage() {
   const hasOps = getFlag('NUMA_OPS');
   const ssoEnabled = getFlag('SSO_ENABLED');
   const voiceEnabled = getFlag('NUMA_VOICE');
-  // Credits admin panel (Numa Credit System / SPK-015). getFlag defaults true when the flag is
-  // absent, so this shows until a proper CREDITS deploy flag is added to capabilities-metadata
-  // + numa-client-stack. Gate it there before broad rollout.
-  const creditsEnabled = getFlag('CREDITS');
+  // Credits admin view (Numa Credit System / SPK-015). Gated by the SHOW_CREDITS flag, which is
+  // emitted explicitly (default false) from numa-client-stack. Metering runs for all clients
+  // regardless; this only controls whether the in-app Credits view is visible.
+  const creditsEnabled = getFlag('SHOW_CREDITS');
   // Hidden by default — only shown when explicitly set to true in numa-client-config
   const usageReportingEnabled = window.sessionStorage.getItem('DEPLOY_USAGE_REPORTING') === 'true';
   const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
@@ -1429,15 +1428,6 @@ export default function SettingsPage() {
       ...(creditsEnabled
         ? [{ key: 'credits', label: t('tabs.credits', { defaultValue: 'Credits' }), iconClassName: 'bi bi-coin' }]
         : []),
-      ...(creditsEnabled
-        ? [
-            {
-              key: 'credit-admin',
-              label: t('tabs.creditAdmin', { defaultValue: 'Credit Admin' }),
-              iconClassName: 'bi bi-sliders',
-            },
-          ]
-        : []),
       ...(voiceEnabled ? [{ key: 'voice', label: t('tabs.voice'), iconClassName: 'bi bi-telephone' }] : []),
       ...(usageReportingEnabled
         ? [{ key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' }]
@@ -2651,20 +2641,7 @@ export default function SettingsPage() {
                     </span>
                   }
                 >
-                  {activeKey === 'credits' && <CreditsAdminPanel />}
-                </Tab>
-              )}
-              {creditsEnabled && (
-                <Tab
-                  eventKey="credit-admin"
-                  title={
-                    <span>
-                      <i className="bi bi-sliders me-2"></i>
-                      {t('tabs.creditAdmin', { defaultValue: 'Credit Admin' })}
-                    </span>
-                  }
-                >
-                  {activeKey === 'credit-admin' && <CreditAdminPanel />}
+                  {activeKey === 'credits' && <CreditsDashboardPanel />}
                 </Tab>
               )}
               {voiceEnabled && (

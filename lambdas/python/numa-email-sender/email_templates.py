@@ -457,6 +457,88 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "View ticket: {{ticket_url}}"
         ),
     },
+    # ── Cognito auth emails (BUG-188) ────────────────────────────────────────
+    # Sent on behalf of a client-account user pool's CustomEmailSender trigger
+    # (lambdas/python/cognito-custom-email-sender). The verification code is
+    # decrypted by that trigger and passed in as `code`. `.code`/`.steps`
+    # styles are inlined because BASE_TEMPLATE only defines `.button`.
+    "auth_reset_password": {
+        "subject": "Reset your {{app_name|default('Numa')}} password",
+        "title": "Reset your password",
+        "html": (
+            "<p>We received a request to reset your password. "
+            "Use the verification code below:</p>"
+            '<div style="display:block;font-family:monospace;font-size:24px;'
+            "background-color:#f0f0f0;padding:12px 20px;border-radius:6px;"
+            "font-weight:bold;letter-spacing:2px;margin:15px auto;"
+            "color:{{primary_color|default('#5e43cb')}};text-align:center;"
+            'width:fit-content;">{{code}}</div>'
+            "<p>This code will expire in 1 hour.</p>"
+            "<p>If you didn't request this, you can safely ignore this email.</p>"
+        ),
+        "text": (
+            "We received a request to reset your password. Use this "
+            "verification code: {{code}}. This code will expire in 1 hour. "
+            "If you didn't request this code, you can safely ignore this email."
+        ),
+    },
+    "auth_create_password": {
+        "subject": "Welcome to {{app_name|default('Numa')}} - create your password",
+        "title": "Welcome to {{app_name|default('Numa')}}",
+        "html": (
+            "<p>Your account has been created! To get started, you'll need "
+            "to set up your password.</p>"
+            "<p>Your activation code:</p>"
+            '<div style="display:block;font-family:monospace;font-size:24px;'
+            "background-color:#f0f0f0;padding:12px 20px;border-radius:6px;"
+            "font-weight:bold;letter-spacing:2px;margin:15px auto;"
+            "color:{{primary_color|default('#5e43cb')}};text-align:center;"
+            'width:fit-content;">{{code}}</div>'
+            '<div style="background-color:#f8f9fa;border-left:4px solid '
+            "{{primary_color|default('#5e43cb')}};padding:15px;margin:20px 0;"
+            'border-radius:0 6px 6px 0;text-align:left;">'
+            "<p><strong>You have two options to complete your account setup:"
+            "</strong></p>"
+            "<ol>"
+            "<li><strong>Option 1:</strong> Click the button below and "
+            "follow the prompts</li>"
+            "<li><strong>Option 2:</strong> Enter the activation code shown "
+            "above in your previous browser window</li>"
+            "</ol>"
+            "</div>"
+            '<a href="https://{{domain}}/create-password?'
+            'email={{email|urlencode}}&code={{code|urlencode}}" '
+            'class="button">Create password</a>'
+            "<p>This code will expire in 1 hour.</p>"
+        ),
+        "text": (
+            "Your account has been created. To get started, set up your "
+            "password using this activation code: {{code}}. "
+            "To complete your account setup: 1) Go to "
+            "https://{{domain}}/create-password?email={{email}}&code={{code}} "
+            "2) Enter your email address 3) Enter this activation code "
+            "4) Create your password. This code will expire in 1 hour."
+        ),
+    },
+    "auth_verify_code": {
+        "subject": "Your {{app_name|default('Numa')}} verification code",
+        "title": "Verify your email",
+        "html": (
+            "<p>Use the verification code below to continue:</p>"
+            '<div style="display:block;font-family:monospace;font-size:24px;'
+            "background-color:#f0f0f0;padding:12px 20px;border-radius:6px;"
+            "font-weight:bold;letter-spacing:2px;margin:15px auto;"
+            "color:{{primary_color|default('#5e43cb')}};text-align:center;"
+            'width:fit-content;">{{code}}</div>'
+            "<p>This code will expire in 24 hours.</p>"
+            "<p>If you didn't request this, you can safely ignore this email.</p>"
+        ),
+        "text": (
+            "Use this verification code to continue: {{code}}. "
+            "This code will expire in 24 hours. If you didn't request this, "
+            "you can safely ignore this email."
+        ),
+    },
     "generic": {
         "subject": "{{subject}}",
         "title": "{{title}}",

@@ -15,6 +15,7 @@ import {
 } from '@aws-sdk/client-connect';
 import { SupportClient, CreateCaseCommand } from '@aws-sdk/client-support';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { withPRM } from '../../../lib/prm-node/prm';
 
 /**
@@ -35,10 +36,16 @@ const ENV_SUFFIX = process.env.ENV_SUFFIX || '';
 const APPROVED_ORIGIN = process.env.APPROVED_ORIGIN || '';
 const FEDERATION_ROLE_ARN = process.env.FEDERATION_ROLE_ARN || '';
 const AGENT_USERNAME = process.env.AGENT_USERNAME || 'numa-voice-agent';
+// FEAT-169 config write-back (STS-proof relay -> deployer numa-client-config).
+const VOICE_CONFIG_WRITER_LAMBDA_ARN = process.env.VOICE_CONFIG_WRITER_LAMBDA_ARN || '';
+const RECORDINGS_BUCKET = process.env.RECORDINGS_BUCKET || '';
+const CONNECT_INSTANCE_URL = process.env.CONNECT_INSTANCE_URL || '';
 
 const connect = withPRM(ConnectClient, { region: CONNECT_REGION });
 const support = withPRM(SupportClient, { region: 'us-east-1' }); // Support API is us-east-1 only
 const sts = withPRM(STSClient, { region: CONNECT_REGION });
+// The config-writer lives in the deployer account in us-east-1.
+const lambda = withPRM(LambdaClient, { region: 'us-east-1' });
 
 const INSTANCE_ALIAS = `numa-${CLIENT_NAME}${ENV_SUFFIX}`;
 
@@ -77,6 +84,79 @@ async function resolveInstance(): Promise<{ id: string; arn: string } | null> {
   const res = await connect.send(new ListInstancesCommand({}));
   const inst = res.InstanceSummaryList?.find((i) => i.InstanceAlias === INSTANCE_ALIAS);
   return inst?.Id && inst.Arn ? { id: inst.Id, arn: inst.Arn } : null;
+}
+
+/**
+ * Generate an STS presigned GetCallerIdentity URL — cross-account identity proof
+ * for the deployer-side config writer. Same pattern as agent-schedule-runner's
+ * email-sender call: the URL is fetched server-side by the writer to prove which
+ * account/role is calling (it cannot be forged without our credentials).
+ */
+async function generateStsProofUrl(expiresIn = 60): Promise<string> {
+  const { SignatureV4 } = await import('@smithy/signature-v4');
+  const { Sha256 } = await import('@aws-crypto/sha256-js');
+  const { defaultProvider } = await import('@aws-sdk/credential-provider-node');
+  const { HttpRequest } = await import('@smithy/protocol-http');
+
+  const signer = new SignatureV4({
+    service: 'sts',
+    region: 'us-east-1',
+    credentials: defaultProvider(),
+    sha256: Sha256,
+  });
+  const request = new HttpRequest({
+    method: 'GET',
+    protocol: 'https:',
+    hostname: 'sts.us-east-1.amazonaws.com',
+    path: '/',
+    query: { Action: 'GetCallerIdentity', Version: '2011-06-15' },
+    headers: { host: 'sts.us-east-1.amazonaws.com' },
+  });
+  const signed = await signer.presign(request, { expiresIn });
+  const queryString = Object.entries(signed.query ?? {})
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&');
+  return `https://${signed.hostname}${signed.path}?${queryString}`;
+}
+
+/**
+ * FEAT-169 write-back: persist recordingsBucket + the live DID list (+ the Connect
+ * instance URL when known) into the deployer-account `numa-client-config` table via
+ * the STS-proof relay (numa-voice-config-writer). Fire-and-forget and FULLY
+ * non-blocking — a write-back failure must never break the admin action that
+ * triggered it. The deployer side derives the clientName from our caller account,
+ * so this can only ever write our OWN tenant record.
+ */
+async function persistVoiceConfig(): Promise<void> {
+  if (!VOICE_CONFIG_WRITER_LAMBDA_ARN) return;
+  try {
+    let didNumbers: string[] = [];
+    const instance = await resolveInstance();
+    if (instance) {
+      const numbers = await connect.send(new ListPhoneNumbersV2Command({ TargetArn: instance.arn }));
+      didNumbers = (numbers.ListPhoneNumbersSummaryList ?? [])
+        .map((n) => n.PhoneNumber)
+        .filter((p): p is string => typeof p === 'string' && p.length > 0);
+    }
+    const stsProofUrl = await generateStsProofUrl();
+    await lambda.send(
+      new InvokeCommand({
+        FunctionName: VOICE_CONFIG_WRITER_LAMBDA_ARN,
+        InvocationType: 'Event', // async — never block the admin response
+        Payload: new TextEncoder().encode(
+          JSON.stringify({
+            sts_proof_url: stsProofUrl,
+            client_name: CLIENT_NAME,
+            did_numbers: didNumbers,
+            ...(RECORDINGS_BUCKET ? { recordings_bucket: RECORDINGS_BUCKET } : {}),
+            ...(CONNECT_INSTANCE_URL ? { connect_instance_url: CONNECT_INSTANCE_URL } : {}),
+          })
+        ),
+      })
+    );
+  } catch (err: unknown) {
+    console.error('voice config write-back failed (non-blocking)', String(err));
+  }
 }
 
 async function getStatus(): Promise<APIGatewayProxyStructuredResultV2> {
@@ -121,11 +201,13 @@ async function claimNumber(body: { country?: string; type?: string }): Promise<A
   const number = avail.AvailableNumbersList?.[0]?.PhoneNumber;
   if (!number) return json(404, { error: `No available ${country} ${type} numbers` });
   const claim = await connect.send(new ClaimPhoneNumberCommand({ TargetArn: instance.arn, PhoneNumber: number }));
+  await persistVoiceConfig(); // FEAT-169: DID set changed — write it back to tenant config.
   return json(200, { claimed: number, id: claim.PhoneNumberId });
 }
 
 async function releaseNumber(phoneNumberId: string): Promise<APIGatewayProxyStructuredResultV2> {
   await connect.send(new ReleasePhoneNumberCommand({ PhoneNumberId: phoneNumberId }));
+  await persistVoiceConfig(); // FEAT-169: DID set changed — write it back to tenant config.
   return json(200, { released: phoneNumberId });
 }
 
@@ -142,6 +224,7 @@ async function setCallerId(phoneNumberId: string): Promise<APIGatewayProxyStruct
       OutboundCallerConfig: { OutboundCallerIdNumberId: phoneNumberId },
     })
   );
+  await persistVoiceConfig(); // FEAT-169: caller-id/DID config changed — write it back.
   return json(200, { queueId: queue.Id, outboundCallerIdNumberId: phoneNumberId });
 }
 

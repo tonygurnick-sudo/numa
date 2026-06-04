@@ -12,9 +12,9 @@ import * as OpsService from '../../../Services/OpsService';
 import type {
   Ticket,
   TicketLink,
-  TicketPriority,
   TicketType,
   FieldDefinition,
+  FieldOverride,
   Customer,
   Supplier,
   AuditEntry,
@@ -38,10 +38,16 @@ import { summarizeRecurrence } from './recurrenceHelpers';
 import { useToast } from '../../../Providers/ToastContext';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 import { StaffAvatar } from '../Shared/StaffAvatar';
+import { resolveBoardMembers } from '../Shared/boardMembers';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { SidebarDropdown } from '../Shared/SidebarDropdown';
 import type { DropdownOption } from '../Shared/SidebarDropdown';
-import { getPriorityColor } from '../Shared/colorUtils';
+import {
+  getFieldOptionColor,
+  isCanonicalPriority,
+  resolveBoardFieldList,
+  resolveFieldOptions,
+} from '../Shared/fieldResolution';
 import {
   formatAuditFieldLabel,
   formatAuditValue,
@@ -59,10 +65,6 @@ interface TicketDetailModalProps {
   onDeleted?: () => void;
   boardIdOverride?: string | null;
 }
-
-// ─── Priority Options ───────────────────────────────────────────────────────
-
-const PRIORITY_OPTIONS: TicketPriority[] = ['highest', 'high', 'medium', 'low', 'lowest'];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -193,8 +195,6 @@ export function TicketDetailModal({
   const [editingTags, setEditingTags] = useState(false);
   const [tagsDraft, setTagsDraft] = useState('');
   const [saving, setSaving] = useState(false);
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [saveError, setSaveError] = useState(false);
 
   // ── CRM lists for selector dropdowns ───────────────────────────────────
 
@@ -202,7 +202,6 @@ export function TicketDetailModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   // ── Move to board ──────────────────────────────────────────────────────
   const [showMoveModal, setShowMoveModal] = useState(false);
-  const [detailsExpanded, setDetailsExpanded] = useState(true);
 
   // ── History panel ────────────────────────────────────────────────────
   const [showHistory, setShowHistory] = useState(false);
@@ -233,17 +232,6 @@ export function TicketDetailModal({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const descriptionEditorRef = useRef<RichTextEditorHandle>(null);
 
-  // Serialises inline saves so back-to-back edits don't race the optimistic
-  // version lock (BUG-131). ticketRef holds the freshest version+fields,
-  // saveQueueRef chains PUTs, and handleUpdate accepts a factory so payloads
-  // that depend on prior state are computed after the previous save lands.
-  const ticketRef = useRef<Ticket | null>(null);
-  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const saveErrorRef = useRef(false);
-  useEffect(() => {
-    ticketRef.current = ticket;
-  }, [ticket]);
-
   // ── Recurrence handlers ─────────────────────────────────────────────────
   const handleRecurrenceSave = useCallback(
     async (config: RecurrenceConfig): Promise<void> => {
@@ -252,7 +240,6 @@ export function TicketDetailModal({
         ? await OpsService.updateTicketRecurrence(numaPut, ticket.id, { config })
         : await OpsService.createTicketRecurrence(numaPost, ticket.id, { config });
       setRecurrence(updated);
-      // Refresh tickets so the kanban/backlog badges pick up hasRecurrence.
       void refreshTickets?.();
     },
     [ticket, recurrence, numaPost, numaPut, refreshTickets]
@@ -381,89 +368,36 @@ export function TicketDetailModal({
   // ── Generic update handler with optimistic locking ──────────────────────
 
   const handleUpdate = useCallback(
-    async (payload: Record<string, unknown> | ((current: Ticket) => Record<string, unknown>)) => {
-      if (!ticketId) return;
-      const task = saveQueueRef.current.then(async () => {
-        const current = ticketRef.current;
-        if (!current) return;
-        const resolvedPayload = typeof payload === 'function' ? payload(current) : payload;
-        setSaving(true);
-        try {
-          const updated = await OpsService.updateTicket(numaPut, ticketId, {
-            ...resolvedPayload,
-            boardId: current.boardId,
-            version: current.version,
-          });
-          ticketRef.current = updated;
-          setTicket(updated);
-          setLastSavedAt(new Date());
-          setSaveError(false);
-          saveErrorRef.current = false;
-          void refreshTickets();
-          const crmImpactingKeys = ['customerId', 'supplierId', 'statusType', 'stageId', 'archived'] as const;
-          if (crmImpactingKeys.some((key) => Object.prototype.hasOwnProperty.call(resolvedPayload, key))) {
-            refreshCrmData();
-          }
-        } catch (err: unknown) {
-          setSaveError(true);
-          saveErrorRef.current = true;
-          const isConflict = err instanceof Error && (err.message.includes('409') || err.message.includes('conflict'));
-          if (isConflict) {
-            await showAlert({ message: t('tickets.conflictMessage'), variant: 'warning' });
-            void loadTicket();
-          } else {
-            console.error('[TicketDetailModal] Update failed', err);
-          }
-        } finally {
-          setSaving(false);
-        }
-      });
-      saveQueueRef.current = task.catch(() => undefined);
-      await task;
-    },
-    [ticketId, numaPut, refreshTickets, refreshCrmData, loadTicket, showAlert, t]
-  );
-
-  // Force-flush any pending inline edits, drain the save queue, then report
-  // the outcome via toast + footer indicator. Drives the indicator into
-  // "Saving..." → "Saved HH:MM" even when nothing was actually pending, so
-  // clicking Save always gives visible confirmation.
-  const handleManualSave = useCallback(async () => {
-    if (!ticketId) return;
-    saveErrorRef.current = false;
-    setSaving(true);
-    const start = Date.now();
-    const minShowMs = 1000;
-    try {
-      descriptionEditorRef.current?.flush();
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      await saveQueueRef.current;
-      // Silent server roundtrip — verifies connectivity and that the ticket
-      // is reachable, without overwriting local state if another user has
-      // edited since (response is intentionally discarded).
+    async (payload: Record<string, unknown>) => {
+      if (!ticket || !ticketId) return;
+      setSaving(true);
       try {
-        await OpsService.getTicket(numaGet, ticketId, effectiveTeamId ?? undefined);
-      } catch (err) {
-        saveErrorRef.current = true;
-        console.error('[TicketDetailModal] Save verification failed', err);
+        const updated = await OpsService.updateTicket(numaPut, ticketId, {
+          ...payload,
+          boardId: ticket.boardId,
+          version: ticket.version,
+        });
+        setTicket(updated);
+        void refreshTickets();
+        const crmImpactingKeys = ['customerId', 'supplierId', 'statusType', 'stageId', 'archived'] as const;
+        if (crmImpactingKeys.some((key) => Object.prototype.hasOwnProperty.call(payload, key))) {
+          refreshCrmData();
+        }
+      } catch (err: unknown) {
+        // Check for 409 conflict
+        const isConflict = err instanceof Error && (err.message.includes('409') || err.message.includes('conflict'));
+        if (isConflict) {
+          await showAlert({ message: t('tickets.conflictMessage'), variant: 'warning' });
+          void loadTicket();
+        } else {
+          console.error('[TicketDetailModal] Update failed', err);
+        }
+      } finally {
+        setSaving(false);
       }
-      const remaining = minShowMs - (Date.now() - start);
-      if (remaining > 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, remaining));
-      }
-      if (saveErrorRef.current) {
-        showToast({ message: t('tickets.saveFailed'), variant: 'error' });
-      } else {
-        setLastSavedAt(new Date());
-        setSaveError(false);
-      }
-    } finally {
-      setSaving(false);
-    }
-  }, [ticketId, numaGet, effectiveTeamId, showToast, t]);
+    },
+    [ticket, ticketId, numaPut, refreshTickets, refreshCrmData, loadTicket, t]
+  );
 
   // ── Title editing handlers ──────────────────────────────────────────────
 
@@ -584,56 +518,51 @@ export function TicketDetailModal({
 
   const handleCustomFieldChange = useCallback(
     async (fieldId: string, value: unknown) => {
-      await handleUpdate((current) => ({
-        fields: { ...(current.fields ?? {}), [fieldId]: value },
-      }));
+      if (!ticket) return;
+      const updatedFields = { ...(ticket.fields ?? {}), [fieldId]: value };
+      await handleUpdate({ fields: updatedFields });
     },
-    [handleUpdate]
+    [ticket, handleUpdate]
   );
 
   // ── Get ticket type fields with overrides ─────────────────────────────
 
   const getVisibleFields = useCallback((): {
     field: FieldDefinition;
-    override: { visible: boolean; required: boolean } | undefined;
+    override: FieldOverride | undefined;
   }[] => {
     if (!ticketType || !config) return [];
     const fieldOverrides = team?.fieldOverrides ?? {};
     const hasWorkUnits = team?.workUnitSeries?.enabled === true;
 
-    // Fields that already have dedicated sidebar rows or are rendered elsewhere.
-    // These are excluded from "Additional Fields" to prevent duplication.
-    const excluded = new Set([
-      'field-name', // title in modal header
-      'field-description', // description tab
-      'field-priority', // Priority sidebar row
-      'field-assignee', // Assignee sidebar row
-      'field-reporter', // Reporter sidebar row
-      'field-due-date', // Due Date sidebar row
-      'field-project', // Project sidebar row
-      'field-client', // Customer sidebar row
-      'field-supplier', // Supplier sidebar row
-      'field-labels', // Tags sidebar row
-      'field-watchers', // not yet implemented
-      // Sprint & effort always have dedicated sidebar rows — exclude from
-      // additional fields unconditionally to prevent duplication.
-      'field-work-unit-id',
-      'field-effort-points',
-    ]);
+    // Fields rendered outside the right sidebar (title input in header,
+    // description in the center panel, watchers not implemented). Everything
+    // else — including system fields like Priority, Assignee, Reporter —
+    // goes through the ordered sidebar loop so Board Settings reordering
+    // actually changes the modal layout.
+    const renderedElsewhere = new Set(['field-name', 'field-description', 'field-watchers']);
+    // Sprint only renders when the board has work units enabled.
+    const hiddenWhenNoWorkUnits = new Set(hasWorkUnits ? [] : ['field-work-unit-id']);
 
-    return ticketType.defaultFields
+    // The board owns its effective list — falls back to template defaults
+    // when the board has never touched this ticket type. resolveBoardFieldList
+    // handles both the post-FEAT-171 complete-snapshot shape and the legacy
+    // "extras on top of defaults" shape transparently. The list IS the order:
+    // we no longer consult `fieldOverrides[].order`, since the editor and the
+    // sidebar would otherwise drift apart on legacy boards where the old
+    // reorder handler wrote `.order` values that the new editor doesn't.
+    const ids = resolveBoardFieldList(ticketType, team?.addedFields);
+    return ids
       .map((fieldId) => {
-        if (excluded.has(fieldId)) return null;
+        if (renderedElsewhere.has(fieldId)) return null;
+        if (hiddenWhenNoWorkUnits.has(fieldId)) return null;
         const field = config.fields.find((f) => f.id === fieldId);
         if (!field) return null;
         const override = fieldOverrides[fieldId];
         if (override?.visible === false) return null;
         return { field, override };
       })
-      .filter(
-        (item): item is { field: FieldDefinition; override: { visible: boolean; required: boolean } | undefined } =>
-          item !== null
-      );
+      .filter((item): item is { field: FieldDefinition; override: FieldOverride | undefined } => item !== null);
   }, [ticketType, config, team]);
 
   // ── Pasted-image-too-large -> auto-attach ─────────────────────────────
@@ -730,10 +659,18 @@ export function TicketDetailModal({
 
     const staff = config.staff;
     const ticketTeamId = ticket.boardId;
+    // Scope the Assignee picker to the ticket's board membership. Look up the
+    // ticket's own board from the summaries list — `team` (boardData?.board) may
+    // be a different board when the modal is opened from cross-team views like
+    // All Tickets.
+    const ticketBoard = boards.find((b) => b.id === ticketTeamId) ?? team;
+    const boardMembers = resolveBoardMembers(ticketBoard, staff);
+    const assigneeInBoard = !ticket.assigneeId || boardMembers.some((m) => m.id === ticket.assigneeId);
+    const orphanAssignee =
+      !assigneeInBoard && ticket.assigneeId ? (staff.find((s) => s.id === ticket.assigneeId) ?? null) : null;
     const projects = config.projects.filter(
       (p) => !p.boardIds?.length || p.boardIds.includes(ticketTeamId) || p.id === ticket.projectId
     );
-    const hasWorkUnits = team?.workUnitSeries?.enabled === true;
     const allZones = ticketTeamData?.zones ?? boardData?.zones ?? [];
     const allStages = ticketTeamData?.stages ?? boardData?.stages ?? [];
     const currentStage = allStages.find((s) => s.id === ticket.stageId);
@@ -804,452 +741,456 @@ export function TicketDetailModal({
           </div>
         </div>
 
-        {/* ── Details section ─────────────────────────────────────────── */}
-        <button
-          className="ticket-sidebar-details-toggle"
-          aria-expanded={detailsExpanded}
-          onClick={() => setDetailsExpanded((prev) => !prev)}
-        >
-          <i className="bi bi-chevron-down" />
-          {t('tickets.details', 'Details')}
-        </button>
+        {/* ── Details body — always visible ────────────────────────────── */}
+        <div className="ticket-sidebar-details-body">
+          {/* Type */}
+          <div className="ticket-sidebar-field">
+            <div className="ticket-sidebar-field-label">{t('tickets.type')}</div>
+            <SidebarDropdown
+              value={ticket.ticketTypeId}
+              onChange={(val) => void handleUpdate({ ticketTypeId: val })}
+              options={(config?.ticketTypes ?? []).map((tt) => ({
+                value: tt.id,
+                label: tt.name,
+                icon: tt.icon ? (
+                  <i className={getTicketTypeIconClass(tt.icon)} style={{ color: tt.color, fontSize: '0.82rem' }} />
+                ) : undefined,
+              }))}
+              renderValue={() => (
+                <>
+                  {ticketType?.icon && (
+                    <i
+                      className={getTicketTypeIconClass(ticketType.icon)}
+                      style={{ color: ticketType.color, fontSize: '0.82rem' }}
+                    />
+                  )}
+                  <span style={{ color: ticketType?.color }}>{ticketType?.name ?? t('common.none')}</span>
+                </>
+              )}
+            />
+          </div>
 
-        {detailsExpanded && (
-          <div className="ticket-sidebar-details-body">
-            {/* Type */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('tickets.type')}</div>
-              <SidebarDropdown
-                value={ticket.ticketTypeId}
-                onChange={(val) => void handleUpdate({ ticketTypeId: val })}
-                options={(config?.ticketTypes ?? []).map((tt) => ({
-                  value: tt.id,
-                  label: tt.name,
-                  icon: tt.icon ? (
-                    <i className={getTicketTypeIconClass(tt.icon)} style={{ color: tt.color, fontSize: '0.82rem' }} />
-                  ) : undefined,
-                }))}
-                renderValue={() => (
-                  <>
-                    {ticketType?.icon && (
-                      <i
-                        className={getTicketTypeIconClass(ticketType.icon)}
-                        style={{ color: ticketType.color, fontSize: '0.82rem' }}
-                      />
-                    )}
-                    <span style={{ color: ticketType?.color }}>{ticketType?.name ?? t('common.none')}</span>
-                  </>
-                )}
-              />
-            </div>
-
-            {/* Priority */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('tickets.priority')}</div>
-              <SidebarDropdown
-                value={ticket.priority}
-                onChange={(val) => void handleUpdate({ priority: val as TicketPriority })}
-                options={PRIORITY_OPTIONS.map((p) => ({
-                  value: p,
-                  label: t(`priority.${p}`),
-                  icon: (
-                    <span
-                      style={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: '50%',
-                        backgroundColor: getPriorityColor(p),
-                        display: 'inline-block',
-                        flexShrink: 0,
+          {/* Every field renders in the order set in Board Settings →
+                Tickets & Fields. System fields get their rich, dedicated UI;
+                anything else falls through to DynamicField. The label always
+                comes from the field's own `name` (with override.label taking
+                precedence) so the sidebar matches Board Settings → Tickets &
+                Fields exactly — no separate hardcoded labels. */}
+          {getVisibleFields().map(({ field, override }) => {
+            const label = override?.label?.trim() || field.name;
+            switch (field.id) {
+              case 'field-priority': {
+                const boardFieldOverrides = team?.fieldOverrides ?? {};
+                const priorityOptions = resolveFieldOptions(config?.fields, boardFieldOverrides, 'field-priority');
+                const customPriority = (ticket.fields ?? {})['field-priority'];
+                const displayPriority =
+                  typeof customPriority === 'string' && !isCanonicalPriority(customPriority)
+                    ? customPriority
+                    : ticket.priority;
+                const handlePriorityChange = (val: string) => {
+                  if (isCanonicalPriority(val)) {
+                    const nextFields = { ...(ticket.fields ?? {}) };
+                    if ('field-priority' in nextFields) delete nextFields['field-priority'];
+                    void handleUpdate({ priority: val, fields: nextFields });
+                  } else {
+                    const nextFields = { ...(ticket.fields ?? {}), 'field-priority': val };
+                    void handleUpdate({ fields: nextFields });
+                  }
+                };
+                return (
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <SidebarDropdown
+                      value={displayPriority}
+                      onChange={handlePriorityChange}
+                      options={priorityOptions.map((p) => ({
+                        value: p,
+                        label: isCanonicalPriority(p) ? t(`priority.${p}`) : p,
+                        icon: (
+                          <span
+                            style={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: '50%',
+                              backgroundColor: getFieldOptionColor('field-priority', p),
+                              display: 'inline-block',
+                              flexShrink: 0,
+                            }}
+                          />
+                        ),
+                      }))}
+                      renderValue={(opt) => (
+                        <>
+                          {isCanonicalPriority(displayPriority) ? (
+                            <PriorityIndicator priority={displayPriority} />
+                          ) : (
+                            <span
+                              style={{
+                                width: 12,
+                                height: 12,
+                                borderRadius: '50%',
+                                backgroundColor: getFieldOptionColor('field-priority', displayPriority),
+                                display: 'inline-block',
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                          <span>{opt?.label ?? displayPriority}</span>
+                        </>
+                      )}
+                    />
+                  </div>
+                );
+              }
+              case 'field-assignee':
+                return (
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <SidebarDropdown
+                      value={ticket.assigneeId ?? ''}
+                      onChange={(val) => void handleUpdate({ assigneeId: val || null })}
+                      options={[
+                        { value: '', label: t('fields.unassigned') },
+                        ...(orphanAssignee
+                          ? [
+                              {
+                                value: orphanAssignee.id,
+                                label: `* ${orphanAssignee.name || orphanAssignee.email}`,
+                                icon: <StaffAvatar staff={orphanAssignee} size={22} />,
+                              } as DropdownOption,
+                            ]
+                          : []),
+                        ...boardMembers
+                          .filter((s) => s.isActive)
+                          .map(
+                            (s): DropdownOption => ({
+                              value: s.id,
+                              label: s.name || s.email,
+                              icon: <StaffAvatar staff={s} size={22} />,
+                            })
+                          ),
+                      ]}
+                      renderValue={() => {
+                        const assignee = ticket.assigneeId ? staff.find((s) => s.id === ticket.assigneeId) : undefined;
+                        return (
+                          <>
+                            <StaffAvatar staff={assignee} name={ticket.assigneeName} size={28} />
+                            <span className={!ticket.assigneeId ? 'sidebar-dropdown-placeholder' : ''}>
+                              {assignee?.name || assignee?.email || ticket.assigneeName || t('fields.unassigned')}
+                            </span>
+                          </>
+                        );
                       }}
                     />
-                  ),
-                }))}
-                renderValue={(opt) => (
-                  <>
-                    <PriorityIndicator priority={ticket.priority} />
-                    <span>{opt?.label ?? t('tickets.priority')}</span>
-                  </>
-                )}
-              />
-            </div>
-
-            {/* Assignee */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
-              <SidebarDropdown
-                value={ticket.assigneeId ?? ''}
-                onChange={(val) => void handleUpdate({ assigneeId: val || null })}
-                options={[
-                  { value: '', label: t('fields.unassigned') },
-                  ...staff
-                    .filter((s) => s.isActive)
-                    .map(
-                      (s): DropdownOption => ({
-                        value: s.id,
-                        label: s.name || s.email,
-                        icon: <StaffAvatar staff={s} size={22} />,
-                      })
-                    ),
-                ]}
-                renderValue={() => {
-                  const assignee = ticket.assigneeId ? staff.find((s) => s.id === ticket.assigneeId) : undefined;
-                  return (
-                    <>
-                      <StaffAvatar staff={assignee} name={ticket.assigneeName} size={28} />
-                      <span className={!ticket.assigneeId ? 'sidebar-dropdown-placeholder' : ''}>
-                        {assignee?.name || assignee?.email || ticket.assigneeName || t('fields.unassigned')}
-                      </span>
-                    </>
-                  );
-                }}
-              />
-            </div>
-
-            {/* Reporter */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('tickets.reporter')}</div>
-              <SidebarDropdown
-                value={ticket.reporterId ?? ''}
-                onChange={(val) => {
-                  const selectedStaff = config?.staff.find((s) => s.id === val);
-                  void handleUpdate({
-                    reporterId: val || null,
-                    reporterName: selectedStaff?.name || selectedStaff?.email || null,
-                  });
-                }}
-                options={[
-                  { value: '', label: t('fields.unassigned') },
-                  ...(config?.staff ?? [])
-                    .filter((s) => s.isActive)
-                    .map(
-                      (s): DropdownOption => ({
-                        value: s.id,
-                        label: s.name || s.email,
-                        icon: <StaffAvatar staff={s} size={22} />,
-                      })
-                    ),
-                ]}
-                renderValue={() => {
-                  const reporter = ticket.reporterId
-                    ? (config?.staff ?? []).find((s) => s.id === ticket.reporterId)
-                    : undefined;
-                  return (
-                    <>
-                      <StaffAvatar staff={reporter} name={ticket.reporterName} size={28} />
-                      <span className={!ticket.reporterId ? 'sidebar-dropdown-placeholder' : ''}>
-                        {reporter?.name || reporter?.email || ticket.reporterName || t('fields.unassigned')}
-                      </span>
-                    </>
-                  );
-                }}
-              />
-            </div>
-
-            {/* Created by */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('tickets.createdBy')}</div>
-              <span
-                className={!ticket.createdByName ? 'sidebar-dropdown-placeholder' : ''}
-                style={{ fontSize: '0.82rem', display: 'block', padding: '5px 8px' }}
-              >
-                {ticket.createdByName || t('common.none')}
-              </span>
-            </div>
-
-            {/* Sprint (if work units enabled) */}
-            {hasWorkUnits && (
-              <div className="ticket-sidebar-field">
-                <div className="ticket-sidebar-field-label">{t('tickets.workUnit')}</div>
-                <SidebarDropdown
-                  value={ticket.workUnitId ?? ''}
-                  onChange={(val) => void handleUpdate({ workUnitId: val || null })}
-                  options={[
-                    { value: '', label: t('common.none') },
-                    ...workUnits
-                      .filter((wu) => wu.status !== 'completed')
-                      .map(
-                        (wu): DropdownOption => ({
-                          value: wu.id,
-                          label: wu.name,
-                          icon: <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />,
-                        })
-                      ),
-                  ]}
-                  renderValue={(opt) =>
-                    opt?.value ? (
-                      <span className="ticket-badge ticket-badge-sprint" style={{ margin: 0 }}>
-                        <i
-                          className="bi bi-circle-fill me-1"
-                          style={{ fontSize: '0.28rem', verticalAlign: 'middle' }}
-                        />
-                        {opt.label}
-                      </span>
-                    ) : (
-                      <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
-                    )
-                  }
-                />
-              </div>
-            )}
-
-            {/* Repeats — opens RecurrencePicker. Inline summary or "Doesn't repeat". */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('recurrence.rowLabel')}</div>
-              <button
-                type="button"
-                className="btn btn-sm btn-link text-decoration-none p-0 text-start"
-                style={{ fontSize: '0.85rem' }}
-                onClick={() => setShowRecurrencePicker(true)}
-              >
-                {recurrence ? (
-                  <span>
-                    <i className="bi bi-arrow-repeat me-1" />
-                    {summarizeRecurrence(recurrence.config, t)}
-                    {!recurrence.enabled && (
-                      <Badge bg="secondary" className="ms-2">
-                        {t('recurrence.rowDisabled')}
-                      </Badge>
-                    )}
-                  </span>
-                ) : (
-                  <span className="text-muted">{t('recurrence.rowDoesNotRepeat')}</span>
-                )}
-              </button>
-            </div>
-
-            {/* Due Date */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('tickets.dueDate')}</div>
-              <Form.Control
-                type="date"
-                size="sm"
-                value={toDateInputValue(ticket.dueDate)}
-                onChange={(e) => void handleUpdate({ dueDate: e.target.value || null })}
-              />
-            </div>
-
-            {/* Project — full width */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('tickets.project')}</div>
-              <div className="d-flex align-items-center gap-1">
-                <div style={{ flex: 1 }}>
-                  <SidebarDropdown
-                    value={ticket.projectId ?? ''}
-                    onChange={(val) => void handleUpdate({ projectId: val || null })}
-                    options={[
-                      { value: '', label: t('common.none') },
-                      ...projects
-                        .filter((p) => p.isActive)
-                        .map(
-                          (p): DropdownOption => ({
-                            value: p.id,
-                            label: p.name,
-                            icon: (
-                              <i
-                                className="bi bi-folder"
-                                style={{ fontSize: '0.78rem', color: p.color || '#6d28d9' }}
-                              />
-                            ),
-                            action: (
-                              <button
-                                type="button"
-                                title={t('projects.openProject', 'Open project')}
-                                onClick={() => window.open(`/ops?project=${p.id}`, '_blank')}
+                  </div>
+                );
+              case 'field-reporter':
+                return (
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <SidebarDropdown
+                      value={ticket.reporterId ?? ''}
+                      onChange={(val) => {
+                        const selectedStaff = config?.staff.find((s) => s.id === val);
+                        void handleUpdate({
+                          reporterId: val || null,
+                          reporterName: selectedStaff?.name || selectedStaff?.email || null,
+                        });
+                      }}
+                      options={[
+                        { value: '', label: t('fields.unassigned') },
+                        ...(config?.staff ?? [])
+                          .filter((s) => s.isActive)
+                          .map(
+                            (s): DropdownOption => ({
+                              value: s.id,
+                              label: s.name || s.email,
+                              icon: <StaffAvatar staff={s} size={22} />,
+                            })
+                          ),
+                      ]}
+                      renderValue={() => {
+                        const reporter = ticket.reporterId
+                          ? (config?.staff ?? []).find((s) => s.id === ticket.reporterId)
+                          : undefined;
+                        return (
+                          <>
+                            <StaffAvatar staff={reporter} name={ticket.reporterName} size={28} />
+                            <span className={!ticket.reporterId ? 'sidebar-dropdown-placeholder' : ''}>
+                              {reporter?.name || reporter?.email || ticket.reporterName || t('fields.unassigned')}
+                            </span>
+                          </>
+                        );
+                      }}
+                    />
+                  </div>
+                );
+              case 'field-work-unit-id':
+                return (
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <SidebarDropdown
+                      value={ticket.workUnitId ?? ''}
+                      onChange={(val) => void handleUpdate({ workUnitId: val || null })}
+                      options={[
+                        { value: '', label: t('common.none') },
+                        ...workUnits.map(
+                          (wu): DropdownOption => ({
+                            value: wu.id,
+                            label: wu.name,
+                            icon: <i className="bi bi-flag" style={{ fontSize: '0.78rem', color: '#065f46' }} />,
+                          })
+                        ),
+                      ]}
+                      renderValue={(opt) =>
+                        opt?.value ? (
+                          <span className="ticket-badge ticket-badge-sprint" style={{ margin: 0 }}>
+                            <i
+                              className="bi bi-circle-fill me-1"
+                              style={{ fontSize: '0.28rem', verticalAlign: 'middle' }}
+                            />
+                            {opt.label}
+                          </span>
+                        ) : (
+                          <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                        )
+                      }
+                    />
+                  </div>
+                );
+              case 'field-due-date':
+                return (
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <Form.Control
+                      type="date"
+                      size="sm"
+                      value={toDateInputValue(ticket.dueDate)}
+                      onChange={(e) => void handleUpdate({ dueDate: e.target.value || null })}
+                    />
+                  </div>
+                );
+              case 'field-project':
+                return (
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <div className="d-flex align-items-center gap-1">
+                      <div style={{ flex: 1 }}>
+                        <SidebarDropdown
+                          value={ticket.projectId ?? ''}
+                          onChange={(val) => void handleUpdate({ projectId: val || null })}
+                          options={[
+                            { value: '', label: t('common.none') },
+                            ...projects
+                              .filter((p) => p.isActive)
+                              .map(
+                                (p): DropdownOption => ({
+                                  value: p.id,
+                                  label: p.name,
+                                  icon: (
+                                    <i
+                                      className="bi bi-folder"
+                                      style={{ fontSize: '0.78rem', color: p.color || '#6d28d9' }}
+                                    />
+                                  ),
+                                  action: (
+                                    <button
+                                      type="button"
+                                      title={t('projects.openProject', 'Open project')}
+                                      onClick={() => window.open(`/ops?project=${p.id}`, '_blank')}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#9ca3af',
+                                        cursor: 'pointer',
+                                        padding: '2px 4px',
+                                        fontSize: '0.72rem',
+                                        lineHeight: 1,
+                                      }}
+                                    >
+                                      <i className="bi bi-box-arrow-up-right" />
+                                    </button>
+                                  ),
+                                })
+                              ),
+                          ]}
+                          renderValue={(opt) => {
+                            if (!opt?.value)
+                              return <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>;
+                            const proj = projects.find((p) => p.id === opt.value);
+                            const pColor = proj?.color || '#6d28d9';
+                            return (
+                              <span
+                                className="ticket-badge ticket-badge-project"
                                 style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  color: '#9ca3af',
-                                  cursor: 'pointer',
-                                  padding: '2px 4px',
-                                  fontSize: '0.72rem',
-                                  lineHeight: 1,
+                                  margin: 0,
+                                  backgroundColor: `${pColor}18`,
+                                  color: pColor,
+                                  borderColor: `${pColor}30`,
                                 }}
                               >
-                                <i className="bi bi-box-arrow-up-right" />
-                              </button>
-                            ),
-                          })
-                        ),
-                    ]}
-                    renderValue={(opt) => {
-                      if (!opt?.value) return <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>;
-                      const proj = projects.find((p) => p.id === opt.value);
-                      const pColor = proj?.color || '#6d28d9';
-                      return (
-                        <span
-                          className="ticket-badge ticket-badge-project"
+                                <i className="bi bi-folder me-1" />
+                                {opt.label}
+                              </span>
+                            );
+                          }}
+                        />
+                      </div>
+                      {ticket.projectId && (
+                        <button
+                          type="button"
+                          title={t('projects.openProject', 'Open project')}
+                          onClick={() => window.open(`/ops?project=${ticket.projectId}`, '_blank')}
                           style={{
-                            margin: 0,
-                            backgroundColor: `${pColor}18`,
-                            color: pColor,
-                            borderColor: `${pColor}30`,
+                            background: 'none',
+                            border: 'none',
+                            color: '#9ca3af',
+                            cursor: 'pointer',
+                            padding: '2px 4px',
+                            fontSize: '0.78rem',
+                            flexShrink: 0,
                           }}
                         >
-                          <i className="bi bi-folder me-1" />
-                          {opt.label}
-                        </span>
-                      );
-                    }}
-                  />
-                </div>
-                {ticket.projectId && (
-                  <button
-                    type="button"
-                    title={t('projects.openProject', 'Open project')}
-                    onClick={() => window.open(`/ops?project=${ticket.projectId}`, '_blank')}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#9ca3af',
-                      cursor: 'pointer',
-                      padding: '2px 4px',
-                      fontSize: '0.78rem',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <i className="bi bi-box-arrow-up-right" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Customer — full width */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('tickets.customer')}</div>
-              <SidebarDropdown
-                value={ticket.customerId ?? ''}
-                onChange={(val) => {
-                  const selected = customers.find((c) => c.id === val);
-                  void handleUpdate({
-                    customerId: val || null,
-                    customerName: selected?.companyName ?? null,
-                  });
-                }}
-                disabled={loadingCrm}
-                options={
-                  loadingCrm
-                    ? [{ value: '', label: t('common.loading'), disabled: true }]
-                    : [
-                        { value: '', label: t('common.none') },
-                        ...customers.map(
-                          (c): DropdownOption => ({
-                            value: c.id,
-                            label: c.companyName,
-                            icon: <i className="bi bi-building" style={{ fontSize: '0.78rem', color: '#1d4ed8' }} />,
-                          })
-                        ),
-                      ]
-                }
-                renderValue={(opt) =>
-                  opt?.value ? (
-                    <span className="ticket-badge ticket-badge-customer" style={{ margin: 0 }}>
-                      <i className="bi bi-building me-1" />
-                      {opt.label}
-                    </span>
-                  ) : (
-                    <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
-                  )
-                }
-              />
-            </div>
-
-            {/* Supplier — full width */}
-            <div className="ticket-sidebar-field">
-              <div className="ticket-sidebar-field-label">{t('tickets.supplier')}</div>
-              <SidebarDropdown
-                value={ticket.supplierId ?? ''}
-                onChange={(val) => {
-                  const selected = suppliers.find((s) => s.id === val);
-                  void handleUpdate({
-                    supplierId: val || null,
-                    supplierName: selected?.companyName ?? null,
-                  });
-                }}
-                disabled={loadingCrm}
-                options={
-                  loadingCrm
-                    ? [{ value: '', label: t('common.loading'), disabled: true }]
-                    : [
-                        { value: '', label: t('common.none') },
-                        ...suppliers.map(
-                          (s): DropdownOption => ({
-                            value: s.id,
-                            label: s.companyName,
-                            icon: <i className="bi bi-truck" style={{ fontSize: '0.78rem', color: '#c2410c' }} />,
-                          })
-                        ),
-                      ]
-                }
-                renderValue={(opt) =>
-                  opt?.value ? (
-                    <span className="ticket-badge ticket-badge-supplier" style={{ margin: 0 }}>
-                      <i className="bi bi-truck me-1" />
-                      {opt.label}
-                    </span>
-                  ) : (
-                    <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
-                  )
-                }
-              />
-            </div>
-
-            {/* Tags */}
-            <div
-              className="ticket-sidebar-field"
-              style={{ cursor: editingTags ? 'default' : 'pointer' }}
-              onClick={editingTags ? undefined : startEditTags}
-              role={editingTags ? undefined : 'button'}
-              tabIndex={editingTags ? undefined : 0}
-              onKeyDown={
-                editingTags
-                  ? undefined
-                  : (e) => {
-                      if (e.key === 'Enter' || e.key === ' ') startEditTags();
+                          <i className="bi bi-box-arrow-up-right" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              case 'field-client':
+                return (
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <SidebarDropdown
+                      value={ticket.customerId ?? ''}
+                      onChange={(val) => {
+                        const selected = customers.find((c) => c.id === val);
+                        void handleUpdate({
+                          customerId: val || null,
+                          customerName: selected?.companyName ?? null,
+                        });
+                      }}
+                      disabled={loadingCrm}
+                      options={
+                        loadingCrm
+                          ? [{ value: '', label: t('common.loading'), disabled: true }]
+                          : [
+                              { value: '', label: t('common.none') },
+                              ...customers.map(
+                                (c): DropdownOption => ({
+                                  value: c.id,
+                                  label: c.companyName,
+                                  icon: (
+                                    <i className="bi bi-building" style={{ fontSize: '0.78rem', color: '#1d4ed8' }} />
+                                  ),
+                                })
+                              ),
+                            ]
+                      }
+                      renderValue={(opt) =>
+                        opt?.value ? (
+                          <span className="ticket-badge ticket-badge-customer" style={{ margin: 0 }}>
+                            <i className="bi bi-building me-1" />
+                            {opt.label}
+                          </span>
+                        ) : (
+                          <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                        )
+                      }
+                    />
+                  </div>
+                );
+              case 'field-supplier':
+                return (
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <SidebarDropdown
+                      value={ticket.supplierId ?? ''}
+                      onChange={(val) => {
+                        const selected = suppliers.find((s) => s.id === val);
+                        void handleUpdate({
+                          supplierId: val || null,
+                          supplierName: selected?.companyName ?? null,
+                        });
+                      }}
+                      disabled={loadingCrm}
+                      options={
+                        loadingCrm
+                          ? [{ value: '', label: t('common.loading'), disabled: true }]
+                          : [
+                              { value: '', label: t('common.none') },
+                              ...suppliers.map(
+                                (s): DropdownOption => ({
+                                  value: s.id,
+                                  label: s.companyName,
+                                  icon: <i className="bi bi-truck" style={{ fontSize: '0.78rem', color: '#c2410c' }} />,
+                                })
+                              ),
+                            ]
+                      }
+                      renderValue={(opt) =>
+                        opt?.value ? (
+                          <span className="ticket-badge ticket-badge-supplier" style={{ margin: 0 }}>
+                            <i className="bi bi-truck me-1" />
+                            {opt.label}
+                          </span>
+                        ) : (
+                          <span className="sidebar-dropdown-placeholder">{t('common.none')}</span>
+                        )
+                      }
+                    />
+                  </div>
+                );
+              case 'field-labels':
+                return (
+                  <div
+                    key={field.id}
+                    className="ticket-sidebar-field"
+                    style={{ cursor: editingTags ? 'default' : 'pointer' }}
+                    onClick={editingTags ? undefined : startEditTags}
+                    role={editingTags ? undefined : 'button'}
+                    tabIndex={editingTags ? undefined : 0}
+                    onKeyDown={
+                      editingTags
+                        ? undefined
+                        : (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') startEditTags();
+                          }
                     }
-              }
-            >
-              <div className="ticket-sidebar-field-label">{t('tickets.tags')}</div>
-              {editingTags ? (
-                <Form.Control
-                  type="text"
-                  size="sm"
-                  value={tagsDraft}
-                  onChange={(e) => setTagsDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void saveTags();
-                    if (e.key === 'Escape') cancelTags();
-                  }}
-                  onBlur={() => void saveTags()}
-                  autoFocus
-                />
-              ) : (
-                <div className="d-flex flex-wrap gap-1" style={{ minHeight: 28, paddingTop: 2, paddingLeft: 8 }}>
-                  {ticket.tags.length > 0 ? (
-                    ticket.tags.map((tag) => (
-                      <span key={tag} className="ticket-tag-badge">
-                        {tag}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="sidebar-dropdown-placeholder" style={{ fontSize: '0.82rem' }}>
-                      {t('common.none')}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Custom / Dynamic Fields */}
-            {getVisibleFields().length > 0 && (
-              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #f0f0f0' }}>
-                <div
-                  className="ticket-sidebar-field-label"
-                  style={{ marginBottom: 6, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.05em' }}
-                >
-                  {t('fields.dynamicFields')}
-                </div>
-                {getVisibleFields().map(({ field, override }) => (
+                  >
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    {editingTags ? (
+                      <Form.Control
+                        type="text"
+                        size="sm"
+                        value={tagsDraft}
+                        onChange={(e) => setTagsDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void saveTags();
+                          if (e.key === 'Escape') cancelTags();
+                        }}
+                        onBlur={() => void saveTags()}
+                        autoFocus
+                      />
+                    ) : (
+                      <div className="d-flex flex-wrap gap-1" style={{ minHeight: 28, paddingTop: 2, paddingLeft: 8 }}>
+                        {ticket.tags.length > 0 ? (
+                          ticket.tags.map((tag) => (
+                            <span key={tag} className="ticket-tag-badge">
+                              {tag}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="sidebar-dropdown-placeholder" style={{ fontSize: '0.82rem' }}>
+                            {t('common.none')}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              default:
+                return (
                   <DynamicField
                     key={field.id}
                     field={field}
@@ -1257,13 +1198,38 @@ export function TicketDetailModal({
                     onChange={(value) => void handleCustomFieldChange(field.id, value)}
                     compact
                     fieldOverride={override}
+                    ticketValues={ticket.fields ?? {}}
                     staff={config.staff}
                   />
-                ))}
-              </div>
-            )}
+                );
+            }
+          })}
+
+          {/* Repeats — opens RecurrencePicker. Inline summary or "Doesn't repeat". */}
+          <div className="ticket-sidebar-field">
+            <div className="ticket-sidebar-field-label">{t('recurrence.rowLabel')}</div>
+            <button
+              type="button"
+              className="btn btn-sm btn-link text-decoration-none p-0 text-start"
+              style={{ fontSize: '0.85rem' }}
+              onClick={() => setShowRecurrencePicker(true)}
+            >
+              {recurrence ? (
+                <span>
+                  <i className="bi bi-arrow-repeat me-1" />
+                  {summarizeRecurrence(recurrence.config, t)}
+                  {!recurrence.enabled && (
+                    <Badge bg="secondary" className="ms-2">
+                      {t('recurrence.rowDisabled')}
+                    </Badge>
+                  )}
+                </span>
+              ) : (
+                <span className="text-muted">{t('recurrence.rowDoesNotRepeat')}</span>
+              )}
+            </button>
           </div>
-        )}
+        </div>
       </div>
     );
   };
@@ -1516,34 +1482,9 @@ export function TicketDetailModal({
                   </button>
                 )}
               </div>
-              <div className="d-flex align-items-center gap-2">
-                <small
-                  className={saveError ? 'text-danger' : 'text-muted'}
-                  style={{ fontSize: '0.75rem', minWidth: 90, textAlign: 'right' }}
-                >
-                  {saving
-                    ? t('common.saving')
-                    : saveError
-                      ? t('tickets.saveFailed')
-                      : lastSavedAt
-                        ? t('tickets.savedAt', {
-                            time: lastSavedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
-                          })
-                        : ''}
-                </small>
-                <button
-                  type="button"
-                  className="ticket-detail-footer-btn ticket-detail-footer-btn--primary"
-                  disabled={saving}
-                  onClick={() => void handleManualSave()}
-                >
-                  <i className="bi bi-check2" />
-                  {t('common.save')}
-                </button>
-                <button type="button" className="ticket-detail-footer-btn" onClick={handleClose}>
-                  {t('common.close')}
-                </button>
-              </div>
+              <button type="button" className="ticket-detail-footer-btn" onClick={handleClose}>
+                {t('common.close')}
+              </button>
             </Modal.Footer>
           </>
         )}

@@ -54,6 +54,16 @@ export interface Prospect {
   qualified?: boolean;
   /** ID of the CRM record created/linked for this prospect, if any. */
   crm_record_id?: string;
+  /** Objections the prospect raised on the most recent call (post-call processor). */
+  objections?: string[];
+  /** Agreed next steps from the most recent call (post-call processor). */
+  next_steps?: string[];
+  /** Call-quality rating 1–5 from the most recent call (post-call processor). */
+  call_quality_rating?: number;
+  /** One-line justification for the call-quality rating (post-call processor). */
+  call_quality_justification?: string;
+  /** Two suggested talking points for the next call (post-call processor). */
+  follow_up_talking_points?: string[];
 }
 
 /**
@@ -128,4 +138,8 @@ export interface WrapUpOutcome {
   prospect_phone: string;
   /** ISO timestamp the outcome was submitted. */
   submitted_at: string;
+  /** Recording-consent audit: whether the SDR attested they told the prospect the
+   *  call was being recorded. Persisted on the per-call outcome record (the audit
+   *  artifact at voice/outcomes/{contactId}.json). */
+  recording_disclosed?: boolean;
 }

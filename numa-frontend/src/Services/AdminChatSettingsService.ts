@@ -158,6 +158,14 @@ function validateGlobal(data: unknown): GlobalChatSettings {
         ? (obj.approvalMode as ApprovalMode)
         : DEFAULT_GLOBAL_CHAT_SETTINGS.approvalMode,
     numaToolApprovalMode: validateNumaToolApprovalMode(obj.numaToolApprovalMode),
+    // TASK-127: per-integration overrides are user-only. Admins have no UI to
+    // set them globally, but the field is on the shared ChatSettings type, so
+    // we preserve whatever the API returns (empty record by default) to keep
+    // the type honest.
+    integrationApprovalModes:
+      typeof obj.integrationApprovalModes === 'object' && obj.integrationApprovalModes !== null
+        ? (obj.integrationApprovalModes as Record<string, ApprovalMode>)
+        : {},
     emailSignatureEnabled:
       typeof obj.emailSignatureEnabled === 'boolean'
         ? obj.emailSignatureEnabled

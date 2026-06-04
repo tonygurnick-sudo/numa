@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Modal, Button, Form, Nav, Tab, Table, Badge, Accordion, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
-import { useAlert } from '../../../Providers/ConfirmContext';
+import { useAlert, useConfirm } from '../../../Providers/ConfirmContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import {
@@ -15,6 +15,7 @@ import {
 } from '../Shared/colorUtils';
 import { STATUS_TYPE_TO_ZONES, getTicketTypeIconClass } from '../../../constants/opsConstants';
 import TicketTypeIconPicker from '../Shared/TicketTypeIconPicker';
+import { TicketTypeFieldsEditor } from './TicketTypeFieldsEditor';
 import { ConfirmModal } from './ConfirmModal';
 import { CustomerDetailModal } from './CustomerDetailModal';
 import { CustomerRecordConfigBlock } from './CustomerRecordConfigBlock';
@@ -144,6 +145,7 @@ export function GlobalSettingsModal({
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const showAlert = useAlert();
+  const showConfirm = useConfirm();
   const { config, boards, refreshBoards, refreshStaff, refreshConfig } = useOps();
 
   // ── Local state (edited copies of config) ──────────────────────────────────
@@ -259,6 +261,8 @@ export function GlobalSettingsModal({
     order: 0,
   });
   const [showTicketTypeModal, setShowTicketTypeModal] = useState(false);
+  const [savingTicketType, setSavingTicketType] = useState(false);
+  const [ticketTypeModalError, setTicketTypeModalError] = useState<string | null>(null);
   const [showTicketTypeFieldModal, setShowTicketTypeFieldModal] = useState(false);
   const [fieldSelectionSearch, setFieldSelectionSearch] = useState('');
   const [showCustomerDetail, setShowCustomerDetail] = useState(false);
@@ -631,13 +635,56 @@ export function GlobalSettingsModal({
         isSystem: false,
         order: fields.length,
       };
-      try {
-        const created = await OpsService.createField(numaPost, payload);
+      // Try to create. If the server reports a duplicate-name conflict, surface
+      // the existing field so the user can choose to reuse it or force-create
+      // a parallel duplicate (FEAT-171). Tickets routinely end up with two
+      // "Priority" fields today; this prevents that silently happening again.
+      const persist = async (force: boolean) => {
+        const created = await OpsService.createField(numaPost, payload, { force });
         const newField: FieldDefinition = { ...payload, ...created, id: created?.id ?? payload.id };
         setFields((prev) => [...prev, newField]);
+      };
+      try {
+        await persist(false);
       } catch (err) {
-        setError(t('errors.saveFailed', { message: String(err) }));
-        return;
+        const e = err as {
+          response?: {
+            status?: number;
+            data?: { error?: string; existing?: { id: string; name: string; isSystem?: boolean; fieldType?: string } };
+          };
+        };
+        if (e.response?.status === 409 && e.response.data?.error === 'duplicate-name' && e.response.data.existing) {
+          const existing = e.response.data.existing;
+          const shouldForce = await showConfirm({
+            title: t('globalSettings.duplicateFieldTitle', 'Field already exists'),
+            message: t('globalSettings.duplicateFieldPrompt', {
+              name: existing.name,
+              defaultValue: 'A field called "{{name}}" already exists. Use existing, or create a parallel duplicate?',
+            }),
+            confirmLabel: t('globalSettings.duplicateCreateAnyway', 'Create anyway'),
+            cancelLabel: t('globalSettings.duplicateUseExisting', 'Use existing'),
+            variant: 'warning',
+          });
+          if (!shouldForce) {
+            // User chose "Use existing" — close the form without persisting.
+            setNewFieldName('');
+            setNewFieldType('text');
+            setNewFieldCategory('common');
+            setNewFieldOptions('');
+            setEditingFieldId(null);
+            setShowingNewField(false);
+            return;
+          }
+          try {
+            await persist(true);
+          } catch (innerErr) {
+            setError(t('errors.saveFailed', { message: String(innerErr) }));
+            return;
+          }
+        } else {
+          setError(t('errors.saveFailed', { message: String(err) }));
+          return;
+        }
       }
     }
     setNewFieldName('');
@@ -647,6 +694,69 @@ export function GlobalSettingsModal({
     setEditingFieldId(null);
     setShowingNewField(false);
   };
+
+  /**
+   * Persist a brand-new field directly from inside the ticket-type template
+   * editor (Create new custom field button). Mirrors handleAddCustomField but
+   * is shaped to fit the TicketTypeFieldsEditor's onCreateField contract.
+   */
+  const handleCreateFieldInline = useCallback(
+    async (payload: {
+      name: string;
+      fieldType: FieldType;
+      category: FieldCategory;
+      options?: string[];
+    }): Promise<string> => {
+      const fullPayload: FieldDefinition = {
+        id: generateId(),
+        name: payload.name,
+        category: payload.category,
+        fieldType: payload.fieldType,
+        options: payload.options,
+        isSystem: false,
+        order: fields.length,
+      };
+      const persist = async (force: boolean): Promise<FieldDefinition> => {
+        const created = await OpsService.createField(numaPost, fullPayload, { force });
+        const newField: FieldDefinition = { ...fullPayload, ...created, id: created?.id ?? fullPayload.id };
+        setFields((prev) => [...prev, newField]);
+        return newField;
+      };
+      try {
+        const newField = await persist(false);
+        return newField.id;
+      } catch (err) {
+        const e = err as {
+          response?: {
+            status?: number;
+            data?: { error?: string; existing?: { id: string; name: string; isSystem?: boolean } };
+          };
+        };
+        if (e.response?.status === 409 && e.response.data?.error === 'duplicate-name' && e.response.data.existing) {
+          const existing = e.response.data.existing;
+          const shouldForce = await showConfirm({
+            title: t('globalSettings.duplicateFieldTitle', 'Field already exists'),
+            message: t('globalSettings.duplicateFieldPrompt', {
+              name: existing.name,
+              defaultValue: 'A field called "{{name}}" already exists. Use existing, or create a parallel duplicate?',
+            }),
+            confirmLabel: t('globalSettings.duplicateCreateAnyway', 'Create anyway'),
+            cancelLabel: t('globalSettings.duplicateUseExisting', 'Use existing'),
+            variant: 'warning',
+          });
+          if (!shouldForce) {
+            // Use existing — return its id so the editor attaches it instead.
+            return existing.id;
+          }
+          const newField = await persist(true);
+          return newField.id;
+        }
+        throw err;
+      }
+    },
+    [fields.length, numaPost, showConfirm, t]
+  );
+
   // ── Helper to get primary contact name for customer/supplier ───────────────
   const getPrimaryContactName = (contacts: { name: string; isPrimary: boolean }[]): string => {
     const primary = contacts.find((c) => c.isPrimary);
@@ -701,23 +811,16 @@ export function GlobalSettingsModal({
     </div>
   );
 
-  // ── Tab 3: Ticket Types ────────────────────────────────────────────────────
+  // ── Tab 3: Ticket Type Templates ───────────────────────────────────────────
   const renderTicketTypesTab = () => (
     <div>
       <div className="alert alert-info small mb-3">
         <i className="bi bi-info-circle me-1" />
+        <strong>{t('globalSettings.ticketTypeTemplatesLead', 'Ticket type templates set the defaults.')}</strong>{' '}
         {t(
-          'globalSettings.ticketTypesInfo',
-          'A ticket type is a piece of work. Create ticket types for bugs, features, tasks, or anything else your boards need to track.'
+          'globalSettings.ticketTypeTemplatesBody',
+          'Each board picks which templates to use and can override fields, labels, and options in Board Settings → Tickets & Fields without affecting other boards.'
         )}
-        <br />
-        <span className="text-muted mt-1 d-inline-block">
-          <i className="bi bi-arrow-right-short me-1" />
-          {t(
-            'globalSettings.ticketTypesEnableNote',
-            'New ticket types must be enabled per board in Board Settings > Tickets & Fields.'
-          )}
-        </span>
       </div>
       <Table size="sm" hover className="mb-0 ops-settings-table">
         <thead>
@@ -2137,7 +2240,7 @@ export function GlobalSettingsModal({
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered>
+      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered scrollable>
         <Modal.Header closeButton>
           <Modal.Title>{t('settings.title')}</Modal.Title>
         </Modal.Header>
@@ -2613,10 +2716,14 @@ export function GlobalSettingsModal({
         </Modal.Footer>
       </Modal>
 
-      {/* ── Ticket Type Config Modal ─────────────────────────────────────── */}
-      <Modal show={showTicketTypeModal} onHide={() => setShowTicketTypeModal(false)} size="lg" centered>
+      {/* ── Ticket Type Template Config Modal ──────────────────────────────── */}
+      <Modal show={showTicketTypeModal} onHide={() => setShowTicketTypeModal(false)} size="lg" centered scrollable>
         <Modal.Header closeButton>
-          <Modal.Title>{editingTicketType ? 'Edit Ticket Type' : 'Add Ticket Type'}</Modal.Title>
+          <Modal.Title>
+            {editingTicketType
+              ? t('globalSettings.editTicketTypeTemplate', 'Edit Ticket Type Template')
+              : t('globalSettings.addTicketTypeTemplate', 'Add Ticket Type Template')}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body className="d-flex flex-column gap-3">
           <div className="row g-3">
@@ -2678,69 +2785,120 @@ export function GlobalSettingsModal({
           <hr className="my-2" />
 
           <Form.Group>
-            <Form.Label className="fw-medium d-flex align-items-center justify-content-between">
-              {t('globalSettings.defaultFields')}
-              <Button
-                variant="outline-primary"
-                size="sm"
-                className="py-0 px-2"
-                onClick={() => setShowTicketTypeFieldModal(true)}
-              >
-                Select Fields
-              </Button>
-            </Form.Label>
-            <div className="text-muted small mb-2">Select the fields that apply to this work item type.</div>
-            <div className="d-flex flex-wrap gap-1 p-2 border rounded bg-light" style={{ minHeight: '44px' }}>
-              {ticketTypeForm.defaultFields.length > 0 ? (
-                ticketTypeForm.defaultFields.map((fieldId) => {
-                  const field = fields.find((f) => f.id === fieldId);
-                  return field ? (
-                    <Badge
-                      key={fieldId}
-                      bg="info"
-                      className="text-white d-flex align-items-center gap-1 fw-normal"
-                      style={{ fontSize: '0.75rem' }}
-                    >
-                      {field.name}
-                      <i
-                        className="bi bi-x-circle-fill ms-1"
-                        style={{ cursor: 'pointer', opacity: 0.8 }}
-                        onClick={() => {
-                          setTicketTypeForm({
-                            ...ticketTypeForm,
-                            defaultFields: ticketTypeForm.defaultFields.filter((id) => id !== fieldId),
-                          });
-                        }}
-                      />
-                    </Badge>
-                  ) : null;
-                })
-              ) : (
-                <span className="text-muted small italic">No fields selected</span>
+            <Form.Label className="fw-medium d-block">{t('globalSettings.defaultFields')}</Form.Label>
+            <div className="text-muted small mb-2">
+              {t(
+                'globalSettings.defaultFieldsHelp',
+                'These are the default fields for this ticket type template. Boards can layer on extra fields or override labels and options in Board Settings → Tickets & Fields.'
               )}
             </div>
+            <TicketTypeFieldsEditor
+              mode="global"
+              ticketType={ticketTypeForm}
+              fields={fields}
+              onMoveField={(_ttId, fromIdx, toIdx) => {
+                const ids = [...(ticketTypeForm.defaultFields ?? [])];
+                if (fromIdx < 0 || fromIdx >= ids.length) return;
+                const [moved] = ids.splice(fromIdx, 1);
+                ids.splice(Math.min(toIdx, ids.length), 0, moved);
+                setTicketTypeForm({ ...ticketTypeForm, defaultFields: ids });
+              }}
+              onDefaultFieldsChange={(_ttId, defaultFields) => setTicketTypeForm({ ...ticketTypeForm, defaultFields })}
+              onCreateField={handleCreateFieldInline}
+            />
           </Form.Group>
         </Modal.Body>
         <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" onClick={() => setShowTicketTypeModal(false)}>
             Cancel
           </Button>
+          {ticketTypeModalError && (
+            <div className="alert alert-danger w-100 mb-0 me-2 py-1 px-2 small">{ticketTypeModalError}</div>
+          )}
           <Button
             variant="primary"
+            disabled={savingTicketType}
             onClick={() => {
-              if (!ticketTypeForm.name.trim() || !ticketTypeForm.prefix.trim() || !ticketTypeForm.icon.trim()) {
-                void showAlert({ message: 'Name, Prefix, and Icon are required.', variant: 'warning' });
-                return;
-              }
-              if (editingTicketType) {
-                setTicketTypes((prev) => prev.map((tt) => (tt.id === ticketTypeForm.id ? ticketTypeForm : tt)));
-              } else {
-                setTicketTypes((prev) => [...prev, ticketTypeForm]);
-              }
-              setShowTicketTypeModal(false);
+              void (async () => {
+                if (!ticketTypeForm.name.trim() || !ticketTypeForm.prefix.trim() || !ticketTypeForm.icon.trim()) {
+                  void showAlert({ message: 'Name, Prefix, and Icon are required.', variant: 'warning' });
+                  return;
+                }
+                // Duplicate-name guard (FEAT-171). Today multiple "Priority"-style
+                // ticket types can be created in parallel; warn the user before
+                // they accidentally fork a template.
+                const trimmedName = ticketTypeForm.name.trim().toLowerCase();
+                const dupe = ticketTypes.find(
+                  (tt) => tt.name.toLowerCase() === trimmedName && tt.id !== ticketTypeForm.id
+                );
+                if (dupe && !editingTicketType) {
+                  const proceed = await showConfirm({
+                    title: t('globalSettings.duplicateTicketTypeTitle', 'Ticket type already exists'),
+                    message: t('globalSettings.duplicateTicketTypePrompt', {
+                      name: dupe.name,
+                      prefix: dupe.prefix,
+                      defaultValue:
+                        'A ticket type called "{{name}}" ({{prefix}}) already exists. Create another one anyway?',
+                    }),
+                    confirmLabel: t('globalSettings.duplicateCreateAnyway', 'Create anyway'),
+                    cancelLabel: t('globalSettings.duplicateUseExisting', 'Use existing'),
+                    variant: 'warning',
+                  });
+                  if (!proceed) return;
+                }
+
+                // Persist immediately so the user doesn't have to hit the
+                // outer Save afterwards. New types come from a temp `custom-…`
+                // id — we POST and swap in the server-assigned real id so the
+                // outer save's diff loop won't try to re-create.
+                setSavingTicketType(true);
+                setTicketTypeModalError(null);
+                try {
+                  const isNew = !editingTicketType || ticketTypeForm.id.startsWith('custom-');
+                  if (isNew) {
+                    const created = await OpsService.createTicketType(numaPost, {
+                      name: ticketTypeForm.name,
+                      prefix: ticketTypeForm.prefix,
+                      icon: ticketTypeForm.icon,
+                      color: ticketTypeForm.color,
+                      defaultFields: ticketTypeForm.defaultFields,
+                    });
+                    const persisted: TicketType = {
+                      ...ticketTypeForm,
+                      ...created,
+                      id: created?.id ?? ticketTypeForm.id,
+                    };
+                    setTicketTypes((prev) => {
+                      const existed = prev.some((tt) => tt.id === ticketTypeForm.id);
+                      return existed
+                        ? prev.map((tt) => (tt.id === ticketTypeForm.id ? persisted : tt))
+                        : [...prev, persisted];
+                    });
+                  } else {
+                    const updated = await OpsService.updateTicketType(numaPut, ticketTypeForm.id, {
+                      name: ticketTypeForm.name,
+                      icon: ticketTypeForm.icon,
+                      color: ticketTypeForm.color,
+                      defaultFields: ticketTypeForm.defaultFields,
+                    });
+                    const persisted: TicketType = { ...ticketTypeForm, ...updated };
+                    setTicketTypes((prev) => prev.map((tt) => (tt.id === ticketTypeForm.id ? persisted : tt)));
+                  }
+                  await refreshConfig();
+                  setShowTicketTypeModal(false);
+                } catch (err) {
+                  setTicketTypeModalError(t('errors.saveFailed', { message: String(err) }));
+                } finally {
+                  setSavingTicketType(false);
+                }
+              })();
             }}
           >
-            {editingTicketType ? 'Save Changes' : 'Add Ticket Type'}
+            {savingTicketType
+              ? t('common.saving', 'Saving…')
+              : editingTicketType
+                ? t('common.save', 'Save Changes')
+                : t('globalSettings.addTicketTypeTemplate', 'Add Ticket Type Template')}
           </Button>
         </Modal.Footer>
       </Modal>

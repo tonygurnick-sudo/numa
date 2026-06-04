@@ -10,6 +10,7 @@ import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
 import { IamServiceLinkedRole } from '@cdktf/provider-aws/lib/iam-service-linked-role';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
+import { SchedulerSchedule } from '@cdktf/provider-aws/lib/scheduler-schedule';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { S3BucketCorsConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-cors-configuration';
@@ -25,6 +26,7 @@ import { CognitoPreSignup } from './cognito-pre-signup-construct';
 import { SSOGroupMapper } from './sso-group-mapper-construct';
 import { CognitoEmailHandler } from './cognito-email-handler-construct';
 import { NoliaCognitoEmailHandler } from './nolia-cognito-email-handler-construct';
+import { CognitoCustomEmailSender } from './cognito-custom-email-sender-construct';
 import { BoxDataSource, boxDataSourcePropsSchema } from './data-sources/box-datasource-construct';
 import { S3DataSource, s3DataSourcePropsSchema } from './data-sources/s3-datasource-construct';
 import { SharePointDataSource, sharePointDataSourcePropsSchema } from './data-sources/sharepoint-datasource-construct';
@@ -192,6 +194,25 @@ export class CoreNumaInfra extends Construct {
         : {
             mfaConfiguration: 'OFF',
           };
+    // CustomEmailSender trigger (BUG-188): route all Cognito auth emails
+    // (verification / activation / password reset) through the centralized
+    // numa-email-sender (our DKIM/SPF/DMARC-aligned notifications.numa.arcanum.ai
+    // domain) instead of Cognito's default verificationemail.com sender, which is
+    // silently dropped or spam-foldered by many Microsoft 365 / Google tenants.
+    // Created before the user pool so its Lambda ARN + KMS key can be wired into
+    // lambdaConfig below. This fully replaces Cognito's own sending, so the
+    // customMessage trigger (which only customizes Cognito-sent mail) is left
+    // wired but unused.
+    if (!props.emailSenderLambdaArn) {
+      throw new Error('emailSenderLambdaArn is required to wire the Cognito CustomEmailSender trigger');
+    }
+    const customEmailSender = new CognitoCustomEmailSender(this, 'cognito-custom-email-sender', {
+      clientName: props.clientName,
+      nameSuffix: numaClient,
+      domainName: emailDomain,
+      emailSenderLambdaArn: props.emailSenderLambdaArn,
+    });
+
     const userPool = new CognitoUserPool(this, 'user-pool', {
       name: numaClient,
       usernameAttributes: ['email'],
@@ -203,6 +224,11 @@ export class CoreNumaInfra extends Construct {
           lambdaVersion: 'V2_0',
         },
         customMessage: customMessageLambda.arn,
+        customEmailSender: {
+          lambdaArn: customEmailSender.function.arn,
+          lambdaVersion: 'V1_0',
+        },
+        kmsKeyId: customEmailSender.kmsKeyArn,
       },
       userPoolAddOns: {
         advancedSecurityMode: 'AUDIT',
@@ -257,6 +283,15 @@ export class CoreNumaInfra extends Construct {
     new LambdaPermission(this, 'cognito-email-permission', {
       statementId: 'cognito-email-handler',
       functionName: customMessageLambda.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: 'cognito-idp.amazonaws.com',
+      sourceArn: userPool.arn,
+    });
+
+    // Grant Cognito permission to invoke the CustomEmailSender trigger (BUG-188)
+    new LambdaPermission(this, 'cognito-custom-email-sender-permission', {
+      statementId: 'cognito-custom-email-sender',
+      functionName: customEmailSender.function.functionName,
       action: 'lambda:InvokeFunction',
       principal: 'cognito-idp.amazonaws.com',
       sourceArn: userPool.arn,
@@ -642,6 +677,17 @@ export class CoreNumaInfra extends Construct {
       ],
     });
 
+    // Dedicated log group for the Numa Credit System lambdas (debit + nightly), so all credit
+    // metering / classification / settlement logs live in one place instead of the busy
+    // <client>-core group. Within it, filter by per-event `_name` (CREDIT_*) or the bound
+    // `domain="credits"` field. (The workspace-agent meter-emit log still lands in the agent's own
+    // container group — `domain="credits"` lets one query span both.) Created directly (not via
+    // NumaLogGroup, whose hardcoded inner id would collide with core-log-group under this scope);
+    // the `/numa/*` resource policy from the core NumaLogGroup already covers this prefix.
+    const creditLogGroup = new CloudwatchLogGroup(this, 'credits-log-group', {
+      name: `/numa/${props.clientName}-credits`,
+    });
+
     // Credit-debit Lambda — live credit metering (Numa Credit System / SPK-015). The workspace
     // agent async-invokes this after each turn (when CREDIT_METERING_ENABLED); it reads the
     // conversation trace from the outputs bucket, recomputes cost, classifies + titles via Nova,
@@ -649,12 +695,15 @@ export class CoreNumaInfra extends Construct {
     this.creditDebitLambda = new NumaLambda(this, 'credit-debit', {
       clientName: props.clientName,
       lambdaDirectory: 'python/credit-debit/',
-      logGroup: this.logGroup,
+      logGroup: creditLogGroup,
       resourceNameSuffix: '_credit-debit',
       environment: {
         CLIENT_NAME: props.clientName,
         CREDITS_TABLE_NAME: this.creditLedgerTable.name,
         OUTPUTS_BUCKET_NAME: this.outputsBucket.bucket.bucket,
+        // Read-only: recover a scheduled run's agentId from its chat-history rows when the metering
+        // event lacks one (so the run attributes to its agent in the dashboard's Top-5-agents).
+        CHAT_HISTORY_TABLE_NAME: this.chatHistoryTable.name,
       },
       additionalPolicyStatements: [
         {
@@ -662,6 +711,12 @@ export class CoreNumaInfra extends Construct {
           // Query: orphan-MSG cleanup (table) + monthly reconciliation rollup (GSI2 index).
           actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:BatchWriteItem', 'dynamodb:Query'],
           resources: [this.creditLedgerTable.arn, `${this.creditLedgerTable.arn}/index/*`],
+        },
+        {
+          // Read-only Query for the scheduled-run agentId recovery above.
+          effect: 'Allow',
+          actions: ['dynamodb:Query'],
+          resources: [this.chatHistoryTable.arn],
         },
         {
           effect: 'Allow',
@@ -676,6 +731,87 @@ export class CoreNumaInfra extends Construct {
           resources: ['*'],
         },
       ],
+    });
+
+    // Credit-nightly Lambda — runs just after midnight NZ (Pacific/Auckland). Two jobs: (1) writes
+    // ADMIN-SAFE anonymised title + deliverables onto that day's ledger META rows (Nova 2 Lite via the
+    // shared lib); (2) month-close settlement — locks the previous NZ month's overflow into the top-up
+    // balance as a settlement TXN. The admin view shows live credits/tier immediately; labels lag ~1 day.
+    const creditNightlyLambda = new NumaLambda(this, 'credit-nightly', {
+      clientName: props.clientName,
+      lambdaDirectory: 'python/credit-nightly/',
+      logGroup: creditLogGroup,
+      resourceNameSuffix: '_credit-nightly',
+      timeout: 600,
+      environment: {
+        CLIENT_NAME: props.clientName,
+        CREDITS_TABLE_NAME: this.creditLedgerTable.name,
+        OUTPUTS_BUCKET_NAME: this.outputsBucket.bucket.bucket,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          // Summariser: Query GSI2 + UpdateItem META rows. Settlement: GetItem the MONTH aggregate,
+          // Put/Delete the settlement TXN row.
+          actions: [
+            'dynamodb:Query',
+            'dynamodb:UpdateItem',
+            'dynamodb:GetItem',
+            'dynamodb:PutItem',
+            'dynamodb:DeleteItem',
+          ],
+          resources: [this.creditLedgerTable.arn, `${this.creditLedgerTable.arn}/index/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`${this.outputsBucket.bucket.arn}/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['bedrock:InvokeModel'],
+          resources: ['*'],
+        },
+      ],
+    });
+
+    // Schedule on the NZ billing calendar via EventBridge Scheduler (DST-aware ScheduleExpressionTimezone
+    // — unlike CloudwatchEventRule, which is UTC-only). Fires 00:30 NZ so the previous month is freshly
+    // closed when settlement runs. Scheduler invokes the Lambda via an assumed role (no resource policy).
+    const creditNightlySchedulerRole = new IamRole(this, 'credit-nightly-scheduler-role', {
+      name: `${props.clientName}-credit-nightly-scheduler`,
+      assumeRolePolicy: new DataAwsIamPolicyDocument(this, 'credit-nightly-scheduler-assume', {
+        statement: [
+          {
+            actions: ['sts:AssumeRole'],
+            principals: [{ identifiers: ['scheduler.amazonaws.com'], type: 'Service' }],
+          },
+        ],
+      }).json,
+    });
+    new IamRolePolicy(this, 'credit-nightly-scheduler-policy', {
+      name: `${props.clientName}-credit-nightly-scheduler`,
+      role: creditNightlySchedulerRole.name,
+      policy: new DataAwsIamPolicyDocument(this, 'credit-nightly-scheduler-policy-doc', {
+        statement: [
+          {
+            effect: 'Allow',
+            actions: ['lambda:InvokeFunction'],
+            resources: [creditNightlyLambda.lambda.arn, `${creditNightlyLambda.lambda.arn}:*`],
+          },
+        ],
+      }).json,
+    });
+    new SchedulerSchedule(this, 'credit-nightly-schedule', {
+      name: `${props.clientName}-credit-nightly`,
+      description: 'Numa Credit System: nightly receipt summariser + NZ month-close settlement',
+      flexibleTimeWindow: { mode: 'OFF' },
+      scheduleExpression: 'cron(30 0 * * ? *)',
+      scheduleExpressionTimezone: 'Pacific/Auckland',
+      target: {
+        arn: creditNightlyLambda.lambda.arn,
+        roleArn: creditNightlySchedulerRole.arn,
+      },
     });
 
     // Agents tables
@@ -2156,4 +2292,10 @@ export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
   knowledgeBase?: KnowledgeBase;
   /** Deployer role ARN for chain assume during ECR image push (container Lambdas) */
   deployerRoleArn?: string;
+  /**
+   * ARN of the centralized numa-email-sender Lambda (deployer account). Required
+   * so the Cognito CustomEmailSender trigger can route auth emails through it.
+   * (BUG-188)
+   */
+  emailSenderLambdaArn?: string;
 };

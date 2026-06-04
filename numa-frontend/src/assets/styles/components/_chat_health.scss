@@ -1,0 +1,362 @@
+// Chat health indicators (context donut + long-running-chat alarm).
+// Sits in the chat input bar next to the file upload button.
+
+.chat-health-indicators {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.chat-health-indicator-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: #71717a;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+
+  &:hover,
+  &:focus-visible {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #3f3f46;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand-primary, #6366f1);
+    outline-offset: 1px;
+  }
+}
+
+// Neutral context donut. Inherits color from the parent button. No colour
+// bands - filling up is the only visual signal until the pre-compact pulse.
+.chat-health-donut {
+  color: var(--brand-primary, #6366f1);
+  display: block;
+}
+
+// Soft "breathing" pulse near auto-compaction. Pure ambient nudge - no alarm
+// semantics. Resolves itself when compaction fires and the donut drops.
+.chat-health-donut-pulse {
+  animation: chat-health-donut-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes chat-health-donut-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+}
+
+// Chat-health alarm icon. The ONLY coloured warning surface in chat health.
+// Hourglass glyph; amber/red bands. Hidden when the chat is healthy.
+.chat-health-alarm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-health-alarm-amber {
+  color: #d97706; // amber-600
+}
+
+.chat-health-alarm-red {
+  color: #dc2626; // red-600
+  animation: chat-health-alarm-red-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes chat-health-alarm-red-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+// Popover styling - tooltip-like, compact and modern.
+.chat-health-popover {
+  max-width: 240px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.06);
+  background: #fff;
+
+  // Tighter arrow + nudge it to match the new corner radius.
+  .popover-arrow::before {
+    border-top-color: rgba(0, 0, 0, 0.06);
+  }
+  .popover-arrow::after {
+    border-top-color: #fff;
+  }
+
+  .popover-body {
+    padding: 0.625rem 0.75rem;
+  }
+}
+
+.chat-health-popover-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: #18181b; // near-black
+  margin-bottom: 0.25rem;
+  line-height: 1.25;
+}
+
+.chat-health-popover-body {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #52525b; // muted
+}
+
+.chat-health-popover-note {
+  margin-top: 0.4rem;
+  font-size: 0.7rem;
+  color: #a1a1aa;
+  line-height: 1.4;
+}
+
+// V2 chat input: when the inline tools include the chat-health indicators,
+// the textarea needs more right-padding to keep typed text clear of the icons.
+.workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap {
+  .chat-input-inline-tools .chat-health-indicators {
+    margin-left: 2px;
+  }
+}
+
+// Always-visible health bar at the top of the chat area. Ian's design.
+// Traffic-light green/orange/red — independent of brand colours.
+.chat-health-topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.4rem 0.85rem;
+  background: #fff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.chat-health-topbar-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.chat-health-topbar-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.chat-health-topbar-label-text {
+  color: #52525b;
+  white-space: nowrap;
+}
+
+.chat-health-topbar-track {
+  flex: 1 1 auto;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.chat-health-topbar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition:
+    width 350ms ease-out,
+    background-color 200ms ease-out;
+}
+
+.chat-health-topbar-value {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: #71717a;
+  min-width: 2.5em;
+  text-align: right;
+}
+
+.chat-health-topbar-help {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 0.1rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: #a1a1aa;
+  cursor: help;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+
+  &:hover,
+  &:focus-visible {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #52525b;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand-primary, #6366f1);
+    outline-offset: 1px;
+  }
+}
+
+// Traffic-light band colours.
+.chat-health-topbar-green {
+  .chat-health-topbar-dot {
+    background: #16a34a;
+  } // green-600
+  .chat-health-topbar-fill {
+    background: #22c55e;
+  } // green-500
+}
+
+.chat-health-topbar-orange {
+  .chat-health-topbar-dot {
+    background: #ea580c;
+  } // orange-600
+  .chat-health-topbar-fill {
+    background: #f97316;
+  } // orange-500
+}
+
+.chat-health-topbar-red {
+  .chat-health-topbar-dot {
+    background: #dc2626;
+  } // red-600
+  .chat-health-topbar-fill {
+    background: #ef4444;
+  } // red-500
+  .chat-health-topbar-label-text {
+    color: #991b1b;
+  }
+}
+
+// Red-state banner sits above the chat input. Dismissable in-session.
+.chat-health-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin: 0 0.75rem 0.5rem;
+  padding: 0.55rem 0.7rem 0.55rem 0.7rem;
+  background: #fef2f2; // red-50
+  border: 1px solid #fecaca; // red-200
+  border-radius: 10px;
+  color: #7f1d1d; // red-900 — accessible on red-50
+
+  animation: chat-health-banner-in 200ms ease-out;
+}
+
+@keyframes chat-health-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-health-banner-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: #dc2626; // red-600
+}
+
+.chat-health-banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chat-health-banner-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 0.1rem;
+}
+
+.chat-health-banner-body {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #991b1b; // red-800
+}
+
+.chat-health-banner-dismiss {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: -2px -4px 0 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #b91c1c; // red-700
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+
+  &:hover,
+  &:focus-visible {
+    background-color: rgba(220, 38, 38, 0.08);
+    color: #7f1d1d;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #ef4444;
+    outline-offset: 1px;
+  }
+}
+
+// Dev-mode raw token breakdown rendered inside the popover.
+.chat-health-debug {
+  margin-top: 0.5rem;
+  padding-top: 0.45rem;
+  border-top: 1px dashed rgba(0, 0, 0, 0.08);
+  font-size: 0.65rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #71717a;
+  line-height: 1.4;
+
+  div + div {
+    margin-top: 0.2rem;
+  }
+}
