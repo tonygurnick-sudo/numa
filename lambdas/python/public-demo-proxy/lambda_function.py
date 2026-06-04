@@ -241,7 +241,7 @@ def _record_conversation(conversation_id: str) -> None:
             ConditionExpression="attribute_not_exists(PK)",
         )
     except ClientError as e:
-        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
             return  # Already seen this conversation today
         logger.exception("Failed to write conversation marker (non-fatal)")
         return
@@ -358,7 +358,7 @@ def _sanitize_request_body(body: dict) -> dict:
 async def _invoke_agentcore_streaming(
     conversation_id: str,
     http_body: dict,
-) -> StreamingResponse:
+) -> StreamingResponse | JSONResponse:
     """Invoke AgentCore and return a streaming SSE response.
 
     Extracts cost data from the result event and records it to DynamoDB

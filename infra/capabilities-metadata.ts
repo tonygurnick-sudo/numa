@@ -138,6 +138,17 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: [],
   },
   {
+    flag: 'SHOW_CREDITS',
+    title: 'Credits Admin View',
+    description:
+      'Shows the in-app credit usage view (Settings -> Credits). Credit metering runs for all clients regardless; this only gates visibility of the admin view. Default off until rollout.',
+    icon: 'bi-coin',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: [],
+  },
+  {
     flag: 'DATA_CONNECTORS_ENABLED',
     title: 'Native Integrations',
     description:

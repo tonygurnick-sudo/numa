@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { WorkspaceChatFileInfo } from '../types/workspaceChatTypes';
 import { listConversationFiles } from '../Services/workspaceChatAgentService';
+import { groupOutputFiles, type OutputFileGroup } from '../utils/outputFileGroups';
 
 export interface UseWorkspaceChatSettingsPanelReturn {
   /** Whether the panel is currently open */
@@ -15,6 +16,8 @@ export interface UseWorkspaceChatSettingsPanelReturn {
   uploadsFiles: WorkspaceChatFileInfo[];
   /** Files in the /outputs folder */
   outputFiles: WorkspaceChatFileInfo[];
+  /** Output files grouped by basename so multi-format artifacts collapse to one row. */
+  outputFileGroups: OutputFileGroup[];
   /** Whether files are currently loading */
   filesLoading: boolean;
   /** Error message if file loading failed */
@@ -155,6 +158,8 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
     setFilesError(null);
   }, []);
 
+  const outputFileGroups = useMemo(() => groupOutputFiles(outputFiles), [outputFiles]);
+
   return {
     isPanelOpen,
     openPanel,
@@ -162,6 +167,7 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
     togglePanel,
     uploadsFiles,
     outputFiles,
+    outputFileGroups,
     filesLoading,
     filesError,
     refreshFiles: loadFiles,

@@ -77,6 +77,9 @@ const ChatInput = ({
   onVoiceRecordingComplete = undefined as ((blob: Blob, filename: string) => void) | undefined,
   voiceRecordingState = 'idle' as VoiceRecordingState,
   voiceInputEnabled = false,
+  // Chat-health indicators rendered after the upload button (v1 left-controls).
+  // Passed in as a slot so this component stays presentation-only.
+  chatHealthSlot = null as React.ReactNode,
 }) => {
   const { t } = useTranslation('chat');
   const internalRef = useRef(null);
@@ -459,6 +462,9 @@ const ChatInput = ({
     );
   };
 
+  // When the chat-health slot is mounted in v2 inline-tools, the textarea
+  // needs extra right-padding so typed text doesn't slide under the icons.
+  const v2InlineToolsWidth = chatHealthSlot ? (isMobile ? 95 : 104) : isMobile ? 39 : 44;
   const v2TextareaStyle =
     variant === 'v2'
       ? {
@@ -466,7 +472,7 @@ const ChatInput = ({
           maxHeight: isMobile ? '46vh' : '56vh',
           fontSize: '0.875rem',
           lineHeight: isMobile ? '1.2rem' : '1.25rem',
-          padding: isMobile ? '10px 39px 10px 14px' : '12px 44px 12px 16px',
+          padding: isMobile ? `10px ${v2InlineToolsWidth}px 10px 14px` : `12px ${v2InlineToolsWidth}px 12px 16px`,
           width: '100%',
           display: 'block',
           boxSizing: 'border-box' as const,
@@ -498,7 +504,10 @@ const ChatInput = ({
                   rows={1}
                   style={v2TextareaStyle}
                 />
-                <div className="chat-input-inline-tools">{renderUploadButton('attachment-icon v2-inline')}</div>
+                <div className="chat-input-inline-tools">
+                  {renderUploadButton('attachment-icon v2-inline')}
+                  {chatHealthSlot}
+                </div>
               </div>
               <div className="chat-input-inline-actions">{renderSendButton()}</div>
             </div>
@@ -526,6 +535,7 @@ const ChatInput = ({
             <div className="left-controls">
               {/* Attachment Button & Numa Files folder selector */}
               {renderUploadButton()}
+              {chatHealthSlot}
               <FeatureWrapper requiredFeature="useCompanyData">
                 <>
                   {/* V1 only: folder dropdown (V2 has folder picker in settings panel) */}

@@ -6,6 +6,33 @@ When a hotfix is backported and the next deploy reconciles, mark it with `STATUS
 
 ---
 
+## 2026-06-04 — Temporary MaxSize bump 25 → 50 for an urgent deploy
+
+**STATUS:** temporary (NOT a source change — revert after the pipeline drains)
+
+**Reason:** Urgent HQ deploy pipeline (`arcanumai/numa` #2575226484 on `dev`) with the large `check` + `package` fan-out (~275 matrix jobs). At the documented ceiling (`MaxSize = 25`, `concurrent = 2` → 50 parallel slots) the fan-out runs in ~3 waves. Bumped to 100 parallel slots to cut wave count for this run.
+
+### Changes made directly in AWS
+
+| Resource             | Change                                                                                                     |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| ASG `gitlab-runners` | `MaxSize` 25 → 50 (= 100 parallel jobs at `concurrent = 2`). vCPU quota is 968, well above the 200 needed. |
+| ASG `gitlab-runners` | `DesiredCapacity` manually set to 50 to pre-warm the fleet (boot ~2.5–3.5 min) ahead of the fan-out.       |
+
+### Revert
+
+Self-corrects on `DesiredCapacity`: once the queue drains (`pending == 0 && running == 0`) the queue-monitor Lambda scales in (−10/min while > 10) back toward `MinSize = 1`. **`MaxSize` does NOT self-revert** — manually restore the documented baseline once the pipeline finishes:
+
+```bash
+aws autoscaling update-auto-scaling-group \
+  --profile arcanum-dev --region ap-southeast-2 \
+  --auto-scaling-group-name gitlab-runners --max-size 25
+```
+
+No source change needed — this is a one-off burst, not a new baseline.
+
+---
+
 ## 2026-05-05 — Token expired + concurrent=1 throttle
 
 **STATUS:** outstanding (not yet backported to `arcanum-infra`)

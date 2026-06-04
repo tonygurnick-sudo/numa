@@ -101,6 +101,7 @@ pre-commit:
   matrix:
     - BUILD_DIR:
         - lambdas/node/admin-capabilities
+        - lambdas/node/admin-credits
         - lambdas/node/admin-data-connector-settings
         - lambdas/node/admin-dr-stats
         - lambdas/node/admin-agents-settings
@@ -137,6 +138,7 @@ pre-commit:
         - lambdas/node/numa-ops-recurrence-runner
         - lambdas/node/numa-search-api
         - lambdas/node/numa-users-api
+        - lambdas/node/numa-voice-admin
         - lambdas/node/openapi-docs-server
         - lambdas/node/pipedream-event-receiver
         - lambdas/node/portal-deploy-assume-role
@@ -145,7 +147,9 @@ pre-commit:
         - lambdas/node/s3-kb-file-migrator
         - lambdas/node/s3-vectors-manager
         - lambdas/node/seed-api-key
+        - lambdas/node/seed-connect-config
         - lambdas/node/seed-ops-config
+        - lambdas/node/seed-voice-agents
         - lambdas/node/srp-hasher
         - lambdas/node/scim-endpoint
         - lambdas/node/sso-group-mapper
@@ -178,6 +182,8 @@ pre-commit:
         - lambdas/python/contract-analysis
         - lambdas/python/costing-calculator
         - lambdas/python/council-resource-consents
+        - lambdas/python/credit-debit
+        - lambdas/python/credit-nightly
         - lambdas/python/data-connectors
         - lambdas/python/document-summariser
         - lambdas/python/e2e-test
@@ -194,6 +200,8 @@ pre-commit:
         - lambdas/python/numa-dr-export
         - lambdas/python/numa-kb-manager
         - lambdas/python/numa-recent-jobs
+        - lambdas/python/numa-voice-intake
+        - lambdas/python/numa-voice-processor
         - lambdas/python/oauth-files-api
         - lambdas/python/oauth-workspace-tools
         - lambdas/python/pipedream-account-sync
@@ -208,6 +216,7 @@ pre-commit:
         - lambdas/python/policy-drafter
         - lambdas/python/policy-reviewer
         - lambdas/python/procurement-rfp-assessment
+        - lambdas/python/public-demo-proxy
         - lambdas/python/racetech-unzip
         - lambdas/python/racetech-upload-url
         - lambdas/python/recruitment-job-ad-creation

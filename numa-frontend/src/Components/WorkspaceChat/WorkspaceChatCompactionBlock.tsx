@@ -14,9 +14,11 @@ import type { WorkspaceChatCompactionSegment } from '@/types/workspaceChatTypes'
 
 interface Props {
   segment: WorkspaceChatCompactionSegment;
+  /** Show the "Reduced context by N tokens" badge. Dev-mode only by default. */
+  debugMode?: boolean;
 }
 
-export function WorkspaceChatCompactionBlock({ segment }: Props) {
+export function WorkspaceChatCompactionBlock({ segment, debugMode = false }: Props) {
   const { t } = useTranslation('chat');
   const { status, summary, preTokens } = segment;
   const [collapsed, setCollapsed] = useState(true);
@@ -59,7 +61,7 @@ export function WorkspaceChatCompactionBlock({ segment }: Props) {
             <>
               <i className="bi bi-file-text compaction-icon" />
               <span className="compaction-label">{t('workspace.compaction.complete')}</span>
-              {preTokens && (
+              {debugMode && preTokens && (
                 <span className="compaction-token-badge">
                   {t('workspace.compaction.tokensSaved', { tokens: formatTokens(preTokens) })}
                 </span>

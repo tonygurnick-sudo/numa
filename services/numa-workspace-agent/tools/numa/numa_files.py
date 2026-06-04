@@ -91,15 +91,18 @@ operation: upload
 Parameters:
   file    (required)  Path to file in workspace
   kb_id   (optional)  Target folder ID (default: "company")
-  path    (optional)  Sub-path within the folder
+  path    (required)  Sub-path within the folder. Pass "" or "/" for the
+                      folder root. If the file came from a sub-path (e.g.
+                      via download), the updated version should usually go
+                      back to the same sub-path.
 
 Examples:
 
-  # Upload to Company Files (admin only)
+  # Upload to Company Files root (admin only)
   mcp__numa__numa_tool(
     name="numa_files",
-    description="Uploading report to Company Files",
-    params={"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company"}
+    description="Uploading report to Company Files root",
+    params={"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company", "path": ""}
   )
 
   # Upload to a user folder with sub-path

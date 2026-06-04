@@ -116,14 +116,15 @@ Response shape (default, non-recursive):
 
 ### 3. Upload (operation: upload)
 
-Add files from the workspace to a folder:
+Add files from the workspace to a folder. `path` is **required** — pass `""` (or `"/"`) for the folder root, or a sub-path like `"reports/2024/"`. If the file came from a sub-path earlier in the conversation, upload it back to the same sub-path; don't drift to root.
 
 ```
-# Upload to Company Files (admin only)
-mcp__numa__numa_tool(name="numa_files", description="Uploading report to Company Files", params={
+# Upload to Company Files root (admin only) — explicit path=""
+mcp__numa__numa_tool(name="numa_files", description="Uploading report to Company Files root", params={
     "operation": "upload",
     "file": "/workdir/outputs/report.pdf",
-    "kb_id": "company"
+    "kb_id": "company",
+    "path": ""
 })
 
 # Upload to a user folder with sub-path

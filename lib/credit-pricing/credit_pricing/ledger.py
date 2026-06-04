@@ -8,18 +8,27 @@ any Decimal coercion for numeric attributes is the caller's job at write time).
 All monetary fields are USD — no FX conversion anywhere in the credit system.
 
 Table ``numa-<client>-credit-ledger``:
-  PK=CONV#<id>      SK=META               conversation aggregate (the dashboard row)
-  PK=CONV#<id>      SK=MSG#<ts>#<msg_id>  per-message cost/credit detail (NO chat content)
-  PK=CLIENT#<name>  SK=MONTH#<YYYY-MM>    monthly reconciliation aggregate
+  PK=CONV#<id>      SK=META                    conversation aggregate (the dashboard row)
+  PK=CONV#<id>      SK=MSG#<ts>#<msg_id>       per-message cost/credit detail (NO chat content)
+  PK=CLIENT#<name>  SK=MONTH#<YYYY-MM>         monthly reconciliation aggregate (+ allocation snapshot)
+  PK=CLIENT#<name>  SK=TXN#<ts>#<id>           top-up / adjustment event (top-up balance event log)
+  PK=CLIENT#<name>  SK=TXN#SETTLEMENT#<YYYY-MM> month-close settlement event (idempotent, one per month)
+  PK=CLIENT#<name>  SK=CONFIG                  pushed pricing config (incl. monthlyAllocations)
   GSI1 GSI1PK=USER#<sub>      GSI1SK=TS#<last_ts>  (META rows only — user's convs, newest first)
   GSI2 GSI2PK=MONTH#<YYYY-MM> GSI2SK=CONV#<id>     (META rows only — per-client monthly rollup)
+
+Top-up balance is an EVENT LOG (no decrementing scalar): balance = sum of TXN ``credits`` (signed).
+``topup`` (+) and ``adjustment`` (±) are appended; ``settlement`` (−overflow) is written once per
+closed month at NZ rollover (deterministic SK → idempotent). The live "available" balance subtracts
+the still-open month's overflow on top (see ``available_balance``). Use-it-or-lose-it monthly
+allocation is never stored as a counter — it's derived ``allocation − consumed`` per (year, month).
 """
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
-from credit_pricing.credits import margin_actual
+from credit_pricing.credits import CREDIT_USD, margin_actual
 
 
 def conv_pk(conversation_id: str) -> str:
@@ -38,6 +47,34 @@ def month_sk(month: str) -> str:
     return f"MONTH#{month}"
 
 
+def txn_sk(ts: str, txn_id: str) -> str:
+    """Append-only event SK (top-ups / adjustments), time-ordered."""
+    return f"TXN#{ts}#{txn_id}"
+
+
+def settlement_sk(month: str) -> str:
+    """Deterministic SK for a month-close settlement — one per month, so re-running is idempotent."""
+    return f"TXN#SETTLEMENT#{month}"
+
+
+TXN_KINDS = ("topup", "settlement", "adjustment")
+
+
+def overflow_credits(consumed_credits: float, allocation_credits: float) -> float:
+    """Credits that spilled past a month's allocation and must draw the top-up balance (>= 0)."""
+    return max(0.0, consumed_credits - max(0.0, allocation_credits))
+
+
+def available_balance(txn_credits_sum: float, open_month_overflow: float) -> float:
+    """Live top-up balance: settled events minus the still-open month's (unsettled) overflow.
+
+    ``txn_credits_sum`` = sum of all TXN ``credits`` (top-ups + settled-month settlements +
+    adjustments). ``open_month_overflow`` = this month's not-yet-settled spill past its allocation.
+    Can go negative — that's the invoice signal.
+    """
+    return txn_credits_sum - max(0.0, open_month_overflow)
+
+
 def meta_item(
     *,
     conversation_id: str,
@@ -50,7 +87,6 @@ def meta_item(
     credits_charged: float,
     credits_value: float,
     credits_floor: float,
-    floored_msgs: int,
     consumption_cost_usd: float,
     total_tokens: int = 0,
     source: str = "chat",
@@ -61,6 +97,7 @@ def meta_item(
     last_ts: Optional[str] = None,
     token_cost_usd: Optional[float] = None,
     agentcore_cost_usd: float = 0.0,
+    credit_usd: float = CREDIT_USD,
     rate_card_version: Optional[str] = None,
     cost_incomplete: bool = False,
 ) -> dict[str, Any]:
@@ -87,8 +124,11 @@ def meta_item(
         "consumptionCostUsd": consumption_cost_usd,
         "creditsValue": credits_value,
         "creditsFloor": credits_floor,
-        "flooredMsgs": floored_msgs,
-        "marginVsConsumption": margin_actual(credits_charged, consumption_cost_usd),
+        "marginVsConsumption": margin_actual(
+            credits_charged,
+            consumption_cost_usd + agentcore_cost_usd,
+            credit_usd=credit_usd,
+        ),
         "agentCoreCostUsd": agentcore_cost_usd,
         "totalTokens": total_tokens,
         "costIncomplete": cost_incomplete,
@@ -157,25 +197,33 @@ def month_aggregate_item(
     month: str,
     credit_revenue_usd: float,
     consumption_cost_usd: float,
+    credits_charged: float = 0.0,
+    allocation_snapshot: Optional[float] = None,
     actual_aws_bill_usd: Optional[float] = None,
     platform_fee_usd: Optional[float] = None,
 ) -> dict[str, Any]:
     """Per-client monthly reconciliation row.
 
-    ``marginVsRealBill`` (vs the actual AWS bill) is the honest all-in margin — the only check
-    that can catch infra drift, since it doesn't depend on any internal multiplier. All USD.
+    ``creditsCharged`` is the exact credit count consumed this month (not derived from revenue/price,
+    so it stays correct across a mid-cycle creditUsd change). ``allocationSnapshot`` is the monthly
+    allocation in effect — stamped each turn so a closed month's overflow is computed against the
+    allocation that actually applied, immune to later config edits (the basis for month-close
+    settlement). ``marginVsRealBill`` (vs the actual AWS bill) is the honest all-in margin. All USD.
     """
     item: dict[str, Any] = {
         "PK": client_pk(client),
         "SK": month_sk(month),
         "creditRevenueUsd": credit_revenue_usd,
         "consumptionCostUsd": consumption_cost_usd,
+        "creditsCharged": credits_charged,
         "marginVsConsumption": (
             credit_revenue_usd / consumption_cost_usd
             if consumption_cost_usd > 0
             else None
         ),
     }
+    if allocation_snapshot is not None:
+        item["allocationSnapshot"] = allocation_snapshot
     if platform_fee_usd is not None:
         item["platformFeeUsd"] = platform_fee_usd
     if actual_aws_bill_usd is not None:
@@ -184,4 +232,44 @@ def month_aggregate_item(
         item["marginVsRealBill"] = (
             base / actual_aws_bill_usd if actual_aws_bill_usd > 0 else None
         )
+    return item
+
+
+def txn_item(
+    *,
+    client: str,
+    kind: str,
+    credits: float,
+    created_at: str,
+    created_by: str = "system",
+    txn_id: Optional[str] = None,
+    month: Optional[str] = None,
+    note: Optional[str] = None,
+) -> dict[str, Any]:
+    """A top-up-balance event-log row. ``credits`` is SIGNED (top-up +, settlement −, adjustment ±).
+
+    ``settlement`` rows use a deterministic per-month SK (idempotent — re-running a month close
+    overwrites rather than double-counts); ``topup`` / ``adjustment`` rows are append-only and
+    time-ordered. ``month`` is required for settlements (which closed month this settles).
+    """
+    if kind not in TXN_KINDS:
+        raise ValueError(f"unknown txn kind: {kind!r} (expected one of {TXN_KINDS})")
+    if kind == "settlement":
+        if not month:
+            raise ValueError("settlement txn requires a month")
+        sk = settlement_sk(month)
+    else:
+        sk = txn_sk(created_at, txn_id or created_at)
+    item: dict[str, Any] = {
+        "PK": client_pk(client),
+        "SK": sk,
+        "txnKind": kind,
+        "credits": credits,
+        "createdAt": created_at,
+        "createdBy": created_by,
+    }
+    if month:
+        item["month"] = month
+    if note:
+        item["note"] = note
     return item

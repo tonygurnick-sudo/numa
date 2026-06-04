@@ -7,6 +7,8 @@ import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { UserManagementUtils } from '../utils/userManagementUtils';
 import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
+import { AdminCreditsService, type BillingAdmin } from '../Services/AdminCreditsService';
+import { getFlag } from '../utils/featureFlags';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
 import {
@@ -31,9 +33,18 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
   const { t } = useTranslation('userManagement');
   // Auth and API state
   const { getCredentials, user, qBusinessClient, forceTokenValidation, requestPasswordReset } = useAuth();
-  const { numaPost } = useNumaRequest();
+  const { numaPost, numaGet } = useNumaRequest();
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
   const currentUserEmail = user?.decoded_tokens?.idToken?.email as string | undefined;
+
+  // Billing-admin roster (Numa Credit System) — only loaded when the credit view is enabled. Gates
+  // who may see credit data; only an existing billing-admin can grant it (server-enforced).
+  const showCredits = getFlag('SHOW_CREDITS');
+  const [billingAccess, setBillingAccess] = useState<{ isBillingAdmin: boolean; admins: BillingAdmin[] }>({
+    isBillingAdmin: false,
+    admins: [],
+  });
+  const billingAdminSubs = useMemo(() => new Set(billingAccess.admins.map((a) => a.sub)), [billingAccess.admins]);
 
   // Users data state — all users fetched upfront for correct sorting/grouping
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -374,6 +385,26 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
     fetchAllUsers();
   }, []);
 
+  // Load the billing-admin roster once (only when the credit view is enabled for this client).
+  useEffect(() => {
+    if (!showCredits) return;
+    AdminCreditsService.getBillingAdmins(numaGet)
+      .then(setBillingAccess)
+      .catch(() => undefined);
+  }, [showCredits, numaGet]);
+
+  // Grant/revoke billing-admin on a user. Server enforces caller-is-billing-admin + last-admin
+  // lockout; surfaces the precise error code so the modal can message it.
+  const handleSetBillingAdmin = async (target: User, grant: boolean): Promise<void> => {
+    const res = await AdminCreditsService.setBillingAdmin(
+      grant ? 'grant' : 'revoke',
+      target.username,
+      target.email ?? null,
+      numaPost
+    );
+    setBillingAccess(res);
+  };
+
   const headerActions = (
     <Button variant="primary" onClick={() => setShowCreateModal(true)} size={embedded ? 'sm' : undefined}>
       <PersonPlus size={16} className="me-2" />
@@ -422,6 +453,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
                   sectionsExpanded={sectionsExpanded}
                   visibleSections={selectedRole ? [selectedRole] : undefined}
                   onToggleSection={(section) => setSectionsExpanded((prev) => ({ ...prev, [section]: !prev[section] }))}
+                  billingAdminSubs={billingAdminSubs}
                 />
               ) : (
                 <>
@@ -538,6 +570,10 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
         onDemoteFromAdmin={handleDemoteFromAdmin}
         onDeleteUser={handleDeleteUser}
         onResetMfa={handleResetMfa}
+        showBillingAccess={showCredits}
+        callerIsBillingAdmin={billingAccess.isBillingAdmin}
+        isTargetBillingAdmin={selectedUser ? billingAdminSubs.has(selectedUser.username) : false}
+        onSetBillingAdmin={handleSetBillingAdmin}
       />
     </>
   );

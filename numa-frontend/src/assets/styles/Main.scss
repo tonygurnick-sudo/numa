@@ -21,6 +21,7 @@
 @use 'components/kb_v2' as *;
 @use 'components/workspace_chat_markdown' as *;
 @use 'components/chat_v2_overrides' as *;
+@use 'components/chat_health' as *;
 @use 'components/demo_chat' as *;
 @use 'components/user_profile' as *;
 @use 'components/welcome_profile_setup' as *;
@@ -30,5 +31,6 @@
 @use 'components/finder_files' as *;
 @use 'components/modal_picker' as *;
 @use 'components/data_connectors' as *;
+@use 'components/credits_dashboard' as *;
 
 @import '../fonts/Metropolis.css';

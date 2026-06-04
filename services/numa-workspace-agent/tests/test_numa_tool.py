@@ -1265,7 +1265,7 @@ class TestHandleKbUpload:
             "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
             return_value=mock_result,
         ) as mock_invoke:
-            result = await _handle_kb_upload({"file": str(test_file)})
+            result = await _handle_kb_upload({"file": str(test_file), "path": ""})
 
         assert "isError" not in result
         parsed = json.loads(result["content"][0]["text"])
@@ -1290,6 +1290,64 @@ class TestHandleKbUpload:
         assert result["isError"] is True
         assert "not found" in result["content"][0]["text"].lower()
 
+    async def test_missing_path_param_returns_error(self, tmp_path):
+        """BUG-138: omitting path entirely must error — prevents silent drift to KB root.
+
+        The model must consciously decide between root (path="") and a sub-path on
+        every upload, instead of falling through to root when it loses track of
+        the source file's location.
+        """
+        test_file = tmp_path / "doc.txt"
+        test_file.write_text("data")
+        result = await _handle_kb_upload({"file": str(test_file)})
+        assert result["isError"] is True
+        assert "path" in result["content"][0]["text"].lower()
+
+    async def test_explicit_empty_path_uploads_to_root(self, tmp_path):
+        """path='' is an explicit 'upload to root' opt-in (BUG-138)."""
+        test_file = tmp_path / "doc.txt"
+        test_file.write_text("data")
+
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"status": "success"},
+        ) as mock_invoke:
+            await _handle_kb_upload({"file": str(test_file), "path": ""})
+
+        assert mock_invoke.call_args[0][1]["kb_path"] == ""
+
+    async def test_explicit_slash_path_normalised_to_root(self, tmp_path):
+        """path='/' is treated as root, same as path='' (BUG-138)."""
+        test_file = tmp_path / "doc.txt"
+        test_file.write_text("data")
+
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"status": "success"},
+        ) as mock_invoke:
+            await _handle_kb_upload({"file": str(test_file), "path": "/"})
+
+        assert mock_invoke.call_args[0][1]["kb_path"] == ""
+
+    async def test_kb_path_alias_honoured(self, tmp_path):
+        """BUG-126: kb_path (the internal Lambda field name) must be accepted as
+        an alias. Previously it was silently dropped because only path,
+        destination, folder, folder_path, and target_path were recognised, so
+        passing kb_path="Trial Checklists/" uploaded to root with no warning.
+        """
+        test_file = tmp_path / "doc.txt"
+        test_file.write_text("data")
+
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"status": "success"},
+        ) as mock_invoke:
+            await _handle_kb_upload(
+                {"file": str(test_file), "kb_path": "Trial Checklists/"}
+            )
+
+        assert mock_invoke.call_args[0][1]["kb_path"] == "Trial Checklists/"
+
     async def test_large_file_uses_presigned_url(self, tmp_path):
         """File exceeding PRESIGNED_URL_THRESHOLD uses streaming upload."""
         big_file = tmp_path / "big.bin"
@@ -1311,7 +1369,7 @@ class TestHandleKbUpload:
                 "numa_workspace_agent.mcp_tools.numa_tool.upload_to_presigned_url",
             ) as mock_upload,
         ):
-            result = await _handle_kb_upload({"file": str(big_file)})
+            result = await _handle_kb_upload({"file": str(big_file), "path": ""})
 
             assert "isError" not in result
 

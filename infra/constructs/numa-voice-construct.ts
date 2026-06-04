@@ -3,6 +3,8 @@ import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { CloudwatchEventRule } from '@cdktf/provider-aws/lib/cloudwatch-event-rule';
 import { CloudwatchEventTarget } from '@cdktf/provider-aws/lib/cloudwatch-event-target';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import { CloudwatchMetricAlarm } from '@cdktf/provider-aws/lib/cloudwatch-metric-alarm';
+import { SqsQueue } from '@cdktf/provider-aws/lib/sqs-queue';
 import { ConnectInstance } from '@cdktf/provider-aws/lib/connect-instance';
 import { ConnectInstanceStorageConfig } from '@cdktf/provider-aws/lib/connect-instance-storage-config';
 import { ConnectUser } from '@cdktf/provider-aws/lib/connect-user';
@@ -78,6 +80,10 @@ export interface NumaVoiceConstructProps extends ApiGatewayLambdaCollectionProps
   clientAccountId: string;
   /** Per-tenant Amazon Connect instance URL (Phase 1 manual, Phase 2 provisioned). */
   connectInstanceUrl?: string;
+  /** ARN of the deployer-account numa-voice-config-writer Lambda (FEAT-169
+   *  config write-back via STS-proof relay). The voice-admin Lambda invokes it
+   *  cross-account to persist recordingsBucket/didNumbers/connectInstanceUrl. */
+  voiceConfigWriterLambdaArn: string;
   /** Shared outputs bucket (client region) — reserved for later phases. */
   outputsBucketArn: string;
   outputsBucketName: string;
@@ -114,6 +120,27 @@ export interface NumaVoiceConstructProps extends ApiGatewayLambdaCollectionProps
   systemUserDependsOn: ITerraformDependable[];
 }
 
+/**
+ * FEAT-158 pre-flight: does `raw` look like an Amazon Connect instance ACCESS
+ * URL (not the CCP softphone URL, not a random string)? Accepts the modern
+ * `*.my.connect.aws` and legacy `*.awsapps.com` hosts over https. Rejects a URL
+ * that already points at the CCP (`/ccp-v2`) — that is the runtime's job to append.
+ */
+export function isValidConnectInstanceUrl(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'https:') return false;
+  const host = u.hostname.toLowerCase();
+  if (!host.endsWith('.my.connect.aws') && !host.endsWith('.awsapps.com')) return false;
+  // Reject the common mistake of pasting the full CCP URL instead of the instance URL.
+  if (/ccp-v2|\/ccp(\/|$)/i.test(u.pathname)) return false;
+  return true;
+}
+
 export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
   protected logGroup: CloudwatchLogGroup;
   public readonly recordingsBucket: S3Bucket;
@@ -126,6 +153,32 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
     const envSuffix = props.environmentName !== 'prod' ? `-${props.environmentName}` : '';
     // Spread onto every region-scoped resource so it lands in voiceRegion.
     const pin = props.voiceProvider ? { provider: props.voiceProvider } : {};
+
+    // ── FEAT-158 deploy-time pre-flight ───────────────────────────────────────
+    // A Phase-1 (manual) Connect instance MUST supply a well-formed
+    // connectInstanceUrl. Without it the CCP softphone renders with an empty
+    // instance URL and no agent can dial — a silent runtime failure that looks
+    // like a successful deploy. Fail loud at synth with an actionable message.
+    // (When connectAutoProvision is on, the URL is derived from the instance
+    // alias downstream, so no manual value is required.)
+    if (!props.connectAutoProvision) {
+      const url = (props.connectInstanceUrl ?? '').trim();
+      if (!url) {
+        throw new Error(
+          `Numa Voice is enabled for "${clientName}" without connectAutoProvision, so a manually-created ` +
+            `Amazon Connect instance is required — but connectInstanceUrl is missing from the client config. ` +
+            `Set connectInstanceUrl to the instance access URL (e.g. https://numa-${clientName}.my.connect.aws), ` +
+            `see the FEAT-158 Connect setup runbook, or set connectAutoProvision: true to provision one via IaC.`
+        );
+      }
+      if (!isValidConnectInstanceUrl(url)) {
+        throw new Error(
+          `connectInstanceUrl "${url}" for "${clientName}" is not a valid Amazon Connect instance URL. ` +
+            `Expected an https URL on *.my.connect.aws (preferred) or *.awsapps.com with no CCP path ` +
+            `(e.g. https://numa-${clientName}.my.connect.aws) — do NOT include /connect/ccp-v2.`
+        );
+      }
+    }
 
     // ── Log group (region-pinned; also satisfies the abstract base field) ──────
     this.logGroup = new CloudwatchLogGroup(this, 'voice-log-group', {
@@ -176,6 +229,19 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
           expiration: [{ days: 7 }],
         },
       ],
+      ...pin,
+    });
+
+    // ── Dead-letter queue for the recording→transcript pipeline ───────────────
+    // Both processor triggers are ASYNC invokes (S3 ObjectCreated and the
+    // Transcribe Job State Change EventBridge rule). After Lambda's 2 async
+    // retries a failed event would be silently dropped — so capture it here and
+    // alarm on depth. Region-pinned to live alongside the processor. Mirrors the
+    // agent-schedule-runner / connector-event-dispatcher DLQ pattern.
+    const processorDlq = new SqsQueue(this, 'voice-processor-dlq', {
+      name: `${clientName}-voice-processor-dlq`,
+      messageRetentionSeconds: 14 * 24 * 60 * 60, // 14 days
+      tags: { Purpose: 'voice-processor-dlq', ClientName: clientName },
       ...pin,
     });
 
@@ -230,6 +296,22 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             resources: [
               `arn:aws:events:${props.region}:${props.clientAccountId}:event-bus/${props.connectorEventBusName}`,
             ],
+          },
+          {
+            // Deliver failed async invocations to the DLQ.
+            effect: 'Allow',
+            actions: ['sqs:SendMessage'],
+            resources: [processorDlq.arn],
+          },
+          {
+            // Emit the TranscriptionFailed / DiarisationUnexpected custom metrics
+            // the pipeline alarms watch. PutMetricData has no resource scoping, so
+            // restrict it to the NumaVoice namespace via condition. Without this
+            // the best-effort emits silently no-op and the alarms get no data.
+            effect: 'Allow',
+            actions: ['cloudwatch:PutMetricData'],
+            resources: ['*'],
+            condition: [{ test: 'StringEquals', variable: 'cloudwatch:namespace', values: ['NumaVoice'] }],
           },
         ],
       }).json,
@@ -288,6 +370,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         },
       },
       tracingConfig: { mode: 'Active' },
+      deadLetterConfig: { targetArn: processorDlq.arn },
       dependsOn: [processorPolicyAttach],
       ...pin,
     });
@@ -348,6 +431,81 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
       ...pin,
     });
 
+    // ── Pipeline monitoring (alarms; region-pinned) ───────────────────────────
+    // SNS topic intentionally not wired — Arcanum's account-level CloudWatch
+    // hookup surfaces these to the existing notification channel (same convention
+    // as the agent-schedule-runner / connector-event-dispatcher DLQ alarms).
+    const VOICE_METRIC_NAMESPACE = 'NumaVoice';
+
+    // 1) Anything in the DLQ = a recording/transcript event was dropped.
+    new CloudwatchMetricAlarm(this, 'voice-processor-dlq-alarm', {
+      alarmName: `${clientName}-voice-processor-dlq-not-empty`,
+      alarmDescription:
+        'Numa Voice processor produced a DLQ message — a recording or transcript-completion event was lost.',
+      namespace: 'AWS/SQS',
+      metricName: 'ApproximateNumberOfMessagesVisible',
+      dimensions: { QueueName: processorDlq.name },
+      statistic: 'Maximum',
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: 'GreaterThanOrEqualToThreshold',
+      treatMissingData: 'notBreaching',
+      ...pin,
+    });
+
+    // 2) Processor Lambda crashed (before it could DLQ / emit a custom metric).
+    new CloudwatchMetricAlarm(this, 'voice-processor-errors-alarm', {
+      alarmName: `${clientName}-voice-processor-errors`,
+      alarmDescription: 'Numa Voice processor Lambda is erroring — recording→transcript pipeline degraded.',
+      namespace: 'AWS/Lambda',
+      metricName: 'Errors',
+      dimensions: { FunctionName: this.processorLambda.functionName },
+      statistic: 'Sum',
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: 'GreaterThanOrEqualToThreshold',
+      treatMissingData: 'notBreaching',
+      ...pin,
+    });
+
+    // 3) Amazon Transcribe reported a FAILED job (custom metric from the processor).
+    new CloudwatchMetricAlarm(this, 'voice-transcription-failed-alarm', {
+      alarmName: `${clientName}-voice-transcription-failed`,
+      alarmDescription: 'Amazon Transcribe returned a FAILED job for a Numa Voice recording.',
+      namespace: VOICE_METRIC_NAMESPACE,
+      metricName: 'TranscriptionFailed',
+      dimensions: { ClientName: clientName },
+      statistic: 'Sum',
+      period: 300,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: 'GreaterThanOrEqualToThreshold',
+      treatMissingData: 'notBreaching',
+      ...pin,
+    });
+
+    // 4) Systematic diarisation breakage (custom metric). Threshold is generous
+    // and the window daily on purpose — a single voicemail legitimately yields one
+    // speaker, so we alarm only when bad diarisation is happening at scale, not on
+    // the expected one-off.
+    new CloudwatchMetricAlarm(this, 'voice-diarisation-unexpected-alarm', {
+      alarmName: `${clientName}-voice-diarisation-unexpected`,
+      alarmDescription:
+        'Numa Voice transcripts are frequently not 2-speaker — the SDR/prospect mapping may be corrupted.',
+      namespace: VOICE_METRIC_NAMESPACE,
+      metricName: 'DiarisationUnexpected',
+      dimensions: { ClientName: clientName },
+      statistic: 'Sum',
+      period: 24 * 60 * 60, // 1 day
+      evaluationPeriods: 1,
+      threshold: 10,
+      comparisonOperator: 'GreaterThanOrEqualToThreshold',
+      treatMissingData: 'notBreaching',
+      ...pin,
+    });
+
     // ── Deploy-time agent + schedule seeding (CLIENT region; NOT pinned) ───────
     // The 4 voice agents, the Post-Call event schedule, and Cognito all live in
     // the client region — so the seed Lambda uses the stack DEFAULT provider
@@ -382,6 +540,14 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             effect: 'Allow',
             actions: ['dynamodb:PutItem'],
             resources: [props.agentsTableArn, props.schedulesTableArn],
+          },
+          {
+            // The seeder upserts existing schedule records (refreshing prompt_text /
+            // agent_snapshot / trigger on re-deploy while preserving runtime counters),
+            // so it needs UpdateItem on the schedules table — not just PutItem.
+            effect: 'Allow',
+            actions: ['dynamodb:UpdateItem'],
+            resources: [props.schedulesTableArn],
           },
           {
             effect: 'Allow',
@@ -642,6 +808,10 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         // Password-free agent SSO (GetFederationToken via the assumed role).
         FEDERATION_ROLE_ARN: voiceFederationRole.arn,
         AGENT_USERNAME: 'numa-voice-agent',
+        // FEAT-169 config write-back (STS-proof relay -> deployer numa-client-config).
+        VOICE_CONFIG_WRITER_LAMBDA_ARN: props.voiceConfigWriterLambdaArn,
+        RECORDINGS_BUCKET: recordingsBucketName,
+        ...(props.connectInstanceUrl ? { CONNECT_INSTANCE_URL: props.connectInstanceUrl } : {}),
       },
       additionalPolicyStatements: [
         {
@@ -664,6 +834,8 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         { effect: 'Allow', actions: ['support:CreateCase'], resources: ['*'] },
         // Assume the federation role (RoleSessionName = Connect username) for SSO.
         { effect: 'Allow', actions: ['sts:AssumeRole'], resources: [voiceFederationRole.arn] },
+        // FEAT-169: invoke the deployer-account config writer (cross-account).
+        { effect: 'Allow', actions: ['lambda:InvokeFunction'], resources: [props.voiceConfigWriterLambdaArn] },
       ],
       // NOTE: addLambdaFunction names routes by array INDEX (voice-admin_route_N).
       // Only ever APPEND — inserting/reordering shifts indices and makes Terraform
@@ -834,16 +1006,33 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         instanceId: connectInstance.id,
         name: 'numa-voice-outbound-whisper',
         type: 'OUTBOUND_WHISPER',
-        description: 'Numa Voice: record Agent + Customer on agent-initiated outbound dials (FEAT-159).',
+        description:
+          'Numa Voice: recording-consent whisper to the agent + record Agent + Customer on agent-initiated outbound dials (FEAT-159).',
         content: JSON.stringify({
           Version: '2019-10-30',
-          StartAction: 'rec',
+          StartAction: 'disclose',
           Metadata: {
             entryPointPosition: { x: 20, y: 20 },
             snapToGrid: false,
-            ActionMetadata: { rec: { position: { x: 224, y: 56 } }, end: { position: { x: 658, y: 131 } } },
+            ActionMetadata: {
+              disclose: { position: { x: 224, y: 56 } },
+              rec: { position: { x: 448, y: 56 } },
+              end: { position: { x: 658, y: 131 } },
+            },
           },
           Actions: [
+            {
+              // Played to the AGENT before they're connected (outbound whisper is
+              // agent-side) — a recording-consent reminder so the SDR discloses to
+              // the prospect. The visible UI banner + wrap-up attestation are the
+              // other two halves of the consent flow (FEAT recording-consent).
+              Identifier: 'disclose',
+              Type: 'MessageParticipant',
+              Parameters: {
+                Text: 'This call is recorded for coaching and CRM follow-up. Please tell the prospect the call is being recorded.',
+              },
+              Transitions: { NextAction: 'rec', Errors: [], Conditions: [] },
+            },
             {
               Identifier: 'rec',
               Type: 'UpdateContactRecordingBehavior',

@@ -57,6 +57,8 @@ export type FieldDefinition = {
   helpText?: string;
   isSystem: boolean;
   order: number;
+  /** Default conditional visibility/required rules; overrides on a board take precedence. */
+  conditions?: FieldConditionRule[];
 };
 
 export type StaffProfile = {
@@ -195,12 +197,33 @@ export type AccessControl = {
   owners: string[];
 };
 
+/**
+ * Field condition rule — drives conditional fields. Today only evaluated
+ * client-side; server-side enforcement is a follow-up to FEAT-171.
+ *
+ * Example: a "Reproduction steps" field that becomes required when
+ * `ticketTypeId === 'tt-bug' && fields['field-severity'] === 'sev1'` would be
+ * expressed as two rules with separate `when` clauses.
+ */
+export type FieldConditionRule = {
+  when: {
+    fieldId: string;
+    op: 'eq' | 'in' | 'present';
+    value?: unknown;
+  };
+  then: {
+    visible?: boolean;
+    required?: boolean;
+  };
+};
+
 export type FieldOverride = {
   visible: boolean;
   required: boolean;
   label?: string;
   options?: string[];
   order?: number;
+  conditions?: FieldConditionRule[];
 };
 
 export type WorkUnitSeriesConfig = {

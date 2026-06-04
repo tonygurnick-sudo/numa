@@ -5,6 +5,7 @@ import Card from 'react-bootstrap/Card';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { dialVoiceNumber } from '../../hooks/useConnectCcp';
+import { isDiallable } from '../../Services/voiceData';
 import { formatDuration } from '../../utils/voiceFormat';
 import type { CallOutcome, Prospect } from '../../types/voice';
 import { PostCallWrapUpPanel } from './PostCallWrapUpPanel';
@@ -20,11 +21,9 @@ interface FocusCallCardProps {
   positionLabel?: string;
   /** Called after a wrap-up save completes, with the chosen disposition. */
   onSaved?: (result: { outcome: CallOutcome; qualified: boolean }) => void;
-}
-
-/** E.164 only (leading + and 2-15 digits) — matches the CCP dial guard. */
-function isDiallable(phone: string | undefined): boolean {
-  return !!phone && /^\+[1-9]\d{1,14}$/.test(phone);
+  /** Called when the SDR dismisses the wrap-up WITHOUT saving — lets the page
+   *  reset the call phase to idle so the next prospect can be dialled. */
+  onDismissed?: () => void;
 }
 
 /**
@@ -40,7 +39,13 @@ function isDiallable(phone: string | undefined): boolean {
  * When idle with no up-next prospect (empty queue), it shows a calm "all done"
  * state rather than broken chrome.
  */
-export const FocusCallCard: React.FC<FocusCallCardProps> = ({ phase, prospect, positionLabel, onSaved }) => {
+export const FocusCallCard: React.FC<FocusCallCardProps> = ({
+  phase,
+  prospect,
+  positionLabel,
+  onSaved,
+  onDismissed,
+}) => {
   const { t } = useTranslation('voice');
 
   // Local live-call timer: starts when phase becomes 'connected', clears otherwise.
@@ -65,11 +70,16 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({ phase, prospect, p
 
   // ── ACW: render the embedded wrap-up in this slot (no extra Card chrome). ──
   if (phase === 'acw') {
-    return <PostCallWrapUpPanel embedded onSaved={onSaved} />;
+    return <PostCallWrapUpPanel embedded onSaved={onSaved} onDismissed={onDismissed} />;
   }
 
-  // ── Empty queue: calm "all done" state. ──
-  if (phase === 'idle' && !prospect) {
+  // ── No prospect to focus on → calm "all done" state. ──
+  // Guards BOTH the empty-queue idle case AND the defensive case where a call
+  // lifecycle event (connecting/connected) arrives without prospect context: we
+  // must render a safe state rather than dereference an undefined prospect, which
+  // would throw and make the whole focus card vanish mid-call. (acw is handled
+  // above and renders the wrap-up without needing a prospect.)
+  if (!prospect) {
     return (
       <Card className="border-success-subtle mb-3">
         <Card.Body className="text-center py-5">
@@ -80,22 +90,34 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({ phase, prospect, p
     );
   }
 
-  // From here we have a prospect (idle / connecting / connected).
-  const p = prospect as Prospect;
+  // From here `prospect` is guaranteed defined (idle / connecting / connected).
+  const p = prospect;
   const isConnected = phase === 'connected';
   const isConnecting = phase === 'connecting';
   const dialDisabled = phase !== 'idle' || !isDiallable(p.phone);
+  // Headline never renders empty — mirrors ProspectListTable's fallback so a
+  // malformed record is visible/labelled rather than a silent blank.
+  const displayName = p.company_name || p.contact_name || t('prospectTable.unknownContact');
 
   const renderIdentity = () => (
     <div className="mb-3">
-      <h4 className="fw-bold mb-1">{p.company_name}</h4>
+      <h4 className="fw-bold mb-1">{displayName}</h4>
       <div className="text-body-secondary">
-        {p.contact_name}
+        {p.company_name ? p.contact_name : null}
         {p.contact_title ? <span> · {p.contact_title}</span> : null}
       </div>
-      <div className="d-flex align-items-center gap-2 mt-1">
-        {p.phone ? <span className="font-monospace">{p.phone}</span> : null}
-        {p.industry ? <Badge bg="body-secondary">{p.industry}</Badge> : null}
+      <div className="d-flex align-items-center gap-2 mt-2">
+        {p.phone ? (
+          <span className="font-monospace text-body d-inline-flex align-items-center gap-1">
+            <i className="bi bi-telephone text-body-secondary" aria-hidden="true"></i>
+            {p.phone}
+          </span>
+        ) : null}
+        {p.industry ? (
+          <Badge bg="light" text="dark" pill className="border fw-normal text-capitalize">
+            {p.industry}
+          </Badge>
+        ) : null}
       </div>
     </div>
   );
@@ -167,7 +189,7 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({ phase, prospect, p
               ) : (
                 <>
                   <i className="bi bi-telephone-outbound-fill" aria-hidden="true"></i>
-                  {t('focus.callCta', { name: p.contact_name })}
+                  {t('focus.callCta', { name: p.contact_name || displayName })}
                 </>
               )}
             </Button>
@@ -175,10 +197,15 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({ phase, prospect, p
             {/* Microcopy under the CTA. */}
             {phase !== 'idle' ? (
               <p className="text-body-secondary small mb-0 mt-2">{t('focus.onAnotherCall')}</p>
-            ) : !isDiallable(p.phone) ? (
+            ) : !p.phone ? (
               <p className="text-warning-emphasis small mb-0 mt-2">
                 <i className="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
                 {t('focus.noPhone')}
+              </p>
+            ) : !isDiallable(p.phone) ? (
+              <p className="text-warning-emphasis small mb-0 mt-2">
+                <i className="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                {t('focus.phoneNotDiallable')}
               </p>
             ) : (
               <p className="text-body-secondary small mb-0 mt-2">

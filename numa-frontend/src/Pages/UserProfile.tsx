@@ -2234,7 +2234,16 @@ export default function UserProfilePage({
                     <tr>
                       <td>
                         <div className="fw-semibold">{t('userProfile.approval.grid.integrations')}</div>
-                        <div className="text-muted small">{t('userProfile.approval.grid.integrationsHelp')}</div>
+                        <div className="text-muted small">
+                          {t('userProfile.approval.grid.integrationsHelp')}{' '}
+                          {/* TASK-127: per-integration overrides live on the
+                              Integrations page. Surface that here so users
+                              know this row is the default — they can pick a
+                              different mode per integration if they want. */}
+                          {t('userProfile.approval.grid.integrationsOverrideNote', {
+                            defaultValue: 'Override this default per integration on the Integrations page.',
+                          })}
+                        </div>
                       </td>
                       {(['always', 'non_destructive', 'never'] as const).map((mode) => (
                         <td key={mode} className="text-center align-middle">

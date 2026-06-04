@@ -866,6 +866,7 @@ const ChatMessages = ({
                       <WorkspaceChatCompactionBlock
                         key={`compaction-${idx}`}
                         segment={seg as WorkspaceChatCompactionSegment}
+                        debugMode={showCost}
                       />
                     );
                   } else if (seg.kind === 'file_attachment') {
@@ -967,6 +968,14 @@ const ChatMessages = ({
                     turns: message.numTurns ?? 0,
                     inputTokens: (message.inputTokens ?? 0).toLocaleString(),
                     outputTokens: (message.outputTokens ?? 0).toLocaleString(),
+                    cacheReadTokens: (message.cacheReadTokens ?? 0).toLocaleString(),
+                    cacheCreationTokens: (message.cacheCreationTokens ?? 0).toLocaleString(),
+                    totalTokens: (
+                      (message.inputTokens ?? 0) +
+                      (message.outputTokens ?? 0) +
+                      (message.cacheReadTokens ?? 0) +
+                      (message.cacheCreationTokens ?? 0)
+                    ).toLocaleString(),
                     durationSec: ((message.durationMs ?? 0) / 1000).toFixed(1),
                   })}{' '}
                   · {t('cost.devOnlyBadge')}

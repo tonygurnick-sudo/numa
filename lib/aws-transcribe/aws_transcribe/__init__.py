@@ -120,10 +120,12 @@ def _format_transcript(items: list, speaker_segments: dict) -> str:
     return "".join(transcript).strip()
 
 
-def fetch_transcript(bucket: str, key: str) -> str:
+def fetch_transcript_with_speakers(bucket: str, key: str) -> tuple[str, list[str]]:
     """
-    Read a completed Transcribe output JSON from S3 and format it into a
-    speaker-labelled transcript string. Safe to call from a completion handler.
+    Read a completed Transcribe output JSON from S3 and return BOTH the
+    speaker-labelled transcript string AND the sorted list of distinct speaker
+    labels Transcribe actually detected — so callers can validate diarisation
+    (e.g. assert exactly 2 speakers before trusting an agent/prospect mapping).
     """
     try:
         logger.info(f"Getting transcript from bucket: {bucket}, key: {key}")
@@ -136,11 +138,15 @@ def fetch_transcript(bucket: str, key: str) -> str:
         items = results.get("items", [])
 
         speaker_segments = {}
+        speakers: set[str] = set()
         for segment in segments:
+            label = segment.get("speaker_label")
+            if label:
+                speakers.add(label)
             for item in segment.get("items", []):
                 speaker_segments[item["start_time"]] = segment["speaker_label"]
 
-        return _format_transcript(items, speaker_segments)
+        return _format_transcript(items, speaker_segments), sorted(speakers)
 
     except Exception as e:
         logger.exception(
@@ -149,6 +155,16 @@ def fetch_transcript(bucket: str, key: str) -> str:
             key=key,
         )
         raise TranscriptionError("Failed to get transcript") from e
+
+
+def fetch_transcript(bucket: str, key: str) -> str:
+    """
+    Read a completed Transcribe output JSON from S3 and format it into a
+    speaker-labelled transcript string. Safe to call from a completion handler.
+    (Text only; see ``fetch_transcript_with_speakers`` for diarisation detail.)
+    """
+    text, _speakers = fetch_transcript_with_speakers(bucket, key)
+    return text
 
 
 def transcribe(

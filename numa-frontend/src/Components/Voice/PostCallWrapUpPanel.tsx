@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Button, Card, Form, Alert, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -57,9 +57,13 @@ interface PostCallWrapUpPanelProps {
   /** Called once after a successful save with the chosen disposition, so the page
    *  can optimistically bump the prospect with the REAL outcome (not a placeholder). */
   onSaved?: (result: { outcome: CallOutcome; qualified: boolean }) => void;
+  /** Called when the SDR dismisses the wrap-up (X or Done) — lets the page reset
+   *  its call phase to idle. Without this, dismissing leaves phase='acw' and the
+   *  dial button stays disabled until a full page reload. */
+  onDismissed?: () => void;
 }
 
-export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedded = false, onSaved }) => {
+export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedded = false, onSaved, onDismissed }) => {
   const { t } = useTranslation('voice');
   const { t: tCommon } = useTranslation('common');
   const { getCredentials } = useAuth();
@@ -73,11 +77,18 @@ export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedd
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
   const [notes, setNotes] = useState('');
   const [qualified, setQualified] = useState<boolean | null>(null);
+  // Recording-consent attestation — defaults to true (the banner + agent whisper
+  // already prompt the SDR to disclose). Persisted to the outcome as an audit
+  // signal; unchecking flags a call where disclosure was missed.
+  const [recordingDisclosed, setRecordingDisclosed] = useState(true);
 
   // ── Submission state ──────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
+  // Synchronous in-flight guard — `submitting` state updates async, so a fast
+  // double-click could fire two saves before the button disables. This blocks it.
+  const submittingRef = useRef(false);
 
   /** Reset all form + active state back to the dismissed (hidden) baseline. */
   const reset = useCallback(() => {
@@ -87,10 +98,19 @@ export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedd
     setOutcome(null);
     setNotes('');
     setQualified(null);
+    setRecordingDisclosed(true);
     setSubmitting(false);
+    submittingRef.current = false;
     setSaved(false);
     setError(false);
   }, []);
+
+  /** Dismiss the wrap-up (X / Done): clear local state AND tell the page to leave
+   *  the 'acw' phase, otherwise the dial button stays disabled until a reload. */
+  const dismiss = useCallback(() => {
+    reset();
+    onDismissed?.();
+  }, [reset, onDismissed]);
 
   // ── Listen for the softphone's call-lifecycle event ─────────────────────────
   useEffect(() => {
@@ -111,6 +131,7 @@ export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedd
         setOutcome(null);
         setNotes('');
         setQualified(null);
+        setRecordingDisclosed(true);
         setSubmitting(false);
         setSaved(false);
         setError(false);
@@ -157,6 +178,8 @@ export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedd
   const handleSubmit = useCallback(async () => {
     const prospectPhone = prospect?.phone;
     if (!contactId || !prospectPhone || outcome === null || qualified === null || submitting) return;
+    if (submittingRef.current) return; // synchronous double-submit guard
+    submittingRef.current = true;
 
     setSubmitting(true);
     setError(false);
@@ -176,6 +199,7 @@ export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedd
         qualified,
         prospect_phone: prospectPhone,
         submitted_at: new Date().toISOString(),
+        recording_disclosed: recordingDisclosed,
       };
 
       await saveCallOutcome(credentials, payload);
@@ -187,8 +211,9 @@ export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedd
     } catch {
       setError(true);
       setSubmitting(false);
+      submittingRef.current = false;
     }
-  }, [contactId, outcome, qualified, notes, prospect, submitting, getCredentials, onSaved]);
+  }, [contactId, outcome, qualified, notes, recordingDisclosed, prospect, submitting, getCredentials, onSaved]);
 
   // Nothing to show until a call enters ACW.
   if (!contactId) {
@@ -221,7 +246,7 @@ export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedd
             className="btn-close"
             aria-label={t('wrapUp.dismiss')}
             title={t('wrapUp.dismiss')}
-            onClick={reset}
+            onClick={dismiss}
           ></button>
         </div>
       </div>
@@ -232,7 +257,7 @@ export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedd
             <i className="bi bi-check-circle-fill me-2" aria-hidden="true"></i>
             {t('wrapUp.saved')}
           </span>
-          <Button variant="outline-success" size="sm" onClick={reset}>
+          <Button variant="outline-success" size="sm" onClick={dismiss}>
             {tCommon('common.done')}
             <i className="bi bi-x-lg ms-2" aria-hidden="true"></i>
           </Button>
@@ -302,6 +327,17 @@ export const PostCallWrapUpPanel: React.FC<PostCallWrapUpPanelProps> = ({ embedd
                 {t('wrapUp.qualifyNo')}
               </Button>
             </div>
+          </Form.Group>
+
+          {/* ── Recording-consent attestation (audit) ── */}
+          <Form.Group className="mb-3" controlId="voice-wrapup-recording-disclosed">
+            <Form.Check
+              type="checkbox"
+              checked={recordingDisclosed}
+              disabled={submitting}
+              onChange={(e) => setRecordingDisclosed(e.target.checked)}
+              label={t('wrapUp.recordingDisclosed')}
+            />
           </Form.Group>
 
           {error && (

@@ -5,7 +5,7 @@
     "multiple": "Note: Numa finished while {{count}} background tasks are still running. Send a message when you'd like to check on them."
   },
   "cost": {
-    "perMessage": "${{cost}} · {{turns}} turns · {{inputTokens}} in / {{outputTokens}} out · {{durationSec}}s",
+    "perMessage": "${{cost}} · {{turns}} turns · {{totalTokens}} total ({{inputTokens}} in / {{cacheReadTokens}} cache_read / {{cacheCreationTokens}} cache_create / {{outputTokens}} out) · {{durationSec}}s",
     "runningTotal": "Total: ${{cost}} (dev)",
     "devOnlyBadge": "dev only"
   },
@@ -39,7 +39,7 @@
       "uploading": "Uploading recording...",
       "sending": "Sending voice message...",
       "recordingLength": "Voice recording ({{duration}})",
-      "userMessageLabel": "\ud83c\udfa4 Voice message ({{duration}})",
+      "userMessageLabel": "🎤 Voice message ({{duration}})",
       "transcribing": "Transcribing your voice message...",
       "maxDuration": "Maximum recording length reached",
       "maxDurationCountdown": "Recording ends in {{remaining}}",
@@ -436,7 +436,7 @@
       "invalid": "Invalid JSON:"
     },
     "vtt": {
-      "summary": "{{entries}} transcript entries \u2022 Duration: {{duration}}"
+      "summary": "{{entries}} transcript entries • Duration: {{duration}}"
     },
     "markdown": {
       "showLess": "Show Less",
@@ -537,6 +537,8 @@
     "connected": "Connected",
     "preview": "Preview",
     "download": "Download",
+    "downloadAs": "Download as {{format}}",
+    "chooseFormat": "Choose format",
     "kbSelected": "{{count}} selected",
     "noneSelected": "None",
     "allToolsEnabledSummary": "All enabled",
@@ -608,5 +610,45 @@
     "tipMessage": "Numa suggests what you might say next after each response. You can turn this off in Settings → Chat Defaults.",
     "tipDismiss": "Got it",
     "ariaLabel": "Suggested next messages"
+  },
+  "chatHealth": {
+    "context": {
+      "title": "Chat length",
+      "body": "This chat has used about {{pct}}% of its length. Older messages are automatically summarised when it gets full.",
+      "preCompactTitle": "Nearly full",
+      "preCompactBody": "This chat is nearly full ({{pct}}%). Older messages will be summarised soon to make room — you don’t need to do anything."
+    },
+    "alarm": {
+      "amberTitle": "Long chat",
+      "amberBody": "This chat has been running for a while. Long chats can become slower and less reliable — we recommend starting a new chat.",
+      "redTitle": "Quality may be reduced",
+      "redBody": "This chat is long enough that the AI may forget earlier details or give lower-quality answers. For new topics, a fresh chat usually gives sharper answers.",
+      "compactionsNote_one": "Older messages have been summarised {{count}} time so far.",
+      "compactionsNote_other": "Older messages have been summarised {{count}} times so far."
+    },
+    "banner": {
+      "title": "This chat is getting long",
+      "body": "Long chats can become slower and less reliable — we recommend starting a new chat.",
+      "dismissAria": "Dismiss chat health warning"
+    },
+    "topBar": {
+      "labelGreen": "Chat health",
+      "labelOrange": "Chat getting long",
+      "labelRed": "Long chat",
+      "helpAria": "About chat health",
+      "helpTitle": "About chat health",
+      "helpBody": "Long chats can become slower and less reliable. This bar tracks how worn-down this chat is based on its length, summarisations, and tool use. When it fills up, consider starting a fresh chat for sharper answers."
+    }
+  },
+  "creditTier": {
+    "title": "Credit tier",
+    "body": "Higher-impact work moves up a tier and uses more credits.",
+    "rating": "Numa rates each chat's credit tier as it works — this one's still being rated.",
+    "tiers": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "very_high": "Very high"
+    }
   }
 }

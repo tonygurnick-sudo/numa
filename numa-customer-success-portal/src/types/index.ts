@@ -178,9 +178,25 @@ export const clientConfigSchema = z.object({
       alertThresholds: z.array(z.number()),
     })
     .optional(),
+
+  // Numa Credit System (SPK-015). showCredits gates the in-app admin view; creditConfig is the
+  // central pricing config authored here and pushed to the client (kept in sync with infra schema).
+  showCredits: z.boolean().optional(), // default: false
+  creditConfig: z
+    .object({
+      creditUsd: z.number().positive().optional(),
+      margin: z.number().min(1).optional(),
+      agentcoreMult: z.number().min(1).optional(),
+      trivialConsumptionUsd: z.number().min(0).optional(),
+      valueTiers: z.record(z.string(), z.record(z.string(), z.number())).optional(),
+      marginsByTier: z.record(z.string(), z.number()).optional(),
+      monthlyAllocations: z.array(z.number().min(0)).optional(),
+    })
+    .optional(),
 });
 
 export type ClientConfig = z.infer<typeof clientConfigSchema>;
+export type CreditConfig = NonNullable<ClientConfig['creditConfig']>;
 
 // Client metadata (non-deployment) — stored in a separate table from client config
 export const CLIENT_STATUS_VALUES = ['trial', 'paying', 'partner', 'internal', 'other', 'unclear'] as const;

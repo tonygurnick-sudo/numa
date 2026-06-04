@@ -97,7 +97,7 @@ export const syncStaff = async (numaPost: NumaPost, force = false): Promise<Staf
 };
 export const createTicketType = async (
   numaPost: NumaPost,
-  payload: { name: string; prefix: string; icon: string; color: string; defaultFields: string[] }
+  payload: { name: string; prefix: string; icon: string; color: string; defaultFields: string[]; force?: boolean }
 ): Promise<TicketType> => {
   const response = (await numaPost(`${BASE_URL}/config/ticket-types`, payload)) as TicketType;
   return response;
@@ -121,8 +121,13 @@ export const deleteTicketType = async (numaDelete: NumaDelete, ticketTypeId: str
 
 // ─── Fields ───────────────────────────────────────────────────────────────
 
-export const createField = async (numaPost: NumaPost, payload: Partial<FieldDefinition>): Promise<FieldDefinition> => {
-  const response = (await numaPost(`${BASE_URL}/config/fields`, payload)) as FieldDefinition;
+export const createField = async (
+  numaPost: NumaPost,
+  payload: Partial<FieldDefinition>,
+  options: { force?: boolean } = {}
+): Promise<FieldDefinition> => {
+  const body = options.force ? { ...payload, force: true } : payload;
+  const response = (await numaPost(`${BASE_URL}/config/fields`, body)) as FieldDefinition;
   return response;
 };
 

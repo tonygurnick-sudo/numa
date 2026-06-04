@@ -24,6 +24,12 @@ interface UserDetailsModalProps {
   onDemoteFromAdmin: (username: string) => Promise<void>;
   onDeleteUser: (user: User) => Promise<void>;
   onResetMfa?: (user: User) => Promise<void>;
+  // Billing access (Numa Credit System) — only shown when the credit view is enabled. Lets a billing
+  // admin grant/revoke the credit-visibility role on another admin (server-enforced).
+  showBillingAccess?: boolean;
+  callerIsBillingAdmin?: boolean;
+  isTargetBillingAdmin?: boolean;
+  onSetBillingAdmin?: (user: User, grant: boolean) => Promise<void>;
 }
 
 type ModalView = 'details' | 'promote' | 'delete' | 'mfa-reset';
@@ -38,6 +44,10 @@ export function UserDetailsModal({
   onDemoteFromAdmin,
   onDeleteUser,
   onResetMfa,
+  showBillingAccess = false,
+  callerIsBillingAdmin = false,
+  isTargetBillingAdmin = false,
+  onSetBillingAdmin,
 }: UserDetailsModalProps): React.JSX.Element {
   const { t } = useTranslation('userManagement');
   const showAlert = useAlert();
@@ -82,6 +92,25 @@ export function UserDetailsModal({
     try {
       await onPromoteToAdmin(user);
       handleClose();
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBillingToggle = async (grant: boolean) => {
+    if (isProcessing || !onSetBillingAdmin) return;
+    setIsProcessing(true);
+    try {
+      await onSetBillingAdmin(user, grant);
+    } catch {
+      // Server enforces caller-is-billing-admin + last-admin lockout; surface a single clear note.
+      void showAlert({
+        message: t('details.billing.error', {
+          defaultValue:
+            "Couldn't update billing access. Only a billing admin can change this, and the last billing admin can't be removed.",
+        }),
+        variant: 'warning',
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -190,6 +219,51 @@ export function UserDetailsModal({
                 {isAdmin ? t('details.permissions.descriptions.admin') : t('details.permissions.descriptions.standard')}
               </Form.Text>
             </Form.Group>
+
+            {showBillingAccess && isAdmin && (
+              <Form.Group className="mb-3">
+                <div
+                  className="p-3"
+                  style={{ border: '1px solid #e4e4e7', borderRadius: '10px', background: '#fafafa' }}
+                >
+                  <div className="d-flex align-items-center gap-2 mb-2">
+                    <i
+                      className="bi bi-coin"
+                      style={{ color: 'var(--brand-primary, var(--color-primary))' }}
+                      aria-hidden="true"
+                    />
+                    <span className="fw-semibold">
+                      {t('details.billing.title', { defaultValue: 'Billing access' })}
+                    </span>
+                    {isTargetBillingAdmin && (
+                      <Badge bg="info-subtle" text="info-emphasis" className="border ms-auto">
+                        {t('details.billing.badge', { defaultValue: 'Billing admin' })}
+                      </Badge>
+                    )}
+                  </div>
+                  <Button
+                    variant={isTargetBillingAdmin ? 'outline-danger' : 'outline-primary'}
+                    size="sm"
+                    onClick={() => handleBillingToggle(!isTargetBillingAdmin)}
+                    disabled={isProcessing || !callerIsBillingAdmin}
+                  >
+                    {isTargetBillingAdmin
+                      ? t('details.billing.revoke', { defaultValue: 'Revoke billing access' })
+                      : t('details.billing.grant', { defaultValue: 'Grant billing access' })}
+                  </Button>
+                  <Form.Text className="text-muted d-block mt-2">
+                    {callerIsBillingAdmin
+                      ? t('details.billing.help', {
+                          defaultValue:
+                            'Billing admins can see credit & cost information. Only a billing admin can grant this.',
+                        })
+                      : t('details.billing.onlyBillingAdmin', {
+                          defaultValue: 'Only a billing admin can change billing access.',
+                        })}
+                  </Form.Text>
+                </div>
+              </Form.Group>
+            )}
 
             {mfaEnabled && onResetMfa && (
               <>

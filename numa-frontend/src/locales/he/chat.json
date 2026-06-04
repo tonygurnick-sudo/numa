@@ -426,7 +426,9 @@
     "connect": "כוננהכט",
     "connected": "כוננהכטהד",
     "preview": "פרהביהו",
-    "download": "דוונלואד"
+    "download": "דוונלואד",
+    "downloadAs": "דוונלואד אס {{format}}",
+    "chooseFormat": "כחווסה פורמאט"
   },
   "agents": {
     "chooseExperience": "כחווסה כחאט השפהריהנכה"

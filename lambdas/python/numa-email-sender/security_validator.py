@@ -32,8 +32,11 @@ logger = structlog.get_logger()
 #   - {clientName}_agent-schedules or {clientName}_agent_schedules
 #       (admin-paused-by-admin notifications + 80%/100% quota-warning emails;
 #        distinct from agent-schedule-runner which sends per-run completion mails)
+#   - {clientName}_cognito-custom-email-sender or {clientName}_cognito_custom_email_sender
+#       (Cognito CustomEmailSender trigger — auth verification/activation/reset
+#        emails, BUG-188)
 ALLOWED_ROLE_REGEX = re.compile(
-    r"^[a-zA-Z0-9-]+_(?:ops[_-]api|agent[_-]schedule[_-]runner|agent[_-]schedules|schedule[_-]runner|ws[_-]agent|chat[_-]agent|workspace[_-]chat[_-]tools|admin[_-]mfa[\w-]*)$"
+    r"^[a-zA-Z0-9-]+_(?:ops[_-]api|agent[_-]schedule[_-]runner|agent[_-]schedules|schedule[_-]runner|ws[_-]agent|chat[_-]agent|workspace[_-]chat[_-]tools|admin[_-]mfa[\w-]*|cognito[_-]custom[_-]email[_-]sender)$"
 )
 
 

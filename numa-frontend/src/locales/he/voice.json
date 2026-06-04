@@ -1,0 +1,141 @@
+{
+  "page": {
+    "title": "Numa Voice",
+    "comingSoon": "שיחות יוצאות ובינת שיחות מבוססת AI נמצאות בהקמה עבור סביבת העבודה שלך.",
+    "subtitle": "שיחות יוצאות עבור צוות ה-SDR שלך",
+    "loading": "טוען את רשימת השיחות שלך…",
+    "error": "משהו השתבש בטעינת Numa Voice. אנא נסה שוב.",
+    "retry": "נסה שוב",
+    "progress": "{{done}} מתוך {{total}} הושלמו",
+    "tally": {
+      "interested": "מעוניין",
+      "callback": "חזרה לשיחה",
+      "qualified": "מוכשר"
+    }
+  },
+  "focus": {
+    "upNext": "הבא בתור",
+    "position": "{{n}} מתוך {{total}}",
+    "dialing": "מחייג…",
+    "live": "פעיל",
+    "callCta": "התקשר אל {{name}}",
+    "onAnotherCall": "סיים את השיחה הנוכחית לפני חיוג ללקוח הפוטנציאלי הבא.",
+    "noPhone": "ללקוח פוטנציאלי זה אין מספר טלפון רשום.",
+    "phoneNotDiallable": "מספר הטלפון זקוק לפורמט בינלאומי (לדוגמה +64…) כדי לחייג.",
+    "softphoneReady": "הסופטפון מוכן — השיחה נפתחת בחלונית הצפה.",
+    "muteHint": "השתמש בחלונית הסופטפון כדי להשתיק או לנתק.",
+    "allDone": "כל השיחות הושלמו להיום. עבודה יפה."
+  },
+  "queue": {
+    "next": "הבא",
+    "onCall": "בשיחה",
+    "done": "הושלמו ({{count}})",
+    "filterAll": "הכל",
+    "filterTodo": "להתקשר",
+    "filterDone": "הושלמו",
+    "locked": "סיים תחילה את השיחה הנוכחית.",
+    "heading": "תור"
+  },
+  "prospectTable": {
+    "title": "שיחות היום",
+    "caption": "לקוחות פוטנציאליים בתור לשיחות יוצאות היום.",
+    "refresh": "רענן את רשימת השיחות",
+    "columns": {
+      "company": "חברה",
+      "contact": "איש קשר",
+      "title": "תפקיד",
+      "industry": "תעשייה",
+      "pain": "השערת כאב",
+      "status": "סטטוס",
+      "actions": "פעולות"
+    },
+    "dial": "חייג",
+    "dialing": "מחייג…",
+    "calling": "בשיחה",
+    "loading": "טוען לקוחות פוטנציאליים…",
+    "empty": "אין שיחות בתור להיום.",
+    "error": "לא ניתן היה לטעון את רשימת השיחות.",
+    "statusUnknown": "—",
+    "unknownContact": "איש קשר לא ידוע",
+    "callDetail": {
+      "toggle": "סיכום השיחה",
+      "summary": "סיכום",
+      "objections": "התנגדויות",
+      "nextSteps": "צעדים הבאים",
+      "rating": "איכות השיחה",
+      "ratingValue": "{{rating}}/5",
+      "talkingPoints": "נקודות לשיחה הבאה"
+    }
+  },
+  "ccp": {
+    "title": "סופטפון",
+    "show": "הצג סופטפון",
+    "hide": "הסתר סופטפון",
+    "connecting": "מתחבר ל-Amazon Connect…",
+    "micPrompt": "אפשר גישה למיקרופון בחלון הסופטפון כדי לקבל שיחות.",
+    "loginPrompt": "התחבר ל-Amazon Connect בחלון הקופץ כדי להתחיל להתקשר.",
+    "notConfigured": "Amazon Connect אינו מוגדר עבור סביבת עבודה זו.",
+    "error": "לא ניתן היה לטעון את הסופטפון. אנא רענן ונסה שוב.",
+    "activeInOtherTab": "הסופטפון פעיל בכרטיסייה אחרת בדפדפן.",
+    "unsupportedBrowser": "הסופטפון דורש את Google Chrome או Microsoft Edge. אנא פתח את Numa ב-Chrome או ב-Edge כדי לבצע שיחות.",
+    "bestEffortBrowser": "לסופטפון אמין, השתמש ב-Chrome או ב-Edge. ב-Firefox ייתכן שתצטרך לאפשר עוגיות בין-אתריות עבור Amazon Connect."
+  },
+  "wrapUp": {
+    "title": "סיכום שיחה",
+    "subtitle": "תעד את תוצאת השיחה שלך עם {{name}}.",
+    "duration": "משך השיחה",
+    "outcomeLabel": "תוצאה",
+    "outcome": {
+      "interested": "מעוניין",
+      "callback": "חזרה לשיחה",
+      "noAnswer": "אין מענה",
+      "notInterested": "לא מעוניין"
+    },
+    "notesLabel": "הערות שיחה",
+    "notesPlaceholder": "מה קרה בשיחה? נקודות מרכזיות, צעדים הבאים…",
+    "qualifyPrompt": "האם הלקוח הפוטנציאלי הזה מוכשר?",
+    "qualifyYes": "מוכשר",
+    "qualifyNo": "לא מוכשר",
+    "submit": "שמור תוצאה",
+    "saveAndNext": "שמור והמשך",
+    "submitting": "שומר…",
+    "saved": "התוצאה נשמרה.",
+    "error": "לא ניתן היה לשמור את התוצאה. אנא נסה שוב.",
+    "dismiss": "סגור ללא תיעוד",
+    "subtitleGeneric": "תעד את תוצאת השיחה הזו.",
+    "noProspectPhone": "לשיחה זו אין מספר טלפון של לקוח פוטנציאלי, ולכן לא ניתן להתאים את התוצאה ללקוח פוטנציאלי והיא לא תישמר.",
+    "recordingDisclosed": "יידעתי את הלקוח הפוטנציאלי שהשיחה מוקלטת"
+  },
+  "consent": {
+    "title": "השיחות מוקלטות.",
+    "body": "האודיו מוקלט ומנותח על ידי בינה מלאכותית לצורך אימון ומעקב CRM. יש ליידע את הלקוח הפוטנציאלי שהשיחה מוקלטת בתחילת כל שיחה."
+  },
+  "assist": {
+    "title": "סיוע בזמן אמת",
+    "companyContext": "הקשר החברה",
+    "discoveryQuestions": "שאלות גילוי",
+    "objections": "התנגדויות",
+    "hooks": "משפטי פתיחה",
+    "next": "הבא",
+    "prev": "הקודם",
+    "prepTitle": "הכנה לשיחה הבאה",
+    "noPanel": "אין עדיין ספר משחק זמין עבור תעשייה זו.",
+    "loading": "טוען את חלונית הסיוע…",
+    "idle": "הסיוע יופיע כאן כשתתחבר שיחה."
+  },
+  "admin": {
+    "title": "ניהול Voice"
+  },
+  "adminPhones": {
+    "title": "מספרי טלפון",
+    "caption": "מספרים יוצאים הזמינים לצוות ה-SDR שלך.",
+    "number": "מספר",
+    "status": "סטטוס",
+    "active": "פעיל",
+    "inactive": "לא פעיל",
+    "claim": "תפוס",
+    "release": "שחרר",
+    "usageMinutes": "שימוש (דקות)",
+    "empty": "עדיין לא הוקצו מספרי טלפון."
+  }
+}

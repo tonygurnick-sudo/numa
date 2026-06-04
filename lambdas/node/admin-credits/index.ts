@@ -1,14 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
-import {
-  DeleteCommand,
-  DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-  UpdateCommand,
-} from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, GetCommand, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 
 // Per-client credit ledger (Numa Credit System / SPK-015).
 const TABLE_NAME = process.env.CREDITS_TABLE_NAME as string;
@@ -42,8 +35,51 @@ function isAdmin(event: { headers?: Record<string, string | undefined> }): boole
   return groups.includes('admin');
 }
 
-const balanceKey = (): { PK: string; SK: string } => ({ PK: `CLIENT#${CLIENT_NAME}`, SK: 'BALANCE' });
-const configKey = (): { PK: string; SK: string } => ({ PK: `CLIENT#${CLIENT_NAME}`, SK: 'CONFIG' });
+// The caller's Cognito sub (from the access token). Used to ownership-check the per-conversation
+// credit-tier endpoint so a user can only read their OWN conversation's tier.
+function callerSub(event: { headers?: Record<string, string | undefined> }): string | null {
+  const auth = event.headers?.authorization || event.headers?.Authorization;
+  if (!auth) return null;
+  const sub = parseJwt(String(auth).replace(/^Bearer\s+/i, ''))['sub'];
+  return typeof sub === 'string' ? sub : null;
+}
+
+const clientPk = (): string => `CLIENT#${CLIENT_NAME}`;
+
+// ── Billing-admin membership (Numa Credit System) ────────────────────────────────────────────────
+// Who may SEE credit data, stored as BILLING_ADMIN#<sub> rows on the CLIENT# partition. Deliberately
+// NOT a Cognito group: admins hold cognito-idp:AdminAddUserToGroup client-side, so a group would be
+// self-grantable. Admin browser creds can't write this table, so the ONLY way in is a caller-checked
+// server write (this Lambda) or the Customer Success Portal (assume-role) — enforcing "only a billing
+// admin promotes another", with Arcanum bootstrapping the first via the portal.
+const billingAdminSk = (sub: string): string => `BILLING_ADMIN#${sub}`;
+
+type BillingAdmin = { sub: string; email: string | null; grantedBy: string | null; grantedAt: string | null };
+
+async function listBillingAdmins(): Promise<BillingAdmin[]> {
+  const res = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': clientPk(), ':sk': 'BILLING_ADMIN#' },
+    })
+  );
+  return (res.Items ?? []).map((it) => ({
+    sub: String(it.sub ?? String(it.SK).slice('BILLING_ADMIN#'.length)),
+    email: it.email ? String(it.email) : null,
+    grantedBy: it.grantedBy ? String(it.grantedBy) : null,
+    grantedAt: it.grantedAt ? String(it.grantedAt) : null,
+  }));
+}
+
+async function isBillingAdmin(event: { headers?: Record<string, string | undefined> }): Promise<boolean> {
+  const sub = callerSub(event);
+  if (!sub) return false;
+  const res = await ddb.send(
+    new GetCommand({ TableName: TABLE_NAME, Key: { PK: clientPk(), SK: billingAdminSk(sub) } })
+  );
+  return !!res.Item;
+}
 
 // ── Pricing-policy defaults — MUST mirror lib/credit-pricing (credits.py + tiers.py). The Credit
 // Admin tab edits these; the debit Lambda reads the CONFIG row at meter time. AWS token rates and
@@ -51,20 +87,21 @@ const configKey = (): { PK: string; SK: string } => ({ PK: `CLIENT#${CLIENT_NAME
 const TIERS = ['low', 'medium', 'high', 'very_high'] as const;
 const CONTEXTS = ['chat', 'agent'] as const;
 const DEFAULT_CONFIG = {
-  creditUsd: 0.5,
-  margin: 2.0,
+  creditUsd: 0.3, // ~NZD $0.50/credit @ FX 1.69 — the NZD-anchored default
+  margin: 2.0, // scalar fallback (unclassified); per-tier marginsByTier below are the real defence
   trivialConsumptionUsd: 0.01,
+  // 2-credit floor on every interaction (low); agent stays cheaper than chat above the floor.
   valueTiers: {
-    chat: { low: 2, medium: 5, high: 12, very_high: 30 },
-    agent: { low: 1, medium: 3, high: 6, very_high: 15 },
+    chat: { low: 2, medium: 4, high: 8, very_high: 18 },
+    agent: { low: 2, medium: 3, high: 5, very_high: 12 },
   },
-  // Per-tier cost-recovery margin (the floor). Default 2x everywhere; raise high/very_high so
-  // token-heavy premium work doesn't collapse to a flat 2x when the floor binds.
-  marginsByTier: { low: 2.0, medium: 2.0, high: 2.0, very_high: 2.0 },
+  // Per-tier cost-recovery (defence) margin (the floor), scaling UP with complexity so cheap work
+  // isn't punished and premium work keeps a fuller margin.
+  marginsByTier: { low: 1.15, medium: 1.3, high: 1.6, very_high: 2.0 },
   // Monthly credit allocation (Jan..Dec). Credits granted per calendar month; UNUSED CREDITS EXPIRE
-  // at month end (no rollover). The Credit Admin panel sets an annual total and splits it evenly,
-  // then lets any month be fine-tuned. All zero = unconfigured (no budget enforced/shown).
-  monthlyAllocations: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  // at month end (no rollover). Defaults to the new-client starter plan (2000/mo ≈ NZD $1,015) so a
+  // fresh client meters against a real allowance; portal-set allocations override this.
+  monthlyAllocations: [2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000],
 } as const;
 
 type ValueTiers = Record<string, Record<string, number>>;
@@ -108,70 +145,12 @@ function effectiveConfig(stored?: Record<string, unknown>): CreditConfig {
   };
 }
 
-// Validate + pick only known fields. Returns null on any invalid value.
-function validateConfig(body: Record<string, unknown>): Record<string, unknown> | null {
-  const out: Record<string, unknown> = {};
-  const pos = (v: unknown): number | null => {
-    const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  };
-  if (body.creditUsd !== undefined) {
-    const n = pos(body.creditUsd);
-    if (n === null) return null;
-    out.creditUsd = n;
-  }
-  if (body.margin !== undefined) {
-    const n = pos(body.margin);
-    if (n === null || n < 1) return null; // margin < 1x would let credits fall below cost
-    out.margin = n;
-  }
-  if (body.trivialConsumptionUsd !== undefined) {
-    const n = Number(body.trivialConsumptionUsd);
-    if (!Number.isFinite(n) || n < 0) return null;
-    out.trivialConsumptionUsd = n;
-  }
-  if (body.valueTiers !== undefined) {
-    const src = body.valueTiers as ValueTiers;
-    const vt: ValueTiers = {};
-    for (const ctx of CONTEXTS) {
-      if (!src?.[ctx]) continue;
-      vt[ctx] = {};
-      for (const tier of TIERS) {
-        if (src[ctx][tier] === undefined) continue;
-        const n = pos(src[ctx][tier]);
-        if (n === null) return null;
-        vt[ctx][tier] = Math.round(n);
-      }
-    }
-    out.valueTiers = vt;
-  }
-  if (body.marginsByTier !== undefined) {
-    const src = body.marginsByTier as Record<string, number>;
-    const mt: Record<string, number> = {};
-    for (const tier of TIERS) {
-      if (src?.[tier] === undefined) continue;
-      const n = Number(src[tier]);
-      if (!Number.isFinite(n) || n < 1) return null; // margin < 1x would let credits fall below cost
-      mt[tier] = n;
-    }
-    out.marginsByTier = mt;
-  }
-  if (body.monthlyAllocations !== undefined) {
-    const src = body.monthlyAllocations;
-    if (!Array.isArray(src)) return null;
-    const arr: number[] = [];
-    for (let i = 0; i < 12; i++) {
-      const n = Number(src[i] ?? 0);
-      if (!Number.isFinite(n) || n < 0) return null; // a month's allocation can't be negative
-      arr.push(Math.round(n));
-    }
-    out.monthlyAllocations = arr;
-  }
-  return out;
-}
+// Config validation/write now lives in the Customer Success Portal (the central authoring surface);
+// this Lambda is read-only for pricing config (validateConfig retired with the POST write path).
 
-// UTC YYYY-MM. (Monthly expiry is Asa's default — the ledger is keyed by month.)
-const currentMonth = (): string => new Date().toISOString().slice(0, 7);
+// Current NZ billing month (YYYY-MM). The credit system bills on one calendar — Pacific/Auckland —
+// for all clients, matching how credit-debit buckets months. The TZ only decides the month boundary.
+const currentMonth = (): string => new Date().toLocaleDateString('en-CA', { timeZone: 'Pacific/Auckland' }).slice(0, 7);
 
 // Admin-safe projection of a META row. NEVER returns internal cost/token fields or chat content —
 // admins see what was done, by whom, over what span, and what it cost in credits. userSub is
@@ -180,12 +159,16 @@ const currentMonth = (): string => new Date().toISOString().slice(0, 7);
 function toAdminRow(item: Record<string, unknown>): Record<string, unknown> {
   return {
     conversationId: String(item.PK || '').replace(/^CONV#/, ''),
+    // title + deliverables are the anonymised, admin-safe labels written by the nightly summariser;
+    // empty until it runs (frontend shows a "anonymised summary coming overnight" placeholder).
     title: item.title ?? '',
+    deliverables: Array.isArray(item.deliverables) ? item.deliverables : [],
     dominantTier: item.dominantTier ?? 'unclassified',
-    category: item.category ?? null,
     creditsCharged: item.creditsCharged ?? 0,
     msgCount: item.msgCount ?? 0,
     source: item.source ?? 'chat',
+    // agentId present on agent / scheduled runs; the frontend joins it to the agent's name.
+    agentId: item.agentId ?? null,
     userSub: item.userSub ?? null,
     firstTs: item.firstTs ?? null,
     lastTs: item.lastTs ?? null,
@@ -216,46 +199,123 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: 'Server configuration error' }) };
     }
 
-    // GET /credits/balance -> current credit balance (admin-only: exposes spend signal)
-    if (method === 'GET' && /\/credits\/balance\/?$/.test(path)) {
-      if (!isAdmin(event)) {
+    // GET /credits/conversation?id=<conversationId> -> the credit tier of the caller's OWN
+    // conversation, for the in-chat credit indicator. NOT admin-gated (any user sees the tier of
+    // their own chats), but ownership-checked: the caller's JWT sub must match the conversation's
+    // userSub. Returns ONLY tier + credits (no cost/token internals, no chat content). The tier is
+    // the ratcheted dominantTier written by credit-debit, so it lags a few seconds behind a turn and
+    // is unrated (classified:false) on a brand-new conversation not yet metered.
+    if (method === 'GET' && /\/credits\/conversation\/?$/.test(path)) {
+      const sub = callerSub(event);
+      if (!sub) {
+        return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
+      }
+      const conversationId = event.queryStringParameters?.id;
+      if (!conversationId) {
+        return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Missing id' }) };
+      }
+      const res = await ddb.send(
+        new QueryCommand({
+          TableName: TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk AND SK = :sk',
+          ExpressionAttributeValues: { ':pk': `CONV#${conversationId}`, ':sk': 'META' },
+          Limit: 1,
+        })
+      );
+      const item = res.Items?.[0];
+      // No META yet (not metered) -> report unrated rather than 404, so the indicator can show a
+      // neutral "rating…" state on a fresh chat instead of an error.
+      if (!item) {
+        return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ classified: false }) };
+      }
+      // Ownership check — never expose another user's conversation tier.
+      if (item.userSub && item.userSub !== sub) {
         return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };
       }
-      // Also return the pricing config here (the Credit Admin tab reads it from this call — avoids
-      // adding a new API-GW route so the whole feature is hotfix-deployable). Plus this month's
-      // allocation/consumption so the panel can show "X / Y used, Z remaining (expires month end)".
+      const tier =
+        typeof item.dominantTier === 'string' && (TIERS as readonly string[]).includes(item.dominantTier)
+          ? item.dominantTier
+          : null;
+      return {
+        statusCode: 200,
+        headers: HEADERS,
+        body: JSON.stringify({
+          classified: tier !== null,
+          tier,
+          source: item.source ?? 'chat',
+          creditsCharged: Number(item.creditsCharged ?? 0),
+        }),
+      };
+    }
+
+    // GET /credits/balance -> live drawdown standing. Billing-admin only (exposes the spend signal);
+    // a plain admin gets 403 'not_billing_admin' and the UI shows the lock screen.
+    if (method === 'GET' && /\/credits\/balance\/?$/.test(path)) {
+      if (!(await isBillingAdmin(event))) {
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'not_billing_admin' }) };
+      }
+      // One CLIENT# partition query returns CONFIG + MONTH# aggregates + TXN# event log together, so we
+      // can derive the Option-B drawdown waterfall here (same logic as the portal's getStanding):
+      //   balance = Σ TXN credits − overflow of months not yet settled by the nightly job.
       const month = currentMonth();
       const monthIndex = Number(month.slice(5, 7)) - 1; // 0=Jan .. 11=Dec
-      const [balRes, cfgRes, monthRes] = await Promise.all([
-        ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: balanceKey() })),
-        ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: configKey() })),
-        ddb.send(
-          new QueryCommand({
-            TableName: TABLE_NAME,
-            IndexName: 'GSI2',
-            KeyConditionExpression: 'GSI2PK = :pk',
-            ExpressionAttributeValues: { ':pk': `MONTH#${month}` },
-            ProjectionExpression: 'creditsCharged',
-          })
-        ),
-      ]);
-      const balance = (balRes.Item?.balance as number) ?? 0;
-      const cfg = effectiveConfig(cfgRes.Item);
-      // Use-it-or-lose-it: remaining is THIS month's allocation minus THIS month's consumption.
-      // Prior months never carry over (the ledger is keyed by month), so expiry is implicit.
-      const consumed = (monthRes.Items || []).reduce((sum, it) => sum + Number(it.creditsCharged ?? 0), 0);
+      const part = await ddb.send(
+        new QueryCommand({
+          TableName: TABLE_NAME,
+          KeyConditionExpression: 'PK = :pk',
+          ExpressionAttributeValues: { ':pk': clientPk() },
+        })
+      );
+      const items = part.Items ?? [];
+      const cfgItem = items.find((it) => it.SK === 'CONFIG');
+      const cfg = effectiveConfig(cfgItem);
+      const txns = items.filter((it) => String(it.SK).startsWith('TXN#'));
+      const settledBalance = txns.reduce((sum, t) => sum + Number(t.credits ?? 0), 0);
+      const settledMonths = new Set(
+        txns.filter((t) => t.txnKind === 'settlement' && t.month).map((t) => String(t.month))
+      );
+      let liveOverflow = 0;
+      let consumed = 0;
+      for (const it of items) {
+        const sk = String(it.SK ?? '');
+        if (!sk.startsWith('MONTH#')) continue;
+        const m = sk.slice('MONTH#'.length);
+        const mIdx = Number(m.slice(5, 7)) - 1;
+        const used =
+          it.creditsCharged != null
+            ? Number(it.creditsCharged)
+            : cfg.creditUsd
+              ? Math.round(Number(it.creditRevenueUsd ?? 0) / cfg.creditUsd)
+              : 0;
+        const alloc =
+          it.allocationSnapshot != null ? Number(it.allocationSnapshot) : (cfg.monthlyAllocations[mIdx] ?? 0);
+        if (m === month) consumed = used;
+        if (!settledMonths.has(m)) liveOverflow += Math.max(0, used - Math.max(0, alloc));
+      }
+      const availableBalance = settledBalance - Math.max(0, liveOverflow);
       const allocation = cfg.monthlyAllocations[monthIndex] ?? 0;
       return {
         statusCode: 200,
         headers: HEADERS,
         body: JSON.stringify({
-          balance,
-          updatedAt: balRes.Item?.updatedAt ?? null,
+          balance: availableBalance, // live: settled events minus unsettled overflow (can be negative)
+          settledBalance,
+          liveOverflow,
+          txns: txns
+            .map((t) => ({
+              kind: String(t.txnKind ?? ''),
+              credits: Number(t.credits ?? 0),
+              month: t.month ? String(t.month) : undefined,
+              createdAt: String(t.createdAt ?? ''),
+              createdBy: t.createdBy ? String(t.createdBy) : undefined,
+              note: t.note ? String(t.note) : undefined,
+            }))
+            .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
           config: {
             defaults: DEFAULT_CONFIG,
             current: cfg,
-            isCustom: !!cfgRes.Item,
-            updatedAt: cfgRes.Item?.updatedAt ?? null,
+            isCustom: !!cfgItem,
+            updatedAt: (cfgItem?.updatedAt as string) ?? null,
           },
           monthly: {
             month,
@@ -269,10 +329,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    // GET /credits/ledger?month=YYYY-MM -> this month's conversations (admin-safe rows, newest first)
+    // GET /credits/ledger?month=YYYY-MM -> this month's conversations (admin-safe rows, newest first).
+    // Billing-admin only (same gate as balance).
     if (method === 'GET' && /\/credits\/ledger\/?$/.test(path)) {
-      if (!isAdmin(event)) {
-        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };
+      if (!(await isBillingAdmin(event))) {
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'not_billing_admin' }) };
       }
       const month = event.queryStringParameters?.month || currentMonth();
       const res = await ddb.send(
@@ -291,78 +352,91 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ month, totalCredits, items }) };
     }
 
-    // POST /credits/topup -> admin-only. Discriminated by `action` so config save/reset can ride
-    // this route (no new API-GW route needed -> hotfix-deployable):
-    //   { credits: N }                 -> manual balance top-up
-    //   { action: 'saveConfig', config } -> persist pricing-policy overrides (Credit Admin tab)
-    //   { action: 'resetConfig' }       -> delete overrides, revert to lib defaults
+    // POST /credits/topup -> RETIRED. Pricing config, allocations, and top-ups are now authored in
+    // the Customer Success Portal ("Numa Credits" page) and pushed into this account's CONFIG/BALANCE
+    // rows. The in-client view is READ-ONLY; clients no longer self-configure credits.
     if (method === 'POST' && /\/credits\/topup\/?$/.test(path)) {
       if (!isAdmin(event)) {
         return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };
       }
-      const body = JSON.parse(event.body || '{}') as {
-        credits?: unknown;
-        action?: string;
-        config?: Record<string, unknown>;
+      return {
+        statusCode: 410,
+        headers: HEADERS,
+        body: JSON.stringify({
+          error: 'Credit config and top-ups are managed centrally in the Customer Success Portal.',
+        }),
       };
+    }
 
-      if (body.action === 'resetConfig') {
-        await ddb.send(new DeleteCommand({ TableName: TABLE_NAME, Key: configKey() }));
-        return {
-          statusCode: 200,
-          headers: HEADERS,
-          body: JSON.stringify({
-            ok: true,
-            config: { defaults: DEFAULT_CONFIG, current: DEFAULT_CONFIG, isCustom: false },
-          }),
-        };
+    // GET /credits/billing-admins -> the caller's own billing-admin status + the roster (so an admin
+    // who's locked out can see who to ask, and User Management can render badges). Any admin may read.
+    if (method === 'GET' && /\/credits\/billing-admins\/?$/.test(path)) {
+      if (!isAdmin(event)) {
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };
       }
-      if (body.action === 'saveConfig') {
-        const clean = validateConfig(body.config || {});
-        if (!clean) {
-          return {
-            statusCode: 400,
-            headers: HEADERS,
-            body: JSON.stringify({ error: 'Invalid config: all values must be positive (margin >= 1).' }),
-          };
-        }
-        await ddb.send(
-          new PutCommand({
-            TableName: TABLE_NAME,
-            Item: { ...configKey(), ...clean, updatedAt: new Date().toISOString(), updatedBy: 'admin' },
-          })
-        );
-        return {
-          statusCode: 200,
-          headers: HEADERS,
-          body: JSON.stringify({
-            ok: true,
-            config: { defaults: DEFAULT_CONFIG, current: effectiveConfig(clean), isCustom: true },
-          }),
-        };
-      }
-
-      const credits = Number(body.credits);
-      if (!Number.isFinite(credits) || credits <= 0) {
-        return {
-          statusCode: 400,
-          headers: HEADERS,
-          body: JSON.stringify({ error: 'credits must be a positive number' }),
-        };
-      }
-      const res = await ddb.send(
-        new UpdateCommand({
-          TableName: TABLE_NAME,
-          Key: balanceKey(),
-          UpdateExpression: 'ADD balance :c SET updatedAt = :t, updatedBy = :u',
-          ExpressionAttributeValues: { ':c': credits, ':t': new Date().toISOString(), ':u': 'admin' },
-          ReturnValues: 'UPDATED_NEW',
-        })
-      );
+      const sub = callerSub(event);
+      const admins = await listBillingAdmins();
       return {
         statusCode: 200,
         headers: HEADERS,
-        body: JSON.stringify({ ok: true, balance: res.Attributes?.balance ?? credits }),
+        body: JSON.stringify({ isBillingAdmin: !!sub && admins.some((a) => a.sub === sub), admins }),
+      };
+    }
+
+    // POST /credits/billing-admins {action:'grant'|'revoke', sub, email?} -> peer-propagation.
+    // Caller MUST already be a billing-admin (server-enforced; admins can't write this table from the
+    // browser). Lockout: the final billing-admin can't be removed — Arcanum re-seeds via the portal.
+    if (method === 'POST' && /\/credits\/billing-admins\/?$/.test(path)) {
+      const caller = callerSub(event);
+      if (!caller) {
+        return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
+      }
+      const admins = await listBillingAdmins();
+      if (!admins.some((a) => a.sub === caller)) {
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'not_billing_admin' }) };
+      }
+      let body: { action?: string; sub?: string; email?: string };
+      try {
+        body = JSON.parse(event.body || '{}');
+      } catch {
+        return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Invalid JSON' }) };
+      }
+      const targetSub = String(body.sub || '');
+      const action = body.action;
+      if (!targetSub || (action !== 'grant' && action !== 'revoke')) {
+        return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Missing action/sub' }) };
+      }
+      if (action === 'revoke') {
+        if (admins.length <= 1 && admins.some((a) => a.sub === targetSub)) {
+          return {
+            statusCode: 409,
+            headers: HEADERS,
+            body: JSON.stringify({ error: 'last_billing_admin' }),
+          };
+        }
+        await ddb.send(
+          new DeleteCommand({ TableName: TABLE_NAME, Key: { PK: clientPk(), SK: billingAdminSk(targetSub) } })
+        );
+      } else {
+        await ddb.send(
+          new PutCommand({
+            TableName: TABLE_NAME,
+            Item: {
+              PK: clientPk(),
+              SK: billingAdminSk(targetSub),
+              sub: targetSub,
+              email: body.email ? String(body.email) : null,
+              grantedBy: caller,
+              grantedAt: new Date().toISOString(),
+            },
+          })
+        );
+      }
+      const updated = await listBillingAdmins();
+      return {
+        statusCode: 200,
+        headers: HEADERS,
+        body: JSON.stringify({ isBillingAdmin: updated.some((a) => a.sub === caller), admins: updated }),
       };
     }
 

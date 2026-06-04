@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Spinner, Alert, Modal, Button, Form } from 'react-bootstrap';
+import { Container, Row, Col, Spinner, Alert, Modal, Button, Form, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Link2, RefreshCw, Grid3X3, RefreshCcw, AlertTriangle, Settings, Eye, EyeOff } from 'lucide-react';
 
@@ -33,6 +33,7 @@ import {
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { ConnectorsService, type PATCredentialField } from '../Services/ConnectorsService';
 import { DataConnectorsService } from '../Services/DataConnectorsService';
+import { ChatSettingsService, type ApprovalMode } from '../Services/ChatSettingsService';
 
 import {
   getConnectionDisplayName,
@@ -127,7 +128,7 @@ export const UnifiedIntegrationsPage = () => {
   const { t } = useTranslation('integrations');
   const { t: tCommon } = useTranslation('common');
   const { user, lambdaClient } = useAuth();
-  const { numaGet, numaDelete } = useNumaRequest();
+  const { numaGet, numaDelete, numaPut } = useNumaRequest();
   const confirm = useConfirm();
   const location = useLocation();
   const navigate = useNavigate();
@@ -177,6 +178,11 @@ export const UnifiedIntegrationsPage = () => {
   // user can deny tools globally disabled by admin AND deny additional ones
   // for themselves. Native connectors don't go through this path.
   const [toolsModalSvc, setToolsModalSvc] = useState<ServiceRow | null>(null);
+  // TASK-127: native connectors don't have a tools-policy modal (no MCP
+  // server to enumerate from). This is their Settings entry-point — for
+  // now it only hosts the approval-mode picker, but it's the home for any
+  // future per-user native settings.
+  const [nativeSettingsModalSvc, setNativeSettingsModalSvc] = useState<ServiceRow | null>(null);
   const [patPrompt, setPatPrompt] = useState<{
     connectorId: string;
     displayName: string;
@@ -187,6 +193,53 @@ export const UnifiedIntegrationsPage = () => {
   // can ask their admin to flip the switch. Off by default so the page stays
   // focused on what they can actually connect to today.
   const [showUnavailable, setShowUnavailable] = useState(false);
+
+  // TASK-127: per-integration approval-mode overrides. Empty record =
+  // "no overrides, use the global setting from User Profile → Tool
+  // Approvals." Hydrated from the SWR cache for instant render, then
+  // refreshed from the API on mount.
+  const [integrationApprovalModes, setIntegrationApprovalModes] = useState<Record<string, ApprovalMode>>(
+    () => ChatSettingsService.getCached()?.integrationApprovalModes ?? {}
+  );
+  // Per-slug PUT in flight indicator — used to disable the picker while
+  // saving so the user can't fire off conflicting writes.
+  const [savingApprovalForSlug, setSavingApprovalForSlug] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void ChatSettingsService.get(numaGet).then((settings) => {
+      if (cancelled) return;
+      setIntegrationApprovalModes(settings.integrationApprovalModes ?? {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [numaGet]);
+
+  const handleApprovalModeChange = useCallback(
+    async (slug: string, mode: ApprovalMode | '') => {
+      // "" (the "use default" sentinel) clears the per-integration override —
+      // the runtime falls back to the user's global integrations mode.
+      setSavingApprovalForSlug(slug);
+      const next: Record<string, ApprovalMode> = { ...integrationApprovalModes };
+      if (mode === '') {
+        delete next[slug];
+      } else {
+        next[slug] = mode;
+      }
+      // Optimistic update — revert on error so the picker reflects truth.
+      setIntegrationApprovalModes(next);
+      try {
+        await ChatSettingsService.update({ integrationApprovalModes: next }, numaPut);
+      } catch (err) {
+        setIntegrationApprovalModes(integrationApprovalModes);
+        setError(extractApiError(err));
+      } finally {
+        setSavingApprovalForSlug(null);
+      }
+    },
+    [integrationApprovalModes, numaPut]
+  );
 
   const reload = useCallback(
     async (opts: { forceRefresh?: boolean } = {}) => {
@@ -932,11 +985,20 @@ export const UnifiedIntegrationsPage = () => {
                         onSwitch={
                           svc.availableMethods.length === 2 && svc.isConnected ? () => handleSwitch(svc) : undefined
                         }
-                        onConfigureTools={
-                          svc.isConnected && svc.effectiveMethod === 'pipedream' && svc.entry.pipedreamSlug
-                            ? () => setToolsModalSvc(svc)
+                        // TASK-127: route to the right Settings modal based
+                        // on connection method. Pipedream gets the full
+                        // tools-policy + approval modal; native gets the
+                        // approval-only modal. Disconnected = no Settings.
+                        onConfigureSettings={
+                          svc.isConnected
+                            ? svc.effectiveMethod === 'pipedream' && svc.entry.pipedreamSlug
+                              ? () => setToolsModalSvc(svc)
+                              : svc.effectiveMethod === 'native'
+                                ? () => setNativeSettingsModalSvc(svc)
+                                : undefined
                             : undefined
                         }
+                        approvalModeOverride={integrationApprovalModes[svc.entry.slug] ?? ''}
                       />
                     ))}
                   </div>
@@ -1026,30 +1088,100 @@ export const UnifiedIntegrationsPage = () => {
         onError={(msg) => setError(msg)}
       />
 
-      <UserToolPolicyModal
-        // Re-resolve against the live `services` list so the modal sees the
-        // latest accounts (FEAT-019) — e.g. immediately after a Pipedream
-        // connect where the snapshot captured at click time has no accounts.
-        svc={(() => {
-          if (!toolsModalSvc) return null;
-          return services.find((s) => s.entry.slug === toolsModalSvc.entry.slug) ?? toolsModalSvc;
-        })()}
-        onHide={() => setToolsModalSvc(null)}
-        onError={(msg) => setError(msg)}
-        onAddAccount={async (pipedreamSlug) => {
-          // Re-use the standard connect-token flow; Pipedream's default
-          // behaviour on a second call is to add another account, not
-          // replace the existing one.
-          await connectPipedream(pipedreamSlug);
-        }}
-        onDisconnectAccount={async (accountId) => {
-          if (!user || !lambdaClient) return;
-          const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
-          await PipedreamProxyService.disconnectIntegration(lambdaClient, externalUserId, { accountId });
-          await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
-          await reload({ forceRefresh: true });
+      {toolsModalSvc && (
+        <UserToolPolicyModal
+          // Fresh instance per open (keyed by slug) so the modal's edit state —
+          // toggles, the dirty baseline, `loading` — never carries over from a
+          // previous open/save of the SAME integration. Previously the modal was
+          // mounted permanently (unkeyed) and only rendered null when closed, so
+          // after a save the stale `initialToggles` baseline left "Save changes"
+          // wrongly enabled on reopen even when nothing had changed.
+          key={toolsModalSvc.entry.slug}
+          // Re-resolve against the live `services` list so the modal sees the
+          // latest accounts (FEAT-019) — e.g. immediately after a Pipedream
+          // connect where the snapshot captured at click time has no accounts.
+          svc={services.find((s) => s.entry.slug === toolsModalSvc.entry.slug) ?? toolsModalSvc}
+          onHide={() => setToolsModalSvc(null)}
+          onError={(msg) => setError(msg)}
+          onAddAccount={async (pipedreamSlug) => {
+            // Re-use the standard connect-token flow; Pipedream's default
+            // behaviour on a second call is to add another account, not
+            // replace the existing one.
+            await connectPipedream(pipedreamSlug);
+          }}
+          onDisconnectAccount={async (accountId) => {
+            if (!user || !lambdaClient) return;
+            const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+            await PipedreamProxyService.disconnectIntegration(lambdaClient, externalUserId, { accountId });
+            await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
+            await reload({ forceRefresh: true });
+          }}
+          approvalMode={integrationApprovalModes[toolsModalSvc.entry.slug] ?? ''}
+          approvalSaving={savingApprovalForSlug === toolsModalSvc.entry.slug}
+          onApprovalModeChange={(mode) => {
+            void handleApprovalModeChange(toolsModalSvc.entry.slug, mode);
+          }}
+        />
+      )}
+      <NativeIntegrationSettingsModal
+        svc={nativeSettingsModalSvc}
+        onHide={() => setNativeSettingsModalSvc(null)}
+        approvalMode={nativeSettingsModalSvc ? (integrationApprovalModes[nativeSettingsModalSvc.entry.slug] ?? '') : ''}
+        approvalSaving={nativeSettingsModalSvc ? savingApprovalForSlug === nativeSettingsModalSvc.entry.slug : false}
+        onApprovalModeChange={(mode) => {
+          if (nativeSettingsModalSvc) void handleApprovalModeChange(nativeSettingsModalSvc.entry.slug, mode);
         }}
       />
+    </div>
+  );
+};
+
+// TASK-127: shared approval-mode picker used inside both the Pipedream
+// Settings modal (UserToolPolicyModal) and the native Settings modal.
+// "" is the "Use default" sentinel — clears the per-integration override
+// and falls back to the user's Tool Approvals default.
+const ApprovalModeSection = ({
+  serviceName,
+  value,
+  saving,
+  onChange,
+}: {
+  serviceName: string;
+  value: ApprovalMode | '';
+  saving: boolean;
+  onChange: (next: ApprovalMode | '') => void;
+}) => {
+  const { t } = useTranslation('integrations');
+  return (
+    <div className="p-3 border rounded-3 bg-light">
+      <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
+        <div>
+          <div className="fw-semibold">{t('approvalMode.sectionTitle', { defaultValue: 'Approval mode' })}</div>
+          <div className="text-muted small">
+            {t('approvalMode.sectionHelp', {
+              defaultValue: 'Override your default Tool Approvals setting for this integration only.',
+            })}
+          </div>
+        </div>
+        {saving && <Spinner size="sm" animation="border" role="status" />}
+      </div>
+      <Form.Select
+        size="sm"
+        value={value}
+        disabled={saving}
+        onChange={(e) => onChange((e.target.value || '') as ApprovalMode | '')}
+        aria-label={t('approvalMode.aria', {
+          defaultValue: 'Approval mode for {{name}}',
+          name: serviceName,
+        })}
+      >
+        <option value="">{t('approvalMode.useDefault', { defaultValue: 'Use default' })}</option>
+        <option value="always">{t('approvalMode.always', { defaultValue: 'Always require approval' })}</option>
+        <option value="non_destructive">
+          {t('approvalMode.nonDestructive', { defaultValue: 'Auto-approve safe actions' })}
+        </option>
+        <option value="never">{t('approvalMode.never', { defaultValue: 'Auto-approve all actions' })}</option>
+      </Form.Select>
     </div>
   );
 };
@@ -1060,7 +1192,8 @@ const IntegrationCard = ({
   onConnect,
   onDisconnect,
   onSwitch,
-  onConfigureTools,
+  onConfigureSettings,
+  approvalModeOverride,
 }: {
   svc: ServiceRow;
   busy: boolean;
@@ -1069,9 +1202,16 @@ const IntegrationCard = ({
   /** Provided only when the service has two methods available AND the user is
    *  currently connected — clicking opens the chooser to swap methods. */
   onSwitch?: () => void;
-  /** Provided for connected Pipedream integrations — opens the per-user
-   *  MCP tool policy modal where the user can deny individual tools. */
-  onConfigureTools?: () => void;
+  /** Provided for connected integrations — opens the per-integration Settings
+   *  modal. For Pipedream the modal includes both the per-user MCP tool
+   *  policy and the approval-mode override; for native it currently only
+   *  contains the approval-mode override (TASK-127). */
+  onConfigureSettings?: () => void;
+  /** TASK-127: read-only display of the per-integration approval-mode
+   *  override. Undefined/empty = "use default" (no pill rendered); any
+   *  concrete value renders a labelled pill next to the integration name
+   *  so the override is visible without opening Settings. */
+  approvalModeOverride?: ApprovalMode | '';
 }) => {
   const { t } = useTranslation('integrations');
   const { display, effectiveMethod, availableMethods, isConnected, dead } = svc;
@@ -1122,14 +1262,15 @@ const IntegrationCard = ({
         </span>
       ) : isConnected ? (
         <>
-          {onConfigureTools && (
+          {onConfigureSettings && (
             <Button
               variant="outline-secondary"
               size="sm"
-              onClick={onConfigureTools}
+              onClick={onConfigureSettings}
               disabled={busy}
-              title={t('actions.configureToolsTooltip', {
-                defaultValue: 'Choose which actions this integration can use in your chats',
+              title={t('actions.configureSettingsTooltip', {
+                defaultValue:
+                  'Approval mode and per-integration settings — only affects you, not other workspace users.',
               })}
             >
               <Settings size={12} className="me-1" />
@@ -1194,6 +1335,57 @@ const IntegrationCard = ({
                   {t('methodChooser.userPicks', { defaultValue: 'Choose method' })}
                 </span>
               )}
+              {/* TASK-127: approval-mode override pill. Rendered only when
+                  the user has set a per-integration mode different from
+                  their global default. Colour-coded so the riskier the
+                  bypass, the more attention-grabbing the badge:
+                    • always → info (extra caution, no bypass)
+                    • non_destructive → warning-subtle (safe-only bypass)
+                    • never → warning (silent execution, biggest impact) */}
+              {approvalModeOverride === 'always' ||
+              approvalModeOverride === 'non_destructive' ||
+              approvalModeOverride === 'never' ? (
+                <OverlayTrigger
+                  placement="top"
+                  overlay={
+                    <Tooltip id={`approval-mode-${svc.entry.slug}`}>
+                      {approvalModeOverride === 'never'
+                        ? t('approvalMode.never', { defaultValue: 'Auto-approve all actions' })
+                        : approvalModeOverride === 'non_destructive'
+                          ? t('approvalMode.nonDestructive', { defaultValue: 'Auto-approve safe actions' })
+                          : t('approvalMode.always', { defaultValue: 'Always require approval' })}
+                    </Tooltip>
+                  }
+                >
+                  <span
+                    className={`badge ${
+                      approvalModeOverride === 'never'
+                        ? 'bg-warning text-dark border border-warning-subtle'
+                        : approvalModeOverride === 'non_destructive'
+                          ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle'
+                          : 'bg-info-subtle text-info-emphasis border border-info-subtle'
+                    }`}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '0.15rem 0.5rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      fontWeight: 500,
+                      letterSpacing: '0.01em',
+                      lineHeight: 1.2,
+                      verticalAlign: 'middle',
+                    }}
+                  >
+                    <i className="bi bi-shield-check" />
+                    {approvalModeOverride === 'never'
+                      ? t('approvalMode.pillNever', { defaultValue: 'Auto-approve' })
+                      : approvalModeOverride === 'non_destructive'
+                        ? t('approvalMode.pillNonDestructive', { defaultValue: 'Safe-only' })
+                        : t('approvalMode.pillAlways', { defaultValue: 'Always ask' })}
+                  </span>
+                </OverlayTrigger>
+              ) : null}
               {(() => {
                 // File-store badge: visible hint that this integration's files
                 // appear under Files → Remote Files. Resolved via the native
@@ -1452,6 +1644,9 @@ const UserToolPolicyModal = ({
   onError,
   onAddAccount,
   onDisconnectAccount,
+  approvalMode,
+  approvalSaving,
+  onApprovalModeChange,
 }: {
   svc: ServiceRow | null;
   onHide: () => void;
@@ -1461,6 +1656,11 @@ const UserToolPolicyModal = ({
   onAddAccount: (pipedreamSlug: string) => Promise<void>;
   /** FEAT-019: invoked when the user disconnects a single account by id. */
   onDisconnectAccount: (accountId: string) => Promise<void>;
+  /** TASK-127: per-integration approval mode override. Empty string =
+   *  "use the user's global Tool Approvals integrations setting." */
+  approvalMode: ApprovalMode | '';
+  approvalSaving: boolean;
+  onApprovalModeChange: (mode: ApprovalMode | '') => void;
 }) => {
   const { t } = useTranslation('integrations');
   const { user, lambdaClient } = useAuth();
@@ -1545,6 +1745,10 @@ const UserToolPolicyModal = ({
         mode: 'deny',
         denyTools,
       });
+      // Re-sync the dirty baseline to the just-saved state so the modal is no
+      // longer considered dirty if it stays mounted or is reopened before a
+      // refetch — keeps "Save changes" correctly disabled post-save.
+      setInitialToggles(toggles);
       onHide();
     } catch (e) {
       onError((e as Error).message || 'Failed to save tool policy');
@@ -1564,6 +1768,17 @@ const UserToolPolicyModal = ({
         </Modal.Title>
       </Modal.Header>
       <Modal.Body style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+        {/* TASK-127: approval-mode override sits above the tool policy so
+            users see the higher-level "do I get prompted at all" knob
+            before drilling into per-tool denies. */}
+        <div className="mb-3">
+          <ApprovalModeSection
+            serviceName={displayName}
+            value={approvalMode}
+            saving={approvalSaving}
+            onChange={onApprovalModeChange}
+          />
+        </div>
         {/* Multi-account section (FEAT-019): only renders when the admin has
             opted this integration in. When off, the modal looks identical to
             the legacy single-account flow — there is no "Add account" button
@@ -1659,6 +1874,7 @@ const UserToolPolicyModal = ({
             <hr className="my-3" />
           </div>
         )}
+        <h6 className="mb-2">{t('toolPolicy.toolsHeading', { defaultValue: 'Allowed actions' })}</h6>
         <p className="text-muted small">
           {t('toolPolicy.intro', {
             defaultValue:
@@ -1703,6 +1919,59 @@ const UserToolPolicyModal = ({
           ) : (
             t('actions.saveChanges', { defaultValue: 'Save changes' })
           )}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+};
+
+// TASK-127: Settings modal for native (non-Pipedream) connectors. Native
+// connectors don't expose an MCP server we can enumerate per-tool, so the
+// UserToolPolicyModal doesn't apply. This is their Settings home — for now
+// it hosts only the per-integration approval-mode override, but it's the
+// right place to add any future per-user native settings (default folder,
+// scope filters, etc.).
+const NativeIntegrationSettingsModal = ({
+  svc,
+  onHide,
+  approvalMode,
+  approvalSaving,
+  onApprovalModeChange,
+}: {
+  svc: ServiceRow | null;
+  onHide: () => void;
+  approvalMode: ApprovalMode | '';
+  approvalSaving: boolean;
+  onApprovalModeChange: (mode: ApprovalMode | '') => void;
+}) => {
+  const { t } = useTranslation('integrations');
+  if (!svc) return null;
+  return (
+    <Modal show centered onHide={onHide}>
+      <Modal.Header closeButton>
+        <Modal.Title>
+          {t('nativeSettings.title', {
+            defaultValue: 'Settings for {{name}}',
+            name: svc.display.name,
+          })}
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <p className="text-muted small">
+          {t('nativeSettings.intro', {
+            defaultValue: 'Per-user settings for this integration. Only affects you.',
+          })}
+        </p>
+        <ApprovalModeSection
+          serviceName={svc.display.name}
+          value={approvalMode}
+          saving={approvalSaving}
+          onChange={onApprovalModeChange}
+        />
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onHide}>
+          {t('actions.close', { defaultValue: 'Close' })}
         </Button>
       </Modal.Footer>
     </Modal>

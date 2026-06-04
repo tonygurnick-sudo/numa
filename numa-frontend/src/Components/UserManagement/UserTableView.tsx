@@ -14,6 +14,8 @@ interface UserTableViewProps {
   sectionsExpanded: { admin: boolean; standard: boolean };
   onToggleSection: (section: 'admin' | 'standard') => void;
   visibleSections?: Array<'admin' | 'standard'>;
+  /** Subs that hold the billing-admin role (Numa Credit System); empty unless the credit view is on. */
+  billingAdminSubs?: Set<string>;
 }
 
 export function UserTableView({
@@ -24,6 +26,7 @@ export function UserTableView({
   sectionsExpanded,
   onToggleSection,
   visibleSections,
+  billingAdminSubs,
 }: UserTableViewProps): React.JSX.Element {
   const { t } = useTranslation('userManagement');
   const showAdminSection = visibleSections ? visibleSections.includes('admin') : true;
@@ -48,6 +51,11 @@ export function UserTableView({
         </td>
         <td style={{ width: '15%' }}>
           <Badge bg={isAdmin ? 'primary' : 'secondary'}>{isAdmin ? t('roles.admin') : t('roles.standard')}</Badge>
+          {billingAdminSubs?.has(user.username) && (
+            <Badge bg="info" className="ms-1">
+              {t('roles.billingAdmin', { defaultValue: 'Billing' })}
+            </Badge>
+          )}
         </td>
         <td style={{ width: '15%' }}>
           <Badge bg={getUserStatusBadgeVariant(user.enabled, user.status)} className={isSystemUser ? 'opacity-50' : ''}>

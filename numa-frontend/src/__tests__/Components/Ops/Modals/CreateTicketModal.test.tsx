@@ -45,9 +45,29 @@ describe('CreateTicketModal (FEAT-108 validation)', () => {
         { id: 'other-user', name: 'Other User', email: 'other@test.com', isActive: true },
       ],
       ticketTypes: [
-        { id: 'tt-1', name: 'Bug', prefix: 'BUG', color: '#ff0000', icon: 'bug', defaultFields: [], order: 1 },
+        {
+          id: 'tt-1',
+          name: 'Bug',
+          prefix: 'BUG',
+          color: '#ff0000',
+          icon: 'bug',
+          // Post-FEAT-171 the sidebar is driven entirely by the ticket type's
+          // defaultFields list — the reporter row only renders when it's in
+          // here (or in the board's addedFields snapshot).
+          defaultFields: ['field-reporter'],
+          order: 1,
+        },
       ],
-      fields: [],
+      fields: [
+        {
+          id: 'field-reporter',
+          name: 'Reporter',
+          fieldType: 'user',
+          category: 'Common',
+          isSystem: true,
+          order: 1,
+        },
+      ],
       projects: [],
     };
 
