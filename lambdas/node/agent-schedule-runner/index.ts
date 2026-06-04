@@ -3,6 +3,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { CognitoIdentityProviderClient, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import {
   DynamoDBDocumentClient,
   GetCommand,
@@ -73,6 +74,9 @@ const dynamo = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, { region: REG
 });
 const s3 = withPRM(S3Client, { region: REGION });
 const lambdaClient = withPRM(LambdaClient, { region: REGION });
+// Reads the per-user vault ({client}/vault/users/{sub}) to detect native OAuth
+// integrations (Gmail, Calendar…) for unified-integrations method resolution.
+const secretsManager = withPRM(SecretsManagerClient, { region: REGION });
 
 // Email sender cross-account Lambda client (us-east-1, where the deployer account Lambda lives)
 const emailLambdaClient = withPRM(LambdaClient, { region: 'us-east-1' });
@@ -2380,9 +2384,11 @@ const invokeWorkspaceAgent = async ({
   const { enabledIntegrations, availableIntegrations } = await buildUnifiedIntegrationsPayload({
     dynamo,
     lambdaClient,
+    secretsManager,
     globalIntegrationSettingsTableName: GLOBAL_INTEGRATION_SETTINGS_TABLE,
     dataConnectorsTableName: DATA_CONNECTORS_TABLE,
     dataConnectorsEnabled: DATA_CONNECTORS_ENABLED,
+    oauthIntegrationsEnabled: OAUTH_INTEGRATIONS_ENABLED,
     pipedreamRelayLambdaArn: PIPEDREAM_RELAY_LAMBDA_ARN,
     clientName: CLIENT_NAME,
     userSub: auth.sub,
