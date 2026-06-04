@@ -45,8 +45,12 @@ from storage import (
 )
 from synergy_api import (
     SynergyAuthError,
+    get_file_details,
+    get_file_history,
+    get_file_weblink,
     get_folder_items,
     list_job_folders,
+    search_files,
     search_jobs,
 )
 
@@ -629,6 +633,42 @@ def _synergy_auth_retry(
     return result[0] if result else None
 
 
+def _synergy_read(
+    table_name: str,
+    user_id: str,
+    fn: Any,
+    *args: Any,
+    cache_control: str = "private, max-age=120",
+) -> Dict[str, Any]:
+    """Run a Synergy read `fn(server, token, *args)` with the standard PAT
+    auth-retry wrapper. DRYs the credential + rotate-on-401 + health-update
+    boilerplate for the file read-parity routes (search/details/history/weblink).
+    """
+    creds = _get_synergy_credentials(table_name, user_id)
+    if not creds:
+        return _response(400, {"error": "Synergy 12d connector not configured."})
+    server, token = creds
+    try:
+        payload = fn(server, token, *args)
+    except SynergyAuthError as exc:
+        new_token = _synergy_auth_retry(table_name, user_id, server, token)
+        if not new_token:
+            return _synergy_auth_error_response(table_name, user_id, exc)
+        try:
+            payload = fn(server, new_token, *args)
+        except (ValueError, httpx.HTTPError, SynergyAuthError):
+            return _synergy_auth_error_response(table_name, user_id, exc)
+    except (ValueError, httpx.HTTPError) as exc:
+        logger.warning(
+            "Synergy read failed",
+            error=str(exc),
+            fn=getattr(fn, "__name__", "?"),
+        )
+        return _response(400, {"error": str(exc)})
+    update_connector_health(table_name, user_id, "synergy", "connected")
+    return _response(200, payload, cache_control=cache_control)
+
+
 def _handle_synergy_jobs(
     event: Dict[str, Any], user_id: str, table_name: str
 ) -> Dict[str, Any]:
@@ -1151,6 +1191,61 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
     ):
         folder_id = path.strip("/").split("/")[-2]
         return _handle_synergy_folder_items(event, folder_id, user_id, table_name)
+
+    # Synergy file read parity: search / history / weblink / details.
+    # Order matters — match the specific suffixes before the bare /files/{id}.
+    if method == "GET" and path.endswith("/data-connectors/synergy/files/search"):
+        p = event.get("queryStringParameters") or {}
+        query = p.get("q") or p.get("file_name") or ""
+        # File search is job-scoped (no global search): require a job to search in.
+        job_id = p.get("job_id") or p.get("limit_id") or ""
+        if not job_id:
+            return _response(
+                400,
+                {
+                    "error": "A job scope is required. Synergy has no global file "
+                    "search — open a job and search within it.",
+                    "error_code": "job_scope_required",
+                },
+            )
+        return _synergy_read(
+            table_name,
+            user_id,
+            search_files,
+            query,
+            job_id,
+            int(p.get("page_size") or 50),
+        )
+
+    if (
+        method == "GET"
+        and "/data-connectors/synergy/files/" in path
+        and path.endswith("/history")
+    ):
+        p = event.get("queryStringParameters") or {}
+        file_id = path.strip("/").split("/")[-2]
+        return _synergy_read(
+            table_name,
+            user_id,
+            get_file_history,
+            file_id,
+            int(p.get("page") or 1),
+            int(p.get("page_size") or 50),
+        )
+
+    if (
+        method == "GET"
+        and "/data-connectors/synergy/files/" in path
+        and path.endswith("/weblink")
+    ):
+        file_id = path.strip("/").split("/")[-2]
+        return _synergy_read(table_name, user_id, get_file_weblink, file_id)
+
+    if method == "GET" and "/data-connectors/synergy/files/" in path:
+        # Bare /files/{id} → details. One segment after "files".
+        parts = path.strip("/").split("/")
+        if parts[-2] == "files":
+            return _synergy_read(table_name, user_id, get_file_details, parts[-1])
 
     # Gmail routes
     if method == "GET" and path.endswith("/data-connectors/gmail/labels"):

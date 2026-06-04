@@ -160,6 +160,17 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: [],
   },
   {
+    flag: 'SYNERGY_FILE_PARITY',
+    title: 'Synergy File Parity',
+    description:
+      'Richer Synergy 12d file experience in Files: revision/version/status columns, a lock indicator, in-job file search (name + contents), and per-file actions (details, version history, copy link). When off, Synergy browsing stays basic (jobs → folders → files + download).',
+    icon: 'bi-folder-symlink',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['DATA_CONNECTORS_ENABLED'],
+  },
+  {
     flag: 'DEVELOPER_MODE',
     title: 'Developer Mode',
     description: 'Enables developer tools, file drill-down, metadata inspection, and debug views.',

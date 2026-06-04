@@ -285,13 +285,15 @@ export class OAuthProvidersService {
     return handleResponse<{ success: boolean; message_id?: string }>(response);
   }
 
-  static async downloadFile(provider: FileBrowseConnectorId, fileId: string): Promise<Blob> {
+  static async downloadFile(provider: FileBrowseConnectorId, fileId: string, version?: number): Promise<Blob> {
     assertFileBrowseAtRuntime(provider, 'downloadFile');
     try {
       const endpoint = getApiEndpoint();
       const encodedFileId = encodeURIComponent(fileId);
+      // Synergy supports downloading a specific version (from version history).
+      const versionQs = version != null ? `?version=${encodeURIComponent(String(version))}` : '';
 
-      const response = await fetch(`${endpoint}/oauth-files/${provider}/download/${encodedFileId}`, {
+      const response = await fetch(`${endpoint}/oauth-files/${provider}/download/${encodedFileId}${versionQs}`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });

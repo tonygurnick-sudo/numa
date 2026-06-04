@@ -16,17 +16,21 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Spinner } from 'react-bootstrap';
+import { Button, Form, InputGroup, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useToast } from '../../../Providers/ToastContext';
 import { ROOT_FOLDER_KEY, useRemoteTree } from '../../../hooks/useRemoteTree';
 import { ConnectorsService } from '../../../Services/ConnectorsService';
+import { getFlag } from '../../../utils/featureFlags';
 import { SynergyDataConnectorService } from '../../../Services/SynergyDataConnectorService';
 import { getFileIcon, formatFileSize } from '../../../Services/filesService';
 import { extractApiError } from '../../../utils/extractApiError';
 import type { OAuthFile, OAuthFolder } from '../../../types/oauthProviders';
 import type { SynergyFolder, SynergyJob, SynergyFile } from '../../../types/synergySync';
+import { SynergyFileContextMenu, type SynergyFileAction } from '../../Synergy/SynergyFileContextMenu';
+import { SynergyVersionHistoryModal } from '../../Synergy/SynergyVersionHistoryModal';
+import { SynergyFileDetailsModal } from '../../Synergy/SynergyFileDetailsModal';
 
 /**
  * Trigger a browser download for a remote-provider file. Common helper so
@@ -81,6 +85,11 @@ interface RemoteProviderInlineRowsProps {
    *  `listFolderItems` (2+ entries = folder). The User Files inline view
    *  always renders from the true root, so it omits this prop. */
   rootSubFolderPath?: { id: string; name: string }[];
+  /** Synergy only: when non-empty, the rows switch to "search mode" and show
+   *  files matching this query (by name + contents) within the current job
+   *  (`rootSubFolderPath[0]`), instead of the browse tree. Synergy file search
+   *  is job-scoped, so this is only meaningful when drilled into a job. */
+  searchQuery?: string;
 }
 
 export function RemoteProviderInlineRows({
@@ -89,6 +98,7 @@ export function RemoteProviderInlineRows({
   onRowContextMenu,
   onFolderDoubleClick,
   rootSubFolderPath,
+  searchQuery,
 }: RemoteProviderInlineRowsProps): React.JSX.Element {
   if (providerId === SYNERGY_PROVIDER_ID) {
     return (
@@ -97,6 +107,7 @@ export function RemoteProviderInlineRows({
         onRowContextMenu={onRowContextMenu}
         onFolderDoubleClick={onFolderDoubleClick}
         rootSubFolderPath={rootSubFolderPath}
+        searchQuery={searchQuery}
       />
     );
   }
@@ -286,15 +297,50 @@ function SynergyInlineRows({
   onRowContextMenu,
   onFolderDoubleClick,
   rootSubFolderPath,
+  searchQuery,
 }: {
   baseDepth: number;
   onRowContextMenu?: (e: React.MouseEvent) => void;
   onFolderDoubleClick?: (folder?: { id: string; name: string }) => void;
   rootSubFolderPath?: { id: string; name: string }[];
+  searchQuery?: string;
 }): React.JSX.Element {
   const { t } = useTranslation('files');
   const { numaGet } = useNumaRequest();
   const { showToast } = useToast();
+
+  // SYNERGY_FILE_PARITY gates everything Phase A added: the rich metadata
+  // columns, in-job search, and per-file actions (context menu / details /
+  // history / copy link). When off, Synergy browsing falls back to the basic
+  // jobs → folders → files + download experience.
+  const parityEnabled = getFlag('SYNERGY_FILE_PARITY');
+
+  // In-job file search. Synergy file search is job-scoped, so we search within
+  // the job at the root of the current drill path. A non-empty `searchQuery`
+  // switches the rows into a flat results list (see search-mode render below).
+  const searchJobId = rootSubFolderPath && rootSubFolderPath.length > 0 ? rootSubFolderPath[0].id : null;
+  const trimmedQuery = (searchQuery ?? '').trim();
+  const searchActive = parityEnabled && trimmedQuery.length > 0 && !!searchJobId;
+  const [searchResults, setSearchResults] = useState<SynergyFile[]>([]);
+  const [searchLoading, setSearchLoading] = useState<boolean>(false);
+
+  // Parity-gated metadata columns + per-file context menu. When the flag is
+  // off these collapse to the pre-parity FileRow (name / size / modified +
+  // download), so the branch ships dark.
+  const fileMetaProps = useCallback(
+    (file: SynergyFile) =>
+      parityEnabled
+        ? {
+            revision: file.revision,
+            version: file.version,
+            documentStatus: file.document_status,
+            state: file.state,
+            isCheckedOut: file.is_checked_out,
+            checkedOutBy: file.checked_out_by,
+          }
+        : {},
+    [parityEnabled]
+  );
 
   // Pagination matches the Google Drive Files surface: 10 rows per page,
   // "Load more" appends to existing state. Same value as `useRemoteTree`'s
@@ -341,6 +387,15 @@ function SynergyInlineRows({
   const [jobFoldersNextPage, setJobFoldersNextPage] = useState<Map<string, number | null>>(new Map());
   const [loadingJobs, setLoadingJobs] = useState<Set<string>>(new Set());
 
+  // Per-job inline search (jobs-mode tree). The tree can have several jobs
+  // expanded at once and there's no single "current job", so search is scoped
+  // per expanded job: each gets its own input + (when a query is active) a flat
+  // results list that replaces that job's folder children. Parity-gated.
+  const [jobSearchInput, setJobSearchInput] = useState<Map<string, string>>(new Map());
+  const [jobSearchQuery, setJobSearchQuery] = useState<Map<string, string>>(new Map());
+  const [jobSearchResults, setJobSearchResults] = useState<Map<string, SynergyFile[]>>(new Map());
+  const [jobSearchLoading, setJobSearchLoading] = useState<Set<string>>(new Set());
+
   // Per-folder items: subfolders + files + next-page cursor (backend
   // returns a single combined cursor walking folders-then-files).
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -352,6 +407,99 @@ function SynergyInlineRows({
 
   const numaGetRef = useRef(numaGet);
   numaGetRef.current = numaGet;
+
+  // Per-file context menu + details/history overlays.
+  const [fileMenu, setFileMenu] = useState<{ file: SynergyFile; x: number; y: number } | null>(null);
+  const [detailsFile, setDetailsFile] = useState<SynergyFile | null>(null);
+  const [historyFile, setHistoryFile] = useState<SynergyFile | null>(null);
+
+  const openFileMenu = useCallback((file: SynergyFile, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileMenu({ file, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleFileAction = useCallback(
+    async (action: SynergyFileAction, file: SynergyFile): Promise<void> => {
+      if (action === 'download') {
+        await downloadInlineFile(
+          SYNERGY_PROVIDER_ID,
+          file.file_id,
+          file.name,
+          showToast,
+          t('remote.errors.downloadFailed', 'Failed to download file')
+        );
+      } else if (action === 'details') {
+        setDetailsFile(file);
+      } else if (action === 'history') {
+        setHistoryFile(file);
+      } else if (action === 'copyLink') {
+        try {
+          const res = await SynergyDataConnectorService.getFileWeblink(numaGetRef.current, file.file_id);
+          if (res.weblink) {
+            await navigator.clipboard.writeText(res.weblink);
+            showToast({ message: t('synergy.linkCopied', 'Link copied to clipboard'), variant: 'success' });
+          } else {
+            showToast({ message: t('synergy.linkFailed', 'No link available'), variant: 'error' });
+          }
+        } catch (err) {
+          showToast({ message: extractApiError(err, t('synergy.linkFailed', 'Failed to get link')), variant: 'error' });
+        }
+      }
+    },
+    [showToast, t]
+  );
+
+  // Rendered in every return branch so the menu/modals are available regardless
+  // of jobs vs rooted view.
+  const overlays = (
+    <>
+      {fileMenu && (
+        <SynergyFileContextMenu
+          position={{ x: fileMenu.x, y: fileMenu.y }}
+          onAction={(action) => void handleFileAction(action, fileMenu.file)}
+          onClose={() => setFileMenu(null)}
+        />
+      )}
+      <SynergyFileDetailsModal show={detailsFile !== null} file={detailsFile} onHide={() => setDetailsFile(null)} />
+      <SynergyVersionHistoryModal
+        show={historyFile !== null}
+        fileId={historyFile?.file_id ?? null}
+        fileName={historyFile?.name ?? ''}
+        onHide={() => setHistoryFile(null)}
+      />
+    </>
+  );
+
+  // In-job search fetch. Runs whenever the query/job scope changes; clears the
+  // results in browse mode. Job-scoped via SynergyDataConnectorService.searchFiles.
+  useEffect(() => {
+    if (!searchActive || !searchJobId) {
+      setSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    setSearchLoading(true);
+    void (async () => {
+      try {
+        const res = await SynergyDataConnectorService.searchFiles(numaGetRef.current, searchJobId, trimmedQuery);
+        if (!cancelled) setSearchResults(res.items ?? []);
+      } catch (err) {
+        if (!cancelled) {
+          setSearchResults([]);
+          showToast({
+            message: extractApiError(err, t('remote.errors.searchFailed', 'Search failed')),
+            variant: 'error',
+          });
+        }
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchActive, searchJobId, trimmedQuery, showToast, t]);
 
   // Top-level fetch: jobs OR rooted contents, depending on rootMode. Two
   // separate effects so the dep arrays stay tight — switching modes
@@ -495,6 +643,51 @@ function SynergyInlineRows({
       setJobsLoadingMore(false);
     }
   }, [jobsNextPage, jobsLoadingMore, showToast, t]);
+
+  // Per-job inline search handlers.
+  const setJobInput = useCallback((jobId: string, value: string) => {
+    setJobSearchInput((prev) => new Map(prev).set(jobId, value));
+  }, []);
+
+  const runJobSearch = useCallback(
+    async (jobId: string) => {
+      const query = (jobSearchInput.get(jobId) ?? '').trim();
+      if (!query) return;
+      setJobSearchQuery((prev) => new Map(prev).set(jobId, query));
+      setJobSearchLoading((prev) => new Set(prev).add(jobId));
+      try {
+        const res = await SynergyDataConnectorService.searchFiles(numaGetRef.current, jobId, query);
+        setJobSearchResults((prev) => new Map(prev).set(jobId, res.items ?? []));
+      } catch (err) {
+        setJobSearchResults((prev) => new Map(prev).set(jobId, []));
+        showToast({
+          message: extractApiError(err, t('remote.errors.searchFailed', 'Search failed')),
+          variant: 'error',
+        });
+      } finally {
+        setJobSearchLoading((prev) => {
+          const next = new Set(prev);
+          next.delete(jobId);
+          return next;
+        });
+      }
+    },
+    [jobSearchInput, showToast, t]
+  );
+
+  const clearJobSearch = useCallback((jobId: string) => {
+    setJobSearchInput((prev) => new Map(prev).set(jobId, ''));
+    setJobSearchQuery((prev) => {
+      const next = new Map(prev);
+      next.delete(jobId);
+      return next;
+    });
+    setJobSearchResults((prev) => {
+      const next = new Map(prev);
+      next.delete(jobId);
+      return next;
+    });
+  }, []);
 
   const toggleJob = useCallback(
     async (jobId: string) => {
@@ -650,6 +843,71 @@ function SynergyInlineRows({
   const topLoading = isJobsMode ? jobsLoading : rootedLoading;
   const topEmpty = isJobsMode ? jobs.length === 0 : rootedFolders.length === 0 && rootedFiles.length === 0;
 
+  // Search mode: a flat list of files matching the query within the current
+  // job (name + contents), replacing the browse tree. Reuses the same FileRow
+  // + per-file context menu / download / details / history wiring as browse.
+  if (searchActive) {
+    if (searchLoading) {
+      return (
+        <div className={`finder-row finder-grid-6 finder-row--depth-${Math.min(baseDepth, DEPTH_CAP)}`}>
+          <div className="finder-row__name-content">
+            <span className="finder-chevron-spacer" />
+            <Spinner animation="border" size="sm" variant="secondary" />
+            <span className="text-muted small ms-2">{t('synergy.searching', 'Searching…')}</span>
+          </div>
+          <div className="finder-row__meta finder-row__meta--type" />
+          <div className="finder-row__meta d-none d-lg-block" />
+          <div className="finder-row__meta d-none d-md-block" />
+          <div className="finder-row__meta d-none d-sm-block" />
+          <div className="finder-row__actions" />
+        </div>
+      );
+    }
+    if (searchResults.length === 0) {
+      return (
+        <div className={`finder-row finder-grid-6 finder-row--depth-${Math.min(baseDepth, DEPTH_CAP)}`}>
+          <div className="finder-row__name-content">
+            <span className="finder-chevron-spacer" />
+            <span className="text-muted small">
+              {t('synergy.noSearchResults', 'No files match your search in this job')}
+            </span>
+          </div>
+          <div className="finder-row__meta finder-row__meta--type" />
+          <div className="finder-row__meta d-none d-lg-block" />
+          <div className="finder-row__meta d-none d-md-block" />
+          <div className="finder-row__meta d-none d-sm-block" />
+          <div className="finder-row__actions" />
+        </div>
+      );
+    }
+    return (
+      <>
+        {searchResults.map((file) => (
+          <FileRow
+            key={`syn-search-file:${file.file_id}`}
+            name={file.name}
+            size={file.size ?? undefined}
+            modified={file.modified_at}
+            subtitle={file.path ? file.path.split('/').slice(0, -1).join(' / ') : undefined}
+            {...fileMetaProps(file)}
+            depth={baseDepth}
+            onContextMenu={(e) => openFileMenu(file, e)}
+            onDownload={() =>
+              downloadInlineFile(
+                SYNERGY_PROVIDER_ID,
+                file.file_id,
+                file.name,
+                showToast,
+                t('remote.errors.downloadFailed', 'Failed to download file')
+              )
+            }
+          />
+        ))}
+        {overlays}
+      </>
+    );
+  }
+
   if (topLoading) {
     return (
       <div className={`finder-row finder-grid-6 finder-row--depth-${Math.min(baseDepth, DEPTH_CAP)}`}>
@@ -723,8 +981,9 @@ function SynergyInlineRows({
               name={file.name}
               size={file.size ?? undefined}
               modified={file.modified_at}
+              {...fileMetaProps(file)}
               depth={depth + 1}
-              onContextMenu={onRowContextMenu}
+              onContextMenu={parityEnabled ? (e) => openFileMenu(file, e) : undefined}
               onDownload={() =>
                 downloadInlineFile(
                   SYNERGY_PROVIDER_ID,
@@ -773,8 +1032,9 @@ function SynergyInlineRows({
             name={file.name}
             size={file.size ?? undefined}
             modified={file.modified_at}
+            {...fileMetaProps(file)}
             depth={baseDepth}
-            onContextMenu={onRowContextMenu}
+            onContextMenu={parityEnabled ? (e) => openFileMenu(file, e) : undefined}
             onDownload={() =>
               downloadInlineFile(
                 SYNERGY_PROVIDER_ID,
@@ -794,6 +1054,7 @@ function SynergyInlineRows({
             onLoadMore={() => void loadMoreRooted()}
           />
         )}
+        {overlays}
       </>
     );
   }
@@ -805,6 +1066,9 @@ function SynergyInlineRows({
         const isLoading = loadingJobs.has(job.job_id);
         const folders = jobFolders.get(job.job_id) ?? [];
         const jobFoldersHasMore = jobFoldersNextPage.get(job.job_id);
+        const activeJobQuery = jobSearchQuery.get(job.job_id);
+        const jobSearching = jobSearchLoading.has(job.job_id);
+        const jobResults = jobSearchResults.get(job.job_id) ?? [];
         return (
           <React.Fragment key={`syn-job:${job.job_id}`}>
             <FolderRow
@@ -818,11 +1082,57 @@ function SynergyInlineRows({
                 onFolderDoubleClick ? () => onFolderDoubleClick({ id: job.job_id, name: job.name }) : undefined
               }
             />
-            {isExpanded && folders.map((folder) => renderFolderRow(folder, baseDepth + 1)).flat()}
+            {/* Per-job search box (parity-gated): scopes to this job, name + contents. */}
+            {isExpanded && parityEnabled && (
+              <SynergyJobSearchRow
+                key={`syn-jobsearch:${job.job_id}`}
+                depth={baseDepth + 1}
+                value={jobSearchInput.get(job.job_id) ?? ''}
+                hasQuery={!!activeJobQuery}
+                loading={jobSearching}
+                placeholder={t('synergy.searchInJob', 'Search files in this job (name or contents)')}
+                clearLabel={t('synergy.clearSearch', 'Clear search')}
+                onChange={(v) => setJobInput(job.job_id, v)}
+                onSubmit={() => void runJobSearch(job.job_id)}
+                onClear={() => clearJobSearch(job.job_id)}
+              />
+            )}
+            {/* When a search is active for this job, its results replace the
+                folder tree; otherwise show the normal folders + Load more. */}
+            {isExpanded &&
+              activeJobQuery &&
+              (jobSearching ? (
+                <InlinePlaceholderRow key={`syn-jrsearching:${job.job_id}`} depth={baseDepth + 1} kind="loading" />
+              ) : jobResults.length === 0 ? (
+                <InlinePlaceholderRow key={`syn-jrempty:${job.job_id}`} depth={baseDepth + 1} kind="empty" />
+              ) : (
+                jobResults.map((file) => (
+                  <FileRow
+                    key={`syn-jr-file:${job.job_id}:${file.file_id}`}
+                    name={file.name}
+                    size={file.size ?? undefined}
+                    modified={file.modified_at}
+                    subtitle={file.path ? file.path.split('/').slice(0, -1).join(' / ') : undefined}
+                    {...fileMetaProps(file)}
+                    depth={baseDepth + 1}
+                    onContextMenu={(e) => openFileMenu(file, e)}
+                    onDownload={() =>
+                      downloadInlineFile(
+                        SYNERGY_PROVIDER_ID,
+                        file.file_id,
+                        file.name,
+                        showToast,
+                        t('remote.errors.downloadFailed', 'Failed to download file')
+                      )
+                    }
+                  />
+                ))
+              ))}
+            {isExpanded && !activeJobQuery && folders.map((folder) => renderFolderRow(folder, baseDepth + 1)).flat()}
             {/* "Load more" for the job's top-level folders. Sits below the
                 folder rows but inside the same expansion so it scrolls
-                together with them. */}
-            {isExpanded && jobFoldersHasMore && (
+                together with them. Hidden while showing search results. */}
+            {isExpanded && !activeJobQuery && jobFoldersHasMore && (
               <LoadMoreRow
                 key={`syn-loadmore-jf:${job.job_id}`}
                 depth={baseDepth + 1}
@@ -843,6 +1153,7 @@ function SynergyInlineRows({
           onLoadMore={() => void loadMoreJobs()}
         />
       )}
+      {overlays}
     </>
   );
 }
@@ -850,6 +1161,67 @@ function SynergyInlineRows({
 // ---------------------------------------------------------------------------
 // Shared row components
 // ---------------------------------------------------------------------------
+
+/** Per-job inline search input, rendered as a finder-row under an expanded job. */
+function SynergyJobSearchRow({
+  depth,
+  value,
+  hasQuery,
+  loading,
+  placeholder,
+  clearLabel,
+  onChange,
+  onSubmit,
+  onClear,
+}: {
+  depth: number;
+  value: string;
+  hasQuery: boolean;
+  loading: boolean;
+  placeholder: string;
+  clearLabel: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  onClear: () => void;
+}): React.JSX.Element {
+  return (
+    <div className={`finder-row finder-grid-6 finder-row--depth-${Math.min(depth, DEPTH_CAP)}`}>
+      <div className="finder-row__name-content">
+        <span className="finder-chevron-spacer" />
+        <Form
+          className="flex-grow-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit();
+          }}
+        >
+          <InputGroup size="sm">
+            <Form.Control
+              type="search"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder={placeholder}
+              aria-label={placeholder}
+            />
+            {hasQuery && (
+              <Button variant="outline-secondary" onClick={onClear} title={clearLabel} aria-label={clearLabel}>
+                <i className="bi bi-x-lg" aria-hidden="true" />
+              </Button>
+            )}
+            <Button variant="primary" type="submit" disabled={!value.trim() || loading}>
+              {loading ? <Spinner animation="border" size="sm" /> : <i className="bi bi-search" aria-hidden="true" />}
+            </Button>
+          </InputGroup>
+        </Form>
+      </div>
+      <div className="finder-row__meta finder-row__meta--type" />
+      <div className="finder-row__meta d-none d-lg-block" />
+      <div className="finder-row__meta d-none d-md-block" />
+      <div className="finder-row__meta d-none d-sm-block" />
+      <div className="finder-row__actions" />
+    </div>
+  );
+}
 
 interface FolderRowProps {
   name: string;
@@ -943,6 +1315,16 @@ interface FileRowProps {
   size?: number;
   modified?: string;
   depth: number;
+  /** Optional muted second line under the name — used to show a file's folder
+   *  path in flat search results (where rows aren't in their folder context). */
+  subtitle?: string;
+  /** Synergy parity metadata (optional; OAuth rows omit these). */
+  revision?: string;
+  version?: number;
+  documentStatus?: string;
+  state?: string;
+  isCheckedOut?: boolean;
+  checkedOutBy?: string;
   onContextMenu?: (e: React.MouseEvent) => void;
   /** When supplied, renders a download button in the row actions slot.
    *  The handler is wired up to `ConnectorsService.files.download` by the
@@ -950,11 +1332,32 @@ interface FileRowProps {
   onDownload?: () => void;
 }
 
-function FileRow({ name, size, modified, depth, onContextMenu, onDownload }: FileRowProps): React.JSX.Element {
+function FileRow({
+  name,
+  size,
+  modified,
+  depth,
+  subtitle,
+  revision,
+  version,
+  documentStatus,
+  state,
+  isCheckedOut,
+  checkedOutBy,
+  onContextMenu,
+  onDownload,
+}: FileRowProps): React.JSX.Element {
   const { t } = useTranslation('files');
   const cappedDepth = Math.min(depth, DEPTH_CAP);
   const iconCls = getFileIcon(name);
   const [downloading, setDownloading] = useState(false);
+  // Status column: prefer Document Status, fall back to a meaningful workflow
+  // state ("None" is 12d's noise default, so suppress it).
+  const status = documentStatus || (state && state !== 'None' ? state : '');
+  // Rev/Version column, e.g. "Rev D · v6"; OAuth rows (no rev/ver) fall back
+  // to the modified date so they're unchanged.
+  const revVer =
+    [revision ? `Rev ${revision}` : '', version != null ? `v${version}` : ''].filter(Boolean).join(' · ') || null;
   const handleDownload = async (e: React.MouseEvent): Promise<void> => {
     if (!onDownload) return;
     e.stopPropagation();
@@ -971,12 +1374,26 @@ function FileRow({ name, size, modified, depth, onContextMenu, onDownload }: Fil
         <span className="finder-chevron-spacer" />
         <i className={`${iconCls} finder-icon finder-icon--file`} aria-hidden />
         <span className="finder-name">{name}</span>
+        {subtitle && (
+          <span className="text-muted small ms-2 text-truncate" title={subtitle} style={{ minWidth: 0 }}>
+            {subtitle}
+          </span>
+        )}
+        {isCheckedOut && (
+          <i
+            className="bi bi-lock-fill text-warning ms-1"
+            title={checkedOutBy ? t('remote.checkedOutBy', { name: checkedOutBy }) : t('remote.checkedOut')}
+            aria-label={checkedOutBy ? t('remote.checkedOutBy', { name: checkedOutBy }) : t('remote.checkedOut')}
+          />
+        )}
       </div>
       <div className="finder-row__meta finder-row__meta--type">
         {name.includes('.') ? name.split('.').pop()?.toUpperCase() : ''}
       </div>
-      <div className="finder-row__meta d-none d-lg-block" />
-      <div className="finder-row__meta d-none d-md-block">{modified ?? ''}</div>
+      <div className="finder-row__meta d-none d-lg-block">{status}</div>
+      <div className="finder-row__meta d-none d-md-block" title={modified ?? undefined}>
+        {revVer ?? modified ?? ''}
+      </div>
       <div className="finder-row__meta d-none d-sm-block">{size != null ? formatFileSize(size) : ''}</div>
       <div className="finder-row__actions">
         {onDownload && (
