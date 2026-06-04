@@ -118,11 +118,11 @@ NUMA_CHAT = AgentTypeConfig(
     restrict_integrations=False,
     max_turns=200,
     max_thinking_tokens=10000,
-    # Default chat thinking config: adaptive thinking with low effort.
+    # Default chat thinking config: adaptive thinking with medium effort.
     # The dropdown's "@low-thinking" / "@high-thinking" / "@no-thinking" variants
     # override these at request time via thinking_override (see sdk_config.py).
     thinking={"type": "adaptive"},
-    effort="low",
+    effort="medium",
 )
 
 register_agent_type(NUMA_CHAT)
