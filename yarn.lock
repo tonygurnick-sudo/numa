@@ -31260,6 +31260,22 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"numa-voice-router@workspace:lambdas/node/numa-voice-router":
+  version: 0.0.0-use.local
+  resolution: "numa-voice-router@workspace:lambdas/node/numa-voice-router"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-connect": "npm:^3.699.0"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
 "nwsapi@npm:^2.2.16":
   version: 2.2.21
   resolution: "nwsapi@npm:2.2.21"

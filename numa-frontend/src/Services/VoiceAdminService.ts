@@ -4,29 +4,35 @@
  * every call carries the bearer token (see frontend CLAUDE.md).
  */
 
+export type VoiceMode = 'personal' | 'shared';
+
 export interface VoicePhoneNumber {
   id?: string;
   number?: string;
   countryCode?: string;
   type?: string;
+  /** Connect username this DID belongs to (its personal line), or undefined = shared/unowned. */
+  owner?: string;
+  /** Server-computed: true if this DID belongs to the CURRENT user (reliable vs matching
+   *  the owner tag, which is a hashed/sanitised username the frontend can't recompute). */
+  mine?: boolean;
 }
 
 export interface VoiceAdminStatus {
   configured: boolean;
   instanceId?: string;
   instanceAlias: string;
+  /** Tenant inbound routing mode: 'personal' honours per-DID owners, 'shared' rings the team. */
+  mode?: VoiceMode;
+  /** True when the inbound contact flow is deployed (DIDs can actually receive calls). */
+  inboundReady?: boolean;
   phoneNumbers?: VoicePhoneNumber[];
   approvedOrigins?: string[];
   numaOriginPresent?: boolean;
   agents?: { id?: string; username?: string }[];
   queues?: { id?: string; name?: string }[];
-}
-
-export interface OutboundCountryResult {
-  filed: boolean;
-  caseId?: string;
-  reason?: string;
-  manual?: { subject: string; communicationBody: string; supportConsole: string; connectConsole: string };
+  /** PhoneNumberId currently set as the outbound queue's caller-ID (undefined = none set). */
+  outboundCallerIdNumberId?: string;
 }
 
 // Match the useNumaRequest() signatures (NumaRequestContext): post requires data.
@@ -54,6 +60,14 @@ export const VoiceAdminService = {
   removeOrigin: (numaDelete: NumaDelete, origin: string): Promise<unknown> =>
     numaDelete(`${BASE}/approved-origins?origin=${encodeURIComponent(origin)}`),
 
-  requestOutboundCountry: (numaPost: NumaPost, country: string): Promise<OutboundCountryResult> =>
-    numaPost(`${BASE}/outbound-country-request`, { country }) as Promise<OutboundCountryResult>,
+  /** Assign a DID's owner. No `owner` → claim it for yourself; admins may pass a username. */
+  setOwner: (numaPost: NumaPost, id: string, owner?: string): Promise<unknown> =>
+    numaPost(`${BASE}/phone-numbers/${encodeURIComponent(id)}/owner`, owner ? { owner } : {}),
+
+  /** Clear a DID's owner (it then rings the shared team queue). */
+  unsetOwner: (numaDelete: NumaDelete, id: string): Promise<unknown> =>
+    numaDelete(`${BASE}/phone-numbers/${encodeURIComponent(id)}/owner`),
+
+  /** Set the tenant inbound routing mode (admin only). */
+  setMode: (numaPost: NumaPost, mode: VoiceMode): Promise<unknown> => numaPost(`${BASE}/mode`, { mode }),
 };

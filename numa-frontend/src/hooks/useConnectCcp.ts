@@ -489,6 +489,21 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
           },
         });
 
+        // Quiet the amazon-connect-streams console flood. While the browser is
+        // offline it logs "network offline ........." every second (plus periodic
+        // softphone-log batch-size warnings) — hundreds of lines that bury real
+        // errors. Cap the CONSOLE echo to errors only; streams' own telemetry is
+        // unaffected. Best-effort: the logging API isn't in our minimal type shim.
+        try {
+          const c = connect as unknown as {
+            getLog?: () => { setEchoLevel?: (level: unknown) => void };
+            LogLevel?: { ERROR?: unknown };
+          };
+          if (c.LogLevel?.ERROR !== undefined) c.getLog?.()?.setEchoLevel?.(c.LogLevel.ERROR);
+        } catch {
+          /* logging config is non-critical */
+        }
+
         initialisedRef.current = true;
         setStatus('needs_login');
 
