@@ -49,14 +49,6 @@ default:
       - runner_system_failure
 
 .rules:
-  # TEMP (2026-06-04 — urgent demo): skip the entire check stage on dev so the
-  # package + image-build stages can run without a check failure tripping
-  # workflow.auto_cancel.on_job_failure:all and cancelling the whole pipeline.
-  # Prepended as the first rule on every *-check job. REVERT after the demo.
-  # See documentation/gitlab-runners/hotfix-log.md.
-  skip-check-on-dev:
-    - if: $CI_COMMIT_BRANCH == "dev"
-      when: never
   if-main:
     - if: $CI_COMMIT_BRANCH == "main"
   if-deployable:
@@ -327,7 +319,6 @@ infra-check:
     - yarn test
     - yarn build
   rules:
-    - !reference [.rules, skip-check-on-dev]
     - if: $CI_COMMIT_BRANCH == "main"
     - changes:
         paths:
@@ -358,7 +349,6 @@ python-libraries-check:
     - if [ -d tests ]; then poetry run python -m unittest discover -s tests -v; else echo "No tests/ directory, skipping"; fi
   parallel: !reference [.python-libraries-matrix]
   rules:
-    - !reference [.rules, skip-check-on-dev]
     - changes:
         paths:
           - $PYTHON_WORKING_DIRECTORY/**/*
@@ -371,7 +361,6 @@ python-lambdas-check:
     - if [ -d tests ]; then poetry run python -m unittest discover -s tests -v; else echo "No tests/ directory, skipping"; fi
   parallel: !reference [.python-lambdas-matrix]
   rules:
-    - !reference [.rules, skip-check-on-dev]
     - changes:
         paths:
           - $PYTHON_WORKING_DIRECTORY/**/*
@@ -405,7 +394,6 @@ node-lambdas-check:
     - yarn build
   parallel: !reference [.node-matrix]
   rules:
-    - !reference [.rules, skip-check-on-dev]
     - changes:
         paths:
           - $BUILD_DIR/**/*
@@ -435,7 +423,6 @@ node-shared-check:
     - yarn workspace @arcanumai/q-apps-deployer-infra run get
     - yarn workspaces foreach --all --parallel --include '@arcanumai/style' --include '@arcanumai/client-config' --include '@arcanumai/numa-customer-success-portal' run lint
   rules:
-    - !reference [.rules, skip-check-on-dev]
     - changes:
         paths:
           - lib/**/*
@@ -452,7 +439,6 @@ tools-check:
     - yarn test
     - yarn build
   rules:
-    - !reference [.rules, skip-check-on-dev]
     - if: $CI_COMMIT_BRANCH == "main"
     - changes:
         paths:
@@ -482,7 +468,6 @@ frontend-check:
     reports:
       junit: numa-frontend/test-reports/test-report.xml
   rules:
-    - !reference [.rules, skip-check-on-dev]
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
     - changes:
