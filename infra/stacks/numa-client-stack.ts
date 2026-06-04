@@ -232,6 +232,7 @@ export class NumaClientStack extends TerraformStack {
       qBusinessProvider: qBusinessProvider,
       knowledgeBase: knowledgeBase,
       deployerRoleArn: deployerRole,
+      emailSenderLambdaArn,
     });
 
     // ── Disaster Recovery ────────────────────────────────────────────────────
