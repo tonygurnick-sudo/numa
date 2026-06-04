@@ -1438,5 +1438,175 @@ class TestBuildBinaryResult(unittest.TestCase):
         self.assertIn("/no-request-id/", key)
 
 
+class TestIsTextualContentType(unittest.TestCase):
+    """The proxy must treat unknown/binary responses as binary, not text.
+
+    Decoding binary as text is lossy and irreversible; it corrupted a customer
+    .docx that came back from a Drive revision download.
+    """
+
+    def test_binary_types_are_not_textual(self) -> None:
+        from pipedream_operations import _is_textual_content_type
+
+        for ct in (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/zip",
+            "application/pdf",
+            "image/png",
+            "application/octet-stream",
+            "",  # absent Content-Type defaults to binary (safe)
+        ):
+            self.assertFalse(
+                _is_textual_content_type(ct), f"{ct!r} should be treated as binary"
+            )
+
+    def test_text_types_are_textual(self) -> None:
+        from pipedream_operations import _is_textual_content_type
+
+        for ct in (
+            "text/plain",
+            "text/html; charset=utf-8",
+            "application/json",
+            "application/xml",
+            "application/ld+json",
+            "application/problem+json",
+            "application/atom+xml",
+            "application/x-www-form-urlencoded",
+            "application/custom; charset=utf-8",  # declared charset => text
+        ):
+            self.assertTrue(
+                _is_textual_content_type(ct), f"{ct!r} should be treated as text"
+            )
+
+
+class TestIsUnsafeProxyUpload(unittest.TestCase):
+    """The passthrough proxy cannot do multipart media uploads."""
+
+    def test_flags_media_upload_urls(self) -> None:
+        from pipedream_operations import _is_unsafe_proxy_upload
+
+        self.assertTrue(
+            _is_unsafe_proxy_upload(
+                "PATCH",
+                "https://www.googleapis.com/upload/drive/v3/files/x?uploadType=multipart",
+                {"filePath": "/workdir/x.docx"},
+            )
+        )
+        self.assertTrue(
+            _is_unsafe_proxy_upload(
+                "POST", "https://content.dropboxapi.com/2/files/upload", None
+            )
+        )
+
+    def test_flags_workdir_reference_in_body(self) -> None:
+        from pipedream_operations import _is_unsafe_proxy_upload
+
+        self.assertTrue(
+            _is_unsafe_proxy_upload(
+                "POST",
+                "https://api.example.com/v1/things",
+                {"filePath": "/workdir/tmp/report.docx"},
+            )
+        )
+
+    def test_allows_reads_and_plain_writes(self) -> None:
+        from pipedream_operations import _is_unsafe_proxy_upload
+
+        # GET to an upload URL is a read (e.g. status) — allowed.
+        self.assertFalse(
+            _is_unsafe_proxy_upload(
+                "GET", "https://www.googleapis.com/upload/drive/v3/files/x", None
+            )
+        )
+        # Ordinary JSON write to a non-upload endpoint — allowed.
+        self.assertFalse(
+            _is_unsafe_proxy_upload(
+                "POST",
+                "https://api.example.com/v1/messages",
+                {"text": "hello"},
+            )
+        )
+
+
+class TestProxyRequestBinarySafety(unittest.TestCase):
+    """End-to-end behaviour of proxy_request for the two incident vectors."""
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:pipedream-credentials",
+            "BINARY_CACHE_BUCKET": "pipedream-proxy-binary-cache-prod",
+        }
+        self.external_user_id = "tleaft_a1b2c3d4-0000-7000-8000-000000000001"
+
+    def _make_ops(self) -> PipedreamOperations:
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+        ops.get_credentials = Mock(  # type: ignore[method-assign]
+            return_value={"project_id": "proj", "environment": "test"}
+        )
+        ops.get_access_token = Mock(return_value="tok")  # type: ignore[method-assign]
+        return ops
+
+    def test_upload_via_proxy_is_refused_before_any_network_call(self) -> None:
+        ops = self._make_ops()
+        with patch("pipedream_operations.requests.request") as mock_req:
+            with self.assertRaises(Exception) as ctx:
+                ops.proxy_request(
+                    external_user_id=self.external_user_id,
+                    account_id="acct",
+                    method="PATCH",
+                    upstream_url="https://www.googleapis.com/upload/drive/v3/files/abc?uploadType=multipart",
+                    body={"filePath": "/workdir/tmp/notes.docx"},
+                )
+            self.assertIn("media upload", str(ctx.exception).lower())
+            mock_req.assert_not_called()
+
+    def test_docx_download_returned_as_binary_not_text(self) -> None:
+        ops = self._make_ops()
+        docx_bytes = b"PK\x03\x04" + bytes(range(256)) * 8  # non-UTF-8 bytes
+        resp = Mock()
+        resp.json.side_effect = ValueError("not json")
+        resp.headers = {
+            "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        }
+        resp.content = docx_bytes
+        resp.text = "garbled-lossy-decode"
+        resp.ok = True
+        resp.status_code = 200
+
+        with patch("pipedream_operations.requests.request", return_value=resp):
+            result = ops.proxy_request(
+                external_user_id=self.external_user_id,
+                account_id="acct",
+                method="GET",
+                upstream_url="https://www.googleapis.com/drive/v3/files/abc/revisions/r1?alt=media",
+            )
+
+        self.assertTrue(result.get("binary"))
+        self.assertNotIn("text", result)
+        self.assertEqual(base64.b64decode(result["base64_body"]), docx_bytes)
+
+    def test_text_response_still_returned_as_text(self) -> None:
+        ops = self._make_ops()
+        resp = Mock()
+        resp.json.side_effect = ValueError("not json")
+        resp.headers = {"content-type": "text/plain; charset=utf-8"}
+        resp.content = b"plain body"
+        resp.text = "plain body"
+        resp.ok = True
+        resp.status_code = 200
+
+        with patch("pipedream_operations.requests.request", return_value=resp):
+            result = ops.proxy_request(
+                external_user_id=self.external_user_id,
+                account_id="acct",
+                method="GET",
+                upstream_url="https://api.example.com/v1/ping",
+            )
+
+        self.assertEqual(result, {"text": "plain body"})
+
+
 if __name__ == "__main__":
     unittest.main()

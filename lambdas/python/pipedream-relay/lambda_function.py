@@ -248,6 +248,36 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
                             "This tool has been restricted by an administrator or user preference.",
                         )
 
+            # Defense-in-depth: block binary/media uploads via the raw proxy.
+            # The passthrough proxy forwards a JSON body, not multipart media, so
+            # routing a file upload here overwrites the target with JSON instead
+            # of the file's contents (this corrupted a customer document). The
+            # proxy lambda enforces this too; we also block here so the bad
+            # request never crosses the account boundary.
+            if operation == "proxy_request":
+                _method = (parameters.get("method") or "").upper()
+                _url = (parameters.get("upstream_url") or "").lower()
+                try:
+                    _body_blob = json.dumps(parameters.get("body") or {})
+                except Exception:
+                    _body_blob = str(parameters.get("body"))
+                if _method in ("POST", "PUT", "PATCH") and (
+                    "upload" in _url or "/workdir/" in _body_blob.lower()
+                ):
+                    logger.warning(
+                        "Blocked media upload via raw proxy",
+                        _name="PROXY_UPLOAD_BLOCKED",
+                        method=_method,
+                        external_user_id=external_user_id,
+                    )
+                    return _error_response(
+                        400,
+                        "Media uploads cannot go through the raw API proxy — it "
+                        "sends a JSON body, not multipart media, and would "
+                        "overwrite the target with JSON. Use the integration's "
+                        "upload/update-file action instead.",
+                    )
+
             # Generate STS proof URL for caller identity verification
             try:
                 sts_proof_url = generate_sts_proof_url()

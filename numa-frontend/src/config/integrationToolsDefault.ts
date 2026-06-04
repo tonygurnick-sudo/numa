@@ -71,12 +71,15 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
   ],
 
   // Google Drive
+  // NOTE: action_keys use an underscore app slug ("google_drive-..."), so deny
+  // entries must too — hyphenated slugs ("google-drive-...") never match and
+  // silently fail to deny.
   google_drive: [
-    'google-drive-resolve-comment',
-    'google-drive-resolve-access-proposals',
-    'google-drive-list-access-proposals',
-    'google-drive-delete-shared-drive',
-    'google-drive-delete-comment',
+    'google_drive-resolve-comment',
+    'google_drive-resolve-access-proposals',
+    'google_drive-list-access-proposals',
+    'google_drive-delete-shared-drive',
+    'google_drive-delete-comment',
   ],
 
   // Google Analytics
@@ -113,12 +116,13 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
   podio: [],
 
   // Google Sheets
+  // NOTE: underscore app slug ("google_sheets-...") — see Google Drive note.
   google_sheets: [
-    'google-sheets-delete-worksheet',
-    'google-sheets-delete-rows',
-    'google-sheets-clear-rows',
-    'google-sheets-clear-cell',
-    'google-sheets-delete-conditional-format-rule',
+    'google_sheets-delete-worksheet',
+    'google_sheets-delete-rows',
+    'google_sheets-clear-rows',
+    'google_sheets-clear-cell',
+    'google_sheets-delete-conditional-format-rule',
   ],
 
   // Google Forms
