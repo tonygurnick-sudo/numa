@@ -25,12 +25,12 @@
  * without a live Amazon Connect instance whose Approved Origins allow this
  * domain. See useConnectCcp for the initCCP details.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { getFlag } from '../../utils/featureFlags';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
-import { useConnectCcp, VOICE_DIAL_EVENT, VOICE_CALL_STATE_EVENT } from '../../hooks/useConnectCcp';
+import { useConnectCcp, getCcpUrl, VOICE_DIAL_EVENT, VOICE_CALL_STATE_EVENT } from '../../hooks/useConnectCcp';
 import type { VoiceCallStateEventDetail } from '../../hooks/useConnectCcp';
 import { getVoiceBrowserSupport } from '../../utils/voiceBrowserSupport';
 
@@ -71,6 +71,49 @@ export const CcpSoftphoneWidget = () => {
   // the panel was ever opened has no live CCP and silently no-ops.
   const { containerRef, status } = useConnectCcp(flagEnabled && browserSupport !== 'unsupported', getSignInUrl);
 
+  // Holds the login popup opened by the Sign-in button so we can auto-close it
+  // once the agent has authenticated (status → ready).
+  const loginPopupRef = useRef<Window | null>(null);
+
+  // Explicit, user-gesture-driven sign-in. initCCP's own loginPopup auto-opens on
+  // mount, but browsers block popups that aren't triggered by a click — so the
+  // agent was stranded in needs_login with no popup and no way to start login.
+  // This button IS that click: open the popup synchronously (so it's allowed),
+  // then navigate it to the freshly-minted federation URL. The SAML agent
+  // auto-authenticates, lands on /ccp-v2, and the embedded iframe (same Connect
+  // domain) picks up the session → onInitialized fires → status becomes ready.
+  const signIn = useCallback(async () => {
+    // Open a real browser TAB (no width/height features = tab, not a popup window).
+    // Feature-restricted popups were being blocked / silently failing; a tab reliably
+    // completes the SAML federation handoff. Open BEFORE the await so it's inside the
+    // click's call stack (a window opened after an async hop gets blocked).
+    const win = window.open('about:blank', 'numa-ccp-login');
+    loginPopupRef.current = win;
+    let url = await getSignInUrl();
+    // Federation mint failed → fall back to the bare ccp-v2 URL so the agent can still
+    // sign in manually in the tab (the SAML login page can't be framed, but loads fine
+    // as a top-level page).
+    if (!url) url = getCcpUrl();
+    if (!url) {
+      win?.close();
+      return;
+    }
+    if (win) win.location.href = url;
+    else window.open(url, 'numa-ccp-login'); // blocked → last-ditch retry
+  }, [getSignInUrl]);
+
+  // Auto-close the login popup once the agent is authenticated.
+  useEffect(() => {
+    if (status === 'ready' && loginPopupRef.current) {
+      try {
+        loginPopupRef.current.close();
+      } catch {
+        /* already closed / cross-origin — close is best-effort on windows we opened */
+      }
+      loginPopupRef.current = null;
+    }
+  }, [status]);
+
   // Auto-open the panel when a dial is requested so the SDR sees the call and
   // the iframe is visible for the softphone UI.
   useEffect(() => {
@@ -93,6 +136,23 @@ export const CcpSoftphoneWidget = () => {
     return () => window.removeEventListener(VOICE_CALL_STATE_EVENT, onState);
   }, []);
 
+  // Surface network state ON SCREEN. When the browser goes offline the embedded CCP
+  // can't reach Connect (it logs "network offline" / "Failed to get agent data" on a
+  // loop) — show the agent a clear banner instead of leaving them guessing why the
+  // softphone stopped working.
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const goOnline = (): void => setOnline(true);
+    const goOffline = (): void => setOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
   if (!flagEnabled) return null;
 
   const renderStatusNotice = () => {
@@ -106,9 +166,15 @@ export const CcpSoftphoneWidget = () => {
     }
     if (status === 'error') {
       return (
-        <div className="p-3 text-center text-danger small">
-          <i className="bi bi-exclamation-octagon me-1" aria-hidden="true"></i>
-          {t('ccp.error')}
+        <div className="p-3 text-center small">
+          <div className="text-danger mb-2">
+            <i className="bi bi-exclamation-octagon me-1" aria-hidden="true"></i>
+            {t('ccp.error')}
+          </div>
+          <Button variant="primary" size="sm" onClick={signIn}>
+            <i className="bi bi-telephone-outbound me-1" aria-hidden="true"></i>
+            {t('ccp.signIn')}
+          </Button>
         </div>
       );
     }
@@ -134,8 +200,11 @@ export const CcpSoftphoneWidget = () => {
     if (status === 'needs_login') {
       return (
         <div className="px-3 pt-2 text-center text-muted small">
-          <i className="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>
-          {t('ccp.loginPrompt')}
+          <div className="mb-2">{t('ccp.loginPrompt')}</div>
+          <Button variant="primary" size="sm" onClick={signIn}>
+            <i className="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>
+            {t('ccp.signIn')}
+          </Button>
         </div>
       );
     }
@@ -227,6 +296,16 @@ export const CcpSoftphoneWidget = () => {
           </div>
         ) : (
           <>
+            {/* Offline banner — the embedded CCP can't reach Connect while offline. */}
+            {!online && (
+              <div className="px-3 py-2 text-center text-warning small bg-warning-subtle border-bottom">
+                <i className="bi bi-wifi-off me-1" aria-hidden="true"></i>
+                {t('ccp.offline', {
+                  defaultValue: "You're offline — the softphone will reconnect when your connection returns.",
+                })}
+              </div>
+            )}
+
             {/* Firefox best-effort heads-up (still attempted below). */}
             {browserSupport === 'best_effort' && (
               <div className="px-3 pt-2 text-center text-warning small">
