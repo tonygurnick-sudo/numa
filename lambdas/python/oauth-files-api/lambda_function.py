@@ -24,6 +24,7 @@ from oauth_providers import (
     OAuthRateLimitError,
     create_provider,
 )
+from oauth_providers.synergy_provider import SynergyProvider
 from vault_integration import (
     get_company_provider_config,
     get_oauth_token,
@@ -263,8 +264,20 @@ async def _handle_download_file(
 
         provider, access_token = await _get_provider_with_token(provider_name, user_id)
 
-        # Download file content
-        file_content = await provider.download_file(access_token, file_id)
+        # Download file content. Synergy supports a specific `version` (from the
+        # version-history UI); other providers have no concept of it, so the
+        # param is only forwarded for Synergy.
+        qs = event.get("queryStringParameters") or {}
+        version_raw = qs.get("version")
+        if isinstance(provider, SynergyProvider) and version_raw:
+            try:
+                file_content = await provider.download_file(
+                    access_token, file_id, version=int(version_raw)
+                )
+            except (ValueError, TypeError):
+                file_content = await provider.download_file(access_token, file_id)
+        else:
+            file_content = await provider.download_file(access_token, file_id)
 
         await provider.close()
 

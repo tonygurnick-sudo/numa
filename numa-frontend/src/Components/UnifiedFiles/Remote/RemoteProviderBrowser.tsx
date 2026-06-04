@@ -10,11 +10,13 @@
  * by provider id so the parent surface stays oblivious.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Button, Form, InputGroup } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../../../Providers/ToastContext';
 import { ConnectorsService } from '../../../Services/ConnectorsService';
 import { extractApiError } from '../../../utils/extractApiError';
+import { getFlag } from '../../../utils/featureFlags';
 import type { RemoteFileItem } from '../../Files/FileContextMenu';
 import { EmailViewerModal } from '../../Files/EmailViewerModal';
 import { RemoteProviderInlineRows } from './RemoteProviderInlineRows';
@@ -160,6 +162,8 @@ function SynergyEmbeddedBrowser({
   subFolderPath: SubFolderBreadcrumb[];
   onSubFolderPathChange: (path: SubFolderBreadcrumb[]) => void;
 }): React.JSX.Element {
+  const { t } = useTranslation('files');
+
   // Drill-in via double-click on a folder or job row: push the row's
   // identity onto the parent-owned sub-path. RemoteProviderInlineRows is
   // re-keyed on the path so the next render re-roots cleanly (matches the
@@ -172,6 +176,35 @@ function SynergyEmbeddedBrowser({
     },
     [subFolderPath, onSubFolderPathChange]
   );
+
+  // In-job file search. Synergy file search is job-scoped, so the search box is
+  // only offered once the user is inside a job (subFolderPath[0]). Searching
+  // covers the whole job (name + contents) regardless of how deep the user has
+  // drilled. The query is reset whenever the job scope changes so it never
+  // leaks across jobs.
+  // Search is part of SYNERGY_FILE_PARITY — hidden entirely when the flag is off.
+  const parityEnabled = getFlag('SYNERGY_FILE_PARITY');
+  const insideJob = parityEnabled && subFolderPath.length > 0;
+  const jobScopeId = insideJob ? subFolderPath[0].id : null;
+  const jobName = insideJob ? subFolderPath[0].name : '';
+  const [searchInput, setSearchInput] = useState('');
+  const [activeQuery, setActiveQuery] = useState('');
+  useEffect(() => {
+    setSearchInput('');
+    setActiveQuery('');
+  }, [jobScopeId]);
+  const runSearch = useCallback(
+    (e?: React.FormEvent) => {
+      e?.preventDefault();
+      setActiveQuery(searchInput.trim());
+    },
+    [searchInput]
+  );
+  const clearSearch = useCallback(() => {
+    setSearchInput('');
+    setActiveQuery('');
+  }, []);
+
   const rootKey = subFolderPath.map((p) => p.id).join('/') || '__root__';
   // The drill view delegates all of its rendering + state to the shared
   // `RemoteProviderInlineRows` component so chevron-expand, per-folder
@@ -182,12 +215,45 @@ function SynergyEmbeddedBrowser({
 
   return (
     <div className="finder-files">
+      {/* In-job file search (name + contents). Only shown once inside a job,
+          because Synergy file search is job-scoped — there is no global search.
+          Searching covers the whole job regardless of drill depth. */}
+      {insideJob && (
+        <Form onSubmit={runSearch} className="px-2 py-2 border-bottom">
+          <InputGroup size="sm">
+            <Form.Control
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={t('synergy.searchPlaceholder', 'Search files in {{job}} by name or contents', {
+                job: jobName,
+              })}
+              aria-label={t('synergy.searchAria', 'Search files in this job')}
+            />
+            {activeQuery && (
+              <Button
+                variant="outline-secondary"
+                onClick={clearSearch}
+                title={t('synergy.clearSearch', 'Clear search')}
+                aria-label={t('synergy.clearSearch', 'Clear search')}
+              >
+                <i className="bi bi-x-lg" aria-hidden="true" />
+              </Button>
+            )}
+            <Button variant="primary" type="submit" disabled={!searchInput.trim()}>
+              <i className="bi bi-search me-1" aria-hidden="true" />
+              {t('synergy.searchButton', 'Search')}
+            </Button>
+          </InputGroup>
+        </Form>
+      )}
       {/* Render the Synergy tree using the SAME inline-rows component the
           User Files surface uses — chevron-expandable jobs → folders →
           subfolders + files, with per-row Load more and download buttons.
           This replaces the old flat click-to-drill `RemoteFileBrowser`
           rendering so the drill view's expansion behaviour matches the
-          User Files dropdown exactly. */}
+          User Files dropdown exactly. When a search is active the same
+          component renders the flat job-scoped results instead of the tree. */}
       <div className="finder-list">
         <RemoteProviderInlineRows
           key={rootKey}
@@ -195,6 +261,7 @@ function SynergyEmbeddedBrowser({
           baseDepth={0}
           rootSubFolderPath={subFolderPath}
           onFolderDoubleClick={handleDrillIn}
+          searchQuery={activeQuery}
         />
       </div>
     </div>

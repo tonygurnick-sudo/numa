@@ -1305,6 +1305,45 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'GET', path: 'data-connectors/synergy/folders/{folder_id}/items' },
     });
 
+    // Synergy file read-parity routes (job-scoped search, details, version
+    // history, weblink). Order in the handler matters — the specific suffixes
+    // (/search, /history, /weblink) are matched before the bare /files/{id}.
+    this.addLambdaFunction(this, 'data-connectors-synergy-file-search', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/files/search' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-file-history', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}/history' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-file-weblink', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}/weblink' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-file-details', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}' },
+    });
+
     this.addLambdaFunction(this, 'data-connectors-sync-configs-list', {
       addAuthorizer: true,
       lambdaDirectory: 'python/data-connectors',

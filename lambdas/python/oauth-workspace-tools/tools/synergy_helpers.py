@@ -519,34 +519,66 @@ def list_job_folders(server: str, token: str, job_id: str) -> List[Dict[str, Any
 
 
 def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
-    """Return subfolders and files for a folder."""
+    """Return a folder's subfolders and ALL of its files.
+
+    Synergy's `/api/v1/folders/{id}/items` only returns the first
+    (default-size) page of `Files`, with no way to request more from that
+    endpoint. The chat agent has no "load more" affordance, so we page through
+    every file via the dedicated paginated endpoint
+    (`/folders/{id}/files/{retrieve_attrs}/{page}/{page_size}/{filter}/{show_deleted}`)
+    and return the complete set, so the agent sees the whole folder.
+    """
     base_url = _build_base_url(server)
-    url = f"{base_url}/api/v1/folders/{folder_id}/items"
     headers = {
         "Authorization": _normalize_token(token),
         "Content-Type": "application/json",
     }
-    response = httpx.get(url, headers=headers, timeout=60)
-    _check_response(response)
-    data = response.json()
+
+    # Subfolders: single shot from /items (they don't paginate).
+    items_response = httpx.get(
+        f"{base_url}/api/v1/folders/{folder_id}/items",
+        headers=headers,
+        timeout=60,
+    )
+    _check_response(items_response)
+    items_data = items_response.json() or {}
     subfolders = [
         _normalize_folder(folder)
-        for folder in data.get("SubFolders", [])
+        for folder in items_data.get("SubFolders", [])
         if isinstance(folder, dict)
     ]
-    files_data = data.get("Files") or {}
-    file_items = (
-        files_data.get("Result")
-        or files_data.get("Items")
-        or files_data.get("items")
-        or []
-    )
-    files = [_normalize_file(f) for f in file_items if isinstance(f, dict)]
+
+    # Files: walk every page via the dedicated paginated endpoint.
+    files: List[Dict[str, Any]] = []
+    files_total = 0
+    page = 1
+    page_size = 100
+    max_pages = 100  # safety cap (10k files) so a pathological folder can't hang
+    while page <= max_pages:
+        # {filter} is a SQL LIKE pattern — `%25` is the URL-encoded `%`
+        # wildcard (match all); a literal `*` matches nothing on 12d.
+        files_url = (
+            f"{base_url}/api/v1/folders/{folder_id}/files"
+            f"/true/{page}/{page_size}/%25/false"
+        )
+        response = httpx.get(files_url, headers=headers, timeout=60)
+        _check_response(response)
+        data = response.json() or {}
+        page_items = data.get("Result") or data.get("Items") or data.get("items") or []
+        files.extend(_normalize_file(f) for f in page_items if isinstance(f, dict))
+        files_total = (
+            data.get("TotalRows") or data.get("Total") or files_total or len(files)
+        )
+        total_pages = data.get("TotalPages") or data.get("totalPages") or 1
+        if page >= total_pages or not page_items:
+            break
+        page += 1
+
     return {
         "folder_id": folder_id,
         "subfolders": subfolders,
         "files": files,
-        "files_total": files_data.get("TotalRows"),
+        "files_total": files_total,
     }
 
 

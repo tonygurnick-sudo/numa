@@ -983,6 +983,10 @@ export class NumaClientStack extends TerraformStack {
         SHOW_CREDITS: clientConfig.showCredits ?? false,
         // Parent flags
         DATA_CONNECTORS_ENABLED: clientConfig.dataConnectorsEnabled ?? false,
+        // Synergy 12d file-interface parity (rich metadata columns, in-job
+        // file search, per-file actions). Sub-capability of data connectors;
+        // off by default so it ships dark until a client opts in.
+        SYNERGY_FILE_PARITY: clientConfig.synergyFileParity ?? false,
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
@@ -1613,6 +1617,16 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         numaOps: z.boolean().optional().default(false),
 
         /**
+         * Whether to enable the Synergy 12d file-interface parity features —
+         * rich file metadata columns, in-job file search, and per-file actions
+         * (details / version history / copy link) in the Files Remote UI.
+         * Sub-capability of data connectors; ships dark by default.
+         *
+         * @default false
+         */
+        synergyFileParity: z.boolean().optional().default(false),
+
+        /**
          * Whether to enable site-wide search (DynamoDB search index + /api/search).
          * Foundational only — producers populate the index in follow-up work.
          *
@@ -1665,6 +1679,23 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * provisioned; Phase 2 (FEAT-169) writes it from the provisioning pipeline.
          */
         connectInstanceUrl: z.string().optional(),
+
+        /**
+         * Numa Voice call-recording S3 bucket name. Written back into client config
+         * by the numa-voice-config-writer Lambda (FEAT-169) so it's discoverable in
+         * the single source of truth rather than only recomputed by convention.
+         * Write-back field — not admin-authored. Declared here so the strict deploy
+         * schema accepts it (the writer pre-validates the value).
+         */
+        recordingsBucket: z.string().optional(),
+
+        /**
+         * Numa Voice claimed DID phone numbers (E.164). Written back into client
+         * config by the numa-voice-config-writer Lambda (FEAT-169) on claim/release.
+         * Write-back field — not admin-authored. Declared here so the strict deploy
+         * schema accepts it (the writer de-dupes, E.164-validates, and caps at 100).
+         */
+        didNumbers: z.array(z.string()).optional(),
 
         /**
          * Feature flags from other branches (not yet implemented in this branch)

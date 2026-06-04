@@ -297,9 +297,9 @@ export const ConnectorsService = {
       return OAuthProvidersService.searchFiles(id, query, folderId, pageSize, pageToken);
     },
 
-    async download(connectorId: string, fileId: string): Promise<Blob> {
+    async download(connectorId: string, fileId: string, version?: number): Promise<Blob> {
       const id = ConnectorsService._mustFileBrowse(connectorId, 'files.download');
-      return OAuthProvidersService.downloadFile(id, fileId);
+      return OAuthProvidersService.downloadFile(id, fileId, version);
     },
 
     async sendEmail(

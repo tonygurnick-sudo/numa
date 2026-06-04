@@ -93,9 +93,13 @@ class SynergyProvider(OAuthProvider):
             return await self._list_job_folders(access_token, job_id)
         if folder_id.startswith(_FOLDER_PREFIX):
             real_id = folder_id[len(_FOLDER_PREFIX) :]
-            return await self._list_folder_items(access_token, real_id)
+            return await self._list_folder_items(
+                access_token, real_id, page_size, page_token
+            )
         # Fallback: treat as folder ID
-        return await self._list_folder_items(access_token, folder_id)
+        return await self._list_folder_items(
+            access_token, folder_id, page_size, page_token
+        )
 
     async def _list_jobs(
         self, access_token: str, page_size: int, page_token: Optional[str]
@@ -202,35 +206,35 @@ class SynergyProvider(OAuthProvider):
         return OAuthFolderContents(folders=folders, files=[], total_count=len(folders))
 
     async def _list_folder_items(
-        self, access_token: str, folder_id: str
+        self,
+        access_token: str,
+        folder_id: str,
+        page_size: int = 100,
+        page_token: Optional[str] = None,
     ) -> OAuthFolderContents:
-        """List subfolders and files in a Synergy folder."""
+        """List a folder's subfolders (page 1) and a page of its files.
+
+        Synergy's `/folders/{id}/items` only returns the first
+        (default-size) page of `Files` and can't be paged, so files are
+        driven off the dedicated paginated endpoint
+        `/folders/{id}/files/{retrieve_attrs}/{page}/{page_size}/{filter}/{show_deleted}`
+        and a `next_page_token` is returned while more pages remain.
+        Subfolders don't paginate, so they're fetched once on page 1.
+        """
         base_url = _build_base_url(self.instance_url)
-        response = await self._make_request_with_retry(
+        page = int(page_token) if page_token else 1
+        page = max(1, page)
+        size = min(page_size, 200) if page_size else 100
+
+        # Files: dedicated paginated endpoint (consistent page size per page).
+        # The {filter} segment is a SQL LIKE pattern — `%25` is the URL-encoded
+        # `%` wildcard (match all); a literal `*` matches nothing on 12d.
+        files_response = await self._make_request_with_retry(
             "GET",
-            f"{base_url}/api/v1/folders/{folder_id}/items",
+            f"{base_url}/api/v1/folders/{folder_id}/files/true/{page}/{size}/%25/false",
             access_token,
         )
-        data = response.json()
-
-        folders: list[OAuthFolder] = []
-        for folder in data.get("SubFolders", []):
-            if not isinstance(folder, dict):
-                continue
-            fid = _extract_id(folder)
-            name = folder.get("Name", "")
-            folders.append(
-                OAuthFolder(
-                    folder_id=f"{_FOLDER_PREFIX}{fid}",
-                    name=name,
-                    path=normalize_file_path(f"/{name}"),
-                    has_subfolders=folder.get("HasSubFolders", False)
-                    or (folder.get("NoOfSubFolders") or 0) > 0,
-                    no_of_subfolders=folder.get("NoOfSubFolders") or 0,
-                )
-            )
-
-        files_data = data.get("Files") or {}
+        files_data = files_response.json() or {}
         file_items = (
             files_data.get("Result")
             or files_data.get("Items")
@@ -256,10 +260,42 @@ class SynergyProvider(OAuthProvider):
                 )
             )
 
+        total_rows = (
+            files_data.get("TotalRows") or files_data.get("Total") or len(files)
+        )
+        total_pages = files_data.get("TotalPages") or files_data.get("totalPages") or 1
+        next_token = str(page + 1) if page < total_pages else None
+
+        # Subfolders only on the first page — they don't paginate.
+        folders: list[OAuthFolder] = []
+        if page == 1:
+            items_response = await self._make_request_with_retry(
+                "GET",
+                f"{base_url}/api/v1/folders/{folder_id}/items",
+                access_token,
+            )
+            items_data = items_response.json() or {}
+            for folder in items_data.get("SubFolders", []):
+                if not isinstance(folder, dict):
+                    continue
+                fid = _extract_id(folder)
+                name = folder.get("Name", "")
+                folders.append(
+                    OAuthFolder(
+                        folder_id=f"{_FOLDER_PREFIX}{fid}",
+                        name=name,
+                        path=normalize_file_path(f"/{name}"),
+                        has_subfolders=folder.get("HasSubFolders", False)
+                        or (folder.get("NoOfSubFolders") or 0) > 0,
+                        no_of_subfolders=folder.get("NoOfSubFolders") or 0,
+                    )
+                )
+
         return OAuthFolderContents(
             folders=folders,
             files=files,
-            total_count=len(folders) + len(files),
+            total_count=total_rows,
+            next_page_token=next_token,
         )
 
     async def download_file(
@@ -267,6 +303,7 @@ class SynergyProvider(OAuthProvider):
         access_token: str,
         file_id: str,
         max_download_size: Optional[int] = None,
+        version: Optional[int] = None,
     ) -> bytes:
         """Download a file from Synergy.
 
@@ -274,25 +311,26 @@ class SynergyProvider(OAuthProvider):
         /api/v1/files/{id}/download?version={n}&with_references=false
         with Content-Type: application/octet-stream and an empty body.
 
-        We first try to resolve the latest version via GET /api/v1/files/{id}.
-        If that fails, we use the folder-files endpoint to look up the version,
-        and ultimately fall back to version=1.
+        When ``version`` is supplied (e.g. from the version-history UI) that
+        specific version is fetched. Otherwise we resolve the latest version via
+        GET /api/v1/files/{id}, falling back to version=1.
         """
         base_url = _build_base_url(self.instance_url)
 
-        # Try to get the latest version number for the file
-        version = 1
-        try:
-            meta_response = await self._make_request_with_retry(
-                "GET",
-                f"{base_url}/api/v1/files/{file_id}",
-                access_token,
-            )
-            meta = meta_response.json()
-            version = meta.get("LatestVersion") or meta.get("latestVersion") or 1
-        except Exception:
-            # File-by-ID endpoint may not be available; fall back to version=1
-            pass
+        # Use the requested version if supplied; otherwise resolve the latest.
+        if version is None:
+            version = 1
+            try:
+                meta_response = await self._make_request_with_retry(
+                    "GET",
+                    f"{base_url}/api/v1/files/{file_id}",
+                    access_token,
+                )
+                meta = meta_response.json()
+                version = meta.get("LatestVersion") or meta.get("latestVersion") or 1
+            except Exception:
+                # File-by-ID endpoint may not be available; fall back to version=1
+                pass
 
         # Synergy download is POST with empty body (per API docs)
         response = await self._make_request_with_retry(

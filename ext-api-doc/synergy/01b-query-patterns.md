@@ -89,10 +89,16 @@ returns all jobs; `true` restricts to root jobs only.
 
 ```
 GET /api/v1/folders/{folder_id}/items              # page 1 of files + all subfolders
-GET /api/v1/folders/{folder_id}/files/true/1/50/*/false   # paginated: retrieve_attrs=true, page=1, size=50, filter=*, show_deleted=false
+GET /api/v1/folders/{folder_id}/files/true/1/50/%25/false   # paginated: retrieve_attrs=true, page=1, size=50, filter=%25, show_deleted=false
 ```
 
 There is no "list all files" endpoint that isn't scoped to a folder.
+
+> ⚠️ The `{filter}` segment is a **SQL `LIKE` pattern**, not a glob. To match
+> all files use `%` (URL-encoded as `%25` in the path). A literal `*` matches
+> **nothing** and the endpoint returns `TotalRows: 0` with HTTP 200 — which
+> silently looks like an empty folder. Verified against the live
+> `synergy.cuttriss.co.nz` instance 2026-06-03.
 
 ### Folders (in a job)
 
@@ -294,7 +300,8 @@ GET /api/v1/folders/300_1/items
 }
 
 # Step 2 — fetch page 2 of files if Files.TotalPages > 1
-GET /api/v1/folders/300_1/files/true/2/50/*/false
+# filter = %25 (URL-encoded SQL LIKE `%` = match all; `*` matches nothing)
+GET /api/v1/folders/300_1/files/true/2/50/%25/false
 ```
 
 ### Example 4: Get job → its folders → a specific file
