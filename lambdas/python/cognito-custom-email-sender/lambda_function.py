@@ -129,7 +129,10 @@ def _generate_sts_proof_url(expires: int = 60) -> str:
     X-Amz-Expires > 60s, so keep it at 60."""
     session = Session()
     sts_client = session.create_client("sts", region_name=STS_REGION)
-    return sts_client.generate_presigned_url(
+    # generate_presigned_url exists on the STS client at runtime; boto3-stubs
+    # only types it per-client, so pyright can't see it on the generic
+    # botocore BaseClient (mirrors pipedream-relay's STS proof URL).
+    return sts_client.generate_presigned_url(  # type: ignore
         "get_caller_identity", Params={}, ExpiresIn=expires, HttpMethod="GET"
     )
 

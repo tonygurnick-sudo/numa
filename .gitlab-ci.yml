@@ -177,6 +177,7 @@ pre-commit:
         - lambdas/python/beyond-expectations-format-error-logs
         - lambdas/python/beyond-expectations-report-and-email
         - lambdas/python/candidate-screening
+        - lambdas/python/cognito-custom-email-sender
         - lambdas/python/cognito-email-handler
         - lambdas/python/company-profile
         - lambdas/python/contract-analysis
