@@ -16,15 +16,64 @@ const OPS: EmailFilterOp[] = ['contains', 'equals', 'not_contains', 'matches'];
 export const EmailFilterBuilder = ({ trigger, onChange }: EmailFilterBuilderProps) => {
   const { t } = useTranslation('automations');
 
-  // Check Gmail connection status when this step loads. Vault is the source
-  // of truth — the legacy data-connectors DDB table lags behind PAT vault
-  // writes for unified connectors.
-  const [gmailStatus, setGmailStatus] = useState<'loading' | 'connected' | 'not_connected'>('loading');
+  // Gmail connection status for the (native) email-trigger source.
+  //
+  // `getStatus` deliberately distinguishes a CONFIRMED `disconnected` from a
+  // transient `check_failed` (network / cold-start / 5xx) and does NOT cache
+  // the latter. We must only surface the hard "connect Gmail" warning on a
+  // confirmed disconnect — otherwise a transient first fetch flashes the
+  // warning and clears a second later once the retry succeeds (the race the
+  // user reported). On `check_failed` we retry a couple of times, then fall
+  // back to a soft "couldn't verify" state with a manual retry — never the
+  // misleading connect CTA.
+  const [gmailStatus, setGmailStatus] = useState<'loading' | 'connected' | 'not_connected' | 'check_failed'>('loading');
+  // Bumped by the "try again" button to re-run the check.
+  const [checkNonce, setCheckNonce] = useState(0);
+
   useEffect(() => {
-    ConnectorsService.getStatus('gmail')
-      .then((s) => setGmailStatus(s.status === 'connected' ? 'connected' : 'not_connected'))
-      .catch(() => setGmailStatus('not_connected'));
-  }, []);
+    let cancelled = false;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const onTransient = () => {
+      if (cancelled) return;
+      // Keep showing the spinner while we retry; only give up after a few
+      // attempts so we never assert "not connected" on an unverified result.
+      if (attempt < 2) {
+        attempt += 1;
+        setGmailStatus('loading');
+        timer = setTimeout(run, 800);
+      } else {
+        setGmailStatus('check_failed');
+      }
+    };
+
+    function run() {
+      ConnectorsService.getStatus('gmail')
+        .then((s) => {
+          if (cancelled) return;
+          if (s.status === 'connected') {
+            setGmailStatus('connected');
+          } else if (s.status === 'disconnected' || s.status === 'error') {
+            // Backend confirmed there's no usable connection — safe to prompt.
+            setGmailStatus('not_connected');
+          } else {
+            // check_failed — the fetch itself failed, not a real disconnect.
+            onTransient();
+          }
+        })
+        // getStatus is designed not to throw, but stay defensive: an
+        // unexpected throw is a transient failure, not a confirmed disconnect.
+        .catch(onTransient);
+    }
+
+    setGmailStatus('loading');
+    run();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [checkNonce]);
 
   const updateFilter = (idx: number, patch: Partial<EmailFilter>) => {
     const next = trigger.filters.map((f, i) => (i === idx ? { ...f, ...patch } : f));
@@ -49,6 +98,23 @@ export const EmailFilterBuilder = ({ trigger, onChange }: EmailFilterBuilderProp
       <div className="workflow-step text-center py-5">
         <Spinner animation="border" size="sm" className="me-2" />
         <span className="text-muted">{t('trigger.event.checkingGmail')}</span>
+      </div>
+    );
+  }
+
+  // Transient failure verifying the connection — offer a retry rather than
+  // the misleading "connect Gmail" CTA (the connection may well be fine).
+  if (gmailStatus === 'check_failed') {
+    return (
+      <div className="workflow-step">
+        <h5 className="mb-1">{t('trigger.event.builder.title')}</h5>
+        <p className="text-muted mb-4">{t('trigger.event.builder.subtitle')}</p>
+        <Alert variant="secondary" className="d-flex align-items-center justify-content-between">
+          <span>{t('trigger.event.gmailCheckFailed')}</span>
+          <Button variant="outline-secondary" size="sm" onClick={() => setCheckNonce((n) => n + 1)}>
+            {t('trigger.event.retryCheck')}
+          </Button>
+        </Alert>
       </div>
     );
   }
