@@ -33,6 +33,10 @@ import {
   connectorSlugForPipedream,
   pipedreamSlugForConnector,
 } from '../Components/Integrations/integrationCatalogHelpers';
+import {
+  IntegrationAccountSubmenu,
+  type IntegrationAccount,
+} from '../Components/Integrations/IntegrationAccountSubmenu';
 import { withPRM } from '../utils/prmUtils';
 import { MY_FILES_SENTINEL, expandMyFilesSentinel, sortKnowledgeBases } from '../constants/knowledgeBase';
 
@@ -58,7 +62,16 @@ import { MemoriesPanel } from '../Components/Memories/MemoriesPanel';
 import { listAgents, getCachedAgents } from '../Services/AgentsService';
 import type { AgentSummary } from '../types/agents';
 
-type Connection = { id: string; isConnected: boolean; mcpServerUrl?: string };
+type Connection = {
+  id: string;
+  isConnected: boolean;
+  mcpServerUrl?: string;
+  // FEAT-019: admin multi-account opt-in + the user's connected accounts for
+  // this integration. Drive the per-account submenu in the Chat Defaults
+  // picker. Empty/undefined accounts = legacy single-account UX (no submenu).
+  allowMultipleAccounts?: boolean;
+  accounts?: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
+};
 
 const IMAGE_TARGET_SIZE = 256;
 const IMAGE_MAX_BYTES = 4 * 1024 * 1024; // 4 MB
@@ -719,29 +732,41 @@ export default function UserProfilePage({
         ]);
         if (cancelled) return;
 
-        // 1. admin integration-settings (admin-side enable + denyTools map)
-        const settingsMap: Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }> = {};
+        // 1. admin integration-settings (admin-side enable + denyTools map +
+        //    FEAT-019 multi-account opt-in). `allowMultipleAccounts` is on the
+        //    same /api/settings/integrations item; capturing it here lets the
+        //    Chat Defaults picker show the per-account submenu.
+        const settingsMap: Record<
+          string,
+          { status: 'enabled' | 'disabled'; denyTools: string[]; allowMultipleAccounts: boolean }
+        > = {};
         const items = Array.isArray(integrationSettingsItems)
           ? (integrationSettingsItems as Array<{
               integration: string;
               status: 'enabled' | 'disabled';
               denyTools?: string[];
+              allowMultipleAccounts?: boolean;
             }>)
           : [];
         for (const item of items) {
           settingsMap[item.integration] = {
             status: item.status,
             denyTools: item.denyTools || [],
+            allowMultipleAccounts: item.allowMultipleAccounts === true,
           };
         }
 
-        // 2. Pipedream connections (filter to admin-enabled + user-connected)
+        // 2. Pipedream connections (filter to admin-enabled + user-connected).
+        //    Carry the connected-account list + admin multi-account flag so the
+        //    picker can render per-account checkboxes (FEAT-019).
         const pipedreamConnections: Connection[] = pipedreamStatus
           ? (pipedreamStatus.connections || [])
               .map((conn) => ({
                 id: conn.app_name,
                 isConnected: conn.status === 'connected',
                 mcpServerUrl: undefined as string | undefined,
+                allowMultipleAccounts: settingsMap[conn.app_name]?.allowMultipleAccounts === true,
+                accounts: conn.accounts ?? [],
               }))
               .filter((c) => c.isConnected)
               .filter((c) => settingsMap[c.id]?.status !== 'disabled')
@@ -847,6 +872,10 @@ export default function UserProfilePage({
         dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
         defaultConnectionIds: companyDefaults.defaultConnectionIds,
         defaultNativeConnectorIds: companyDefaults.defaultNativeConnectorIds,
+        // Account scope is user-only — company defaults never carry it, so an
+        // empty map (= "all accounts") is the correct preview when user
+        // defaults are disabled.
+        defaultAccountsByApp: {} as Record<string, string[]>,
       };
     }
     return userDefaults;
@@ -967,6 +996,7 @@ export default function UserProfilePage({
         dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
         defaultConnectionIds: userDefaults.defaultConnectionIds,
         defaultNativeConnectorIds: userDefaults.defaultNativeConnectorIds,
+        defaultAccountsByApp: userDefaults.defaultAccountsByApp,
         language: userDefaults.language,
         approvalMode: userDefaults.approvalMode,
         numaToolApprovalMode: userDefaults.numaToolApprovalMode,
@@ -1787,6 +1817,10 @@ export default function UserProfilePage({
                             iconClass?: string;
                             pipedreamSlug?: string;
                             nativeSlug?: string;
+                            // FEAT-019: populated for Pipedream rows only —
+                            // drives the per-account submenu.
+                            allowMultipleAccounts?: boolean;
+                            accounts?: IntegrationAccount[];
                           };
                           const rows: Row[] = [];
 
@@ -1803,6 +1837,8 @@ export default function UserProfilePage({
                               iconClass: getConnectionFallbackIcon(pdSlug),
                               pipedreamSlug: pdSlug,
                               nativeSlug: nativeSlug ?? undefined,
+                              allowMultipleAccounts: conn.allowMultipleAccounts,
+                              accounts: conn.accounts,
                             });
                           }
 
@@ -1840,55 +1876,101 @@ export default function UserProfilePage({
                               : false;
                             const checked = isPdEnabled || isNativeEnabled;
                             return (
-                              <Form.Check
-                                key={row.key}
-                                type="checkbox"
-                                id={`profile-defaults-${row.key}`}
-                                label={
-                                  <span className="d-flex align-items-center gap-2">
-                                    {row.iconSrc ? (
-                                      <img
-                                        src={row.iconSrc}
-                                        alt={row.label}
-                                        className="profile-integration-icon"
-                                        onError={(e) => {
-                                          e.currentTarget.style.display = 'none';
-                                        }}
-                                      />
-                                    ) : (
-                                      <i className={row.iconClass} />
-                                    )}
-                                    {row.label}
-                                  </span>
-                                }
-                                checked={checked}
-                                disabled={disableDefaultsForm}
-                                onChange={(e) => {
-                                  const nextChecked = e.target.checked;
-                                  setUserDefaults((prev) => {
-                                    const pd = prev.defaultConnectionIds;
-                                    const nv = prev.defaultNativeConnectorIds ?? [];
-                                    let nextPd = pd;
-                                    let nextNv = nv;
-                                    if (row.pipedreamSlug) {
-                                      nextPd = nextChecked
-                                        ? Array.from(new Set([...pd, row.pipedreamSlug]))
-                                        : pd.filter((x) => x !== row.pipedreamSlug);
+                              <div key={row.key}>
+                                <Form.Check
+                                  type="checkbox"
+                                  id={`profile-defaults-${row.key}`}
+                                  label={
+                                    <span className="d-flex align-items-center gap-2">
+                                      {row.iconSrc ? (
+                                        <img
+                                          src={row.iconSrc}
+                                          alt={row.label}
+                                          className="profile-integration-icon"
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = 'none';
+                                          }}
+                                        />
+                                      ) : (
+                                        <i className={row.iconClass} />
+                                      )}
+                                      {row.label}
+                                    </span>
+                                  }
+                                  checked={checked}
+                                  disabled={disableDefaultsForm}
+                                  onChange={(e) => {
+                                    const nextChecked = e.target.checked;
+                                    setUserDefaults((prev) => {
+                                      const pd = prev.defaultConnectionIds;
+                                      const nv = prev.defaultNativeConnectorIds ?? [];
+                                      let nextPd = pd;
+                                      let nextNv = nv;
+                                      if (row.pipedreamSlug) {
+                                        nextPd = nextChecked
+                                          ? Array.from(new Set([...pd, row.pipedreamSlug]))
+                                          : pd.filter((x) => x !== row.pipedreamSlug);
+                                      }
+                                      if (row.nativeSlug) {
+                                        nextNv = nextChecked
+                                          ? Array.from(new Set([...nv, row.nativeSlug]))
+                                          : nv.filter((x) => x !== row.nativeSlug);
+                                      }
+                                      // FEAT-019: drop any saved account scope for
+                                      // a Pipedream integration that's been turned
+                                      // off — a stale allow-list shouldn't linger.
+                                      let nextAccounts = prev.defaultAccountsByApp ?? {};
+                                      if (row.pipedreamSlug && !nextChecked && nextAccounts[row.pipedreamSlug]) {
+                                        nextAccounts = { ...nextAccounts };
+                                        delete nextAccounts[row.pipedreamSlug];
+                                      }
+                                      return {
+                                        ...prev,
+                                        defaultConnectionIds: nextPd,
+                                        defaultNativeConnectorIds: nextNv,
+                                        defaultAccountsByApp: nextAccounts,
+                                      };
+                                    });
+                                    setDirty(true);
+                                  }}
+                                />
+                                {/* FEAT-019: per-account scope for multi-account
+                                    Pipedream integrations. The submenu self-hides
+                                    unless the admin opted in AND the user has >1
+                                    account connected. */}
+                                {row.pipedreamSlug && (
+                                  <IntegrationAccountSubmenu
+                                    connectionId={row.pipedreamSlug}
+                                    accounts={row.accounts ?? []}
+                                    allowMultipleAccounts={row.allowMultipleAccounts ?? false}
+                                    isEnabled={checked}
+                                    selectedAccountIds={
+                                      (displayedSettings.defaultAccountsByApp ?? {})[row.pipedreamSlug]
                                     }
-                                    if (row.nativeSlug) {
-                                      nextNv = nextChecked
-                                        ? Array.from(new Set([...nv, row.nativeSlug]))
-                                        : nv.filter((x) => x !== row.nativeSlug);
-                                    }
-                                    return {
-                                      ...prev,
-                                      defaultConnectionIds: nextPd,
-                                      defaultNativeConnectorIds: nextNv,
-                                    };
-                                  });
-                                  setDirty(true);
-                                }}
-                              />
+                                    disabled={disableDefaultsForm}
+                                    onChange={(nextAccountIds) => {
+                                      const slug = row.pipedreamSlug!;
+                                      setUserDefaults((prev) => {
+                                        const all = row.accounts?.map((a) => a.account_id) ?? [];
+                                        const nextMap = { ...(prev.defaultAccountsByApp ?? {}) };
+                                        // Persist a narrowed subset only; "all
+                                        // selected" reverts to the empty/absent
+                                        // default the proxy treats as legacy.
+                                        if (
+                                          nextAccountIds.length === 0 ||
+                                          (all.length > 0 && nextAccountIds.length === all.length)
+                                        ) {
+                                          delete nextMap[slug];
+                                        } else {
+                                          nextMap[slug] = nextAccountIds;
+                                        }
+                                        return { ...prev, defaultAccountsByApp: nextMap };
+                                      });
+                                      setDirty(true);
+                                    }}
+                                  />
+                                )}
+                              </div>
                             );
                           });
                         })()}
