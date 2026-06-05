@@ -465,8 +465,13 @@ const listEventSchedulesForUser = async (userId: string): Promise<ScheduleRecord
     new QueryCommand({
       TableName: SCHEDULES_TABLE,
       KeyConditionExpression: 'user_id = :u',
-      FilterExpression: '#status = :active AND trigger_type = :event AND trigger.#source = :gmail',
-      ExpressionAttributeNames: { '#status': 'status', '#source': 'source' },
+      // `trigger` is a DynamoDB reserved keyword (same class as the `timezone`
+      // gotcha) — it MUST be aliased via ExpressionAttributeNames, or DynamoDB
+      // rejects the whole query with `ValidationException: ... reserved
+      // keyword: trigger`, which throws past the handler into the DLQ and no
+      // schedule ever fires.
+      FilterExpression: '#status = :active AND trigger_type = :event AND #trigger.#source = :gmail',
+      ExpressionAttributeNames: { '#status': 'status', '#trigger': 'trigger', '#source': 'source' },
       ExpressionAttributeValues: {
         ':u': userId,
         ':active': 'active',

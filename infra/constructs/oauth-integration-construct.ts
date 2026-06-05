@@ -102,12 +102,15 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
     // Also registers Gmail push notifications on first connect.
     const oauthAuthPolicy = [
       ...oauthPolicy,
-      // Data connectors table (Gmail watch registration writes connected_email + watch_expiry)
+      // Data connectors table. UpdateItem: Gmail watch registration writes the
+      // connector row (connected_email + watch_expiry). GetItem: the /oauth/gmail/status
+      // check reads the row so "connected" only reports true when the Gmail
+      // connection is actually triggerable (vault token AND connector row).
       ...(props.dataConnectorsTableArn
         ? [
             {
               effect: 'Allow' as const,
-              actions: ['dynamodb:UpdateItem'],
+              actions: ['dynamodb:UpdateItem', 'dynamodb:GetItem'],
               resources: [props.dataConnectorsTableArn],
             },
           ]
