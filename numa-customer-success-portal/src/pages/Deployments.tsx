@@ -16,6 +16,7 @@ import {
   ButtonGroup,
   ToggleButton,
   ListGroup,
+  Dropdown,
 } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { Upload } from 'react-bootstrap-icons';
@@ -79,6 +80,7 @@ export default function Deployments() {
   const [hideGroupMembers, setHideGroupMembers] = useState<boolean>(true);
   const [locks, setLocks] = useState<DeploymentLockRecord[]>([]);
   const [filteredClient, setFilteredClient] = useState<string>('all');
+  const [clientFilterOpen, setClientFilterOpen] = useState(false);
   const [isSingleSubmitting, setIsSingleSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -884,7 +886,7 @@ export default function Deployments() {
                   onChange={() => setChannel('numa-deploy')}
                 >
                   Production
-                  <Badge bg="light" className="ms-2">
+                  <Badge bg="light" text="dark" className="ms-2">
                     {imagesByChannel['numa-deploy'].length}
                   </Badge>
                 </ToggleButton>
@@ -897,7 +899,7 @@ export default function Deployments() {
                   onChange={() => setChannel('numa-deploy-dev')}
                 >
                   Dev
-                  <Badge bg="light" className="ms-2">
+                  <Badge bg="light" text="dark" className="ms-2">
                     {imagesByChannel['numa-deploy-dev'].length}
                   </Badge>
                 </ToggleButton>
@@ -933,9 +935,13 @@ export default function Deployments() {
           </div>
           {deployMode === 'single' ? (
             <>
-              <Row>
-                <Col md={4}>
-                  <Form.Group className="mb-3">
+              {/* Two-column layout: the tall client picker on the left, and a
+               * stacked "configure + deploy" column on the right so the image
+               * tag / label fields and the action buttons fill the vertical
+               * space beside the picker instead of leaving a large void. */}
+              <Row className="g-4">
+                <Col lg={5} xl={4}>
+                  <Form.Group>
                     <Form.Label>Client</Form.Label>
                     <ClientSelectGroup
                       value={selectedClient}
@@ -945,7 +951,7 @@ export default function Deployments() {
                     />
                   </Form.Group>
                 </Col>
-                <Col md={4}>
+                <Col lg={7} xl={8}>
                   <Form.Group className="mb-3">
                     <Form.Label>Image Tag</Form.Label>
                     <Form.Select
@@ -968,8 +974,6 @@ export default function Deployments() {
                       })}
                     </Form.Select>
                   </Form.Group>
-                </Col>
-                <Col md={4}>
                   <Form.Group className="mb-3">
                     <Form.Label>
                       Deployment Label <Badge bg="secondary">Required</Badge>
@@ -981,29 +985,34 @@ export default function Deployments() {
                       onChange={(e) => setDeploymentLabel(e.target.value)}
                       disabled={loading || isSingleSubmitting}
                     />
+                    <Form.Text className="text-muted">
+                      A short, human-readable name for this deployment — shown in the activity history below.
+                    </Form.Text>
                   </Form.Group>
+
+                  {hasInFlight && (
+                    <Alert variant="warning" className="mb-3">
+                      A deployment is already running for this client
+                    </Alert>
+                  )}
+
+                  <div className="d-flex flex-wrap gap-2">
+                    <Button variant="primary" onClick={handleDeployClick} disabled={!canSingleDeploy}>
+                      {isSingleSubmitting ? (
+                        <>
+                          <Spinner size="sm" className="me-2" />
+                          Deploying...
+                        </>
+                      ) : (
+                        'Start Deployment'
+                      )}
+                    </Button>
+                    <Button variant="outline-primary" onClick={handlePlanOnly} disabled={!canSingleDeploy}>
+                      Plan Only
+                    </Button>
+                  </div>
                 </Col>
               </Row>
-
-              {hasInFlight && (
-                <Alert variant="warning" className="mb-3">
-                  A deployment is already running for this client
-                </Alert>
-              )}
-
-              <Button variant="primary" onClick={handleDeployClick} disabled={!canSingleDeploy}>
-                {isSingleSubmitting ? (
-                  <>
-                    <Spinner size="sm" className="me-2" />
-                    Deploying...
-                  </>
-                ) : (
-                  'Start Deployment'
-                )}
-              </Button>
-              <Button className="ms-2" variant="outline-primary" onClick={handlePlanOnly} disabled={!canSingleDeploy}>
-                Plan Only
-              </Button>
             </>
           ) : (
             <>
@@ -1188,57 +1197,82 @@ export default function Deployments() {
                 unmountOnExit={false}
               >
                 <Tab eventKey="history" title="History">
-                  <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-                    <ClientSelectGroup
+                  {/* Compact single-row filter bar. The client picker is tucked
+                   * into a dropdown so the toolbar stays one tidy line instead of
+                   * a tall picker stranding the period/refresh controls across a
+                   * wide empty band. */}
+                  <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <Dropdown
+                      show={clientFilterOpen}
+                      onToggle={(next) => setClientFilterOpen(next)}
+                      autoClose="outside"
+                    >
+                      <Dropdown.Toggle variant="outline-secondary" size="sm" id="client-filter-toggle">
+                        <span className="text-muted me-1">Client:</span>
+                        <span className="fw-semibold">{filteredClient === 'all' ? 'All clients' : filteredClient}</span>
+                      </Dropdown.Toggle>
+                      <Dropdown.Menu style={{ width: 300, padding: '0.75rem' }}>
+                        <ClientSelectGroup
+                          size="sm"
+                          value={filteredClient}
+                          onChange={(value) => {
+                            setFilteredClient(value);
+                            setClientFilterOpen(false);
+                          }}
+                          clients={clients}
+                          allOption={{ value: 'all', label: 'All clients' }}
+                          showCounts={true}
+                          deploymentCounts={clients.reduce(
+                            (acc, c) => {
+                              acc[c.name] = history.filter((h) => h.clientName === c.name).length;
+                              return acc;
+                            },
+                            {} as Record<string, number>
+                          )}
+                        />
+                      </Dropdown.Menu>
+                    </Dropdown>
+
+                    <Form.Select
                       size="sm"
-                      value={filteredClient}
-                      onChange={setFilteredClient}
-                      clients={clients}
-                      showCounts={true}
-                      deploymentCounts={clients.reduce(
-                        (acc, c) => {
-                          acc[c.name] = history.filter((h) => h.clientName === c.name).length;
-                          return acc;
-                        },
-                        {} as Record<string, number>
-                      )}
-                      style={{ width: '220px' }}
+                      value={historyPeriod}
+                      onChange={(e) => setHistoryPeriod(e.target.value as any)}
+                      style={{ width: 140 }}
+                    >
+                      <option value="7d">Last 7 days</option>
+                      <option value="14d">Last 14 days</option>
+                      <option value="30d">Last 30 days</option>
+                      <option value="90d">Last 90 days</option>
+                    </Form.Select>
+
+                    <Form.Check
+                      type="checkbox"
+                      id="toggle-hide-members"
+                      label="Hide group members"
+                      checked={hideGroupMembers}
+                      onChange={(e) => setHideGroupMembers(e.currentTarget.checked)}
                     />
-                    <div className="d-flex align-items-center gap-2">
-                      <Form.Select
-                        size="sm"
-                        value={historyPeriod}
-                        onChange={(e) => setHistoryPeriod(e.target.value as any)}
-                        style={{ width: 140 }}
-                      >
-                        <option value="7d">Last 7 days</option>
-                        <option value="14d">Last 14 days</option>
-                        <option value="30d">Last 30 days</option>
-                        <option value="90d">Last 90 days</option>
-                      </Form.Select>
-                      <Form.Check
-                        type="checkbox"
-                        id="toggle-hide-members"
-                        label="Hide group members"
-                        checked={hideGroupMembers}
-                        onChange={(e) => setHideGroupMembers(e.currentTarget.checked)}
-                      />
-                      <Button
-                        variant="outline-secondary"
-                        size="sm"
-                        onClick={loadHistory}
-                        disabled={loading || isSingleSubmitting || isGroupSubmitting || isRefreshing}
-                      >
-                        {isRefreshing ? (
-                          <>
-                            <Spinner size="sm" className="me-1" />
-                            Refreshing
-                          </>
-                        ) : (
-                          'Refresh'
-                        )}
-                      </Button>
-                    </div>
+
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={loadHistory}
+                      disabled={loading || isSingleSubmitting || isGroupSubmitting || isRefreshing}
+                    >
+                      {isRefreshing ? (
+                        <>
+                          <Spinner size="sm" className="me-1" />
+                          Refreshing
+                        </>
+                      ) : (
+                        'Refresh'
+                      )}
+                    </Button>
+
+                    <span className="text-muted small ms-auto">
+                      Showing {filteredHistory.length} deployment{filteredHistory.length === 1 ? '' : 's'}
+                      {filteredClient !== 'all' ? ` for ${filteredClient}` : ' across all clients'}
+                    </span>
                   </div>
                   <Table hover responsive className="mb-0">
                     <thead>

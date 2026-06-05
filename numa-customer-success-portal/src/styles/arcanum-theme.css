@@ -155,6 +155,20 @@ pre {
 }
 
 .btn-primary {
+  /* Drive every state (hover/active/checked) through Bootstrap's own button
+   * CSS variables. The direct property overrides below cover plain :hover/:active,
+   * but the .btn-check:checked + .btn rule used by ToggleButton/radio groups has
+   * higher specificity and reads --bs-btn-active-bg — which, left unset, falls
+   * back to Bootstrap's compiled blue. Remapping the vars keeps checked toggles
+   * on-brand purple. */
+  --bs-btn-bg: var(--arcanum-purple);
+  --bs-btn-border-color: var(--arcanum-purple);
+  --bs-btn-hover-bg: var(--arcanum-purple-dark);
+  --bs-btn-hover-border-color: var(--arcanum-purple-dark);
+  --bs-btn-active-bg: var(--arcanum-purple-darker);
+  --bs-btn-active-border-color: var(--arcanum-purple-darker);
+  --bs-btn-disabled-bg: var(--arcanum-purple);
+  --bs-btn-disabled-border-color: var(--arcanum-purple);
   background-color: var(--arcanum-purple);
   border-color: var(--arcanum-purple);
   color: #fff;
@@ -184,6 +198,14 @@ pre {
 }
 
 .btn-outline-primary {
+  /* Same rationale as .btn-primary: the checked state of an outline toggle
+   * reads --bs-btn-active-bg, so remap it to purple instead of Bootstrap blue. */
+  --bs-btn-color: var(--arcanum-purple);
+  --bs-btn-border-color: var(--arcanum-purple);
+  --bs-btn-hover-bg: var(--arcanum-purple);
+  --bs-btn-hover-border-color: var(--arcanum-purple);
+  --bs-btn-active-bg: var(--arcanum-purple);
+  --bs-btn-active-border-color: var(--arcanum-purple);
   color: var(--arcanum-purple);
   border-color: var(--arcanum-purple);
 }
@@ -208,6 +230,15 @@ pre {
 
 /* Warning + danger buttons retoned to the asknuma palette. */
 .btn-warning {
+  --bs-btn-bg: var(--nd-warn);
+  --bs-btn-border-color: var(--nd-warn);
+  --bs-btn-color: #fff;
+  --bs-btn-hover-bg: #b45309;
+  --bs-btn-hover-border-color: #b45309;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-bg: #b45309;
+  --bs-btn-active-border-color: #b45309;
+  --bs-btn-active-color: #fff;
   background-color: var(--nd-warn);
   border-color: var(--nd-warn);
   color: #fff;
@@ -219,6 +250,14 @@ pre {
   color: #fff;
 }
 .btn-outline-warning {
+  --bs-btn-color: var(--nd-warn);
+  --bs-btn-border-color: var(--nd-warn);
+  --bs-btn-hover-bg: var(--nd-warn);
+  --bs-btn-hover-border-color: var(--nd-warn);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-bg: var(--nd-warn);
+  --bs-btn-active-border-color: var(--nd-warn);
+  --bs-btn-active-color: #fff;
   color: var(--nd-warn);
   border-color: var(--nd-warn);
   background-color: transparent;
