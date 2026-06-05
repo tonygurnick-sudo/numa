@@ -448,6 +448,22 @@
   border-radius: 2px;
 }
 
+// Agent avatar shown inline in a memory badge / scope picker
+.memory-scope-badge__avatar,
+.memory-scope-dropdown__avatar {
+  margin-right: 0.25rem;
+  border-radius: 4px;
+}
+
+// Hint shown beneath a scoped Add form when no targets are available
+.profile-memory-hint {
+  font-family: 'Metropolis Regular';
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+  color: #a1a1aa;
+  margin-top: 0.5rem;
+}
+
 // --- Empty state ---
 .profile-empty-state {
   font-family: 'Metropolis Regular';

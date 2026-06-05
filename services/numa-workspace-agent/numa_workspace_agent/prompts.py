@@ -801,11 +801,32 @@ def build_agent_context(
 _EMAIL_INTEGRATION_SLUGS = {"gmail", "microsoft_outlook"}
 
 
-def _build_user_profile_context(user_profile: Optional[dict]) -> str:
+def _build_user_profile_context(
+    user_profile: Optional[dict],
+    enabled_integration_slugs: Optional[set[str]] = None,
+    active_agent_id: Optional[str] = None,
+) -> str:
     """Build user profile context block for the system prompt.
+
+    Memories are scoped (``general`` | ``integration:{slug}`` | ``agent:{id}``)
+    and only the ones relevant to this conversation are injected, so the prompt
+    isn't polluted with context for tools/agents that aren't active. The model
+    can always enumerate every memory via the memories tool on demand.
 
     Args:
         user_profile: User profile dict from DynamoDB (or None if disabled/empty).
+        enabled_integration_slugs: Slugs of integrations enabled for this
+            conversation (both Pipedream and native, in their own slug forms).
+            When provided, ``integration:{slug}`` memories are only injected if
+            that integration is enabled — matching across the Pipedream/native
+            divide via ``slug_aliases``. When ``None``, all integration memories
+            are injected (backwards-compatible / callers without integration
+            context).
+        active_agent_id: The Numa Agent running this conversation, or ``None``
+            for default (agent-less) chat. ``agent:{id}`` memories are injected
+            only when they match the active agent — so agent memories stay
+            hidden in normal chat and only surface when chatting with that
+            specific agent.
 
     Returns:
         Formatted profile context string, or empty string if no profile.
@@ -840,9 +861,11 @@ def _build_user_profile_context(user_profile: Optional[dict]) -> str:
             f"{user_profile['customInstructions']}"
         )
 
-    # User memories — show ALL memories grouped by scope so the model has a
-    # complete picture when the user asks "what are my memories?"
-    # This is the single source of truth for all user memories in the prompt.
+    # User memories — grouped by scope. General memories always apply.
+    # Integration memories are gated to the integrations enabled for this
+    # conversation (when that set is known); agent memories are gated to the
+    # active agent. Irrelevant memories are silently omitted — the model can
+    # still enumerate everything via the memories tool if asked.
     memories = user_profile.get("memories", [])
     valid_memories = [m for m in memories if isinstance(m, dict) and m.get("scope")]
     if valid_memories:
@@ -853,15 +876,37 @@ def _build_user_profile_context(user_profile: Optional[dict]) -> str:
         ]
         agent = [m for m in valid_memories if m.get("scope", "").startswith("agent:")]
 
-        parts.append("\n**User Memories:**")
-        for mem in general:
-            parts.append(f"- {mem.get('content', '')}")
-        for mem in integration:
-            scope_label = mem.get("scope", "").replace("integration:", "")
-            parts.append(f"- [{scope_label}] {mem.get('content', '')}")
-        for mem in agent:
-            scope_label = mem.get("scope", "").replace("agent:", "")
-            parts.append(f"- [agent:{scope_label}] {mem.get('content', '')}")
+        # Gate integration memories to enabled integrations (Pipedream <->
+        # native aware). `None` means "caller didn't supply the set" → show all.
+        if enabled_integration_slugs is not None:
+            from numa_workspace_agent.mcp_tools.integration_preferences import (
+                slug_aliases,
+            )
+
+            integration = [
+                mem
+                for mem in integration
+                if slug_aliases(mem.get("scope", "").replace("integration:", ""))
+                & enabled_integration_slugs
+            ]
+
+        # Gate agent memories to the active agent — hidden entirely in
+        # agent-less chat (active_agent_id is None).
+        agent = [
+            mem
+            for mem in agent
+            if mem.get("scope", "").replace("agent:", "") == active_agent_id
+        ]
+
+        if general or integration or agent:
+            parts.append("\n**User Memories:**")
+            for mem in general:
+                parts.append(f"- {mem.get('content', '')}")
+            for mem in integration:
+                scope_label = mem.get("scope", "").replace("integration:", "")
+                parts.append(f"- [{scope_label}] {mem.get('content', '')}")
+            for mem in agent:
+                parts.append(f"- {mem.get('content', '')}")
 
     parts.append("</user-profile>")
     return "\n".join(parts)
@@ -1521,9 +1566,20 @@ def build_workspace_system_prompt(
                 f"{base_prompt}\n\n**Company Profile:**\n{formatted}{truncation_note}"
             )
 
-    # Append user profile context if available
+    # Append user profile context if available. Integration-scoped memories are
+    # gated to the integrations enabled for this conversation (both Pipedream
+    # and native slugs), so the model only sees memory relevant to tools it can
+    # actually use. Passing the set (even when empty) enables gating.
     if user_profile:
-        profile_context = _build_user_profile_context(user_profile)
+        enabled_integration_slugs = {
+            it["slug"]
+            for it in (enabled_integrations or [])
+            if isinstance(it, dict) and it.get("slug")
+        }
+        active_agent_id = agent_config.agent_id if agent_config else None
+        profile_context = _build_user_profile_context(
+            user_profile, enabled_integration_slugs, active_agent_id
+        )
         if profile_context:
             base_prompt = f"{base_prompt}\n\n{profile_context}"
 

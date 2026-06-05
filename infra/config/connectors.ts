@@ -8,6 +8,11 @@
  *
  * Used by the catalog endpoint in `admin-integration-settings` so the backend
  * can reason about native connectors without depending on the frontend bundle.
+ *
+ * ⚠️ The slug list is mirrored in Python at
+ * `lambdas/python/workspace-chat-tools/tools/user_profile.py`
+ * (`_NATIVE_CONNECTOR_SLUGS`) for memory-scope validation — that Lambda can't
+ * import TS. Add/rename a slug here → mirror it there in the same commit.
  */
 export const NATIVE_CONNECTORS = [
   // OAuth2

@@ -590,6 +590,7 @@
     "adminDisabled": "Your admin has disabled personal defaults. You'll use company defaults when starting new chats.",
     "tabs": {
       "myProfile": "My Profile",
+      "memories": "Memories",
       "userSettings": "User Settings",
       "chatDefaults": "Chat Defaults",
       "approvalSettings": "Tool Approvals"
@@ -663,6 +664,30 @@
             "integrationPrefix": "Integration",
             "agentPrefix": "Agent"
           },
+          "tabs": {
+            "general": "General",
+            "integrations": "Integrations",
+            "agents": "Agents"
+          },
+          "categories": {
+            "general": "General memories apply to every chat, agent, and context.",
+            "integrations": "These memories apply only when the linked integration is enabled in a chat.",
+            "agents": "These memories apply only when chatting with the linked agent."
+          },
+          "emptyByScope": {
+            "general": "No general memories yet. Add one below, or say \"Remember this\" in any chat.",
+            "integrations": "No integration-specific memories yet. Add one below to scope it to an integration.",
+            "agents": "No agent-specific memories yet. Numa saves these automatically when you ask it to remember something while chatting with an agent."
+          },
+          "integrationPicker": {
+            "placeholder": "Select an integration",
+            "empty": "Connect an integration to scope a memory to it."
+          },
+          "agentPicker": {
+            "placeholder": "Select an agent",
+            "empty": "No agents available to scope a memory to."
+          },
+          "unknownAgent": "Unknown agent",
           "content": {
             "label": "Memory",
             "placeholder": "What should Numa remember?"

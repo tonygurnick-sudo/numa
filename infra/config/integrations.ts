@@ -1,5 +1,10 @@
 /**
  * Shared configuration for supported Pipedream integrations across infrastructure
+ *
+ * ⚠️ The slug list is mirrored in Python at
+ * `lambdas/python/workspace-chat-tools/tools/user_profile.py`
+ * (`_PIPEDREAM_INTEGRATION_SLUGS`) for memory-scope validation — that Lambda
+ * can't import TS. Add/rename a slug here → mirror it there in the same commit.
  */
 export const SUPPORTED_INTEGRATIONS = [
   'gmail',

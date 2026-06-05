@@ -51,6 +51,26 @@ _CONNECTOR_TO_PIPEDREAM: dict[str, str] = {
     v: k for k, v in _PIPEDREAM_TO_CONNECTOR.items()
 }
 
+
+def slug_aliases(slug: str) -> set[str]:
+    """Return a slug plus its cross-method counterpart (Pipedream <-> native).
+
+    The same external service can be enabled via Pipedream or a native
+    connector under different slugs (e.g. ``google_drive`` vs ``googledrive``).
+    Callers that need to match a slug against an enabled set regardless of
+    method should compare alias sets, so an ``integration:google_drive`` memory
+    still activates when only the native ``googledrive`` connector is on (and
+    vice versa). Services with a single shared slug (e.g. ``gmail``) just
+    return ``{slug}``.
+    """
+    aliases = {slug}
+    if slug in _PIPEDREAM_TO_CONNECTOR:
+        aliases.add(_PIPEDREAM_TO_CONNECTOR[slug])
+    if slug in _CONNECTOR_TO_PIPEDREAM:
+        aliases.add(_CONNECTOR_TO_PIPEDREAM[slug])
+    return aliases
+
+
 _CACHE_TTL_SECONDS = 120
 _cache: dict[str, Optional[Method]] = {}
 _cache_loaded_at: float = 0.0
