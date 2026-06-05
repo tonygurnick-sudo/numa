@@ -1305,6 +1305,45 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'GET', path: 'data-connectors/synergy/folders/{folder_id}/items' },
     });
 
+    // Synergy file read-parity routes (job-scoped search, details, version
+    // history, weblink). Order in the handler matters — the specific suffixes
+    // (/search, /history, /weblink) are matched before the bare /files/{id}.
+    this.addLambdaFunction(this, 'data-connectors-synergy-file-search', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/files/search' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-file-history', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}/history' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-file-weblink', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}/weblink' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-file-details', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}' },
+    });
+
     this.addLambdaFunction(this, 'data-connectors-sync-configs-list', {
       addAuthorizer: true,
       lambdaDirectory: 'python/data-connectors',
@@ -1953,6 +1992,16 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           effect: 'Allow',
           actions: ['dynamodb:Query'],
           resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
+        },
+        // Native OAuth integrations (Gmail, Calendar…) live in the per-user
+        // vault, not the data-connectors table. The unified payload reads the
+        // vault to detect them — without this grant the runner can't see
+        // vault-only native connections and silently drops them
+        // (INTEGRATION_DROPPED_NO_AUTH) so the scheduled run fails.
+        {
+          effect: 'Allow',
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [`arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/*`],
         },
         // GetItem for Level-3 admin overrides (read on each invocation so
         // admin toggle changes apply immediately). UpdateItem for the

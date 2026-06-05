@@ -35,8 +35,23 @@ export type SynergyFile = {
   file_id: string;
   name: string;
   size?: number;
+  size_readable?: string;
   content_type?: string;
   modified_at?: string;
+  created_on?: string;
+  /** Latest 12d version number. */
+  version?: number;
+  /** 12d workflow state (e.g. "None", "Issued"). */
+  state?: string;
+  /** Custom "Revision" attribute value (e.g. "D"). */
+  revision?: string;
+  /** Custom "Document Status" attribute value (e.g. "Issued for Approval"). */
+  document_status?: string;
+  last_changed_by?: string;
+  file_type?: string;
+  path?: string;
+  is_checked_out?: boolean;
+  checked_out_by?: string;
 };
 
 export type SynergyFolderItemsResponse = {
@@ -44,6 +59,29 @@ export type SynergyFolderItemsResponse = {
   subfolders: SynergyFolder[];
   files: SynergyFile[];
   files_total?: number;
+  page?: number;
+  page_size?: number;
+  total_rows?: number;
+  total_pages?: number;
+};
+
+export type SynergyFileSearchResponse = {
+  items: SynergyFile[];
+  /** Echoed back: the job the search was scoped to and the query run. */
+  job_id?: string;
+  query?: string;
+  total_rows?: number;
+};
+
+export type SynergyHistoryEntry = {
+  version?: number;
+  changed_by?: string;
+  changed_at?: string;
+  change_type?: number;
+};
+
+export type SynergyFileHistoryResponse = {
+  items: SynergyHistoryEntry[];
   page?: number;
   page_size?: number;
   total_rows?: number;

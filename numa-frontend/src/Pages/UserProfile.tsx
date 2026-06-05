@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFlag } from '../utils/featureFlags';
-import { Alert, Button, Dropdown, Form, InputGroup, Modal, Spinner, Tab } from 'react-bootstrap';
+import { Alert, Button, Form, InputGroup, Modal, Spinner, Tab } from 'react-bootstrap';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
@@ -21,7 +21,6 @@ import {
   ChatSettingsService,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_USER_PROFILE,
-  type Memory,
   type UserChatSettingsUpdate,
   type UserProfile,
 } from '../Services/ChatSettingsService';
@@ -34,6 +33,10 @@ import {
   connectorSlugForPipedream,
   pipedreamSlugForConnector,
 } from '../Components/Integrations/integrationCatalogHelpers';
+import {
+  IntegrationAccountSubmenu,
+  type IntegrationAccount,
+} from '../Components/Integrations/IntegrationAccountSubmenu';
 import { withPRM } from '../utils/prmUtils';
 import { MY_FILES_SENTINEL, expandMyFilesSentinel, sortKnowledgeBases } from '../constants/knowledgeBase';
 
@@ -55,8 +58,20 @@ import ProfileAvatar from '../Components/ProfileAvatar';
 import { invalidateProfileBlob } from '../utils/profileImageCache';
 import { RichTextEditor } from '../Components/Ops/Shared/RichTextEditor';
 import { CharCount } from '../Components/CharCount';
+import { MemoriesPanel } from '../Components/Memories/MemoriesPanel';
+import { listAgents, getCachedAgents } from '../Services/AgentsService';
+import type { AgentSummary } from '../types/agents';
 
-type Connection = { id: string; isConnected: boolean; mcpServerUrl?: string };
+type Connection = {
+  id: string;
+  isConnected: boolean;
+  mcpServerUrl?: string;
+  // FEAT-019: admin multi-account opt-in + the user's connected accounts for
+  // this integration. Drive the per-account submenu in the Chat Defaults
+  // picker. Empty/undefined accounts = legacy single-account UX (no submenu).
+  allowMultipleAccounts?: boolean;
+  accounts?: Array<{ account_id: string; name?: string | null; healthy?: boolean | null; dead?: boolean | null }>;
+};
 
 const IMAGE_TARGET_SIZE = 256;
 const IMAGE_MAX_BYTES = 4 * 1024 * 1024; // 4 MB
@@ -67,7 +82,6 @@ const LIMIT_TITLE = 100;
 const LIMIT_URL = 200;
 const LIMIT_LONG = 500;
 const LIMIT_CUSTOM_INSTRUCTIONS = 1500;
-const LIMIT_MEMORY = 300;
 
 interface UserProfilePageProps {
   embedded?: boolean;
@@ -326,14 +340,6 @@ export default function UserProfilePage({
   const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Memory editing state
-  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
-  const [editingMemoryContent, setEditingMemoryContent] = useState('');
-  const [editingMemoryScope, setEditingMemoryScope] = useState('general');
-  const [addingMemory, setAddingMemory] = useState(false);
-  const [newMemoryContent, setNewMemoryContent] = useState('');
-  const [newMemoryScope, setNewMemoryScope] = useState('general');
-
   const resizeToCanvas = useCallback(
     async (file: File): Promise<Blob> => {
       const url = URL.createObjectURL(file);
@@ -512,6 +518,31 @@ export default function UserProfilePage({
   // for the workspace AND the user has actually authed. Mirror of
   // `availableConnections` (Pipedream) so the UI can list both kinds.
   const [availableNativeConnectors, setAvailableNativeConnectors] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Agents — used by the Memories tab to resolve agent-scoped memory names
+  // (memory.scope `agent:{id}`) and to populate the agent picker when adding
+  // an agent-scoped memory.
+  const [agents, setAgents] = useState<AgentSummary[]>(() => getCachedAgents('all') ?? []);
+  const [agentsLoading, setAgentsLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (previewMode) return;
+    let cancelled = false;
+    setAgentsLoading(true);
+    (async () => {
+      try {
+        const list = await listAgents(numaGet, { scope: 'all' });
+        if (!cancelled) setAgents(list);
+      } catch {
+        // Non-fatal — agent-scoped memories fall back to their raw id / "unknown agent".
+      } finally {
+        if (!cancelled) setAgentsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [previewMode, numaGet]);
 
   useEffect(() => {
     // Skip fetching while the admin view is active — re-fetch when switching back to 'user'.
@@ -701,29 +732,41 @@ export default function UserProfilePage({
         ]);
         if (cancelled) return;
 
-        // 1. admin integration-settings (admin-side enable + denyTools map)
-        const settingsMap: Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }> = {};
+        // 1. admin integration-settings (admin-side enable + denyTools map +
+        //    FEAT-019 multi-account opt-in). `allowMultipleAccounts` is on the
+        //    same /api/settings/integrations item; capturing it here lets the
+        //    Chat Defaults picker show the per-account submenu.
+        const settingsMap: Record<
+          string,
+          { status: 'enabled' | 'disabled'; denyTools: string[]; allowMultipleAccounts: boolean }
+        > = {};
         const items = Array.isArray(integrationSettingsItems)
           ? (integrationSettingsItems as Array<{
               integration: string;
               status: 'enabled' | 'disabled';
               denyTools?: string[];
+              allowMultipleAccounts?: boolean;
             }>)
           : [];
         for (const item of items) {
           settingsMap[item.integration] = {
             status: item.status,
             denyTools: item.denyTools || [],
+            allowMultipleAccounts: item.allowMultipleAccounts === true,
           };
         }
 
-        // 2. Pipedream connections (filter to admin-enabled + user-connected)
+        // 2. Pipedream connections (filter to admin-enabled + user-connected).
+        //    Carry the connected-account list + admin multi-account flag so the
+        //    picker can render per-account checkboxes (FEAT-019).
         const pipedreamConnections: Connection[] = pipedreamStatus
           ? (pipedreamStatus.connections || [])
               .map((conn) => ({
                 id: conn.app_name,
                 isConnected: conn.status === 'connected',
                 mcpServerUrl: undefined as string | undefined,
+                allowMultipleAccounts: settingsMap[conn.app_name]?.allowMultipleAccounts === true,
+                accounts: conn.accounts ?? [],
               }))
               .filter((c) => c.isConnected)
               .filter((c) => settingsMap[c.id]?.status !== 'disabled')
@@ -829,6 +872,10 @@ export default function UserProfilePage({
         dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
         defaultConnectionIds: companyDefaults.defaultConnectionIds,
         defaultNativeConnectorIds: companyDefaults.defaultNativeConnectorIds,
+        // Account scope is user-only — company defaults never carry it, so an
+        // empty map (= "all accounts") is the correct preview when user
+        // defaults are disabled.
+        defaultAccountsByApp: {} as Record<string, string[]>,
       };
     }
     return userDefaults;
@@ -949,6 +996,7 @@ export default function UserProfilePage({
         dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
         defaultConnectionIds: userDefaults.defaultConnectionIds,
         defaultNativeConnectorIds: userDefaults.defaultNativeConnectorIds,
+        defaultAccountsByApp: userDefaults.defaultAccountsByApp,
         language: userDefaults.language,
         approvalMode: userDefaults.approvalMode,
         numaToolApprovalMode: userDefaults.numaToolApprovalMode,
@@ -1241,352 +1289,6 @@ export default function UserProfilePage({
                 <CharCount value={userProfile.customInstructions} max={LIMIT_CUSTOM_INSTRUCTIONS} />
               </div>
 
-              {/* ── Section 3: Memories ── */}
-              <div className="profile-section">
-                <div className="profile-section__title">{t('userProfile.profile.fields.memories.sectionTitle')}</div>
-                <p className="profile-section__description">{t('userProfile.profile.fields.memories.description')}</p>
-
-                {userProfile.memories.length === 0 && !addingMemory && (
-                  <div className="profile-empty-state">{t('userProfile.profile.fields.memories.empty')}</div>
-                )}
-
-                {/* Existing memories list */}
-                {userProfile.memories.map((memory) => (
-                  <div key={memory.id} className="profile-memory-item">
-                    {editingMemoryId === memory.id ? (
-                      <div
-                        className="profile-memory-form"
-                        style={{ border: 'none', background: 'transparent', padding: 0, margin: 0 }}
-                      >
-                        <Form.Control
-                          as="textarea"
-                          rows={2}
-                          maxLength={LIMIT_MEMORY}
-                          value={editingMemoryContent}
-                          onChange={(e) => setEditingMemoryContent(e.target.value)}
-                          className="mb-2"
-                          placeholder={t('userProfile.profile.fields.memories.content.placeholder')}
-                        />
-                        <div className="profile-memory-form__controls">
-                          <Dropdown className="memory-scope-dropdown">
-                            <Dropdown.Toggle
-                              variant="outline-secondary"
-                              size="sm"
-                              className="memory-scope-dropdown__toggle"
-                            >
-                              {editingMemoryScope === 'general' ? (
-                                <>
-                                  <i className="bi bi-globe2 memory-scope-dropdown__general-icon" />
-                                  {t('userProfile.profile.fields.memories.scope.general')}
-                                </>
-                              ) : (
-                                <>
-                                  <img
-                                    src={getConnectionIcon(editingMemoryScope.replace('integration:', ''))}
-                                    alt=""
-                                    className="memory-scope-dropdown__icon"
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                    }}
-                                  />
-                                  {getConnectionDisplayName(editingMemoryScope.replace('integration:', ''))}
-                                </>
-                              )}
-                            </Dropdown.Toggle>
-                            <Dropdown.Menu className="memory-scope-dropdown__menu">
-                              <Dropdown.Item
-                                active={editingMemoryScope === 'general'}
-                                onClick={() => setEditingMemoryScope('general')}
-                                className="memory-scope-dropdown__item"
-                              >
-                                <i className="bi bi-globe2 memory-scope-dropdown__general-icon" />
-                                <div className="memory-scope-dropdown__item-text">
-                                  <span className="memory-scope-dropdown__item-name">
-                                    {t('userProfile.profile.fields.memories.scope.general')}
-                                  </span>
-                                  <span className="memory-scope-dropdown__item-desc">
-                                    {t('userProfile.profile.fields.memories.scope.generalDescription')}
-                                  </span>
-                                </div>
-                              </Dropdown.Item>
-                              {availableConnections.length > 0 && (
-                                <>
-                                  <Dropdown.Divider />
-                                  <div className="memory-scope-dropdown__group-header">
-                                    <span className="memory-scope-dropdown__group-title">
-                                      {t('userProfile.profile.fields.memories.scope.integrationsHeader')}
-                                    </span>
-                                    <span className="memory-scope-dropdown__group-desc">
-                                      {t('userProfile.profile.fields.memories.scope.integrationsDescription')}
-                                    </span>
-                                  </div>
-                                  {availableConnections
-                                    .sort((a, b) =>
-                                      getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id))
-                                    )
-                                    .map((conn) => (
-                                      <Dropdown.Item
-                                        key={conn.id}
-                                        active={editingMemoryScope === `integration:${conn.id}`}
-                                        onClick={() => setEditingMemoryScope(`integration:${conn.id}`)}
-                                        className="memory-scope-dropdown__item"
-                                      >
-                                        <img
-                                          src={getConnectionIcon(conn.id)}
-                                          alt=""
-                                          className="memory-scope-dropdown__icon"
-                                          onError={(e) => {
-                                            e.currentTarget.style.display = 'none';
-                                          }}
-                                        />
-                                        <span className="memory-scope-dropdown__item-name">
-                                          {getConnectionDisplayName(conn.id)}
-                                        </span>
-                                      </Dropdown.Item>
-                                    ))}
-                                </>
-                              )}
-                            </Dropdown.Menu>
-                          </Dropdown>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => {
-                              if (!editingMemoryContent.trim()) return;
-                              setUserProfile((prev) => ({
-                                ...prev,
-                                memories: prev.memories.map((m) =>
-                                  m.id === memory.id
-                                    ? { ...m, content: editingMemoryContent.trim(), scope: editingMemoryScope }
-                                    : m
-                                ),
-                              }));
-                              setEditingMemoryId(null);
-                              setProfileDirty(true);
-                            }}
-                          >
-                            {t('userProfile.profile.fields.memories.saveMemory')}
-                          </Button>
-                          <Button variant="outline-secondary" size="sm" onClick={() => setEditingMemoryId(null)}>
-                            {t('userProfile.profile.fields.memories.cancelMemory')}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="d-flex justify-content-between align-items-start">
-                        <div className="flex-grow-1">
-                          <div className="profile-memory-item__content">{memory.content}</div>
-                          <div className="profile-memory-item__meta">
-                            <span className="profile-memory-badge">
-                              {memory.scope === 'general' ? (
-                                <>
-                                  <i className="bi bi-globe2 memory-scope-badge__icon" />
-                                  {t('userProfile.profile.fields.memories.scope.general')}
-                                </>
-                              ) : memory.scope.startsWith('integration:') ? (
-                                <>
-                                  <img
-                                    src={getConnectionIcon(memory.scope.replace('integration:', ''))}
-                                    alt=""
-                                    className="memory-scope-badge__img"
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                    }}
-                                  />
-                                  {getConnectionDisplayName(memory.scope.replace('integration:', ''))}
-                                </>
-                              ) : memory.scope.startsWith('agent:') ? (
-                                `${t('userProfile.profile.fields.memories.scope.agentPrefix')}: ${memory.scope.replace('agent:', '').slice(0, 8)}`
-                              ) : (
-                                memory.scope
-                              )}
-                            </span>
-                            <span className="profile-memory-source">
-                              {memory.source === 'ai'
-                                ? t('userProfile.profile.fields.memories.source.ai')
-                                : t('userProfile.profile.fields.memories.source.user')}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="profile-memory-item__actions">
-                          <Button
-                            className="profile-memory-action-btn"
-                            variant="outline-secondary"
-                            size="sm"
-                            disabled={profileSaving}
-                            onClick={() => {
-                              setEditingMemoryId(memory.id);
-                              setEditingMemoryContent(memory.content);
-                              setEditingMemoryScope(memory.scope);
-                            }}
-                          >
-                            {t('userProfile.profile.fields.memories.editMemory')}
-                          </Button>
-                          <Button
-                            className="profile-memory-action-btn"
-                            variant="outline-danger"
-                            size="sm"
-                            disabled={profileSaving}
-                            onClick={() => {
-                              setUserProfile((prev) => ({
-                                ...prev,
-                                memories: prev.memories.filter((m) => m.id !== memory.id),
-                              }));
-                              setProfileDirty(true);
-                            }}
-                          >
-                            {t('userProfile.profile.fields.memories.deleteMemory')}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {/* Add memory form */}
-                {addingMemory ? (
-                  <div className="profile-memory-form">
-                    <Form.Control
-                      as="textarea"
-                      rows={2}
-                      maxLength={LIMIT_MEMORY}
-                      value={newMemoryContent}
-                      onChange={(e) => setNewMemoryContent(e.target.value)}
-                      className="mb-2"
-                      placeholder={t('userProfile.profile.fields.memories.content.placeholder')}
-                    />
-                    <div className="profile-memory-form__controls">
-                      <Dropdown className="memory-scope-dropdown">
-                        <Dropdown.Toggle
-                          variant="outline-secondary"
-                          size="sm"
-                          className="memory-scope-dropdown__toggle"
-                        >
-                          {newMemoryScope === 'general' ? (
-                            <>
-                              <i className="bi bi-globe2 memory-scope-dropdown__general-icon" />
-                              {t('userProfile.profile.fields.memories.scope.general')}
-                            </>
-                          ) : (
-                            <>
-                              <img
-                                src={getConnectionIcon(newMemoryScope.replace('integration:', ''))}
-                                alt=""
-                                className="memory-scope-dropdown__icon"
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                }}
-                              />
-                              {getConnectionDisplayName(newMemoryScope.replace('integration:', ''))}
-                            </>
-                          )}
-                        </Dropdown.Toggle>
-                        <Dropdown.Menu className="memory-scope-dropdown__menu">
-                          <Dropdown.Item
-                            active={newMemoryScope === 'general'}
-                            onClick={() => setNewMemoryScope('general')}
-                            className="memory-scope-dropdown__item"
-                          >
-                            <i className="bi bi-globe2 memory-scope-dropdown__general-icon" />
-                            <div className="memory-scope-dropdown__item-text">
-                              <span className="memory-scope-dropdown__item-name">
-                                {t('userProfile.profile.fields.memories.scope.general')}
-                              </span>
-                              <span className="memory-scope-dropdown__item-desc">
-                                {t('userProfile.profile.fields.memories.scope.generalDescription')}
-                              </span>
-                            </div>
-                          </Dropdown.Item>
-                          {availableConnections.length > 0 && (
-                            <>
-                              <Dropdown.Divider />
-                              <div className="memory-scope-dropdown__group-header">
-                                <span className="memory-scope-dropdown__group-title">
-                                  {t('userProfile.profile.fields.memories.scope.integrationsHeader')}
-                                </span>
-                                <span className="memory-scope-dropdown__group-desc">
-                                  {t('userProfile.profile.fields.memories.scope.integrationsDescription')}
-                                </span>
-                              </div>
-                              {availableConnections
-                                .sort((a, b) =>
-                                  getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id))
-                                )
-                                .map((conn) => (
-                                  <Dropdown.Item
-                                    key={conn.id}
-                                    active={newMemoryScope === `integration:${conn.id}`}
-                                    onClick={() => setNewMemoryScope(`integration:${conn.id}`)}
-                                    className="memory-scope-dropdown__item"
-                                  >
-                                    <img
-                                      src={getConnectionIcon(conn.id)}
-                                      alt=""
-                                      className="memory-scope-dropdown__icon"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                      }}
-                                    />
-                                    <span className="memory-scope-dropdown__item-name">
-                                      {getConnectionDisplayName(conn.id)}
-                                    </span>
-                                  </Dropdown.Item>
-                                ))}
-                            </>
-                          )}
-                        </Dropdown.Menu>
-                      </Dropdown>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => {
-                          if (!newMemoryContent.trim()) return;
-                          const newMemory: Memory = {
-                            id: crypto.randomUUID(),
-                            content: newMemoryContent.trim(),
-                            scope: newMemoryScope,
-                            createdAt: new Date().toISOString(),
-                            source: 'user',
-                          };
-                          setUserProfile((prev) => ({
-                            ...prev,
-                            memories: [...prev.memories, newMemory],
-                          }));
-                          setNewMemoryContent('');
-                          setNewMemoryScope('general');
-                          setAddingMemory(false);
-                          setProfileDirty(true);
-                        }}
-                      >
-                        {t('userProfile.profile.fields.memories.saveMemory')}
-                      </Button>
-                      <Button
-                        variant="outline-secondary"
-                        size="sm"
-                        onClick={() => {
-                          setAddingMemory(false);
-                          setNewMemoryContent('');
-                          setNewMemoryScope('general');
-                        }}
-                      >
-                        {t('userProfile.profile.fields.memories.cancelMemory')}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <Button
-                    className="profile-add-memory-btn"
-                    disabled={profileSaving || userProfile.memories.length >= 50}
-                    onClick={() => setAddingMemory(true)}
-                  >
-                    <i className="bi bi-plus-lg"></i>
-                    {userProfile.memories.length >= 50
-                      ? t('userProfile.profile.fields.memories.limitReached')
-                      : t('userProfile.profile.fields.memories.addMemory')}
-                  </Button>
-                )}
-              </div>
-
               <div className="profile-actions">
                 <Button variant="primary" disabled={!profileDirty || profileSaving} onClick={handleSaveProfile}>
                   {profileSaving ? (
@@ -1603,6 +1305,40 @@ export default function UserProfilePage({
                 </Button>
               </div>
             </Form>
+          )}
+        </Tab>
+        <Tab
+          eventKey="memories"
+          title={
+            <span>
+              <i className="bi bi-stars me-2"></i>
+              {t('userProfile.tabs.memories')}
+            </span>
+          }
+        >
+          {profileError && (
+            <Alert variant="danger" className="mb-3">
+              {profileError}
+            </Alert>
+          )}
+          {profileLoading ? (
+            <div className="text-center py-4">
+              <Spinner animation="border" />
+            </div>
+          ) : (
+            <MemoriesPanel
+              memories={userProfile.memories}
+              onChange={(next) => {
+                setUserProfile((prev) => ({ ...prev, memories: next }));
+                setProfileDirty(true);
+              }}
+              availableConnections={availableConnections}
+              agents={agents}
+              agentsLoading={agentsLoading}
+              saving={profileSaving}
+              dirty={profileDirty}
+              onSave={handleSaveProfile}
+            />
           )}
         </Tab>
         <Tab
@@ -2081,6 +1817,10 @@ export default function UserProfilePage({
                             iconClass?: string;
                             pipedreamSlug?: string;
                             nativeSlug?: string;
+                            // FEAT-019: populated for Pipedream rows only —
+                            // drives the per-account submenu.
+                            allowMultipleAccounts?: boolean;
+                            accounts?: IntegrationAccount[];
                           };
                           const rows: Row[] = [];
 
@@ -2097,6 +1837,8 @@ export default function UserProfilePage({
                               iconClass: getConnectionFallbackIcon(pdSlug),
                               pipedreamSlug: pdSlug,
                               nativeSlug: nativeSlug ?? undefined,
+                              allowMultipleAccounts: conn.allowMultipleAccounts,
+                              accounts: conn.accounts,
                             });
                           }
 
@@ -2134,55 +1876,101 @@ export default function UserProfilePage({
                               : false;
                             const checked = isPdEnabled || isNativeEnabled;
                             return (
-                              <Form.Check
-                                key={row.key}
-                                type="checkbox"
-                                id={`profile-defaults-${row.key}`}
-                                label={
-                                  <span className="d-flex align-items-center gap-2">
-                                    {row.iconSrc ? (
-                                      <img
-                                        src={row.iconSrc}
-                                        alt={row.label}
-                                        className="profile-integration-icon"
-                                        onError={(e) => {
-                                          e.currentTarget.style.display = 'none';
-                                        }}
-                                      />
-                                    ) : (
-                                      <i className={row.iconClass} />
-                                    )}
-                                    {row.label}
-                                  </span>
-                                }
-                                checked={checked}
-                                disabled={disableDefaultsForm}
-                                onChange={(e) => {
-                                  const nextChecked = e.target.checked;
-                                  setUserDefaults((prev) => {
-                                    const pd = prev.defaultConnectionIds;
-                                    const nv = prev.defaultNativeConnectorIds ?? [];
-                                    let nextPd = pd;
-                                    let nextNv = nv;
-                                    if (row.pipedreamSlug) {
-                                      nextPd = nextChecked
-                                        ? Array.from(new Set([...pd, row.pipedreamSlug]))
-                                        : pd.filter((x) => x !== row.pipedreamSlug);
+                              <div key={row.key}>
+                                <Form.Check
+                                  type="checkbox"
+                                  id={`profile-defaults-${row.key}`}
+                                  label={
+                                    <span className="d-flex align-items-center gap-2">
+                                      {row.iconSrc ? (
+                                        <img
+                                          src={row.iconSrc}
+                                          alt={row.label}
+                                          className="profile-integration-icon"
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = 'none';
+                                          }}
+                                        />
+                                      ) : (
+                                        <i className={row.iconClass} />
+                                      )}
+                                      {row.label}
+                                    </span>
+                                  }
+                                  checked={checked}
+                                  disabled={disableDefaultsForm}
+                                  onChange={(e) => {
+                                    const nextChecked = e.target.checked;
+                                    setUserDefaults((prev) => {
+                                      const pd = prev.defaultConnectionIds;
+                                      const nv = prev.defaultNativeConnectorIds ?? [];
+                                      let nextPd = pd;
+                                      let nextNv = nv;
+                                      if (row.pipedreamSlug) {
+                                        nextPd = nextChecked
+                                          ? Array.from(new Set([...pd, row.pipedreamSlug]))
+                                          : pd.filter((x) => x !== row.pipedreamSlug);
+                                      }
+                                      if (row.nativeSlug) {
+                                        nextNv = nextChecked
+                                          ? Array.from(new Set([...nv, row.nativeSlug]))
+                                          : nv.filter((x) => x !== row.nativeSlug);
+                                      }
+                                      // FEAT-019: drop any saved account scope for
+                                      // a Pipedream integration that's been turned
+                                      // off — a stale allow-list shouldn't linger.
+                                      let nextAccounts = prev.defaultAccountsByApp ?? {};
+                                      if (row.pipedreamSlug && !nextChecked && nextAccounts[row.pipedreamSlug]) {
+                                        nextAccounts = { ...nextAccounts };
+                                        delete nextAccounts[row.pipedreamSlug];
+                                      }
+                                      return {
+                                        ...prev,
+                                        defaultConnectionIds: nextPd,
+                                        defaultNativeConnectorIds: nextNv,
+                                        defaultAccountsByApp: nextAccounts,
+                                      };
+                                    });
+                                    setDirty(true);
+                                  }}
+                                />
+                                {/* FEAT-019: per-account scope for multi-account
+                                    Pipedream integrations. The submenu self-hides
+                                    unless the admin opted in AND the user has >1
+                                    account connected. */}
+                                {row.pipedreamSlug && (
+                                  <IntegrationAccountSubmenu
+                                    connectionId={row.pipedreamSlug}
+                                    accounts={row.accounts ?? []}
+                                    allowMultipleAccounts={row.allowMultipleAccounts ?? false}
+                                    isEnabled={checked}
+                                    selectedAccountIds={
+                                      (displayedSettings.defaultAccountsByApp ?? {})[row.pipedreamSlug]
                                     }
-                                    if (row.nativeSlug) {
-                                      nextNv = nextChecked
-                                        ? Array.from(new Set([...nv, row.nativeSlug]))
-                                        : nv.filter((x) => x !== row.nativeSlug);
-                                    }
-                                    return {
-                                      ...prev,
-                                      defaultConnectionIds: nextPd,
-                                      defaultNativeConnectorIds: nextNv,
-                                    };
-                                  });
-                                  setDirty(true);
-                                }}
-                              />
+                                    disabled={disableDefaultsForm}
+                                    onChange={(nextAccountIds) => {
+                                      const slug = row.pipedreamSlug!;
+                                      setUserDefaults((prev) => {
+                                        const all = row.accounts?.map((a) => a.account_id) ?? [];
+                                        const nextMap = { ...(prev.defaultAccountsByApp ?? {}) };
+                                        // Persist a narrowed subset only; "all
+                                        // selected" reverts to the empty/absent
+                                        // default the proxy treats as legacy.
+                                        if (
+                                          nextAccountIds.length === 0 ||
+                                          (all.length > 0 && nextAccountIds.length === all.length)
+                                        ) {
+                                          delete nextMap[slug];
+                                        } else {
+                                          nextMap[slug] = nextAccountIds;
+                                        }
+                                        return { ...prev, defaultAccountsByApp: nextMap };
+                                      });
+                                      setDirty(true);
+                                    }}
+                                  />
+                                )}
+                              </div>
                             );
                           });
                         })()}

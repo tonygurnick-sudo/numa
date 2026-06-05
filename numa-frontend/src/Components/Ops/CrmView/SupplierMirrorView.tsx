@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   DndContext,
   PointerSensor,
-  closestCenter,
   useSensor,
   useSensors,
   DragOverlay,
@@ -12,6 +11,7 @@ import {
   type DragOverEvent,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { kanbanCollisionDetection } from '../Shared/kanbanCollision';
 import { Button, Form, Badge, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 
@@ -141,35 +141,12 @@ function DroppableSupplierColumn({
   const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
 
   const stageColor = stage.colorPosition ? getColorForPosition(stage.colorPosition) : TEAL_ACCENT;
-  const textColor = getContrastTextColor(stageColor);
 
   return (
-    <div className="kanban-column" style={{ background: isOver ? '#f0fdfa' : undefined }}>
-      <div
-        style={{
-          backgroundColor: stageColor,
-          color: textColor,
-          borderRadius: 8,
-          padding: '7px 12px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 12,
-        }}
-      >
-        <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>{stage.name}</span>
-        <span
-          style={{
-            backgroundColor: 'rgba(255,255,255,0.25)',
-            borderRadius: 10,
-            padding: '1px 7px',
-            fontSize: '0.68rem',
-            fontWeight: 700,
-            color: textColor,
-          }}
-        >
-          {suppliers.length}
-        </span>
+    <div className="kanban-column" style={{ background: isOver ? 'var(--ops-hover-bg)' : undefined }}>
+      <div className="ops-stage-pill" style={{ '--ops-stage-color': stageColor } as React.CSSProperties}>
+        <span className="kanban-column-name">{stage.name}</span>
+        <span className="ops-stage-pill-count">{suppliers.length}</span>
       </div>
 
       <div ref={setNodeRef}>
@@ -1195,7 +1172,7 @@ export function SupplierMirrorView(): React.JSX.Element {
         ) : (
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={kanbanCollisionDetection}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={(e) => void handleDragEnd(e)}

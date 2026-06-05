@@ -2,6 +2,9 @@ import type {
   SynergyFolderItemsResponse,
   SynergyJobsResponse,
   SynergyJobFoldersResponse,
+  SynergyFileSearchResponse,
+  SynergyFileHistoryResponse,
+  SynergyFile,
   SyncConfig,
 } from '../types/synergySync';
 
@@ -35,6 +38,45 @@ export const SynergyDataConnectorService = {
       `/api/data-connectors/synergy/folders/${folderId}/items`,
       params
     )) as SynergyFolderItemsResponse;
+  },
+
+  /**
+   * Search files within a job by name AND contents (merged).
+   *
+   * Synergy file search is job-scoped — there is no global/all-jobs search, so
+   * a `jobId` (the bare `N_N` IDString of the job you're inside) is required.
+   * The backend searches filename and document contents and merges the results.
+   */
+  async searchFiles(
+    numaGet: NumaGet,
+    jobId: string,
+    query: string,
+    opts?: { page_size?: number }
+  ): Promise<SynergyFileSearchResponse> {
+    return (await numaGet('/api/data-connectors/synergy/files/search', {
+      q: query,
+      job_id: jobId,
+      page_size: opts?.page_size,
+    })) as SynergyFileSearchResponse;
+  },
+
+  async getFileHistory(
+    numaGet: NumaGet,
+    fileId: string,
+    params?: { page?: number; page_size?: number }
+  ): Promise<SynergyFileHistoryResponse> {
+    return (await numaGet(
+      `/api/data-connectors/synergy/files/${fileId}/history`,
+      params
+    )) as SynergyFileHistoryResponse;
+  },
+
+  async getFileDetails(numaGet: NumaGet, fileId: string): Promise<SynergyFile> {
+    return (await numaGet(`/api/data-connectors/synergy/files/${fileId}`)) as SynergyFile;
+  },
+
+  async getFileWeblink(numaGet: NumaGet, fileId: string): Promise<{ weblink?: string }> {
+    return (await numaGet(`/api/data-connectors/synergy/files/${fileId}/weblink`)) as { weblink?: string };
   },
 
   async listSyncConfigs(numaGet: NumaGet): Promise<SyncConfig[]> {

@@ -150,7 +150,9 @@
       "description": "Run your agent when an event occurs, like a new email arrives.",
       "comingSoon": "Coming soon",
       "triggersDisabled": "Event triggers aren't enabled for your account yet. Contact your admin to turn them on.",
-      "gmailNotConnected": "Connect your Gmail account in Data Connectors to use email triggers.",
+      "gmailNotConnected": "Connect the native Gmail connector in Data Connectors to use email triggers. The Gmail integration used in chat won't power triggers — you need the native connection.",
+      "gmailCheckFailed": "We couldn't verify your Gmail connection. Check your network and try again.",
+      "retryCheck": "Try again",
       "checkingGmail": "Checking Gmail connection...",
       "builder": {
         "title": "Set up the trigger",

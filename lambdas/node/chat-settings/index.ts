@@ -2,6 +2,8 @@ import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { SUPPORTED_INTEGRATIONS } from '../../../infra/config/integrations';
+import { NATIVE_CONNECTORS } from '../../../infra/config/connectors';
 
 const TABLE_NAME = process.env.CHAT_SETTINGS_TABLE_NAME as string;
 const CLIENT_NAME = process.env.CLIENT_NAME as string;
@@ -48,6 +50,10 @@ export type ChatSettings = {
   /** Default per-chat-enable list for NATIVE connectors. Mirrors
    *  defaultConnectionIds for Pipedream. Empty = "none enabled by default". */
   defaultNativeConnectorIds: string[];
+  /** FEAT-019: per-chat default account scope for multi-account Pipedream
+   *  integrations. Pipedream app slug → allow-list of account IDs. Absent
+   *  slug or empty array = "all connected accounts" (legacy default). */
+  defaultAccountsByApp: Record<string, string[]>;
   language: string | null;
   approvalMode: ApprovalMode;
   numaToolApprovalMode: NumaToolApprovalMode;
@@ -126,6 +132,27 @@ const MAX_MEMORY_CONTENT = 300;
 const MAX_MEMORIES = 50;
 const VALID_SCOPE_PATTERN = /^(general|integration:.+|agent:.+)$/;
 
+// Slugs a memory may legitimately be scoped to via `integration:{slug}`.
+// Mirrors the Python copy in
+// lambdas/python/workspace-chat-tools/tools/user_profile.py.
+const VALID_INTEGRATION_SLUGS = new Set<string>([...SUPPORTED_INTEGRATIONS, ...NATIVE_CONNECTORS]);
+
+// Downgrade an `integration:{slug}` scope whose slug isn't a real integration
+// (e.g. a tool group like "numa-ops") to "general".
+//
+// This is the persistence/save path (picker-driven UI + profile re-saves), so
+// it HEALS rather than rejects: content is preserved and any legacy bad-slug
+// memory written before validation existed becomes a general memory on the
+// next save. The AI `add_memory` tool (user_profile.py) is stricter — it
+// rejects unknown integration slugs at creation so the model re-scopes.
+function normalizeScope(scope: string): string {
+  if (scope.startsWith('integration:')) {
+    const slug = scope.slice('integration:'.length);
+    if (!VALID_INTEGRATION_SLUGS.has(slug)) return 'general';
+  }
+  return scope;
+}
+
 function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
   if (typeof data !== 'object' || data === null) return { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE };
   const obj = data as Record<string, unknown>;
@@ -147,6 +174,27 @@ function validateIntegrationApprovalModes(data: unknown): IntegrationApprovalMod
     if (typeof rawMode !== 'string') continue;
     if (!VALID_APPROVAL_MODES.includes(rawMode as ApprovalMode)) continue;
     out[slug] = rawMode as ApprovalMode;
+  }
+  return out;
+}
+
+// FEAT-019: validate the per-app account-scope map (slug → account IDs).
+// Drops malformed keys/values and empty arrays (empty = "all accounts", so
+// there's nothing to persist). Slugs and ids are trimmed/length-capped to
+// keep DDB items bounded.
+function validateAccountsByApp(data: unknown): Record<string, string[]> {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return {};
+  const obj = data as Record<string, unknown>;
+  const out: Record<string, string[]> = {};
+  for (const [rawSlug, rawIds] of Object.entries(obj)) {
+    const slug = typeof rawSlug === 'string' ? rawSlug.trim().slice(0, 128) : '';
+    if (!slug) continue;
+    if (!Array.isArray(rawIds)) continue;
+    const ids = rawIds
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      .map((id) => id.trim().slice(0, 256));
+    if (ids.length === 0) continue;
+    out[slug] = ids;
   }
   return out;
 }
@@ -181,7 +229,7 @@ function validateMemory(raw: unknown): Memory | null {
   const createdAt = typeof obj.createdAt === 'string' ? obj.createdAt : new Date().toISOString();
   const source = obj.source === 'ai' ? 'ai' : 'user';
   if (!id || !content || !VALID_SCOPE_PATTERN.test(scope)) return null;
-  return { id, content, scope, createdAt, source } as Memory;
+  return { id, content, scope: normalizeScope(scope), createdAt, source } as Memory;
 }
 
 function validateUserProfile(raw: unknown): UserProfile {
@@ -242,6 +290,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
   defaultNativeConnectorIds: [],
+  defaultAccountsByApp: {},
   language: 'browser',
   approvalMode: 'non_destructive',
   numaToolApprovalMode: { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE },
@@ -344,6 +393,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       dataAnalysisEnabled: DEFAULT_SETTINGS.dataAnalysisEnabled,
       defaultConnectionIds: DEFAULT_SETTINGS.defaultConnectionIds,
       defaultNativeConnectorIds: DEFAULT_SETTINGS.defaultNativeConnectorIds,
+      defaultAccountsByApp: { ...DEFAULT_SETTINGS.defaultAccountsByApp },
       language: DEFAULT_SETTINGS.language,
       approvalMode: DEFAULT_SETTINGS.approvalMode,
       numaToolApprovalMode: DEFAULT_SETTINGS.numaToolApprovalMode,
@@ -390,6 +440,10 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
           (id): id is string => typeof id === 'string'
         )
       : DEFAULT_SETTINGS.defaultNativeConnectorIds,
+    // FEAT-019: account scope is user-only; admins have no UI for it, but the
+    // field lives on the shared ChatSettings type so we preserve whatever is
+    // stored (empty record by default) to keep the type honest.
+    defaultAccountsByApp: validateAccountsByApp((item as Record<string, unknown>)?.defaultAccountsByApp),
     language: DEFAULT_SETTINGS.language,
     approvalMode,
     numaToolApprovalMode: validateNumaToolApprovalMode(item?.numaToolApprovalMode),
@@ -464,6 +518,12 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
   const defaultNativeConnectorIds = Array.isArray(userItem?.defaultNativeConnectorIds)
     ? (userItem!.defaultNativeConnectorIds as unknown[]).filter((id): id is string => typeof id === 'string')
     : globalSettings.defaultNativeConnectorIds;
+  // FEAT-019: account scope is user-only in practice (global is always empty).
+  // User record is authoritative when present; empty map = "all accounts".
+  const defaultAccountsByApp =
+    userItem?.defaultAccountsByApp && typeof userItem.defaultAccountsByApp === 'object'
+      ? validateAccountsByApp(userItem.defaultAccountsByApp)
+      : globalSettings.defaultAccountsByApp;
   const language =
     typeof userItem?.language === 'string' || userItem?.language === null
       ? (userItem!.language as string | null)
@@ -513,6 +573,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     dataAnalysisEnabled,
     defaultConnectionIds,
     defaultNativeConnectorIds,
+    defaultAccountsByApp,
     language,
     approvalMode,
     numaToolApprovalMode,
@@ -614,6 +675,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
                 )
               : currentGlobal.defaultNativeConnectorIds
             : currentGlobal.defaultNativeConnectorIds,
+        // Account scope is user-only; admins have no write path. Preserve
+        // whatever is stored (empty by default).
+        defaultAccountsByApp: currentGlobal.defaultAccountsByApp,
         language: DEFAULT_SETTINGS.language,
         approvalMode:
           'approvalMode' in body &&
@@ -661,6 +725,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         dataAnalysisEnabled: updatedSettings.dataAnalysisEnabled,
         defaultConnectionIds: updatedSettings.defaultConnectionIds,
         defaultNativeConnectorIds: updatedSettings.defaultNativeConnectorIds,
+        defaultAccountsByApp: updatedSettings.defaultAccountsByApp,
         language: updatedSettings.language,
         approvalMode: updatedSettings.approvalMode,
         numaToolApprovalMode: updatedSettings.numaToolApprovalMode,
@@ -716,6 +781,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         dataAnalysisEnabled: merged.dataAnalysisEnabled,
         defaultConnectionIds: merged.defaultConnectionIds,
         defaultNativeConnectorIds: merged.defaultNativeConnectorIds,
+        defaultAccountsByApp: merged.defaultAccountsByApp,
         language: merged.language,
         approvalMode: merged.approvalMode,
         numaToolApprovalMode: merged.numaToolApprovalMode,
@@ -748,6 +814,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultNativeConnectorIds: useUserChatDefaults
           ? merged.defaultNativeConnectorIds
           : globalSettings.defaultNativeConnectorIds,
+        defaultAccountsByApp: useUserChatDefaults ? merged.defaultAccountsByApp : globalSettings.defaultAccountsByApp,
         language: merged.language,
         approvalMode: merged.approvalMode,
         numaToolApprovalMode: merged.numaToolApprovalMode,
@@ -781,6 +848,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'dataAnalysisEnabled',
         'defaultConnectionIds',
         'defaultNativeConnectorIds',
+        'defaultAccountsByApp',
         'userDefaultsEnabled',
       ];
       const hasChatDefaultFields = CHAT_DEFAULT_KEYS.some((k) => k in body);
@@ -890,6 +958,21 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }
       } else if (Array.isArray((current as Record<string, unknown>).defaultNativeConnectorIds)) {
         next.defaultNativeConnectorIds = (current as UserChatSettings).defaultNativeConnectorIds;
+      }
+
+      // defaultAccountsByApp (FEAT-019) — per-app account scope map.
+      if ('defaultAccountsByApp' in body) {
+        const incoming = (body as Record<string, unknown>).defaultAccountsByApp;
+        if (incoming === null) {
+          // clear override
+        } else {
+          next.defaultAccountsByApp = validateAccountsByApp(incoming);
+        }
+      } else if (
+        typeof (current as Record<string, unknown>).defaultAccountsByApp === 'object' &&
+        (current as Record<string, unknown>).defaultAccountsByApp !== null
+      ) {
+        next.defaultAccountsByApp = validateAccountsByApp((current as Record<string, unknown>).defaultAccountsByApp);
       }
 
       // language
@@ -1024,6 +1107,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'dataAnalysisEnabled' in next ||
         'defaultConnectionIds' in next ||
         'defaultNativeConnectorIds' in next ||
+        'defaultAccountsByApp' in next ||
         'language' in next ||
         'approvalMode' in next ||
         'numaToolApprovalMode' in next ||

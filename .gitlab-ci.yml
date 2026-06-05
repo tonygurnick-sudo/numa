@@ -139,6 +139,7 @@ pre-commit:
         - lambdas/node/numa-search-api
         - lambdas/node/numa-users-api
         - lambdas/node/numa-voice-admin
+        - lambdas/node/numa-voice-router
         - lambdas/node/openapi-docs-server
         - lambdas/node/pipedream-event-receiver
         - lambdas/node/portal-deploy-assume-role

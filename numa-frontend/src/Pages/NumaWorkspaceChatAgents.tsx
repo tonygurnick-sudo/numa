@@ -847,6 +847,20 @@ const NumaWorkspaceChatAgents = () => {
         setEnabledConnections(defaultPdSlugs);
         setEnabledNativeConnectorIds(defaultNativeSlugs);
 
+        // FEAT-019: seed the per-account scope from the user's saved chat
+        // defaults, narrowed to the Pipedream integrations actually enabled
+        // above. Absent/empty entries mean "all accounts" (the proxy's legacy
+        // default), so we only carry slugs the user explicitly narrowed.
+        const defaultAccounts = userChatSettings.defaultAccountsByApp ?? {};
+        const enabledPdSet = new Set(defaultPdSlugs);
+        const seededAccounts: Record<string, string[]> = {};
+        for (const [slug, accountIds] of Object.entries(defaultAccounts)) {
+          if (enabledPdSet.has(slug) && Array.isArray(accountIds) && accountIds.length > 0) {
+            seededAccounts[slug] = accountIds;
+          }
+        }
+        setSelectedAccountsByApp(seededAccounts);
+
         // Apply user's default KB selection, filtered by what's available
         setEnabledKBIds(defaultKBIdsFromSettings);
         return;

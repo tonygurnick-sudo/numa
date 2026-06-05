@@ -4,12 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { getFlag } from '../../utils/featureFlags';
-import { VoiceAdminService, type VoiceAdminStatus, type OutboundCountryResult } from '../../Services/VoiceAdminService';
+import { VoiceAdminService, type VoiceAdminStatus } from '../../Services/VoiceAdminService';
 
 /**
  * VoiceAdminPanel — manage the tenant's Amazon Connect setup: instance status,
- * phone numbers (claim/release + outbound caller-ID), Approved Origins + agent,
- * and an outbound-country enablement request (the one thing with no Connect API).
+ * phone numbers (claim/release + outbound caller-ID), and Approved Origins + agent.
  * Reads render for any user; mutations are admin-only (enforced server-side too).
  *
  * This is the reusable body — it carries no page header chrome so it can be
@@ -18,6 +17,18 @@ import { VoiceAdminService, type VoiceAdminStatus, type OutboundCountryResult } 
  */
 
 const CLAIM_COUNTRIES = ['US', 'AU', 'NZ'];
+
+/** Pull a human-readable message out of whatever useNumaRequest throws (Error,
+ *  string, or a `{ error }` / `{ message }` body from the Lambda). */
+function extractErrorMessage(err: unknown): string | null {
+  if (!err) return null;
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message;
+  const e = err as { error?: unknown; message?: unknown };
+  if (typeof e.error === 'string') return e.error;
+  if (typeof e.message === 'string') return e.message;
+  return null;
+}
 
 export const VoiceAdminPanel: React.FC = () => {
   const { t } = useTranslation('voice');
@@ -32,8 +43,8 @@ export const VoiceAdminPanel: React.FC = () => {
   const [status, setStatus] = useState<VoiceAdminStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [outboundResult, setOutboundResult] = useState<OutboundCountryResult | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,35 +64,28 @@ export const VoiceAdminPanel: React.FC = () => {
   }, [load]);
 
   const run = useCallback(
-    async (key: string, fn: () => Promise<unknown>) => {
+    async (key: string, fn: () => Promise<unknown>, successMsg?: string) => {
       setBusy(key);
       setError(null);
+      setSuccess(null);
       try {
         await fn();
         await load();
+        if (successMsg) setSuccess(successMsg);
       } catch (err) {
         console.error('[VoiceAdmin] action failed', key, err);
-        setError(t('admin.actionError', { defaultValue: 'That action failed. Check your permissions and try again.' }));
+        // Surface the server's actual message (e.g. "No default outbound queue…")
+        // rather than a generic failure, so misconfigurations are diagnosable.
+        setError(
+          extractErrorMessage(err) ??
+            t('admin.actionError', { defaultValue: 'That action failed. Check your permissions and try again.' })
+        );
       } finally {
         setBusy(null);
       }
     },
     [load, t]
   );
-
-  const requestOutbound = useCallback(async () => {
-    setBusy('outbound');
-    setError(null);
-    try {
-      const res = await VoiceAdminService.requestOutboundCountry(numaPost, 'New Zealand');
-      setOutboundResult(res);
-    } catch (err) {
-      console.error('[VoiceAdmin] outbound request failed', err);
-      setError(t('admin.actionError', { defaultValue: 'That action failed. Check your permissions and try again.' }));
-    } finally {
-      setBusy(null);
-    }
-  }, [numaPost, t]);
 
   if (!getFlag('NUMA_VOICE')) {
     return (
@@ -99,7 +103,15 @@ export const VoiceAdminPanel: React.FC = () => {
     <>
       {error && (
         <Alert variant="danger" dismissible onClose={() => setError(null)}>
+          <i className="bi bi-exclamation-octagon-fill me-2" aria-hidden="true" />
           {error}
+        </Alert>
+      )}
+
+      {success && (
+        <Alert variant="success" dismissible onClose={() => setSuccess(null)}>
+          <i className="bi bi-check-circle-fill me-2" aria-hidden="true" />
+          {success}
         </Alert>
       )}
 
@@ -113,7 +125,7 @@ export const VoiceAdminPanel: React.FC = () => {
           <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden="true" />
           {t('admin.notConfigured', {
             defaultValue:
-              'No Amazon Connect instance found for this workspace yet. Deploy with autoProvision enabled, then refresh.',
+              'No phone system is set up for this workspace yet. Deploy with autoProvision enabled, then refresh.',
           })}
         </Alert>
       ) : (
@@ -175,56 +187,201 @@ export const VoiceAdminPanel: React.FC = () => {
               )}
             </Card.Header>
             <Card.Body className="p-0">
+              {/* Inbound routing mode (tenant-wide): personal lines vs one shared team line. */}
+              <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3 py-2 border-bottom bg-light small">
+                <span>
+                  <i className="bi bi-signpost-split me-1" aria-hidden="true" />
+                  {t('admin.inboundMode', { defaultValue: 'Inbound routing' })}:{' '}
+                  <strong>
+                    {status.mode === 'personal'
+                      ? t('admin.modePersonal', { defaultValue: 'Personal lines' })
+                      : t('admin.modeShared', { defaultValue: 'Shared team line' })}
+                  </strong>
+                </span>
+                {isAdmin && (
+                  <ButtonGroup size="sm">
+                    <Button
+                      variant={status.mode !== 'personal' ? 'primary' : 'outline-primary'}
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void run(
+                          'mode:shared',
+                          () => VoiceAdminService.setMode(numaPost, 'shared'),
+                          t('admin.modeSetShared', { defaultValue: 'Inbound now rings the whole team.' })
+                        )
+                      }
+                    >
+                      {t('admin.modeShared', { defaultValue: 'Shared team line' })}
+                    </Button>
+                    <Button
+                      variant={status.mode === 'personal' ? 'primary' : 'outline-primary'}
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void run(
+                          'mode:personal',
+                          () => VoiceAdminService.setMode(numaPost, 'personal'),
+                          t('admin.modeSetPersonal', { defaultValue: 'Owned lines now ring their owner.' })
+                        )
+                      }
+                    >
+                      {t('admin.modePersonal', { defaultValue: 'Personal lines' })}
+                    </Button>
+                  </ButtonGroup>
+                )}
+              </div>
+              {!status.inboundReady && (
+                <Alert variant="info" className="m-3 mb-0 small">
+                  <i className="bi bi-info-circle me-2" aria-hidden="true" />
+                  {t('admin.inboundNotReady', {
+                    defaultValue:
+                      'Inbound calling isn’t set up yet — numbers can make outbound calls but won’t receive any until the next deploy.',
+                  })}
+                </Alert>
+              )}
               {(status.phoneNumbers ?? []).length === 0 ? (
                 <div className="text-muted text-center py-4">
                   {t('admin.noNumbers', { defaultValue: 'No numbers claimed yet.' })}
                 </div>
               ) : (
-                <Table size="sm" hover responsive className="mb-0 align-middle">
-                  <tbody>
-                    {(status.phoneNumbers ?? []).map((n) => (
-                      <tr key={n.id}>
-                        <td className="font-monospace">{n.number}</td>
-                        <td>
-                          <Badge bg="light" text="dark" className="border">
-                            {n.countryCode} {n.type}
-                          </Badge>
-                        </td>
-                        <td className="text-end">
-                          {isAdmin && (
-                            <>
+                <>
+                  {!status.outboundCallerIdNumberId && (
+                    <Alert variant="warning" className="m-3 mb-0 small">
+                      <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden="true" />
+                      {isAdmin
+                        ? t('admin.noCallerId', {
+                            defaultValue:
+                              'No outbound caller ID is set — outbound calls will fail until you set one below.',
+                          })
+                        : t('admin.noCallerIdUser', {
+                            defaultValue:
+                              'No outbound caller ID is set — outbound calls will fail. Ask your workspace admin to set one.',
+                          })}
+                    </Alert>
+                  )}
+                  <Table size="sm" hover responsive className="mb-0 align-middle">
+                    <tbody>
+                      {(status.phoneNumbers ?? []).map((n) => (
+                        <tr key={n.id}>
+                          <td className="font-monospace">{n.number}</td>
+                          <td>
+                            <Badge bg="light" text="dark" className="border me-2">
+                              {n.countryCode} {n.type}
+                            </Badge>
+                            {n.id && n.id === status.outboundCallerIdNumberId && (
+                              <Badge bg="success" className="me-1">
+                                <i className="bi bi-telephone-outbound me-1" aria-hidden="true" />
+                                {t('admin.callerIdBadge', { defaultValue: 'Caller ID' })}
+                              </Badge>
+                            )}
+                            {n.owner ? (
+                              <Badge bg={n.mine ? 'primary' : 'secondary'}>
+                                <i className="bi bi-person-fill me-1" aria-hidden="true" />
+                                {n.mine ? t('admin.yourLine', { defaultValue: 'Your line' }) : n.owner}
+                              </Badge>
+                            ) : (
+                              <Badge bg="light" text="dark" className="border">
+                                <i className="bi bi-people me-1" aria-hidden="true" />
+                                {t('admin.sharedLine', { defaultValue: 'Shared' })}
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="text-end">
+                            {/* Owner controls — available to ALL users (self-claim). The server
+                              still enforces who may release which line. */}
+                            {!n.owner && (
                               <Button
-                                variant="outline-secondary"
+                                variant="outline-primary"
                                 size="sm"
                                 className="me-2"
                                 disabled={busy !== null || !n.id}
                                 onClick={() =>
-                                  void run(`callerid:${n.id}`, () => VoiceAdminService.setCallerId(numaPost, n.id!))
+                                  void run(
+                                    `claim-own:${n.id}`,
+                                    () => VoiceAdminService.setOwner(numaPost, n.id!),
+                                    t('admin.claimedForYou', { defaultValue: 'This line is now yours.' })
+                                  )
                                 }
                               >
-                                {t('admin.setCallerId', { defaultValue: 'Set as caller-ID' })}
+                                {busy === `claim-own:${n.id}` ? (
+                                  <Spinner size="sm" animation="border" className="me-1" />
+                                ) : null}
+                                {t('admin.claimForMe', { defaultValue: 'Claim for me' })}
                               </Button>
+                            )}
+                            {n.owner && (isAdmin || n.mine) && (
                               <Button
-                                variant="outline-danger"
+                                variant="outline-warning"
                                 size="sm"
+                                className="me-2"
                                 disabled={busy !== null || !n.id}
                                 onClick={() =>
-                                  void run(`release:${n.id}`, () => VoiceAdminService.releaseNumber(numaDelete, n.id!))
+                                  void run(
+                                    `unown:${n.id}`,
+                                    () => VoiceAdminService.unsetOwner(numaDelete, n.id!),
+                                    t('admin.lineReleased', { defaultValue: 'Line released to the shared pool.' })
+                                  )
                                 }
                               >
-                                {busy === `release:${n.id}` ? (
-                                  <Spinner size="sm" animation="border" />
-                                ) : (
-                                  t('admin.release', { defaultValue: 'Release' })
-                                )}
+                                {busy === `unown:${n.id}` ? (
+                                  <Spinner size="sm" animation="border" className="me-1" />
+                                ) : null}
+                                {t('admin.unassign', { defaultValue: 'Unassign' })}
                               </Button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
+                            )}
+                            {isAdmin && (
+                              <>
+                                {n.id && n.id === status.outboundCallerIdNumberId ? (
+                                  <Button variant="success" size="sm" className="me-2" disabled>
+                                    <i className="bi bi-check-lg me-1" aria-hidden="true" />
+                                    {t('admin.callerIdBadge', { defaultValue: 'Caller ID' })}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    className="me-2"
+                                    disabled={busy !== null || !n.id}
+                                    onClick={() =>
+                                      void run(
+                                        `callerid:${n.id}`,
+                                        () => VoiceAdminService.setCallerId(numaPost, n.id!),
+                                        t('admin.callerIdSet', {
+                                          defaultValue: 'Outbound caller ID set to {{number}}.',
+                                          number: n.number,
+                                        })
+                                      )
+                                    }
+                                  >
+                                    {busy === `callerid:${n.id}` ? (
+                                      <Spinner size="sm" animation="border" className="me-1" />
+                                    ) : null}
+                                    {t('admin.setCallerId', { defaultValue: 'Set as caller-ID' })}
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  disabled={busy !== null || !n.id}
+                                  onClick={() =>
+                                    void run(`release:${n.id}`, () =>
+                                      VoiceAdminService.releaseNumber(numaDelete, n.id!)
+                                    )
+                                  }
+                                >
+                                  {busy === `release:${n.id}` ? (
+                                    <Spinner size="sm" animation="border" />
+                                  ) : (
+                                    t('admin.release', { defaultValue: 'Release' })
+                                  )}
+                                </Button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </>
               )}
             </Card.Body>
           </Card>
@@ -277,45 +434,6 @@ export const VoiceAdminPanel: React.FC = () => {
                     ))}
                   </tbody>
                 </Table>
-              )}
-            </Card.Body>
-          </Card>
-
-          {/* ── Outbound country request ────────────────────────────────── */}
-          <Card className="mb-3">
-            <Card.Header className="fw-semibold">
-              <i className="bi bi-send me-2" aria-hidden="true" />
-              {t('admin.outbound', { defaultValue: 'Outbound country (NZ)' })}
-            </Card.Header>
-            <Card.Body>
-              <p className="small text-muted">
-                {t('admin.outboundHelp', {
-                  defaultValue:
-                    'Amazon Connect has no API to enable an outbound destination — it needs an AWS Support case. This files one for you (if your account has a Business+ support plan), otherwise it returns the details to submit in the console.',
-                })}
-              </p>
-              {isAdmin && (
-                <Button
-                  variant="outline-primary"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() => void requestOutbound()}
-                >
-                  {busy === 'outbound' ? <Spinner size="sm" animation="border" className="me-1" /> : null}
-                  {t('admin.requestOutbound', { defaultValue: 'Request NZ outbound' })}
-                </Button>
-              )}
-              {outboundResult && (
-                <Alert variant={outboundResult.filed ? 'success' : 'info'} className="mt-3 mb-0 small">
-                  {outboundResult.filed
-                    ? t('admin.caseFiled', { defaultValue: 'Support case filed: {{id}}', id: outboundResult.caseId })
-                    : t('admin.caseManual', {
-                        defaultValue: 'No support plan — submit this in the console:',
-                      })}
-                  {!outboundResult.filed && outboundResult.manual && (
-                    <pre className="mt-2 mb-0 small">{outboundResult.manual.communicationBody}</pre>
-                  )}
-                </Alert>
               )}
             </Card.Body>
           </Card>

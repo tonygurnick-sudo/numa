@@ -14,6 +14,7 @@ import { ConnectPhoneNumber } from '@cdktf/provider-aws/lib/connect-phone-number
 import { DataAwsConnectSecurityProfile } from '@cdktf/provider-aws/lib/data-aws-connect-security-profile';
 import { ConnectRoutingProfile } from '@cdktf/provider-aws/lib/connect-routing-profile';
 import { ConnectContactFlow } from '@cdktf/provider-aws/lib/connect-contact-flow';
+import { ConnectLambdaFunctionAssociation } from '@cdktf/provider-aws/lib/connect-lambda-function-association';
 import { KmsKey } from '@cdktf/provider-aws/lib/kms-key';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { IamPolicy } from '@cdktf/provider-aws/lib/iam-policy';
@@ -763,8 +764,8 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
 
     // ── Voice Admin API (client region; created whenever numaVoice is on) ─────
     // Backs the Voice Admin panel: phone numbers (list/claim/release + caller-id),
-    // agent/origins, instance status, and the outbound-country support-case
-    // request. Routes go through the shared API Gateway + custom authorizer
+    // agent/origins, instance status, and per-user softphone federation. Routes go
+    // through the shared API Gateway + custom authorizer
     // (addLambdaFunction); admin-group checks live in the handler. Resolves the
     // Connect instance at runtime by alias, so it works for both the autoProvision
     // and a manually-created (FEAT-158) instance.
@@ -826,12 +827,24 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             'connect:AssociateApprovedOrigin',
             'connect:DisassociateApprovedOrigin',
             'connect:ListUsers',
+            // Per-user agent provisioning (each Numa user federates as their own agent).
+            'connect:CreateUser',
+            'connect:ListRoutingProfiles',
+            'connect:ListSecurityProfiles',
             'connect:ListQueues',
+            'connect:DescribeQueue',
+            'connect:DescribeRoutingProfile',
             'connect:UpdateQueueOutboundCallerConfig',
+            // DID ownership (tag DIDs + instance mode) + wiring DIDs to the inbound flow.
+            'connect:DescribePhoneNumber',
+            'connect:TagResource',
+            'connect:UntagResource',
+            'connect:ListTagsForResource',
+            'connect:ListContactFlows',
+            'connect:AssociatePhoneNumberContactFlow',
           ],
           resources: ['*'],
         },
-        { effect: 'Allow', actions: ['support:CreateCase'], resources: ['*'] },
         // Assume the federation role (RoleSessionName = Connect username) for SSO.
         { effect: 'Allow', actions: ['sts:AssumeRole'], resources: [voiceFederationRole.arn] },
         // FEAT-169: invoke the deployer-account config writer (cross-account).
@@ -847,8 +860,17 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         { verb: 'POST', path: 'voice/phone-numbers/{id}/caller-id' },
         { verb: 'POST', path: 'voice/approved-origins' },
         { verb: 'DELETE', path: 'voice/approved-origins' },
+        // RETIRED route — its handler was removed (returns 404 now). Kept in place,
+        // NOT deleted: addLambdaFunction keys routes by ARRAY INDEX, so removing this
+        // mid-array shifts voice/federation-token's index and triggers a Terraform 409
+        // re-key conflict on apply (see the "only ever APPEND" note above). Drop only
+        // with a state migration.
         { verb: 'POST', path: 'voice/outbound-country-request' },
         { verb: 'GET', path: 'voice/federation-token' },
+        // Per-DID ownership (self-claim / admin assign-release) + tenant inbound mode.
+        { verb: 'POST', path: 'voice/phone-numbers/{id}/owner' },
+        { verb: 'DELETE', path: 'voice/phone-numbers/{id}/owner' },
+        { verb: 'POST', path: 'voice/mode' },
       ],
     });
 
@@ -1007,32 +1029,26 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         name: 'numa-voice-outbound-whisper',
         type: 'OUTBOUND_WHISPER',
         description:
-          'Numa Voice: recording-consent whisper to the agent + record Agent + Customer on agent-initiated outbound dials (FEAT-159).',
+          'Numa Voice: record Agent + Customer on agent-initiated outbound dials (FEAT-159). No customer-played prompt — the OUTBOUND_WHISPER plays to the CUSTOMER, so the agent-facing recording-consent reminder lives in the UI, not here.',
         content: JSON.stringify({
           Version: '2019-10-30',
-          StartAction: 'disclose',
+          // NOTE: an OUTBOUND_WHISPER flow plays to the CUSTOMER (the called party),
+          // NOT the agent. A MessageParticipant here was heard by the PROSPECT, even
+          // though the text ("...tell the prospect the call is being recorded") is an
+          // instruction for the SDR. So we play nothing to the customer and only set
+          // the recording behavior; the agent's recording-consent reminder is surfaced
+          // in the Numa UI (RecordingConsentBanner + on-connect reminder + wrap-up
+          // attestation) — the other halves of the consent flow.
+          StartAction: 'rec',
           Metadata: {
             entryPointPosition: { x: 20, y: 20 },
             snapToGrid: false,
             ActionMetadata: {
-              disclose: { position: { x: 224, y: 56 } },
-              rec: { position: { x: 448, y: 56 } },
-              end: { position: { x: 658, y: 131 } },
+              rec: { position: { x: 224, y: 56 } },
+              end: { position: { x: 448, y: 56 } },
             },
           },
           Actions: [
-            {
-              // Played to the AGENT before they're connected (outbound whisper is
-              // agent-side) — a recording-consent reminder so the SDR discloses to
-              // the prospect. The visible UI banner + wrap-up attestation are the
-              // other two halves of the consent flow (FEAT recording-consent).
-              Identifier: 'disclose',
-              Type: 'MessageParticipant',
-              Parameters: {
-                Text: 'This call is recorded for coaching and CRM follow-up. Please tell the prospect the call is being recorded.',
-              },
-              Transitions: { NextAction: 'rec', Errors: [], Conditions: [] },
-            },
             {
               Identifier: 'rec',
               Type: 'UpdateContactRecordingBehavior',
@@ -1056,6 +1072,179 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         },
         ...pin,
       });
+
+      // ── INBOUND: shared team queue + per-DID router + inbound flow ─────────────
+      // Shared inbound queue: every claimed DID can ring the whole team here. In
+      // personal mode an OWNED DID instead rings only its owner's agent queue (the
+      // router Lambda resolves that); unowned DIDs and shared mode land here.
+      const voiceInboundShared = new ConnectQueue(this, 'voice-inbound-shared-queue', {
+        instanceId: connectInstance.id,
+        name: 'numa-voice-inbound-shared',
+        hoursOfOperationId: voiceHours.hoursOfOperationId,
+        ...pin,
+      });
+
+      // Router Lambda — the inbound flow invokes it per call to pick the target queue
+      // from the dialled DID's `numa-owner` tag + the instance `numa-voice-mode` tag.
+      const voiceRouterZip = path.resolve(
+        import.meta.dirname,
+        '..',
+        '..',
+        'lambdas',
+        'node/numa-voice-router',
+        'lambda_function.zip'
+      );
+      const voiceRouterRole = new IamRole(this, 'voice-router-role', {
+        assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
+        ...pin,
+      });
+      const voiceRouterBasic = new IamRolePolicyAttachment(this, 'voice-router-basic', {
+        role: voiceRouterRole.name,
+        policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+        ...pin,
+      });
+      const voiceRouterPolicy = new IamPolicy(this, 'voice-router-policy', {
+        policy: new DataAwsIamPolicyDocument(this, 'voice-router-policy-doc', {
+          statement: [
+            {
+              effect: 'Allow',
+              actions: [
+                'connect:ListPhoneNumbersV2',
+                'connect:DescribePhoneNumber',
+                'connect:ListTagsForResource',
+                'connect:ListUsers',
+              ],
+              resources: ['*'],
+            },
+          ],
+        }).json,
+        ...pin,
+      });
+      new IamRolePolicyAttachment(this, 'voice-router-policy-attach', {
+        role: voiceRouterRole.name,
+        policyArn: voiceRouterPolicy.arn,
+        ...pin,
+      });
+      const voiceRouterLambda = new LambdaFunction(this, 'voice-router-lambda', {
+        functionName: `${clientName}-numa-voice-router`,
+        role: voiceRouterRole.arn,
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        filename: voiceRouterZip,
+        sourceCodeHash: Fn.filebase64sha256(voiceRouterZip),
+        timeout: 10,
+        environment: {
+          variables: {
+            SHARED_INBOUND_QUEUE_ARN: voiceInboundShared.arn,
+            OWNER_TAG: 'numa-owner',
+            MODE_TAG: 'numa-voice-mode',
+          },
+        },
+        dependsOn: [voiceRouterBasic],
+        ...pin,
+      });
+      // Connect needs both a resource-policy grant AND the instance association to
+      // invoke the Lambda from a contact flow.
+      new LambdaPermission(this, 'voice-router-connect-invoke', {
+        statementId: 'AllowConnectInvoke',
+        action: 'lambda:InvokeFunction',
+        functionName: voiceRouterLambda.functionName,
+        principal: 'connect.amazonaws.com',
+        sourceArn: connectInstance.arn,
+        ...pin,
+      });
+      new ConnectLambdaFunctionAssociation(this, 'voice-router-assoc', {
+        instanceId: connectInstance.id,
+        functionArn: voiceRouterLambda.arn,
+        ...pin,
+      });
+
+      // Inbound contact flow: record both channels → ask the router which queue → set
+      // it and transfer. FAIL-OPEN: any error routes to the shared queue so an inbound
+      // call never drops. (NOTE: Connect flow JSON is finicky and only verifiable on a
+      // live instance — validate/adjust this flow in the Connect console after deploy.)
+      const voiceInboundFlow = new ConnectContactFlow(this, 'voice-inbound-flow', {
+        instanceId: connectInstance.id,
+        name: 'numa-voice-inbound',
+        type: 'CONTACT_FLOW',
+        description:
+          'Numa Voice inbound: record + route the dialled DID to its owner (personal) or the shared team queue.',
+        content: JSON.stringify({
+          Version: '2019-10-30',
+          StartAction: 'rec',
+          Metadata: {
+            entryPointPosition: { x: 20, y: 20 },
+            snapToGrid: false,
+            ActionMetadata: {
+              rec: { position: { x: 200, y: 40 } },
+              route: { position: { x: 400, y: 40 } },
+              setq: { position: { x: 600, y: 40 } },
+              xfer: { position: { x: 800, y: 40 } },
+              sharedq: { position: { x: 600, y: 240 } },
+              xfershared: { position: { x: 800, y: 240 } },
+              end: { position: { x: 1000, y: 140 } },
+            },
+          },
+          Actions: [
+            {
+              Identifier: 'rec',
+              Type: 'UpdateContactRecordingBehavior',
+              Parameters: { RecordingBehavior: { RecordedParticipants: ['Agent', 'Customer'] } },
+              Transitions: { NextAction: 'route', Errors: [], Conditions: [] },
+            },
+            {
+              Identifier: 'route',
+              Type: 'InvokeLambdaFunction',
+              Parameters: { LambdaFunctionARN: voiceRouterLambda.arn, InvocationTimeLimitSeconds: '8' },
+              Transitions: { NextAction: 'setq', Errors: [{ NextAction: 'sharedq', ErrorType: 'NoMatchingError' }] },
+            },
+            {
+              Identifier: 'setq',
+              Type: 'UpdateContactTargetQueue',
+              Parameters: { QueueId: '$.External.queueArn' },
+              Transitions: { NextAction: 'xfer', Errors: [{ NextAction: 'sharedq', ErrorType: 'NoMatchingError' }] },
+            },
+            {
+              Identifier: 'xfer',
+              Type: 'TransferContactToQueue',
+              Parameters: {},
+              Transitions: {
+                NextAction: 'end',
+                Errors: [
+                  { NextAction: 'sharedq', ErrorType: 'QueueAtCapacity' },
+                  { NextAction: 'sharedq', ErrorType: 'NoMatchingError' },
+                ],
+              },
+            },
+            {
+              Identifier: 'sharedq',
+              // "Set working queue" takes the queue ARN — match the router's ARN format
+              // (the dynamic personal path uses $.External.queueArn, an ARN) so both
+              // branches are consistent.
+              Type: 'UpdateContactTargetQueue',
+              Parameters: { QueueId: voiceInboundShared.arn },
+              Transitions: { NextAction: 'xfershared', Errors: [{ NextAction: 'end', ErrorType: 'NoMatchingError' }] },
+            },
+            {
+              Identifier: 'xfershared',
+              Type: 'TransferContactToQueue',
+              Parameters: {},
+              Transitions: {
+                NextAction: 'end',
+                Errors: [
+                  { NextAction: 'end', ErrorType: 'QueueAtCapacity' },
+                  { NextAction: 'end', ErrorType: 'NoMatchingError' },
+                ],
+              },
+            },
+            { Identifier: 'end', Type: 'DisconnectParticipant', Parameters: {}, Transitions: {} },
+          ],
+        }),
+        ...pin,
+      });
+      // Surface the inbound flow id so the admin Lambda can associate claimed DIDs with it.
+      void voiceInboundFlow;
+
       // Routing profile whose DEFAULT OUTBOUND queue is numa-voice-outbound (the one
       // carrying the caller-ID DID). The default "Basic Routing Profile" routes outbound
       // through BasicQueue, which has no caller-ID -> Connect rejects the dial with
@@ -1067,7 +1256,12 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         description: 'Numa Voice outbound SDR routing (default outbound queue carries the caller-ID DID)',
         defaultOutboundQueueId: voiceOutboundQueue.queueId,
         mediaConcurrencies: [{ channel: 'VOICE', concurrency: 1 }],
-        queueConfigs: [{ channel: 'VOICE', delay: 0, priority: 1, queueId: voiceOutboundQueue.queueId }],
+        // Outbound queue (caller-ID) + the shared inbound queue, so every agent on this
+        // profile both dials out AND receives shared/team inbound calls.
+        queueConfigs: [
+          { channel: 'VOICE', delay: 0, priority: 1, queueId: voiceOutboundQueue.queueId },
+          { channel: 'VOICE', delay: 0, priority: 1, queueId: voiceInboundShared.queueId },
+        ],
         ...pin,
       });
       // Federated agent user (SAML → no password). numa-voice-admin's

@@ -71,14 +71,16 @@
     "title": "Softphone",
     "show": "Show softphone",
     "hide": "Hide softphone",
-    "connecting": "Connecting to Amazon Connect…",
+    "connecting": "Connecting your phone…",
     "micPrompt": "Allow microphone access in the softphone window to take calls.",
-    "loginPrompt": "Sign in to Amazon Connect in the popup window to start calling.",
-    "notConfigured": "Amazon Connect is not configured for this workspace.",
+    "loginPrompt": "Connect your phone to start making calls.",
+    "signIn": "Connect phone",
+    "notConfigured": "The softphone is not configured for this workspace.",
     "error": "Couldn't load the softphone. Please refresh and try again.",
     "activeInOtherTab": "The softphone is active in another browser tab.",
     "unsupportedBrowser": "The softphone requires Google Chrome or Microsoft Edge. Please open Numa in Chrome or Edge to make calls.",
-    "bestEffortBrowser": "For a reliable softphone, use Chrome or Edge. In Firefox you may need to allow cross-site cookies for Amazon Connect."
+    "bestEffortBrowser": "For a reliable softphone, use Chrome or Edge. In Firefox you may need to allow cross-site cookies for the softphone.",
+    "offline": "You're offline — the softphone will reconnect when your connection returns."
   },
   "wrapUp": {
     "title": "Call wrap-up",

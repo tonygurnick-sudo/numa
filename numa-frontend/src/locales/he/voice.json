@@ -71,14 +71,16 @@
     "title": "סופטפון",
     "show": "הצג סופטפון",
     "hide": "הסתר סופטפון",
-    "connecting": "מתחבר ל-Amazon Connect…",
+    "connecting": "מחבר את הטלפון שלך…",
     "micPrompt": "אפשר גישה למיקרופון בחלון הסופטפון כדי לקבל שיחות.",
-    "loginPrompt": "התחבר ל-Amazon Connect בחלון הקופץ כדי להתחיל להתקשר.",
-    "notConfigured": "Amazon Connect אינו מוגדר עבור סביבת עבודה זו.",
+    "loginPrompt": "חבר את הטלפון שלך כדי להתחיל לבצע שיחות.",
+    "signIn": "חבר טלפון",
+    "notConfigured": "הסופטפון אינו מוגדר עבור סביבת עבודה זו.",
     "error": "לא ניתן היה לטעון את הסופטפון. אנא רענן ונסה שוב.",
     "activeInOtherTab": "הסופטפון פעיל בכרטיסייה אחרת בדפדפן.",
     "unsupportedBrowser": "הסופטפון דורש את Google Chrome או Microsoft Edge. אנא פתח את Numa ב-Chrome או ב-Edge כדי לבצע שיחות.",
-    "bestEffortBrowser": "לסופטפון אמין, השתמש ב-Chrome או ב-Edge. ב-Firefox ייתכן שתצטרך לאפשר עוגיות בין-אתריות עבור Amazon Connect."
+    "bestEffortBrowser": "לסופטפון אמין, השתמש ב-Chrome או ב-Edge. ב-Firefox ייתכן שתצטרך לאפשר עוגיות בין-אתריות עבור הסופטפון.",
+    "offline": "אין חיבור לאינטרנט — הסופטפון יתחבר מחדש כשהחיבור יחזור."
   },
   "wrapUp": {
     "title": "סיכום שיחה",

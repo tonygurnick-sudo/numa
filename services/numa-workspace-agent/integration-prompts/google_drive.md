@@ -29,7 +29,7 @@ Auth key is `googleDrive` (camelCase):
   - `text/plain`
   - `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (Word)
 
-- **Uploading files uses workspace paths directly:** For `google_drive-upload-file`, pass the workspace path in `filePath` (e.g., `/workdir/uploads/report.pdf`). The system converts it to a presigned URL automatically.
+- **Uploading & replacing files — ALWAYS use the action, NEVER the raw API:** To upload a NEW file use `google_drive-upload-file`; to REPLACE the contents of an EXISTING file (keeps the same `fileId` and Drive version history) use `google_drive-update-file`. In both, pass the workspace path in `filePath` (e.g., `/workdir/uploads/report.pdf`) — the system converts it to a presigned URL and streams the real bytes. **Never upload or overwrite a file via `proxy_request` or a raw `googleapis.com/upload/...` URL.** `proxy_request` sends a JSON body, not multipart media, so it overwrites the file with a tiny JSON blob and destroys it (this has actually happened — it is not hypothetical).
 
 - **Folder prop naming varies by action:** Upload uses `parentId`, move uses `folderId`, `list-files` uses `folderId`. Always check the schema for the correct prop name.
 
@@ -60,13 +60,41 @@ Auth key is `googleDrive` (camelCase):
 }
 ```
 
+## Example: Replace an Existing File's Contents
+
+Use this to write changes back to a file you downloaded and edited locally. It
+keeps the same `fileId` and Drive version history:
+
+```json
+{
+  "googleDrive": { "authProvisionId": "auto" },
+  "fileId": "abc123",
+  "filePath": "/workdir/tmp/report_updated.pdf"
+}
+```
+
+## Never Use proxy_request for Files
+
+`proxy_request` (the raw "API Request" tool) is unsafe for binary in BOTH
+directions and will silently corrupt files:
+
+- **Uploads:** it sends a JSON body, not multipart media — the upstream stores
+  the JSON instead of your file. Use `google_drive-upload-file` (new) or
+  `google_drive-update-file` (overwrite existing).
+- **Downloads / revisions:** fetch bytes via `google_drive-download-file` (with
+  `stash_id="NEW"`). Do not pull file or revision bytes through `proxy_request`.
+
+After any upload or update, verify it (re-list or re-download and check the size
+and mimeType) before telling the user it is done.
+
 ## When to Use What
 
 - **"Find a file called X"** -> `find-file` with `nameSearchTerm`
 - **"Find a folder called X"** -> `find-folder` with `nameSearchTerm`
 - **"List files in folder X"** -> `list-files` with `folderId`
 - **"Download this file"** -> `google_drive-download-file` with `stash_id="NEW"`
-- **"Upload a file"** -> `google_drive-upload-file` with workspace path
+- **"Upload a new file"** -> `google_drive-upload-file` with workspace path in `filePath`
+- **"Update / overwrite an existing file"** -> `google_drive-update-file` with `fileId` + workspace path in `filePath` (preserves version history)
 - **"Share file with someone"** -> `google_drive-add-file-sharing-preference`
 - **"Move file to trash"** -> `google_drive-move-file-to-trash` (recoverable)
 - **"Permanently delete"** -> `google_drive-delete-file` (irreversible)

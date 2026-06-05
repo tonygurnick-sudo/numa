@@ -1,6 +1,8 @@
+import { gzipSync } from 'node:zlib';
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 
-import { decideMethod, type IntegrationMethod } from './integrations-payload';
+import { decideMethod, listUserVaultNativeIntegrations, type IntegrationMethod } from './integrations-payload';
 
 // Helper — build the dependency bag with sensible defaults.
 const make = (overrides: {
@@ -141,4 +143,72 @@ describe('decideMethod — dual-method services from infra/config/connectors.ts'
 // is dependency-free.
 beforeEach(() => {
   // No shared state — `decideMethod` is pure.
+});
+
+describe('listUserVaultNativeIntegrations', () => {
+  // Build a fake SecretsManagerClient whose `send` returns a fixed payload.
+  const clientReturning = (secretString: string | undefined): SecretsManagerClient =>
+    ({ send: async () => ({ SecretString: secretString }) }) as unknown as SecretsManagerClient;
+
+  const clientThrowing = (name: string): SecretsManagerClient =>
+    ({
+      send: async () => {
+        const e = new Error(name) as Error & { name: string };
+        e.name = name;
+        throw e;
+      },
+    }) as unknown as SecretsManagerClient;
+
+  const vault = (secrets: Record<string, { fields?: Record<string, string> }>): string => JSON.stringify({ secrets });
+
+  it('returns the slugs of oauth-* entries that have an access_token', async () => {
+    const secretsManager = clientReturning(
+      vault({
+        'oauth-gmail': { fields: { provider: 'gmail', access_token: 'tok' } },
+        'oauth-googledrive': { fields: { access_token: 'tok2' } },
+      })
+    );
+    const result = await listUserVaultNativeIntegrations({ secretsManager, clientName: 'hq', userSub: 'sub' });
+    expect(result).toEqual(new Set(['gmail', 'googledrive']));
+  });
+
+  it('excludes entries with no access_token (a disconnected integration)', async () => {
+    const secretsManager = clientReturning(vault({ 'oauth-gmail': { fields: { provider: 'gmail' } } }));
+    const result = await listUserVaultNativeIntegrations({ secretsManager, clientName: 'hq', userSub: 'sub' });
+    expect(result).toEqual(new Set());
+  });
+
+  it('ignores oauth-client-* company-credential entries and non-native slugs', async () => {
+    const secretsManager = clientReturning(
+      vault({
+        'oauth-client-google': { fields: { access_token: 'x', client_id: 'c' } },
+        'oauth-some-unknown-app': { fields: { access_token: 'y' } },
+        'apikey-hirehop': { fields: { access_token: 'z' } },
+      })
+    );
+    const result = await listUserVaultNativeIntegrations({ secretsManager, clientName: 'hq', userSub: 'sub' });
+    expect(result).toEqual(new Set());
+  });
+
+  it('transparently decompresses a gzip-packed vault', async () => {
+    const packed = JSON.stringify({
+      _compressed: true,
+      _data: gzipSync(vault({ 'oauth-gmail': { fields: { access_token: 'tok' } } })).toString('base64'),
+    });
+    const result = await listUserVaultNativeIntegrations({
+      secretsManager: clientReturning(packed),
+      clientName: 'hq',
+      userSub: 'sub',
+    });
+    expect(result).toEqual(new Set(['gmail']));
+  });
+
+  it('returns empty (no throw) when the user has no vault yet', async () => {
+    const result = await listUserVaultNativeIntegrations({
+      secretsManager: clientThrowing('ResourceNotFoundException'),
+      clientName: 'hq',
+      userSub: 'sub',
+    });
+    expect(result).toEqual(new Set());
+  });
 });
