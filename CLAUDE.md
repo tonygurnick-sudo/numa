@@ -289,6 +289,8 @@ See `documentation/email-sending/` for the full guide: architecture, security mo
 
 **Lambdas (Container):** For Lambdas that need system-level deps (e.g. Playwright/Chromium). Each has its own `Dockerfile` in the lambda directory. Build context is the repo root so shared libs (`lib/prm`) are accessible. Package: `cd lambdas && bash package-container-lambda.sh python/<name>`. Output: `infra/assets/artifacts/<name>/image.tar`. Deployed as ARM64 container images via ECR (skopeo push). Uses `NumaLambda` with `packageType: 'Image'` and `imageUri`. First example: `browser-lambda` (Playwright + Chromium for JS-rendered page fetching).
 
+> ⚠️ **Adding a new lambda? Update the CI matrix.** If the lambda is part of the per-client **Numa deploy**, you MUST add it to the matching matrix in `.gitlab-ci.yml` — `.python-lambdas-matrix` (Python) or `.node-matrix` (Node). That matrix drives **both** CI packaging (the `lambda_function.zip` the deploy reads) **and** the lint/type/test check. Forget it and `cdktf deploy` dies at synth with `filebase64sha256(".../lambda_function.zip"): no such file or directory`. **Exception — do NOT add** lambdas that aren't in the per-client Numa stack: deployer/portal lambdas (`q-apps-deployer-stack`, e.g. `numa-email-sender`, `numa-voice-config-writer`, `numa-fleet-analytics-rollup`), Pipedream proxy-account lambdas (`pipedream-proxy-stack`, e.g. `pipedream-schema-refresh`), and container lambdas (their own `package-container-lambda.sh` build, e.g. `browser-lambda`).
+
 **Services:** See Services section above for Docker packaging.
 
 **Infra (CDKTF):** Build frontend + package lambdas first, then `yarn cdktf deploy --auto-approve <stack>`.

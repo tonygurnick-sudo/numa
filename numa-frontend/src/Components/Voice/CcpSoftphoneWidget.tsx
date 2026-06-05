@@ -189,6 +189,17 @@ export const CcpSoftphoneWidget = () => {
         </div>
       );
     }
+    if (status === 'inactive_tab') {
+      // Another browser tab already owns the single CCP agent session, so this
+      // tab deliberately skipped initCCP. If that tab closes, the cross-tab guard
+      // promotes this one automatically (no reload needed).
+      return (
+        <div className="p-3 text-center text-muted small" style={{ minHeight: PANEL_BODY_HEIGHT / 2 }}>
+          <i className="bi bi-window-stack d-block fs-3 mb-2" aria-hidden="true"></i>
+          {t('ccp.activeInOtherTab', { defaultValue: 'The softphone is active in another browser tab.' })}
+        </div>
+      );
+    }
     if (status === 'initialising') {
       return (
         <div className="p-3 text-center text-muted small">
