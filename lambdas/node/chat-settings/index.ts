@@ -2,6 +2,8 @@ import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { SUPPORTED_INTEGRATIONS } from '../../../infra/config/integrations';
+import { NATIVE_CONNECTORS } from '../../../infra/config/connectors';
 
 const TABLE_NAME = process.env.CHAT_SETTINGS_TABLE_NAME as string;
 const CLIENT_NAME = process.env.CLIENT_NAME as string;
@@ -126,6 +128,27 @@ const MAX_MEMORY_CONTENT = 300;
 const MAX_MEMORIES = 50;
 const VALID_SCOPE_PATTERN = /^(general|integration:.+|agent:.+)$/;
 
+// Slugs a memory may legitimately be scoped to via `integration:{slug}`.
+// Mirrors the Python copy in
+// lambdas/python/workspace-chat-tools/tools/user_profile.py.
+const VALID_INTEGRATION_SLUGS = new Set<string>([...SUPPORTED_INTEGRATIONS, ...NATIVE_CONNECTORS]);
+
+// Downgrade an `integration:{slug}` scope whose slug isn't a real integration
+// (e.g. a tool group like "numa-ops") to "general".
+//
+// This is the persistence/save path (picker-driven UI + profile re-saves), so
+// it HEALS rather than rejects: content is preserved and any legacy bad-slug
+// memory written before validation existed becomes a general memory on the
+// next save. The AI `add_memory` tool (user_profile.py) is stricter — it
+// rejects unknown integration slugs at creation so the model re-scopes.
+function normalizeScope(scope: string): string {
+  if (scope.startsWith('integration:')) {
+    const slug = scope.slice('integration:'.length);
+    if (!VALID_INTEGRATION_SLUGS.has(slug)) return 'general';
+  }
+  return scope;
+}
+
 function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
   if (typeof data !== 'object' || data === null) return { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE };
   const obj = data as Record<string, unknown>;
@@ -181,7 +204,7 @@ function validateMemory(raw: unknown): Memory | null {
   const createdAt = typeof obj.createdAt === 'string' ? obj.createdAt : new Date().toISOString();
   const source = obj.source === 'ai' ? 'ai' : 'user';
   if (!id || !content || !VALID_SCOPE_PATTERN.test(scope)) return null;
-  return { id, content, scope, createdAt, source } as Memory;
+  return { id, content, scope: normalizeScope(scope), createdAt, source } as Memory;
 }
 
 function validateUserProfile(raw: unknown): UserProfile {

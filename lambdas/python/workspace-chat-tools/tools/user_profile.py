@@ -31,6 +31,121 @@ MAX_MEMORY_CONTENT = 300
 MAX_MEMORIES = 50
 VALID_SCOPE_PATTERN = re.compile(r"^(general|integration:.+|agent:.+)$")
 
+# Canonical set of slugs a memory may be scoped to via `integration:{slug}`.
+# Mirrors infra/config/integrations.ts (SUPPORTED_INTEGRATIONS) and
+# infra/config/connectors.ts (NATIVE_CONNECTORS). This Lambda can't import the
+# TypeScript registries, so the lists are duplicated here.
+#
+# ⚠️ When you add or rename an integration slug in either of those TS files,
+# MIRROR THE CHANGE here in the same commit — otherwise a memory the model
+# legitimately scopes to the new integration silently falls back to "general".
+_PIPEDREAM_INTEGRATION_SLUGS = {
+    "gmail",
+    "microsoft_outlook",
+    "microsoft_outlook_calendar",
+    "slack",
+    "google_calendar",
+    "xero_accounting_api",
+    "hubspot",
+    "notion",
+    "apollo_io",
+    "pipedrive",
+    "jira",
+    "linkedin",
+    "google_drive",
+    "google_analytics",
+    "sharepoint",
+    "salesforce_rest_api",
+    "asana",
+    "onenote",
+    "trello",
+    "whatsapp_business",
+    "mailchimp",
+    "freshdesk",
+    "rentman",
+    "podio",
+    "google_sheets",
+    "google_forms",
+    "google_docs",
+    "telegram_bot_api",
+    "microsoft_teams",
+    "zoom",
+    "microsoft_excel",
+    "smartsheet",
+    "box",
+    "zoho_books",
+    "odoo",
+    "jobber",
+    "canva",
+    "google_tag_manager",
+    "webflow",
+    "dropbox",
+    "survey_monkey",
+    "monday",
+    "procore",
+    "quickbooks",
+    "harvest",
+    "alchemer",
+    "microsoft_sql_server",
+    "microsoft_dynamics_365_sales",
+    "dynamics_365_business_central_api",
+    "clickup",
+    "google_ads",
+    "zoho_crm",
+    "microsofttodo",
+    "fathom",
+    "elevenlabs",
+}
+_NATIVE_CONNECTOR_SLUGS = {
+    "googledrive",
+    "gmail",
+    "onedrive",
+    "dropbox",
+    "workflowmax",
+    "podio",
+    "simpro",
+    "getjobber",
+    "wrike",
+    "connecteam-oauth",
+    "totalsynergy-oauth",
+    "xero",
+    "myob-account-right",
+    "myob-acumatica",
+    "netsuite",
+    "zoho-crm",
+    "quickbooks",
+    "actionstep",
+    "hirehop",
+    "connecteam-api",
+    "totalsynergy-api",
+    "synergy",
+    "workbench",
+    "fergus",
+}
+VALID_INTEGRATION_SLUGS = _PIPEDREAM_INTEGRATION_SLUGS | _NATIVE_CONNECTOR_SLUGS
+
+
+def _validate_integration_scope(scope: str) -> None:
+    """Reject an ``integration:{slug}`` scope whose slug isn't a real integration.
+
+    The model chooses the scope string freely and sometimes scopes a memory to
+    a tool group or feature name (e.g. ``integration:numa-ops``) that is not a
+    real SaaS integration. We reject it outright (rather than silently saving it
+    as a general memory) so the model gets clear feedback and can re-scope —
+    either to a valid integration or explicitly to ``general``.
+    """
+    if not scope.startswith("integration:"):
+        return
+    slug = scope[len("integration:") :]
+    if slug not in VALID_INTEGRATION_SLUGS:
+        raise ValueError(
+            f"'{slug}' is not a recognised integration, so it can't be used as a "
+            "memory scope. Use a real integration slug (e.g. 'jira', 'slack', "
+            "'gmail', 'google_drive', 'sharepoint') or scope the memory as "
+            "'general'. Tool groups and feature names (e.g. 'numa-ops', 'numa', "
+            "'web-search') are not integrations."
+        )
+
 
 def _get_dynamo_resource():
     """Get DynamoDB resource with PRM tracking."""
@@ -190,6 +305,10 @@ def handle_add_memory(params: Dict[str, Any]) -> Dict[str, Any]:
             f"Invalid scope '{scope}'. Must be 'general', "
             "'integration:{{slug}}', or 'agent:{{agentId}}'"
         )
+
+    # Reject integration scopes that don't name a real integration (e.g. a tool
+    # group like "numa-ops") so the model re-scopes instead of saving junk.
+    _validate_integration_scope(scope)
 
     logger.info(
         "Adding memory",

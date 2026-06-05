@@ -1453,6 +1453,7 @@ export default function SettingsPage() {
   const userTabs = useMemo(
     () => [
       { key: 'my-profile', label: t('userProfile.tabs.myProfile'), iconClassName: 'bi bi-person-circle' },
+      { key: 'memories', label: t('userProfile.tabs.memories'), iconClassName: 'bi bi-stars' },
       { key: 'user-settings', label: t('userProfile.tabs.userSettings'), iconClassName: 'bi bi-person-gear' },
       { key: 'user-defaults', label: t('userProfile.tabs.chatDefaults'), iconClassName: 'bi bi-sliders' },
       ...(workspaceChatEnabled
