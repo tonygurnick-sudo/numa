@@ -430,7 +430,7 @@ export const OpsPage: React.FC = () => {
 
   return (
     <OpsProvider>
-      <div className="d-flex flex-column h-100">
+      <div className="d-flex flex-column h-100 ops-root">
         <OpsPageContent activityOpen={activityOpen} onToggleActivity={toggleActivity} />
       </div>
       <ActivitySidebarWrapper

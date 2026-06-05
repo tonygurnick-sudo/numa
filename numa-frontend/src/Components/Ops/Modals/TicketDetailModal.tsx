@@ -27,7 +27,7 @@ import type {
 import { CommentSection } from '../Shared/CommentSection';
 import { LinkedTicketsSection } from '../Shared/LinkedTicketsSection';
 import { AttachmentsSection } from '../Shared/AttachmentsSection';
-import { RichTextEditor } from '../Shared/RichTextEditor';
+import { RichTextEditor, LARGE_PASTED_IMAGE_BYTES } from '../Shared/RichTextEditor';
 import type { RichTextEditorHandle } from '../Shared/RichTextEditor';
 import { uploadAttachmentToTicket } from '../Shared/attachmentUploader';
 import { DynamicField } from '../Shared/DynamicField';
@@ -652,6 +652,30 @@ export function TicketDetailModal({
     [numaPost, ticket, showToast, t]
   );
 
+  // ── Description image button -> inline (small) or attach (large) ──────
+  // Small images embed inline as base64 so the description stays self-contained
+  // (no expiring S3 URLs). Oversized images would blow the 400KB DynamoDB item
+  // limit, so they get routed to attachments and we skip the inline embed by
+  // returning an empty string.
+  const handleDescriptionImageUpload = useCallback(
+    async (file: File): Promise<string> => {
+      if (!ticket) return '';
+      if (file.size > LARGE_PASTED_IMAGE_BYTES) {
+        await uploadAttachmentToTicket(numaPost, ticket.id, file);
+        setAttachmentsRefreshKey((k) => k + 1);
+        showToast({ message: t('tickets.largeImagePastedAttached'), variant: 'info' });
+        return '';
+      }
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+        reader.onerror = () => reject(reader.error ?? new Error('Failed to read image'));
+        reader.readAsDataURL(file);
+      });
+    },
+    [numaPost, ticket, showToast, t]
+  );
+
   // ── Render: Loading state ─────────────────────────────────────────────
 
   if (!show) return <></>;
@@ -1257,16 +1281,19 @@ export function TicketDetailModal({
                 );
               default:
                 return (
-                  <DynamicField
-                    key={field.id}
-                    field={field}
-                    value={ticket.fields?.[field.id] ?? field.defaultValue ?? null}
-                    onChange={(value) => void handleCustomFieldChange(field.id, value)}
-                    compact
-                    fieldOverride={override}
-                    ticketValues={ticket.fields ?? {}}
-                    staff={config.staff}
-                  />
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <DynamicField
+                      field={field}
+                      value={ticket.fields?.[field.id] ?? field.defaultValue ?? null}
+                      onChange={(value) => void handleCustomFieldChange(field.id, value)}
+                      compact
+                      hideLabel
+                      fieldOverride={override}
+                      ticketValues={ticket.fields ?? {}}
+                      staff={config.staff}
+                    />
+                  </div>
                 );
             }
           })}
@@ -1414,12 +1441,9 @@ export function TicketDetailModal({
       <div className="d-flex" style={{ minHeight: 0, flex: 1, overflow: 'hidden' }}>
         {/* Left column: stacked sections (65%) */}
         <div className="ticket-detail-left-col">
-          {/* Description */}
+          {/* Description \u2014 the editor is self-evidently the description, so no
+              section heading here (keeps the toolbar flush to the top). */}
           <div className="ticket-detail-section">
-            <div className="ticket-section-heading">
-              <i className="bi bi-text-left me-2" />
-              {t('tickets.description')}
-            </div>
             <RichTextEditor
               ref={descriptionEditorRef}
               value={ticket.description ?? ''}
@@ -1429,6 +1453,7 @@ export function TicketDetailModal({
                 }
               }}
               onLargeImagePaste={handleLargeImagePaste}
+              onImageUpload={handleDescriptionImageUpload}
               placeholder={t('common.description') + '\u2026'}
               minHeight={120}
               disabled={saving}

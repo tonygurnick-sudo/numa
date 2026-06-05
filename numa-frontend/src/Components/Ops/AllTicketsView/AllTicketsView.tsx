@@ -1316,7 +1316,11 @@ export function AllTicketsView(): React.JSX.Element {
                         <td
                           key={col.key}
                           className={MOBILE_KEEP_KEYS.includes(col.key) ? '' : 'd-none d-lg-table-cell'}
-                          style={{ padding: '0.75rem 0.75rem' }}
+                          style={{
+                            padding: '0.55rem 0.75rem',
+                            fontSize: '0.85rem',
+                            color: 'var(--ops-text-default)',
+                          }}
                         >
                           {col.render ? col.render(ticket) : String(col.accessor(ticket) ?? '-')}
                         </td>

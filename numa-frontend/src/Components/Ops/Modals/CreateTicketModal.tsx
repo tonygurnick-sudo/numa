@@ -97,9 +97,7 @@ export function CreateTicketModal({
   onHide,
   onSuccess,
   prefilledCustomerId,
-  prefilledCustomerName,
   prefilledSupplierId,
-  prefilledSupplierName,
   prefilledZoneId,
   prefilledProjectId,
 }: CreateTicketModalProps): React.JSX.Element {
@@ -685,12 +683,9 @@ export function CreateTicketModal({
           <div className="d-flex" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             {/* Left: description + attachments + initial comment ─────── */}
             <div className="ticket-detail-left-col">
-              {/* Description */}
+              {/* Description — the editor is self-evidently the description, so
+                  no section heading (matches the ticket detail modal). */}
               <Form.Group className="ticket-detail-section">
-                <div className="ticket-section-heading">
-                  <i className="bi bi-text-left me-2" />
-                  {t('tickets.description')}
-                </div>
                 <RichTextEditor
                   value={description}
                   onChange={(html) => setDescription(html)}

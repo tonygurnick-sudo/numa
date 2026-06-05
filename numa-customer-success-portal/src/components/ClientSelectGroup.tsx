@@ -14,6 +14,14 @@ interface ClientSelectGroupProps {
   size?: 'sm' | 'lg';
   className?: string;
   style?: React.CSSProperties;
+  /**
+   * When provided, renders a persistent, selectable "all" row at the top of the
+   * list and makes the clear (×) action reset to this value instead of ''. Use
+   * in filter contexts (e.g. Deployments history) where "all" is a real
+   * selection, not an empty one — otherwise clearing strands the filter on a
+   * value that matches nothing, with no way to restore it (BUG-078).
+   */
+  allOption?: { value: string; label: string };
 }
 
 export function ClientSelectGroup({
@@ -26,6 +34,7 @@ export function ClientSelectGroup({
   size,
   className,
   style,
+  allOption,
 }: ClientSelectGroupProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDev, setShowDev] = useState(true);
@@ -44,6 +53,41 @@ export function ClientSelectGroup({
   const isDevSelected = useMemo(() => devClients.some((c) => c.name === value), [devClients, value]);
 
   const listHeight = size === 'sm' ? 180 : 240;
+
+  // Clearing the selection resets to the "all" sentinel when one is configured,
+  // otherwise to an empty string (the deselect behaviour used by the deploy form
+  // and config tools).
+  const clearValue = allOption?.value ?? '';
+
+  const renderAllRow = () => {
+    if (!allOption) return null;
+    const selected = value === allOption.value;
+    return (
+      <div
+        role="button"
+        aria-pressed={selected}
+        tabIndex={disabled ? -1 : 0}
+        onClick={() => {
+          if (!disabled) onChange(allOption.value);
+        }}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onChange(allOption.value);
+          }
+        }}
+        className={`px-2 py-1 rounded d-flex align-items-center ${selected ? 'bg-primary text-white' : ''}`}
+        style={{
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          fontSize: size === 'sm' ? '0.875rem' : undefined,
+          userSelect: 'none',
+        }}
+      >
+        <span className="text-truncate fw-semibold">{allOption.label}</span>
+      </div>
+    );
+  };
 
   const renderClientRow = (client: Client) => {
     const selected = value === client.name;
@@ -137,6 +181,8 @@ export function ClientSelectGroup({
 
       {/* Client List */}
       <div className="client-picker-list border rounded p-2" style={{ height: listHeight, overflowY: 'scroll' }}>
+        {allOption && !searchTerm && <div className="mb-2">{renderAllRow()}</div>}
+
         {filteredDev.length > 0 && (
           <div className="mb-2">
             <div className="text-muted small mb-1 d-flex align-items-center">
@@ -176,14 +222,14 @@ export function ClientSelectGroup({
        * we use the primary purple pill regardless of dev/prod. The dev/prod
        * distinction is already conveyed by the orange Internal badge inline
        * with the client name in the picker list. */}
-      {value && (
+      {value && value !== allOption?.value && (
         <div className="mt-2 d-flex align-items-center gap-2">
           <span className="text-muted small">Selected:</span>
           <Badge
             bg="primary"
             className="d-flex align-items-center"
             style={{ cursor: disabled ? 'not-allowed' : 'pointer' }}
-            onClick={() => !disabled && onChange('')}
+            onClick={() => !disabled && onChange(clearValue)}
             title="Click to clear"
           >
             {value}

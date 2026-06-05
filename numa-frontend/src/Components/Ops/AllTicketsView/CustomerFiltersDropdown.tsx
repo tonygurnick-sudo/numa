@@ -149,13 +149,7 @@ export function CustomerFiltersDropdown({
     <div ref={wrapperRef} className="position-relative d-inline-block">
       <button
         type="button"
-        className="btn btn-sm d-inline-flex align-items-center gap-1"
-        style={{
-          backgroundColor: activeCount > 0 ? '#eef2ff' : '#f8f9fa',
-          border: `1px solid ${activeCount > 0 ? '#818cf8' : '#dee2e6'}`,
-          color: activeCount > 0 ? '#4f46e5' : '#495057',
-          borderRadius: 8,
-        }}
+        className={`ops-filter-btn${activeCount > 0 ? ' ops-filter-btn--active' : ''}`}
         onClick={() => setIsOpen((prev) => !prev)}
       >
         <i className="bi bi-people" />
@@ -165,13 +159,13 @@ export function CustomerFiltersDropdown({
             {activeCount}
           </Badge>
         )}
-        <i className="bi bi-chevron-down" style={{ fontSize: '0.6rem' }} />
+        <i className="bi bi-chevron-down" />
       </button>
 
       {isOpen && (
         <div
-          className="position-absolute bg-white border rounded shadow-sm"
-          style={{ top: '100%', left: 0, zIndex: 1050, marginTop: 4, width: 780 }}
+          className="position-absolute ops-filter-menu"
+          style={{ top: '100%', right: 0, zIndex: 1050, marginTop: 6, width: 780, maxWidth: 'calc(100vw - 32px)' }}
         >
           {/* 4-column grid — all same height, each column scrollable independently */}
           <div className="d-flex" style={{ height: 360 }}>
