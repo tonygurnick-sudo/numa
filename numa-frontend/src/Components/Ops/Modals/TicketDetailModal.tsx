@@ -1281,16 +1281,19 @@ export function TicketDetailModal({
                 );
               default:
                 return (
-                  <DynamicField
-                    key={field.id}
-                    field={field}
-                    value={ticket.fields?.[field.id] ?? field.defaultValue ?? null}
-                    onChange={(value) => void handleCustomFieldChange(field.id, value)}
-                    compact
-                    fieldOverride={override}
-                    ticketValues={ticket.fields ?? {}}
-                    staff={config.staff}
-                  />
+                  <div key={field.id} className="ticket-sidebar-field">
+                    <div className="ticket-sidebar-field-label">{label}</div>
+                    <DynamicField
+                      field={field}
+                      value={ticket.fields?.[field.id] ?? field.defaultValue ?? null}
+                      onChange={(value) => void handleCustomFieldChange(field.id, value)}
+                      compact
+                      hideLabel
+                      fieldOverride={override}
+                      ticketValues={ticket.fields ?? {}}
+                      staff={config.staff}
+                    />
+                  </div>
                 );
             }
           })}

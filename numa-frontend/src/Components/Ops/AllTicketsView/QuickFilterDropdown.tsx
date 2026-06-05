@@ -53,32 +53,27 @@ export function QuickFilterDropdown({
     <div ref={wrapperRef} className="position-relative d-inline-block">
       <button
         type="button"
-        className="btn btn-sm d-inline-flex align-items-center gap-1"
-        style={{
-          backgroundColor: selected.length > 0 ? '#eef2ff' : '#f8f9fa',
-          border: `1px solid ${selected.length > 0 ? '#818cf8' : '#dee2e6'}`,
-          color: selected.length > 0 ? '#4f46e5' : '#495057',
-          borderRadius: 8,
-        }}
+        className={`ops-filter-btn${selected.length > 0 ? ' ops-filter-btn--active' : ''}`}
         onClick={() => setIsOpen((prev) => !prev)}
       >
         {displayLabel}
-        <i className="bi bi-chevron-down" style={{ fontSize: '0.55rem' }} />
+        <i className="bi bi-chevron-down" />
       </button>
 
       {isOpen && (
         <div
-          className="position-absolute bg-white border rounded shadow-sm"
-          style={{ top: '100%', left: 0, zIndex: 1050, minWidth: 200, maxHeight: 300, overflowY: 'auto', marginTop: 4 }}
+          className="position-absolute ops-filter-menu"
+          style={{ top: '100%', left: 0, zIndex: 1050, minWidth: 210, maxHeight: 300, overflowY: 'auto', marginTop: 6 }}
         >
           {options.map((opt) => (
-            <div key={opt.value} className="px-3 py-1">
+            <div key={opt.value} className="ops-filter-option">
               <Form.Check
                 type="checkbox"
                 id={`quick-filter-${opt.value}`}
                 label={opt.label}
                 checked={selected.includes(opt.value)}
                 onChange={() => handleToggle(opt.value)}
+                className="m-0"
               />
             </div>
           ))}

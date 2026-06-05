@@ -4,12 +4,19 @@
 
 :root {
   --ops-border: var(--nav-divider, #e4e4e7);
+  --ops-border-strong: #d4d4d8;
   --ops-text-muted: var(--nav-icon-default, #71717a);
   --ops-text-secondary: var(--nav-section-text, #71717a);
+  --ops-text-strong: #18181b; /* zinc-900 — headings, titles (v2) */
   --ops-hover-bg: var(--nav-hover-bg, #f4f4f5);
   --ops-text-default: var(--nav-text-default, #3f3f46);
   --ops-radius: 10px;
   --ops-transition: all 0.15s ease;
+
+  /* v2 Numa typography — Metropolis (loaded globally via main.scss) */
+  --ops-font: 'Metropolis Regular', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ops-font-medium: 'Metropolis Medium', var(--ops-font);
+  --ops-font-display: 'Metropolis Semi Bold', var(--ops-font);
   --ops-font-xs: 0.7rem; /* meta text, section titles */
   --ops-font-sm: 0.75rem; /* field labels, badges */
   --ops-font-md: 0.85rem; /* field values, body text */
@@ -37,6 +44,28 @@
   --ops-radius-sm: 4px;
   --ops-radius-lg: 12px;
   --ops-radius-pill: 100px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v2 Numa typography — apply Metropolis across the Ops surface + portaled
+   modals (which mount outside .ops-root on document.body).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-root,
+.ticket-detail-modal,
+.create-ticket-modal,
+.crm-detail-modal,
+.ops-activity-sidebar,
+.ops-fab,
+.ops-fab-menu {
+  font-family: var(--ops-font);
+  color: var(--ops-text-default);
+}
+
+/* v2 base density: stray inherited text defaults to 14px, not Bootstrap's 16px.
+   Explicit rem/px sizes (the vast majority of Ops styles) are unaffected. */
+.ops-root {
+  font-size: 0.875rem;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -125,10 +154,157 @@
 }
 
 .kanban-column-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1a1a1a;
-  letter-spacing: 0.01em;
+  font-family: var(--ops-font-display);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ops-text-strong);
+  letter-spacing: -0.01em;
+}
+
+/* Small colour accent for CRM/lifecycle stage columns — v2 restraint: the
+   stage colour is a dot, not a saturated header bar. */
+.ops-stage-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* Outlined stage pill header (CRM / Suppliers): the stage colour is the pill's
+   border, not a saturated fill — restrained but still colour-coded per column. */
+.ops-stage-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--ops-stage-color, var(--ops-border));
+  background: color-mix(in srgb, var(--ops-stage-color, #ffffff) 12%, #ffffff);
+  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.ops-stage-pill .kanban-column-name {
+  font-family: var(--ops-font-medium);
+  font-weight: 500;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ops-stage-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ops-text-muted);
+  background: var(--ops-hover-bg);
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v2 filter toolbar buttons + dropdown menus (All Tickets / CRM filters)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--ops-border);
+  background: #fff;
+  color: var(--ops-text-default);
+  font-family: var(--ops-font-medium);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--ops-transition);
+  white-space: nowrap;
+}
+
+.ops-filter-btn:hover {
+  background: #fafafa;
+  border-color: var(--ops-border-strong);
+  color: var(--ops-text-strong);
+}
+
+.ops-filter-btn--active {
+  background: color-mix(in srgb, var(--brand-primary, #8e50a7) 8%, white 92%);
+  border-color: color-mix(in srgb, var(--brand-primary, #8e50a7) 35%, white 65%);
+  color: var(--brand-primary, #8e50a7);
+}
+
+.ops-filter-btn .bi {
+  font-size: 0.6rem;
+  opacity: 0.65;
+}
+
+.ops-filter-menu {
+  background: #fff;
+  border: 1px solid var(--ops-border);
+  border-radius: 12px;
+  box-shadow: var(--ops-shadow-lg);
+  padding: 4px;
+}
+
+.ops-filter-menu-title {
+  font-family: var(--ops-font-medium);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ops-text-secondary);
+  padding: 6px 10px 4px;
+}
+
+.ops-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  color: var(--ops-text-default);
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.ops-filter-option:hover {
+  background: var(--ops-hover-bg);
+}
+
+/* Brand-tinted checkboxes inside ops filter menus */
+.ops-filter-menu .form-check-input {
+  cursor: pointer;
+}
+
+.ops-filter-menu .form-check-input:checked {
+  background-color: var(--brand-primary, #8e50a7);
+  border-color: var(--brand-primary, #8e50a7);
+}
+
+.ops-filter-menu .form-check-input:focus {
+  border-color: var(--brand-primary, #8e50a7);
+  box-shadow: var(--ops-shadow-focus);
+}
+
+.ops-filter-menu .form-check-label {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--ops-text-default);
 }
 
 .kanban-column-count {
@@ -380,14 +556,12 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .ticket-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: var(--ops-radius);
-  margin-bottom: 6px;
+  background: #ffffff;
+  border-radius: var(--ops-radius-lg);
+  margin-bottom: 8px;
   cursor: grab;
   border: 1px solid var(--ops-border);
-  padding: 10px 12px;
+  padding: 11px 13px;
   transition:
     box-shadow var(--ops-transition-smooth),
     border-color var(--ops-transition-smooth),
@@ -398,9 +572,9 @@
 }
 
 .ticket-card:not(.ticket-card--dragging):hover {
-  box-shadow: var(--ops-shadow-lg);
-  border-color: #d1d5db;
-  transform: translateY(-3px);
+  box-shadow: var(--ops-shadow-md);
+  border-color: var(--ops-border-strong);
+  transform: translateY(-1px);
 }
 
 .ticket-card:not(.ticket-card--dragging):hover .ticket-card-actions {
@@ -528,10 +702,11 @@
 
 /* Title */
 .ticket-title {
-  font-size: 0.84rem;
+  font-family: var(--ops-font-medium);
+  font-size: 0.85rem;
   font-weight: 600;
   line-height: 1.4;
-  color: #111827;
+  color: var(--ops-text-strong);
   margin: 0 0 8px 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -708,8 +883,8 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  background-color: #eee;
-  border-radius: var(--ops-radius);
+  background-color: var(--ops-hover-bg, #f4f4f5);
+  border-radius: 10px;
   padding: 3px;
 }
 
@@ -717,15 +892,16 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 16px;
+  padding: 7px 14px;
   border: none;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
-  color: #6b7280;
-  font-size: 0.85rem;
+  color: #52525b;
+  font-family: var(--ops-font-medium);
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
-  transition: var(--ops-transition-smooth);
+  transition: var(--ops-transition);
   white-space: nowrap;
 }
 
@@ -738,15 +914,13 @@
 }
 
 .ops-nav-tab:hover {
-  color: #374151;
+  color: var(--ops-text-strong);
 }
 
 .ops-nav-tab.active {
   background-color: #ffffff;
   color: var(--brand-primary, var(--color-primary, #8e50a7));
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.08),
-    0 2px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   font-weight: 600;
 }
 
@@ -779,9 +953,10 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .ticket-section-heading {
+  font-family: var(--ops-font-display);
   font-size: var(--ops-font-base);
   font-weight: 600;
-  color: #1f2937;
+  color: var(--ops-text-strong);
   margin-bottom: 10px;
   display: flex;
   align-items: center;
@@ -795,13 +970,13 @@
 
 .ticket-detail-modal .modal-content {
   max-height: 88vh;
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   border: none;
   box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.15),
-    0 0 0 1px rgba(0, 0, 0, 0.05);
+    0 12px 40px rgba(0, 0, 0, 0.12),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 
 /* Modal.Body scrolls; header, lifecycle row and footer stay pinned */
@@ -814,7 +989,7 @@
 /* ── Header ──────────────────────────────────────────────────────────────── */
 
 .ticket-detail-modal .modal-header {
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--ops-border);
   padding: 1rem 1.5rem 0.75rem;
 }
 
@@ -834,10 +1009,10 @@
   font-size: var(--ops-font-sm);
   font-weight: 600;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  color: #6b7280;
-  background: #f3f4f6;
+  color: var(--ops-text-muted);
+  background: var(--ops-hover-bg);
   border: 1px solid var(--ops-border);
-  border-radius: 4px;
+  border-radius: 5px;
   padding: 2px 8px;
   flex-shrink: 0;
 }
@@ -852,8 +1027,8 @@
 
 .ticket-detail-sidebar {
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  border: 1px solid var(--ops-border);
+  border-radius: 12px;
   padding: 0;
 }
 
@@ -887,9 +1062,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  font-family: var(--ops-font-display);
   font-size: 0.8rem;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--ops-text-strong);
   cursor: pointer;
   user-select: none;
   padding: 10px 14px 6px;
@@ -918,10 +1094,13 @@
 }
 
 .ticket-sidebar-field-label {
-  font-size: 0.72rem;
+  font-family: var(--ops-font-medium);
+  font-size: 0.6875rem;
   font-weight: 600;
-  color: #374151;
-  margin-bottom: 2px;
+  color: var(--ops-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
 }
 
 /* Jira-style inline selects: borderless at rest, border appears on hover/focus */
@@ -936,21 +1115,21 @@
     border-color 0.15s ease,
     box-shadow 0.15s ease,
     background-color 0.15s ease;
-  color: #1f2937;
+  color: var(--ops-text-default);
   box-shadow: none;
 }
 
 .ticket-detail-sidebar .form-select:hover,
 .ticket-detail-sidebar .form-control:hover {
-  background-color: #f3f4f6;
-  border-color: #e5e7eb;
+  background-color: var(--ops-hover-bg);
+  border-color: var(--ops-border);
 }
 
 .ticket-detail-sidebar .form-select:focus,
 .ticket-detail-sidebar .form-control:focus {
   background-color: #fff;
-  border-color: #a78bfa;
-  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.15);
+  border-color: var(--brand-primary, #8e50a7);
+  box-shadow: var(--ops-shadow-focus);
   outline: none;
 }
 
@@ -958,7 +1137,7 @@
   display: flex;
   align-items: flex-start;
   padding: 7px 0;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f1f1f3;
   font-size: var(--ops-font-md);
 }
 
@@ -969,7 +1148,7 @@
 .ticket-sidebar-label {
   font-size: var(--ops-font-sm);
   font-weight: 500;
-  color: #6b7280;
+  color: var(--ops-text-muted);
   min-width: 88px;
   flex-shrink: 0;
   padding-top: 4px;
@@ -985,11 +1164,12 @@
 }
 
 .ticket-sidebar-section-title {
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-family: var(--ops-font-medium);
+  font-size: 0.6875rem;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   margin-top: 14px;
   margin-bottom: 6px;
   padding: 0 14px;
@@ -1002,7 +1182,7 @@
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 
 .ticket-detail-modal .modal-footer {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--ops-border);
   padding: 8px 16px;
   background: #fafafa;
 }
@@ -1032,17 +1212,18 @@
 }
 
 .ticket-detail-footer-btn--primary {
-  background: #2563eb;
+  background: var(--brand-primary, #8e50a7);
   color: #ffffff;
 }
 
 .ticket-detail-footer-btn--primary:hover {
-  background: #1d4ed8;
+  background: var(--brand-hover, #744188);
   color: #ffffff;
 }
 
 .ticket-detail-footer-btn--primary:disabled {
-  background: #93c5fd;
+  background: var(--brand-primary, #8e50a7);
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -1053,11 +1234,11 @@
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--ops-border);
   padding: 8px 20px;
   background: #fafafa;
   font-size: 0.72rem;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 .ticket-lifecycle-strip strong {
@@ -1072,7 +1253,7 @@
   max-width: 65%;
   overflow-y: auto;
   padding-right: 1.5rem;
-  border-right: 1px solid #f0f0f0;
+  border-right: 1px solid var(--ops-border);
 }
 
 .ticket-detail-right-col {
@@ -1096,9 +1277,12 @@
 }
 
 .ticket-detail-modal .ticket-section-heading {
-  font-size: 0.78rem;
+  font-family: var(--ops-font-medium);
+  font-size: 0.6875rem;
   font-weight: 600;
-  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ops-text-secondary);
   margin-bottom: 10px;
   display: flex;
   align-items: center;
@@ -1106,7 +1290,7 @@
 
 .ticket-detail-modal .ticket-section-heading .bi {
   font-size: 0.82rem;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 /* Wider badge limit inside sidebar */
@@ -1183,17 +1367,17 @@
 
 .crm-detail-modal .modal-content {
   max-height: 90vh;
-  border-radius: 12px;
+  border-radius: 14px;
   border: none;
   box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.15),
-    0 0 0 1px rgba(0, 0, 0, 0.05);
+    0 12px 40px rgba(0, 0, 0, 0.12),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
 }
 
 .crm-detail-modal .modal-header {
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--ops-border);
   padding: 1rem 1.5rem 0.75rem;
 }
 
@@ -1213,7 +1397,7 @@
 }
 
 .crm-detail-modal .modal-footer {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--ops-border);
   padding: 8px 20px;
   background: #fafafa;
 }
@@ -1227,7 +1411,7 @@
   padding: 10px 20px;
   cursor: pointer;
   user-select: none;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--ops-border);
   transition: background-color 0.1s ease;
 }
 
@@ -1238,19 +1422,20 @@
 .crm-section-header .bi-chevron-down,
 .crm-section-header .bi-chevron-right {
   font-size: 0.6rem;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   transition: transform 0.15s ease;
 }
 
 .crm-section-header-title {
+  font-family: var(--ops-font-display);
   font-size: 0.82rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--ops-text-strong);
 }
 
 .crm-section-header-icon {
   font-size: 0.82rem;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 .crm-section-body {
@@ -1299,7 +1484,7 @@
   align-items: flex-start;
   padding: 7px 0;
   font-size: 0.85rem;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid #f1f1f3;
   transition: background-color 0.1s ease;
 }
 
@@ -1312,16 +1497,19 @@
 }
 
 .crm-field-row--editing {
-  background-color: #f0f4ff !important;
+  background-color: color-mix(in srgb, var(--brand-primary, #8e50a7) 5%, white 95%) !important;
   border-radius: 6px;
   padding-left: 8px;
   padding-right: 8px;
 }
 
 .crm-field-label {
-  font-size: 0.78rem;
+  font-family: var(--ops-font-medium);
+  font-size: 0.6875rem;
   font-weight: 600;
-  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ops-text-muted);
   min-width: 120px;
   flex-shrink: 0;
   padding-top: 4px;
@@ -1330,20 +1518,20 @@
 .crm-field-value {
   flex: 1;
   min-width: 0;
-  color: #111827;
+  color: var(--ops-text-default);
   cursor: pointer;
   font-size: 0.82rem;
   padding: 3px 6px;
-  border-radius: 4px;
+  border-radius: 5px;
   transition: background-color 0.1s ease;
 }
 
 .crm-field-value:hover {
-  background-color: #f3f4f6;
+  background-color: var(--ops-hover-bg);
 }
 
 .crm-field-value--empty {
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   font-style: normal;
 }
 
@@ -1384,30 +1572,30 @@
 /* Selects in CRM modals — visible but subtle border to differentiate from text */
 .crm-detail-modal .form-select {
   font-size: 0.82rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ops-border);
   background-color: #fff;
   border-radius: 6px;
   padding: 4px 28px 4px 8px;
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
-  color: #1f2937;
+  color: var(--ops-text-default);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .crm-detail-modal .form-select:hover {
-  border-color: #d1d5db;
+  border-color: var(--ops-border-strong);
 }
 
 .crm-detail-modal .form-select:focus {
-  border-color: #a78bfa;
-  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.15);
+  border-color: var(--brand-primary, #8e50a7);
+  box-shadow: var(--ops-shadow-focus);
 }
 
 /* Text inputs in CRM modals when editing */
 .crm-detail-modal .form-control {
   font-size: 0.82rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ops-border);
   border-radius: 6px;
   padding: 4px 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -1417,12 +1605,12 @@
 }
 
 .crm-detail-modal .form-control:hover {
-  border-color: #d1d5db;
+  border-color: var(--ops-border-strong);
 }
 
 .crm-detail-modal .form-control:focus {
-  border-color: #a78bfa;
-  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.15);
+  border-color: var(--brand-primary, #8e50a7);
+  box-shadow: var(--ops-shadow-focus);
 }
 
 .crm-detail-modal .form-control.is-invalid {
@@ -1447,7 +1635,7 @@
   background: transparent;
   cursor: pointer;
   font-size: 0.82rem;
-  color: #1f2937;
+  color: var(--ops-text-default);
   text-align: left;
   transition:
     background-color 0.15s ease,
@@ -1457,8 +1645,8 @@
 }
 
 .sidebar-dropdown-trigger:hover {
-  background: #f3f4f6;
-  border-color: #e5e7eb;
+  background: var(--ops-hover-bg);
+  border-color: var(--ops-border);
 }
 
 .sidebar-dropdown-trigger:disabled {
@@ -1467,7 +1655,7 @@
 }
 
 .sidebar-dropdown-trigger--empty {
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 .sidebar-dropdown-trigger-content {
@@ -1479,12 +1667,12 @@
 }
 
 .sidebar-dropdown-placeholder {
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 .sidebar-dropdown-chevron {
   font-size: 0.6rem;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   flex-shrink: 0;
   transition: opacity 0.15s ease;
   opacity: 0;
@@ -1504,8 +1692,8 @@
   max-height: 260px;
   overflow-y: auto;
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  border: 1px solid var(--ops-border);
+  border-radius: 12px;
   box-shadow:
     0 10px 25px -5px rgba(0, 0, 0, 0.1),
     0 4px 10px -4px rgba(0, 0, 0, 0.06);
@@ -1534,12 +1722,12 @@
   gap: 6px;
   padding: 4px 8px 6px;
   margin: -4px -4px 4px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f1f1f3;
   z-index: 1;
 }
 
 .sidebar-dropdown-search-icon {
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   font-size: 0.78rem;
   flex-shrink: 0;
 }
@@ -1552,24 +1740,25 @@
   background: transparent;
   font-size: 0.82rem;
   padding: 4px 0;
-  color: #111827;
+  color: var(--ops-text-default);
 }
 
 .sidebar-dropdown-search-input::placeholder {
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 .sidebar-dropdown-empty {
   padding: 12px 10px;
   font-size: 0.78rem;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   text-align: center;
 }
 
 .sidebar-dropdown-group-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: #9ca3af;
+  font-family: var(--ops-font-medium);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--ops-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 6px 10px 3px;
@@ -1586,22 +1775,23 @@
   background: transparent;
   cursor: pointer;
   font-size: 0.82rem;
-  color: #1f2937;
+  color: var(--ops-text-default);
   text-align: left;
   transition: background-color 0.1s ease;
 }
 
 .sidebar-dropdown-item:hover {
-  background: #f3f4f6;
+  background: var(--ops-hover-bg);
 }
 
 .sidebar-dropdown-item--selected {
-  background: #ede9fe;
+  background: color-mix(in srgb, var(--brand-primary, #8e50a7) 10%, white 90%);
+  color: var(--brand-primary, #8e50a7);
   font-weight: 500;
 }
 
 .sidebar-dropdown-item--selected:hover {
-  background: #ddd6fe;
+  background: color-mix(in srgb, var(--brand-primary, #8e50a7) 16%, white 84%);
 }
 
 .sidebar-dropdown-item--disabled {
@@ -1637,7 +1827,7 @@
 
 .sidebar-dropdown-check {
   font-size: 0.82rem;
-  color: #7c3aed;
+  color: var(--brand-primary, #8e50a7);
   flex-shrink: 0;
 }
 
@@ -1646,16 +1836,18 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .create-ticket-right-panel {
-  background: #f9fafb;
-  border-radius: 8px;
+  background: #fafafa;
+  border: 1px solid var(--ops-border);
+  border-radius: 12px;
   padding: 1rem 1.25rem;
   height: 100%;
 }
 
 .create-ticket-section-label {
+  font-family: var(--ops-font-display);
   font-size: 0.875rem;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--ops-text-strong);
   margin-bottom: 8px;
   margin-top: 16px;
 }
@@ -1666,9 +1858,10 @@
 
 /* Right panel field labels should not inherit uppercase */
 .create-ticket-right-panel .form-label {
+  font-family: var(--ops-font-medium);
   font-size: 0.75rem;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--ops-text-muted);
   text-transform: none;
   letter-spacing: 0;
 }
@@ -2220,7 +2413,7 @@
 .backlog-group-card {
   background: #fff;
   border: 1px solid var(--ops-border);
-  border-radius: var(--ops-radius);
+  border-radius: var(--ops-radius-lg);
   margin-bottom: 12px;
   overflow: visible;
 }
@@ -2231,7 +2424,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: #f9fafb;
+  background: #fafafa;
   cursor: pointer;
   user-select: none;
   transition: background-color 0.15s;
@@ -2242,9 +2435,10 @@
 }
 
 .backlog-group-name {
+  font-family: var(--ops-font-display);
   font-size: 0.88rem;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--ops-text-strong);
   white-space: nowrap;
 }
 
@@ -2548,7 +2742,7 @@
   text-align: left;
   width: 100%;
   border: none;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f1f1f3;
 }
 
 .backlog-ticket-row:last-child {

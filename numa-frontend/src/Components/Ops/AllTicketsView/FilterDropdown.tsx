@@ -326,8 +326,8 @@ export function FilterDropdown({
       {/* ── Dropdown Menu ─────────────────────────────────────────────── */}
       {isOpen && (
         <div
-          className="position-absolute bg-white border rounded shadow-sm"
-          style={{ top: '100%', left: 0, zIndex: 1050, minWidth: 220, marginTop: 4 }}
+          className="position-absolute ops-filter-menu"
+          style={{ top: '100%', left: 0, zIndex: 1050, minWidth: 220, marginTop: 6 }}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
         >
           {/* Sort options */}

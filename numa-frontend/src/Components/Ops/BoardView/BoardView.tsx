@@ -2,17 +2,15 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
-  closestCenter,
-  pointerWithin,
   DragOverlay,
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
-  type CollisionDetection,
   useSensor,
   useSensors,
   PointerSensor,
 } from '@dnd-kit/core';
+import { kanbanCollisionDetection } from '../Shared/kanbanCollision';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
@@ -30,49 +28,6 @@ import './kanban.css';
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const ORDER_GAP = 1000;
-
-/**
- * Custom collision detection that prioritises the column (stage droppable) the
- * pointer is physically inside, then finds the closest sortable item within
- * that column.  Plain `closestCenter` measures center-to-center distance across
- * ALL droppables, so a ticket in the *original* column at a similar vertical
- * position can beat every target in the adjacent column — making it impossible
- * to drag one column to the right.
- */
-const kanbanCollisionDetection: CollisionDetection = (args) => {
-  // 1. Find column droppables the pointer is inside (ids start with "stage-")
-  const pointerCollisions = pointerWithin(args);
-  const overColumn = pointerCollisions.find((c) => String(c.id).startsWith('stage-'));
-
-  if (overColumn) {
-    // 2. Narrow candidates to TICKETS inside the hovered column. We intentionally
-    // exclude the column droppable itself from `closestCenter` here: the column's
-    // rect spans the full column height, so its center can beat every individual
-    // ticket center when the pointer is mid-column, causing the over target to
-    // collapse to the column (which the drop handler treats as "append to end").
-    // Falling back to the column only when there are no ticket candidates keeps
-    // empty columns droppable.
-    const columnId = overColumn.id as string;
-    const columnContainer = args.droppableContainers.find((c) => c.id === columnId);
-    const columnRect = columnContainer?.rect.current;
-
-    const filtered = args.droppableContainers.filter((container) => {
-      const id = String(container.id);
-      if (id.startsWith('stage-')) return false;
-      if (!columnRect) return false;
-      const rect = container.rect.current;
-      if (!rect) return false;
-      const itemCenterX = rect.left + rect.width / 2;
-      return itemCenterX >= columnRect.left && itemCenterX <= columnRect.left + columnRect.width;
-    });
-
-    const result = closestCenter({ ...args, droppableContainers: filtered });
-    return result.length > 0 ? result : [overColumn];
-  }
-
-  // 3. Pointer isn't inside any column — fall back to closestCenter globally
-  return closestCenter(args);
-};
 
 /**
  * Calculates the order value for a ticket being inserted at `insertIndex`

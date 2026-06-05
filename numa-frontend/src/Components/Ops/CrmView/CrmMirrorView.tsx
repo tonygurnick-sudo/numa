@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Button, Form, Spinner, Badge, Alert } from 'react-bootstrap';
 import {
   DndContext,
-  closestCenter,
   DragOverlay,
   PointerSensor,
   useSensor,
@@ -13,6 +12,7 @@ import {
   type DragOverEvent,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { kanbanCollisionDetection } from '../Shared/kanbanCollision';
 import { useTranslation } from 'react-i18next';
 
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
@@ -129,39 +129,12 @@ function DroppableColumn({
   const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
 
   const stageColor = stage.color || getColorForPosition(stage.colorPosition);
-  const textColor = getContrastTextColor(stageColor);
 
   return (
-    <div ref={setNodeRef} className="kanban-column" style={{ background: isOver ? '#faf5ff' : undefined }}>
-      <div
-        style={{
-          backgroundColor: stageColor,
-          color: textColor,
-          borderRadius: 8,
-          padding: '7px 12px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 12,
-          position: 'sticky',
-          top: 0,
-          zIndex: 2,
-          boxShadow: '0 4px 8px -2px rgba(0, 0, 0, 0.08)',
-        }}
-      >
-        <span style={{ fontWeight: 700, fontSize: '0.78rem' }}>{stage.name}</span>
-        <span
-          style={{
-            backgroundColor: 'rgba(255,255,255,0.25)',
-            borderRadius: 10,
-            padding: '1px 7px',
-            fontSize: '0.68rem',
-            fontWeight: 700,
-            color: textColor,
-          }}
-        >
-          {customers.length}
-        </span>
+    <div ref={setNodeRef} className="kanban-column" style={{ background: isOver ? 'var(--ops-hover-bg)' : undefined }}>
+      <div className="ops-stage-pill" style={{ '--ops-stage-color': stageColor } as React.CSSProperties}>
+        <span className="kanban-column-name">{stage.name}</span>
+        <span className="ops-stage-pill-count">{customers.length}</span>
       </div>
 
       <div style={{ flex: 1, minHeight: 40 }}>
@@ -956,13 +929,10 @@ const CrmMirrorView = (): React.JSX.Element => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
-      <div
-        className="d-flex flex-column"
-        style={{ minHeight: '100%', height: viewMode === 'list' ? '100%' : undefined }}
-      >
+      <div className="d-flex flex-column" style={{ height: '100%', minHeight: 0, overflow: 'hidden' }}>
         {/* ── Toolbar ──────────────────────────────────────────────────── */}
         <div
-          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white"
+          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white flex-shrink-0"
           style={{ minHeight: 48 }}
         >
           <Form.Control
@@ -1004,7 +974,7 @@ const CrmMirrorView = (): React.JSX.Element => {
                 style={{
                   padding: '5px 10px',
                   border: 'none',
-                  background: viewMode === 'board' ? '#4f46e5' : '#fff',
+                  background: viewMode === 'board' ? 'var(--brand-primary, #8e50a7)' : '#fff',
                   color: viewMode === 'board' ? '#fff' : '#6b7280',
                   cursor: 'pointer',
                   fontSize: '0.85rem',
@@ -1021,7 +991,7 @@ const CrmMirrorView = (): React.JSX.Element => {
                   padding: '5px 10px',
                   border: 'none',
                   borderLeft: '1px solid #e5e7eb',
-                  background: viewMode === 'list' ? '#4f46e5' : '#fff',
+                  background: viewMode === 'list' ? 'var(--brand-primary, #8e50a7)' : '#fff',
                   color: viewMode === 'list' ? '#fff' : '#6b7280',
                   cursor: 'pointer',
                   fontSize: '0.85rem',
@@ -1036,8 +1006,8 @@ const CrmMirrorView = (): React.JSX.Element => {
 
         {/* ── Filter bar (shared across board + list) ─────────────────── */}
         <div
-          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom"
-          style={{ backgroundColor: '#fafbfc' }}
+          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom flex-shrink-0"
+          style={{ backgroundColor: '#fafafa' }}
         >
           <div className="d-flex flex-wrap align-items-center gap-2">
             <QuickFilterDropdown
@@ -1133,7 +1103,8 @@ const CrmMirrorView = (): React.JSX.Element => {
           </div>
         )}
         <div
-          className={`flex-grow-1 d-flex flex-column px-3 pb-3 pt-3${viewMode === 'list' ? ' overflow-hidden' : ''}`}
+          className={`flex-grow-1 d-flex flex-column px-3 pb-3 pt-3 ${viewMode === 'list' ? 'overflow-hidden' : 'overflow-auto'}`}
+          style={{ minHeight: 0 }}
         >
           {viewMode === 'list' ? (
             <div
@@ -1246,7 +1217,7 @@ const CrmMirrorView = (): React.JSX.Element => {
           ) : (
             <DndContext
               sensors={sensors}
-              collisionDetection={closestCenter}
+              collisionDetection={kanbanCollisionDetection}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
               onDragEnd={(e) => void handleDragEnd(e)}
