@@ -49,13 +49,7 @@ import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAlert, useConfirm } from '../Providers/ConfirmContext';
 import BrandingAdminPanel from '../Components/Branding/BrandingAdminPanel';
-import UsageAnalyticsPanel from '../Components/UsageAnalytics/UsageAnalyticsPanel';
-import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
-
-import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab';
-import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
-import UserManagementAuditTab from '../Components/UsageAnalytics/UserManagementAuditTab';
 import { UNSAFE_NavigationContext, useParams, useNavigate } from 'react-router-dom';
 import {
   AdminChatSettingsService,
@@ -122,13 +116,6 @@ const useNavigationConfirm = (when: boolean, message: string) => {
   }, [navigationContext, when, message, confirm, tCommon]);
 };
 
-const AUDIT_SUB_DEFAULTS: Record<string, string> = {
-  activity: 'user-activity',
-  index: 'web-crawler',
-  files: 'sync',
-  users: 'user-management',
-};
-
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');
@@ -141,23 +128,11 @@ export default function SettingsPage() {
   // The legacy `data-connectors` tab is now folded into the `integrations`
   // tab — preserve any deep links by mapping the old key on initial mount.
   const [activeKey, setActiveKey] = useState<string>(urlTab === 'data-connectors' ? 'integrations' : urlTab || 'users');
-  const validScopes = ['user', 'admin', 'developer', 'services'] as const;
+  const validScopes = ['user', 'admin'] as const;
   type SettingsScope = (typeof validScopes)[number];
   const [settingsScope, setSettingsScope] = useState<SettingsScope>(
     validScopes.includes(urlScope as SettingsScope) ? (urlScope as SettingsScope) : 'user'
   );
-  // CHOSE HEAD: richer services-scope tab state + rebuild state. 3af3ef8e used a simpler audit scope.
-  // To revert to 3af3ef8e: replace with:
-  //   const [auditTabKey, setAuditTabKey] = useState<string>(urlScope === 'audit' && urlTab ? urlTab : 'user-activity');
-  const [auditTabKey, setAuditTabKey] = useState<string>(() => {
-    if ((urlScope === 'services' || urlScope === 'audit') && urlTab && urlTab in AUDIT_SUB_DEFAULTS) return urlTab;
-    return 'activity';
-  });
-  const [auditSubKey, setAuditSubKey] = useState<string>(() => AUDIT_SUB_DEFAULTS[auditTabKey] ?? 'user-activity');
-  const handleAuditTabChange = useCallback((key: string) => {
-    setAuditTabKey(key);
-    setAuditSubKey(AUDIT_SUB_DEFAULTS[key] ?? 'user-activity');
-  }, []);
 
   // Upload/Scan table state (shared data source)
   const brandingFlag =
@@ -179,7 +154,6 @@ export default function SettingsPage() {
   const creditsEnabled = getFlag('SHOW_CREDITS');
   // Hidden by default — only shown when explicitly set to true in numa-client-config
   const usageReportingEnabled = window.sessionStorage.getItem('DEPLOY_USAGE_REPORTING') === 'true';
-  const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
   const disasterRecoveryEnabled = getFlag('DISASTER_RECOVERY');
   const availableIntegrations = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
 
@@ -187,10 +161,7 @@ export default function SettingsPage() {
     if (!isAdmin && settingsScope !== 'user') {
       setSettingsScope('user');
     }
-    if (!developerModeEnabled && (settingsScope === 'developer' || settingsScope === 'services')) {
-      setSettingsScope('admin');
-    }
-  }, [isAdmin, developerModeEnabled, settingsScope]);
+  }, [isAdmin, settingsScope]);
 
   // Global (admin) settings — SWR: initialize from cache for instant render
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>(
@@ -852,17 +823,11 @@ export default function SettingsPage() {
       case 'admin':
         tab = activeKey;
         break;
-      case 'developer':
-        tab = 'api-keys';
-        break;
-      case 'services':
-        tab = auditTabKey;
-        break;
       default:
         tab = userSettingsTabKey;
     }
     navigate(`/settings/${currentScope}/${tab}`, { replace: true });
-  }, [currentScope, activeKey, userSettingsTabKey, auditTabKey, navigate]);
+  }, [currentScope, activeKey, userSettingsTabKey, navigate]);
 
   const [isBrandingDirty, setIsBrandingDirty] = useState<boolean>(false);
 
@@ -1485,13 +1450,6 @@ export default function SettingsPage() {
   const activeTabLabel = (() => {
     if (currentScope === 'admin') return adminTabs.find((tab) => tab.key === activeKey)?.label;
     if (currentScope === 'user') return userTabs.find((tab) => tab.key === userSettingsTabKey)?.label;
-    if (currentScope === 'services')
-      return [
-        { key: 'activity', label: t('auditTabs.activity') },
-        { key: 'index', label: t('auditTabs.index') },
-        { key: 'files', label: t('auditTabs.files') },
-        { key: 'users', label: t('auditTabs.users') },
-      ].find((tab) => tab.key === auditTabKey)?.label;
     return undefined;
   })();
 
@@ -1499,15 +1457,7 @@ export default function SettingsPage() {
     <div className="dashboard settings-page">
       <PageHeader
         title={activeTabLabel ? `${t('header.title')} / ${activeTabLabel}` : t('header.title')}
-        subtitle={
-          currentScope === 'admin'
-            ? t('header.adminSubtitle')
-            : currentScope === 'developer'
-              ? t('header.developerSubtitle')
-              : currentScope === 'services'
-                ? t('header.servicesSubtitle')
-                : t('header.userSubtitle')
-        }
+        subtitle={currentScope === 'admin' ? t('header.adminSubtitle') : t('header.userSubtitle')}
         actions={
           isAdmin ? (
             <div className="settings-scope-toggle" role="group" aria-label={t('scope.label')}>
@@ -1527,26 +1477,6 @@ export default function SettingsPage() {
                 <i className="bi bi-shield-lock" aria-hidden="true"></i>
                 {t('scope.admin')}
               </button>
-              {developerModeEnabled && (
-                <button
-                  type="button"
-                  className={`settings-scope-toggle__button ${currentScope === 'developer' ? 'active' : ''}`}
-                  onClick={() => setSettingsScope('developer')}
-                >
-                  <i className="bi bi-code-slash" aria-hidden="true"></i>
-                  {t('scope.developer')}
-                </button>
-              )}
-              {developerModeEnabled && (
-                <button
-                  type="button"
-                  className={`settings-scope-toggle__button ${currentScope === 'services' ? 'active' : ''}`}
-                  onClick={() => setSettingsScope('services')}
-                >
-                  <i className="bi bi-clock-history" aria-hidden="true"></i>
-                  {t('scope.services')}
-                </button>
-              )}
             </div>
           ) : undefined
         }
@@ -1568,22 +1498,6 @@ export default function SettingsPage() {
           onSelect={setUserSettingsTabKey}
           ariaLabel={t('scope.user')}
           className="settings-user-tabs-bar"
-        />
-      )}
-      {isAdmin && currentScope === 'services' && (
-        <SubHeaderTabBar
-          // CHOSE HEAD: grouped sub-tabs (activity/index/files) match the nested services panel below.
-          // 3af3ef8e used flat top-level tabs. To revert: replace with the 3af3ef8e flat list.
-          items={[
-            { key: 'activity', label: t('auditTabs.activity'), iconClassName: 'bi bi-people' },
-            { key: 'index', label: t('auditTabs.index'), iconClassName: 'bi bi-search' },
-            { key: 'files', label: t('auditTabs.files'), iconClassName: 'bi bi-file-text' },
-            { key: 'users', label: t('auditTabs.users'), iconClassName: 'bi bi-person-plus' },
-          ]}
-          activeKey={auditTabKey}
-          onSelect={handleAuditTabChange}
-          ariaLabel={t('scope.services')}
-          className="settings-admin-tabs-bar"
         />
       )}
 
@@ -2684,114 +2598,6 @@ export default function SettingsPage() {
                 </Tab>
               )}
             </StyledTabs>
-          </div>
-        )}
-
-        {isAdmin && (
-          <div hidden={currentScope !== 'developer'} aria-hidden={currentScope !== 'developer'}>
-            <UsageAnalyticsPanel />
-          </div>
-        )}
-
-        {/* CHOSE HEAD: services scope panel with nested activity/index/files sub-tabs.
-            3af3ef8e had a simpler 'audit' scope with flat top-level tabs.
-            To revert to 3af3ef8e panel: replace this div's scope with 'audit' and simplify tab structure. */}
-        {isAdmin && (
-          <div hidden={currentScope !== 'services'} aria-hidden={currentScope !== 'services'}>
-            {auditTabKey === 'activity' && (
-              <>
-                <div className="d-flex gap-2 mb-3">
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'user-activity' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('user-activity')}
-                  >
-                    <i className="bi bi-people me-1" />
-                    {t('auditTabs.userActivity')}
-                  </button>
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'automation' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('automation')}
-                  >
-                    <i className="bi bi-gear me-1" />
-                    {t('auditTabs.automation')}
-                  </button>
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'notifications' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('notifications')}
-                  >
-                    <i className="bi bi-bell me-1" />
-                    {t('auditTabs.notifications')}
-                  </button>
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'schedule' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('schedule')}
-                  >
-                    <i className="bi bi-calendar-event me-1" />
-                    {t('auditTabs.schedule')}
-                  </button>
-                </div>
-                {auditSubKey === 'user-activity' && <AuditPanel />}
-                {auditSubKey === 'automation' && <GenericAuditLogTab logType="automation" />}
-                {auditSubKey === 'notifications' && <NotificationsAuditPanel />}
-                {auditSubKey === 'schedule' && <GenericAuditLogTab logType="schedule" />}
-              </>
-            )}
-
-            {auditTabKey === 'index' && (
-              <>
-                <div className="d-flex gap-2 mb-3">
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'web-crawler' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('web-crawler')}
-                  >
-                    <i className="bi bi-globe me-1" />
-                    {t('auditTabs.webCrawler')}
-                  </button>
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'search-index' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('search-index')}
-                  >
-                    <i className="bi bi-search me-1" />
-                    {t('auditTabs.searchIndex')}
-                  </button>
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'kb-index' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('kb-index')}
-                  >
-                    <i className="bi bi-database me-1" />
-                    {t('auditTabs.kbIndex')}
-                  </button>
-                </div>
-                {auditSubKey === 'web-crawler' && <GenericAuditLogTab logType="web-crawler" />}
-                {auditSubKey === 'search-index' && <GenericAuditLogTab logType="search-index" />}
-                {auditSubKey === 'kb-index' && <GenericAuditLogTab logType="kb-index" />}
-              </>
-            )}
-
-            {auditTabKey === 'files' && (
-              <>
-                <div className="d-flex gap-2 mb-3">
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'sync' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('sync')}
-                  >
-                    <i className="bi bi-arrow-repeat me-1" />
-                    {t('auditTabs.sync')}
-                  </button>
-                  <button
-                    className={`btn btn-sm ${auditSubKey === 'recovery' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setAuditSubKey('recovery')}
-                  >
-                    <i className="bi bi-arrow-counterclockwise me-1" />
-                    {t('auditTabs.recovery')}
-                  </button>
-                </div>
-                {auditSubKey === 'sync' && <GenericAuditLogTab logType="sync" />}
-                {auditSubKey === 'recovery' && <GenericAuditLogTab logType="recovery" />}
-              </>
-            )}
-
-            {auditTabKey === 'users' && <UserManagementAuditTab />}
           </div>
         )}
       </div>

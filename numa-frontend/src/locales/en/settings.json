@@ -3,17 +3,13 @@
     "title": "Settings",
     "adminSubtitle": "Manage company-wide controls and policies.",
     "userSubtitle": "Manage your personal preferences and defaults.",
-    "developerSubtitle": "API keys and developer tools.",
-    "auditSubtitle": "System logs and activity monitoring.",
-    "servicesSubtitle": "System services and file processing."
+    "auditSubtitle": "System logs and activity monitoring."
   },
   "scope": {
     "label": "Settings scope",
     "user": "Your Settings",
     "admin": "Admin Settings",
-    "developer": "Developer",
-    "audit": "Audit",
-    "services": "Services"
+    "audit": "Audit"
   },
   "tabs": {
     "users": "Users",
