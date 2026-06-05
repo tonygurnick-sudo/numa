@@ -842,16 +842,92 @@ const deletePKCESession = async (sessionId: string): Promise<void> => {
  * data-connectors DynamoDB record. Failures are logged but never block the
  * OAuth flow.
  */
-const registerGmailWatch = async (accessToken: string, userSub: string): Promise<void> => {
-  if (!DATA_CONNECTORS_TABLE_NAME || !DATA_CONNECTORS_SETTINGS_TABLE_NAME) {
-    console.warn(
-      'Gmail watch skipped: DATA_CONNECTORS_TABLE_NAME or DATA_CONNECTORS_SETTINGS_TABLE_NAME not configured'
+/**
+ * Returns true when the user has a connected Gmail row in the data-connectors
+ * table. This is the email→user_sub mapping the trigger dispatcher requires;
+ * the status endpoint uses it so a Gmail connection is only reported
+ * "connected" when it is actually triggerable. Fails OPEN (returns true) on a
+ * lookup error so a transient DynamoDB blip never flips a working connection to
+ * "disconnected" and nags the user to reconnect.
+ */
+const gmailConnectorRowExists = async (safeSub: string): Promise<boolean> => {
+  try {
+    const result = await ddbDoc.send(
+      new GetCommand({
+        TableName: DATA_CONNECTORS_TABLE_NAME,
+        Key: { user_id: safeSub, connector_id: 'gmail' },
+      })
     );
+    return result.Item?.status === 'connected';
+  } catch (error) {
+    console.warn(`gmailConnectorRowExists lookup failed for ${safeSub} (failing open):`, error);
+    return true;
+  }
+};
+
+const registerGmailWatch = async (accessToken: string, userSub: string): Promise<void> => {
+  if (!DATA_CONNECTORS_TABLE_NAME) {
+    console.warn('Gmail watch skipped: DATA_CONNECTORS_TABLE_NAME not configured');
     return;
   }
 
+  const safeSub = userSub.replace(/[^a-zA-Z0-9_-]/g, '');
+
   try {
-    // 0. Look up the Pub/Sub topic from the global connector settings table
+    // 1. Fetch the user's email from the Gmail profile. This is the key the
+    //    trigger dispatcher uses to map an inbound Pub/Sub event
+    //    (which only carries `emailAddress`) back to a user — so we need it on
+    //    the connector row regardless of whether push-watch registration works.
+    let userEmail = '';
+    try {
+      const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (profileRes.ok) {
+        const profile = (await profileRes.json()) as { emailAddress?: string };
+        userEmail = profile.emailAddress || '';
+      } else {
+        console.warn('Failed to fetch Gmail profile:', profileRes.status);
+      }
+    } catch (err) {
+      console.warn('Gmail profile fetch error (non-fatal):', err);
+    }
+
+    // 2. ALWAYS write the data-connectors row first. This row is the
+    //    email→user_sub mapping the connector-event-dispatcher REQUIRES to
+    //    process Gmail triggers (the vault stores the OAuth token but not the
+    //    email). It must exist whenever the user has a vault token, so that
+    //    "connected" (which the status endpoint derives from the vault) also
+    //    means "triggerable". Decoupling it from the watch call below is the
+    //    fix for the silent-failure mode where a transient watch error left a
+    //    user connected-in-vault but with no connector row → triggers dead.
+    //    `connected_at` is set once; `last_history_id` is intentionally left
+    //    untouched so we don't reset an existing watermark on reconnect.
+    await ddbDoc.send(
+      new UpdateCommand({
+        TableName: DATA_CONNECTORS_TABLE_NAME,
+        Key: { user_id: safeSub, connector_id: 'gmail' },
+        UpdateExpression:
+          'SET #s = :status, connected_email = :email, connected_at = if_not_exists(connected_at, :now), updated_at = :now',
+        ExpressionAttributeNames: { '#s': 'status' },
+        ExpressionAttributeValues: {
+          ':status': 'connected',
+          ':email': userEmail,
+          ':now': new Date().toISOString(),
+        },
+      })
+    );
+    console.log(`Gmail connector row written for user ${safeSub} (${userEmail})`);
+
+    // 3. Attempt push-watch registration. A failure here (missing Pub/Sub
+    //    topic, Gmail API error, non-Workspace account, etc.) does NOT undo the
+    //    connection — the row above stands, and the gmail-watch-manager renewal
+    //    job will keep retrying the watch on its schedule because the row is
+    //    `status = connected`. We just log loudly so the gap is visible.
+    if (!DATA_CONNECTORS_SETTINGS_TABLE_NAME) {
+      console.warn('Gmail watch skipped: DATA_CONNECTORS_SETTINGS_TABLE_NAME not configured (connection still saved)');
+      return;
+    }
     const settingsResult = await ddbDoc.send(
       new GetCommand({
         TableName: DATA_CONNECTORS_SETTINGS_TABLE_NAME,
@@ -860,23 +936,12 @@ const registerGmailWatch = async (accessToken: string, userSub: string): Promise
     );
     const pubsubTopic = settingsResult.Item?.pubsubTopic as string | undefined;
     if (!pubsubTopic) {
-      console.warn('Gmail watch skipped: no pubsubTopic found in connector settings (run GCP setup wizard first)');
+      console.warn(
+        'Gmail watch skipped: no pubsubTopic in connector settings (run GCP setup wizard) — connection still saved'
+      );
       return;
     }
 
-    // 1. Fetch user email from Gmail profile
-    const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    let userEmail = '';
-    if (profileRes.ok) {
-      const profile = (await profileRes.json()) as { emailAddress?: string };
-      userEmail = profile.emailAddress || '';
-    } else {
-      console.warn('Failed to fetch Gmail profile:', profileRes.status);
-    }
-
-    // 2. Call users.watch() to register push notifications
     const watchRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/watch', {
       method: 'POST',
       headers: {
@@ -891,33 +956,29 @@ const registerGmailWatch = async (accessToken: string, userSub: string): Promise
 
     if (!watchRes.ok) {
       const errorText = await watchRes.text();
-      console.error(`Gmail watch registration failed (${watchRes.status}):`, errorText);
+      console.error(
+        `Gmail watch registration failed (${watchRes.status}) — connection saved, renewal job will retry:`,
+        errorText
+      );
       return;
     }
 
     const watchData = (await watchRes.json()) as { historyId?: string; expiration?: string };
     console.log('Gmail watch registered', { historyId: watchData.historyId, expiration: watchData.expiration });
 
-    // 3. Store connected_email + watch_expiry on the data-connectors record
+    // 4. Stamp the watch lifetime onto the row now that the watch is live.
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    const safeSub = userSub.replace(/[^a-zA-Z0-9_-]/g, '');
-
     await ddbDoc.send(
       new UpdateCommand({
         TableName: DATA_CONNECTORS_TABLE_NAME,
         Key: { user_id: safeSub, connector_id: 'gmail' },
-        UpdateExpression:
-          'SET #s = :status, connected_email = :email, watch_expiry = :expiry, watch_registered_at = :now',
-        ExpressionAttributeNames: { '#s': 'status' },
+        UpdateExpression: 'SET watch_expiry = :expiry, watch_registered_at = :now',
         ExpressionAttributeValues: {
-          ':status': 'connected',
-          ':email': userEmail,
           ':expiry': Date.now() + sevenDaysMs,
           ':now': new Date().toISOString(),
         },
       })
     );
-
     console.log(`Gmail watch registered for user ${safeSub} (${userEmail})`);
   } catch (error) {
     console.error('Gmail watch registration error (non-fatal):', error);
@@ -1633,6 +1694,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         const safeSub = auth.sub.replace(/[^a-zA-Z0-9_-]/g, '');
         const secret = await getUserOAuthSecret(safeSub, provider);
         if (secret && secret.access_token) {
+          // Gmail is special: a valid vault token is necessary but NOT
+          // sufficient. Event triggers also need the data-connectors row (the
+          // email→user_sub map the dispatcher resolves inbound Pub/Sub events
+          // against). If the token exists but the row doesn't — e.g. a
+          // disconnect deleted the row while orphaning the vault token — report
+          // `disconnected` so the UI prompts a reconnect (which `registerGmailWatch`
+          // turns back into a complete, triggerable connection) rather than
+          // claiming "connected" for a connection that can't actually fire.
+          if (provider === 'gmail' && DATA_CONNECTORS_TABLE_NAME) {
+            const hasRow = await gmailConnectorRowExists(safeSub);
+            if (!hasRow) {
+              console.warn(
+                `Gmail status: vault token present but no connector row for ${safeSub} — reporting disconnected`
+              );
+              return jsonResponse(200, { status: 'disconnected', reason: 'missing_connector_row' });
+            }
+          }
           const expiresAt = new Date(secret.expires_at).getTime();
           const isExpired = Date.now() >= expiresAt - 5 * 60 * 1000;
           return jsonResponse(200, {
