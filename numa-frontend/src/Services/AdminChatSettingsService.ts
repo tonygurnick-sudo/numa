@@ -149,6 +149,16 @@ function validateGlobal(data: unknown): GlobalChatSettings {
     defaultNativeConnectorIds: Array.isArray(obj.defaultNativeConnectorIds)
       ? obj.defaultNativeConnectorIds.filter((id): id is string => typeof id === 'string')
       : DEFAULT_GLOBAL_CHAT_SETTINGS.defaultNativeConnectorIds,
+    // FEAT-019: per-app account scope is user-only (admins have no UI to set
+    // it globally — accounts are per-user). Field is on the shared
+    // ChatSettings type, so preserve whatever the API returns (empty record
+    // by default) to keep the type honest. Mirrors integrationApprovalModes.
+    defaultAccountsByApp:
+      typeof obj.defaultAccountsByApp === 'object' &&
+      obj.defaultAccountsByApp !== null &&
+      !Array.isArray(obj.defaultAccountsByApp)
+        ? (obj.defaultAccountsByApp as Record<string, string[]>)
+        : {},
     language:
       typeof obj.language === 'string' || obj.language === null
         ? (obj.language as string | null)

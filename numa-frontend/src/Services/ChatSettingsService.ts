@@ -43,6 +43,12 @@ export type ChatSettings = {
    *  enabled by default when a new chat starts. Empty array = "none enabled
    *  by default" (matches Pipedream behaviour). */
   defaultNativeConnectorIds: string[];
+  /** FEAT-019: per-chat default account scope for multi-account Pipedream
+   *  integrations. Keyed by Pipedream app slug → allow-list of account IDs.
+   *  An absent slug or empty array means "all connected accounts active"
+   *  (the legacy default the proxy already assumes). Only meaningful for
+   *  slugs the admin has opted into multi-account; ignored otherwise. */
+  defaultAccountsByApp: Record<string, string[]>;
   language: string | null;
   approvalMode: ApprovalMode;
   numaToolApprovalMode: NumaToolApprovalMode;
@@ -128,6 +134,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
   defaultNativeConnectorIds: [],
+  defaultAccountsByApp: {},
   language: 'browser',
   approvalMode: 'non_destructive',
   numaToolApprovalMode: { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE },
@@ -339,6 +346,23 @@ function validateIntegrationApprovalModes(data: unknown): Record<string, Approva
   return out;
 }
 
+/** FEAT-019: sanitise the per-app account-scope map. Keys are app slugs,
+ *  values are string[] of account IDs. Drops malformed keys/values and
+ *  empty arrays (empty = "all accounts", so there's no point persisting it). */
+function validateAccountsByApp(data: unknown): Record<string, string[]> {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return {};
+  const obj = data as Record<string, unknown>;
+  const out: Record<string, string[]> = {};
+  for (const [slug, ids] of Object.entries(obj)) {
+    if (typeof slug !== 'string' || !slug.trim()) continue;
+    if (!Array.isArray(ids)) continue;
+    const cleaned = ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    if (cleaned.length === 0) continue;
+    out[slug.trim()] = cleaned;
+  }
+  return out;
+}
+
 /**
  * Validate and sanitize settings from API response.
  * Ensures all fields have correct types, falling back to defaults if invalid.
@@ -377,6 +401,7 @@ function validateSettings(data: unknown): ChatSettings {
     defaultNativeConnectorIds: Array.isArray(obj.defaultNativeConnectorIds)
       ? obj.defaultNativeConnectorIds.filter((id): id is string => typeof id === 'string')
       : DEFAULT_CHAT_SETTINGS.defaultNativeConnectorIds,
+    defaultAccountsByApp: validateAccountsByApp(obj.defaultAccountsByApp),
     language:
       typeof obj.language === 'string' || obj.language === null
         ? (obj.language as string | null)
