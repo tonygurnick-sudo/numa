@@ -2,7 +2,7 @@
  * WorkspaceChatFileUpload - Modal for uploading files to workspace.
  *
  * Uploads files directly to S3 using presigned URLs, bypassing CloudFront's 10MB limit.
- * Supports files up to 200MB with real progress tracking.
+ * Supports files up to 500MB with real progress tracking.
  * Supports drag-and-drop, multi-file selection, and folder uploads.
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -190,7 +190,8 @@ export function WorkspaceChatFileUpload({
    */
   const addFiles = useCallback(
     (newFiles: File[], relativePaths?: string[]) => {
-      const maxSize = 500 * 1024 * 1024; // 500MB (direct S3 upload bypasses CloudFront 10MB limit)
+      const maxSizeMb = 500; // direct S3 upload bypasses CloudFront 10MB limit
+      const maxSize = maxSizeMb * 1024 * 1024;
 
       // Filter out folder entries that browsers sometimes include, plus
       // hidden/skip-listed paths (.git/, node_modules/, etc.) which the
@@ -226,7 +227,7 @@ export function WorkspaceChatFileUpload({
             relativePath,
             status: 'error' as const,
             progress: 0,
-            error: t('workspace.fileUpload.fileTooLarge'),
+            error: t('workspace.fileUpload.fileTooLarge', { size: maxSizeMb }),
           };
         }
         return {

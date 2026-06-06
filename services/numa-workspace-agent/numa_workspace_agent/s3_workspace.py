@@ -1082,8 +1082,8 @@ def archive_claude_session(
     Returns:
         True if archived successfully, False otherwise
     """
-    import io
     import tarfile
+    import tempfile
 
     if not OUTPUTS_BUCKET:
         logger.warning("No OUTPUTS_BUCKET configured for session archive")
@@ -1096,24 +1096,30 @@ def archive_claude_session(
 
     key = f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/_system/claude-home.tar.gz"
 
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
-        tf.add(claude_dir, arcname=".claude")
-
-    archive_size = buf.tell()
-    buf.seek(0)
-
+    # Stream the archive through a temp file on disk rather than building the
+    # whole tar.gz in an io.BytesIO in RAM — a large .claude tree would
+    # otherwise be held entirely in memory twice (BytesIO + put_object Body).
+    # tarfile writes to disk, then s3.upload_file streams it back up in chunks
+    # (boto3 adds a CRC32 integrity check). Same object/key/behavior.
+    tmp_fd, tmp_name = tempfile.mkstemp(suffix=".tar.gz")
+    os.close(tmp_fd)
     try:
+        with tarfile.open(tmp_name, mode="w:gz") as tf:
+            tf.add(claude_dir, arcname=".claude")
+
+        archive_size = os.path.getsize(tmp_name)
+
         s3 = _get_s3_client()
         # Store session_id as object metadata for quick retrieval on restore
-        put_kwargs: dict = {
-            "Bucket": OUTPUTS_BUCKET,
-            "Key": key,
-            "Body": buf.getvalue(),
-        }
+        extra_args: dict = {}
         if session_id:
-            put_kwargs["Metadata"] = {"session-id": session_id}
-        s3.put_object(**put_kwargs)
+            extra_args["Metadata"] = {"session-id": session_id}
+        s3.upload_file(
+            tmp_name,
+            OUTPUTS_BUCKET,
+            key,
+            ExtraArgs=extra_args or None,
+        )
     except ClientError as e:
         logger.error(
             "Failed to upload Claude session to S3",
@@ -1121,6 +1127,11 @@ def archive_claude_session(
             error=str(e),
         )
         return False
+    finally:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
 
     logger.info(
         "Archived Claude session to S3",

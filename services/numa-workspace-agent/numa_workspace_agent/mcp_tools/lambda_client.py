@@ -7,12 +7,19 @@ the unified numa_tool can share the same invocation logic.
 
 import json
 import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import structlog
+from numa_workspace_agent.atomic_io import (
+    FileIntegrityError,
+    atomic_download_url,
+    atomic_write_bytes,
+    atomic_write_text,
+)
 from numa_workspace_agent.mcp_tools.schema_preview import build_schema_preview
 
 logger = structlog.get_logger()
@@ -39,6 +46,145 @@ PREVIEW_LENGTH = 500
 
 # Schema walker for large integration results lives in schema_preview.py
 # so numa_ops and numa_files can reuse it.
+
+
+def _atomic_urlretrieve(url: str, dest: str | Path) -> None:
+    """Download `url` to `dest` atomically.
+
+    urllib.request.urlretrieve writes directly to the final path as bytes
+    stream in — a crash, OOM, or container kill mid-download leaves a
+    truncated file at the final path that a later session would treat as a
+    complete, valid download. We instead download to a temp file in the SAME
+    directory (so os.replace stays on one filesystem and is atomic on POSIX)
+    and only swap it into place once the transfer fully succeeds. On any
+    failure the partial temp file is removed and the error re-raised, so the
+    final path either holds a complete file or no file at all.
+    """
+    import urllib.request
+
+    dest_path = Path(dest)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    tmp_path = dest_path.parent / f"{dest_path.name}.part-{uuid.uuid4().hex}"
+    try:
+        urllib.request.urlretrieve(url, str(tmp_path))
+        os.replace(str(tmp_path), str(dest_path))
+    except BaseException:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+class OversizedResultIntegrityError(Exception):
+    """Raised when a spilled oversized tool result fails sha256 verification.
+
+    The destination MUST NOT use unverified bytes: a sha256 mismatch means the
+    object behind ``result_url`` is not the result the producer hashed (truncated
+    transfer, wrong object, corruption). We hard-fail rather than hand the model a
+    silently-wrong result — that is the verification half of the 100% bar.
+    """
+
+
+def _fetch_and_verify_oversized(envelope: dict[str, Any]) -> Any:
+    """Resolve a ``{"oversized": true, ...}`` spillover envelope losslessly.
+
+    The workspace-chat-tools Lambda returns this fixed envelope when a structured
+    tool result is too large for the 6 MB synchronous Lambda response payload. The
+    FULL result JSON was written to S3 and presigned; here we:
+
+      1. Download the exact bytes at ``result_url`` (streamed, hashed as we go).
+      2. Verify the streamed sha256 == ``result_sha256`` — hard-fail on mismatch.
+      3. Verify the byte count == ``result_size`` when the producer supplied one.
+      4. Parse the verified bytes as JSON and return the COMPLETE result.
+
+    Nothing is truncated or sampled — the caller receives exactly what would have
+    been returned inline had it fit. On any failure we raise (never return
+    unverified or partial data).
+    """
+    result_url = envelope.get("result_url")
+    expected_sha = envelope.get("result_sha256")
+    expected_size = envelope.get("result_size")
+
+    if not result_url or not expected_sha:
+        # Malformed envelope from a producer that set oversized=true but omitted
+        # the pointer/hash. We cannot recover the result safely — fail loudly.
+        raise OversizedResultIntegrityError(
+            "Oversized tool result envelope missing result_url/result_sha256; "
+            "cannot fetch or verify the full result."
+        )
+
+    # Stream the presigned URL to disk (never whole-file RAM) via the canonical
+    # atomic_io helper, which hashes as it streams and verifies sha256/size
+    # before swapping the temp file into place. This replaces the previous
+    # in-memory bytearray accumulation that held the entire (multi-MB)
+    # oversized result in RAM before parsing.
+    #
+    # Only enforce the size check when the producer supplied a usable count
+    # (int >= 0) — preserve the original tolerance for missing/negative sizes.
+    size_check = (
+        expected_size if isinstance(expected_size, int) and expected_size >= 0 else None
+    )
+    # Spill to the system temp dir (writable everywhere) rather than RESULTS_DIR:
+    # this blob is ephemeral scratch parsed and deleted immediately, and must not
+    # appear under /workdir nor depend on /workdir being mounted/writable.
+    tmp_path = Path(tempfile.gettempdir()) / f"oversized-result-{uuid.uuid4().hex}.json"
+    # Do NOT log result_url — it is a presigned bearer token retained 30 days.
+    try:
+        total = atomic_download_url(
+            result_url,
+            tmp_path,
+            expected_sha256=expected_sha,
+            expected_size=size_check,
+        )
+    except FileIntegrityError as e:
+        # atomic_io already discarded the temp file on mismatch. Re-raise as
+        # this module's stable exception name so callers/tests keep one type.
+        raise OversizedResultIntegrityError(
+            "Oversized tool result failed integrity verification: "
+            f"{e} Refusing to use unverified or possibly-truncated bytes."
+        ) from e
+
+    try:
+        with open(tmp_path, "rb") as f:
+            body = f.read()
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    logger.info(
+        "Resolved oversized tool result losslessly",
+        _name="OVERSIZED_RESULT_VERIFIED",
+        result_size=total,
+        result_sha256=expected_sha,
+    )
+
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        raise OversizedResultIntegrityError(
+            f"Oversized tool result passed sha256 but is not valid JSON: {e}"
+        ) from e
+
+
+def resolve_oversized_result(result: Any) -> Any:
+    """Return *result* unchanged unless it is an oversized spillover envelope.
+
+    Tolerant/backward-compatible: an older Lambda that never emits the envelope
+    returns its result inline, and this is a no-op. A newer Lambda that spilled a
+    large result to S3 returns ``{"status":"success","oversized":true,...}`` which
+    we resolve into the COMPLETE, sha256-verified result here.
+    """
+    if (
+        isinstance(result, dict)
+        and result.get("oversized") is True
+        and "result_url" in result
+    ):
+        return _fetch_and_verify_oversized(result)
+    return result
 
 
 def pop_approval_id(action_key: str) -> str:
@@ -175,7 +321,13 @@ def invoke_workspace_tool(
         error_msg = response_payload.get("error", "Unknown error")
         raise Exception(f"Tool error: {error_msg}")
 
-    return response_payload.get("result", {})
+    # Lossless oversized-result resolution. When the tool's full result exceeded
+    # the 6 MB synchronous Lambda payload, the Lambda spilled it to S3 and
+    # returned a small {"oversized": true, result_url, result_sha256, ...}
+    # envelope. Download it, VERIFY the sha256 over the exact bytes, and return
+    # the COMPLETE result as if it had come back inline. Older Lambdas that never
+    # emit the envelope pass through unchanged (backward-compatible).
+    return resolve_oversized_result(response_payload.get("result", {}))
 
 
 def invoke_workspace_tool_async(
@@ -260,7 +412,7 @@ def save_result(
     }
 
     content = json.dumps(output, indent=2, default=str)
-    file_path.write_text(content)
+    atomic_write_text(content, file_path)
 
     # File stats for the agent
     file_size = len(content.encode("utf-8"))
@@ -285,7 +437,7 @@ def save_result(
         schema = build_schema_preview(output)
         schema_json = json.dumps(schema, indent=2, default=str)
         preview_path = results_dir / f"{action_key}-{timestamp}.preview.json"
-        preview_path.write_text(schema_json)
+        atomic_write_text(schema_json, preview_path)
         preview = (
             "Full result on disk — schema preview below "
             "(use jq or python on the full file to extract specific fields):\n\n"
@@ -295,9 +447,9 @@ def save_result(
     else:
         preview = result_str
 
-    # Check for Pipedream file stash uploads and download them
-    import urllib.request
-
+    # Check for Pipedream file stash uploads and download them.
+    # Downloads go through _atomic_urlretrieve (defined at module scope),
+    # which imports urllib.request itself and writes atomically.
     downloaded_files: list[str] = []
     inner_result = output.get("result", {})
 
@@ -313,7 +465,7 @@ def save_result(
         content_type = inner_result.get("content_type", "application/octet-stream")
         ext = mimetypes.guess_extension(content_type.split(";")[0].strip()) or ""
         binary_path = results_dir / f"{action_key}-binary{ext}"
-        binary_path.write_bytes(b64.b64decode(inner_result["base64_body"]))
+        atomic_write_bytes(b64.b64decode(inner_result["base64_body"]), binary_path)
         downloaded_files.append(str(binary_path))
 
     # Handle oversize binary proxy responses staged to S3 by the proxy.
@@ -355,7 +507,7 @@ def save_result(
         try:
             # Do NOT log the presigned URL itself — it is a bearer token
             # and CloudWatch retains logs for 30 days.
-            urllib.request.urlretrieve(inner_result["presigned_url"], str(binary_path))
+            _atomic_urlretrieve(inner_result["presigned_url"], binary_path)
             downloaded_files.append(str(binary_path))
         except Exception as dl_err:
             logger.warning(
@@ -399,9 +551,9 @@ def save_result(
 
             dest = results_dir / filename
             try:
-                # Create parent directories (e.g., __stash/) if filename includes subdirs
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                urllib.request.urlretrieve(get_url, str(dest))
+                # Create parent directories (e.g., __stash/) if filename
+                # includes subdirs (also handled inside _atomic_urlretrieve).
+                _atomic_urlretrieve(get_url, dest)
                 downloaded_files.append(str(dest))
             except Exception as dl_err:
                 logger.warning(
@@ -437,7 +589,7 @@ def save_result(
                 dest = results_dir / f"transcript-{meeting_id}.{ext}"
 
                 try:
-                    urllib.request.urlretrieve(authenticated_url, str(dest))
+                    _atomic_urlretrieve(authenticated_url, dest)
                     downloaded_files.append(str(dest))
                 except Exception as dl_err:
                     logger.warning(

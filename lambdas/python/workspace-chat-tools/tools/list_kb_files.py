@@ -20,6 +20,7 @@ import structlog
 
 from prm import client as prm_client
 from tools.kb_permissions import is_root_kb, verify_kb_access
+from tools.response_size import inline_or_spill
 
 logger = structlog.get_logger()
 
@@ -203,6 +204,29 @@ def _list_top_level(
         }
 
 
+def _spill_listings_response(response: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a list_kb_files response inline when it fits, else spill it
+    losslessly to S3.
+
+    Each per-KB listing is already capped to ``MAX_ITEMS_PER_KB`` for prompt
+    conciseness, so this rarely fires — but with many KBs the aggregate can
+    still exceed the 6 MB synchronous Lambda payload cap. We never drop any of
+    the listed items here: when the serialized response would overflow, the
+    **full** result JSON is written to S3 (the DATA bucket this handler already
+    reads from), sha256'd, and returned as the oversized envelope with a
+    presigned GET URL. A no-op for responses already under budget.
+    """
+    return inline_or_spill(
+        response,
+        s3_client=prm_client("s3", region=REGION),
+        bucket=DATA_BUCKET_NAME,
+        note=(
+            "Full KB listings exceeded the inline response limit; "
+            "fetch result_url to get the complete JSON (verify with result_sha256)."
+        ),
+    )
+
+
 def handle_list_kb_files(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     List top-level files and folders for all allowed knowledge bases.
@@ -304,8 +328,10 @@ def handle_list_kb_files(params: Dict[str, Any]) -> Dict[str, Any]:
         total_folders=sum(len(l.get("folders", [])) for l in listings.values()),
     )
 
-    return {
-        "listings": listings,
-        "kb_count": len(listings),
-        "errors": errors,
-    }
+    return _spill_listings_response(
+        {
+            "listings": listings,
+            "kb_count": len(listings),
+            "errors": errors,
+        }
+    )

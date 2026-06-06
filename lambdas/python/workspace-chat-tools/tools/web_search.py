@@ -569,6 +569,38 @@ def _handle_fetch_url(params: Dict[str, Any]) -> Dict[str, Any]:
                 reason=result.get("reason"),
             )
             return error_response
+
+        # Binary payload sniffed from an extensionless URL: browser-lambda
+        # streamed it to S3 instead of UTF-8-decoding it (which corrupts
+        # PDFs/zips/images). There is no text `content`; propagate the S3
+        # reference so the agent-side consumer can surface a download instead
+        # of dumping mojibake into the model context.
+        if result.get("result_type") == "binary_file":
+            logger.info(
+                "fetch_url returned a streamed binary",
+                url=url,
+                content_type=result.get("content_type"),
+                s3_key=result.get("s3_key"),
+                has_download_url=bool(result.get("download_url")),
+            )
+            binary_result: Dict[str, Any] = {
+                "url": result.get("url", url),
+                "title": "",
+                "status": "success",
+                "result_type": "binary_file",
+                "content_type": result.get("content_type", "application/octet-stream"),
+                "s3_key": result.get("s3_key", ""),
+                "file_type": result.get("file_type", ""),
+                "file_size": result.get("file_size", 0),
+            }
+            # Forward the presigned GET (when browser-lambda supplied one) so
+            # the agent-side handler can stream the bytes into /workdir.
+            # Absent on older browser-lambda builds -- tolerant reader downstream.
+            download_url = result.get("download_url")
+            if download_url:
+                binary_result["download_url"] = download_url
+            return binary_result
+
         return {
             "url": result.get("url", url),
             "title": result.get("title", ""),

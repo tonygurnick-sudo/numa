@@ -16,15 +16,51 @@ Approval model:
 - Unsafe (requires approval): request (arbitrary HTTP calls incl. sending email)
 """
 
+import hashlib
 import json
 import os
 import re
+import uuid
 from typing import Any
 
 import structlog
 from claude_agent_sdk import tool
+from numa_workspace_agent import atomic_io
 
 logger = structlog.get_logger()
+
+
+def _atomic_write_bytes(data: bytes, dest: str) -> None:
+    """Write bytes to dest atomically (temp file in same dir + os.replace)."""
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    tmp = f"{dest}.part-{uuid.uuid4().hex}"
+    try:
+        with open(tmp, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, dest)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _atomic_download_url(
+    url: str, dest: str, expected_sha256: str | None = None
+) -> int:
+    """Stream a (presigned S3) URL to dest atomically; verify sha256 if given.
+
+    Returns bytes written. Raises FileIntegrityError on checksum mismatch (the
+    temp file is discarded, so the final path is never corrupted). Thin wrapper
+    over the canonical ``atomic_io.atomic_download_url`` so connector downloads
+    share the single streaming + verification implementation and exception
+    contract with the rest of the /workdir boundary.
+    """
+    return atomic_io.atomic_download_url(url, dest, expected_sha256=expected_sha256)
+
 
 # Connector type sets for routing
 SYNERGY_CONNECTORS = {"synergy"}
@@ -589,9 +625,13 @@ async def _handle_download_file(params: dict[str, Any]) -> dict[str, Any]:
     file_id = params.get("file_id", "unknown")
     source = data.get("connector") or data.get("provider") or connector
     size = data.get("size", 0)
+    # Tolerant reader: large files arrive as a presigned S3 URL
+    # (`file_content_url`), small/legacy ones inline as hex (`file_content`).
     file_content_hex = data.get("file_content", "")
+    file_content_url = data.get("file_content_url", "")
+    expected_sha256 = data.get("content_sha256") or None
 
-    if not file_content_hex:
+    if not file_content_hex and not file_content_url:
         return {
             "content": [{"type": "text", "text": "No file content received"}],
             "is_error": True,
@@ -613,14 +653,34 @@ async def _handle_download_file(params: dict[str, Any]) -> dict[str, Any]:
             "isError": True,
         }
 
-    # Convert hex back to bytes and save to workspace
-    file_content = bytes.fromhex(file_content_hex)
-    os.makedirs(os.path.dirname(workspace_path), exist_ok=True)
+    # Save to the workspace atomically (temp file + os.replace) so an
+    # interrupted/partial transfer never leaves a truncated file at the final
+    # path. Verify the sha256 end-to-end when the lambda provides one.
+    try:
+        if file_content_url:
+            written = _atomic_download_url(
+                file_content_url, workspace_path, expected_sha256
+            )
+        else:
+            file_content = bytes.fromhex(file_content_hex)
+            if expected_sha256:
+                actual = hashlib.sha256(file_content).hexdigest()
+                if actual != expected_sha256:
+                    raise ValueError(
+                        f"Checksum mismatch (expected {expected_sha256[:12]}…, "
+                        f"got {actual[:12]}…)"
+                    )
+            _atomic_write_bytes(file_content, workspace_path)
+            written = len(file_content)
+    except Exception as e:
+        logger.error("connector_download_write_failed", error=str(e))
+        return {
+            "content": [{"type": "text", "text": f"Error saving downloaded file: {e}"}],
+            "is_error": True,
+            "isError": True,
+        }
 
-    with open(workspace_path, "wb") as f:
-        f.write(file_content)
-
-    size_str = _format_size(size) if size else f"{len(file_content)} bytes"
+    size_str = _format_size(size) if size else f"{written} bytes"
 
     return {
         "content": [

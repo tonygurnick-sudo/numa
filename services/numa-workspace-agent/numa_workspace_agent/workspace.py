@@ -13,6 +13,7 @@ from typing import Optional, TypedDict
 
 import structlog
 
+from .atomic_io import atomic_write_text
 from .sdk_config import LOCAL_ROOT
 
 logger = structlog.get_logger()
@@ -146,7 +147,7 @@ def set_active_conversation(
         if "sessionId" in existing_data:
             data["sessionId"] = existing_data["sessionId"]
 
-    meta_file.write_text(json.dumps(data, indent=2))
+    atomic_write_text(json.dumps(data, indent=2), meta_file)
     logger.debug(
         "Set active conversation",
         conversation_id=conversation_id,

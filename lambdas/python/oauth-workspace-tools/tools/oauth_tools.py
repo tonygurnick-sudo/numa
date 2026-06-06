@@ -24,6 +24,14 @@ from oauth_providers import (
 )
 from prm import client
 
+from .file_transfer import (  # noqa: F401  (re-exported for connect_tools)
+    OAUTH_INLINE_MAX,
+    OAUTH_PRESIGNED_EXPIRY,
+    OUTPUTS_BUCKET,
+    build_download_payload,
+    stage_download_to_s3,
+)
+
 logger = structlog.get_logger()
 
 # Initialize AWS clients with PRM
@@ -32,7 +40,7 @@ secrets_manager = client("secretsmanager")
 # Environment configuration
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "demo")
 VAULT_SECRETS_PREFIX = os.environ.get("VAULT_SECRETS_PREFIX", f"{CLIENT_NAME}/vault")
-OUTPUTS_BUCKET = os.environ.get("OUTPUTS_BUCKET_NAME", "")
+# OUTPUTS_BUCKET is imported from file_transfer (shared staging bucket).
 VAULT_AUDIT_LOG_TABLE_NAME = os.environ.get("VAULT_AUDIT_LOG_TABLE_NAME", "")
 
 # Audit dedup: a chat turn that calls Gmail 20 times shouldn't write 20 audit
@@ -44,6 +52,10 @@ _OAUTH_AUDIT_DEDUP_SECONDS = 60
 
 # Maximum file download size (50MB)
 MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024
+
+# Inline-vs-S3 staging (OAUTH_INLINE_MAX / OAUTH_PRESIGNED_EXPIRY) and the
+# stage_download_to_s3 helper now live in file_transfer.py and are shared with
+# connect_tools.py — see imports above.
 
 # Caches with TTL
 _available_providers_cache: Optional[tuple[list[str], float]] = None
@@ -775,13 +787,22 @@ def handle_oauth_download_file(params: Dict[str, Any]) -> Dict[str, Any]:
                 workspace_path = f"/workdir/uploads/oauth-{provider}/{safe_filename}"
 
                 result = {
-                    "file_content": file_content.hex(),
                     "filename": safe_filename,
                     "workspace_path": workspace_path,
                     "provider": provider,
                     "original_file_id": file_id,
                     "size": len(file_content),
                 }
+
+                # Small files stay inline as hex (fast path, backward compatible
+                # with older workspace-agent readers). Larger files are staged to
+                # S3 and returned as a presigned URL so they survive the 6 MB
+                # Lambda response cap without truncation/corruption.
+                result.update(
+                    build_download_payload(
+                        file_content, safe_filename, user_sub, provider
+                    )
+                )
 
                 return {"status": "success", "result": result, "error": None}
             finally:
