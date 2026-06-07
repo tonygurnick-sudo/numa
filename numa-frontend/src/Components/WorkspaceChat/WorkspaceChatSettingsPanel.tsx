@@ -37,7 +37,7 @@ import { getConnectorById, surfacesInFiles } from '../DataConnectors/connectorRe
 import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations';
 import { connectorSlugForPipedream, pipedreamSlugForConnector } from '../Integrations/integrationCatalogHelpers';
 import { WorkspaceChatFilesExpandedModal } from './WorkspaceChatFilesExpandedModal';
-import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
+import { IntegrationAccountButton } from '../Integrations/IntegrationAccountSelector';
 import { getFileIconClass, getFileIconColorClass, formatFileSize } from '../../utils/fileUtils';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
@@ -1009,6 +1009,23 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                                     <i className={item.iconClass} />
                                   )}
                                   <span>{item.name}</span>
+                                  {item.pipedreamSlug && (
+                                    <IntegrationAccountButton
+                                      connectionId={item.pipedreamSlug}
+                                      displayName={item.name}
+                                      accounts={item.accounts ?? []}
+                                      allowMultipleAccounts={item.allowMultipleAccounts === true}
+                                      isEnabled={pdActive}
+                                      selectedAccountIds={selectedAccountsByApp?.[item.pipedreamSlug]}
+                                      disabled={isDisabled}
+                                      onChange={(next) =>
+                                        setSelectedAccountsByApp?.((prev) => ({
+                                          ...prev,
+                                          [item.pipedreamSlug!]: next,
+                                        }))
+                                      }
+                                    />
+                                  )}
                                 </span>
                               </div>
                               <button
@@ -1027,22 +1044,6 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                                 )}
                               </button>
                             </div>
-                            {item.pipedreamSlug && (
-                              <IntegrationAccountSubmenu
-                                connectionId={item.pipedreamSlug}
-                                accounts={item.accounts ?? []}
-                                allowMultipleAccounts={item.allowMultipleAccounts === true}
-                                isEnabled={pdActive}
-                                selectedAccountIds={selectedAccountsByApp?.[item.pipedreamSlug]}
-                                disabled={isDisabled}
-                                onChange={(next) =>
-                                  setSelectedAccountsByApp?.((prev) => ({
-                                    ...prev,
-                                    [item.pipedreamSlug!]: next,
-                                  }))
-                                }
-                              />
-                            )}
                           </div>
                         );
                       })}

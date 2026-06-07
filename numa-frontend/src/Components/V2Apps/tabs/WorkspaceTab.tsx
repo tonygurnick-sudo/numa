@@ -8,7 +8,7 @@ import {
 } from '../../../config/integrationsConfig';
 import * as v2AppsService from '../../../Services/v2AppsService';
 import type { UseV2AppWorkspaceSettingsReturn } from '../../../hooks/useV2AppWorkspaceSettings';
-import { IntegrationAccountSubmenu } from '../../Integrations/IntegrationAccountSubmenu';
+import { IntegrationAccountButton } from '../../Integrations/IntegrationAccountSelector';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -462,21 +462,22 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
                                     <i className={fallbackIcon} />
                                   )}
                                   {displayName}
+                                  <IntegrationAccountButton
+                                    connectionId={conn.id}
+                                    displayName={displayName}
+                                    accounts={conn.accounts ?? []}
+                                    allowMultipleAccounts={conn.allowMultipleAccounts === true}
+                                    isEnabled={isEnabled}
+                                    selectedAccountIds={settings.selectedAccountsByApp?.[conn.id]}
+                                    onChange={(next) =>
+                                      setSelectedAccountsByApp({
+                                        ...(settings.selectedAccountsByApp ?? {}),
+                                        [conn.id]: next,
+                                      })
+                                    }
+                                  />
                                 </Form.Check.Label>
                               </Form.Check>
-                              <IntegrationAccountSubmenu
-                                connectionId={conn.id}
-                                accounts={conn.accounts ?? []}
-                                allowMultipleAccounts={conn.allowMultipleAccounts === true}
-                                isEnabled={isEnabled}
-                                selectedAccountIds={settings.selectedAccountsByApp?.[conn.id]}
-                                onChange={(next) =>
-                                  setSelectedAccountsByApp({
-                                    ...(settings.selectedAccountsByApp ?? {}),
-                                    [conn.id]: next,
-                                  })
-                                }
-                              />
                             </div>
                           );
                         })

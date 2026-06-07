@@ -9,7 +9,7 @@ import { useAlert, useConfirm } from '../../Providers/ConfirmContext';
 import { useBranding } from '../../Providers/BrandingContext';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { ChipsInput } from '../Inputs/ChipsInput';
-import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
+import { IntegrationAccountButton } from '../Integrations/IntegrationAccountSelector';
 import { TaxonomyMultiSelect } from '../Inputs/TaxonomyMultiSelect';
 import { INDUSTRIES, PERSONAS } from '../../utils/resourceTaxonomy';
 import { AgentFileUpload } from './AgentFileUpload';
@@ -1952,10 +1952,11 @@ export const AgentCreateModal = ({
                                   const canonical = conn.pipedreamSlug!;
                                   const row = enabledRows.find((r) => r.slug === canonical || r.slug === conn.id);
                                   return (
-                                    <div key={conn.id} className="mb-2">
-                                      <div className="small fw-semibold mb-1">{conn.name}</div>
-                                      <IntegrationAccountSubmenu
+                                    <div key={conn.id} className="mb-2 d-flex align-items-center gap-2">
+                                      <span className="small fw-semibold">{conn.name}</span>
+                                      <IntegrationAccountButton
                                         connectionId={canonical}
+                                        displayName={conn.name}
                                         accounts={conn.accounts ?? []}
                                         allowMultipleAccounts={true}
                                         isEnabled={true}

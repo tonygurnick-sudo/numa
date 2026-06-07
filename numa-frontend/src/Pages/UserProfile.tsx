@@ -34,9 +34,9 @@ import {
   pipedreamSlugForConnector,
 } from '../Components/Integrations/integrationCatalogHelpers';
 import {
-  IntegrationAccountSubmenu,
+  IntegrationAccountButton,
   type IntegrationAccount,
-} from '../Components/Integrations/IntegrationAccountSubmenu';
+} from '../Components/Integrations/IntegrationAccountSelector';
 import { withPRM } from '../utils/prmUtils';
 import { MY_FILES_SENTINEL, expandMyFilesSentinel, sortKnowledgeBases } from '../constants/knowledgeBase';
 
@@ -1895,6 +1895,43 @@ export default function UserProfilePage({
                                         <i className={row.iconClass} />
                                       )}
                                       {row.label}
+                                      {/* FEAT-019: per-account scope for multi-account
+                                          Pipedream integrations. The control self-hides
+                                          unless the admin opted in AND the user has >1
+                                          account connected. */}
+                                      {row.pipedreamSlug && (
+                                        <IntegrationAccountButton
+                                          connectionId={row.pipedreamSlug}
+                                          displayName={row.label}
+                                          accounts={row.accounts ?? []}
+                                          allowMultipleAccounts={row.allowMultipleAccounts ?? false}
+                                          isEnabled={checked}
+                                          selectedAccountIds={
+                                            (displayedSettings.defaultAccountsByApp ?? {})[row.pipedreamSlug]
+                                          }
+                                          disabled={disableDefaultsForm}
+                                          onChange={(nextAccountIds) => {
+                                            const slug = row.pipedreamSlug!;
+                                            setUserDefaults((prev) => {
+                                              const all = row.accounts?.map((a) => a.account_id) ?? [];
+                                              const nextMap = { ...(prev.defaultAccountsByApp ?? {}) };
+                                              // Persist a narrowed subset only; "all
+                                              // selected" reverts to the empty/absent
+                                              // default the proxy treats as legacy.
+                                              if (
+                                                nextAccountIds.length === 0 ||
+                                                (all.length > 0 && nextAccountIds.length === all.length)
+                                              ) {
+                                                delete nextMap[slug];
+                                              } else {
+                                                nextMap[slug] = nextAccountIds;
+                                              }
+                                              return { ...prev, defaultAccountsByApp: nextMap };
+                                            });
+                                            setDirty(true);
+                                          }}
+                                        />
+                                      )}
                                     </span>
                                   }
                                   checked={checked}
@@ -1934,42 +1971,6 @@ export default function UserProfilePage({
                                     setDirty(true);
                                   }}
                                 />
-                                {/* FEAT-019: per-account scope for multi-account
-                                    Pipedream integrations. The submenu self-hides
-                                    unless the admin opted in AND the user has >1
-                                    account connected. */}
-                                {row.pipedreamSlug && (
-                                  <IntegrationAccountSubmenu
-                                    connectionId={row.pipedreamSlug}
-                                    accounts={row.accounts ?? []}
-                                    allowMultipleAccounts={row.allowMultipleAccounts ?? false}
-                                    isEnabled={checked}
-                                    selectedAccountIds={
-                                      (displayedSettings.defaultAccountsByApp ?? {})[row.pipedreamSlug]
-                                    }
-                                    disabled={disableDefaultsForm}
-                                    onChange={(nextAccountIds) => {
-                                      const slug = row.pipedreamSlug!;
-                                      setUserDefaults((prev) => {
-                                        const all = row.accounts?.map((a) => a.account_id) ?? [];
-                                        const nextMap = { ...(prev.defaultAccountsByApp ?? {}) };
-                                        // Persist a narrowed subset only; "all
-                                        // selected" reverts to the empty/absent
-                                        // default the proxy treats as legacy.
-                                        if (
-                                          nextAccountIds.length === 0 ||
-                                          (all.length > 0 && nextAccountIds.length === all.length)
-                                        ) {
-                                          delete nextMap[slug];
-                                        } else {
-                                          nextMap[slug] = nextAccountIds;
-                                        }
-                                        return { ...prev, defaultAccountsByApp: nextMap };
-                                      });
-                                      setDirty(true);
-                                    }}
-                                  />
-                                )}
                               </div>
                             );
                           });

@@ -17,7 +17,7 @@ import type {
 } from '../../../types/apps';
 import type { V2AppRunState } from '../../../hooks/useV2AppRun';
 import type { RunRecord, ProgressEvent } from '../../../Services/v2AppsService';
-import { IntegrationAccountSubmenu } from '../../Integrations/IntegrationAccountSubmenu';
+import { IntegrationAccountButton } from '../../Integrations/IntegrationAccountSelector';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -402,16 +402,19 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
                                     <i className={fallbackIcon} />
                                   )}
                                   {displayName}
+                                  <IntegrationAccountButton
+                                    connectionId={conn.id}
+                                    displayName={displayName}
+                                    accounts={conn.accounts ?? []}
+                                    allowMultipleAccounts={conn.allowMultipleAccounts === true}
+                                    isEnabled={isEnabled}
+                                    selectedAccountIds={selectedAccountsByApp[conn.id]}
+                                    onChange={(next) =>
+                                      setSelectedAccountsByApp((prev) => ({ ...prev, [conn.id]: next }))
+                                    }
+                                  />
                                 </Form.Check.Label>
                               </Form.Check>
-                              <IntegrationAccountSubmenu
-                                connectionId={conn.id}
-                                accounts={conn.accounts ?? []}
-                                allowMultipleAccounts={conn.allowMultipleAccounts === true}
-                                isEnabled={isEnabled}
-                                selectedAccountIds={selectedAccountsByApp[conn.id]}
-                                onChange={(next) => setSelectedAccountsByApp((prev) => ({ ...prev, [conn.id]: next }))}
-                              />
                             </div>
                           );
                         })

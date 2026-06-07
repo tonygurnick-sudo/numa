@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Spinner, Alert, Modal, Button, Form, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { Link2, RefreshCw, Grid3X3, RefreshCcw, AlertTriangle, Settings, Eye, EyeOff } from 'lucide-react';
+import { Link2, RefreshCw, Grid3X3, RefreshCcw, AlertTriangle, Settings, Eye, EyeOff, Search } from 'lucide-react';
 
 import { getFlag } from '../utils/featureFlags';
 import { extractApiError } from '../utils/extractApiError';
@@ -1673,11 +1673,22 @@ const UserToolPolicyModal = ({
   // show a busy state without leaking across rows.
   const [addingAccount, setAddingAccount] = useState(false);
   const [disconnectingAccountId, setDisconnectingAccountId] = useState<string | null>(null);
+  // Filter for the connected-accounts list — handy once a user has wired up
+  // many accounts for the same integration.
+  const [accountSearch, setAccountSearch] = useState('');
 
   const pdSlug = svc?.entry.pipedreamSlug ?? null;
   const displayName = svc?.display.name ?? '';
   const allowMultiple = svc?.entry.allowMultipleAccounts === true;
   const accounts = svc?.accounts ?? [];
+  const filteredAccounts = useMemo(() => {
+    const q = accountSearch.trim().toLowerCase();
+    if (!q) return accounts;
+    return accounts.filter((acc) => {
+      const label = (acc.name || acc.account_id).toLowerCase();
+      return label.includes(q) || acc.account_id.toLowerCase().includes(q);
+    });
+  }, [accounts, accountSearch]);
 
   useEffect(() => {
     if (!svc || !pdSlug || !user || !lambdaClient) return;
@@ -1822,53 +1833,82 @@ const UserToolPolicyModal = ({
               </div>
             ) : (
               <div className="d-flex flex-column gap-2">
-                {accounts.map((acc) => {
-                  const accountBusy = disconnectingAccountId === acc.account_id;
-                  return (
-                    <div
-                      key={acc.account_id}
-                      className="d-flex align-items-center justify-content-between p-2 border rounded-3 bg-white"
-                    >
-                      <div className="d-flex align-items-center gap-2 min-w-0">
-                        <div className="text-truncate">
-                          <div className="fw-semibold small text-truncate">{acc.name || acc.account_id}</div>
-                          {acc.dead === true ? (
-                            <div className="small text-danger">
-                              <AlertTriangle size={12} className="me-1" aria-hidden />
-                              {t('status.dead', { defaultValue: 'Account inactive' })}
-                            </div>
-                          ) : acc.healthy === false ? (
-                            <div className="small text-warning">
-                              <AlertTriangle size={12} className="me-1" aria-hidden />
-                              {t('status.reconnectRequired', { defaultValue: 'Reconnect required' })}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline-danger"
-                        size="sm"
-                        disabled={accountBusy}
-                        onClick={async () => {
-                          setDisconnectingAccountId(acc.account_id);
-                          try {
-                            await onDisconnectAccount(acc.account_id);
-                          } catch (e) {
-                            onError((e as Error).message || 'Failed to disconnect account');
-                          } finally {
-                            setDisconnectingAccountId(null);
-                          }
-                        }}
+                {accounts.length > 1 && (
+                  <div className="position-relative">
+                    <Search
+                      size={14}
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        left: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: 'var(--bs-secondary-color, #6c757d)',
+                      }}
+                    />
+                    <Form.Control
+                      type="text"
+                      size="sm"
+                      value={accountSearch}
+                      onChange={(e) => setAccountSearch(e.target.value)}
+                      placeholder={t('toolPolicy.accountsSearchPlaceholder', { defaultValue: 'Search accounts...' })}
+                      style={{ paddingLeft: 30 }}
+                    />
+                  </div>
+                )}
+                {filteredAccounts.length === 0 ? (
+                  <div className="small text-muted fst-italic">
+                    {t('toolPolicy.accountsNoResults', { defaultValue: 'No accounts match your search.' })}
+                  </div>
+                ) : (
+                  filteredAccounts.map((acc) => {
+                    const accountBusy = disconnectingAccountId === acc.account_id;
+                    return (
+                      <div
+                        key={acc.account_id}
+                        className="d-flex align-items-center justify-content-between p-2 border rounded-3 bg-white"
                       >
-                        {accountBusy ? (
-                          <Spinner animation="border" size="sm" />
-                        ) : (
-                          t('actions.disconnect', { defaultValue: 'Disconnect' })
-                        )}
-                      </Button>
-                    </div>
-                  );
-                })}
+                        <div className="d-flex align-items-center gap-2 min-w-0">
+                          <div className="text-truncate">
+                            <div className="fw-semibold small text-truncate">{acc.name || acc.account_id}</div>
+                            {acc.dead === true ? (
+                              <div className="small text-danger">
+                                <AlertTriangle size={12} className="me-1" aria-hidden />
+                                {t('status.dead', { defaultValue: 'Account inactive' })}
+                              </div>
+                            ) : acc.healthy === false ? (
+                              <div className="small text-warning">
+                                <AlertTriangle size={12} className="me-1" aria-hidden />
+                                {t('status.reconnectRequired', { defaultValue: 'Reconnect required' })}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          disabled={accountBusy}
+                          onClick={async () => {
+                            setDisconnectingAccountId(acc.account_id);
+                            try {
+                              await onDisconnectAccount(acc.account_id);
+                            } catch (e) {
+                              onError((e as Error).message || 'Failed to disconnect account');
+                            } finally {
+                              setDisconnectingAccountId(null);
+                            }
+                          }}
+                        >
+                          {accountBusy ? (
+                            <Spinner animation="border" size="sm" />
+                          ) : (
+                            t('actions.disconnect', { defaultValue: 'Disconnect' })
+                          )}
+                        </Button>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             )}
             <hr className="my-3" />
