@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Button, ButtonGroup, Card, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, ButtonGroup, Card, Dropdown, DropdownButton, Spinner, Table } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
@@ -7,13 +7,17 @@ import { getFlag } from '../../utils/featureFlags';
 import { VoiceAdminService, type VoiceAdminStatus } from '../../Services/VoiceAdminService';
 
 /**
- * VoiceAdminPanel — manage the tenant's Amazon Connect setup: instance status,
- * phone numbers (claim/release + outbound caller-ID), and Approved Origins + agent.
- * Reads render for any user; mutations are admin-only (enforced server-side too).
+ * VoiceAdminPanel — manage the tenant's Amazon Connect setup. The primary view is
+ * AGENT-CENTRIC: each Numa user that has a voice agent is listed by name + email
+ * (resolved from Cognito server-side — the Connect username is a bare sub UUID), with
+ * the phone number they own or a "Claim number" action. Spare numbers nobody owns live
+ * in a separate "Unassigned numbers" card, alongside Approved Origins and inbound mode.
+ * Reads render for any user; mutations are admin-only (enforced server-side too), except
+ * self-service actions on a user's own line.
  *
- * This is the reusable body — it carries no page header chrome so it can be
- * dropped into the admin Settings panel (Settings supplies its own header).
- * Lives under Settings → Admin → Voice; the old /voice/admin route redirects here.
+ * This is the reusable body — it carries no page header chrome so it can be dropped into
+ * the admin Settings panel (Settings supplies its own header). Lives under Settings →
+ * Admin → Voice; the old /voice/admin route redirects here.
  */
 
 const CLAIM_COUNTRIES = ['US', 'AU', 'NZ'];
@@ -87,6 +91,17 @@ export const VoiceAdminPanel: React.FC = () => {
     [load, t]
   );
 
+  // Agents split: humans get the agent-centric table; the shared system bot is a footnote.
+  const agents = status?.agents ?? [];
+  const humanAgents = agents.filter((a) => !a.isBot);
+  const botAgent = agents.find((a) => a.isBot);
+  // The "Unassigned numbers" card shows every DID NOT rendered inline on a human agent's
+  // row: truly-unowned numbers AND orphans — a DID whose owner tag points at a deleted
+  // user or the shared bot. Without the orphan case those numbers would be invisible
+  // (no agent row, and filtered out of here), leaving paid resources unmanageable.
+  const renderedOwners = new Set(humanAgents.map((a) => a.username).filter(Boolean));
+  const unassignedNumbers = (status?.phoneNumbers ?? []).filter((n) => !n.owner || !renderedOwners.has(n.owner));
+
   if (!getFlag('NUMA_VOICE')) {
     return (
       <div className="container py-5 text-center text-muted">
@@ -152,23 +167,214 @@ export const VoiceAdminPanel: React.FC = () => {
                     )}
                   </div>
                 </div>
-                <div>
-                  <div className="text-muted">{t('admin.agents', { defaultValue: 'Agents' })}</div>
-                  <div className="font-monospace">
-                    {(status.agents ?? []).map((a) => a.username).join(', ') ||
-                      t('admin.none', { defaultValue: 'none' })}
-                  </div>
-                </div>
               </div>
             </Card.Body>
           </Card>
 
-          {/* ── Phone numbers ───────────────────────────────────────────── */}
+          {/* ── Agents (name + email + their line) ───────────────────────── */}
+          <Card className="mb-3">
+            <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <span className="fw-semibold">
+                <i className="bi bi-people me-2" aria-hidden="true" />
+                {t('admin.agents', { defaultValue: 'Agents' })}
+              </span>
+              {isAdmin && humanAgents.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline-secondary"
+                  disabled={busy !== null}
+                  title={t('admin.syncNamesHint', {
+                    defaultValue: "Repair agents' name & email in the Connect console from Numa accounts.",
+                  })}
+                  onClick={() =>
+                    void run(
+                      'syncIdentities',
+                      () => VoiceAdminService.syncIdentities(numaPost),
+                      t('admin.namesSynced', { defaultValue: 'Agent names synced to Connect.' })
+                    )
+                  }
+                >
+                  {busy === 'syncIdentities' ? (
+                    <Spinner size="sm" animation="border" className="me-1" />
+                  ) : (
+                    <i className="bi bi-arrow-repeat me-1" aria-hidden="true" />
+                  )}
+                  {t('admin.syncNames', { defaultValue: 'Sync names' })}
+                </Button>
+              )}
+            </Card.Header>
+            <Card.Body className="p-0">
+              {humanAgents.length === 0 ? (
+                <div className="text-muted text-center py-4">
+                  {t('admin.noAgents', {
+                    defaultValue: 'No agents yet — a user appears here after they open the softphone.',
+                  })}
+                </div>
+              ) : (
+                <Table size="sm" hover responsive className="mb-0 align-middle">
+                  <tbody>
+                    {humanAgents.map((a) => {
+                      const canManage = isAdmin || !!a.isSelf;
+                      return (
+                        <tr key={a.id ?? a.username}>
+                          {/* Identity */}
+                          <td>
+                            <div className="fw-semibold">
+                              {a.displayName || a.username}
+                              {a.isSelf && (
+                                <Badge bg="primary" className="ms-2">
+                                  {t('admin.you', { defaultValue: 'You' })}
+                                </Badge>
+                              )}
+                            </div>
+                            {a.email && <div className="text-muted small">{a.email}</div>}
+                          </td>
+                          {/* Their line */}
+                          <td>
+                            {a.phoneNumber ? (
+                              <>
+                                <span className="font-monospace">{a.phoneNumber}</span>
+                                {a.countryCode && (
+                                  <Badge bg="light" text="dark" className="border ms-2">
+                                    {a.countryCode} {a.type}
+                                  </Badge>
+                                )}
+                                {a.isCallerId && (
+                                  <Badge bg="success" className="ms-1">
+                                    <i className="bi bi-telephone-outbound me-1" aria-hidden="true" />
+                                    {t('admin.callerIdBadge', { defaultValue: 'Caller ID' })}
+                                  </Badge>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-muted fst-italic">
+                                {t('admin.noNumber', { defaultValue: 'No number' })}
+                              </span>
+                            )}
+                          </td>
+                          {/* Actions */}
+                          <td className="text-end">
+                            {canManage && !a.phoneNumber && a.username && (
+                              <DropdownButton
+                                size="sm"
+                                variant="outline-primary"
+                                align="end"
+                                disabled={busy !== null}
+                                title={
+                                  busy === `claim-agent:${a.username}` ? (
+                                    <Spinner size="sm" animation="border" />
+                                  ) : (
+                                    t('admin.claimNumber', { defaultValue: 'Claim number' })
+                                  )
+                                }
+                              >
+                                {CLAIM_COUNTRIES.map((c) => (
+                                  <Dropdown.Item
+                                    key={c}
+                                    onClick={() =>
+                                      void run(
+                                        `claim-agent:${a.username}`,
+                                        () => VoiceAdminService.claimNumberForAgent(numaPost, c, a.username!),
+                                        t('admin.claimedForAgent', {
+                                          defaultValue: 'Claimed a {{country}} number for {{name}}.',
+                                          country: c,
+                                          name: a.displayName || a.email || a.username,
+                                        })
+                                      )
+                                    }
+                                  >
+                                    {t('admin.claim', { defaultValue: 'Claim' })} {c}
+                                  </Dropdown.Item>
+                                ))}
+                              </DropdownButton>
+                            )}
+                            {canManage && a.phoneNumber && a.phoneNumberId && (
+                              <>
+                                {isAdmin && !a.isCallerId && (
+                                  <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    className="me-2"
+                                    disabled={busy !== null}
+                                    onClick={() =>
+                                      void run(
+                                        `callerid:${a.phoneNumberId}`,
+                                        () => VoiceAdminService.setCallerId(numaPost, a.phoneNumberId!),
+                                        t('admin.callerIdSet', {
+                                          defaultValue: 'Outbound caller ID set to {{number}}.',
+                                          number: a.phoneNumber,
+                                        })
+                                      )
+                                    }
+                                  >
+                                    {busy === `callerid:${a.phoneNumberId}` ? (
+                                      <Spinner size="sm" animation="border" className="me-1" />
+                                    ) : null}
+                                    {t('admin.setCallerId', { defaultValue: 'Set as caller-ID' })}
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="outline-warning"
+                                  size="sm"
+                                  className="me-2"
+                                  disabled={busy !== null}
+                                  onClick={() =>
+                                    void run(
+                                      `unown:${a.phoneNumberId}`,
+                                      () => VoiceAdminService.unsetOwner(numaDelete, a.phoneNumberId!),
+                                      t('admin.lineReleased', { defaultValue: 'Line released to the shared pool.' })
+                                    )
+                                  }
+                                >
+                                  {busy === `unown:${a.phoneNumberId}` ? (
+                                    <Spinner size="sm" animation="border" className="me-1" />
+                                  ) : null}
+                                  {t('admin.unassign', { defaultValue: 'Unassign' })}
+                                </Button>
+                                {isAdmin && (
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    disabled={busy !== null}
+                                    onClick={() =>
+                                      void run(`release:${a.phoneNumberId}`, () =>
+                                        VoiceAdminService.releaseNumber(numaDelete, a.phoneNumberId!)
+                                      )
+                                    }
+                                  >
+                                    {busy === `release:${a.phoneNumberId}` ? (
+                                      <Spinner size="sm" animation="border" />
+                                    ) : (
+                                      t('admin.release', { defaultValue: 'Release' })
+                                    )}
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+              )}
+              {botAgent && (
+                <div className="px-3 py-2 border-top small text-muted">
+                  <i className="bi bi-robot me-2" aria-hidden="true" />
+                  {t('admin.botAgentNote', {
+                    defaultValue: 'A shared system agent handles calls when no user is signed in.',
+                  })}
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+
+          {/* ── Unassigned numbers + inbound routing ─────────────────────── */}
           <Card className="mb-3">
             <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-2">
               <span className="fw-semibold">
                 <i className="bi bi-telephone me-2" aria-hidden="true" />
-                {t('admin.numbers', { defaultValue: 'Phone numbers' })}
+                {t('admin.unassignedNumbers', { defaultValue: 'Unassigned numbers' })}
               </span>
               {isAdmin && (
                 <ButtonGroup size="sm">
@@ -249,8 +455,7 @@ export const VoiceAdminPanel: React.FC = () => {
                       <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden="true" />
                       {isAdmin
                         ? t('admin.noCallerId', {
-                            defaultValue:
-                              'No outbound caller ID is set — outbound calls will fail until you set one below.',
+                            defaultValue: 'No outbound caller ID is set — outbound calls will fail until you set one.',
                           })
                         : t('admin.noCallerIdUser', {
                             defaultValue:
@@ -258,129 +463,151 @@ export const VoiceAdminPanel: React.FC = () => {
                           })}
                     </Alert>
                   )}
-                  <Table size="sm" hover responsive className="mb-0 align-middle">
-                    <tbody>
-                      {(status.phoneNumbers ?? []).map((n) => (
-                        <tr key={n.id}>
-                          <td className="font-monospace">{n.number}</td>
-                          <td>
-                            <Badge bg="light" text="dark" className="border me-2">
-                              {n.countryCode} {n.type}
-                            </Badge>
-                            {n.id && n.id === status.outboundCallerIdNumberId && (
-                              <Badge bg="success" className="me-1">
-                                <i className="bi bi-telephone-outbound me-1" aria-hidden="true" />
-                                {t('admin.callerIdBadge', { defaultValue: 'Caller ID' })}
+                  {unassignedNumbers.length === 0 ? (
+                    <div className="text-muted text-center py-4">
+                      {t('admin.allAssigned', { defaultValue: 'Every number is assigned to an agent.' })}
+                    </div>
+                  ) : (
+                    <Table size="sm" hover responsive className="mb-0 align-middle">
+                      <tbody>
+                        {unassignedNumbers.map((n) => (
+                          <tr key={n.id}>
+                            <td className="font-monospace">{n.number}</td>
+                            <td>
+                              <Badge bg="light" text="dark" className="border me-2">
+                                {n.countryCode} {n.type}
                               </Badge>
-                            )}
-                            {n.owner ? (
-                              <Badge bg={n.mine ? 'primary' : 'secondary'}>
-                                <i className="bi bi-person-fill me-1" aria-hidden="true" />
-                                {n.mine ? t('admin.yourLine', { defaultValue: 'Your line' }) : n.owner}
-                              </Badge>
-                            ) : (
-                              <Badge bg="light" text="dark" className="border">
-                                <i className="bi bi-people me-1" aria-hidden="true" />
-                                {t('admin.sharedLine', { defaultValue: 'Shared' })}
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="text-end">
-                            {/* Owner controls — available to ALL users (self-claim). The server
-                              still enforces who may release which line. */}
-                            {!n.owner && (
-                              <Button
-                                variant="outline-primary"
-                                size="sm"
-                                className="me-2"
-                                disabled={busy !== null || !n.id}
-                                onClick={() =>
-                                  void run(
-                                    `claim-own:${n.id}`,
-                                    () => VoiceAdminService.setOwner(numaPost, n.id!),
-                                    t('admin.claimedForYou', { defaultValue: 'This line is now yours.' })
-                                  )
-                                }
-                              >
-                                {busy === `claim-own:${n.id}` ? (
-                                  <Spinner size="sm" animation="border" className="me-1" />
-                                ) : null}
-                                {t('admin.claimForMe', { defaultValue: 'Claim for me' })}
-                              </Button>
-                            )}
-                            {n.owner && (isAdmin || n.mine) && (
-                              <Button
-                                variant="outline-warning"
-                                size="sm"
-                                className="me-2"
-                                disabled={busy !== null || !n.id}
-                                onClick={() =>
-                                  void run(
-                                    `unown:${n.id}`,
-                                    () => VoiceAdminService.unsetOwner(numaDelete, n.id!),
-                                    t('admin.lineReleased', { defaultValue: 'Line released to the shared pool.' })
-                                  )
-                                }
-                              >
-                                {busy === `unown:${n.id}` ? (
-                                  <Spinner size="sm" animation="border" className="me-1" />
-                                ) : null}
-                                {t('admin.unassign', { defaultValue: 'Unassign' })}
-                              </Button>
-                            )}
-                            {isAdmin && (
-                              <>
-                                {n.id && n.id === status.outboundCallerIdNumberId ? (
-                                  <Button variant="success" size="sm" className="me-2" disabled>
-                                    <i className="bi bi-check-lg me-1" aria-hidden="true" />
-                                    {t('admin.callerIdBadge', { defaultValue: 'Caller ID' })}
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="outline-secondary"
-                                    size="sm"
-                                    className="me-2"
-                                    disabled={busy !== null || !n.id}
-                                    onClick={() =>
-                                      void run(
-                                        `callerid:${n.id}`,
-                                        () => VoiceAdminService.setCallerId(numaPost, n.id!),
-                                        t('admin.callerIdSet', {
-                                          defaultValue: 'Outbound caller ID set to {{number}}.',
-                                          number: n.number,
-                                        })
-                                      )
-                                    }
-                                  >
-                                    {busy === `callerid:${n.id}` ? (
-                                      <Spinner size="sm" animation="border" className="me-1" />
-                                    ) : null}
-                                    {t('admin.setCallerId', { defaultValue: 'Set as caller-ID' })}
-                                  </Button>
-                                )}
+                              {n.id && n.id === status.outboundCallerIdNumberId && (
+                                <Badge bg="success" className="me-1">
+                                  <i className="bi bi-telephone-outbound me-1" aria-hidden="true" />
+                                  {t('admin.callerIdBadge', { defaultValue: 'Caller ID' })}
+                                </Badge>
+                              )}
+                              {/* Owner tag set but no current agent owns it → a deleted user or the bot. */}
+                              {n.owner && (
+                                <Badge bg="warning" text="dark" title={n.ownerEmail || n.owner}>
+                                  <i className="bi bi-exclamation-triangle me-1" aria-hidden="true" />
+                                  {t('admin.orphaned', {
+                                    defaultValue: 'Orphaned — was {{name}}',
+                                    name: n.ownerDisplayName || n.ownerEmail || n.owner,
+                                  })}
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="text-end">
+                              {/* Non-admins may grab a spare number for themselves. */}
+                              {!isAdmin && (
                                 <Button
-                                  variant="outline-danger"
+                                  variant="outline-primary"
                                   size="sm"
                                   disabled={busy !== null || !n.id}
                                   onClick={() =>
-                                    void run(`release:${n.id}`, () =>
-                                      VoiceAdminService.releaseNumber(numaDelete, n.id!)
+                                    void run(
+                                      `claim-own:${n.id}`,
+                                      () => VoiceAdminService.setOwner(numaPost, n.id!),
+                                      t('admin.claimedForYou', { defaultValue: 'This line is now yours.' })
                                     )
                                   }
                                 >
-                                  {busy === `release:${n.id}` ? (
-                                    <Spinner size="sm" animation="border" />
-                                  ) : (
-                                    t('admin.release', { defaultValue: 'Release' })
-                                  )}
+                                  {busy === `claim-own:${n.id}` ? (
+                                    <Spinner size="sm" animation="border" className="me-1" />
+                                  ) : null}
+                                  {t('admin.claimForMe', { defaultValue: 'Claim for me' })}
                                 </Button>
-                              </>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
+                              )}
+                              {isAdmin && (
+                                <>
+                                  {humanAgents.length > 0 && n.id && (
+                                    <DropdownButton
+                                      size="sm"
+                                      variant="outline-primary"
+                                      align="end"
+                                      className="d-inline-block me-2"
+                                      disabled={busy !== null}
+                                      title={
+                                        busy === `assign:${n.id}` ? (
+                                          <Spinner size="sm" animation="border" />
+                                        ) : (
+                                          t('admin.assignTo', { defaultValue: 'Assign to' })
+                                        )
+                                      }
+                                    >
+                                      {/* Only agents WITH a username — passing undefined would make
+                                        the backend fall back to assigning the DID to the admin (callerUser). */}
+                                      {humanAgents
+                                        .filter((a) => a.username)
+                                        .map((a) => (
+                                          <Dropdown.Item
+                                            key={a.id ?? a.username}
+                                            onClick={() =>
+                                              void run(
+                                                `assign:${n.id}`,
+                                                () => VoiceAdminService.setOwner(numaPost, n.id!, a.username!),
+                                                t('admin.assignedTo', {
+                                                  defaultValue: '{{number}} assigned to {{name}}.',
+                                                  number: n.number,
+                                                  name: a.displayName || a.email || a.username,
+                                                })
+                                              )
+                                            }
+                                          >
+                                            {a.displayName || a.email || a.username}
+                                          </Dropdown.Item>
+                                        ))}
+                                    </DropdownButton>
+                                  )}
+                                  {n.id && n.id === status.outboundCallerIdNumberId ? (
+                                    <Button variant="success" size="sm" className="me-2" disabled>
+                                      <i className="bi bi-check-lg me-1" aria-hidden="true" />
+                                      {t('admin.callerIdBadge', { defaultValue: 'Caller ID' })}
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      variant="outline-secondary"
+                                      size="sm"
+                                      className="me-2"
+                                      disabled={busy !== null || !n.id}
+                                      onClick={() =>
+                                        void run(
+                                          `callerid:${n.id}`,
+                                          () => VoiceAdminService.setCallerId(numaPost, n.id!),
+                                          t('admin.callerIdSet', {
+                                            defaultValue: 'Outbound caller ID set to {{number}}.',
+                                            number: n.number,
+                                          })
+                                        )
+                                      }
+                                    >
+                                      {busy === `callerid:${n.id}` ? (
+                                        <Spinner size="sm" animation="border" className="me-1" />
+                                      ) : null}
+                                      {t('admin.setCallerId', { defaultValue: 'Set as caller-ID' })}
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    disabled={busy !== null || !n.id}
+                                    onClick={() =>
+                                      void run(`release:${n.id}`, () =>
+                                        VoiceAdminService.releaseNumber(numaDelete, n.id!)
+                                      )
+                                    }
+                                  >
+                                    {busy === `release:${n.id}` ? (
+                                      <Spinner size="sm" animation="border" />
+                                    ) : (
+                                      t('admin.release', { defaultValue: 'Release' })
+                                    )}
+                                  </Button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  )}
                 </>
               )}
             </Card.Body>
