@@ -80,9 +80,10 @@ def ensure_file_in_s3(file_path: str, user_sub: str, conversation_id: str) -> No
         if e.response["Error"]["Code"] != "404":
             raise  # Some other error, re-raise
 
-    # Upload local file to S3
-    with open(file_path, "rb") as f:
-        s3_client.put_object(Bucket=outputs_bucket, Key=s3_key, Body=f.read())
+    # Upload local file to S3. upload_file streams from disk in chunks (boto3
+    # adds a CRC32 integrity check) instead of reading the whole file into RAM
+    # via put_object(Body=f.read()) — same result, bounded memory.
+    s3_client.upload_file(str(file_path), outputs_bucket, s3_key)
 
 
 def sync_file_to_s3(file_path: str, content: str | bytes) -> None:

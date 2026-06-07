@@ -33,6 +33,7 @@ import structlog
 
 from prm import client as prm_client
 from tools.kb_permissions import _get_dynamodb_client, is_root_kb, verify_kb_access
+from tools.response_size import inline_or_spill, sha256_hex
 
 from .approval import check_approval, create_approval_request, poll_approval
 
@@ -64,6 +65,39 @@ PRESIGNED_URL_EXPIRY = 300  # 5 minutes
 # =============================================================================
 # QUERY OPERATIONS
 # =============================================================================
+
+
+def _spill_structured_result(response: Dict[str, Any], note: str) -> Dict[str, Any]:
+    """Return a structured KB result inline when it fits, else spill it
+    losslessly to S3.
+
+    A KB operation can produce more JSON than fits the 6 MB synchronous Lambda
+    payload cap (large retrieval content, a recursive file listing, etc.). We
+    never drop, trim, or summarise any of it: when the serialized response would
+    overflow, the **full** result JSON is written to S3 (same bucket the
+    download path presigns against — ``DATA_BUCKET_NAME``), sha256'd, and
+    returned as the oversized envelope with a presigned GET URL. The agent
+    fetches the URL to get the complete result and can verify it against
+    ``result_sha256``. A no-op for responses already under budget.
+    """
+    return inline_or_spill(
+        response,
+        s3_client=prm_client("s3", region=REGION),
+        bucket=DATA_BUCKET_NAME,
+        expiry=PRESIGNED_URL_EXPIRY,
+        note=note,
+    )
+
+
+def _spill_query_response(response: Dict[str, Any]) -> Dict[str, Any]:
+    """Lossless inline-or-spill wrapper for query_knowledgebase results."""
+    return _spill_structured_result(
+        response,
+        note=(
+            "Full knowledge-base result exceeded the inline response limit; "
+            "fetch result_url to get the complete JSON (verify with result_sha256)."
+        ),
+    )
 
 
 def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -124,15 +158,21 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     # Raw Cognito JWT — required by _query_qbusiness for OIDC-federated calls.
     id_token = params.get("__id_token", "")
 
+    # Validate bucket is configured (required for oversized query results)
+    if not DATA_BUCKET_NAME:
+        raise ValueError("DATA_BUCKET_NAME not configured")
+
     # Handle all_kbs mode: query all enabled KBs
     if all_kbs:
-        return _handle_all_kbs_query(
-            query=query,
-            user_intent=user_intent,
-            max_results=max_results,
-            summarise_results=summarise_results,
-            allowed_kbs_with_names=allowed_kbs_with_names,
-            id_token=id_token,
+        return _spill_query_response(
+            _handle_all_kbs_query(
+                query=query,
+                user_intent=user_intent,
+                max_results=max_results,
+                summarise_results=summarise_results,
+                allowed_kbs_with_names=allowed_kbs_with_names,
+                id_token=id_token,
+            )
         )
 
     # Single KB mode: validate KB access
@@ -159,22 +199,26 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     if summarise_results and all_content and user_intent:
         summarised = _summarize_content(all_content, user_intent, len(refs))
         if summarised:
-            return {
-                "summarised_content": summarised,
-                "references": refs,
-                "provider": kb_result["provider"],
-                "query": query,
-                "results_count": len(refs),
-            }
+            return _spill_query_response(
+                {
+                    "summarised_content": summarised,
+                    "references": refs,
+                    "provider": kb_result["provider"],
+                    "query": query,
+                    "results_count": len(refs),
+                }
+            )
 
     # Return raw content (fallback or when summarise_results=False)
-    return {
-        "raw_content": kb_result["content_pieces"],
-        "references": refs,
-        "provider": kb_result["provider"],
-        "query": query,
-        "results_count": len(refs),
-    }
+    return _spill_query_response(
+        {
+            "raw_content": kb_result["content_pieces"],
+            "references": refs,
+            "provider": kb_result["provider"],
+            "query": query,
+            "results_count": len(refs),
+        }
+    )
 
 
 def _query_single_kb(
@@ -1449,9 +1493,12 @@ def _download_file(bucket: str, key: str) -> Dict[str, Any]:
     filename = key.split("/")[-1]
 
     try:
-        # Check file size first with a HEAD request (no data transfer)
-        head_response = s3_client.head_object(Bucket=bucket, Key=key)
-        file_size = head_response["ContentLength"]
+        # Determine size WITHOUT loading the object body. Large files must never
+        # be pulled into the Lambda — doing so to compute a sha256 would
+        # reintroduce the 6 MB response / OOM problem the presigned path exists
+        # to avoid. HeadObject is a cheap metadata call (covered by s3:GetObject).
+        head = s3_client.head_object(Bucket=bucket, Key=key)
+        file_size = head["ContentLength"]
 
         logger.info(
             "File size determined",
@@ -1461,7 +1508,10 @@ def _download_file(bucket: str, key: str) -> Dict[str, Any]:
         )
 
         if file_size >= PRESIGNED_URL_THRESHOLD:
-            # Large file: return presigned URL for direct download
+            # Large file: presigned URL for direct download, bypassing Lambda
+            # payload limits. The object is NOT read here. Integrity on this path
+            # is S3's transport checksum (CRC32 on GET) + the signed URL — we do
+            # not re-download the whole file just to stamp an app-level sha256.
             presigned_url = s3_client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": bucket, "Key": key},
@@ -1481,21 +1531,23 @@ def _download_file(bucket: str, key: str) -> Dict[str, Any]:
                 "s3_uri": f"s3://{bucket}/{key}",
             }
 
-        # Small file: return inline base64 (existing behavior)
-        response = s3_client.get_object(Bucket=bucket, Key=key)
-        content = response["Body"].read()
+        # Small file: load it (needed for the inline base64 anyway) and stamp a
+        # sha256 the caller can verify end-to-end.
+        content = s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
+        file_sha256 = sha256_hex(content)
         content_base64 = base64.b64encode(content).decode("utf-8")
 
         logger.info(
             "File downloaded successfully",
             filename=filename,
-            size_bytes=len(content),
+            size_bytes=file_size,
         )
 
         return {
             "filename": filename,
-            "size_bytes": len(content),
+            "size_bytes": file_size,
             "content_base64": content_base64,
+            "download_sha256": file_sha256,
             "s3_uri": f"s3://{bucket}/{key}",
         }
 
@@ -1700,6 +1752,10 @@ def _download_folder(
         total_uncompressed_size=total_size,
     )
 
+    # sha256 over the EXACT zip bytes — same value whether we return inline or
+    # presigned, so the caller can verify integrity in both paths.
+    zip_sha256 = sha256_hex(zip_content)
+
     if len(zip_content) >= PRESIGNED_URL_THRESHOLD:
         # Large zip: upload to S3 temp location and return presigned URL
         temp_key = f"tmp/kb-downloads/{uuid_mod.uuid4()}/{zip_filename}"
@@ -1727,6 +1783,7 @@ def _download_folder(
             "filename": zip_filename,
             "size_bytes": len(zip_content),
             "presigned_url": presigned_url,
+            "download_sha256": zip_sha256,
             "file_count": downloaded_count,
             "total_files_in_folder": len(files),
         }
@@ -1738,6 +1795,7 @@ def _download_folder(
         "filename": zip_filename,
         "size_bytes": len(zip_content),
         "content_base64": content_base64,
+        "download_sha256": zip_sha256,
         "file_count": downloaded_count,
         "total_files_in_folder": len(files),
     }
@@ -1935,7 +1993,16 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
         if not recursive:
             response["folders"] = _list_subfolders(bucket, prefix)
 
-        return response
+        # A recursive listing of a large KB can exceed the inline payload cap.
+        # Spill the FULL listing losslessly rather than truncating it.
+        return _spill_structured_result(
+            response,
+            note=(
+                "Full KB file listing exceeded the inline response limit; "
+                "fetch result_url to get the complete JSON "
+                "(verify with result_sha256)."
+            ),
+        )
 
     elif mode == "download_folder":
         # Download folder as zip

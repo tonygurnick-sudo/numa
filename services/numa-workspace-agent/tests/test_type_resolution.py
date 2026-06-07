@@ -43,7 +43,9 @@ class TestCreateAgentOptionsDefaults:
 
     def test_max_turns_from_numa_chat(self):
         options = create_agent_options()
-        assert options.max_turns == 50
+        # Default raised 50 -> 200 in commit ee7a45b7 ("Jakarta hotfix
+        # replication: max_turns, region prefix, Lambda memory/timeout").
+        assert options.max_turns == 200
 
     def test_max_output_tokens_env_set(self):
         # Per-API-call output cap is held to 32k by default so chat sessions get
@@ -202,12 +204,16 @@ class TestCreateAgentOptionsWithType:
         )
         register_agent_type(config)
 
-        # Request-level model should take precedence
+        # Request-level model should take precedence over the type default.
+        # The resolved model is regionalized (commit fbca7ed5 "Nolia App"):
+        # in us-east-1 with USE_GLOBAL_INFERENCE_PROFILE=true (the default),
+        # sonnet-4-6 maps to the `global.` inference profile. The point of the
+        # test is precedence: request sonnet wins over the type's default haiku.
         options = create_agent_options(
             agent_type_config=config,
             model="us.anthropic.claude-sonnet-4-6",
         )
-        assert options.model == "us.anthropic.claude-sonnet-4-6"
+        assert options.model == "global.anthropic.claude-sonnet-4-6"
 
     def test_thinking_tokens_from_type(self):
         config = AgentTypeConfig(

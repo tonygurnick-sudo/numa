@@ -16,6 +16,7 @@ import structlog
 
 from prm import client as prm_client
 
+from .file_transfer import build_download_payload
 from .oauth_tools import (
     _get_consolidated_company_vault,
     _get_user_consolidated_vault,
@@ -617,18 +618,25 @@ def handle_connect_synergy_download(params: Dict[str, Any]) -> Dict[str, Any]:
         safe_filename = re.sub(r"[^\w\s.-]", "_", safe_filename)
         safe_filename = safe_filename.strip(". ") or f"synergy_{file_id[:8]}"
 
-        return {
-            "status": "success",
-            "result": {
-                "file_content": content.hex(),
-                "filename": safe_filename,
-                "workspace_path": f"/workdir/uploads/connect-synergy/{safe_filename}",
-                "connector": "synergy",
-                "original_file_id": file_id,
-                "size": len(content),
-            },
-            "error": None,
+        result: Dict[str, Any] = {
+            "filename": safe_filename,
+            "workspace_path": f"/workdir/uploads/connect-synergy/{safe_filename}",
+            "connector": "synergy",
+            "original_file_id": file_id,
+            "size": len(content),
         }
+
+        # Small files stay inline as hex (fast path, backward compatible with
+        # older workspace-agent readers). Larger files are staged to S3 and
+        # returned as a presigned URL so they survive the 6 MB Lambda response
+        # cap without truncation/corruption — identical to the OAuth download
+        # path. The MicroVM reader (mcp_tools/connect.py) accepts either shape
+        # and verifies content_sha256 end-to-end.
+        result.update(
+            build_download_payload(content, safe_filename, user_sub, "synergy")
+        )
+
+        return {"status": "success", "result": result, "error": None}
 
     except SynergyAuthError:
         return {

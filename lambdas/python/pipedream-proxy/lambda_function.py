@@ -15,7 +15,11 @@ from typing import Any, Dict
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
-from pipedream_operations import PipedreamOperations
+from pipedream_operations import (
+    LAMBDA_RESPONSE_LIMIT_BYTES,
+    LAMBDA_RESPONSE_SAFETY_MARGIN_BYTES,
+    PipedreamOperations,
+)
 from prm import client as prm_client
 from security_validator import SecurityValidationError, SecurityValidator
 
@@ -350,11 +354,39 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             external_user_id=external_user_id,
         )
 
+        # Lossless oversized-result guard. The binary path already self-offloads
+        # to S3 inside proxy_request, but a structured result (e.g. a run_action
+        # with a large `exports`/`ret`, or a paginated proxy body) can still
+        # serialize past the Lambda 6 MB sync-invoke limit. Rather than let the
+        # runtime 413 the whole invocation (lost result) or truncate it (lossy),
+        # write the FULL result JSON to S3 and return a presigned reference with
+        # a sha256 over the exact stored bytes.
+        body = json.dumps({"success": True, "operation": operation, "data": result})
+        response_dict = {"statusCode": 200, "body": body}
+        actual_size = len(json.dumps(response_dict).encode("utf-8"))
+        if (
+            actual_size + LAMBDA_RESPONSE_SAFETY_MARGIN_BYTES
+            >= LAMBDA_RESPONSE_LIMIT_BYTES
+        ):
+            logger.info(
+                "Result exceeds inline limit; offloading to S3",
+                _name="RESULT_OFFLOAD",
+                operation=operation,
+                external_user_id=external_user_id,
+            )
+            offloaded = pipedream_ops.offload_oversized_result(
+                result=result,
+                operation=operation,
+                external_user_id=external_user_id,
+                request_id=context.aws_request_id,
+            )
+            body = json.dumps(
+                {"success": True, "operation": operation, "data": offloaded}
+            )
+
         return {
             "statusCode": 200,
-            "body": json.dumps(
-                {"success": True, "operation": operation, "data": result}
-            ),
+            "body": body,
         }
 
     except SecurityValidationError as e:

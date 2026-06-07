@@ -186,6 +186,22 @@ class TestExtractFinalResult:
 class TestRunPipeline:
     """Tests for run_pipeline() with mocked run_claude_sdk."""
 
+    @pytest.fixture(autouse=True)
+    def _redirect_workspace_root(self, tmp_path, monkeypatch):
+        """Point the workspace root at a writable tmp dir.
+
+        run_pipeline() creates per-step system dirs under
+        ``LOCAL_ROOT / ".system" / "step-N"``. LOCAL_ROOT defaults to
+        ``/workdir`` (the writable ephemeral path inside the AgentCore
+        container) but on a dev box / CI runner that path is absent or
+        read-only, so the mkdir raises OSError [Errno 30]. Redirect the
+        module-level binding to tmp_path so these tests are hermetic.
+        """
+        monkeypatch.setattr(
+            "numa_workspace_agent.pipeline.LOCAL_ROOT",
+            tmp_path,
+        )
+
     @pytest.mark.asyncio
     async def test_successful_two_step_pipeline(
         self, mock_pipeline_step_a, mock_pipeline_step_b

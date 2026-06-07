@@ -297,15 +297,31 @@ class TestSaveResult:
         # Should NOT have truncation indicator
         assert "truncated" not in preview
 
-    def test_preview_is_truncated_for_large_results(self):
-        """Large results are truncated with a '... (truncated' indicator."""
+    def test_preview_uses_schema_preview_for_large_results(self):
+        """Large results get a schema-with-samples preview, not raw JSON inline.
+
+        Previously save_result sliced the JSON to PREVIEW_LENGTH chars and
+        appended a '... (truncated, see file for full result)' string. That
+        lossy first-N-chars approach was replaced (commit e05ad7a8) with a
+        structured schema preview that captures the full *shape* of the result
+        in <5KB. The current contract therefore:
+          - does NOT inline the verbatim raw JSON (the small-result path),
+          - emits the 'Full result on disk — schema preview below' marker,
+          - still points the model at the full file via a schema sidecar path.
+        """
         big_data = {"key_" + str(i): "x" * 100 for i in range(50)}
         result = {"status": "success", "result": big_data}
 
         _, preview = save_result(result, "big", "desc")
 
-        assert "truncated" in preview
-        assert "see file for full result" in preview
+        # Large-result path: schema preview, not raw inline JSON.
+        assert "Full result on disk" in preview
+        assert "schema preview" in preview
+        # Schema captures shape (types/examples) rather than a char slice.
+        assert "_type" in preview
+        # The model is pointed at the full file via the machine-readable sidecar.
+        assert "Schema sidecar (machine-readable):" in preview
+        assert ".preview.json" in preview
 
     def test_preview_shows_file_stats(self):
         """Preview text includes line count and size information."""

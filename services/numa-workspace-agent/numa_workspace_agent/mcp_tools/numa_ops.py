@@ -22,6 +22,7 @@ from typing import Any
 
 import structlog
 from claude_agent_sdk import tool
+from numa_workspace_agent.atomic_io import atomic_write_text
 from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
 from numa_workspace_agent.mcp_tools.s3_helpers import sync_file_to_s3
 from numa_workspace_agent.mcp_tools.schema_preview import build_schema_preview
@@ -234,7 +235,7 @@ def _save_ops_result(result: Any, operation: str) -> str:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     file_path = results_dir / f"{operation}-{timestamp}.json"
     file_content = json.dumps(result, indent=2, default=str)
-    file_path.write_text(file_content)
+    atomic_write_text(file_content, file_path)
 
     sync_file_to_s3(str(file_path), file_content)
 

@@ -25,6 +25,7 @@ import structlog
 from botocore.config import Config
 
 from prm import client as prm_client
+from tools.response_size import inline_or_spill
 
 logger = structlog.get_logger()
 
@@ -81,6 +82,32 @@ AUDIO_VIDEO_EXTENSIONS = {
     ".mkv",
     ".avi",
 }
+
+
+def _spill_extract_response(response: Dict[str, Any]) -> Dict[str, Any]:
+    """Return an extract_content response inline when it fits, else spill the
+    FULL result losslessly to S3.
+
+    Today the handler writes the extracted text to S3 and returns only small
+    metadata (paths + ``text_length``), so this is a no-op on the normal path.
+    It is a lossless fail-safe: if any code path ever returns the extracted text
+    *inline* (e.g. a future ``return_content`` mode), an over-budget response
+    would otherwise be silently truncated mid-JSON by the 6 MB Lambda payload
+    cap and surface to the agent as an opaque JSONDecodeError.
+
+    Instead of truncating any field, we write the **entire** result JSON to S3
+    (the OUTPUTS bucket this handler already uses), sha256 it, presign a GET, and
+    return the oversized envelope. Nothing is dropped.
+    """
+    return inline_or_spill(
+        response,
+        s3_client=prm_client("s3", region=REGION),
+        bucket=OUTPUTS_BUCKET_NAME,
+        note=(
+            "Full extraction result exceeded the inline response limit; "
+            "fetch result_url to get the complete JSON (verify with result_sha256)."
+        ),
+    )
 
 
 def _validate_workspace_path(file_path: str) -> tuple[bool, str | None]:
@@ -413,13 +440,15 @@ def _handle_audio_video_extraction(
         duration_seconds=duration,
     )
 
-    return {
-        "message": f"Audio transcribed successfully to {output_workspace_path}",
-        "output_path": output_workspace_path,
-        "s3_key": output_s3_key,
-        "original_file": file_path,
-        "text_length": len(full_text),
-    }
+    return _spill_extract_response(
+        {
+            "message": f"Audio transcribed successfully to {output_workspace_path}",
+            "output_path": output_workspace_path,
+            "s3_key": output_s3_key,
+            "original_file": file_path,
+            "text_length": len(full_text),
+        }
+    )
 
 
 # ── Main handler ─────────────────────────────────────────────────────────────
@@ -624,10 +653,12 @@ def handle_extract_content(params: Dict[str, Any]) -> Dict[str, Any]:
     )
     output_workspace_path = f"{WORKSPACE_ROOT}/{output_rel_path}"
 
-    return {
-        "message": f"Content extracted successfully to {output_workspace_path}",
-        "output_path": output_workspace_path,
-        "s3_key": output_s3_key,
-        "original_file": file_path,
-        "text_length": len(full_text),
-    }
+    return _spill_extract_response(
+        {
+            "message": f"Content extracted successfully to {output_workspace_path}",
+            "output_path": output_workspace_path,
+            "s3_key": output_s3_key,
+            "original_file": file_path,
+            "text_length": len(full_text),
+        }
+    )
