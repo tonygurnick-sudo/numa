@@ -837,7 +837,7 @@ async function notifyUploadComplete(
 /**
  * Upload a file directly to S3, bypassing CloudFront.
  *
- * This method supports files up to 200MB by:
+ * This method supports files up to 500MB by:
  * 1. Generating a presigned PUT URL for S3
  * 2. Uploading the file directly to S3 (bypasses 10MB CloudFront limit)
  * 3. Notifying the backend to sync the file from S3 to local EFS

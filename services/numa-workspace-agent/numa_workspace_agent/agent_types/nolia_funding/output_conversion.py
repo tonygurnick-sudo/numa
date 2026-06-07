@@ -14,7 +14,6 @@ and will sync up at the end.
 
 import json
 import os
-import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -169,11 +168,14 @@ async def _convert_via_lambda(
         )
         return None
 
-    # Write to /workdir/outputs/ with the same stem as the MD
+    # Write to /workdir/outputs/ with the same stem as the MD.
+    # Stream the presigned URL straight to the final path atomically
+    # (temp + fsync + os.replace) instead of buffering the whole file in RAM.
     target_path = md_path.with_suffix(f".{target_format}")
     try:
-        with urllib.request.urlopen(download_url) as resp:  # noqa: S310
-            target_path.write_bytes(resp.read())
+        from ...atomic_io import atomic_download_url
+
+        atomic_download_url(download_url, target_path)
     except Exception as e:
         logger.error(
             "Failed to download converted artefact",

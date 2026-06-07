@@ -401,7 +401,7 @@
       "uploadFolder": "Upload Folder",
       "uploading": "Uploading...",
       "remove": "Remove",
-      "fileTooLarge": "File exceeds 50MB limit",
+      "fileTooLarge": "File exceeds {{size}}MB limit",
       "success_one": "{{count}} file uploaded successfully!",
       "success_other": "{{count}} files uploaded successfully!",
       "allFailed": "All uploads failed. Please try again.",

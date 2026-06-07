@@ -73,6 +73,9 @@ const ChatInput = ({
   isSettingsPanelOpen = false,
   hasActiveSettings = false,
   onPasteFiles = undefined as ((files: File[]) => void) | undefined,
+  // When the composer has staged attachments, show Send (not the voice mic) even
+  // with empty text, so an attachment-only message can be sent with a click.
+  hasStagedAttachments = false,
   // Voice recording
   onVoiceRecordingComplete = undefined as ((blob: Blob, filename: string) => void) | undefined,
   voiceRecordingState = 'idle' as VoiceRecordingState,
@@ -148,6 +151,7 @@ const ChatInput = ({
     isVoiceRecordingSupported() &&
     !!onVoiceRecordingComplete &&
     !inputMessage.trim() &&
+    !hasStagedAttachments &&
     !showStopButton &&
     !showSendSpinner;
 

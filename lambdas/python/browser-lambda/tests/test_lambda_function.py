@@ -35,6 +35,7 @@ class TestCrawlPage(unittest.TestCase):
         mock_get_env.return_value = {
             "BUCKET_NAME": "test-bucket",
             "TABLE_NAME": "test-table",
+            "CLIENT_NAME": "test-client",
         }
 
         process_result = {
@@ -60,6 +61,7 @@ class TestCrawlPage(unittest.TestCase):
         mock_get_env.return_value = {
             "BUCKET_NAME": "test-bucket",
             "TABLE_NAME": "test-table",
+            "CLIENT_NAME": "test-client",
         }
         mock_asyncio_run.side_effect = Exception("Processing error")
 

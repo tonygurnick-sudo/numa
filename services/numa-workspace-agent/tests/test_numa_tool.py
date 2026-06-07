@@ -22,6 +22,8 @@ from numa_workspace_agent.mcp_tools.numa_tool import (
     PRESIGNED_URL_THRESHOLD,
     TOOL_HANDLERS,
     TOOL_NAMES,
+    _atomic_download_url,
+    _atomic_write_bytes,
     _check_operation_allowed,
     _err,
     _get_allowed_operations,
@@ -646,12 +648,17 @@ class TestHandleKnowledgeBase:
         mock_handler.assert_called_once_with({"folder_path": "reports/2024"})
 
     async def test_invalid_operation_returns_error(self):
-        """An invalid operation should return an error listing valid operations."""
-        result = await _handle_knowledge_base({"operation": "delete"})
+        """An unrecognised operation should return an error listing valid operations.
+
+        Note: 'delete' is a *valid* operation (see _KB_OPERATIONS), so this uses
+        a genuinely unknown name. The error wording is "Invalid numa_files
+        operation" post the My Files -> Numa Files rebrand.
+        """
+        result = await _handle_knowledge_base({"operation": "frobnicate"})
 
         assert result["isError"] is True
         text = result["content"][0]["text"]
-        assert "Invalid knowledge_base operation" in text
+        assert "Invalid numa_files operation" in text
         assert "query" in text
 
     async def test_missing_operation_returns_error(self):
@@ -887,10 +894,19 @@ class TestHandleWebSearch:
         result = await _handle_web_search({"user_intent": "test"})
         assert result["isError"] is True
 
-    async def test_missing_user_intent_returns_error(self):
-        """Missing 'user_intent' returns an error."""
-        result = await _handle_web_search({"query": "test"})
-        assert result["isError"] is True
+    async def test_missing_user_intent_is_optional(self):
+        """user_intent is optional for web_search (two-step search upgrade,
+        d611ae2e): missing it is fine — the search still runs and only `query`
+        is forwarded. It is only passed through to the Lambda when supplied."""
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value={"results": []},
+        ) as mock_invoke:
+            result = await _handle_web_search({"query": "test"})
+
+        assert "isError" not in result
+        sent_params = mock_invoke.call_args[0][1]
+        assert "user_intent" not in sent_params
 
     async def test_max_results_clamped_to_10(self):
         """max_results above 10 should be clamped to 10."""
@@ -926,8 +942,12 @@ class TestHandleWebSearch:
         sent_params = mock_invoke.call_args[0][1]
         assert sent_params["max_results"] == 1
 
-    async def test_default_max_results_is_3(self):
-        """When max_results is not provided, default should be 3."""
+    async def test_default_max_results_is_5(self):
+        """When max_results is not provided, default should be 5.
+
+        Raised from 3 to 5 in the two-step Playwright web search upgrade
+        (d611ae2e) — more candidate results to fetch/expand from.
+        """
         with patch(
             "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
             return_value={"results": []},
@@ -940,7 +960,7 @@ class TestHandleWebSearch:
             )
 
         sent_params = mock_invoke.call_args[0][1]
-        assert sent_params["max_results"] == 3
+        assert sent_params["max_results"] == 5
 
 
 # ---------------------------------------------------------------------------
@@ -1720,7 +1740,13 @@ class TestHandleKbList:
         assert sent_params["pattern"] == "*.pdf"
 
     async def test_allowed_kbs_forwarded(self):
-        """Allowed KB IDs are passed as extra_event_fields."""
+        """Allowed KB IDs are passed as extra_event_fields.
+
+        _get_kb_config auto-injects the caller's own root KB (NUMA_USER_SUB,
+        here 'user-1') so users can always reach their personal/root files
+        (ad8e9734). This is the caller's *own* KB — not a scoping leak — so the
+        forwarded list is the configured KB plus the personal root KB.
+        """
         with patch(
             "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
             return_value={"files": []},
@@ -1728,7 +1754,7 @@ class TestHandleKbList:
             await _handle_kb_list({})
 
         extra = mock_invoke.call_args[1].get("extra_event_fields", {})
-        assert extra["allowed_kbs"] == ["kb-1"]
+        assert extra["allowed_kbs"] == ["kb-1", "user-1"]
 
     async def test_folder_forwarded(self):
         """A folder param is forwarded to the Lambda."""
@@ -2444,3 +2470,701 @@ class TestHandleRender:
         result = await _handle_render({"type": "html", "content": "<div>ok</div>"})
         payload = json.loads(result["content"][0]["text"])
         assert payload["render_type"] == "html"
+
+
+# ---------------------------------------------------------------------------
+# fetch_url binary_file propagation
+# ---------------------------------------------------------------------------
+
+
+class TestFetchUrlBinary:
+    """fetch_url binary (S3-reference) result handling in _handle_web_search."""
+
+    async def test_binary_file_with_download_url_delivered_to_workspace(self):
+        """When browser-lambda supplies a presigned download_url, the bytes are
+        streamed into the workspace (/workdir/uploads/web/...) and an
+        output_path is returned. The real download is mocked so no /workdir
+        writes happen; we assert the dest path + URL passed to the downloader."""
+        mock_result = {
+            "url": "https://example.com/report",
+            "status": "success",
+            "result_type": "binary_file",
+            "content_type": "application/pdf",
+            "s3_key": "documents/company/web-crawler/example.com/report",
+            "file_type": "",
+            "file_size": 4242,
+            "download_url": "https://signed.example/get?sig=abc",
+        }
+
+        captured: dict[str, str] = {}
+
+        def _fake_download(
+            url: str, dest: str, *, expected_sha256: str | None = None
+        ) -> int:
+            captured["url"] = url
+            captured["dest"] = dest
+            return 18  # don't touch the real /workdir filesystem
+
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool._save_fetch_url_to_file"
+            ) as save_mock,
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool._atomic_download_url",
+                side_effect=_fake_download,
+            ),
+        ):
+            result = await _handle_web_search(
+                {"operation": "fetch_url", "url": "https://example.com/report"}
+            )
+
+        # Text save path is never used for binaries
+        save_mock.assert_not_called()
+        assert "isError" not in result
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["status"] == "success"
+        assert payload["result_type"] == "binary_file"
+        assert payload["content_type"] == "application/pdf"
+        assert payload["s3_key"] == mock_result["s3_key"]
+        # Critical: the file is delivered under /workdir/uploads/web/, filename
+        # derived from the URL basename.
+        assert payload["output_path"] == "/workdir/uploads/web/report"
+        assert captured["url"] == "https://signed.example/get?sig=abc"
+        assert captured["dest"] == "/workdir/uploads/web/report"
+        assert "content" not in payload
+
+    async def test_binary_file_download_filename_falls_back_to_s3_key(self):
+        """Extensionless URL with no path basename → filename from s3_key
+        basename; the path-guard still keeps it under /workdir/uploads/."""
+        mock_result = {
+            "url": "https://example.com/",  # no basename in the URL path
+            "status": "success",
+            "result_type": "binary_file",
+            "content_type": "application/zip",
+            "s3_key": "documents/company/web-crawler/example.com/archive-bundle",
+            "file_size": 10,
+            "download_url": "https://signed.example/get?sig=zip",
+        }
+
+        captured: dict[str, str] = {}
+
+        def _fake_download(
+            url: str, dest: str, *, expected_sha256: str | None = None
+        ) -> int:
+            captured["dest"] = dest
+            return 10
+
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool._atomic_download_url",
+                side_effect=_fake_download,
+            ),
+        ):
+            result = await _handle_web_search(
+                {"operation": "fetch_url", "url": "https://example.com/"}
+            )
+
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["output_path"] == "/workdir/uploads/web/archive-bundle"
+        assert captured["dest"] == "/workdir/uploads/web/archive-bundle"
+
+    async def test_binary_file_without_download_url_falls_back_to_s3_ref(self):
+        """Older browser-lambda (no download_url) → surface the S3 reference,
+        never decoded/saved as a (corrupt) text file, no workspace download."""
+        mock_result = {
+            "url": "https://example.com/report",
+            "status": "success",
+            "result_type": "binary_file",
+            "content_type": "application/pdf",
+            "s3_key": "documents/company/web-crawler/example.com/report",
+            "file_type": "",
+            "file_size": 9999,
+        }
+
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool._save_fetch_url_to_file"
+            ) as save_mock,
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool._atomic_download_url"
+            ) as dl_mock,
+        ):
+            result = await _handle_web_search(
+                {"operation": "fetch_url", "url": "https://example.com/report"}
+            )
+
+        # No download attempted, and no text save-to-file path
+        dl_mock.assert_not_called()
+        save_mock.assert_not_called()
+        assert "isError" not in result
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["status"] == "success"
+        assert payload["result_type"] == "binary_file"
+        assert payload["content_type"] == "application/pdf"
+        assert payload["s3_key"] == mock_result["s3_key"]
+        assert payload["file_size"] == 9999
+        assert "output_path" not in payload
+        assert "content" not in payload
+
+    async def test_text_fetch_url_still_saves_to_file(self):
+        """A normal text page still routes through _save_fetch_url_to_file."""
+        mock_result = {
+            "url": "https://example.com/page",
+            "status": "success",
+            "content": "# Title\n\nbody",
+            "title": "Title",
+            "content_type": "text/markdown",
+        }
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool._save_fetch_url_to_file",
+                side_effect=lambda r: r,
+            ) as save_mock,
+        ):
+            await _handle_web_search(
+                {"operation": "fetch_url", "url": "https://example.com/page"}
+            )
+        save_mock.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Atomic file write helper
+# ---------------------------------------------------------------------------
+
+
+class TestAtomicWriteBytes:
+    def test_writes_file_content(self, tmp_path):
+        dest = tmp_path / "out.bin"
+        _atomic_write_bytes(dest, b"hello bytes")
+        assert dest.read_bytes() == b"hello bytes"
+
+    def test_creates_parent_dirs(self, tmp_path):
+        dest = tmp_path / "nested" / "deep" / "out.bin"
+        _atomic_write_bytes(dest, b"data")
+        assert dest.read_bytes() == b"data"
+
+    def test_overwrites_existing_atomically(self, tmp_path):
+        dest = tmp_path / "out.bin"
+        dest.write_bytes(b"old content here")
+        _atomic_write_bytes(dest, b"new")
+        assert dest.read_bytes() == b"new"
+
+    def test_no_temp_files_left_behind(self, tmp_path):
+        dest = tmp_path / "out.bin"
+        _atomic_write_bytes(dest, b"x")
+        # Only the destination file should remain -- no .tmp leftovers
+        leftovers = [p.name for p in tmp_path.iterdir() if p.name != "out.bin"]
+        assert leftovers == []
+
+    def test_failure_does_not_corrupt_existing_and_cleans_temp(self, tmp_path):
+        import os
+
+        dest = tmp_path / "out.bin"
+        dest.write_bytes(b"original")
+
+        # Make os.replace fail to simulate a mid-swap error.
+        with patch.object(os, "replace", side_effect=OSError("boom")):
+            with pytest.raises(OSError):
+                _atomic_write_bytes(dest, b"replacement")
+
+        # Original is untouched (atomicity) and no temp file remains.
+        assert dest.read_bytes() == b"original"
+        leftovers = [p.name for p in tmp_path.iterdir() if p.name != "out.bin"]
+        assert leftovers == []
+
+
+# ---------------------------------------------------------------------------
+# Atomic URL download helper (web-fetched binary delivery)
+# ---------------------------------------------------------------------------
+
+
+class _FakeURLResponse:
+    """Minimal urlopen() context manager yielding *body* in chunks."""
+
+    def __init__(self, body: bytes):
+        self._body = body
+        self._pos = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self, n: int = -1) -> bytes:
+        if n is None or n < 0:
+            chunk, self._pos = self._body[self._pos :], len(self._body)
+            return chunk
+        chunk = self._body[self._pos : self._pos + n]
+        self._pos += len(chunk)
+        return chunk
+
+
+class TestAtomicDownloadUrl:
+    def test_streams_url_to_dest(self, tmp_path):
+        dest = tmp_path / "sub" / "file.pdf"
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            return_value=_FakeURLResponse(b"%PDF-1.7 body bytes"),
+        ):
+            written = _atomic_download_url("https://signed/get", str(dest))
+        assert written == len(b"%PDF-1.7 body bytes")
+        assert dest.read_bytes() == b"%PDF-1.7 body bytes"
+        # No leftover .part- temp files
+        leftovers = [
+            p.name for p in (tmp_path / "sub").iterdir() if p.name != "file.pdf"
+        ]
+        assert leftovers == []
+
+    def test_failure_cleans_temp_and_raises(self, tmp_path):
+        dest = tmp_path / "file.bin"
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            side_effect=OSError("network boom"),
+        ):
+            with pytest.raises(OSError):
+                _atomic_download_url("https://signed/get", str(dest))
+        assert not dest.exists()
+        leftovers = [p.name for p in tmp_path.iterdir()]
+        assert leftovers == []
+
+
+# ---------------------------------------------------------------------------
+# End-to-end sha256 VERIFICATION — the destination half of the 100% bar
+# ---------------------------------------------------------------------------
+
+import hashlib  # noqa: E402
+
+from numa_workspace_agent.mcp_tools.lambda_client import (  # noqa: E402
+    OversizedResultIntegrityError,
+    resolve_oversized_result,
+)
+from numa_workspace_agent.mcp_tools.numa_tool import (  # noqa: E402
+    BinaryDownloadIntegrityError,
+)
+
+
+class TestAtomicDownloadUrlSha256:
+    """_atomic_download_url verifies the producer's download_sha256 over the
+    EXACT bytes it streams to disk (the browser-binary path)."""
+
+    def test_matching_sha256_keeps_file(self, tmp_path):
+        body = b"%PDF-1.7 verified binary content across chunks" * 3
+        sha = hashlib.sha256(body).hexdigest()
+        dest = tmp_path / "ok.pdf"
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            return_value=_FakeURLResponse(body),
+        ):
+            written = _atomic_download_url(
+                "https://signed/get", str(dest), expected_sha256=sha
+            )
+        assert written == len(body)
+        # File on disk is exactly the bytes that were hashed — lossless + verified.
+        assert dest.read_bytes() == body
+        assert hashlib.sha256(dest.read_bytes()).hexdigest() == sha
+
+    def test_mismatched_sha256_deletes_file_and_raises(self, tmp_path):
+        body = b"these are the real bytes"
+        wrong_sha = hashlib.sha256(b"different bytes entirely").hexdigest()
+        dest = tmp_path / "bad.pdf"
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            return_value=_FakeURLResponse(body),
+        ):
+            with pytest.raises(BinaryDownloadIntegrityError):
+                _atomic_download_url(
+                    "https://signed/get", str(dest), expected_sha256=wrong_sha
+                )
+        # Never leave unverified/corrupt bytes at the destination.
+        assert not dest.exists()
+        leftovers = [p.name for p in tmp_path.iterdir()]
+        assert leftovers == []
+
+    def test_no_expected_sha_skips_verification(self, tmp_path):
+        """Backward-compatible: older browser-lambda omits download_sha256."""
+        body = b"unverified but accepted"
+        dest = tmp_path / "legacy.bin"
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            return_value=_FakeURLResponse(body),
+        ):
+            written = _atomic_download_url("https://signed/get", str(dest))
+        assert written == len(body)
+        assert dest.read_bytes() == body
+
+
+class TestDeliverBinaryFetchUrlSha256:
+    """_deliver_binary_fetch_url forwards download_sha256 to the verifier and
+    surfaces the verified flag; a mismatch is reported as an error (S3 ref
+    retained), never a silently-corrupt workspace file."""
+
+    async def test_download_sha256_forwarded_and_surfaced(self):
+        body = b"binary report bytes"
+        sha = hashlib.sha256(body).hexdigest()
+        mock_result = {
+            "url": "https://example.com/report",
+            "status": "success",
+            "result_type": "binary_file",
+            "content_type": "application/pdf",
+            "s3_key": "documents/company/web-crawler/example.com/report",
+            "file_size": len(body),
+            "download_url": "https://signed.example/get?sig=abc",
+            "download_sha256": sha,
+        }
+        captured: dict[str, object] = {}
+
+        def _fake_download(
+            url: str, dest: str, *, expected_sha256: str | None = None
+        ) -> int:
+            captured["expected_sha256"] = expected_sha256
+            captured["dest"] = dest
+            return len(body)
+
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool._atomic_download_url",
+                side_effect=_fake_download,
+            ),
+        ):
+            result = await _handle_web_search(
+                {"operation": "fetch_url", "url": "https://example.com/report"}
+            )
+        # The producer's digest reaches the verifying downloader.
+        assert captured["expected_sha256"] == sha
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["status"] == "success"
+        assert payload["download_sha256"] == sha
+        assert payload["sha256_verified"] is True
+
+    async def test_sha256_mismatch_reports_error_and_retains_s3_ref(self):
+        mock_result = {
+            "url": "https://example.com/report",
+            "status": "success",
+            "result_type": "binary_file",
+            "content_type": "application/pdf",
+            "s3_key": "documents/company/web-crawler/example.com/report",
+            "file_size": 10,
+            "download_url": "https://signed.example/get?sig=abc",
+            "download_sha256": "deadbeef" * 8,
+        }
+
+        def _boom(url: str, dest: str, *, expected_sha256: str | None = None) -> int:
+            raise BinaryDownloadIntegrityError("sha256 mismatch")
+
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool._atomic_download_url",
+                side_effect=_boom,
+            ),
+        ):
+            result = await _handle_web_search(
+                {"operation": "fetch_url", "url": "https://example.com/report"}
+            )
+        # Hard-fail surfaces as an error; S3 ref is retained so bytes aren't lost.
+        assert result.get("isError") is True
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["status"] == "error"
+        assert payload["s3_key"] == mock_result["s3_key"]
+
+
+class TestResolveOversizedResult:
+    """resolve_oversized_result downloads, sha256-VERIFIES, and parses the FULL
+    spilled result losslessly — the structured-result half of the 100% bar."""
+
+    @staticmethod
+    def _full_result() -> dict:
+        # A result that would blow the 6 MB inline cap — every item must survive.
+        return {
+            "status": "success",
+            "results": [
+                {"id": i, "text": "x" * 1000, "chunk": "y" * 500} for i in range(2000)
+            ],
+            "summarised_content": "z" * 50000,
+            "total_results_count": 2000,
+        }
+
+    def _envelope(self, body: bytes, *, sha: str | None = None, size=None) -> dict:
+        return {
+            "status": "success",
+            "oversized": True,
+            "result_url": "https://signed.example/result.json?sig=x",
+            "result_sha256": (
+                sha if sha is not None else hashlib.sha256(body).hexdigest()
+            ),
+            "result_size": size if size is not None else len(body),
+            "note": "oversized; fetch result_url",
+        }
+
+    def test_lossless_roundtrip_verified(self):
+        full = self._full_result()
+        body = json.dumps(full, default=str).encode("utf-8")
+        env = self._envelope(body)
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            return_value=_FakeURLResponse(body),
+        ):
+            resolved = resolve_oversized_result(env)
+        # COMPLETE result, nothing dropped or truncated.
+        assert resolved == full
+        assert len(resolved["results"]) == 2000
+        assert resolved["results"][1999]["text"] == "x" * 1000
+        assert "truncated" not in json.dumps(resolved)
+
+    def test_sha256_mismatch_hard_fails(self):
+        body = json.dumps({"a": 1}).encode("utf-8")
+        env = self._envelope(body, sha="00" * 32)  # deliberately wrong
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            return_value=_FakeURLResponse(body),
+        ):
+            with pytest.raises(OversizedResultIntegrityError) as ei:
+                resolve_oversized_result(env)
+        assert "sha256" in str(ei.value).lower()
+
+    def test_size_mismatch_hard_fails(self):
+        body = json.dumps({"a": 1}).encode("utf-8")
+        # Correct sha but wrong declared size → still refuse (possible truncation).
+        env = self._envelope(body, size=len(body) + 99)
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            return_value=_FakeURLResponse(body),
+        ):
+            with pytest.raises(OversizedResultIntegrityError) as ei:
+                resolve_oversized_result(env)
+        assert "size" in str(ei.value).lower()
+
+    def test_missing_fields_hard_fails(self):
+        env = {"status": "success", "oversized": True, "result_url": "https://x"}
+        # No result_sha256 → cannot verify → refuse rather than trust bytes.
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            return_value=_FakeURLResponse(b"{}"),
+        ):
+            with pytest.raises(OversizedResultIntegrityError):
+                resolve_oversized_result(env)
+
+    def test_non_oversized_passes_through_unchanged(self):
+        """Backward-compatible: an inline result is returned as-is, no fetch."""
+        inline = {"status": "success", "results": [1, 2, 3]}
+        with patch(
+            "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+            side_effect=AssertionError("must not fetch for inline results"),
+        ):
+            assert resolve_oversized_result(inline) is inline
+
+    def test_oversized_false_passes_through(self):
+        inline = {"status": "success", "oversized": False, "data": "ok"}
+        assert resolve_oversized_result(inline) is inline
+
+
+class TestInvokeWorkspaceToolResolvesOversized:
+    """invoke_workspace_tool transparently resolves the oversized envelope so
+    every KB/extract/list handler receives the COMPLETE, verified result."""
+
+    def test_oversized_envelope_resolved_end_to_end(self, monkeypatch):
+        from numa_workspace_agent.mcp_tools import lambda_client
+
+        monkeypatch.setenv("WORKSPACE_TOOLS_LAMBDA_NAME", "wct")
+        monkeypatch.setenv("NUMA_ENABLED_TOOLS", "[]")
+
+        full = {"status": "success", "listings": {"kb1": {"files": ["a", "b"]}}}
+        body = json.dumps(full, default=str).encode("utf-8")
+        envelope = {
+            "status": "success",
+            "oversized": True,
+            "result_url": "https://signed/result.json",
+            "result_sha256": hashlib.sha256(body).hexdigest(),
+            "result_size": len(body),
+            "note": "n",
+        }
+        lambda_response = {"status": "success", "result": envelope}
+
+        class _Payload:
+            def read(self):
+                return json.dumps(lambda_response).encode("utf-8")
+
+        mock_client = MagicMock()
+        mock_client.invoke.return_value = {"Payload": _Payload()}
+        mock_session = MagicMock()
+        mock_session.client.return_value = mock_client
+
+        with (
+            (
+                patch.object(lambda_client.boto3, "Session", return_value=mock_session)
+                if hasattr(lambda_client, "boto3")
+                else patch("boto3.Session", return_value=mock_session)
+            ),
+            patch(
+                "numa_workspace_agent.atomic_io.urllib.request.urlopen",
+                return_value=_FakeURLResponse(body),
+            ),
+        ):
+            resolved = lambda_client.invoke_workspace_tool("list_kb_files", {})
+
+        # The handler sees the COMPLETE result, not the envelope.
+        assert resolved == full
+        assert "oversized" not in resolved
+        assert resolved["listings"]["kb1"]["files"] == ["a", "b"]
+
+
+class TestKbDownloadSha256Verification:
+    """_handle_kb_download re-hashes the downloaded bytes and hard-fails on a
+    mismatch (both the base64 and presigned paths)."""
+
+    def setup_method(self):
+        import os
+
+        os.environ["NUMA_ALLOWED_KBS"] = "[]"
+        os.environ["NUMA_USER_SUB"] = "user-1"
+
+    async def test_base64_verified_and_surfaced(self, tmp_path):
+        content = b"kb file contents"
+        sha = hashlib.sha256(content).hexdigest()
+        mock_result = {
+            "filename": "doc.pdf",
+            "content_base64": base64.b64encode(content).decode(),
+            "download_sha256": sha,
+            "s3_uri": "s3://bucket/doc.pdf",
+        }
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value=mock_result,
+        ):
+            result = await _handle_kb_download(
+                {"file": "doc.pdf", "output_dir": str(tmp_path)}
+            )
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["status"] == "success"
+        assert payload["sha256_verified"] is True
+        assert payload["download_sha256"] == sha
+        assert (tmp_path / "doc.pdf").read_bytes() == content
+
+    async def test_base64_mismatch_hard_fails_no_write(self, tmp_path):
+        content = b"kb file contents"
+        mock_result = {
+            "filename": "doc.pdf",
+            "content_base64": base64.b64encode(content).decode(),
+            "download_sha256": "ab" * 32,  # wrong
+            "s3_uri": "s3://bucket/doc.pdf",
+        }
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value=mock_result,
+        ):
+            result = await _handle_kb_download(
+                {"file": "doc.pdf", "output_dir": str(tmp_path)}
+            )
+        assert result.get("isError") is True
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["status"] == "error"
+        # Nothing unverified written to disk.
+        assert not (tmp_path / "doc.pdf").exists()
+
+    async def test_presigned_verified(self, tmp_path):
+        content = b"large kb file via presigned url"
+        sha = hashlib.sha256(content).hexdigest()
+        mock_result = {
+            "filename": "big.pdf",
+            "presigned_url": "https://signed/get",
+            "size_bytes": len(content),
+            "download_sha256": sha,
+            "s3_uri": "s3://bucket/big.pdf",
+        }
+
+        def _fake_presigned_dl(url, dest_path, expected_size=0):
+            Path(dest_path).write_bytes(content)
+            return len(content)
+
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.download_from_presigned_url",
+                side_effect=_fake_presigned_dl,
+            ),
+        ):
+            result = await _handle_kb_download(
+                {"file": "big.pdf", "output_dir": str(tmp_path)}
+            )
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["status"] == "success"
+        assert payload["sha256_verified"] is True
+        assert (tmp_path / "big.pdf").read_bytes() == content
+
+    async def test_presigned_mismatch_deletes_and_errors(self, tmp_path):
+        content = b"corrupted-on-arrival"
+        mock_result = {
+            "filename": "big.pdf",
+            "presigned_url": "https://signed/get",
+            "size_bytes": len(content),
+            "download_sha256": "cd" * 32,  # wrong
+            "s3_uri": "s3://bucket/big.pdf",
+        }
+
+        def _fake_presigned_dl(url, dest_path, expected_size=0):
+            Path(dest_path).write_bytes(content)
+            return len(content)
+
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                return_value=mock_result,
+            ),
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.download_from_presigned_url",
+                side_effect=_fake_presigned_dl,
+            ),
+        ):
+            result = await _handle_kb_download(
+                {"file": "big.pdf", "output_dir": str(tmp_path)}
+            )
+        assert result.get("isError") is True
+        # Corrupt file deleted — no unverified bytes left behind.
+        assert not (tmp_path / "big.pdf").exists()
+
+    async def test_legacy_no_sha_still_succeeds(self, tmp_path):
+        """Backward-compatible: older Lambda omits download_sha256."""
+        content = b"legacy kb file"
+        mock_result = {
+            "filename": "old.pdf",
+            "content_base64": base64.b64encode(content).decode(),
+            "s3_uri": "s3://bucket/old.pdf",
+        }
+        with patch(
+            "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+            return_value=mock_result,
+        ):
+            result = await _handle_kb_download(
+                {"file": "old.pdf", "output_dir": str(tmp_path)}
+            )
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["status"] == "success"
+        assert "sha256_verified" not in payload
+        assert (tmp_path / "old.pdf").read_bytes() == content

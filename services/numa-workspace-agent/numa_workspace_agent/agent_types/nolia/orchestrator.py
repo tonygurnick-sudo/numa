@@ -688,8 +688,10 @@ def _save_phase_notes(result: dict[str, Any], filename: str) -> None:
     if not text:
         return
     try:
+        from ...atomic_io import atomic_write_text
+
         notes_path = Path("/workdir/tmp") / filename
-        notes_path.write_text(text, encoding="utf-8")
+        atomic_write_text(text, notes_path, encoding="utf-8")
         logger.info(
             "Saved phase notes",
             _name="NOLIA_PHASE_NOTES",

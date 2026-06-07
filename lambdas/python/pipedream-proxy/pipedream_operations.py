@@ -5,6 +5,7 @@ Contains all the Pipedream-specific logic ported from existing lambdas.
 """
 
 import base64
+import hashlib
 import io
 import json
 import os
@@ -120,10 +121,12 @@ def _is_textual_content_type(content_type: str) -> bool:
     # Structured-suffix text types: application/<x>+json, application/<x>+xml.
     if base.endswith("+json") or base.endswith("+xml"):
         return True
-    # An explicitly declared charset is a strong textual signal (but never
-    # override an octet-stream, which is binary-by-definition).
-    if "charset=" in raw and not base.startswith("application/octet"):
-        return True
+    # A bare charset= is NOT treated as a textual signal: binary responses
+    # routinely carry one (e.g. "application/pdf; charset=utf-8"), and decoding
+    # those via response.text corrupts them. text/* base types are already
+    # matched explicitly above, so dropping the charset heuristic does not
+    # regress real text handling — it only forces mislabeled binaries onto the
+    # safe base64 path.
     return False
 
 
@@ -1498,15 +1501,21 @@ class PipedreamOperations:
         bucket and a short-lived presigned GET URL replaces the body.
 
         The two response shapes are intentionally distinguishable so old
-        and new consumers can both handle them:
-          - inline:   {binary, base64_body, content_type, size, filename_hint}
+        and new consumers can both handle them. Both carry `download_sha256`,
+        a hex SHA-256 over the exact bytes (inline base64 decodes to those
+        bytes; oversize stores exactly those bytes in S3):
+          - inline:   {binary, base64_body, content_type, size,
+                       download_sha256, filename_hint}
           - oversize: {binary, binary_storage="s3_presigned", presigned_url,
+                       download_url, s3_key, download_sha256,
                        presigned_url_expires_in, content_type, size,
                        filename_hint}
 
         Old workspace agents that look for `base64_body` will find it on
         small files (today's behavior unchanged) and fall through to the
         existing JSON-save path on large files (URL surfaced to the user).
+        Nothing is ever truncated: a binary is either returned whole inline
+        (under the limit) or staged whole to S3 and referenced by URL.
         """
         size = len(response_content)
         upstream_filename = _extract_filename_from_content_disposition(
@@ -1515,6 +1524,12 @@ class PipedreamOperations:
         ext = _content_type_to_extension(content_type)
         filename_hint = _safe_filename(upstream_filename) if upstream_filename else ""
 
+        # Integrity hash over the EXACT bytes we will return / store. Computed
+        # once here so both the inline and the presigned shapes carry the same
+        # digest — the consumer can verify the bytes it ends up holding match
+        # what the proxy saw, whether they arrived inline or via S3.
+        download_sha256 = hashlib.sha256(response_content).hexdigest()
+
         # Build the inline candidate first so we can measure it precisely.
         b64 = base64.b64encode(response_content).decode()
         inline_result: Dict[str, Any] = {
@@ -1522,6 +1537,7 @@ class PipedreamOperations:
             "base64_body": b64,
             "content_type": content_type,
             "size": size,
+            "download_sha256": download_sha256,
         }
         if filename_hint:
             inline_result["filename_hint"] = filename_hint
@@ -1635,6 +1651,11 @@ class PipedreamOperations:
             "binary": True,
             "binary_storage": "s3_presigned",
             "presigned_url": presigned_url,
+            # Aliases so consumers keyed on a generic download contract
+            # ("download_url" / "s3_key") find the reference too.
+            "download_url": presigned_url,
+            "s3_key": key,
+            "download_sha256": download_sha256,
             "presigned_url_expires_in": PRESIGNED_URL_EXPIRES_IN_SECONDS,
             "content_type": content_type,
             "size": size,
@@ -1642,6 +1663,124 @@ class PipedreamOperations:
         if filename_hint:
             oversize_result["filename_hint"] = filename_hint
         return oversize_result
+
+    def offload_oversized_result(
+        self,
+        result: Dict[str, Any],
+        operation: str,
+        external_user_id: str,
+        request_id: Optional[str],
+    ) -> Dict[str, Any]:
+        """Stage a too-large structured tool result to S3, losslessly.
+
+        Some structured results (e.g. a ``run_action`` whose ``exports`` /
+        ``ret`` carries a large payload, or a paginated proxy_request body)
+        serialize past the Lambda 6 MB sync-invoke response limit. The old
+        behaviour let the runtime 413 the whole invocation — the result was
+        lost, not truncated, but lost. This writes the FULL result JSON to the
+        binary cache bucket and returns a small presigned reference instead.
+
+        NOTHING is truncated or dropped: the exact ``json.dumps(result)`` bytes
+        are uploaded and the returned ``result_sha256`` is computed over those
+        exact stored bytes. The wire shape is fixed::
+
+            {"status": "success", "oversized": true,
+             "result_url": "<presigned GET>",
+             "result_sha256": "<hex of bytes at url>",
+             "result_size": <int>,
+             "note": "<one-line hint>"}
+
+        Reuses the same bucket + presigned mechanism as the binary path so no
+        new infrastructure is required.
+        """
+        # Serialize once; this is the exact byte payload we store and hash.
+        result_bytes = json.dumps(result).encode("utf-8")
+        result_size = len(result_bytes)
+        result_sha256 = hashlib.sha256(result_bytes).hexdigest()
+
+        bucket = os.environ.get("BINARY_CACHE_BUCKET")
+        if not bucket:
+            # No bucket configured — fail loudly rather than silently dropping
+            # or truncating the result. (Infra wires BINARY_CACHE_BUCKET for
+            # this proxy; this branch only fires on a misconfigured stack.)
+            logger.error(
+                "Oversized structured result and no BINARY_CACHE_BUCKET configured",
+                _name="OVERSIZED_RESULT_NO_BUCKET",
+                operation=operation,
+                result_size=result_size,
+            )
+            raise Exception(
+                f"Tool result is too large to return inline ({result_size} "
+                "bytes) and the result cache bucket is not configured."
+            )
+
+        tenant_prefix = _safe_filename(external_user_id) or "unknown"
+        request_segment = _safe_filename(request_id or "") or "no-request-id"
+        object_uuid = uuid.uuid4().hex
+        key = f"{tenant_prefix}/{request_segment}/result-{object_uuid}.json"
+
+        s3 = self._get_s3_client()
+        try:
+            s3.upload_fileobj(
+                io.BytesIO(result_bytes),
+                bucket,
+                key,
+                ExtraArgs={
+                    "ContentType": "application/json",
+                    "ServerSideEncryption": "AES256",
+                },
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to upload oversized structured result to cache bucket",
+                _name="OVERSIZED_RESULT_UPLOAD_FAILED",
+                bucket=bucket,
+                key=key,
+                result_size=result_size,
+                error=str(e),
+            )
+            raise Exception("Failed to stage oversized tool result for download") from e
+
+        try:
+            presigned_url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": key},
+                ExpiresIn=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to presign oversized structured result",
+                _name="OVERSIZED_RESULT_PRESIGN_FAILED",
+                bucket=bucket,
+                key=key,
+                error=str(e),
+            )
+            raise Exception(
+                "Failed to generate download URL for oversized tool result"
+            ) from e
+
+        # Log only the key, never the presigned URL (it is a bearer token).
+        logger.info(
+            "Oversized structured result staged to S3",
+            _name="OVERSIZED_RESULT_STAGED",
+            operation=operation,
+            bucket=bucket,
+            key=key,
+            result_size=result_size,
+        )
+
+        return {
+            "status": "success",
+            "oversized": True,
+            "result_url": presigned_url,
+            "result_sha256": result_sha256,
+            "result_size": result_size,
+            "note": (
+                f"Full {operation} result ({result_size} bytes) exceeded the "
+                "inline response limit; fetch the complete JSON from result_url "
+                "(expires in 15 min). Verify integrity against result_sha256."
+            ),
+        }
 
     def proxy_request(
         self,
