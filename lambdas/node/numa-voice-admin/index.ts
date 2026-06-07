@@ -11,6 +11,8 @@ import {
   DisassociateApprovedOriginCommand,
   ListUsersCommand,
   CreateUserCommand,
+  DescribeUserCommand,
+  UpdateUserIdentityInfoCommand,
   ListRoutingProfilesCommand,
   ListSecurityProfilesCommand,
   ListQueuesCommand,
@@ -24,6 +26,10 @@ import {
   ListContactFlowsCommand,
   AssociatePhoneNumberContactFlowCommand,
 } from '@aws-sdk/client-connect';
+import {
+  CognitoIdentityProviderClient,
+  ListUsersCommand as CognitoListUsersCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { createHash } from 'node:crypto';
@@ -59,11 +65,18 @@ type VoiceMode = 'personal' | 'shared';
 const VOICE_CONFIG_WRITER_LAMBDA_ARN = process.env.VOICE_CONFIG_WRITER_LAMBDA_ARN || '';
 const RECORDINGS_BUCKET = process.env.RECORDINGS_BUCKET || '';
 const CONNECT_INSTANCE_URL = process.env.CONNECT_INSTANCE_URL || '';
+// Cognito pool (CLIENT region = this Lambda's region) — used to resolve a Connect
+// agent username (which is the user's Cognito `sub`) back to a real email/name. The
+// Connect username is a sub because the FE sends the access token (no `email` claim),
+// so Connect IdentityInfo alone is junk; Cognito is the only source of real identity.
+const USER_POOL_ID = process.env.USER_POOL_ID || '';
 
 const connect = withPRM(ConnectClient, { region: CONNECT_REGION });
 const sts = withPRM(STSClient, { region: CONNECT_REGION });
 // The config-writer lives in the deployer account in us-east-1.
 const lambda = withPRM(LambdaClient, { region: 'us-east-1' });
+// Cognito runs in the CLIENT region (this Lambda's default region == the pool region).
+const cognito = USER_POOL_ID ? withPRM(CognitoIdentityProviderClient, {}) : undefined;
 
 const INSTANCE_ALIAS = `numa-${CLIENT_NAME}${ENV_SUFFIX}`;
 
@@ -100,6 +113,65 @@ const json = (statusCode: number, body: unknown): APIGatewayProxyStructuredResul
   headers: HEADERS,
   body: JSON.stringify(body),
 });
+
+// ── Identity resolution (Connect username → human email/name) ────────────────
+// A Connect agent's Username is the user's Cognito `sub` (a UUID) — see the header
+// note on USER_POOL_ID. To render anything human in the admin panel we map the sub
+// back to its Cognito user. Cached per warm container (identities rarely change) so
+// the per-load lookups don't hammer Cognito.
+type Identity = { email?: string; displayName: string };
+const IDENTITY_TTL_MS = 10 * 60 * 1000;
+const identityCache = new Map<string, { v: Identity; at: number }>();
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Turn an email local-part into a best-effort display name ("tony.gurnick" → "Tony Gurnick"). */
+function deriveName(email: string): string {
+  const local = email
+    .split('@')[0]
+    .replace(/[^A-Za-z0-9._-]/g, ' ')
+    .trim();
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  const cap = (w: string): string => (w ? w[0].toUpperCase() + w.slice(1) : w);
+  return parts.map(cap).join(' ') || email;
+}
+
+/** Resolve one Connect username to {email, displayName}. Email-shaped usernames need
+ *  no lookup; UUID (sub) usernames are looked up in Cognito by the `sub` attribute.
+ *  Falls back to the raw username if Cognito is unconfigured or the user is gone. */
+async function resolveIdentity(username: string): Promise<Identity> {
+  if (!username) return { displayName: username };
+  if (username.includes('@')) return { email: username, displayName: deriveName(username) };
+  const cached = identityCache.get(username);
+  if (cached && Date.now() - cached.at < IDENTITY_TTL_MS) return cached.v;
+  let v: Identity = { displayName: username };
+  if (cognito && USER_POOL_ID && UUID_RE.test(username)) {
+    try {
+      const res = await cognito.send(
+        new CognitoListUsersCommand({ UserPoolId: USER_POOL_ID, Filter: `sub = "${username}"`, Limit: 1 })
+      );
+      const attrs = res.Users?.[0]?.Attributes ?? [];
+      const get = (n: string): string | undefined => attrs.find((a) => a.Name === n)?.Value;
+      const email = get('email');
+      const fullName =
+        get('name') ||
+        [get('given_name'), get('family_name')].filter(Boolean).join(' ') ||
+        (email ? deriveName(email) : undefined);
+      if (email || fullName) v = { email, displayName: fullName || email || username };
+    } catch (err: unknown) {
+      console.warn('cognito identity resolve failed', username, String(err));
+    }
+  }
+  identityCache.set(username, { v, at: Date.now() });
+  return v;
+}
+
+/** Resolve many usernames at once → Map<username, Identity> (de-duped, parallel). */
+async function resolveIdentities(usernames: Array<string | undefined>): Promise<Map<string, Identity>> {
+  const uniq = [...new Set(usernames.filter((u): u is string => !!u))];
+  const entries = await Promise.all(uniq.map(async (u) => [u, await resolveIdentity(u)] as const));
+  return new Map(entries);
+}
 
 /** Resolve this tenant's Connect instance id+arn by its deterministic alias. */
 async function resolveInstance(): Promise<{ id: string; arn: string } | null> {
@@ -208,7 +280,7 @@ async function getStatus(claims: JwtClaims): Promise<APIGatewayProxyStructuredRe
   }
   // Per-DID owner (from its numa-owner tag) + tenant inbound mode, so the panel can show
   // personal vs shared lines. DescribePhoneNumber per number — fine for the handful of DIDs.
-  const [mode, inboundFlowId, phoneNumbers] = await Promise.all([
+  const [mode, inboundFlowId, rawNumbers] = await Promise.all([
     getMode(instance.arn),
     findContactFlowId(instance.id, INBOUND_FLOW_NAME).catch(() => undefined),
     Promise.all(
@@ -229,6 +301,40 @@ async function getStatus(claims: JwtClaims): Promise<APIGatewayProxyStructuredRe
       })
     ),
   ]);
+
+  // Resolve every agent username AND every DID owner (both are Cognito subs) to a real
+  // email/name in ONE batched pass, so the panel never shows a raw UUID.
+  const agentUsers = users.UserSummaryList ?? [];
+  const idMap = await resolveIdentities([...agentUsers.map((u) => u.Username), ...rawNumbers.map((n) => n.owner)]);
+
+  // Attach the resolved owner identity to each number (for the "unassigned" view).
+  const phoneNumbers = rawNumbers.map((n) => {
+    const id = n.owner ? idMap.get(n.owner) : undefined;
+    return { ...n, ownerEmail: id?.email, ownerDisplayName: id?.displayName };
+  });
+
+  // Agent-centric view: each Connect user joined to the DID they own (owner === username),
+  // with a human label resolved from Cognito. This is what the redesigned panel renders.
+  const numberByOwner = new Map(phoneNumbers.filter((n) => n.owner).map((n) => [n.owner as string, n]));
+  const agents = agentUsers.map((u) => {
+    const username = u.Username ?? '';
+    const id = idMap.get(username);
+    const owned = numberByOwner.get(username);
+    return {
+      id: u.Id,
+      username,
+      email: id?.email,
+      displayName: id?.displayName ?? username,
+      isSelf: !!callerUsername && username === callerUsername,
+      isBot: username === AGENT_USERNAME,
+      phoneNumberId: owned?.id,
+      phoneNumber: owned?.number,
+      countryCode: owned?.countryCode,
+      type: owned?.type,
+      isCallerId: !!owned?.id && owned.id === outboundCallerIdNumberId,
+    };
+  });
+
   return json(200, {
     configured: true,
     instanceId: instance.id,
@@ -238,7 +344,7 @@ async function getStatus(claims: JwtClaims): Promise<APIGatewayProxyStructuredRe
     phoneNumbers,
     approvedOrigins: origins.Origins ?? [],
     numaOriginPresent: (origins.Origins ?? []).includes(APPROVED_ORIGIN),
-    agents: (users.UserSummaryList ?? []).map((u) => ({ id: u.Id, username: u.Username })),
+    agents,
     queues: (queues.QueueSummaryList ?? []).map((q) => ({ id: q.Id, name: q.Name })),
     outboundCallerIdNumberId,
   });
@@ -572,14 +678,20 @@ async function ensureConnectUser(instanceId: string, username: string, claims: J
     throw new Error('Missing numa-voice-routing routing profile or Agent security profile');
   }
   // Always give the agent a COMPLETE identity in the Connect console (a half-populated
-  // IdentityInfo reads as a broken/anonymous agent). Derive first/last from the email
-  // local-part when the IdP didn't supply given_name/family_name.
-  const email = typeof claims.email === 'string' ? claims.email.trim() : undefined;
-  const localPart = (email ?? username)
+  // IdentityInfo reads as a broken/anonymous agent). claims.email is absent on the
+  // access-token path (the root cause of UUID agents), so fall back to Cognito — the
+  // username IS the user's sub — to still record a real email + name. Derive first/last
+  // from the resolved name or the email local-part when the IdP gave no given/family name.
+  const claimEmail = typeof claims.email === 'string' && claims.email.trim() ? claims.email.trim() : undefined;
+  const resolved = claimEmail ? undefined : await resolveIdentity(username);
+  const email = claimEmail ?? resolved?.email;
+  const nameSource =
+    resolved?.displayName && resolved.displayName !== username ? resolved.displayName : (email ?? username);
+  const localPart = nameSource
     .split('@')[0]
     .replace(/[^A-Za-z0-9._-]/g, ' ')
     .trim();
-  const [derivedFirst, ...derivedRest] = localPart.split(/[._-]+/).filter(Boolean);
+  const [derivedFirst, ...derivedRest] = localPart.split(/[._\s-]+/).filter(Boolean);
   const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
   const firstName = (typeof claims.given_name === 'string' && claims.given_name.trim()) || cap(derivedFirst) || 'Numa';
   const lastName =
@@ -604,6 +716,57 @@ async function ensureConnectUser(instanceId: string, username: string, claims: J
     // Lost a create race / user already exists (e.g. beyond the ListUsers page) — fine.
     if ((err as { name?: string })?.name !== 'DuplicateResourceException') throw err;
   }
+}
+
+/** Backfill IdentityInfo (Email + name) on EXISTING Connect agents from Cognito.
+ *  Agents created before the forward fix have a UUID-derived junk identity and no
+ *  email; this repairs the Connect console / CCP display for them. Idempotent: skips
+ *  the bot, users with no resolvable email, and users already carrying the right email.
+ *  The panel resolves names live regardless — this only fixes Connect's own records. */
+async function syncAgentIdentities(): Promise<APIGatewayProxyStructuredResultV2> {
+  const instance = await resolveInstance();
+  if (!instance) return json(409, { error: 'No Connect instance for this workspace' });
+  const users = await listAllUsers(instance.id);
+  let updated = 0;
+  let skipped = 0;
+  let failed = 0;
+  for (const u of users) {
+    if (!u.Id || !u.Username || u.Username === AGENT_USERNAME) {
+      skipped++;
+      continue;
+    }
+    const ident = await resolveIdentity(u.Username);
+    if (!ident.email) {
+      skipped++; // nothing better to write than the UUID we already have
+      continue;
+    }
+    try {
+      const cur = (await connect.send(new DescribeUserCommand({ InstanceId: instance.id, UserId: u.Id }))).User
+        ?.IdentityInfo;
+      if (cur?.Email === ident.email) {
+        skipped++; // already correct
+        continue;
+      }
+      const [first, ...rest] = ident.displayName.split(/[._\s-]+/).filter(Boolean);
+      const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
+      await connect.send(
+        new UpdateUserIdentityInfoCommand({
+          InstanceId: instance.id,
+          UserId: u.Id,
+          IdentityInfo: {
+            Email: ident.email,
+            FirstName: (cap(first) || 'Numa').slice(0, 100),
+            LastName: (rest.map(cap).join(' ') || 'Voice').slice(0, 100),
+          },
+        })
+      );
+      updated++;
+    } catch (err: unknown) {
+      console.warn('identity backfill failed', u.Username, String(err));
+      failed++;
+    }
+  }
+  return json(200, { updated, skipped, failed, total: users.length });
 }
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
@@ -633,10 +796,18 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     const phoneOwnerMatch = path.match(/\/voice\/phone-numbers\/([^/]+?)\/owner\/?$/);
     const phoneIdMatch = path.match(/\/voice\/phone-numbers\/([^/]+?)(\/caller-id)?\/?$/);
 
-    // Claim a NEW DID — ADMIN ONLY (each claim costs money). Claimed into the pool
-    // UNOWNED; users then self-assign an available number via POST .../{id}/owner.
+    // Claim a NEW DID — ADMIN ONLY (each claim costs money). Optional { owner } assigns
+    // it to a specific agent on claim (the per-agent "Claim" flow); without it the DID
+    // lands UNOWNED in the pool for later assignment via POST .../{id}/owner.
     if (method === 'POST' && /\/voice\/phone-numbers\/?$/.test(path)) {
-      return requireAdmin() ?? (await claimNumber(body as { country?: string; type?: string }));
+      const denied = requireAdmin();
+      if (denied) return denied;
+      const owner = typeof body.owner === 'string' && body.owner ? body.owner : undefined;
+      return await claimNumber(body as { country?: string; type?: string }, owner);
+    }
+    // Backfill existing agents' Connect IdentityInfo (Email/name) from Cognito — admin only.
+    if (method === 'POST' && /\/voice\/agents\/sync-identities\/?$/.test(path)) {
+      return requireAdmin() ?? (await syncAgentIdentities());
     }
     // Assign/reassign a DID's owner. Admins → anyone; a non-admin may only claim it for SELF.
     if (method === 'POST' && phoneOwnerMatch) {

@@ -24,6 +24,7 @@
     "test": "echo 'no tests'"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.699.0",
     "@aws-sdk/client-connect": "^3.699.0",
     "@aws-sdk/client-lambda": "^3.699.0",
     "@aws-sdk/client-sts": "^3.699.0",
