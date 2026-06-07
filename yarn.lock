@@ -31669,6 +31669,7 @@ __metadata:
   resolution: "numa-voice-admin@workspace:lambdas/node/numa-voice-admin"
   dependencies:
     "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.699.0"
     "@aws-sdk/client-connect": "npm:^3.699.0"
     "@aws-sdk/client-lambda": "npm:^3.699.0"
     "@aws-sdk/client-sts": "npm:^3.699.0"

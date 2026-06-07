@@ -812,6 +812,10 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         // FEAT-169 config write-back (STS-proof relay -> deployer numa-client-config).
         VOICE_CONFIG_WRITER_LAMBDA_ARN: props.voiceConfigWriterLambdaArn,
         RECORDINGS_BUCKET: recordingsBucketName,
+        // Cognito pool — resolve a Connect agent username (== the user's sub) back to a
+        // real email/name for the admin panel (the FE access token carries no email, so
+        // Connect usernames are bare subs and IdentityInfo is junk without this).
+        USER_POOL_ID: props.userPoolId,
         ...(props.connectInstanceUrl ? { CONNECT_INSTANCE_URL: props.connectInstanceUrl } : {}),
       },
       additionalPolicyStatements: [
@@ -829,6 +833,9 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             'connect:ListUsers',
             // Per-user agent provisioning (each Numa user federates as their own agent).
             'connect:CreateUser',
+            // Read/repair agent IdentityInfo (sync-identities backfill from Cognito).
+            'connect:DescribeUser',
+            'connect:UpdateUserIdentityInfo',
             'connect:ListRoutingProfiles',
             'connect:ListSecurityProfiles',
             'connect:ListQueues',
@@ -844,6 +851,12 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             'connect:AssociatePhoneNumberContactFlow',
           ],
           resources: ['*'],
+        },
+        // Resolve agent usernames (Cognito subs) → real email/name for the admin panel.
+        {
+          effect: 'Allow',
+          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminGetUser'],
+          resources: [props.userPoolArn],
         },
         // Assume the federation role (RoleSessionName = Connect username) for SSO.
         { effect: 'Allow', actions: ['sts:AssumeRole'], resources: [voiceFederationRole.arn] },
@@ -871,6 +884,8 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         { verb: 'POST', path: 'voice/phone-numbers/{id}/owner' },
         { verb: 'DELETE', path: 'voice/phone-numbers/{id}/owner' },
         { verb: 'POST', path: 'voice/mode' },
+        // APPEND-ONLY (routes keyed by array index): backfill agent IdentityInfo from Cognito.
+        { verb: 'POST', path: 'voice/agents/sync-identities' },
       ],
     });
 
