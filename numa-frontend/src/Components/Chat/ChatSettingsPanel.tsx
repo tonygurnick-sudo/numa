@@ -6,7 +6,7 @@ import {
   getConnectionDisplayName,
   getConnectionFallbackIcon,
 } from '../../config/integrationsConfig';
-import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
+import { IntegrationAccountButton } from '../Integrations/IntegrationAccountSelector';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -336,21 +336,22 @@ export const ChatSettingsPanel = ({
                               <i className={fallbackIcon} />
                             )}
                             {displayName}
+                            <IntegrationAccountButton
+                              connectionId={conn.id}
+                              displayName={displayName}
+                              accounts={conn.accounts ?? []}
+                              allowMultipleAccounts={conn.allowMultipleAccounts === true}
+                              isEnabled={isEnabled}
+                              selectedAccountIds={selectedAccountsByApp?.[conn.id]}
+                              disabled={isDisabled}
+                              onChange={(next) => setSelectedAccountsByApp?.((prev) => ({ ...prev, [conn.id]: next }))}
+                            />
                           </span>
                         }
                         checked={isEnabled}
                         onChange={(e) => handleIntegrationToggle(conn.id, e.target.checked)}
                         disabled={isDisabled}
                         className="py-1"
-                      />
-                      <IntegrationAccountSubmenu
-                        connectionId={conn.id}
-                        accounts={conn.accounts ?? []}
-                        allowMultipleAccounts={conn.allowMultipleAccounts === true}
-                        isEnabled={isEnabled}
-                        selectedAccountIds={selectedAccountsByApp?.[conn.id]}
-                        disabled={isDisabled}
-                        onChange={(next) => setSelectedAccountsByApp?.((prev) => ({ ...prev, [conn.id]: next }))}
                       />
                     </div>
                   );

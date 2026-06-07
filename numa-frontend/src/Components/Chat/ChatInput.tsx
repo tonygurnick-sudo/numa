@@ -17,7 +17,7 @@ import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { useDrawerBackClose } from '../../hooks/useDrawerBackClose';
 import type { WorkspaceChatModelId } from '../../types/workspaceChatTypes';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
-import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
+import { IntegrationAccountButton } from '../Integrations/IntegrationAccountSelector';
 
 // WebSocket message size limit (AWS API Gateway limit is 32KB)
 const MAX_MESSAGE_LENGTH = 20000; // Conservative limit accounting for JSON overhead
@@ -1046,7 +1046,20 @@ const ChatInput = ({
                             style={{ fontSize: '24px', display: 'none' }}
                           />
                           <div>
-                            <div className="fw-bold">{getConnectionDisplayName(connection.id)}</div>
+                            <div className="fw-bold d-flex align-items-center gap-2">
+                              {getConnectionDisplayName(connection.id)}
+                              <IntegrationAccountButton
+                                connectionId={connection.id}
+                                displayName={getConnectionDisplayName(connection.id)}
+                                accounts={connection.accounts ?? []}
+                                allowMultipleAccounts={connection.allowMultipleAccounts === true}
+                                isEnabled={isEnabled}
+                                selectedAccountIds={selectedAccountsByApp[connection.id]}
+                                onChange={(next) =>
+                                  setSelectedAccountsByApp?.((prev) => ({ ...prev, [connection.id]: next }))
+                                }
+                              />
+                            </div>
                             <div className="text-muted small">{t('input.integrations.connected')}</div>
                           </div>
                         </div>
@@ -1059,14 +1072,6 @@ const ChatInput = ({
                           {isEnabled ? t('input.integrations.enabled') : t('input.integrations.enable')}
                         </Button>
                       </div>
-                      <IntegrationAccountSubmenu
-                        connectionId={connection.id}
-                        accounts={connection.accounts ?? []}
-                        allowMultipleAccounts={connection.allowMultipleAccounts === true}
-                        isEnabled={isEnabled}
-                        selectedAccountIds={selectedAccountsByApp[connection.id]}
-                        onChange={(next) => setSelectedAccountsByApp?.((prev) => ({ ...prev, [connection.id]: next }))}
-                      />
                     </div>
                   );
                 })}

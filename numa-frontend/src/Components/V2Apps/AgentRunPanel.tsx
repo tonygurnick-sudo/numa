@@ -10,7 +10,7 @@ import {
 } from '../../config/integrationsConfig';
 import { useAuth } from '../../Providers/AuthProvider';
 import type { V2AppAgent, V2AppWorkspaceSettings, RunConfiguration } from '../../types/apps';
-import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
+import { IntegrationAccountButton } from '../Integrations/IntegrationAccountSelector';
 import type { V2AppRunState } from '../../hooks/useV2AppRun';
 import type { RunRecord, ProgressEvent } from '../../Services/v2AppsService';
 
@@ -388,18 +388,19 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
                                       <i className={fallbackIcon} />
                                     )}
                                     {displayName}
+                                    <IntegrationAccountButton
+                                      connectionId={conn.id}
+                                      displayName={displayName}
+                                      accounts={conn.accounts ?? []}
+                                      allowMultipleAccounts={conn.allowMultipleAccounts === true}
+                                      isEnabled={isEnabled}
+                                      selectedAccountIds={selectedAccountsByApp[conn.id]}
+                                      onChange={(next) =>
+                                        setSelectedAccountsByApp((prev) => ({ ...prev, [conn.id]: next }))
+                                      }
+                                    />
                                   </Form.Check.Label>
                                 </Form.Check>
-                                <IntegrationAccountSubmenu
-                                  connectionId={conn.id}
-                                  accounts={conn.accounts ?? []}
-                                  allowMultipleAccounts={conn.allowMultipleAccounts === true}
-                                  isEnabled={isEnabled}
-                                  selectedAccountIds={selectedAccountsByApp[conn.id]}
-                                  onChange={(next) =>
-                                    setSelectedAccountsByApp((prev) => ({ ...prev, [conn.id]: next }))
-                                  }
-                                />
                               </div>
                             );
                           })
