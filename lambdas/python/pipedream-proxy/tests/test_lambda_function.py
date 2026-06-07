@@ -1453,6 +1453,11 @@ class TestIsTextualContentType(unittest.TestCase):
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "application/zip",
             "application/pdf",
+            # A binary type that carries a charset must still be binary: the
+            # bare charset= heuristic used to misclassify these as text and
+            # corrupt the download via response.text.
+            "application/pdf; charset=utf-8",
+            "application/custom; charset=utf-8",
             "image/png",
             "application/octet-stream",
             "",  # absent Content-Type defaults to binary (safe)
@@ -1466,14 +1471,13 @@ class TestIsTextualContentType(unittest.TestCase):
 
         for ct in (
             "text/plain",
-            "text/html; charset=utf-8",
+            "text/html; charset=utf-8",  # text/* base type is matched explicitly
             "application/json",
             "application/xml",
             "application/ld+json",
             "application/problem+json",
             "application/atom+xml",
             "application/x-www-form-urlencoded",
-            "application/custom; charset=utf-8",  # declared charset => text
         ):
             self.assertTrue(
                 _is_textual_content_type(ct), f"{ct!r} should be treated as text"
@@ -1606,6 +1610,243 @@ class TestProxyRequestBinarySafety(unittest.TestCase):
             )
 
         self.assertEqual(result, {"text": "plain body"})
+
+
+class TestBinaryResultSha256(unittest.TestCase):
+    """Both binary shapes must carry a sha256 over the exact bytes.
+
+    The hash lets the consumer verify the bytes it ends up holding (inline
+    base64 or fetched from the presigned URL) match what the proxy saw. The
+    oversize digest is over the EXACT bytes stored in S3 — never truncated.
+    """
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:pipedream-credentials",
+            "BINARY_CACHE_BUCKET": "pipedream-proxy-binary-cache-prod",
+        }
+        self.external_user_id = "tleaft_a1b2c3d4-0000-7000-8000-000000000001"
+        self.request_id = "req-sha-1"
+
+    def _make_ops(self) -> PipedreamOperations:
+        with patch.dict(os.environ, self.env_vars):
+            return PipedreamOperations()
+
+    def test_inline_result_carries_matching_sha256(self) -> None:
+        import hashlib
+
+        content = b"%PDF-1.4 small inline body " + b"y" * 500
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            ops._s3_client = Mock()
+            result = ops._build_binary_result(
+                response_content=content,
+                content_type="application/pdf",
+                content_disposition='attachment; filename="x.pdf"',
+                external_user_id=self.external_user_id,
+                request_id=self.request_id,
+            )
+
+        self.assertIn("base64_body", result)
+        self.assertIn("download_sha256", result)
+        # Digest is over the exact bytes, and the inline base64 decodes to them.
+        self.assertEqual(result["download_sha256"], hashlib.sha256(content).hexdigest())
+        self.assertEqual(
+            hashlib.sha256(base64.b64decode(result["base64_body"])).hexdigest(),
+            result["download_sha256"],
+        )
+
+    def test_oversize_result_sha256_is_over_stored_bytes(self) -> None:
+        import hashlib
+
+        # 5.5 MB raw → base64-wrapped envelope exceeds the 6 MB Lambda limit.
+        content = b"\x00\x01\x02\x03" * (int(5.5 * 1024 * 1024) // 4)
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            mock_s3 = Mock()
+            mock_s3.generate_presigned_url.return_value = "https://s3.example/signed"
+            ops._s3_client = mock_s3
+            result = ops._build_binary_result(
+                response_content=content,
+                content_type="application/pdf",
+                content_disposition='attachment; filename="big.pdf"',
+                external_user_id=self.external_user_id,
+                request_id=self.request_id,
+            )
+
+        self.assertEqual(result["binary_storage"], "s3_presigned")
+        self.assertNotIn("base64_body", result)
+        self.assertIn("download_url", result)
+        self.assertIn("s3_key", result)
+        self.assertIn("download_sha256", result)
+        # The digest must match the EXACT bytes handed to upload_fileobj.
+        uploaded_stream = mock_s3.upload_fileobj.call_args.args[0]
+        uploaded_bytes = uploaded_stream.getvalue()
+        self.assertEqual(uploaded_bytes, content)  # whole thing, not truncated
+        self.assertEqual(
+            result["download_sha256"], hashlib.sha256(uploaded_bytes).hexdigest()
+        )
+
+
+class TestOffloadOversizedResult(unittest.TestCase):
+    """Oversized STRUCTURED tool results go to S3 with the fixed wire shape."""
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:pipedream-credentials",
+            "BINARY_CACHE_BUCKET": "pipedream-proxy-binary-cache-prod",
+        }
+        self.external_user_id = "tleaft_a1b2c3d4-0000-7000-8000-000000000001"
+
+    def _make_ops(self) -> PipedreamOperations:
+        with patch.dict(os.environ, self.env_vars):
+            return PipedreamOperations()
+
+    def test_offload_shape_and_sha256(self) -> None:
+        import hashlib
+
+        result = {"exports": {"rows": list(range(1000))}}
+        with patch.dict(os.environ, self.env_vars):
+            ops = self._make_ops()
+            mock_s3 = Mock()
+            mock_s3.generate_presigned_url.return_value = "https://s3.example/result"
+            ops._s3_client = mock_s3
+            offloaded = ops.offload_oversized_result(
+                result=result,
+                operation="run_action",
+                external_user_id=self.external_user_id,
+                request_id="req-offload-1",
+            )
+
+        # Exact fixed wire contract.
+        self.assertEqual(offloaded["status"], "success")
+        self.assertTrue(offloaded["oversized"])
+        self.assertEqual(offloaded["result_url"], "https://s3.example/result")
+        self.assertIn("result_sha256", offloaded)
+        self.assertIn("result_size", offloaded)
+        self.assertIn("note", offloaded)
+        # No truncation: stored bytes are the full json.dumps(result), and the
+        # sha256 + size describe exactly those bytes.
+        expected_bytes = json.dumps(result).encode("utf-8")
+        uploaded_stream = mock_s3.upload_fileobj.call_args.args[0]
+        self.assertEqual(uploaded_stream.getvalue(), expected_bytes)
+        self.assertEqual(offloaded["result_size"], len(expected_bytes))
+        self.assertEqual(
+            offloaded["result_sha256"], hashlib.sha256(expected_bytes).hexdigest()
+        )
+        # JSON content-type on the staged object.
+        extra = mock_s3.upload_fileobj.call_args.kwargs["ExtraArgs"]
+        self.assertEqual(extra["ContentType"], "application/json")
+        self.assertEqual(extra["ServerSideEncryption"], "AES256")
+
+    def test_offload_without_bucket_raises_not_truncates(self) -> None:
+        env_no_bucket = {
+            "PIPEDREAM_SECRET_ARN": self.env_vars["PIPEDREAM_SECRET_ARN"],
+            "AWS_DEFAULT_REGION": "us-east-1",
+        }
+        with patch.dict(os.environ, env_no_bucket, clear=True):
+            ops = PipedreamOperations()
+            with self.assertRaises(Exception) as ctx:
+                ops.offload_oversized_result(
+                    result={"big": "x" * 10},
+                    operation="run_action",
+                    external_user_id=self.external_user_id,
+                    request_id="req",
+                )
+        self.assertIn("too large to return inline", str(ctx.exception))
+
+
+class TestHandlerOversizedStructuredResult(unittest.TestCase):
+    """The handler must offload an oversized structured result, not 413/truncate."""
+
+    def setUp(self) -> None:
+        self.mock_context = Mock()
+        self.mock_context.function_name = "pipedream-proxy"
+        self.mock_context.aws_request_id = "test-req-oversize"
+        self.env_vars = {
+            "SECURITY_MAPPING_TABLE": "pipedream-security-mapping",
+            "ALLOWED_ACCOUNTS_TABLE": "pipedream-allowed-accounts",
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:pipedream-credentials",
+            "BINARY_CACHE_BUCKET": "pipedream-proxy-binary-cache-prod",
+            "ENVIRONMENT": "test",
+        }
+        self.event = {
+            "operation": "run_action",
+            "external_user_id": "arcanum_demo_user123",
+            "sts_proof_url": "https://sts.us-east-1.amazonaws.com/?Action=GetCallerIdentity",
+            "parameters": {"action_key": "x-do", "configured_props": {}},
+        }
+
+    def test_oversized_run_action_offloaded(self) -> None:
+        import hashlib
+
+        # A run_action result that serializes well past the 6 MB envelope.
+        big_value = "z" * (7 * 1024 * 1024)
+        big_result = {"exports": {"blob": big_value}}
+
+        with patch.dict(os.environ, self.env_vars):
+            with patch.object(
+                lambda_function, "SecurityValidator"
+            ) as mock_validator_cls, patch.object(
+                lambda_function, "PipedreamOperations"
+            ) as mock_ops_cls:
+                mock_validator_cls.return_value.validate_request.return_value = {
+                    "caller_account_id": "123",
+                    "role_name": "role",
+                }
+                mock_ops = mock_ops_cls.return_value
+                mock_ops.run_action.return_value = big_result
+                mock_ops.offload_oversized_result.return_value = {
+                    "status": "success",
+                    "oversized": True,
+                    "result_url": "https://s3.example/big-result",
+                    "result_sha256": hashlib.sha256(
+                        json.dumps(big_result).encode("utf-8")
+                    ).hexdigest(),
+                    "result_size": len(json.dumps(big_result).encode("utf-8")),
+                    "note": "fetch from result_url",
+                }
+
+                response = lambda_function.handler(self.event, self.mock_context)
+
+        self.assertEqual(response["statusCode"], 200)
+        # The returned envelope is tiny — it must NOT contain the big blob.
+        self.assertLess(len(response["body"]), 4096)
+        body = json.loads(response["body"])
+        data = body["data"]
+        self.assertTrue(data["oversized"])
+        self.assertEqual(data["result_url"], "https://s3.example/big-result")
+        self.assertIn("result_sha256", data)
+        # The offload path was actually exercised with the full result.
+        mock_ops.offload_oversized_result.assert_called_once()
+        kwargs = mock_ops.offload_oversized_result.call_args.kwargs
+        self.assertEqual(kwargs["result"], big_result)
+        self.assertEqual(kwargs["operation"], "run_action")
+
+    def test_small_run_action_returned_inline(self) -> None:
+        """A normal-size result is returned inline; offload is not called."""
+        small_result = {"exports": {"ok": True}}
+
+        with patch.dict(os.environ, self.env_vars):
+            with patch.object(
+                lambda_function, "SecurityValidator"
+            ) as mock_validator_cls, patch.object(
+                lambda_function, "PipedreamOperations"
+            ) as mock_ops_cls:
+                mock_validator_cls.return_value.validate_request.return_value = {
+                    "caller_account_id": "123",
+                    "role_name": "role",
+                }
+                mock_ops = mock_ops_cls.return_value
+                mock_ops.run_action.return_value = small_result
+
+                response = lambda_function.handler(self.event, self.mock_context)
+
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertEqual(body["data"], small_result)
+        mock_ops.offload_oversized_result.assert_not_called()
 
 
 if __name__ == "__main__":

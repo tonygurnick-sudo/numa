@@ -13,6 +13,7 @@ import asyncio
 import base64
 import errno
 import json
+import mimetypes
 import os
 import shutil
 import subprocess
@@ -23,7 +24,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-import aiofiles
 import boto3
 import structlog
 from fastapi import FastAPI, HTTPException, Request
@@ -45,6 +45,7 @@ from .agent_types import (
     AgentTypeConfig,
     get_agent_type_config,
 )
+from .atomic_io import atomic_write_bytes, atomic_write_text
 from .dynamo import (
     is_v1_conversation,
     load_v1_conversation_history,
@@ -402,8 +403,16 @@ def _fetch_kb_listings(
             )
             return None
 
-        result = response_payload.get("result", {})
-        listings = result.get("listings", {})
+        # list_kb_files spills its full result to S3 when it would overflow the
+        # 6 MB synchronous Lambda payload, returning a small
+        # {"oversized": true, result_url, result_sha256, ...} envelope instead.
+        # Resolve it losslessly here (download + sha256-verify) so the system
+        # prompt sees the COMPLETE listings. Backward-compatible: a non-oversized
+        # result passes through unchanged.
+        from .mcp_tools.lambda_client import resolve_oversized_result
+
+        result = resolve_oversized_result(response_payload.get("result", {}))
+        listings = result.get("listings", {}) if isinstance(result, dict) else {}
 
         if listings:
             # Build the prompt content preview for logging
@@ -831,16 +840,19 @@ async def read_workspace_local_file(path: str):
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
-    content = file_path.read_text(errors="replace")
-
-    # Return JSON for .json files so the UI can pretty-print
+    # Only text-decode when we actually need text (.json pretty-print). For any
+    # other file, serve the raw bytes verbatim so arbitrary /workdir files
+    # (including binaries) download uncorrupted — never lossy-decode them.
     if file_path.suffix == ".json":
+        text = file_path.read_text(errors="replace")
         try:
-            return JSONResponse(content=json.loads(content))
+            return JSONResponse(content=json.loads(text))
         except json.JSONDecodeError:
-            pass
+            return Response(content=text, media_type="text/plain")
 
-    return Response(content=content, media_type="text/plain")
+    raw = file_path.read_bytes()
+    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+    return Response(content=raw, media_type=media_type)
 
 
 # =============================================================================
@@ -1087,26 +1099,154 @@ def _build_workspace_error_payload(e: OSError) -> dict[str, Any]:
     }
 
 
-def _workspace_setup_error_response(
-    e: OSError, *, body: dict[str, Any], agent_type_config: Any
-) -> Response:
-    """Return a structured response for an OSError during workspace setup.
+# Safety margin reserved on top of an incoming write's size before we allow it.
+# The container filesystem is fixed and shared (uploads, outputs, tool scripts,
+# trace.jsonl, temp files written mid-request), so leave headroom rather than
+# filling /workdir to the byte. 100 MB matches the margin called out in the
+# reactive ENOSPC handling notes above.
+WORKSPACE_FREE_SPACE_MARGIN_BYTES = 100 * 1024 * 1024
 
-    Always returns HTTP 200 so AgentCore doesn't wrap it as a generic
-    RuntimeClientError 500. The frontend's existing SSE error handler
-    renders the `error` field cleanly.
+# Hard cap on a single browser-uploaded file, mirroring the 500 MB limit the
+# frontend enforces in WorkspaceChatFileUpload.tsx. Enforced server-side so a
+# crafted/bypassed request can't push an arbitrarily large object into the
+# workspace.
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+
+
+def get_workspace_free_bytes() -> Optional[int]:
+    """Return the number of free bytes available on the /workdir filesystem.
+
+    Uses ``os.statvfs`` (``f_bavail`` blocks available to a non-privileged
+    process × ``f_frsize`` fragment size). Returns ``None`` if the stat fails
+    (e.g. the path doesn't exist yet in a local/test environment) so callers
+    can treat "unknown" as "don't block" and fall back to the reactive ENOSPC
+    backstop rather than spuriously rejecting a write.
     """
-    payload = _build_workspace_error_payload(e)
-    logger.error(
-        "Workspace setup failed",
-        _name="WORKSPACE_SETUP_ERROR",
-        phase="request",
-        errno=payload.get("errno"),
-        error=str(e),
+    try:
+        stat = os.statvfs(str(LOCAL_ROOT))
+    except OSError as e:
+        logger.warning(
+            "Could not stat workspace filesystem for free-space check",
+            _name="WORKSPACE_STATVFS_FAILED",
+            phase="upload",
+            error=str(e),
+        )
+        return None
+    return stat.f_bavail * stat.f_frsize
+
+
+def _format_bytes(n: int) -> str:
+    """Human-readable byte size for error messages (e.g. ``512.0 MB``)."""
+    value = float(n)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if value < 1024 or unit == "TB":
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TB"
+
+
+def _build_workspace_quota_error_payload(
+    *, needed_bytes: int, free_bytes: int
+) -> dict[str, Any]:
+    """Structured error for a proactive (pre-write) disk-full rejection.
+
+    Mirrors the shape/style of :func:`_build_workspace_error_payload` (the
+    reactive ENOSPC envelope) so the frontend's existing SSE/JSON error handler
+    renders it identically. ``errno`` is set to ENOSPC so existing log filters
+    and client-side handling that key off the disk-full errno keep working.
+    """
+    message = (
+        f"Workspace disk full: needs {_format_bytes(needed_bytes)}, "
+        f"has {_format_bytes(free_bytes)}. "
+        "Delete files in the workspace settings panel (uploads/outputs tabs) "
+        "to free space, or start a new conversation."
+    )
+    return {
+        "type": "error",
+        "error": message,
+        "error_type": "OSError",
+        "errno": errno.ENOSPC,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _ensure_workspace_has_room(needed_bytes: int) -> Optional[dict[str, Any]]:
+    """Proactively check /workdir has room for an incoming ``needed_bytes`` write.
+
+    Returns ``None`` when the write is safe to proceed (or when free space can't
+    be determined — see :func:`get_workspace_free_bytes`). When there isn't
+    enough room (free space < ``needed_bytes`` + safety margin) returns a
+    structured quota-error payload so the caller can surface a clean error
+    instead of letting the write fail mid-stream with ENOSPC.
+    """
+    if needed_bytes <= 0:
+        return None
+    free_bytes = get_workspace_free_bytes()
+    if free_bytes is None:
+        # Unknown free space — defer to the reactive ENOSPC backstop.
+        return None
+    required = needed_bytes + WORKSPACE_FREE_SPACE_MARGIN_BYTES
+    if free_bytes >= required:
+        return None
+    logger.warning(
+        "Rejecting write: insufficient workspace free space",
+        _name="WORKSPACE_DISK_FULL_PROACTIVE",
+        phase="upload",
+        needed_bytes=needed_bytes,
+        margin_bytes=WORKSPACE_FREE_SPACE_MARGIN_BYTES,
+        free_bytes=free_bytes,
+    )
+    return _build_workspace_quota_error_payload(
+        needed_bytes=required, free_bytes=free_bytes
     )
 
-    # Mirror the same response-mode resolution used by the chat dispatch
-    # below so the client gets back a shape it knows how to parse.
+
+def _s3_prefix_total_bytes(s3_prefix: str) -> Optional[int]:
+    """Sum ``ContentLength`` over every object under ``s3_prefix`` in OUTPUTS_BUCKET.
+
+    Used by the cold-start sync guard to learn the incoming download size before
+    ``sync_from_s3`` starts writing. Returns ``None`` (treat as "unknown" → don't
+    block) if the bucket isn't configured or the listing fails, so a transient S3
+    error never blocks a normal sync — the reactive ENOSPC handler is the
+    backstop. ``list_objects_v2`` already returns sizes, so this adds no
+    per-object HEAD calls.
+    """
+    from .s3_workspace import OUTPUTS_BUCKET
+
+    if not OUTPUTS_BUCKET:
+        return None
+    try:
+        s3 = boto3.client("s3")
+        paginator = s3.get_paginator("list_objects_v2")
+        total = 0
+        for page in paginator.paginate(
+            Bucket=OUTPUTS_BUCKET, Prefix=f"{s3_prefix.rstrip('/')}/"
+        ):
+            for obj in page.get("Contents", []):
+                total += obj.get("Size", 0)
+        return total
+    except Exception as e:  # noqa: BLE001 - best-effort; never block sync on this
+        logger.warning(
+            "Could not compute S3 prefix size for cold-start disk guard",
+            _name="COLD_START_SIZE_CHECK_FAILED",
+            phase="sync",
+            error=str(e),
+        )
+        return None
+
+
+def _workspace_error_envelope_response(
+    payload: dict[str, Any], *, body: dict[str, Any], agent_type_config: Any
+) -> Response:
+    """Wrap a workspace error envelope in the response shape the client expects.
+
+    Always returns HTTP 200 so AgentCore doesn't wrap it as a generic
+    RuntimeClientError 500. Mirrors the response-mode resolution used by the chat
+    dispatch below so the client gets back a shape it knows how to parse: a
+    streaming chat request gets a single SSE error event; everything else gets
+    JSON. Used by both the OSError setup handler and the proactive disk guard so
+    they emit identical shapes.
+    """
     action = body.get("action", "chat")
     request_mode = body.get("responseMode")
     type_default = getattr(agent_type_config, "response_mode", "stream")
@@ -1126,6 +1266,28 @@ def _workspace_setup_error_response(
 
     # Sync / fire-and-forget / non-chat actions get JSON
     return JSONResponse(content={"status": "error", **payload})
+
+
+def _workspace_setup_error_response(
+    e: OSError, *, body: dict[str, Any], agent_type_config: Any
+) -> Response:
+    """Return a structured response for an OSError during workspace setup.
+
+    Always returns HTTP 200 so AgentCore doesn't wrap it as a generic
+    RuntimeClientError 500. The frontend's existing SSE error handler
+    renders the `error` field cleanly.
+    """
+    payload = _build_workspace_error_payload(e)
+    logger.error(
+        "Workspace setup failed",
+        _name="WORKSPACE_SETUP_ERROR",
+        phase="request",
+        errno=payload.get("errno"),
+        error=str(e),
+    )
+    return _workspace_error_envelope_response(
+        payload, body=body, agent_type_config=agent_type_config
+    )
 
 
 @app.post("/invocations")
@@ -1293,6 +1455,38 @@ async def invocations(request: Request):
             "Cold start detected, syncing from S3",
             s3_prefix=resolved_prefix or "default",
         )
+
+        # Proactive /workdir disk guard: a conversation can accumulate multi-GB
+        # of files across turns. On cold start we re-download all of them into
+        # the fixed-size container disk. If the incoming total won't fit, reject
+        # up front with an actionable error instead of letting sync_from_s3 fail
+        # mid-stream with ENOSPC (which leaves a half-synced workspace). The
+        # reactive ENOSPC handler below remains the backstop for the unknown /
+        # mid-request-growth cases.
+        # When resolved_prefix is None, sync_from_s3 pulls from the default
+        # conversation prefix — mirror that path here (reusing s3_workspace's
+        # S3_PREFIX constant) so the size estimate matches what actually gets
+        # written and the two stay in lockstep if the prefix ever changes.
+        from .s3_workspace import S3_PREFIX as _DEFAULT_WS_PREFIX
+
+        cold_start_prefix = resolved_prefix or (
+            f"{_DEFAULT_WS_PREFIX}/{user_sub}/conversations/{conversation_id}"
+        )
+        incoming_bytes = _s3_prefix_total_bytes(cold_start_prefix)
+        if incoming_bytes is not None:
+            quota_error = _ensure_workspace_has_room(incoming_bytes)
+            if quota_error is not None:
+                logger.error(
+                    "Cold start sync would exceed workspace disk",
+                    _name="COLD_START_DISK_FULL",
+                    phase="sync",
+                    conversation_id=conversation_id,
+                    incoming_bytes=incoming_bytes,
+                )
+                return _workspace_error_envelope_response(
+                    quota_error, body=body, agent_type_config=agent_type_config
+                )
+
         sync_result = sync_from_s3(user_sub, conversation_id, s3_prefix=resolved_prefix)
         logger.info(
             "Cold start sync complete",
@@ -1458,8 +1652,8 @@ def _write_schemas_to_disk(
     for action in actions:
         key = action.get("key", action.get("name_slug", "unknown"))
         action_filename = key.replace("/", "_") + ".json"
-        (app_dir / action_filename).write_text(
-            json.dumps(action, indent=2, default=str)
+        atomic_write_text(
+            json.dumps(action, indent=2, default=str), app_dir / action_filename
         )
 
     # Write index (use pre-built index if available, otherwise build from actions)
@@ -1478,7 +1672,7 @@ def _write_schemas_to_disk(
                 }
             )
 
-    (app_dir / "_index.json").write_text(json.dumps(index, indent=2))
+    atomic_write_text(json.dumps(index, indent=2), app_dir / "_index.json")
 
 
 def _download_single_integration(
@@ -1538,8 +1732,8 @@ def _download_single_integration(
 
             # Save full action schema
             action_filename = key.replace("/", "_") + ".json"
-            (app_dir / action_filename).write_text(
-                json.dumps(action, indent=2, default=str)
+            atomic_write_text(
+                json.dumps(action, indent=2, default=str), app_dir / action_filename
             )
 
             # Build index entry
@@ -1556,13 +1750,13 @@ def _download_single_integration(
 
         # Save index
         index_file = app_dir / "_index.json"
-        index_file.write_text(json.dumps(index_entries, indent=2))
+        atomic_write_text(json.dumps(index_entries, indent=2), index_file)
 
         # Write denied tools metadata if present (from relay policy filtering)
         denied_tools = result.get("denied_tools", [])
         denied_file = app_dir / "_denied_tools.json"
         if denied_tools:
-            denied_file.write_text(json.dumps(denied_tools, indent=2))
+            atomic_write_text(json.dumps(denied_tools, indent=2), denied_file)
         elif denied_file.exists():
             denied_file.unlink()
 
@@ -1661,7 +1855,9 @@ def _sync_integration_schemas(
                         denied_tools = denied_by_app.get(slug, [])
                         denied_file = tools_dir / slug / "_denied_tools.json"
                         if denied_tools:
-                            denied_file.write_text(json.dumps(denied_tools, indent=2))
+                            atomic_write_text(
+                                json.dumps(denied_tools, indent=2), denied_file
+                            )
                         elif denied_file.exists():
                             denied_file.unlink()
 
@@ -2993,6 +3189,32 @@ async def _handle_upload(
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid base64 fileContent") from e
 
+    # Backend upload size cap — mirror the frontend's 500 MB limit so a crafted
+    # request can't bypass it. Here we have the actual decoded bytes, so the
+    # check is exact.
+    if len(content) > MAX_UPLOAD_BYTES:
+        logger.warning(
+            "Rejecting oversized upload",
+            _name="UPLOAD_TOO_LARGE",
+            phase="upload",
+            conversation_id=conversation_id,
+            size=len(content),
+            max_bytes=MAX_UPLOAD_BYTES,
+        )
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"File exceeds the {_format_bytes(MAX_UPLOAD_BYTES)} upload limit "
+                f"({_format_bytes(len(content))})."
+            ),
+        )
+
+    # Proactive /workdir disk guard — reject before writing if there isn't room,
+    # rather than failing mid-write with ENOSPC.
+    quota_error = _ensure_workspace_has_room(len(content))
+    if quota_error is not None:
+        raise HTTPException(status_code=507, detail=quota_error["error"])
+
     paths = get_workspace_paths()
 
     # Sanitize the upload path - allows folder structure like "invoices/2024/a.pdf"
@@ -3003,12 +3225,24 @@ async def _handle_upload(
     # Extract just the filename for the response
     safe_filename = safe_rel_path.split("/")[-1]
 
-    # Write file, creating parent directories if needed
+    # Write file atomically (temp + fsync + os.replace); atomic_write_bytes
+    # creates parent directories as needed, so a crash mid-upload can never
+    # leave a truncated file at the final path.
     upload_path = paths["uploads"] / safe_rel_path
-    upload_path.parent.mkdir(parents=True, exist_ok=True)
-
-    async with aiofiles.open(upload_path, "wb") as f:
-        await f.write(content)
+    try:
+        await asyncio.to_thread(atomic_write_bytes, content, upload_path)
+    except OSError as e:
+        if "No space left on device" in str(e) or e.errno == errno.ENOSPC:  # ENOSPC
+            logger.warning(
+                "Disk full while writing file",
+                conversation_id=conversation_id,
+                error=str(e),
+            )
+            raise HTTPException(
+                status_code=507,
+                detail="Insufficient storage space available",
+            ) from e
+        raise
 
     logger.info(
         "File uploaded",
@@ -3053,6 +3287,31 @@ async def _handle_upload_complete(
     if not s3_key:
         raise HTTPException(status_code=400, detail="Missing s3Key")
 
+    # Backend upload size cap (fail fast on the reported size before doing any
+    # S3 work). Mirrors the frontend's 500 MB limit; the browser uploaded
+    # straight to S3 via a presigned URL, so this is the first server-side
+    # gate. The reported size is validated against the real S3 object below.
+    try:
+        reported_size = int(size or 0)
+    except (TypeError, ValueError):
+        reported_size = 0
+    if reported_size > MAX_UPLOAD_BYTES:
+        logger.warning(
+            "Rejecting oversized upload (reported size)",
+            _name="UPLOAD_TOO_LARGE",
+            phase="upload",
+            conversation_id=conversation_id,
+            size=reported_size,
+            max_bytes=MAX_UPLOAD_BYTES,
+        )
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"File exceeds the {_format_bytes(MAX_UPLOAD_BYTES)} upload limit "
+                f"({_format_bytes(reported_size)})."
+            ),
+        )
+
     # Silently skip hidden segments (e.g. .git/, .DS_Store) instead of 400ing.
     # Folder uploads can surface dozens of these per drop; erroring back to the
     # browser turns into a chat-wide failure message. The FE filters these out,
@@ -3089,12 +3348,91 @@ async def _handle_upload_complete(
     if safe_rel_path is None:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    # Sync file from S3 to local EFS
+    s3 = boto3.client("s3")
+
+    # HEAD the object to learn its authoritative size. The browser uploaded
+    # directly to S3, so the reported `size` is untrusted: a partial/aborted
+    # upload or a crafted request could understate it. The HEAD is one cheap
+    # metadata call (no body transfer). We use the real size for both the
+    # upload cap and the proactive disk check, and reject on a large mismatch
+    # versus the reported size (defends against truncated/partial uploads).
+    # All size checks run BEFORE we touch the local filesystem so a rejected
+    # upload doesn't leave behind empty directories.
+    actual_size: Optional[int] = None
+    try:
+        head = s3.head_object(Bucket=OUTPUTS_BUCKET, Key=s3_key)
+        actual_size = int(head.get("ContentLength", 0))
+    except Exception as e:  # noqa: BLE001 - best-effort; download path still guards
+        # If HEAD fails (object not yet visible, permissions, transient error),
+        # fall back to the reported size for the caps below and let the
+        # download attempt surface any real problem. Do NOT silently skip the
+        # cap — apply it to whatever size we have.
+        logger.warning(
+            "Could not HEAD uploaded object; falling back to reported size",
+            _name="UPLOAD_HEAD_FAILED",
+            phase="upload",
+            conversation_id=conversation_id,
+            s3_key=s3_key,
+            error=str(e),
+        )
+
+    effective_size = actual_size if actual_size is not None else reported_size
+
+    # Enforce the cap against the authoritative size.
+    if effective_size > MAX_UPLOAD_BYTES:
+        logger.warning(
+            "Rejecting oversized upload (actual S3 size)",
+            _name="UPLOAD_TOO_LARGE",
+            phase="upload",
+            conversation_id=conversation_id,
+            size=effective_size,
+            reported_size=reported_size,
+            max_bytes=MAX_UPLOAD_BYTES,
+        )
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"File exceeds the {_format_bytes(MAX_UPLOAD_BYTES)} upload limit "
+                f"({_format_bytes(effective_size)})."
+            ),
+        )
+
+    # Reject a meaningful mismatch between reported and actual size. A small
+    # delta is tolerated (clients estimate slightly differently); a large gap
+    # signals a partial/aborted upload or a spoofed request.
+    if actual_size is not None and reported_size > 0:
+        delta = abs(actual_size - reported_size)
+        if delta > max(1024, reported_size // 100):  # >1 KB or >1% of reported
+            logger.warning(
+                "Upload size mismatch between reported and actual S3 object",
+                _name="UPLOAD_SIZE_MISMATCH",
+                phase="upload",
+                conversation_id=conversation_id,
+                s3_key=s3_key,
+                reported_size=reported_size,
+                actual_size=actual_size,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Uploaded file size does not match the reported size "
+                    f"(reported {_format_bytes(reported_size)}, "
+                    f"found {_format_bytes(actual_size)}). "
+                    "The upload may be incomplete — please retry."
+                ),
+            )
+
+    # Proactive /workdir disk guard — reject before downloading if there isn't
+    # room, rather than failing mid-download with ENOSPC.
+    quota_error = _ensure_workspace_has_room(effective_size)
+    if quota_error is not None:
+        raise HTTPException(status_code=507, detail=quota_error["error"])
+
+    # Sync file from S3 to local EFS (size checks passed).
     paths = get_workspace_paths()
     local_path = paths["uploads"] / safe_rel_path
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
-    s3 = boto3.client("s3")
     try:
         s3.download_file(OUTPUTS_BUCKET, s3_key, str(local_path))
     except Exception as e:

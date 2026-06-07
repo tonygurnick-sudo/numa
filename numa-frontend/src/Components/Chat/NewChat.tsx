@@ -519,6 +519,7 @@ const NewChat = ({
         setSelectedModelId={setSelectedModelId}
         showModelSelector={showModelSelector}
         onPasteFiles={onFilesDropped}
+        hasStagedAttachments={stagedItems.length > 0}
         voiceInputEnabled={voiceInputEnabled}
         voiceRecordingState={voiceRecordingState}
         onVoiceRecordingComplete={onVoiceRecordingComplete}

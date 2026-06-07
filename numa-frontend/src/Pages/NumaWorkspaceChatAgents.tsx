@@ -3608,6 +3608,7 @@ const NumaWorkspaceChatAgents = () => {
                           isStopping={isStopping}
                           variant="v2"
                           onPasteFiles={(files) => handleDroppedFiles(files.map((f) => ({ file: f })))}
+                          hasStagedAttachments={uploadedFiles.length > 0 || stagedItems.length > 0}
                           voiceInputEnabled={voiceInputEnabled}
                           voiceRecordingState={voiceRecordingState}
                           onVoiceRecordingComplete={handleVoiceRecordingComplete}

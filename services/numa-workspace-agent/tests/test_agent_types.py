@@ -84,7 +84,9 @@ class TestAgentTypeConfigDefaults:
 
     def test_default_limits(self):
         config = AgentTypeConfig(type_id="test", display_name="Test")
-        assert config.max_turns == 50
+        # Default raised 50 -> 200 in commit ee7a45b7 ("Jakarta hotfix
+        # replication: max_turns, region prefix, Lambda memory/timeout").
+        assert config.max_turns == 200
         assert config.max_thinking_tokens == 10_000
 
     def test_default_model_is_none(self):

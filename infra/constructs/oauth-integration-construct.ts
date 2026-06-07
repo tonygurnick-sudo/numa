@@ -39,6 +39,10 @@ export interface OAuthIntegrationConstructProps extends ApiGatewayLambdaCollecti
   dataBucketName?: string;
   /** Data bucket ARN (for IAM permissions) */
   dataBucketArn?: string;
+  /** Outputs bucket name (for staging large connector downloads as presigned URLs) */
+  outputsBucketName?: string;
+  /** Outputs bucket ARN (for IAM permissions) */
+  outputsBucketArn?: string;
 }
 
 export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
@@ -199,6 +203,19 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
             },
           ]
         : []),
+      // Outputs bucket — stage large connector downloads here and hand them
+      // back to the workspace agent as presigned GET URLs (avoids the 6 MB
+      // Lambda response cap that silently truncates hex-encoded files).
+      // GetObject is required so the lambda can sign valid presigned GETs.
+      ...(props.outputsBucketArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['s3:PutObject', 's3:GetObject'],
+              resources: [`${props.outputsBucketArn}/numa-chat/connector-downloads/*`],
+            },
+          ]
+        : []),
     ];
 
     const workspaceToolsLambda = new NumaLambda(this, 'oauth-workspace-tools', {
@@ -217,6 +234,8 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
         DATA_CONNECTORS_SECRETS_PREFIX: dataConnectorsSecretsPrefix,
         // S3 data bucket for KB/file access
         DATA_BUCKET_NAME: props.dataBucketName ?? '',
+        // Outputs bucket for staging large connector downloads (presigned URLs)
+        OUTPUTS_BUCKET_NAME: props.outputsBucketName ?? '',
       },
       additionalPolicyStatements: workspaceToolsPolicy,
     });

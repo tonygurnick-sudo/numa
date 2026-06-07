@@ -8,6 +8,7 @@ It's the second step in the web crawler Step Function workflow.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import pathlib
@@ -15,7 +16,16 @@ import ssl
 import time
 import urllib.parse
 from datetime import datetime
-from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, TypedDict
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    List,
+    NotRequired,
+    Optional,
+    Sequence,
+    TypedDict,
+)
 from urllib.parse import urldefrag, urljoin, urlparse
 
 import html2text
@@ -133,6 +143,114 @@ EXTRACTABLE_FILE_TYPES = {
     ".jpeg",
 }
 
+# ── Binary-vs-text sniffing ─────────────────────────────────────────────────
+#
+# Some servers return binary payloads (PDFs, Office docs, images, archives)
+# from extensionless URLs with no helpful path suffix. Calling ``r.text`` on
+# those bytes UTF-8-decodes them into mojibake, which then gets fed into the
+# HTML parser and either corrupts downstream content or crashes. Before
+# decoding we sniff both the declared Content-Type and the leading magic bytes
+# and, if the payload is genuinely binary, route it to the existing
+# stream-to-S3 path instead of pretending it is HTML/text.
+
+# Base content-types (parameters stripped) that are safe to decode as text.
+SAFE_TEXT_CONTENT_TYPES = {
+    "text/html",
+    "text/plain",
+    "text/markdown",
+    "text/xml",
+    "text/csv",
+    "application/json",
+    "application/ld+json",
+    "application/xml",
+    "application/xhtml+xml",
+    "application/javascript",
+    "application/ecmascript",
+}
+
+# Magic-number signatures for common binary formats. If the response body
+# starts with any of these prefixes it is binary regardless of headers.
+BINARY_MAGIC_PREFIXES: tuple[bytes, ...] = (
+    b"%PDF",  # PDF
+    b"PK\x03\x04",  # ZIP / OOXML (docx, xlsx, pptx) / epub / jar
+    b"PK\x05\x06",  # empty ZIP archive
+    b"PK\x07\x08",  # spanned ZIP archive
+    b"\xff\xd8\xff",  # JPEG
+    b"\x89PNG\r\n\x1a\n",  # PNG
+    b"GIF87a",  # GIF
+    b"GIF89a",  # GIF
+    b"BM",  # BMP
+    b"II*\x00",  # TIFF (little-endian)
+    b"MM\x00*",  # TIFF (big-endian)
+    b"RIFF",  # WebP / WAV / AVI container
+    b"\x1f\x8b",  # gzip
+    b"BZh",  # bzip2
+    b"7z\xbc\xaf\x27\x1c",  # 7-Zip
+    b"Rar!\x1a\x07",  # RAR
+    b"\x00\x00\x01\x00",  # ICO
+    b"%!PS",  # PostScript / EPS
+    b"\xd0\xcf\x11\xe0",  # legacy MS Office (OLE2: doc/xls/ppt)
+    b"OggS",  # Ogg
+    b"\x1aE\xdf\xa3",  # Matroska / WebM
+    b"ID3",  # MP3 with ID3 tag
+    b"fLaC",  # FLAC
+    b"\x7fELF",  # ELF executable
+    b"MZ",  # Windows PE executable
+)
+
+# Number of leading bytes to inspect when sniffing magic numbers.
+SNIFF_BYTES = 16
+
+
+def _base_content_type(content_type: str) -> str:
+    """Strip parameters (e.g. ``; charset=utf-8``) and lowercase a Content-Type."""
+    return content_type.split(";", 1)[0].strip().lower()
+
+
+def _looks_binary(body: bytes, content_type: str) -> bool:
+    """Decide whether a response body should be treated as binary.
+
+    A payload is binary if EITHER its magic bytes match a known binary
+    signature OR its declared base Content-Type is not in the safe-text
+    allowlist. Text-family content-types (``text/*`` and the explicit
+    application/* allowlist) are decoded as text; everything else streams.
+    """
+    head = body[:SNIFF_BYTES]
+    if head.startswith(BINARY_MAGIC_PREFIXES):
+        return True
+
+    base = _base_content_type(content_type)
+    if base:
+        if base in SAFE_TEXT_CONTENT_TYPES:
+            return False
+        # Any text/* subtype we don't explicitly list is still text.
+        if base.startswith("text/"):
+            return False
+        # A declared, non-text content-type (application/pdf, image/png,
+        # application/octet-stream, ...) means binary.
+        return True
+
+    # No Content-Type header and no binary magic: fall back to a NUL-byte
+    # heuristic. Genuine text never contains NUL bytes; binary frequently does.
+    return b"\x00" in head
+
+
+def _decode_text(response: httpx.Response) -> str:
+    """Decode a response body as text honouring the declared charset.
+
+    Respects ``response.encoding`` (which httpx derives from the Content-Type
+    charset and a content sniff), falling back to UTF-8 with replacement so a
+    mislabelled charset never raises mid-fetch.
+    """
+    declared = response.encoding
+    if declared:
+        try:
+            return response.content.decode(declared, errors="replace")
+        except (LookupError, TypeError):
+            pass
+    return response.content.decode("utf-8", errors="replace")
+
+
 # Minimum word count threshold -- pages with fewer words after httpx extraction
 # are candidates for Playwright re-fetch (may be JS-rendered shells)
 MIN_CONTENT_WORDS = int(os.environ.get("MIN_CONTENT_WORDS", "50"))
@@ -198,6 +316,19 @@ class ScrapedContent(TypedDict):
     content_type: str
     metadata: Dict[str, str]
     links: List[str]
+    _raw_html: NotRequired[str]
+
+
+class BinaryResponse(TypedDict):
+    """Sentinel returned by ``fetch_page`` when the body is binary, not text.
+
+    Carries enough context for ``process_url`` to route the URL to the
+    existing stream-to-S3 path instead of UTF-8-decoding the payload.
+    """
+
+    _binary: bool
+    url: str
+    content_type: str
 
 
 class FetchHttpError(Exception):
@@ -510,8 +641,13 @@ async def fetch_page(
     url: str,
     limit_to_path: bool = True,
     seed_url_prefix: Optional[str] = None,
-) -> Optional[ScrapedContent]:
-    """Download *url* and return structured information or None on error."""
+) -> Optional[ScrapedContent | BinaryResponse]:
+    """Download *url* and return structured information or None on error.
+
+    Returns a :class:`ScrapedContent` for genuine text/HTML pages, or a
+    :class:`BinaryResponse` sentinel when the body sniffs as binary so the
+    caller can stream it to S3 instead of corrupting it via ``r.text``.
+    """
     user_agents = [PRIMARY_USER_AGENT, FALLBACK_USER_AGENT]
 
     for attempt, user_agent in enumerate(user_agents, 1):
@@ -530,7 +666,27 @@ async def fetch_page(
                         logger.warning("Content too large", url=url)
                         return None
 
-                    raw_html = r.text
+                    declared_content_type = r.headers.get("content-type", "text/html")
+
+                    # Sniff BEFORE decoding: binary payloads (PDF/zip/image/
+                    # office/etc.) served from extensionless URLs must NOT be
+                    # run through r.text -- that UTF-8-mangles them. Route them
+                    # to the stream-to-S3 path instead (same as extractable
+                    # file types).
+                    if _looks_binary(r.content, declared_content_type):
+                        logger.info(
+                            "Binary response detected; routing to stream-to-S3",
+                            url=url,
+                            content_type=_base_content_type(declared_content_type),
+                            magic=r.content[:8].hex(),
+                        )
+                        return {
+                            "_binary": True,
+                            "url": url,
+                            "content_type": declared_content_type,
+                        }
+
+                    raw_html = _decode_text(r)
                     title, text, links = _parse_html(
                         raw_html, url, limit_to_path, seed_url_prefix
                     )
@@ -765,82 +921,99 @@ async def stream_url_to_s3(
                             }
                         continue  # Try next user agent
 
-                # Check content length if provided
-                content_length = response.headers.get("content-length")
-                if content_length and int(content_length) > max_size:
-                    return {
-                        "success": False,
-                        "error": f"File too large: {content_length} bytes",
-                    }
+                    # Check content length if provided
+                    content_length = response.headers.get("content-length")
+                    if content_length and int(content_length) > max_size:
+                        return {
+                            "success": False,
+                            "error": f"File too large: {content_length} bytes",
+                        }
 
-                # Use S3 multipart upload for streaming
-                upload_id = s3.create_multipart_upload(
-                    Bucket=bucket,
-                    Key=key,
-                    ContentType=response.headers.get("content-type", content_type),
-                )["UploadId"]
-
-                parts = []
-                part_number = 1
-                total_size = 0
-
-                try:
-                    async for chunk in _stream_chunks(response, CHUNK_SIZE):
-                        total_size += len(chunk)
-
-                        # Safety check during streaming
-                        if total_size > max_size:
-                            # Abort upload and cleanup
-                            s3.abort_multipart_upload(
-                                Bucket=bucket, Key=key, UploadId=upload_id
-                            )
-                            return {
-                                "success": False,
-                                "error": f"File exceeded size limit: {total_size} bytes",
-                            }
-
-                        # Upload part
-                        part_response = s3.upload_part(
-                            Bucket=bucket,
-                            Key=key,
-                            PartNumber=part_number,
-                            UploadId=upload_id,
-                            Body=chunk,
-                        )
-
-                        parts.append(
-                            {"ETag": part_response["ETag"], "PartNumber": part_number}
-                        )
-                        part_number += 1
-
-                    # Complete multipart upload
-                    s3.complete_multipart_upload(
+                    # Use S3 multipart upload for streaming
+                    upload_id = s3.create_multipart_upload(
                         Bucket=bucket,
                         Key=key,
-                        UploadId=upload_id,
-                        MultipartUpload={"Parts": parts},
-                    )
+                        ContentType=content_type
+                        or response.headers.get("content-type")
+                        or "application/octet-stream",
+                    )["UploadId"]
 
-                    if attempt > 1:
-                        logger.info(
-                            "File download retry successful",
-                            url=url,
-                            attempt=attempt,
-                            user_agent=user_agent,
+                    parts = []
+                    part_number = 1
+                    total_size = 0
+
+                    # End-to-end integrity digest. We hash each chunk as it
+                    # streams past on its way to S3, so the digest is over the
+                    # EXACT bytes stored in the object without ever buffering the
+                    # whole file in memory. The agent re-computes SHA-256 over the
+                    # bytes it pulls from the presigned URL and compares.
+                    sha256 = hashlib.sha256()
+
+                    try:
+                        async for chunk in _stream_chunks(response, CHUNK_SIZE):
+                            total_size += len(chunk)
+
+                            # Safety check during streaming
+                            if total_size > max_size:
+                                # Abort upload and cleanup
+                                s3.abort_multipart_upload(
+                                    Bucket=bucket, Key=key, UploadId=upload_id
+                                )
+                                return {
+                                    "success": False,
+                                    "error": f"File exceeded size limit: {total_size} bytes",
+                                }
+
+                            # Hash before uploading so the digest covers precisely
+                            # the bytes that land in S3 for this part.
+                            sha256.update(chunk)
+
+                            # Upload part
+                            part_response = s3.upload_part(
+                                Bucket=bucket,
+                                Key=key,
+                                PartNumber=part_number,
+                                UploadId=upload_id,
+                                Body=chunk,
+                            )
+
+                            parts.append(
+                                {
+                                    "ETag": part_response["ETag"],
+                                    "PartNumber": part_number,
+                                }
+                            )
+                            part_number += 1
+
+                        # Complete multipart upload
+                        s3.complete_multipart_upload(
+                            Bucket=bucket,
+                            Key=key,
+                            UploadId=upload_id,
+                            MultipartUpload={"Parts": parts},
                         )
 
-                    return {
-                        "success": True,
-                        "file_size": total_size,
-                        "parts_uploaded": len(parts),
-                    }
+                        if attempt > 1:
+                            logger.info(
+                                "File download retry successful",
+                                url=url,
+                                attempt=attempt,
+                                user_agent=user_agent,
+                            )
 
-                except Exception as e:
-                    # Cleanup on error
-                    s3.abort_multipart_upload(
-                        Bucket=bucket, Key=key, UploadId=upload_id
-                    )
-                    raise e
+                        return {
+                            "success": True,
+                            "file_size": total_size,
+                            "parts_uploaded": len(parts),
+                            "sha256": sha256.hexdigest(),
+                        }
+
+                    except Exception as e:
+                        # Cleanup on error
+                        s3.abort_multipart_upload(
+                            Bucket=bucket, Key=key, UploadId=upload_id
+                        )
+                        raise e
 
         except Exception as e:
             logger.error(
@@ -867,13 +1040,29 @@ async def process_file_url(
     client_name: str,
     preferred_kb: str = "bedrock",
     seed_url: Optional[str] = None,
+    sniffed_content_type: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Download file to S3 via streaming, return metadata."""
+    """Download file to S3 via streaming, return metadata.
+
+    ``sniffed_content_type`` is supplied when the binary was detected by
+    sniffing a body returned from an extensionless URL (the path suffix is
+    then unreliable for typing the file).
+    """
 
     s3_key = sanitise_url_for_s3_key(url, prefix, seed_url=seed_url)
 
-    # Stream download to S3
-    upload_result = await stream_url_to_s3(url, bucket, s3_key)
+    # Stream download to S3. Pass the sniffed content-type so the S3 object is
+    # tagged correctly even when the URL carries no file extension.
+    upload_result = await stream_url_to_s3(
+        url,
+        bucket,
+        s3_key,
+        content_type=(
+            _base_content_type(sniffed_content_type)
+            if sniffed_content_type
+            else "application/octet-stream"
+        ),
+    )
 
     if not upload_result["success"]:
         return {
@@ -903,7 +1092,7 @@ async def process_file_url(
         file_size=upload_result["file_size"],
     )
 
-    return {
+    result: Dict[str, Any] = {
         "url": url,
         "status": "success",
         "s3_key": s3_key,
@@ -911,6 +1100,41 @@ async def process_file_url(
         "file_size": upload_result["file_size"],
         "links_enqueued": 0,
     }
+    if sniffed_content_type:
+        # Discriminator + typing so returnContent-mode callers can tell a
+        # streamed binary apart from a text page (which carries `content`).
+        result["result_type"] = "binary_file"
+        result["content_type"] = _base_content_type(sniffed_content_type)
+
+        # End-to-end integrity: emit the SHA-256 of the exact bytes written to
+        # S3 alongside the download_url/s3_key so the agent can verify the
+        # bytes it pulls down are byte-exact. Computed during the streaming
+        # upload (over the chunks as they pass), so no buffering of the whole
+        # file. Best-effort: only set when the streamer produced a digest.
+        download_sha256 = upload_result.get("sha256")
+        if download_sha256:
+            result["download_sha256"] = download_sha256
+
+        # Hand back a short-lived presigned GET so the agent can pull the
+        # bytes straight into its workspace instead of leaving them stranded
+        # in S3 with no tool able to open them. This Lambda already holds
+        # s3:GetObject on the data bucket, so the signature is valid. Best
+        # effort: if signing fails we still return the result (with s3_key)
+        # so the path never breaks -- older agents fall back to the s3_key.
+        try:
+            result["download_url"] = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": s3_key},
+                ExpiresIn=900,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to presign download URL for streamed binary",
+                bucket=bucket,
+                key=s3_key,
+                error=str(exc),
+            )
+    return result
 
 
 async def process_url(
@@ -954,6 +1178,18 @@ async def process_url(
     file_extension = pathlib.Path(url).suffix.lower()
 
     if file_extension in EXTRACTABLE_FILE_TYPES:
+        # Map file extensions to their MIME types so extension-detected binaries
+        # produce the same result schema (result_type/content_type/
+        # download_sha256/download_url) as content-sniffed binaries.
+        extension_content_type_map = {
+            ".pdf": "application/pdf",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+        }
+        sniffed_ct = extension_content_type_map.get(
+            file_extension, "application/octet-stream"
+        )
         # Route to file download handler
         return await process_file_url(
             url,
@@ -965,10 +1201,11 @@ async def process_url(
             client_name,
             preferred_kb,
             seed_url=seed_url_prefix,
+            sniffed_content_type=sniffed_ct,
         )
 
     # Fetch page content -- Playwright-first or httpx-first with fallback
-    scraped: Optional[ScrapedContent] = None
+    scraped: Optional[ScrapedContent | BinaryResponse] = None
     http_status_failure: Optional[int] = None
 
     try:
@@ -977,6 +1214,49 @@ async def process_url(
             scraped = await fetch_page_playwright(url, limit_to_path, seed_url_prefix)
         else:
             scraped = await fetch_page(url, limit_to_path, seed_url_prefix)
+
+            # Binary payload sniffed from an extensionless URL: route to the
+            # existing stream-to-S3 path instead of decoding it as text. This
+            # is the same handling the EXTRACTABLE_FILE_TYPES branch performs,
+            # just triggered by magic bytes / content-type rather than suffix.
+            if isinstance(scraped, dict) and scraped.get("_binary"):
+                sniffed_ct = scraped.get("content_type") or "application/octet-stream"
+                if not bucket:
+                    # No bucket configured (shouldn't happen on deployed
+                    # Lambda) -- surface a clean error rather than streaming
+                    # into "" or, worse, decoding the binary as text.
+                    logger.warning(
+                        "Binary response but no bucket configured; cannot stream",
+                        url=url,
+                        content_type=sniffed_ct,
+                    )
+                    return {
+                        "url": url,
+                        "status": "failed",
+                        "reason": (
+                            "Binary content cannot be returned as text and no "
+                            "storage bucket is configured to stream it to."
+                        ),
+                        "content_type": _base_content_type(sniffed_ct),
+                        "links_enqueued": 0,
+                    }
+                logger.info(
+                    "Routing sniffed binary to stream-to-S3",
+                    url=url,
+                    content_type=sniffed_ct,
+                )
+                return await process_file_url(
+                    url,
+                    bucket,
+                    user_id,
+                    prefix,
+                    crawl_session_id,
+                    kb_id,
+                    client_name,
+                    preferred_kb,
+                    seed_url=seed_url_prefix,
+                    sniffed_content_type=sniffed_ct,
+                )
 
             # Check if the page would benefit from Playwright rendering
             if scraped:
@@ -1126,7 +1406,12 @@ def handler(event: CrawlPageEvent, _: LambdaContext) -> Dict[str, Any]:
     # S3/DynamoDB env vars only required for crawler mode (not returnContent)
     if return_content:
         client_name = os.environ.get("CLIENT_NAME", "unknown")
-        bucket = ""
+        # BUCKET_NAME is always set on the deployed Lambda. It is optional in
+        # returnContent mode (text pages are returned inline), but a sniffed
+        # binary still needs somewhere to stream to, so use the env bucket
+        # when present. Empty bucket -> binary streaming is skipped gracefully
+        # by process_url's guard below.
+        bucket = os.environ.get("BUCKET_NAME", "")
         table_name = ""
     else:
         try:

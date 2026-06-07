@@ -853,6 +853,9 @@ export class NumaClientStack extends TerraformStack {
       // Data bucket (for S3 data bucket connector)
       dataBucketName: core.dataBucket.bucket.bucket,
       dataBucketArn: core.dataBucket.bucket.arn,
+      // Outputs bucket (stage large connector downloads as presigned URLs)
+      outputsBucketName: core.outputsBucket.bucket.bucket,
+      outputsBucketArn: core.outputsBucket.bucket.arn,
       // Vault audit log — the construct treats this as required (it builds
       // an IAM resource ARN from it), but it was never being passed. The
       // policy was being rendered as `table/undefined`, so the lambda had

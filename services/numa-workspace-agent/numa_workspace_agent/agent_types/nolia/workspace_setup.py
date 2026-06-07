@@ -391,9 +391,11 @@ async def _convert_to_pdf(
         pdf_bytes = resp.read()
 
     # Save locally
+    from ...atomic_io import atomic_write_bytes
+
     pdf_filename = original_file.stem + ".pdf"
     local_pdf_path = UPLOADS_DIR / pdf_filename
-    local_pdf_path.write_bytes(pdf_bytes)
+    atomic_write_bytes(pdf_bytes, local_pdf_path)
 
     # Upload to S3 so _extract_pdf can reference it
     s3_pdf_key = f"{s3_prefix}/uploads/{pdf_filename}"

@@ -25,6 +25,11 @@ from typing import Any
 
 import structlog
 from claude_agent_sdk import tool
+from numa_workspace_agent import atomic_io
+from numa_workspace_agent.atomic_io import (
+    FileIntegrityError,
+    atomic_write_text,
+)
 from numa_workspace_agent.mcp_tools.lambda_client import (
     invoke_workspace_tool,
     invoke_workspace_tool_async,
@@ -61,7 +66,7 @@ def _save_kb_result(result: Any, operation: str) -> str:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     file_path = _KB_RESULTS_DIR / f"{operation}-{timestamp}.json"
     content = json.dumps(result, indent=2, default=str)
-    file_path.write_text(content)
+    atomic_write_text(content, file_path)
     sync_file_to_s3(str(file_path), content)
     return str(file_path)
 
@@ -77,6 +82,80 @@ def _kb_overflow_response(result: Any, operation: str) -> dict[str, Any]:
         "specific fields):\n\n"
         f"{schema_json}"
     )
+
+
+# ── Helper: atomic file write ───────────────────────────────────────────────
+
+
+class BinaryDownloadIntegrityError(Exception):
+    """Raised when a downloaded binary fails sha256 verification.
+
+    A mismatch means the bytes written to /workdir are not the bytes the
+    producer hashed (truncated transfer, wrong object, corruption). We delete
+    the bad file and refuse to hand the model a silently-corrupt binary.
+
+    This is numa_tool's stable public exception name (asserted by tests and
+    caught by the KB / web-binary handlers). The integrity logic itself lives in
+    ``atomic_io`` and raises ``atomic_io.FileIntegrityError``; the thin wrappers
+    below catch that and re-raise it as this type so callers keep one name.
+    """
+
+
+def _atomic_write_bytes(dest_path: Path, data: bytes) -> None:
+    """Write *data* to *dest_path* atomically (dest-first arg order).
+
+    Thin wrapper over the canonical ``atomic_io.atomic_write_bytes`` — the
+    single source of truth for the temp-file + fsync + os.replace dance. The
+    argument order is intentionally flipped relative to the canonical helper
+    (``atomic_io.atomic_write_bytes(data, dest)``) to preserve this module's
+    existing call sites and tests.
+    """
+    atomic_io.atomic_write_bytes(data, dest_path)
+
+
+def _atomic_download_url(
+    url: str, dest: str, *, expected_sha256: str | None = None
+) -> int:
+    """Stream a (presigned) URL to *dest* atomically; return bytes written.
+
+    Thin wrapper over the canonical ``atomic_io.atomic_download_url`` (the one
+    streaming + verification implementation). On a sha256 mismatch atomic_io
+    discards the temp file and raises ``FileIntegrityError``; we re-raise it as
+    ``BinaryDownloadIntegrityError`` so this module's public exception name is
+    preserved for callers and tests. When ``expected_sha256`` is absent (older
+    browser-lambda) verification is skipped — backward-compatible.
+    """
+    try:
+        return atomic_io.atomic_download_url(url, dest, expected_sha256=expected_sha256)
+    except FileIntegrityError as e:
+        raise BinaryDownloadIntegrityError(str(e)) from e
+
+
+def _verify_downloaded_file_or_delete(path: Path, expected_sha256: str | None) -> None:
+    """Re-hash the file at *path* and hard-fail on mismatch.
+
+    Thin wrapper over ``atomic_io.verify_file_sha256`` (which deletes the bad
+    file on mismatch). Re-raises the canonical ``FileIntegrityError`` as this
+    module's ``BinaryDownloadIntegrityError`` for caller/test compatibility.
+    No-op when ``expected_sha256`` is absent (older Lambda → backward-compatible).
+    """
+    try:
+        atomic_io.verify_file_sha256(path, expected_sha256)
+    except FileIntegrityError as e:
+        raise BinaryDownloadIntegrityError(str(e)) from e
+
+
+def _verify_bytes_sha256(data: bytes, expected_sha256: str | None) -> None:
+    """Verify in-memory *data* against *expected_sha256*; raise on mismatch.
+
+    Thin wrapper over ``atomic_io.verify_bytes_sha256`` for the inline base64
+    download path (bytes never hit disk until after verification). Re-raises as
+    ``BinaryDownloadIntegrityError``. No-op when ``expected_sha256`` is absent.
+    """
+    try:
+        atomic_io.verify_bytes_sha256(data, expected_sha256)
+    except FileIntegrityError as e:
+        raise BinaryDownloadIntegrityError(str(e)) from e
 
 
 # ── Helper: build MCP response ──────────────────────────────────────────────
@@ -194,8 +273,7 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
     output_file = params.get("output_file")
     if output_file:
         output_path = Path(output_file)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, indent=2))
+        atomic_write_text(json.dumps(result, indent=2), output_path)
         results_count = result.get(
             "results_count", result.get("total_results_count", 0)
         )
@@ -248,7 +326,7 @@ def _save_fetch_url_to_file(result: dict[str, Any]) -> dict[str, Any]:
     FETCH_URL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     file_path = FETCH_URL_OUTPUT_DIR / f"{safe_name}.md"
 
-    file_path.write_text(content, encoding="utf-8")
+    atomic_write_text(content, file_path, encoding="utf-8")
     logger.info(
         "Saved fetch_url content to file", path=str(file_path), size=len(content)
     )
@@ -307,7 +385,7 @@ async def _handle_fetch_url_pdf(url: str) -> dict[str, Any]:
 
         FETCH_URL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         file_path = FETCH_URL_OUTPUT_DIR / safe_name
-        file_path.write_bytes(body)
+        atomic_io.atomic_write_bytes(body, file_path)
 
         logger.info(
             "Saved fetched PDF to file",
@@ -374,11 +452,144 @@ async def _handle_web_search(params: dict[str, Any]) -> dict[str, Any]:
 
     result = invoke_workspace_tool("web_search", tool_params)
 
-    # For fetch_url, save large content to file to avoid bloating context
+    # For fetch_url, handle the two success shapes:
+    #   - binary_file: browser-lambda sniffed a binary (PDF/zip/image/...) from
+    #     an extensionless URL and streamed it to S3 rather than corrupting it
+    #     via UTF-8 decode. There's no text content. When browser-lambda also
+    #     supplied a presigned `download_url`, pull the bytes straight into the
+    #     workspace so the agent can read/extract them. Older browser-lambda
+    #     builds omit `download_url` -- fall back to surfacing the S3 reference.
+    #   - text page: save large content to a file to avoid bloating context.
     if operation == "fetch_url" and result.get("status") == "success":
+        if result.get("result_type") == "binary_file":
+            return _deliver_binary_fetch_url(result, url)
         result = _save_fetch_url_to_file(result)
 
     return _ok(json.dumps(result, indent=2))
+
+
+# Workspace destination for web-fetched binaries delivered via download_url.
+_WEB_DOWNLOAD_DIR = "/workdir/uploads/web"
+
+
+def _deliver_binary_fetch_url(result: dict[str, Any], url: str) -> dict[str, Any]:
+    """Deliver a fetched binary into the workspace, or reference S3 if it can't.
+
+    When ``result`` carries a presigned ``download_url`` (newer browser-lambda),
+    stream the bytes atomically into ``/workdir/uploads/web/`` and return the
+    workspace ``output_path``. Without a ``download_url`` (older browser-lambda),
+    fall back to the original s3_key-reference message (tolerant reader).
+    """
+    s3_key = result.get("s3_key", "")
+    content_type = result.get("content_type", "application/octet-stream")
+    file_size = result.get("file_size", 0)
+    download_url = result.get("download_url")
+    # End-to-end integrity: when browser-lambda stamped the sha256 of the exact
+    # streamed bytes, re-hash on download and hard-fail on mismatch. Absent on
+    # older browser-lambda builds → skip verification (backward-compatible).
+    download_sha256 = result.get("download_sha256")
+
+    if not download_url:
+        # Backward compat: older browser-lambda streamed to S3 but can't hand
+        # back a presigned URL. Surface the S3 reference as before.
+        return _ok(
+            json.dumps(
+                {
+                    "status": "success",
+                    "url": result.get("url", url),
+                    "result_type": "binary_file",
+                    "content_type": content_type,
+                    "s3_key": s3_key,
+                    "file_type": result.get("file_type", ""),
+                    "file_size": file_size,
+                    "message": (
+                        "This URL returned binary content (not a text/HTML "
+                        "page), so it was downloaded to storage instead of "
+                        "being read as text. The raw bytes are preserved "
+                        "uncorrupted at the s3_key above."
+                    ),
+                },
+                indent=2,
+            )
+        )
+
+    # Derive a safe filename from the URL basename, falling back to the s3_key
+    # basename, then a constant. Same sanitisation style as connect.py.
+    from urllib.parse import urlparse
+
+    raw_name = os.path.basename(urlparse(result.get("url", url) or url).path)
+    if not raw_name:
+        raw_name = os.path.basename(s3_key)
+    safe_filename = re.sub(r"[^\w\s.-]", "_", os.path.basename(raw_name))
+    safe_filename = safe_filename.strip(". ") or "web_download"
+
+    dest = f"{_WEB_DOWNLOAD_DIR}/{safe_filename}"
+
+    # Validate the resolved path stays under /workdir/uploads/ (mirror the
+    # path-validation in connect.py _handle_download_file).
+    real_path = os.path.realpath(dest)
+    if not real_path.startswith("/workdir/uploads/"):
+        logger.warning("Rejected unsafe web-download path", dest=dest, real=real_path)
+        return _err("Invalid download path for fetched binary.")
+
+    try:
+        written = _atomic_download_url(
+            download_url, dest, expected_sha256=download_sha256
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.error("Web binary download failed", url=url, dest=dest, error=str(e))
+        # Don't pretend the file is in the workspace -- surface the S3 ref so the
+        # bytes aren't lost, and report the delivery failure. On a sha256
+        # mismatch _atomic_download_url already deleted the corrupt temp file,
+        # so nothing unverified is left in /workdir.
+        return _err(
+            json.dumps(
+                {
+                    "status": "error",
+                    "url": result.get("url", url),
+                    "result_type": "binary_file",
+                    "content_type": content_type,
+                    "s3_key": s3_key,
+                    "file_size": file_size,
+                    "error": f"Failed to download fetched binary into workspace: {e}",
+                    "message": (
+                        "The binary is preserved uncorrupted at the s3_key above, "
+                        "but could not be delivered into the workspace."
+                    ),
+                },
+                indent=2,
+            )
+        )
+
+    logger.info(
+        "Delivered web-fetched binary to workspace",
+        url=url,
+        output_path=dest,
+        bytes=written,
+    )
+
+    success_payload: dict[str, Any] = {
+        "status": "success",
+        "url": result.get("url", url),
+        "result_type": "binary_file",
+        "content_type": content_type,
+        "s3_key": s3_key,
+        "file_type": result.get("file_type", ""),
+        "file_size": file_size,
+        "output_path": dest,
+        "message": (
+            f"This URL returned binary content, which has been downloaded "
+            f"into the workspace at {dest}. The raw bytes are preserved "
+            f"uncorrupted -- read or extract it from that path "
+            f"(the s3_key is retained for reference)."
+        ),
+    }
+    if download_sha256:
+        # Surface the verified digest so the model (and chat trace) can see the
+        # bytes on disk were re-hashed and matched the producer's sha256.
+        success_payload["download_sha256"] = download_sha256
+        success_payload["sha256_verified"] = True
+    return _ok(json.dumps(success_payload, indent=2))
 
 
 AUDIO_VIDEO_EXTENSIONS = {
@@ -941,43 +1152,83 @@ async def _handle_kb_download(params: dict[str, Any]) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / filename
 
+    # End-to-end integrity: producer stamps download_sha256 over the exact
+    # stored bytes. Re-hash on this side and hard-fail on mismatch (absent on
+    # older Lambdas → skipped, backward-compatible).
+    expected_sha = result.get("download_sha256")
+
     if result.get("presigned_url"):
         actual_size = download_from_presigned_url(
             url=result["presigned_url"],
             dest_path=str(output_path),
             expected_size=result.get("size_bytes", 0),
         )
-        return _ok(
-            json.dumps(
-                {
-                    "status": "success",
-                    "message": f"File saved to {output_path}",
-                    "filename": filename,
-                    "size_bytes": actual_size,
-                    "output_path": str(output_path),
-                    "s3_uri": result.get("s3_uri"),
-                },
-                indent=2,
+        try:
+            _verify_downloaded_file_or_delete(output_path, expected_sha)
+        except BinaryDownloadIntegrityError as e:
+            return _err(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "error": str(e),
+                        "filename": filename,
+                        "s3_uri": result.get("s3_uri"),
+                        "message": (
+                            "Downloaded KB file did not match its sha256 and was "
+                            "deleted. The original is intact at the s3_uri above; "
+                            "retry the download."
+                        ),
+                    },
+                    indent=2,
+                )
             )
-        )
+        success: dict[str, Any] = {
+            "status": "success",
+            "message": f"File saved to {output_path}",
+            "filename": filename,
+            "size_bytes": actual_size,
+            "output_path": str(output_path),
+            "s3_uri": result.get("s3_uri"),
+        }
+        if expected_sha:
+            success["download_sha256"] = expected_sha
+            success["sha256_verified"] = True
+        return _ok(json.dumps(success, indent=2))
 
     elif result.get("content_base64"):
         file_content = base64.b64decode(result["content_base64"])
-        with open(output_path, "wb") as f:
-            f.write(file_content)
-        return _ok(
-            json.dumps(
-                {
-                    "status": "success",
-                    "message": f"File saved to {output_path}",
-                    "filename": filename,
-                    "size_bytes": len(file_content),
-                    "output_path": str(output_path),
-                    "s3_uri": result.get("s3_uri"),
-                },
-                indent=2,
+        try:
+            _verify_bytes_sha256(file_content, expected_sha)
+        except BinaryDownloadIntegrityError as e:
+            return _err(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "error": str(e),
+                        "filename": filename,
+                        "s3_uri": result.get("s3_uri"),
+                        "message": (
+                            "Decoded KB file did not match its sha256; nothing "
+                            "was written. The original is intact at the s3_uri "
+                            "above; retry the download."
+                        ),
+                    },
+                    indent=2,
+                )
             )
-        )
+        _atomic_write_bytes(output_path, file_content)
+        success_b64: dict[str, Any] = {
+            "status": "success",
+            "message": f"File saved to {output_path}",
+            "filename": filename,
+            "size_bytes": len(file_content),
+            "output_path": str(output_path),
+            "s3_uri": result.get("s3_uri"),
+        }
+        if expected_sha:
+            success_b64["download_sha256"] = expected_sha
+            success_b64["sha256_verified"] = True
+        return _ok(json.dumps(success_b64, indent=2))
 
     return _ok(json.dumps(result, indent=2))
 
@@ -1082,45 +1333,83 @@ async def _handle_kb_download_folder(params: dict[str, Any]) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / filename
 
+    # End-to-end integrity: producer stamps download_sha256 over the exact zip
+    # bytes. Re-hash on this side, hard-fail on mismatch (absent on older
+    # Lambdas → skipped, backward-compatible).
+    expected_sha = result.get("download_sha256")
+    folder_meta = {
+        "file_count": result.get("file_count", 0),
+        "total_files_in_folder": result.get("total_files_in_folder", 0),
+    }
+
     if result.get("presigned_url"):
         actual_size = download_from_presigned_url(
             url=result["presigned_url"],
             dest_path=str(output_path),
             expected_size=result.get("size_bytes", 0),
         )
-        return _ok(
-            json.dumps(
-                {
-                    "status": "success",
-                    "message": f"Folder downloaded to {output_path}",
-                    "filename": filename,
-                    "size_bytes": actual_size,
-                    "output_path": str(output_path),
-                    "file_count": result.get("file_count", 0),
-                    "total_files_in_folder": result.get("total_files_in_folder", 0),
-                },
-                indent=2,
+        try:
+            _verify_downloaded_file_or_delete(output_path, expected_sha)
+        except BinaryDownloadIntegrityError as e:
+            return _err(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "error": str(e),
+                        "filename": filename,
+                        "message": (
+                            "Downloaded folder zip did not match its sha256 and "
+                            "was deleted. Retry the download."
+                        ),
+                    },
+                    indent=2,
+                )
             )
-        )
+        success: dict[str, Any] = {
+            "status": "success",
+            "message": f"Folder downloaded to {output_path}",
+            "filename": filename,
+            "size_bytes": actual_size,
+            "output_path": str(output_path),
+            **folder_meta,
+        }
+        if expected_sha:
+            success["download_sha256"] = expected_sha
+            success["sha256_verified"] = True
+        return _ok(json.dumps(success, indent=2))
 
     elif result.get("content_base64"):
         file_content = base64.b64decode(result["content_base64"])
-        with open(output_path, "wb") as f:
-            f.write(file_content)
-        return _ok(
-            json.dumps(
-                {
-                    "status": "success",
-                    "message": f"Folder downloaded to {output_path}",
-                    "filename": filename,
-                    "size_bytes": len(file_content),
-                    "output_path": str(output_path),
-                    "file_count": result.get("file_count", 0),
-                    "total_files_in_folder": result.get("total_files_in_folder", 0),
-                },
-                indent=2,
+        try:
+            _verify_bytes_sha256(file_content, expected_sha)
+        except BinaryDownloadIntegrityError as e:
+            return _err(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "error": str(e),
+                        "filename": filename,
+                        "message": (
+                            "Decoded folder zip did not match its sha256; nothing "
+                            "was written. Retry the download."
+                        ),
+                    },
+                    indent=2,
+                )
             )
-        )
+        _atomic_write_bytes(output_path, file_content)
+        success_b64: dict[str, Any] = {
+            "status": "success",
+            "message": f"Folder downloaded to {output_path}",
+            "filename": filename,
+            "size_bytes": len(file_content),
+            "output_path": str(output_path),
+            **folder_meta,
+        }
+        if expected_sha:
+            success_b64["download_sha256"] = expected_sha
+            success_b64["sha256_verified"] = True
+        return _ok(json.dumps(success_b64, indent=2))
 
     return _ok(json.dumps(result, indent=2))
 
@@ -1564,7 +1853,7 @@ async def _handle_render(params: dict[str, Any]) -> dict[str, Any]:
         ext = ".html" if render_type == "html" else ".json"
         saved_path = results_dir / f"render-{timestamp}{ext}"
         saved_content = json.dumps(result, indent=2)
-        saved_path.write_text(saved_content)
+        atomic_write_text(saved_content, saved_path)
 
         sync_file_to_s3(str(saved_path), saved_content)
 
