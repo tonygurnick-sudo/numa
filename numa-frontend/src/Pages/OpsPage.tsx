@@ -7,7 +7,6 @@ import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { OpsProvider, useOps } from '../Components/Ops/OpsContext';
 import * as OpsService from '../Services/OpsService';
 import OpsHeader from '../Components/Ops/OpsHeader';
-import OpsFab from '../Components/Ops/OpsFab';
 import BoardView from '../Components/Ops/BoardView/BoardView';
 import BacklogView from '../Components/Ops/BacklogView/BacklogView';
 import { AllTicketsView } from '../Components/Ops/AllTicketsView/AllTicketsView';
@@ -445,7 +444,6 @@ export const OpsPage: React.FC = () => {
         }}
       />
       <DeepLinkHandler />
-      <OpsFab />
     </OpsProvider>
   );
 };
