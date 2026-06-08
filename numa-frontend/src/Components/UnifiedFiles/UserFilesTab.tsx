@@ -1076,7 +1076,13 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     closeUploadModal();
     setUploadSuccess(true);
     setTimeout(() => setUploadSuccess(false), 3000);
-    if (kbIdToRefresh) fetchKbFiles(kbIdToRefresh);
+    if (kbIdToRefresh) {
+      // Re-list the root level (shallow, for uploader enrichment) AND the whole
+      // KB recursively (deep), so a file uploaded into a subfolder shows up
+      // without a manual refresh — matches the Refresh button (BUG-135).
+      fetchKbFiles(kbIdToRefresh);
+      fetchDeepKbFiles(kbIdToRefresh, true);
+    }
   }
 
   const handleFolderCreated = useCallback(() => refreshKBs(), [refreshKBs]);

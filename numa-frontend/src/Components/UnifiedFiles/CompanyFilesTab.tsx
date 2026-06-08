@@ -768,7 +768,10 @@ export function CompanyFilesTab({ onActionChange }: CompanyFilesTabProps): React
     setShowUploadModal(false);
     setUploadSuccess(true);
     setTimeout(() => setUploadSuccess(false), 3000);
+    // Shallow re-list for enrichment + a forced deep re-list so files uploaded
+    // into a subfolder appear without a manual refresh (BUG-135).
     fetchFiles();
+    fetchDeepFiles(true);
   }
 
   // ── Delete handlers ─────────────────────────────────────────
